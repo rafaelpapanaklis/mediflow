@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 221 83% 53%;
+    --radius: 0.625rem;
+  }
+  * { border-color: hsl(var(--border)); }
+  body { background: hsl(var(--background)); color: hsl(var(--foreground)); }
+}
+
+@layer utilities {
+  .shadow-card    { box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04); }
+  .shadow-card-md { box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
+  .animate-fade-up { animation: fadeUp 0.3s ease-out; }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

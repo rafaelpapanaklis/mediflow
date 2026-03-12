@@ -1,0 +1,259 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Clinic {
+  id           String    @id @default(cuid())
+  name         String
+  slug         String    @unique
+  specialty    String
+  country      String    @default("MX")
+  city         String?
+  address      String?
+  phone        String?
+  email        String?
+  logoUrl      String?
+  taxId        String?
+  plan         Plan      @default(PRO)
+  trialEndsAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  users        User[]
+  patients     Patient[]
+  appointments Appointment[]
+  records      MedicalRecord[]
+  invoices     Invoice[]
+  schedules    ClinicSchedule[]
+
+  @@map("clinics")
+}
+
+enum Plan {
+  BASIC
+  PRO
+  CLINIC
+}
+
+model User {
+  id          String   @id @default(cuid())
+  supabaseId  String   @unique
+  clinicId    String
+  email       String
+  firstName   String
+  lastName    String
+  role        Role     @default(DOCTOR)
+  specialty   String?
+  avatarUrl   String?
+  phone       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  clinic       Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+  records      MedicalRecord[]
+
+  @@map("users")
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  DOCTOR
+  RECEPTIONIST
+  READONLY
+}
+
+model Patient {
+  id                  String        @id @default(cuid())
+  clinicId            String
+  patientNumber       String
+  firstName           String
+  lastName            String
+  email               String?
+  phone               String?
+  dob                 DateTime?
+  gender              Gender        @default(OTHER)
+  bloodType           String?
+  address             String?
+  insuranceProvider   String?
+  insurancePolicy     String?
+  allergies           String[]      @default([])
+  chronicConditions   String[]      @default([])
+  currentMedications  String[]      @default([])
+  tags                String[]      @default([])
+  notes               String?
+  status              PatientStatus @default(ACTIVE)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  clinic       Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+  records      MedicalRecord[]
+  invoices     Invoice[]
+  files        PatientFile[]
+
+  @@unique([clinicId, patientNumber])
+  @@map("patients")
+}
+
+enum Gender {
+  M
+  F
+  OTHER
+}
+
+enum PatientStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+model Appointment {
+  id           String            @id @default(cuid())
+  clinicId     String
+  patientId    String
+  doctorId     String
+  type         String
+  date         DateTime
+  startTime    String
+  endTime      String
+  durationMins Int               @default(30)
+  room         String?
+  status       AppointmentStatus @default(PENDING)
+  notes        String?
+  reminderSent Boolean           @default(false)
+  confirmedAt  DateTime?
+  cancelledAt  DateTime?
+  cancelReason String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  clinic   Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor   User     @relation(fields: [doctorId], references: [id])
+  invoice  Invoice?
+
+  @@map("appointments")
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+model MedicalRecord {
+  id            String   @id @default(cuid())
+  clinicId      String
+  patientId     String
+  doctorId      String
+  visitDate     DateTime @default(now())
+  subjective    String?
+  objective     String?
+  assessment    String?
+  plan          String?
+  diagnoses     Json?
+  vitals        Json?
+  specialtyData Json?
+  isPrivate     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor  User    @relation(fields: [doctorId], references: [id])
+
+  @@map("medical_records")
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  clinicId      String
+  patientId     String
+  appointmentId String?       @unique
+  invoiceNumber String
+  items         Json
+  subtotal      Float
+  discount      Float         @default(0)
+  total         Float
+  paid          Float         @default(0)
+  balance       Float
+  status        InvoiceStatus @default(PENDING)
+  paymentMethod String?
+  notes         String?
+  dueDate       DateTime?
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  clinic      Clinic       @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id])
+  payments    Payment[]
+
+  @@unique([clinicId, invoiceNumber])
+  @@map("invoices")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  invoiceId String
+  amount    Float
+  method    String
+  reference String?
+  notes     String?
+  paidAt    DateTime @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model ClinicSchedule {
+  id        String  @id @default(cuid())
+  clinicId  String
+  dayOfWeek Int
+  enabled   Boolean @default(true)
+  openTime  String  @default("09:00")
+  closeTime String  @default("18:00")
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@unique([clinicId, dayOfWeek])
+  @@map("clinic_schedules")
+}
+
+model PatientFile {
+  id        String   @id @default(cuid())
+  patientId String
+  name      String
+  url       String
+  size      Int?
+  mimeType  String?
+  category  String?
+  createdAt DateTime @default(now())
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("patient_files")
+}
