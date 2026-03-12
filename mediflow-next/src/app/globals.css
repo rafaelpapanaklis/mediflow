@@ -1,0 +1,159 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background:         0 0% 97%;
+    --foreground:         222 47% 6%;
+    --card:               0 0% 100%;
+    --card-foreground:    222 47% 6%;
+    --popover:            0 0% 100%;
+    --popover-foreground: 222 47% 6%;
+    --primary:            221 83% 53%;
+    --primary-foreground: 0 0% 100%;
+    --secondary:          210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted:              210 40% 96%;
+    --muted-foreground:   215 16% 47%;
+    --accent:             210 40% 96%;
+    --accent-foreground:  222 47% 11%;
+    --destructive:        0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border:             214 32% 91%;
+    --input:              214 32% 91%;
+    --ring:               221 83% 53%;
+    --radius:             0.625rem;
+
+    /* Brand palette */
+    --brand:              221 83% 53%;
+    --brand-hover:        221 83% 46%;
+    --brand-bg:           214 100% 97%;
+    --brand-fg:           221 83% 53%;
+
+    --emerald:            160 84% 39%;
+    --emerald-bg:         152 76% 97%;
+    --amber:              38 92% 50%;
+    --amber-bg:           48 100% 96%;
+    --rose:               350 89% 60%;
+    --rose-bg:            356 100% 97%;
+    --violet:             262 83% 58%;
+    --violet-bg:          270 100% 98%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/40;
+  }
+}
+
+@layer components {
+  /* ── Gradient text ── */
+  .gradient-text {
+    @apply bg-gradient-to-r from-brand-600 to-violet-600 bg-clip-text text-transparent;
+  }
+
+  /* ── Glassmorphism nav ── */
+  .glass-nav {
+    @apply bg-white/90 backdrop-blur-xl border-b border-border/60;
+  }
+
+  /* ── Card base ── */
+  .card-base {
+    @apply bg-card rounded-xl border border-border shadow-card;
+  }
+
+  /* ── Section padding ── */
+  .section-pad {
+    @apply py-20 px-6;
+  }
+
+  /* ── Max width container ── */
+  .container-tight {
+    @apply max-w-6xl mx-auto;
+  }
+  .container-wide {
+    @apply max-w-7xl mx-auto;
+  }
+
+  /* ── Hero gradient bg ── */
+  .hero-bg {
+    background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(37,99,235,0.12) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 40% at 80% 50%, rgba(124,58,237,0.07) 0%, transparent 60%),
+                hsl(var(--background));
+  }
+
+  /* ── Gradient border button ── */
+  .btn-gradient {
+    @apply relative inline-flex items-center justify-center gap-2
+           bg-gradient-to-r from-brand-600 to-violet-600
+           text-white font-semibold rounded-xl
+           px-6 py-3 text-sm
+           shadow-[0_4px_16px_rgba(37,99,235,0.35)]
+           hover:shadow-[0_6px_24px_rgba(37,99,235,0.45)]
+           hover:-translate-y-0.5
+           transition-all duration-200;
+  }
+
+  /* ── Subtle tag / badge ── */
+  .tag-blue    { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-50 text-brand-600 border border-brand-100; }
+  .tag-green   { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100; }
+  .tag-amber   { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50  text-amber-700  border border-amber-100; }
+  .tag-rose    { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50   text-rose-700   border border-rose-100; }
+  .tag-violet  { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-violet-50 text-violet-700 border border-violet-100; }
+  .tag-slate   { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600  border border-slate-200; }
+
+  /* ── Avatar initials ── */
+  .avatar-initials {
+    @apply flex items-center justify-center rounded-full font-bold text-white select-none flex-shrink-0;
+  }
+
+  /* ── Table shared styles ── */
+  .data-table {
+    @apply w-full text-sm;
+  }
+  .data-table thead tr {
+    @apply border-b border-border bg-muted/40;
+  }
+  .data-table thead th {
+    @apply px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide;
+  }
+  .data-table tbody tr {
+    @apply border-b border-border/60 hover:bg-muted/20 transition-colors;
+  }
+  .data-table tbody td {
+    @apply px-4 py-3 text-sm;
+  }
+
+  /* ── Form input base ── */
+  .form-input-base {
+    @apply w-full rounded-lg border border-border bg-white px-3 py-2.5 text-sm
+           placeholder:text-muted-foreground
+           focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600
+           transition-all duration-150;
+  }
+}
