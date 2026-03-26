@@ -6,11 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getInitials, avatarColor } from "@/lib/utils";
 import toast from "react-hot-toast";
+import { useRouter } from "next/navigation";
 
 const PLAN_INFO: Record<string, { name: string; price: string; features: string[] }> = {
-  BASIC:  { name: "Básico",        price: "$49/mes",  features: ["1 profesional","200 pacientes","Agenda básica"] },
-  PRO:    { name: "Profesional",   price: "$99/mes",  features: ["3 profesionales","Pacientes ilimitados","WhatsApp","Reportes"] },
-  CLINIC: { name: "Clínica",       price: "$249/mes", features: ["Ilimitado todo","IA diagnóstica","Telemedicina","API"] },
+  BASIC:  { name: "Básico",      price: "$49/mes",  features: ["1 profesional", "200 pacientes", "Agenda básica"] },
+  PRO:    { name: "Profesional", price: "$99/mes",  features: ["3 profesionales", "Pacientes ilimitados", "WhatsApp", "Reportes"] },
+  CLINIC: { name: "Clínica",     price: "$249/mes", features: ["Ilimitado todo", "IA diagnóstica", "Telemedicina", "API"] },
 };
 
 interface Props {
@@ -19,12 +20,19 @@ interface Props {
 }
 
 export function SettingsClient({ user, clinic }: Props) {
-  const [tab, setTab]         = useState<"profile"|"clinic"|"plan">("profile");
+  const router = useRouter();
+  const [tab, setTab]         = useState<"profile" | "clinic" | "plan">("profile");
   const [saving, setSaving]   = useState(false);
-  const [profile, setProfile] = useState({ firstName: user.firstName, lastName: user.lastName, phone: user.phone ?? "", specialty: user.specialty ?? "" });
-  const [clinicForm, setClinicForm] = useState({ name: clinic.name, phone: clinic.phone ?? "", email: clinic.email ?? "", city: clinic.city ?? "" });
+  const [profile, setProfile] = useState({
+    firstName: user.firstName, lastName: user.lastName,
+    phone: user.phone ?? "", specialty: user.specialty ?? "",
+  });
+  const [clinicForm, setClinicForm] = useState({
+    name: clinic.name, phone: clinic.phone ?? "",
+    email: clinic.email ?? "", city: clinic.city ?? "",
+  });
 
-  const plan   = PLAN_INFO[clinic.plan] ?? PLAN_INFO.PRO;
+  const plan     = PLAN_INFO[clinic.plan] ?? PLAN_INFO.PRO;
   const initials = getInitials(user.firstName, user.lastName);
   const color    = avatarColor(user.id);
   const trialEnd = clinic.trialEndsAt ? new Date(clinic.trialEndsAt) : null;
@@ -32,16 +40,38 @@ export function SettingsClient({ user, clinic }: Props) {
 
   async function saveProfile() {
     setSaving(true);
-    await new Promise(r => setTimeout(r, 600));
-    setSaving(false);
-    toast.success("Perfil actualizado");
+    try {
+      const res = await fetch("/api/users/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(profile),
+      });
+      if (!res.ok) throw new Error("Error al guardar");
+      toast.success("Perfil actualizado");
+      router.refresh();
+    } catch {
+      toast.error("Error al guardar perfil");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function saveClinic() {
     setSaving(true);
-    await new Promise(r => setTimeout(r, 600));
-    setSaving(false);
-    toast.success("Datos de clínica actualizados");
+    try {
+      const res = await fetch("/api/clinic", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(clinicForm),
+      });
+      if (!res.ok) throw new Error("Error al guardar");
+      toast.success("Clínica actualizada");
+      router.refresh();
+    } catch {
+      toast.error("Error al guardar clínica");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const TABS = [
@@ -73,7 +103,7 @@ export function SettingsClient({ user, clinic }: Props) {
             <div>
               <div className="font-bold">{user.firstName} {user.lastName}</div>
               <div className="text-sm text-muted-foreground">{user.email}</div>
-              <div className="text-xs text-muted-foreground">{user.role}</div>
+              <div className="text-xs text-muted-foreground capitalize">{user.role.toLowerCase().replace("_", " ")}</div>
             </div>
           </div>
           <div className="space-y-4">
@@ -96,7 +126,9 @@ export function SettingsClient({ user, clinic }: Props) {
               <Input value={profile.phone} onChange={e => setProfile(f => ({ ...f, phone: e.target.value }))} />
             </div>
           </div>
-          <Button className="mt-5" disabled={saving} onClick={saveProfile}>{saving ? "Guardando…" : "Guardar cambios"}</Button>
+          <Button className="mt-5" disabled={saving} onClick={saveProfile}>
+            {saving ? "Guardando…" : "Guardar cambios"}
+          </Button>
         </div>
       )}
 
@@ -123,7 +155,9 @@ export function SettingsClient({ user, clinic }: Props) {
               <Input type="email" value={clinicForm.email} onChange={e => setClinicForm(f => ({ ...f, email: e.target.value }))} />
             </div>
           </div>
-          <Button className="mt-5" disabled={saving} onClick={saveClinic}>{saving ? "Guardando…" : "Guardar cambios"}</Button>
+          <Button className="mt-5" disabled={saving} onClick={saveClinic}>
+            {saving ? "Guardando…" : "Guardar cambios"}
+          </Button>
         </div>
       )}
 
@@ -150,7 +184,6 @@ export function SettingsClient({ user, clinic }: Props) {
               ))}
             </ul>
           </div>
-
           <div className="rounded-xl border border-border bg-white p-5 shadow-card">
             <h3 className="font-bold mb-3 text-sm">Cambiar plan</h3>
             <div className="space-y-2.5">

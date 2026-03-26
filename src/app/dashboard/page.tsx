@@ -100,11 +100,11 @@ export default async function DashboardPage() {
               <div key={appt.id} className="flex items-center gap-3 py-3 border-b border-border/60 last:border-0">
                 <span className="text-xs font-mono font-bold text-muted-foreground w-11 flex-shrink-0">{appt.startTime}</span>
                 <div className={`w-8 h-8 rounded-full ${avatarColor(appt.patientId)} flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0`}>
-                  {getInitials(appt.patient.firstName, appt.patient.lastName)}
+                  {getInitials(appt.patient?.firstName ?? "P", appt.patient?.lastName ?? "")}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold truncate">{appt.patient.firstName} {appt.patient.lastName}</div>
-                  <div className="text-xs text-muted-foreground">{appt.type} · {appt.doctor.firstName} {appt.doctor.lastName}</div>
+                  <div className="text-sm font-semibold truncate">{appt.patient?.firstName} {appt.patient?.lastName}</div>
+                  <div className="text-xs text-muted-foreground">{appt.type} · {appt.doctor?.firstName} {appt.doctor?.lastName}</div>
                 </div>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 ${s.cls}`}>{s.label}</span>
               </div>

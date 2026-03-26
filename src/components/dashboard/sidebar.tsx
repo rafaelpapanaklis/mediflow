@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { LayoutDashboard, Calendar, Users, FileText, CreditCard, BarChart2, Settings, LogOut, Menu, X } from "lucide-react";
+import { LayoutDashboard, Calendar, Users, FileText, CreditCard, BarChart2, Settings, LogOut, Menu, X, Stethoscope } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import toast from "react-hot-toast";
@@ -15,6 +15,7 @@ const NAV = [
   { href: "/dashboard/billing",      icon: CreditCard,      label: "Facturación"   },
   { href: "/dashboard/reports",      icon: BarChart2,       label: "Reportes"      },
   { href: "/dashboard/settings",     icon: Settings,        label: "Configuración" },
+  { href: "/dashboard/clinical",      icon: Stethoscope,     label: "Expedientes" },
 ];
 
 interface SidebarProps {

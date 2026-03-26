@@ -80,7 +80,7 @@ export function PatientsClient({ patients: initial }: { patients: any[] }) {
                 </td>
               </tr>
             ) : filtered.map(p => (
-              <tr key={p.id} className="border-b border-border/60 hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => {}}>
+              <tr key={p.id} className="border-b border-border/60 hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => window.location.href = `/dashboard/patients/${p.id}`}>
                 <td className="px-5 py-3">
                   <div className="flex items-center gap-3">
                     <div className={`w-9 h-9 rounded-full ${avatarColor(p.id)} flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0`}>
@@ -100,10 +100,10 @@ export function PatientsClient({ patients: initial }: { patients: any[] }) {
                 </td>
                 <td className="px-4 py-3 hidden sm:table-cell font-mono text-xs text-muted-foreground">#{p.patientNumber}</td>
                 <td className="px-4 py-3 hidden sm:table-cell text-center">
-                  <span className="text-sm font-bold">{p._count.appointments}</span>
+                  <span className="text-sm font-bold">{p._count?.appointments ?? 0}</span>
                 </td>
                 <td className="px-4 py-3 hidden sm:table-cell text-xs text-muted-foreground">
-                  {p.appointments[0] ? formatDate(p.appointments[0].date) : "Nunca"}
+                  {p.appointments?.[0] ? formatDate(p.appointments[0].date) : "Nunca"}
                 </td>
                 <td className="px-5 py-3 hidden sm:table-cell">
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${STATUS_COLORS[p.status] ?? STATUS_COLORS.ACTIVE}`}>
