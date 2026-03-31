@@ -3,9 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Check, X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 
@@ -19,18 +17,23 @@ const SPECIALTIES = [
 ];
 
 const PLANS = [
-  { id: "BASIC",  name: "Básico",        price: "$49/mes",  desc: "1 profesional · 200 pacientes"           },
-  { id: "PRO",    name: "Profesional ⭐", price: "$99/mes",  desc: "3 profesionales · Ilimitado · WhatsApp"  },
-  { id: "CLINIC", name: "Clínica",       price: "$249/mes", desc: "Ilimitado · IA · Telemedicina"           },
+  { id: "BASIC",  name: "Básico",        price: "$49",  per: "mes", desc: "1 profesional · 200 pacientes",                          features: ["Agenda y citas","Pacientes básico","Facturación","Soporte email"] },
+  { id: "PRO",    name: "Profesional ⭐", price: "$99",  per: "mes", desc: "3 profesionales · Ilimitado",                           features: ["Todo Básico","Expedientes clínicos","Reportes avanzados","WhatsApp","Soporte prioritario"] },
+  { id: "CLINIC", name: "Clínica",       price: "$249", per: "mes", desc: "Ilimitado todo",                                         features: ["Todo Pro","Múltiples sucursales","API access","Manager de cuenta"] },
 ];
+
+const BANK_INFO = {
+  nombre: "Efthymios Rafail Papanaklis",
+  clabe:  "012910015008025244",
+  banco:  "BBVA",
+};
 
 function StepDots({ current, total }: { current: number; total: number }) {
   return (
-    <div className="flex gap-2 mb-6">
+    <div className="flex gap-1.5 mb-6">
       {Array.from({ length: total }).map((_, i) => (
-        <div key={i} className={cn(
-          "h-1.5 rounded-full transition-all duration-300",
-          i < current ? "bg-emerald-500 w-5" : i === current ? "bg-brand-600 w-5" : "bg-border w-5"
+        <div key={i} className={cn("h-1.5 rounded-full transition-all duration-300 w-6",
+          i < current ? "bg-emerald-500" : i === current ? "bg-brand-600" : "bg-border"
         )} />
       ))}
     </div>
@@ -39,19 +42,47 @@ function StepDots({ current, total }: { current: number; total: number }) {
 
 export function RegisterForm() {
   const router = useRouter();
-  const [step, setStep] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [step, setStep]         = useState(0);
+  const [loading, setLoading]   = useState(false);
+  const [checkingSlug, setCheckingSlug] = useState(false);
+  const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
   const [specialty, setSpecialty] = useState("dental");
-  const [plan, setPlan] = useState("PRO");
-  const [error, setError] = useState("");
+  const [plan, setPlan]           = useState("PRO");
+  const [payMethod, setPayMethod] = useState<"stripe" | "transfer">("transfer");
+  const [error, setError]         = useState("");
+  const [registered, setRegistered] = useState(false);
+
   const [form, setForm] = useState({
     firstName: "", lastName: "", email: "", password: "", password2: "",
-    clinicName: "", country: "México", city: "", phone: "",
+    clinicName: "", slug: "", country: "México", city: "", phone: "",
   });
-
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
-  const next = () => { setError(""); setStep(s => Math.min(s+1, 4)); };
-  const back = () => { setError(""); setStep(s => Math.max(s-1, 0)); };
+
+  function slugify(text: string) {
+    return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 30);
+  }
+
+  function handleClinicNameChange(name: string) {
+    set("clinicName", name);
+    const newSlug = slugify(name);
+    set("slug", newSlug);
+    if (newSlug.length >= 3) checkSlugAvailability(newSlug);
+  }
+
+  async function checkSlugAvailability(slug: string) {
+    if (slug.length < 3) { setSlugAvailable(null); return; }
+    setCheckingSlug(true);
+    try {
+      const res = await fetch(`/api/check-slug?slug=${slug}`);
+      const data = await res.json();
+      setSlugAvailable(data.available);
+    } catch {
+      setSlugAvailable(null);
+    } finally {
+      setCheckingSlug(false);
+    }
+  }
 
   function validateStep() {
     if (step === 0) {
@@ -62,13 +93,14 @@ export function RegisterForm() {
     }
     if (step === 1) {
       if (!form.clinicName) { setError("El nombre de la clínica es requerido"); return false; }
+      if (!form.slug || form.slug.length < 3) { setError("El subdominio debe tener mínimo 3 caracteres"); return false; }
+      if (slugAvailable === false) { setError("Ese subdominio ya está en uso"); return false; }
     }
     return true;
   }
 
-  function handleNext() {
-    if (validateStep()) next();
-  }
+  function next() { if (validateStep()) { setError(""); setStep(s => s + 1); } }
+  function back() { setError(""); setStep(s => s - 1); }
 
   async function handleSubmit() {
     setLoading(true);
@@ -80,14 +112,24 @@ export function RegisterForm() {
         body: JSON.stringify({
           firstName: form.firstName, lastName: form.lastName,
           email: form.email, password: form.password,
-          clinicName: form.clinicName, specialty, country: form.country,
-          city: form.city, phone: form.phone, plan,
+          clinicName: form.clinicName, slug: form.slug,
+          specialty, country: form.country, city: form.city,
+          phone: form.phone, plan, paymentMethod: payMethod,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error al registrarse");
-      toast.success("¡Cuenta creada! Revisa tu correo para confirmar.");
-      router.push("/dashboard");
+
+      if (payMethod === "transfer") {
+        setRegistered(true);
+      } else {
+        // Stripe - redirect to checkout
+        if (data.checkoutUrl) {
+          window.location.href = data.checkoutUrl;
+        } else {
+          router.push("/dashboard");
+        }
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -95,102 +137,180 @@ export function RegisterForm() {
     }
   }
 
+  // Success screen for transfer payment
+  if (registered && payMethod === "transfer") {
+    return (
+      <div className="w-full max-w-[440px] animate-fade-up">
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center text-3xl mx-auto mb-4">✅</div>
+          <h1 className="text-2xl font-extrabold mb-2">¡Cuenta creada!</h1>
+          <p className="text-sm text-muted-foreground">Tu clínica está lista. Solo falta activar tu plan.</p>
+        </div>
+
+        <div className="rounded-xl border border-border bg-white p-5 mb-4">
+          <div className="text-sm font-bold mb-3">💳 Realiza tu pago por transferencia SPEI</div>
+          <div className="space-y-2.5 text-sm">
+            <div className="flex justify-between py-2 border-b border-border">
+              <span className="text-muted-foreground">Nombre</span>
+              <span className="font-semibold">{BANK_INFO.nombre}</span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-border">
+              <span className="text-muted-foreground">CLABE</span>
+              <span className="font-mono font-extrabold text-brand-700 text-base tracking-wider">{BANK_INFO.clabe}</span>
+            </div>
+            <div className="flex justify-between py-2 border-b border-border">
+              <span className="text-muted-foreground">Banco</span>
+              <span className="font-semibold">{BANK_INFO.banco}</span>
+            </div>
+            <div className="flex justify-between py-2">
+              <span className="text-muted-foreground">Monto</span>
+              <span className="font-extrabold text-brand-700">{PLANS.find(p => p.id === plan)?.price}/mes</span>
+            </div>
+          </div>
+          <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
+            <strong>Importante:</strong> En el concepto de la transferencia escribe el nombre de tu clínica: <strong>{form.clinicName}</strong>. Tu plan se activará en máximo 24 horas hábiles.
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border bg-white p-4 mb-4 text-sm">
+          <div className="font-bold mb-1">Mientras tanto puedes acceder con 14 días de prueba gratuita</div>
+          <p className="text-xs text-muted-foreground">Tu cuenta ya está creada. Puedes ingresar ahora y empezar a usar el sistema.</p>
+        </div>
+
+        <Link href="/login" className="block w-full text-center bg-brand-600 text-white font-bold py-3 rounded-xl hover:bg-brand-700 transition-colors">
+          Ir al panel de control →
+        </Link>
+      </div>
+    );
+  }
+
   return (
-    <div className="w-full max-w-[420px]">
+    <div className="w-full max-w-[440px]">
       <div className="flex items-center gap-2 font-extrabold text-[19px] text-brand-600 mb-7">
         <div className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center text-white text-xs font-extrabold">M</div>
         MediFlow
       </div>
-      <StepDots current={step} total={5} />
+      <StepDots current={step} total={6} />
 
       {error && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-4 py-3 mb-4">
-          {error}
-        </div>
+        <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-4 py-3 mb-4">{error}</div>
       )}
 
-      {/* STEP 0 */}
+      {/* STEP 0 - Personal info */}
       {step === 0 && (
         <div className="animate-fade-up">
           <h1 className="text-2xl font-extrabold mb-1">Crea tu cuenta</h1>
-          <p className="text-sm text-muted-foreground mb-6">Paso 1 de 5</p>
+          <p className="text-sm text-muted-foreground mb-6">Paso 1 de 6</p>
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Nombre *</Label>
-                <Input placeholder="Ana" value={form.firstName} onChange={e => set("firstName", e.target.value)} />
+                <label className="text-sm font-semibold">Nombre *</label>
+                <input className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                  placeholder="Ana" value={form.firstName} onChange={e => set("firstName", e.target.value)} />
               </div>
               <div className="space-y-1.5">
-                <Label>Apellido *</Label>
-                <Input placeholder="García" value={form.lastName} onChange={e => set("lastName", e.target.value)} />
+                <label className="text-sm font-semibold">Apellido *</label>
+                <input className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                  placeholder="García" value={form.lastName} onChange={e => set("lastName", e.target.value)} />
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label>Correo electrónico *</Label>
-              <Input type="email" placeholder="ana@miclinica.com" value={form.email} onChange={e => set("email", e.target.value)} />
+              <label className="text-sm font-semibold">Correo electrónico *</label>
+              <input type="email" className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                placeholder="ana@miclinica.com" value={form.email} onChange={e => set("email", e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label>Contraseña * (mínimo 8 caracteres)</Label>
-              <Input type="password" placeholder="••••••••" value={form.password} onChange={e => set("password", e.target.value)} />
+              <label className="text-sm font-semibold">Contraseña * (mínimo 8 caracteres)</label>
+              <input type="password" className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                placeholder="••••••••" value={form.password} onChange={e => set("password", e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label>Confirmar contraseña *</Label>
-              <Input type="password" placeholder="••••••••" value={form.password2} onChange={e => set("password2", e.target.value)} />
+              <label className="text-sm font-semibold">Confirmar contraseña *</label>
+              <input type="password" className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                placeholder="••••••••" value={form.password2} onChange={e => set("password2", e.target.value)} />
             </div>
           </div>
-          <Button className="w-full mt-5" size="lg" onClick={handleNext}>Continuar →</Button>
+          <button onClick={next} className="w-full mt-5 h-11 bg-brand-600 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors">Continuar →</button>
           <p className="text-center text-sm text-muted-foreground mt-4">
-            ¿Ya tienes cuenta?{" "}
-            <Link href="/login" className="text-brand-600 font-semibold hover:underline">Inicia sesión</Link>
+            ¿Ya tienes cuenta? <Link href="/login" className="text-brand-600 font-semibold hover:underline">Inicia sesión</Link>
           </p>
         </div>
       )}
 
-      {/* STEP 1 */}
+      {/* STEP 1 - Clinic info + subdomain */}
       {step === 1 && (
         <div className="animate-fade-up">
           <h1 className="text-2xl font-extrabold mb-1">Tu clínica</h1>
-          <p className="text-sm text-muted-foreground mb-6">Paso 2 de 5</p>
+          <p className="text-sm text-muted-foreground mb-6">Paso 2 de 6</p>
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label>Nombre de tu clínica *</Label>
-              <Input placeholder="Clínica Dental García" value={form.clinicName} onChange={e => set("clinicName", e.target.value)} />
+              <label className="text-sm font-semibold">Nombre de tu clínica *</label>
+              <input className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                placeholder="Clínica Dental García" value={form.clinicName}
+                onChange={e => handleClinicNameChange(e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label>País</Label>
-              <select className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600"
-                value={form.country} onChange={e => set("country", e.target.value)}>
-                {["México","Colombia","Argentina","Chile","España","Perú","Ecuador","Otro"].map(c => <option key={c}>{c}</option>)}
-              </select>
+              <label className="text-sm font-semibold">Tu URL / subdominio *</label>
+              <div className="relative">
+                <div className="flex items-center h-10 rounded-lg border border-border bg-white overflow-hidden focus-within:ring-2 focus-within:ring-brand-600/20 focus-within:border-brand-600">
+                  <input className="flex-1 px-3 text-sm focus:outline-none bg-transparent"
+                    placeholder="mi-clinica"
+                    value={form.slug}
+                    onChange={e => {
+                      const v = slugify(e.target.value);
+                      set("slug", v);
+                      checkSlugAvailability(v);
+                    }}
+                  />
+                  <div className="px-3 bg-muted border-l border-border text-xs text-muted-foreground font-mono h-full flex items-center flex-shrink-0">
+                    .mediflow.app
+                  </div>
+                </div>
+                <div className="absolute right-[105px] top-1/2 -translate-y-1/2">
+                  {checkingSlug && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
+                  {!checkingSlug && slugAvailable === true  && <Check className="w-3.5 h-3.5 text-emerald-500" />}
+                  {!checkingSlug && slugAvailable === false && <X    className="w-3.5 h-3.5 text-rose-500"    />}
+                </div>
+              </div>
+              {slugAvailable === true  && <p className="text-xs text-emerald-600 font-semibold">✓ Disponible — {form.slug}.mediflow.app</p>}
+              {slugAvailable === false && <p className="text-xs text-rose-600 font-semibold">✗ No disponible, elige otro nombre</p>}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Ciudad</Label>
-                <Input placeholder="Ciudad de México" value={form.city} onChange={e => set("city", e.target.value)} />
+                <label className="text-sm font-semibold">País</label>
+                <select className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                  value={form.country} onChange={e => set("country", e.target.value)}>
+                  {["México","Colombia","Argentina","Chile","España","Perú","Ecuador","Otro"].map(c => <option key={c}>{c}</option>)}
+                </select>
               </div>
               <div className="space-y-1.5">
-                <Label>Teléfono</Label>
-                <Input placeholder="+52 55..." value={form.phone} onChange={e => set("phone", e.target.value)} />
+                <label className="text-sm font-semibold">Ciudad</label>
+                <input className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                  placeholder="CDMX" value={form.city} onChange={e => set("city", e.target.value)} />
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold">Teléfono</label>
+              <input className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                placeholder="+52 55..." value={form.phone} onChange={e => set("phone", e.target.value)} />
             </div>
           </div>
           <div className="flex gap-2 mt-5">
-            <Button variant="outline" onClick={back} className="px-5">← Atrás</Button>
-            <Button className="flex-1" size="lg" onClick={handleNext}>Continuar →</Button>
+            <button onClick={back} className="px-5 h-11 border border-border rounded-xl text-sm font-semibold hover:bg-muted transition-colors">← Atrás</button>
+            <button onClick={next} className="flex-1 h-11 bg-brand-600 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors">Continuar →</button>
           </div>
         </div>
       )}
 
-      {/* STEP 2 */}
+      {/* STEP 2 - Specialty */}
       {step === 2 && (
         <div className="animate-fade-up">
           <h1 className="text-2xl font-extrabold mb-1">Tu especialidad</h1>
-          <p className="text-sm text-muted-foreground mb-6">Paso 3 de 5</p>
+          <p className="text-sm text-muted-foreground mb-6">Paso 3 de 6</p>
           <div className="grid grid-cols-2 gap-2 mb-5">
             {SPECIALTIES.map(s => (
               <button key={s.id} onClick={() => setSpecialty(s.id)}
-                className={cn(
-                  "flex items-center gap-2.5 p-3.5 rounded-xl border text-sm font-semibold text-left transition-all",
+                className={cn("flex items-center gap-2.5 p-3.5 rounded-xl border text-sm font-semibold text-left transition-all",
                   specialty === s.id ? "border-brand-300 bg-brand-50 text-brand-700 shadow-sm" : "border-border bg-white text-muted-foreground hover:border-brand-200"
                 )}>
                 <span className="text-lg">{s.icon}</span>
@@ -199,70 +319,134 @@ export function RegisterForm() {
             ))}
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={back} className="px-5">← Atrás</Button>
-            <Button className="flex-1" size="lg" onClick={next}>Continuar →</Button>
+            <button onClick={back} className="px-5 h-11 border border-border rounded-xl text-sm font-semibold hover:bg-muted transition-colors">← Atrás</button>
+            <button onClick={next} className="flex-1 h-11 bg-brand-600 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors">Continuar →</button>
           </div>
         </div>
       )}
 
-      {/* STEP 3 */}
+      {/* STEP 3 - Plan */}
       {step === 3 && (
         <div className="animate-fade-up">
-          <h1 className="text-2xl font-extrabold mb-1">Horarios de atención</h1>
-          <p className="text-sm text-muted-foreground mb-5">Paso 4 de 5 · Puedes cambiarlos después</p>
-          <div className="rounded-xl border border-border overflow-hidden mb-5">
-            <div className="grid grid-cols-3 bg-muted/50 px-4 py-2.5 text-xs font-bold text-muted-foreground uppercase tracking-wide">
-              <span>Día</span><span>Apertura</span><span>Cierre</span>
-            </div>
-            {["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"].map((day, i) => (
-              <div key={day} className="grid grid-cols-3 items-center px-4 py-2 border-t border-border gap-2">
-                <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-                  <input type="checkbox" defaultChecked={i < 5} className="w-4 h-4 rounded accent-brand-600" />
-                  {day}
-                </label>
-                <select className="text-xs rounded-md border border-border px-2 py-1.5" defaultValue="09:00">
-                  {["08:00","09:00","10:00"].map(t => <option key={t}>{t}</option>)}
-                </select>
-                <select className="text-xs rounded-md border border-border px-2 py-1.5" defaultValue="18:00">
-                  {["14:00","17:00","18:00","19:00","20:00"].map(t => <option key={t}>{t}</option>)}
-                </select>
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={back} className="px-5">← Atrás</Button>
-            <Button className="flex-1" size="lg" onClick={next}>Continuar →</Button>
-          </div>
-        </div>
-      )}
-
-      {/* STEP 4 */}
-      {step === 4 && (
-        <div className="animate-fade-up">
           <h1 className="text-2xl font-extrabold mb-1">Elige tu plan</h1>
-          <p className="text-sm text-muted-foreground mb-5">Paso 5 de 5 · 14 días gratis, sin tarjeta</p>
+          <p className="text-sm text-muted-foreground mb-5">Paso 4 de 6 · 14 días gratis, sin tarjeta</p>
           <div className="space-y-2.5 mb-4">
             {PLANS.map(p => (
               <button key={p.id} onClick={() => setPlan(p.id)}
-                className={cn(
-                  "w-full flex items-center gap-3 p-4 rounded-xl border text-left transition-all",
+                className={cn("w-full p-4 rounded-xl border text-left transition-all",
                   plan === p.id ? "border-brand-300 bg-brand-50 shadow-sm" : "border-border bg-white hover:border-brand-200"
                 )}>
-                <div className={cn("w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center", plan === p.id ? "border-brand-600 bg-brand-600" : "border-muted-foreground/40")}>
-                  {plan === p.id && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                <div className="flex items-center gap-3 mb-2">
+                  <div className={cn("w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center",
+                    plan === p.id ? "border-brand-600 bg-brand-600" : "border-muted-foreground/40")}>
+                    {plan === p.id && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </div>
+                  <div className="flex-1">
+                    <span className="text-sm font-bold">{p.name}</span>
+                    <span className="ml-2 text-brand-700 font-extrabold">{p.price}/{p.per}</span>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <div className="text-sm font-bold">{p.name} — {p.price}</div>
-                  <div className="text-xs text-muted-foreground">{p.desc}</div>
+                <div className="pl-7 grid grid-cols-2 gap-0.5">
+                  {p.features.map(f => <div key={f} className="text-xs text-muted-foreground flex items-center gap-1"><span className="text-emerald-500">✓</span>{f}</div>)}
                 </div>
               </button>
             ))}
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={back} className="px-5">← Atrás</Button>
-            <Button className="flex-1" size="lg" disabled={loading} onClick={handleSubmit}>
-              {loading ? "Creando tu clínica..." : "Crear mi clínica ✦"}
-            </Button>
+            <button onClick={back} className="px-5 h-11 border border-border rounded-xl text-sm font-semibold hover:bg-muted transition-colors">← Atrás</button>
+            <button onClick={next} className="flex-1 h-11 bg-brand-600 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors">Continuar →</button>
+          </div>
+        </div>
+      )}
+
+      {/* STEP 4 - Payment method */}
+      {step === 4 && (
+        <div className="animate-fade-up">
+          <h1 className="text-2xl font-extrabold mb-1">Método de pago</h1>
+          <p className="text-sm text-muted-foreground mb-5">Paso 5 de 6</p>
+
+          <div className="space-y-3 mb-5">
+            {/* Stripe */}
+            <button onClick={() => setPayMethod("stripe")}
+              className={cn("w-full p-4 rounded-xl border text-left transition-all",
+                payMethod === "stripe" ? "border-brand-300 bg-brand-50 shadow-sm" : "border-border bg-white hover:border-brand-200")}>
+              <div className="flex items-center gap-3">
+                <div className={cn("w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center",
+                  payMethod === "stripe" ? "border-brand-600 bg-brand-600" : "border-muted-foreground/40")}>
+                  {payMethod === "stripe" && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                </div>
+                <div className="flex-1">
+                  <div className="text-sm font-bold flex items-center gap-2">
+                    💳 Tarjeta de crédito / débito
+                    <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">Activación inmediata</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-0.5">Visa, Mastercard, AMEX · Procesado por Stripe</div>
+                </div>
+              </div>
+            </button>
+
+            {/* Transfer */}
+            <button onClick={() => setPayMethod("transfer")}
+              className={cn("w-full p-4 rounded-xl border text-left transition-all",
+                payMethod === "transfer" ? "border-brand-300 bg-brand-50 shadow-sm" : "border-border bg-white hover:border-brand-200")}>
+              <div className="flex items-center gap-3">
+                <div className={cn("w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center",
+                  payMethod === "transfer" ? "border-brand-600 bg-brand-600" : "border-muted-foreground/40")}>
+                  {payMethod === "transfer" && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                </div>
+                <div className="flex-1">
+                  <div className="text-sm font-bold flex items-center gap-2">
+                    🏦 Transferencia SPEI / CLABE
+                    <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">Activación en 24h</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-0.5">Transferencia bancaria a cuenta BBVA</div>
+                  {payMethod === "transfer" && (
+                    <div className="mt-2 p-2.5 bg-white border border-border rounded-lg text-xs space-y-1">
+                      <div className="flex justify-between"><span className="text-muted-foreground">Nombre</span><span className="font-semibold">{BANK_INFO.nombre}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">CLABE</span><span className="font-mono font-bold text-brand-700">{BANK_INFO.clabe}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">Banco</span><span className="font-semibold">{BANK_INFO.banco}</span></div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </button>
+          </div>
+
+          <div className="flex gap-2">
+            <button onClick={back} className="px-5 h-11 border border-border rounded-xl text-sm font-semibold hover:bg-muted transition-colors">← Atrás</button>
+            <button onClick={next} className="flex-1 h-11 bg-brand-600 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors">Continuar →</button>
+          </div>
+        </div>
+      )}
+
+      {/* STEP 5 - Confirm */}
+      {step === 5 && (
+        <div className="animate-fade-up">
+          <h1 className="text-2xl font-extrabold mb-1">Confirmar y crear</h1>
+          <p className="text-sm text-muted-foreground mb-5">Paso 6 de 6 · Revisa tu información</p>
+
+          <div className="rounded-xl border border-border bg-white divide-y divide-border mb-5">
+            {[
+              { label: "Nombre",       val: `${form.firstName} ${form.lastName}` },
+              { label: "Email",        val: form.email                            },
+              { label: "Clínica",      val: form.clinicName                       },
+              { label: "URL",          val: `${form.slug}.mediflow.app`            },
+              { label: "Especialidad", val: SPECIALTIES.find(s => s.id === specialty)?.label ?? specialty },
+              { label: "Plan",         val: `${PLANS.find(p => p.id === plan)?.name} · ${PLANS.find(p => p.id === plan)?.price}/mes` },
+              { label: "Pago",         val: payMethod === "stripe" ? "Tarjeta de crédito" : "Transferencia SPEI" },
+            ].map(r => (
+              <div key={r.label} className="flex justify-between items-center px-4 py-3 text-sm">
+                <span className="text-muted-foreground">{r.label}</span>
+                <span className="font-semibold">{r.val}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex gap-2">
+            <button onClick={back} className="px-5 h-11 border border-border rounded-xl text-sm font-semibold hover:bg-muted transition-colors">← Atrás</button>
+            <button onClick={handleSubmit} disabled={loading} className="flex-1 h-11 bg-brand-600 text-white font-bold rounded-xl hover:bg-brand-700 disabled:opacity-50 transition-colors">
+              {loading ? "Creando tu clínica…" : payMethod === "stripe" ? "Pagar y crear clínica →" : "Crear clínica y ver datos de pago →"}
+            </button>
           </div>
         </div>
       )}
