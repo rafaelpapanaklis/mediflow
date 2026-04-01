@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { getInitials, avatarColor } from "@/lib/utils";
@@ -11,17 +11,9 @@ import { GeneralMedicineForm } from "@/components/clinical/medicine-form";
 import { ClinicalRecordsList } from "@/components/clinical/records-list";
 
 const SPECIALTY_MAP: Record<string, string> = {
-  dental:      "dental",
-  odontologia: "dental",
-  odontología: "dental",
-  nutrition:   "nutrition",
-  nutricion:   "nutrition",
-  nutrición:   "nutrition",
-  psychology:  "psychology",
-  psicologia:  "psychology",
-  psicología:  "psychology",
-  medicine:    "medicine",
-  medicina:    "medicine",
+  dental: "dental", odontologia: "dental", odontología: "dental",
+  nutrition: "nutrition", nutricion: "nutrition", nutrición: "nutrition",
+  psychology: "psychology", psicologia: "psychology", psicología: "psychology",
 };
 
 function detectSpecialty(raw: string): string {
@@ -41,21 +33,66 @@ interface Props {
   currentPatientId?: string;
 }
 
-export function ClinicalClient({ specialty, patients, selectedPatient, records: initialRecords, sessionCount, currentPatientId }: Props) {
+export function ClinicalClient({
+  specialty, patients, selectedPatient: initialPatient,
+  records: initialRecords, sessionCount: initialSessionCount,
+  currentPatientId,
+}: Props) {
   const router  = useRouter();
-  const [search, setSearch]   = useState("");
-  const [records, setRecords] = useState(initialRecords);
-  const [tab, setTab]         = useState<"new" | "history">("new");
+  const [search, setSearch]         = useState("");
+  const [selectedPatient, setSelectedPatient] = useState(initialPatient);
+  const [records, setRecords]       = useState(initialRecords);
+  const [sessionCount, setSessionCount] = useState(initialSessionCount);
+  const [loading, setLoading]       = useState(false);
+  const [tab, setTab]               = useState<"new" | "history">("new");
 
   const detectedSpecialty = detectSpecialty(specialty);
 
+  // When patient changes via URL, reload records from API
+  useEffect(() => {
+    if (!currentPatientId) {
+      setSelectedPatient(null);
+      setRecords([]);
+      setSessionCount(0);
+      return;
+    }
+
+    // If it's the same patient already loaded, don't reload
+    if (selectedPatient?.id === currentPatientId && records.length === initialRecords.length) {
+      return;
+    }
+
+    setLoading(true);
+    // Load patient records
+    fetch(`/api/clinical?patientId=${currentPatientId}`)
+      .then(r => r.json())
+      .then(data => {
+        setRecords(Array.isArray(data) ? data : []);
+        setSessionCount((Array.isArray(data) ? data.length : 0) + 1);
+      })
+      .catch(() => setRecords([]))
+      .finally(() => setLoading(false));
+
+    // Find patient from list
+    const patient = patients.find(p => p.id === currentPatientId);
+    if (patient) setSelectedPatient(patient);
+
+  }, [currentPatientId]);
+
   const filtered = patients.filter(p => {
     const q = search.toLowerCase();
-    return `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) || p.patientNumber.includes(q);
+    return `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) ||
+           p.patientNumber.includes(q);
   });
+
+  function selectPatient(patientId: string) {
+    setTab("new");
+    router.push(`/dashboard/clinical?patientId=${patientId}`);
+  }
 
   function handleSaved(record: any) {
     setRecords(prev => [record, ...prev]);
+    setSessionCount(prev => prev + 1);
     setTab("history");
   }
 
@@ -68,16 +105,23 @@ export function ClinicalClient({ specialty, patients, selectedPatient, records: 
             <h2 className="text-sm font-bold mb-2">Pacientes</h2>
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-              <input className="flex h-8 w-full rounded-lg border border-border bg-white pl-8 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-                placeholder="Buscar…" value={search} onChange={e => setSearch(e.target.value)} />
+              <input
+                className="flex h-8 w-full rounded-lg border border-border bg-white pl-8 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                placeholder="Buscar…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
             </div>
           </div>
           <div className="overflow-y-auto max-h-[calc(100vh-200px)]">
             {filtered.length === 0 ? (
               <div className="p-4 text-xs text-muted-foreground text-center">Sin resultados</div>
             ) : filtered.map(p => (
-              <button key={p.id} onClick={() => router.push(`/dashboard/clinical?patientId=${p.id}`)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-muted/30 transition-colors border-b border-border/50 last:border-0 ${currentPatientId === p.id ? "bg-brand-50" : ""}`}>
+              <button
+                key={p.id}
+                onClick={() => selectPatient(p.id)}
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-muted/30 transition-colors border-b border-border/50 last:border-0 ${currentPatientId === p.id ? "bg-brand-50" : ""}`}
+              >
                 <div className={`w-8 h-8 rounded-full ${avatarColor(p.id)} flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0`}>
                   {getInitials(p.firstName, p.lastName)}
                 </div>
@@ -101,7 +145,9 @@ export function ClinicalClient({ specialty, patients, selectedPatient, records: 
                detectedSpecialty === "psychology" ? "🧠" : "🩺"}
             </div>
             <h2 className="text-lg font-bold mb-2">Expediente Clínico</h2>
-            <p className="text-sm text-muted-foreground">Selecciona un paciente de la lista para ver su expediente o registrar una nueva consulta.</p>
+            <p className="text-sm text-muted-foreground">
+              Selecciona un paciente de la lista para ver su expediente o registrar una nueva consulta.
+            </p>
           </div>
         ) : (
           <div>
@@ -111,7 +157,9 @@ export function ClinicalClient({ specialty, patients, selectedPatient, records: 
                 {getInitials(selectedPatient.firstName, selectedPatient.lastName)}
               </div>
               <div>
-                <h1 className="text-lg font-extrabold">{selectedPatient.firstName} {selectedPatient.lastName}</h1>
+                <h1 className="text-lg font-extrabold">
+                  {selectedPatient.firstName} {selectedPatient.lastName}
+                </h1>
                 <p className="text-sm text-muted-foreground">
                   Expediente #{selectedPatient.patientNumber} · {records.length} consulta{records.length !== 1 ? "s" : ""} previas
                 </p>
@@ -120,35 +168,56 @@ export function ClinicalClient({ specialty, patients, selectedPatient, records: 
 
             {/* Tabs */}
             <div className="flex gap-1 mb-5 bg-muted rounded-xl p-1 w-fit">
-              <button onClick={() => setTab("new")}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${tab === "new" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+              <button
+                onClick={() => setTab("new")}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${tab === "new" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              >
                 + Nueva consulta
               </button>
-              <button onClick={() => setTab("history")}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${tab === "history" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+              <button
+                onClick={() => setTab("history")}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${tab === "history" ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              >
                 Historial ({records.length})
               </button>
             </div>
 
-            {tab === "new" && (
-              <div className="rounded-xl border border-border bg-white shadow-card p-5">
-                <h2 className="text-sm font-bold mb-4">
-                  {detectedSpecialty === "dental"     ? "🦷 Consulta dental" :
-                   detectedSpecialty === "nutrition"  ? "🥗 Consulta nutricional" :
-                   detectedSpecialty === "psychology" ? "🧠 Sesión de psicología" :
-                   "🩺 Consulta médica"}
-                </h2>
-                {detectedSpecialty === "dental"     && <DentalForm          patientId={selectedPatient.id} onSaved={handleSaved} />}
-                {detectedSpecialty === "nutrition"  && <NutritionForm       patientId={selectedPatient.id} patient={selectedPatient} onSaved={handleSaved} />}
-                {detectedSpecialty === "psychology" && <PsychologyForm      patientId={selectedPatient.id} sessionNum={sessionCount} onSaved={handleSaved} />}
-                {detectedSpecialty === "medicine"   && <GeneralMedicineForm patientId={selectedPatient.id} onSaved={handleSaved} />}
+            {loading ? (
+              <div className="rounded-xl border border-border bg-white shadow-card p-10 text-center text-sm text-muted-foreground">
+                Cargando expediente…
               </div>
-            )}
+            ) : (
+              <>
+                {tab === "new" && (
+                  <div className="rounded-xl border border-border bg-white shadow-card p-5">
+                    <h2 className="text-sm font-bold mb-4">
+                      {detectedSpecialty === "dental"     ? "🦷 Consulta dental" :
+                       detectedSpecialty === "nutrition"  ? "🥗 Consulta nutricional" :
+                       detectedSpecialty === "psychology" ? "🧠 Sesión de psicología" :
+                       "🩺 Consulta médica"}
+                    </h2>
+                    {detectedSpecialty === "dental"     && <DentalForm          patientId={selectedPatient.id} onSaved={handleSaved} />}
+                    {detectedSpecialty === "nutrition"  && <NutritionForm       patientId={selectedPatient.id} patient={selectedPatient} onSaved={handleSaved} />}
+                    {detectedSpecialty === "psychology" && <PsychologyForm      patientId={selectedPatient.id} sessionNum={sessionCount} onSaved={handleSaved} />}
+                    {detectedSpecialty === "medicine"   && <GeneralMedicineForm patientId={selectedPatient.id} onSaved={handleSaved} />}
+                  </div>
+                )}
 
-            {tab === "history" && (
-              <div>
-                <ClinicalRecordsList records={records} />
-              </div>
+                {tab === "history" && (
+                  <div>
+                    {records.length === 0 ? (
+                      <div className="rounded-xl border border-border bg-white shadow-card p-10 text-center">
+                        <p className="text-sm text-muted-foreground mb-3">Sin consultas registradas para este paciente</p>
+                        <button onClick={() => setTab("new")} className="text-xs font-semibold text-brand-600 hover:underline">
+                          Registrar primera consulta →
+                        </button>
+                      </div>
+                    ) : (
+                      <ClinicalRecordsList records={records} />
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

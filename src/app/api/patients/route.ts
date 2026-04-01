@@ -66,11 +66,24 @@ export async function POST(req: NextRequest) {
     const data = patientSchema.parse(body);
     const patient = await prisma.patient.create({
       data: {
-        ...data,
         clinicId,
-        patientNumber: await nextPatientNumber(clinicId),
-        dob:   data.dob ? new Date(data.dob) : undefined,
-        email: data.email || undefined,
+        patientNumber:      await nextPatientNumber(clinicId),
+        firstName:          data.firstName ?? "",
+        lastName:           data.lastName ?? "",
+        email:              data.email || undefined,
+        phone:              data.phone,
+        dob:                data.dob ? new Date(data.dob) : undefined,
+        gender:             (data.gender ?? "OTHER") as any,
+        bloodType:          data.bloodType,
+        address:            data.address,
+        insuranceProvider:  data.insuranceProvider,
+        insurancePolicy:    data.insurancePolicy,
+        allergies:          data.allergies ?? [],
+        chronicConditions:  data.chronicConditions ?? [],
+        currentMedications: data.currentMedications ?? [],
+        tags:               data.tags ?? [],
+        notes:              data.notes,
+        status:             "ACTIVE",
       },
     });
     return NextResponse.json(patient, { status: 201 });

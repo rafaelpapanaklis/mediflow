@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const data = appointmentSchema.parse(body);
     const appointment = await prisma.appointment.create({
-      data: { ...data, clinicId: dbUser.clinicId, date: new Date(data.date), status: "PENDING" },
+      data: { patientId: data.patientId, doctorId: data.doctorId, type: data.type, startTime: data.startTime, endTime: data.endTime, durationMins: data.durationMins, room: data.room, notes: data.notes, clinicId: dbUser.clinicId, date: new Date(data.date), status: "PENDING" as const },
       include: { patient: true, doctor: true },
     });
     return NextResponse.json(appointment, { status: 201 });
