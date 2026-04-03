@@ -38,7 +38,8 @@
     "date-fns": "^3.6.0",
     "react-hot-toast": "^2.4.1",
     "zod": "^3.23.8",
-    "otplib": "^12.0.1"
+    "otplib": "^12.0.1",
+    "googleapis": "^140.0.0"
   },
   "devDependencies": {
     "@types/node": "^20",
