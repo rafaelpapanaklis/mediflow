@@ -1,5 +1,6 @@
+export const dynamic = "force-dynamic";
+
 import type { Metadata } from "next";
-import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { AdminClinicsClient } from "./clinics-client";
 
@@ -13,6 +14,5 @@ export default async function AdminClinicsPage() {
       users:  { take: 1, select: { email: true, firstName: true, lastName: true } },
     },
   });
-
   return <AdminClinicsClient clinics={clinics as any} />;
 }
