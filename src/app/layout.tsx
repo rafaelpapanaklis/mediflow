@@ -15,16 +15,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es" className={`${sora.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <head>
-        {/* Prevent flash of wrong theme */}
+        {/* Default: DARK mode. Only switch to light if user explicitly chose light. */}
         <script dangerouslySetInnerHTML={{ __html: `
           (function() {
             try {
               var saved = localStorage.getItem('theme');
-              var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-              if (saved === 'dark' || (!saved && prefersDark)) {
+              if (saved === 'light') {
+                document.documentElement.classList.remove('dark');
+              } else {
                 document.documentElement.classList.add('dark');
+                if (!saved) localStorage.setItem('theme', 'dark');
               }
-            } catch(e) {}
+            } catch(e) {
+              document.documentElement.classList.add('dark');
+            }
           })();
         `}} />
       </head>
