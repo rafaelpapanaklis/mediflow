@@ -397,8 +397,8 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                         <span className="text-base font-bold">{a.startTime} – {a.endTime}</span>
                         <span className={`text-sm font-bold px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.text} ml-auto`}>{cfg.label}</span>
                         {/* Improvement 4: Google Calendar indicator */}
-                        {a.googleCalendarEventId && <CalendarCheck className="w-4 h-4 text-brand-500" title="Sincronizado con Google Calendar" />}
-                        {a.reminderSent && <MessageCircle className="w-4 h-4 text-emerald-500" title="Recordatorio enviado" />}
+                        {a.googleCalendarEventId && <span title="Sincronizado con Google Calendar"><CalendarCheck className="w-4 h-4 text-brand-500" /></span>}
+                        {a.reminderSent && <span title="Recordatorio enviado"><MessageCircle className="w-4 h-4 text-emerald-500" /></span>}
                       </div>
                       <div className="text-lg font-bold mt-1">{a.patient.firstName} {a.patient.lastName}</div>
                       <div className="text-sm text-muted-foreground">{a.type} · Dr/a. {a.doctor.firstName} {a.doctor.lastName} · {a.durationMins} min</div>
