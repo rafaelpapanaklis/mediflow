@@ -67,6 +67,12 @@ model User {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  // Google Calendar integration
+  googleCalendarToken   String?
+  googleRefreshToken    String?
+  googleCalendarEmail   String?
+  googleCalendarEnabled Boolean @default(false)
+
   clinic       Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointments Appointment[]
   records      MedicalRecord[]
@@ -143,8 +149,9 @@ model Appointment {
   reminderSent Boolean           @default(false)
   confirmedAt  DateTime?
   cancelledAt  DateTime?
-  cancelReason String?
-  createdAt    DateTime          @default(now())
+  cancelReason          String?
+  googleCalendarEventId String?
+  createdAt             DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
   clinic    Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
