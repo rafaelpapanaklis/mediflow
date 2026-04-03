@@ -400,7 +400,7 @@ export default function HomePage() {
                   </div>
                   <div className="bg-slate-900 border border-slate-800 rounded-lg p-2">
                     <div className="font-bold text-white mb-1.5">Progreso de peso</div>
-                    {[["Consulta 1","75 kg",100,"#ef4444"],["Consulta 2","73 kg",94,"#f59e0b"],["Consulta 3","72 kg",88,"#10b981"]].map(([l,v,w,c])=>(
+                    {([ ["Consulta 1","75 kg",100,"#ef4444"],["Consulta 2","73 kg",94,"#f59e0b"],["Consulta 3","72 kg",88,"#10b981"] ] as [string,string,number,string][]).map(([l,v,w,c])=>(
                       <div key={l} className="mb-2">
                         <div className="flex justify-between mb-0.5"><span className="text-slate-500">{l}</span><span style={{color:c,fontWeight:700}}>{v}</span></div>
                         <div style={{height:4,background:"#334155",borderRadius:2}}><div style={{height:"100%",width:`${w}%`,background:c,borderRadius:2}}></div></div>
@@ -498,7 +498,7 @@ export default function HomePage() {
             document.querySelectorAll('[data-spec]').forEach(btn => {
               btn.addEventListener('click', function() {
                 const sid = this.dataset.spec;
-                const s = specs.find(x => x.id === sid);
+                const s = specs.find(x => x.id === sid); if (!s) return;
                 document.querySelectorAll('[data-spec]').forEach(b => {
                   b.style.background = '';
                   b.style.borderColor = '';
