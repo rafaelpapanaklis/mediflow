@@ -2,6 +2,10 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+<<<<<<< HEAD
+=======
+// recharts reserved for weight tracking chart
+>>>>>>> 076fdc9a19aee075db273c97a606b45d831715b7
 import toast from "react-hot-toast";
 
 const ACTIVITY_LEVELS = [
