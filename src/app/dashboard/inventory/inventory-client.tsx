@@ -1,12 +1,33 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Plus, Search, AlertTriangle, Package, X, CheckCircle, Edit3 } from "lucide-react";
+import { Plus, Search, Package, X, Edit3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
 
-const CATEGORY_ICONS: Record<string, string> = {
+// Icons from the uploaded image mapped to categories/items
+const DENTAL_ICONS = [
+  { id: "implante-plateado",  src: "/icons/dental/implante-plateado.png",  label: "Implante plateado"  },
+  { id: "implante-azul",      src: "/icons/dental/implante-azul.png",      label: "Implante azul"      },
+  { id: "implante-dorado",    src: "/icons/dental/implante-dorado.png",    label: "Implante dorado"    },
+  { id: "gasas",              src: "/icons/dental/gasas.png",              label: "Gasas/consumibles"  },
+  { id: "algodon",            src: "/icons/dental/algodon.png",            label: "Algodón/rollos"     },
+  { id: "jeringa-verde",      src: "/icons/dental/jeringa-verde.png",      label: "Jeringa/anestesia"  },
+  { id: "fresa-jeringa",      src: "/icons/dental/fresa-jeringa.png",      label: "Fresa/instrumental" },
+  { id: "frasco-azul",        src: "/icons/dental/frasco-azul.png",        label: "Frasco/solución"    },
+  { id: "cemento",            src: "/icons/dental/cemento.png",            label: "Cemento/material"   },
+  { id: "brackets",           src: "/icons/dental/brackets.png",           label: "Brackets"           },
+  { id: "cadenas",            src: "/icons/dental/cadenas.png",            label: "Cadenas elásticas"  },
+  { id: "implante-solo",      src: "/icons/dental/implante-solo.png",      label: "Implante"           },
+  { id: "limas",              src: "/icons/dental/limas.png",              label: "Limas/endodoncia"   },
+  { id: "tijeras",            src: "/icons/dental/tijeras.png",            label: "Tijeras/cirugía"    },
+  { id: "esterilizacion",     src: "/icons/dental/esterilizacion.png",     label: "Esterilización"     },
+  { id: "guantes-cubrebocas", src: "/icons/dental/guantes-cubrebocas.png", label: "Guantes/cubrebocas" },
+];
+
+// Fallback emoji icons for items without custom icon
+const CATEGORY_EMOJI: Record<string, string> = {
   "Instrumental básico":        "🔧",
   "Fresas dentales":            "⚙️",
   "Materiales de restauración": "🧴",
@@ -14,17 +35,18 @@ const CATEGORY_ICONS: Record<string, string> = {
   "Endodoncia":                 "🔬",
   "Cirugía e implantes":        "🏥",
   "Consumibles":                "📦",
+  "Otro":                       "📦",
 };
 
-// Unsplash images per category
-const CATEGORY_IMAGES: Record<string, string> = {
-  "Instrumental básico":        "https://images.unsplash.com/photo-1606811971618-4486d14f3f99?w=56&h=56&fit=crop&auto=format",
-  "Fresas dentales":            "https://images.unsplash.com/photo-1598300042247-d088f8ab3a91?w=56&h=56&fit=crop&auto=format",
-  "Materiales de restauración": "https://images.unsplash.com/photo-1584515933487-779824d29309?w=56&h=56&fit=crop&auto=format",
-  "Ortodoncia":                 "https://images.unsplash.com/photo-1606811971618-4486d14f3f99?w=56&h=56&fit=crop&auto=format",
-  "Endodoncia":                 "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=56&h=56&fit=crop&auto=format",
-  "Cirugía e implantes":        "https://images.unsplash.com/photo-1530026405186-ed1f139313f8?w=56&h=56&fit=crop&auto=format",
-  "Consumibles":                "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=56&h=56&fit=crop&auto=format",
+// Auto-assigned icon per category for display
+const CATEGORY_DEFAULT_ICON: Record<string, string> = {
+  "Instrumental básico":        "fresa-jeringa",
+  "Fresas dentales":            "fresa-jeringa",
+  "Materiales de restauración": "cemento",
+  "Ortodoncia":                 "brackets",
+  "Endodoncia":                 "limas",
+  "Cirugía e implantes":        "implante-solo",
+  "Consumibles":                "guantes-cubrebocas",
 };
 
 interface Item {
@@ -35,37 +57,58 @@ interface Item {
 
 type StatusTab = "disponible" | "poco" | "sin" | "inactivo";
 
-const TABS: { id: StatusTab; label: string; color: string; bg: string; border: string }[] = [
-  { id:"disponible", label:"Disponible",  color:"text-emerald-700 dark:text-emerald-400", bg:"bg-emerald-50 dark:bg-emerald-950/40",  border:"border-emerald-300 dark:border-emerald-700" },
-  { id:"poco",       label:"Poco stock",  color:"text-amber-700 dark:text-amber-400",    bg:"bg-amber-50 dark:bg-amber-950/40",       border:"border-amber-300 dark:border-amber-700"    },
-  { id:"sin",        label:"Sin stock",   color:"text-rose-700 dark:text-rose-400",      bg:"bg-rose-50 dark:bg-rose-950/40",         border:"border-rose-300 dark:border-rose-700"      },
-  { id:"inactivo",   label:"No activos",  color:"text-slate-500 dark:text-slate-400",    bg:"bg-slate-50 dark:bg-slate-800/40",       border:"border-slate-300 dark:border-slate-600"    },
+const TABS: { id: StatusTab; label: string; activeClass: string }[] = [
+  { id:"disponible", label:"✅ Disponible",  activeClass:"bg-emerald-500 text-white border-emerald-500" },
+  { id:"poco",       label:"⚠️ Poco stock",  activeClass:"bg-amber-500 text-white border-amber-500"    },
+  { id:"sin",        label:"🔴 Sin stock",   activeClass:"bg-rose-500 text-white border-rose-500"      },
+  { id:"inactivo",   label:"⚫ No activos",  activeClass:"bg-slate-500 text-white border-slate-500"    },
 ];
 
 function getStatus(item: Item): StatusTab {
-  if (item.quantity === 0 && item.minQuantity === 5) {
-    // Never had stock — check if it was always 0 (default seed)
-    // We use minQuantity=5 as default — items with qty=0 and never edited = inactivo
-    return "inactivo";
-  }
+  if (item.quantity === 0 && item.minQuantity === 5) return "inactivo";
   if (item.quantity === 0) return "sin";
   if (item.quantity <= item.minQuantity) return "poco";
   return "disponible";
 }
 
-function ItemImage({ category }: { category: string }) {
+// Icon component — tries custom image, falls back to emoji
+function ItemIcon({ iconId, category, size = 44 }: { iconId: string; category: string; size?: number }) {
   const [err, setErr] = useState(false);
-  const src = CATEGORY_IMAGES[category];
-  if (!src || err) {
+  const icon = DENTAL_ICONS.find(i => i.id === iconId);
+
+  if (icon && !err) {
     return (
-      <div className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-lg flex-shrink-0">
-        {CATEGORY_ICONS[category] ?? "📦"}
-      </div>
+      <img src={icon.src} alt={icon.label} onError={() => setErr(true)}
+        style={{ width: size, height: size }}
+        className="rounded-xl object-contain flex-shrink-0 bg-white dark:bg-slate-800 p-1 border border-border" />
     );
   }
   return (
-    <img src={src} alt={category} onError={() => setErr(true)}
-      className="w-11 h-11 rounded-xl object-cover flex-shrink-0 border border-border" />
+    <div style={{ width: size, height: size }}
+      className="rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0 border border-border text-2xl">
+      {CATEGORY_EMOJI[category] ?? "📦"}
+    </div>
+  );
+}
+
+// Icon picker modal
+function IconPicker({ selected, onSelect }: { selected: string; onSelect: (id: string) => void }) {
+  return (
+    <div>
+      <Label className="text-sm mb-2 block">Ícono del artículo</Label>
+      <div className="grid grid-cols-8 gap-2 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-border">
+        {DENTAL_ICONS.map(icon => (
+          <button key={icon.id} type="button"
+            onClick={() => onSelect(icon.id)}
+            title={icon.label}
+            className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all border-2 bg-white dark:bg-slate-700 hover:scale-110 ${selected === icon.id ? "border-brand-500 ring-2 ring-brand-300" : "border-transparent"}`}>
+            <img src={icon.src} alt={icon.label}
+              className="w-9 h-9 object-contain"
+              onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -76,32 +119,34 @@ export function InventoryClient({ initialItems, specialty }: { initialItems: Ite
   const [showAdd,    setShowAdd]    = useState(false);
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
   const [editQty,    setEditQty]    = useState<Record<string, string>>({});
-  const [newItem,    setNewItem]    = useState({ name:"", description:"", category:"Instrumental básico", quantity:0, minQuantity:5, unit:"pza" });
+  const [customCat,  setCustomCat]  = useState("");
+  const [newItem, setNewItem] = useState({
+    name: "", description: "", category: "Instrumental básico",
+    customCategory: "", quantity: 0, minQuantity: 5, unit: "pza", iconId: "fresa-jeringa",
+  });
 
-  // Count per tab
   const counts = useMemo(() => {
     const c: Record<StatusTab, number> = { disponible:0, poco:0, sin:0, inactivo:0 };
     for (const item of items) c[getStatus(item)]++;
     return c;
   }, [items]);
 
-  // Filtered items for current tab
   const filtered = useMemo(() => {
     return items
       .filter(i => getStatus(i) === tab)
-      .filter(i => !search || i.name.toLowerCase().includes(search.toLowerCase()) || i.category.toLowerCase().includes(search.toLowerCase()));
+      .filter(i => !search || i.name.toLowerCase().includes(search.toLowerCase()) || i.category.toLowerCase().includes(search.toLowerCase()))
+      .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
   }, [items, tab, search]);
 
-  async function setQuantityDirect(id: string, qty: number) {
+  async function setQuantityDirect(id: string, qtyStr: string) {
+    const qty = parseInt(qtyStr);
     if (isNaN(qty) || qty < 0) return;
     setLoadingIds(s => new Set(s).add(id));
     try {
-      const item = items.find(i => i.id === id);
-      if (!item) return;
-      const change = qty - item.quantity;
+      const item = items.find(i => i.id === id)!;
       const res = await fetch(`/api/inventory/${id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ change }),
+        body: JSON.stringify({ quantity: qty }),
       });
       const updated = await res.json();
       setItems(prev => prev.map(i => i.id === id ? { ...i, quantity: updated.quantity } : i));
@@ -126,27 +171,34 @@ export function InventoryClient({ initialItems, specialty }: { initialItems: Ite
     }
   }
 
-  async function updateMinQty(id: string, minQty: number) {
+  async function updateMinQty(id: string, min: number) {
     await fetch(`/api/inventory/${id}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ minQuantity: minQty }),
+      body: JSON.stringify({ minQuantity: min }),
     });
-    setItems(prev => prev.map(i => i.id === id ? { ...i, minQuantity: minQty } : i));
+    setItems(prev => prev.map(i => i.id === id ? { ...i, minQuantity: min } : i));
   }
 
   async function addItem() {
-    if (!newItem.name) { toast.error("El nombre es requerido"); return; }
+    if (!newItem.name.trim()) { toast.error("El nombre es requerido"); return; }
+    const finalCategory = newItem.category === "Otro"
+      ? (newItem.customCategory.trim() || "Otro")
+      : newItem.category;
     try {
       const res = await fetch("/api/inventory", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...newItem, emoji: "📦" }),
+        body: JSON.stringify({
+          name: newItem.name, description: newItem.description,
+          category: finalCategory, emoji: newItem.iconId,
+          quantity: newItem.quantity, minQuantity: newItem.minQuantity, unit: newItem.unit,
+        }),
       });
       const created = await res.json();
       setItems(prev => [...prev, created]);
       setShowAdd(false);
-      setNewItem({ name:"", description:"", category:"Instrumental básico", quantity:0, minQuantity:5, unit:"pza" });
+      setNewItem({ name:"", description:"", category:"Instrumental básico", customCategory:"", quantity:0, minQuantity:5, unit:"pza", iconId:"fresa-jeringa" });
       toast.success("Artículo agregado");
-      setTab(created.quantity === 0 ? "inactivo" : created.quantity <= created.minQuantity ? "poco" : "disponible");
+      setTab(getStatus(created));
     } catch { toast.error("Error"); }
   }
 
@@ -157,49 +209,46 @@ export function InventoryClient({ initialItems, specialty }: { initialItems: Ite
     toast.success("Eliminado");
   }
 
-  const currentTab = TABS.find(t => t.id === tab)!;
-
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-extrabold">📦 Inventario</h1>
-          <p className="text-sm text-muted-foreground">{items.length} artículos registrados</p>
+          <h1 className="text-2xl font-extrabold">📦 Inventario</h1>
+          <p className="text-base text-muted-foreground mt-0.5">{items.length} artículos registrados</p>
         </div>
-        <Button onClick={() => setShowAdd(true)} size="sm">
-          <Plus className="w-4 h-4 mr-1.5" /> Agregar artículo
+        <Button onClick={() => setShowAdd(true)}>
+          <Plus className="w-5 h-5 mr-2" /> Agregar artículo
         </Button>
       </div>
 
       {/* Status tabs */}
-      <div className="grid grid-cols-4 gap-2 mb-5">
+      <div className="grid grid-cols-4 gap-3 mb-6">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`rounded-xl border p-3 text-left transition-all ${tab === t.id ? `${t.bg} ${t.border}` : "bg-white dark:bg-slate-900 border-border hover:border-slate-400"}`}>
-            <div className={`text-2xl font-extrabold leading-none mb-0.5 ${tab === t.id ? t.color : "text-foreground"}`}>
-              {counts[t.id]}
-            </div>
-            <div className={`text-xs font-semibold ${tab === t.id ? t.color : "text-muted-foreground"}`}>{t.label}</div>
+            className={`rounded-2xl border-2 p-4 text-left transition-all ${tab === t.id ? t.activeClass : "bg-white dark:bg-slate-900 border-border hover:border-slate-400"}`}>
+            <div className={`text-3xl font-extrabold leading-none mb-1 ${tab !== t.id ? "text-foreground" : ""}`}>{counts[t.id]}</div>
+            <div className={`text-sm font-bold ${tab !== t.id ? "text-muted-foreground" : ""}`}>{t.label}</div>
           </button>
         ))}
       </div>
 
       {/* Search */}
-      <div className="relative mb-4">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <input className="flex h-10 w-full rounded-xl border border-border bg-white dark:bg-slate-900 pl-9 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-          placeholder={`Buscar en ${currentTab.label.toLowerCase()}…`}
+      <div className="relative mb-5">
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+        <input
+          className="flex h-12 w-full rounded-xl border border-border bg-white dark:bg-slate-900 pl-11 pr-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          placeholder="Buscar artículo o categoría…"
           value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
       {/* Empty state */}
       {filtered.length === 0 && (
-        <div className="text-center py-12 text-muted-foreground">
-          <Package className="w-10 h-10 mx-auto mb-3 opacity-20" />
-          <div className="font-semibold text-sm">
+        <div className="text-center py-16 text-muted-foreground">
+          <Package className="w-12 h-12 mx-auto mb-3 opacity-20" />
+          <div className="text-base font-semibold">
             {tab === "inactivo" ? "Todos los artículos tienen stock registrado" :
-             tab === "disponible" ? "No hay artículos con stock suficiente aún" :
+             tab === "disponible" ? "No hay artículos con stock suficiente" :
              tab === "poco" ? "No hay artículos con stock bajo" :
              "No hay artículos sin stock"}
           </div>
@@ -207,145 +256,174 @@ export function InventoryClient({ initialItems, specialty }: { initialItems: Ite
       )}
 
       {/* Items list */}
-      <div className="bg-white dark:bg-slate-900 border border-border rounded-xl overflow-hidden shadow-card">
-        {filtered.map((item, idx) => {
-          const isLoad = loadingIds.has(item.id);
-          const isEditing = editQty[item.id] !== undefined;
-          const status = getStatus(item);
-          return (
-            <div key={item.id}
-              className={`flex items-center gap-3 px-4 py-3 group transition-colors ${idx > 0 ? "border-t border-border/50" : ""} hover:bg-muted/10`}>
-              <ItemImage category={item.category} />
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold truncate">{item.name}</div>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-xs text-muted-foreground">{item.category}</span>
-                  {item.description && <span className="text-xs text-muted-foreground truncate hidden sm:block">· {item.description}</span>}
-                </div>
-                {/* Alert threshold */}
-                <div className="flex items-center gap-1 mt-1">
-                  <span className="text-[10px] text-muted-foreground">Alerta si baja de:</span>
-                  <input type="number" min="0"
-                    className="w-10 h-4 text-[10px] border border-border rounded px-1 bg-transparent focus:outline-none focus:ring-1 focus:ring-brand-600/30"
-                    defaultValue={item.minQuantity}
-                    onBlur={e => {
-                      const v = parseInt(e.target.value);
-                      if (!isNaN(v) && v !== item.minQuantity) updateMinQty(item.id, v);
-                    }} />
-                  <span className="text-[10px] text-muted-foreground">{item.unit}</span>
-                </div>
-              </div>
+      {filtered.length > 0 && (
+        <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl overflow-hidden shadow-card">
+          {filtered.map((item, idx) => {
+            const isLoad    = loadingIds.has(item.id);
+            const isEditing = editQty[item.id] !== undefined;
+            const status    = getStatus(item);
+            const iconId    = item.emoji && DENTAL_ICONS.find(i => i.id === item.emoji) ? item.emoji : (CATEGORY_DEFAULT_ICON[item.category] ?? "fresa-jeringa");
 
-              {/* Quantity section */}
-              <div className="flex items-center gap-2 flex-shrink-0">
-                {/* Direct input */}
-                {isEditing ? (
-                  <div className="flex items-center gap-1">
-                    <input type="number" min="0" autoFocus
-                      className="w-16 h-9 text-center text-sm font-bold border-2 border-brand-500 rounded-lg bg-white dark:bg-slate-800 focus:outline-none"
-                      value={editQty[item.id]}
-                      onChange={e => setEditQty(prev => ({ ...prev, [item.id]: e.target.value }))}
-                      onKeyDown={e => {
-                        if (e.key === "Enter") setQuantityDirect(item.id, parseInt(editQty[item.id]));
-                        if (e.key === "Escape") setEditQty(prev => { const n = { ...prev }; delete n[item.id]; return n; });
+            return (
+              <div key={item.id}
+                className={`flex items-center gap-4 px-5 py-4 group transition-colors ${idx > 0 ? "border-t border-border/50" : ""} hover:bg-muted/10`}>
+                <ItemIcon iconId={iconId} category={item.category} size={48} />
+
+                <div className="flex-1 min-w-0">
+                  <div className="text-base font-bold truncate">{item.name}</div>
+                  <div className="text-sm text-muted-foreground mt-0.5">{item.category}</div>
+                  {item.description && (
+                    <div className="text-sm text-muted-foreground/70 truncate mt-0.5">{item.description}</div>
+                  )}
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    <span className="text-xs text-muted-foreground">Alerta si baja de</span>
+                    <input type="number" min="0"
+                      className="w-12 h-5 text-xs border border-border rounded-md px-1.5 bg-transparent focus:outline-none focus:ring-1 focus:ring-brand-600/30"
+                      defaultValue={item.minQuantity}
+                      onBlur={e => {
+                        const v = parseInt(e.target.value);
+                        if (!isNaN(v) && v !== item.minQuantity) updateMinQty(item.id, v);
                       }} />
-                    <button onClick={() => setQuantityDirect(item.id, parseInt(editQty[item.id] || "0"))}
-                      disabled={isLoad}
-                      className="w-8 h-9 bg-brand-600 text-white rounded-lg flex items-center justify-center text-xs font-bold hover:bg-brand-700 transition-colors disabled:opacity-50">
-                      ✓
-                    </button>
+                    <span className="text-xs text-muted-foreground">{item.unit}</span>
                   </div>
-                ) : (
-                  <button onClick={() => setEditQty(prev => ({ ...prev, [item.id]: String(item.quantity) }))}
-                    className={`flex items-center gap-1 px-2 py-1 rounded-lg border transition-colors hover:border-brand-400 group/qty ${
-                      status === "sin" ? "border-rose-300 bg-rose-50 dark:bg-rose-950/30" :
-                      status === "poco" ? "border-amber-300 bg-amber-50 dark:bg-amber-950/30" :
-                      status === "inactivo" ? "border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800" :
-                      "border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30"
-                    }`}>
-                    <span className={`text-lg font-extrabold leading-none ${
-                      status === "sin" ? "text-rose-600" :
-                      status === "poco" ? "text-amber-600" :
-                      status === "inactivo" ? "text-slate-400" :
-                      "text-emerald-600"
-                    }`}>{item.quantity}</span>
-                    <span className="text-[10px] text-muted-foreground">{item.unit}</span>
-                    <Edit3 className="w-3 h-3 text-muted-foreground opacity-0 group-hover/qty:opacity-100 transition-opacity" />
+                </div>
+
+                {/* Quantity */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {isEditing ? (
+                    <div className="flex items-center gap-1.5">
+                      <input type="number" min="0" autoFocus
+                        className="w-20 h-11 text-center text-lg font-bold border-2 border-brand-500 rounded-xl bg-white dark:bg-slate-800 focus:outline-none"
+                        value={editQty[item.id]}
+                        onChange={e => setEditQty(prev => ({ ...prev, [item.id]: e.target.value }))}
+                        onKeyDown={e => {
+                          if (e.key === "Enter") setQuantityDirect(item.id, editQty[item.id]);
+                          if (e.key === "Escape") setEditQty(prev => { const n = { ...prev }; delete n[item.id]; return n; });
+                        }} />
+                      <button onClick={() => setQuantityDirect(item.id, editQty[item.id])} disabled={isLoad}
+                        className="h-11 px-3 bg-brand-600 text-white rounded-xl font-bold hover:bg-brand-700 transition-colors disabled:opacity-50 text-sm">
+                        ✓
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setEditQty(prev => ({ ...prev, [item.id]: String(item.quantity) }))}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border-2 transition-colors hover:border-brand-400 group/qty ${
+                        status === "sin"      ? "border-rose-300 bg-rose-50 dark:bg-rose-950/30" :
+                        status === "poco"     ? "border-amber-300 bg-amber-50 dark:bg-amber-950/30" :
+                        status === "inactivo" ? "border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800" :
+                        "border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30"
+                      }`}>
+                      <span className={`text-2xl font-extrabold leading-none ${
+                        status === "sin"      ? "text-rose-600" :
+                        status === "poco"     ? "text-amber-600" :
+                        status === "inactivo" ? "text-slate-400" :
+                        "text-emerald-600"
+                      }`}>{item.quantity}</span>
+                      <span className="text-sm text-muted-foreground">{item.unit}</span>
+                      <Edit3 className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover/qty:opacity-100 ml-1" />
+                    </button>
+                  )}
+
+                  <button disabled={isLoad || item.quantity === 0} onClick={() => changeQty(item.id, -1)}
+                    className="w-11 h-11 rounded-xl bg-rose-500 hover:bg-rose-600 active:scale-95 text-white font-bold text-2xl flex items-center justify-center transition-all disabled:opacity-30 shadow-sm">
+                    −
                   </button>
-                )}
-
-                {/* +/- buttons */}
-                <button disabled={isLoad || item.quantity === 0} onClick={() => changeQty(item.id, -1)}
-                  className="w-9 h-9 rounded-xl bg-rose-500 hover:bg-rose-600 active:scale-95 text-white font-bold text-xl flex items-center justify-center transition-all disabled:opacity-30 shadow-sm">
-                  −
-                </button>
-                <button disabled={isLoad} onClick={() => changeQty(item.id, 1)}
-                  className="w-9 h-9 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-bold text-xl flex items-center justify-center transition-all disabled:opacity-50 shadow-sm">
-                  +
-                </button>
-                <button onClick={() => deleteItem(item.id)}
-                  className="w-7 h-7 rounded-lg text-muted-foreground hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
-                  <X className="w-3.5 h-3.5" />
-                </button>
+                  <button disabled={isLoad} onClick={() => changeQty(item.id, 1)}
+                    className="w-11 h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-bold text-2xl flex items-center justify-center transition-all shadow-sm">
+                    +
+                  </button>
+                  <button onClick={() => deleteItem(item.id)}
+                    className="w-9 h-9 rounded-lg text-muted-foreground hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center ml-1">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
-      {/* Add Modal */}
+      {/* Add Item Modal */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl shadow-xl w-full max-w-md">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-              <h2 className="text-sm font-bold">Agregar artículo</h2>
-              <button onClick={() => setShowAdd(false)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-4 h-4" /></button>
+          <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-white dark:bg-slate-900">
+              <h2 className="text-lg font-bold">Agregar artículo</h2>
+              <button onClick={() => setShowAdd(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
             </div>
-            <div className="px-5 py-4 space-y-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Nombre *</Label>
-                <input className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-                  placeholder="Ej: Resina A2" value={newItem.name} onChange={e => setNewItem(n => ({ ...n, name: e.target.value }))} />
+            <div className="px-6 py-5 space-y-4">
+
+              {/* Icon picker */}
+              <IconPicker
+                selected={newItem.iconId}
+                onSelect={id => setNewItem(n => ({ ...n, iconId: id }))} />
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">Nombre del artículo *</Label>
+                <input className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                  placeholder="Ej: Resina compuesta A2"
+                  value={newItem.name} onChange={e => setNewItem(n => ({ ...n, name: e.target.value }))} />
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Para qué sirve</Label>
-                <textarea className="flex min-h-[55px] w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-                  placeholder="Ej: Para restauraciones del sector anterior"
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">Para qué sirve</Label>
+                <textarea className="flex min-h-[70px] w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 py-3 text-base placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+                  placeholder="Ej: Para restauraciones del sector anterior, color más utilizado"
                   value={newItem.description} onChange={e => setNewItem(n => ({ ...n, description: e.target.value }))} />
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Categoría</Label>
-                <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none"
-                  value={newItem.category} onChange={e => setNewItem(n => ({ ...n, category: e.target.value }))}>
-                  {Object.keys(CATEGORY_ICONS).map(c => <option key={c}>{c}</option>)}
-                  <option value="Otro">Otro</option>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">Categoría</Label>
+                <select className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
+                  value={newItem.category}
+                  onChange={e => {
+                    setNewItem(n => ({ ...n, category: e.target.value }));
+                    if (e.target.value !== "Otro") setCustomCat("");
+                  }}>
+                  <option>Instrumental básico</option>
+                  <option>Fresas dentales</option>
+                  <option>Materiales de restauración</option>
+                  <option>Ortodoncia</option>
+                  <option>Endodoncia</option>
+                  <option>Cirugía e implantes</option>
+                  <option>Consumibles</option>
+                  <option>Otro</option>
                 </select>
+                {/* Custom category input when Otro is selected */}
+                {newItem.category === "Otro" && (
+                  <input
+                    className="flex h-11 w-full rounded-xl border border-brand-400 bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20 mt-2"
+                    placeholder="Escribe el nombre de la categoría (o deja en blanco para usar 'Otro')"
+                    value={newItem.customCategory}
+                    onChange={e => setNewItem(n => ({ ...n, customCategory: e.target.value }))} />
+                )}
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-xs">Cantidad inicial</Label>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Cantidad inicial</Label>
                   <input type="number" min="0"
-                    className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none"
+                    className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
                     value={newItem.quantity} onChange={e => setNewItem(n => ({ ...n, quantity: parseInt(e.target.value) || 0 }))} />
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Alerta si baja de</Label>
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Alerta si baja de</Label>
                   <input type="number" min="0"
-                    className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none"
+                    className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
                     value={newItem.minQuantity} onChange={e => setNewItem(n => ({ ...n, minQuantity: parseInt(e.target.value) || 0 }))} />
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Unidad</Label>
-                  <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none"
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Unidad</Label>
+                  <select className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
                     value={newItem.unit} onChange={e => setNewItem(n => ({ ...n, unit: e.target.value }))}>
                     {["pza","cja","frasco","rollo","par","paquete","kit","ml","mg","uni"].map(u => <option key={u}>{u}</option>)}
                   </select>
                 </div>
               </div>
             </div>
-            <div className="px-5 pb-5 flex gap-2">
-              <Button variant="outline" onClick={() => setShowAdd(false)} className="flex-1">Cancelar</Button>
-              <Button onClick={addItem} className="flex-1">✅ Agregar</Button>
+            <div className="px-6 pb-6 flex gap-3">
+              <Button variant="outline" onClick={() => setShowAdd(false)} className="flex-1 h-11 text-base">Cancelar</Button>
+              <Button onClick={addItem} className="flex-1 h-11 text-base">✅ Agregar artículo</Button>
             </div>
           </div>
         </div>
