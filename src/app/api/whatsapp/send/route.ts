@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { sendWhatsAppMessage } from "@/lib/whatsapp";
 
 async function getClinicId() {
   const supabase = createClient();
@@ -10,35 +11,6 @@ async function getClinicId() {
   return dbUser?.clinicId ?? null;
 }
 
-export async function sendWhatsAppMessage(
-  phoneNumberId: string,
-  accessToken: string,
-  to: string,
-  message: string
-) {
-  // Format phone number - remove spaces, dashes, ensure country code
-  const phone = to.replace(/[\s\-\(\)]/g, "");
-  const formattedPhone = phone.startsWith("+") ? phone.slice(1) : phone.startsWith("52") ? phone : `52${phone}`;
-
-  const res = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      to: formattedPhone,
-      type: "text",
-      text: { body: message },
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error?.message ?? "Error al enviar mensaje");
-  }
-  return await res.json();
-}
-
-// Send reminder manually for a specific appointment
 export async function POST(req: NextRequest) {
   const clinicId = await getClinicId();
   if (!clinicId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
