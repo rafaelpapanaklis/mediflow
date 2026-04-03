@@ -144,7 +144,7 @@ export function AdminClinicsClient({ clinics: initial }: Props) {
                 return (
                   <tr key={clinic.id} className="border-b border-slate-800 hover:bg-slate-800/40 transition-colors">
                     <td className="px-4 py-3">
-                      <div className="font-semibold text-white">{clinic.name}</div>
+                      <Link href={`/admin/clinics/${clinic.id}`} className="font-semibold text-white hover:text-brand-400 transition-colors">{clinic.name}</Link>
                       <div className="text-[10px] text-slate-500">{clinic.specialty} · {clinic.country}</div>
                       <div className="text-[10px] text-slate-600 font-mono">{clinic.slug}</div>
                     </td>

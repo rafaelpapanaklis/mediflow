@@ -27,13 +27,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const dbUser = await getDbUser();
   if (!dbUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  try {
-    const body = await req.json();
-    const record = await prisma.medicalRecord.create({
-      data: { ...body, clinicId: dbUser.clinicId, doctorId: dbUser.id },
-    });
-    return NextResponse.json(record, { status: 201 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 });
-  }
+  const body = await req.json();
+  const record = await prisma.medicalRecord.create({ data: { ...body, clinicId: dbUser.clinicId, doctorId: dbUser.id } });
+  return NextResponse.json(record, { status: 201 });
 }

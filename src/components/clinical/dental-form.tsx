@@ -1,291 +1,242 @@
 "use client";
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
 
-const TEETH_UPPER = [18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28];
-const TEETH_LOWER = [48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38];
-
-const TOOTH_CONDITIONS: Record<string, { label: string; color: string }> = {
-  healthy:    { label: "Sano",        color: "bg-white border-slate-300" },
-  caries:     { label: "Caries",      color: "bg-red-400 border-red-500 text-white" },
-  filled:     { label: "Obturado",    color: "bg-blue-400 border-blue-500 text-white" },
-  crown:      { label: "Corona",      color: "bg-yellow-400 border-yellow-500" },
-  missing:    { label: "Ausente",     color: "bg-slate-400 border-slate-500 text-white" },
-  extracted:  { label: "Extraído",    color: "bg-slate-600 border-slate-700 text-white" },
-  implant:    { label: "Implante",    color: "bg-violet-400 border-violet-500 text-white" },
-  fracture:   { label: "Fractura",    color: "bg-orange-400 border-orange-500 text-white" },
-  root_canal: { label: "Endodoncia",  color: "bg-pink-400 border-pink-500 text-white" },
-  bridge:     { label: "Puente",      color: "bg-emerald-400 border-emerald-500 text-white" },
+const TOOTH_CONDITIONS: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  healthy:      { label: "Sano",          color: "#94a3b8", bg: "#fff",    border: "#94a3b8" },
+  caries:       { label: "Caries",        color: "#7f1d1d", bg: "#fca5a5", border: "#ef4444" },
+  restoration:  { label: "Restauración",  color: "#1e3a8a", bg: "#bfdbfe", border: "#3b82f6" },
+  crown:        { label: "Corona",        color: "#78350f", bg: "#fde68a", border: "#f59e0b" },
+  endo:         { label: "Endodoncia",    color: "#4c1d95", bg: "#c4b5fd", border: "#7c3aed" },
+  absent:       { label: "Ausente",       color: "#94a3b8", bg: "#f1f5f9", border: "#cbd5e1" },
+  extraction:   { label: "Extracción",    color: "#7c2d12", bg: "#fed7aa", border: "#f97316" },
+  implant:      { label: "Implante",      color: "#064e3b", bg: "#a7f3d0", border: "#10b981" },
 };
 
-const DENTAL_PROCEDURES = [
-  "Extracción simple","Extracción quirúrgica","Obturación resina","Obturación amalgama",
-  "Endodoncia anterior","Endodoncia posterior","Corona metal-porcelana","Corona zirconia",
-  "Limpieza/Profilaxis","Raspado y alisado","Implante dental","Puente fijo",
-  "Blanqueamiento","Ortodoncia brackets","Ortodoncia invisible","Carilla de porcelana",
-  "Radiografía periapical","Radiografía panorámica","Cirugía de encías","Otro",
-];
+const UPPER_TEETH = [18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28];
+const LOWER_TEETH = [48,47,46,45,44,43,42,41, 31,32,33,34,35,36,37,38];
+const PROCEDURES = ["Profilaxis","Tartrectomía","Extracción simple","Extracción quirúrgica","Restauración resina","Amalgama","Corona porcelana","Corona metal-porcelana","Endodoncia unirradicular","Endodoncia birradicular","Endodoncia multirradicular","Implante dental","Ortodoncia brackets","Ortodoncia invisible","Carilla dental","Blanqueamiento","Periodoncia","Cirugía periodontal","Injerto óseo"];
 
-interface ToothState {
-  condition: string;
-  notes: string;
-}
-
-interface Props {
-  patientId: string;
-  onSaved: (record: any) => void;
-}
+interface Props { patientId: string; onSaved: (record: any) => void }
 
 export function DentalForm({ patientId, onSaved }: Props) {
-  const [teeth, setTeeth]         = useState<Record<number, ToothState>>({});
+  const [saving,     setSaving]     = useState(false);
+  const [activeTool, setActiveTool] = useState<keyof typeof TOOTH_CONDITIONS>("caries");
+  const [odontogram, setOdontogram] = useState<Record<number, string>>({});
+  const [selectedProcs, setSelectedProcs] = useState<string[]>([]);
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null);
-  const [activeTool, setActiveTool] = useState("caries");
-  const [saving, setSaving]       = useState(false);
   const [form, setForm] = useState({
-    chiefComplaint: "",
-    medicalHistory: "",
-    lastVisit: "",
-    procedures: [] as string[],
-    periodontal: { plaque: "", calculus: "", gingival: "", pocketDepth: "" },
-    vitals: { bloodPressure: "", heartRate: "", notes: "" },
-    treatment: "",
-    nextVisit: "",
-    observations: "",
-    xrays: "",
+    subjective:  "",
+    objective:   "",
+    assessment:  "",
+    plan:        "",
+    periodontal: { plaque: "", calculus: "", gingival: "", pocketDepth: "", bleeding: false },
+    xrays:       "",
+    nextVisit:   "",
+    medications: [{ drug: "", dose: "", duration: "" }],
   });
+  const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
 
-  function paintTooth(toothNum: number) {
-    setTeeth(prev => ({
-      ...prev,
-      [toothNum]: { condition: activeTool, notes: prev[toothNum]?.notes ?? "" },
-    }));
+  function clickTooth(num: number) {
+    setSelectedTooth(num);
+    setOdontogram(o => ({ ...o, [num]: activeTool }));
   }
 
-  function toggleProcedure(proc: string) {
-    setForm(f => ({
-      ...f,
-      procedures: f.procedures.includes(proc)
-        ? f.procedures.filter(p => p !== proc)
-        : [...f.procedures, proc],
-    }));
+  function toggleProc(p: string) {
+    setSelectedProcs(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
   }
 
   async function handleSave() {
-    if (!form.chiefComplaint) { toast.error("Ingresa el motivo de consulta"); return; }
+    if (!form.subjective && !form.assessment) { toast.error("Agrega al menos el motivo de consulta o diagnóstico"); return; }
     setSaving(true);
     try {
       const res = await fetch("/api/clinical", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           patientId,
-          subjective: form.chiefComplaint,
-          objective:  form.medicalHistory,
-          assessment: form.observations,
-          plan:       form.treatment,
-          vitals:     form.vitals,
+          subjective: form.subjective, objective: form.objective,
+          assessment: form.assessment, plan: form.plan,
           specialtyData: {
-            type: "dental",
-            odontogram: teeth,
-            procedures: form.procedures,
+            type: "dental", odontogram,
+            procedures: selectedProcs,
             periodontal: form.periodontal,
-            lastVisit: form.lastVisit,
-            nextVisit: form.nextVisit,
-            xrays: form.xrays,
+            xrays: form.xrays, nextVisit: form.nextVisit,
+            medications: form.medications.filter(m => m.drug),
           },
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
       const record = await res.json();
-      toast.success("Expediente dental guardado");
       onSaved(record);
-    } catch (err: any) {
-      toast.error(err.message ?? "Error al guardar");
-    } finally {
-      setSaving(false);
-    }
+      toast.success("Expediente dental guardado");
+    } catch (err: any) { toast.error(err.message ?? "Error al guardar"); } finally { setSaving(false); }
   }
 
-  const ToothButton = ({ num }: { num: number }) => {
-    const state = teeth[num];
-    const cfg   = TOOTH_CONDITIONS[state?.condition ?? "healthy"];
+  const renderTooth = (num: number) => {
+    const condition = odontogram[num] ?? "healthy";
+    const style = TOOTH_CONDITIONS[condition];
+    const isSelected = selectedTooth === num;
     return (
-      <button onClick={() => paintTooth(num)} title={`Diente ${num}`}
-        className={`w-8 h-8 rounded border-2 text-[10px] font-bold transition-all hover:scale-110 ${cfg.color}`}>
-        {num}
-      </button>
+      <div key={num} className="flex flex-col items-center gap-0.5 cursor-pointer" onClick={() => clickTooth(num)}>
+        <span className="text-[9px] text-muted-foreground font-mono">{num}</span>
+        <div className="w-7 h-8 rounded-md flex items-center justify-center text-[9px] font-bold border-2 transition-all hover:scale-110"
+          style={{ background: style.bg, borderColor: isSelected ? "#2563eb" : style.border, color: style.color, boxShadow: isSelected ? "0 0 0 2px #2563eb" : "none" }}>
+          {condition === "absent" ? "X" : condition === "implant" ? "I" : condition === "endo" ? "E" : ""}
+        </div>
+      </div>
     );
   };
 
   return (
     <div className="space-y-6">
-      {/* Motivo y antecedentes */}
+      {/* ANAMNESIS */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <Label>Motivo de consulta *</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-            placeholder="Dolor en molar superior derecho, sensibilidad al frío…"
-            value={form.chiefComplaint} onChange={e => setForm(f => ({ ...f, chiefComplaint: e.target.value }))} />
+          <Label>Motivo de consulta / HEA</Label>
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            placeholder="¿Por qué viene el paciente hoy?" value={form.subjective} onChange={e => set("subjective", e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <Label>Antecedentes médicos relevantes</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-            placeholder="Diabetes, hipertensión, alergias a anestesia…"
-            value={form.medicalHistory} onChange={e => setForm(f => ({ ...f, medicalHistory: e.target.value }))} />
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            placeholder="Diabetes, hipertensión, medicamentos actuales…" value={form.objective} onChange={e => set("objective", e.target.value)} />
         </div>
       </div>
 
-      {/* Signos vitales */}
+      {/* ODONTOGRAMA */}
       <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">📊 Signos vitales</h3>
-        <div className="grid grid-cols-3 gap-3">
-          <div className="space-y-1">
-            <Label>Presión arterial</Label>
-            <input className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none"
-              placeholder="120/80 mmHg" value={form.vitals.bloodPressure}
-              onChange={e => setForm(f => ({ ...f, vitals: { ...f.vitals, bloodPressure: e.target.value } }))} />
-          </div>
-          <div className="space-y-1">
-            <Label>Frecuencia cardíaca</Label>
-            <input className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none"
-              placeholder="72 bpm" value={form.vitals.heartRate}
-              onChange={e => setForm(f => ({ ...f, vitals: { ...f.vitals, heartRate: e.target.value } }))} />
-          </div>
-          <div className="space-y-1">
-            <Label>Notas</Label>
-            <input className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none"
-              placeholder="Observaciones…" value={form.vitals.notes}
-              onChange={e => setForm(f => ({ ...f, vitals: { ...f.vitals, notes: e.target.value } }))} />
-          </div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold">🦷 Odontograma</h3>
+          <span className="text-xs text-muted-foreground">{selectedTooth ? `Diente #${selectedTooth} seleccionado` : "Haz clic en un diente para marcarlo"}</span>
         </div>
-      </div>
 
-      {/* Odontograma */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">🦷 Odontograma</h3>
-
-        {/* Tools */}
-        <div className="flex flex-wrap gap-1.5 mb-4">
+        {/* Tool selector */}
+        <div className="flex flex-wrap gap-1.5 mb-4 pb-3 border-b border-border">
           {Object.entries(TOOTH_CONDITIONS).map(([key, val]) => (
-            <button key={key} onClick={() => setActiveTool(key)}
-              className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all ${activeTool === key ? "ring-2 ring-brand-600 " + val.color : "bg-white border-border text-muted-foreground hover:border-brand-200"}`}>
+            <button key={key} onClick={() => setActiveTool(key as keyof typeof TOOTH_CONDITIONS)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${activeTool === key ? "ring-2 ring-brand-600 scale-105" : ""}`}
+              style={{ background: val.bg, borderColor: val.border, color: val.color }}>
               {val.label}
             </button>
           ))}
+          <button onClick={() => { setOdontogram({}); setSelectedTooth(null); }} className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-slate-300 text-slate-600 hover:bg-slate-50 ml-auto">
+            Limpiar
+          </button>
         </div>
 
-        <p className="text-xs text-muted-foreground mb-3">Selecciona una condición y haz clic en el diente</p>
+        {/* Upper arch */}
+        <div className="text-[10px] text-center text-muted-foreground mb-1 font-semibold">SUPERIOR</div>
+        <div className="flex justify-center gap-1 mb-1">{UPPER_TEETH.map(renderTooth)}</div>
+        <div className="border-t-2 border-b-2 border-dashed border-muted my-2" />
+        <div className="flex justify-center gap-1 mb-1">{LOWER_TEETH.map(renderTooth)}</div>
+        <div className="text-[10px] text-center text-muted-foreground mt-1 font-semibold">INFERIOR</div>
 
-        {/* Upper teeth */}
-        <div className="mb-1">
-          <div className="text-[10px] text-muted-foreground text-center mb-1">Superior</div>
-          <div className="flex justify-center gap-1">
-            {TEETH_UPPER.map(n => <ToothButton key={n} num={n} />)}
-          </div>
-        </div>
-        <div className="border-t border-dashed border-muted-foreground/20 my-2" />
-        {/* Lower teeth */}
-        <div>
-          <div className="flex justify-center gap-1">
-            {TEETH_LOWER.map(n => <ToothButton key={n} num={n} />)}
-          </div>
-          <div className="text-[10px] text-muted-foreground text-center mt-1">Inferior</div>
-        </div>
-
-        {/* Summary */}
-        {Object.keys(teeth).length > 0 && (
-          <div className="mt-4 p-3 bg-muted/30 rounded-lg">
-            <div className="text-xs font-bold mb-2">Resumen del odontograma:</div>
-            <div className="flex flex-wrap gap-1.5">
-              {Object.entries(teeth).map(([num, state]) => (
-                <span key={num} className="text-[10px] bg-white border border-border rounded px-2 py-0.5">
-                  D{num}: {TOOTH_CONDITIONS[state.condition]?.label ?? state.condition}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Evaluación periodontal */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">🔬 Evaluación periodontal</h3>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {[
-            { key: "plaque",      label: "Placa bacteriana" },
-            { key: "calculus",    label: "Cálculo / Sarro" },
-            { key: "gingival",    label: "Estado gingival" },
-            { key: "pocketDepth", label: "Profundidad bolsas" },
-          ].map(f => (
-            <div key={f.key} className="space-y-1">
-              <Label>{f.label}</Label>
-              <select className="flex h-9 w-full rounded-lg border border-border bg-white px-2 text-sm focus:outline-none"
-                value={(form.periodontal as any)[f.key]}
-                onChange={e => setForm(prev => ({ ...prev, periodontal: { ...prev.periodontal, [f.key]: e.target.value } }))}>
-                <option value="">Seleccionar…</option>
-                {f.key === "plaque"      && ["Ausente","Leve","Moderada","Severa"].map(o => <option key={o}>{o}</option>)}
-                {f.key === "calculus"    && ["Ausente","Supragingival leve","Supragingival moderado","Subgingival"].map(o => <option key={o}>{o}</option>)}
-                {f.key === "gingival"    && ["Sana","Gingivitis leve","Gingivitis moderada","Periodontitis"].map(o => <option key={o}>{o}</option>)}
-                {f.key === "pocketDepth" && ["< 3mm (normal)","3-4mm (leve)","4-6mm (moderada)","> 6mm (severa)"].map(o => <option key={o}>{o}</option>)}
-              </select>
+        {/* Legend */}
+        <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-border">
+          {Object.entries(TOOTH_CONDITIONS).map(([, val]) => (
+            <div key={val.label} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+              <div className="w-3 h-3 rounded border" style={{ background: val.bg, borderColor: val.border }} />
+              {val.label}
             </div>
           ))}
         </div>
       </div>
 
-      {/* Procedimientos */}
+      {/* PERIODONTAL */}
       <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">🔧 Procedimientos realizados</h3>
+        <h3 className="text-sm font-bold mb-3">Evaluación periodontal</h3>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            { key: "plaque",     label: "Índice de placa",  placeholder: "Ej. 35%" },
+            { key: "calculus",   label: "Cálculo dental",   placeholder: "Leve / Moderado / Severo" },
+            { key: "gingival",   label: "Estado gingival",  placeholder: "Sana / Inflamada" },
+            { key: "pocketDepth",label: "Bolsas periodontales", placeholder: "Ej. 2-3mm" },
+          ].map(f => (
+            <div key={f.key} className="space-y-1">
+              <Label className="text-xs">{f.label}</Label>
+              <input className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                placeholder={f.placeholder}
+                value={(form.periodontal as any)[f.key] ?? ""}
+                onChange={e => set("periodontal", { ...form.periodontal, [f.key]: e.target.value })} />
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 mt-3">
+          <input type="checkbox" id="bleeding" checked={form.periodontal.bleeding}
+            onChange={e => set("periodontal", { ...form.periodontal, bleeding: e.target.checked })}
+            className="w-4 h-4 accent-brand-600" />
+          <label htmlFor="bleeding" className="text-sm font-medium">Sangrado al sondeo presente</label>
+        </div>
+      </div>
+
+      {/* PROCEDIMIENTOS */}
+      <div className="rounded-xl border border-border p-4">
+        <h3 className="text-sm font-bold mb-3">Procedimientos realizados en esta visita</h3>
         <div className="flex flex-wrap gap-2">
-          {DENTAL_PROCEDURES.map(proc => (
-            <button key={proc} onClick={() => toggleProcedure(proc)}
-              className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition-all ${
-                form.procedures.includes(proc)
-                  ? "bg-brand-600 text-white border-brand-600"
-                  : "bg-white border-border text-muted-foreground hover:border-brand-300"
-              }`}>
-              {proc}
+          {PROCEDURES.map(p => (
+            <button key={p} onClick={() => toggleProc(p)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedProcs.includes(p) ? "bg-brand-600 text-white border-brand-600" : "bg-white text-muted-foreground border-border hover:border-brand-300 hover:text-brand-600"}`}>
+              {p}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Plan y observaciones */}
+      {/* PRESCRIPCIÓN */}
+      <div className="rounded-xl border border-border p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold">💊 Prescripción médica</h3>
+          <button className="text-xs font-semibold text-brand-600 hover:underline"
+            onClick={() => set("medications", [...form.medications, { drug:"", dose:"", duration:"" }])}>+ Agregar</button>
+        </div>
+        <div className="space-y-2">
+          {form.medications.map((med, i) => (
+            <div key={i} className="grid grid-cols-3 gap-2">
+              <input className="flex h-9 rounded-lg border border-border bg-white px-3 text-sm focus:outline-none" placeholder="Medicamento" value={med.drug}
+                onChange={e => { const m = [...form.medications]; m[i].drug = e.target.value; set("medications", m); }} />
+              <input className="flex h-9 rounded-lg border border-border bg-white px-3 text-sm focus:outline-none" placeholder="Dosis (ej. 500mg c/8h)" value={med.dose}
+                onChange={e => { const m = [...form.medications]; m[i].dose = e.target.value; set("medications", m); }} />
+              <input className="flex h-9 rounded-lg border border-border bg-white px-3 text-sm focus:outline-none" placeholder="Duración (ej. 7 días)" value={med.duration}
+                onChange={e => { const m = [...form.medications]; m[i].duration = e.target.value; set("medications", m); }} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* DIAGNÓSTICO Y PLAN */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <Label>Plan de tratamiento</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-            placeholder="Extracción pieza 18, obturación pieza 36, profilaxis…"
-            value={form.treatment} onChange={e => setForm(f => ({ ...f, treatment: e.target.value }))} />
+          <Label>Observaciones clínicas / Diagnóstico</Label>
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            placeholder="Diagnóstico, hallazgos clínicos…" value={form.assessment} onChange={e => set("assessment", e.target.value)} />
         </div>
         <div className="space-y-1.5">
-          <Label>Observaciones clínicas</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-            placeholder="Paciente con buena higiene oral, se recomienda…"
-            value={form.observations} onChange={e => setForm(f => ({ ...f, observations: e.target.value }))} />
+          <Label>Plan de tratamiento futuro</Label>
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            placeholder="Próximos procedimientos a realizar…" value={form.plan} onChange={e => set("plan", e.target.value)} />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label>Radiografías tomadas</Label>
-          <input className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none"
-            placeholder="Periapical diente 36, panorámica…"
-            value={form.xrays} onChange={e => setForm(f => ({ ...f, xrays: e.target.value }))} />
+          <input className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            placeholder="Rx panorámica, periapical #26…" value={form.xrays} onChange={e => set("xrays", e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <Label>Próxima cita recomendada</Label>
-          <input type="date" className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none"
-            value={form.nextVisit} onChange={e => setForm(f => ({ ...f, nextVisit: e.target.value }))} />
+          <input className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            placeholder="En 3 meses, urgente, etc." value={form.nextVisit} onChange={e => set("nextVisit", e.target.value)} />
         </div>
       </div>
 
-      <Button onClick={handleSave} disabled={saving} className="w-full" size="lg">
-        {saving ? "Guardando expediente…" : "💾 Guardar expediente dental"}
-      </Button>
+      <div className="flex justify-end">
+        <Button onClick={handleSave} disabled={saving} size="lg">
+          {saving ? "Guardando…" : "💾 Guardar expediente dental"}
+        </Button>
+      </div>
     </div>
   );
 }

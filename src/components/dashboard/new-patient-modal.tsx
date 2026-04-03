@@ -1,5 +1,4 @@
 "use client";
-
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -7,18 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
 
-interface Props {
-  open: boolean;
-  onClose: () => void;
-  onCreated: (patient: any) => void;
-}
+interface Props { open: boolean; onClose: () => void; onCreated: (patient: any) => void; }
 
 export function NewPatientModal({ open, onClose, onCreated }: Props) {
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({
-    firstName: "", lastName: "", email: "", phone: "",
-    gender: "OTHER", dob: "", address: "", allergies: "", notes: "",
-  });
+  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", gender: "OTHER", dob: "", address: "", allergies: "", notes: "" });
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
   async function handleSubmit(e: React.FormEvent) {
@@ -29,83 +21,49 @@ export function NewPatientModal({ open, onClose, onCreated }: Props) {
       const res = await fetch("/api/patients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          allergies: form.allergies ? form.allergies.split(",").map(s => s.trim()).filter(Boolean) : [],
-        }),
+        body: JSON.stringify({ ...form, allergies: form.allergies ? form.allergies.split(",").map(s => s.trim()).filter(Boolean) : [] }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
       const patient = await res.json();
       onCreated(patient);
       setForm({ firstName:"", lastName:"", email:"", phone:"", gender:"OTHER", dob:"", address:"", allergies:"", notes:"" });
+      toast.success(`Paciente ${patient.firstName} creado`);
     } catch (err: any) {
       toast.error(err.message ?? "Error al crear paciente");
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Nuevo paciente</DialogTitle>
-        </DialogHeader>
+        <DialogHeader><DialogTitle>Nuevo paciente</DialogTitle></DialogHeader>
         <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Nombre *</Label>
-              <Input placeholder="Ana" value={form.firstName} onChange={e => set("firstName", e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Apellido *</Label>
-              <Input placeholder="García" value={form.lastName} onChange={e => set("lastName", e.target.value)} />
-            </div>
+            <div className="space-y-1.5"><Label>Nombre *</Label><Input placeholder="Ana" value={form.firstName} onChange={e => set("firstName", e.target.value)} /></div>
+            <div className="space-y-1.5"><Label>Apellido *</Label><Input placeholder="García" value={form.lastName} onChange={e => set("lastName", e.target.value)} /></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Email</Label>
-              <Input type="email" placeholder="ana@email.com" value={form.email} onChange={e => set("email", e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Teléfono</Label>
-              <Input placeholder="+52 55..." value={form.phone} onChange={e => set("phone", e.target.value)} />
-            </div>
+            <div className="space-y-1.5"><Label>Email</Label><Input type="email" placeholder="ana@email.com" value={form.email} onChange={e => set("email", e.target.value)} /></div>
+            <div className="space-y-1.5"><Label>Teléfono</Label><Input placeholder="+52 55..." value={form.phone} onChange={e => set("phone", e.target.value)} /></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Fecha de nacimiento</Label>
-              <Input type="date" value={form.dob} onChange={e => set("dob", e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Género</Label>
-              <select className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600"
-                value={form.gender} onChange={e => set("gender", e.target.value)}>
-                <option value="M">Masculino</option>
-                <option value="F">Femenino</option>
-                <option value="OTHER">Otro</option>
+            <div className="space-y-1.5"><Label>Fecha de nacimiento</Label><Input type="date" value={form.dob} onChange={e => set("dob", e.target.value)} /></div>
+            <div className="space-y-1.5"><Label>Género</Label>
+              <select className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20" value={form.gender} onChange={e => set("gender", e.target.value)}>
+                <option value="M">Masculino</option><option value="F">Femenino</option><option value="OTHER">Otro</option>
               </select>
             </div>
           </div>
-          <div className="space-y-1.5">
-            <Label>Dirección</Label>
-            <Input placeholder="Calle, Col., Ciudad" value={form.address} onChange={e => set("address", e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Alergias (separadas por comas)</Label>
-            <Input placeholder="Penicilina, Látex..." value={form.allergies} onChange={e => set("allergies", e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Notas iniciales</Label>
-            <textarea className="flex min-h-[60px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 resize-none"
+          <div className="space-y-1.5"><Label>Dirección</Label><Input placeholder="Calle, Col., Ciudad" value={form.address} onChange={e => set("address", e.target.value)} /></div>
+          <div className="space-y-1.5"><Label>Alergias (separadas por comas)</Label><Input placeholder="Penicilina, Látex..." value={form.allergies} onChange={e => set("allergies", e.target.value)} /></div>
+          <div className="space-y-1.5"><Label>Notas</Label>
+            <textarea className="flex min-h-[60px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
               placeholder="Motivo de consulta, antecedentes…" value={form.notes} onChange={e => set("notes", e.target.value)} />
           </div>
         </form>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button disabled={loading} onClick={handleSubmit as any}>
-            {loading ? "Guardando…" : "Crear paciente"}
-          </Button>
+          <Button disabled={loading} onClick={handleSubmit as any}>{loading ? "Guardando…" : "Crear paciente"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

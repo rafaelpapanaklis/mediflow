@@ -13,14 +13,6 @@ export async function PATCH(req: NextRequest) {
   const dbUser = await getDbUser();
   if (!dbUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await req.json();
-  const updated = await prisma.clinic.update({
-    where: { id: dbUser.clinicId },
-    data: {
-      name:  body.name,
-      city:  body.city || undefined,
-      phone: body.phone || undefined,
-      email: body.email || undefined,
-    },
-  });
+  const updated = await prisma.clinic.update({ where: { id: dbUser.clinicId }, data: { name: body.name, city: body.city || undefined, phone: body.phone || undefined, email: body.email || undefined } });
   return NextResponse.json(updated);
 }

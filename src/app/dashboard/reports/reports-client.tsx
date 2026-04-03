@@ -1,9 +1,6 @@
 "use client";
-
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, PieChart, Pie, Legend } from "recharts";
 import { formatCurrency } from "@/lib/utils";
-
-const PIE_COLORS = ["#2563eb","#7c3aed","#059669","#d97706","#e11d48","#0891b2"];
 
 interface Props {
   monthlyData: { label: string; revenue: number; patients: number; appointments: number }[];
@@ -11,86 +8,111 @@ interface Props {
   byStatus:    { status: string; _count: { id: number } }[];
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  PENDING: "Pendiente", CONFIRMED: "Confirmada", IN_PROGRESS: "En curso",
-  COMPLETED: "Completada", CANCELLED: "Cancelada", NO_SHOW: "No asistió",
-};
+const STATUS_LABELS: Record<string, string> = { PENDING:"Pendiente", CONFIRMED:"Confirmada", COMPLETED:"Completada", CANCELLED:"Cancelada", NO_SHOW:"No asistió", IN_PROGRESS:"En curso" };
+const COLORS = ["#2563eb","#10b981","#f59e0b","#ef4444","#8b5cf6","#06b6d4"];
 
 export function ReportsClient({ monthlyData, topTypes, byStatus }: Props) {
-  const pieData = byStatus.map(s => ({ name: STATUS_LABELS[s.status] ?? s.status, value: s._count.id }));
-  const totalAppts = byStatus.reduce((s, i) => s + i._count.id, 0);
-  const completionRate = totalAppts > 0
-    ? Math.round((byStatus.find(s => s.status === "COMPLETED")?._count.id ?? 0) / totalAppts * 100)
+  const totalRevenue = monthlyData.reduce((s, d) => s + d.revenue, 0);
+  const totalPatients = monthlyData.reduce((s, d) => s + d.patients, 0);
+  const totalAppts = monthlyData.reduce((s, d) => s + d.appointments, 0);
+  const completionRate = byStatus.length > 0
+    ? Math.round(((byStatus.find(s => s.status === "COMPLETED")?._count.id ?? 0) / byStatus.reduce((s, b) => s + b._count.id, 0)) * 100)
     : 0;
+  const pieData = byStatus.map(s => ({ name: STATUS_LABELS[s.status] ?? s.status, value: s._count.id }));
 
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-xl font-extrabold">Reportes</h1>
-        <p className="text-sm text-muted-foreground">Analítica de tu clínica — últimos 6 meses</p>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-xl font-extrabold">Reportes y estadísticas</h1>
+        <p className="text-sm text-muted-foreground">Últimos 6 meses</p>
       </div>
 
-      {/* Quick stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: "Ingresos totales",    value: formatCurrency(monthlyData.reduce((s,m) => s + m.revenue, 0)) },
-          { label: "Pacientes nuevos",    value: monthlyData.reduce((s,m) => s + m.patients, 0) },
-          { label: "Total citas",         value: totalAppts },
-          { label: "Tasa de completadas", value: `${completionRate}%` },
+          { label: "Ingresos totales",  value: formatCurrency(totalRevenue),     icon: "💰", color: "text-emerald-600" },
+          { label: "Pacientes nuevos",  value: String(totalPatients),             icon: "👥", color: "text-brand-600"   },
+          { label: "Total citas",       value: String(totalAppts),               icon: "📅", color: "text-violet-600"  },
+          { label: "Tasa de atención",  value: `${completionRate}%`,             icon: "✅", color: "text-amber-600"   },
         ].map(k => (
-          <div key={k.label} className="rounded-xl border border-border bg-white p-5 shadow-card">
-            <div className="text-2xl font-extrabold mb-0.5">{k.value}</div>
-            <div className="text-xs text-muted-foreground">{k.label}</div>
+          <div key={k.label} className="bg-white border border-border rounded-xl p-5 shadow-card">
+            <div className="text-2xl mb-2">{k.icon}</div>
+            <div className={`text-2xl font-extrabold ${k.color}`}>{k.value}</div>
+            <div className="text-xs text-muted-foreground mt-0.5">{k.label}</div>
           </div>
         ))}
       </div>
 
-      {/* Revenue chart */}
-      <div className="rounded-xl border border-border bg-white p-5 shadow-card mb-5">
-        <h2 className="text-sm font-bold mb-4">💰 Ingresos mensuales</h2>
-        <div className="h-48">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={monthlyData} barSize={32} margin={{ left: -10 }}>
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v: number) => [formatCurrency(v), "Ingresos"]} contentStyle={{ borderRadius: 10, border: "1px solid #e2e8f0", fontSize: 12 }} cursor={{ fill: "#f1f5f9" }} />
-              <Bar dataKey="revenue" fill="#2563eb" radius={[6,6,0,0]} />
-            </BarChart>
-          </ResponsiveContainer>
+      <div className="grid lg:grid-cols-2 gap-5">
+        <div className="bg-white border border-border rounded-xl p-5 shadow-card">
+          <h2 className="text-sm font-bold mb-4">Ingresos mensuales</h2>
+          <div className="h-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={monthlyData} barSize={28} margin={{ left: -20 }}>
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} tickFormatter={v => v === 0 ? "" : `$${(v/1000).toFixed(0)}k`} />
+                <Tooltip formatter={(v: number) => [formatCurrency(v), "Ingresos"]} contentStyle={{ borderRadius: 10, fontSize: 12 }} />
+                <Bar dataKey="revenue" radius={[6,6,0,0]}>
+                  {monthlyData.map((_, i) => <Cell key={i} fill={i === monthlyData.length - 1 ? "#2563eb" : "#bfdbfe"} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-      </div>
 
-      <div className="grid lg:grid-cols-2 gap-5 mb-5">
-        {/* Patient trend */}
-        <div className="rounded-xl border border-border bg-white p-5 shadow-card">
-          <h2 className="text-sm font-bold mb-4">👥 Pacientes nuevos / mes</h2>
-          <div className="h-40">
+        <div className="bg-white border border-border rounded-xl p-5 shadow-card">
+          <h2 className="text-sm font-bold mb-4">Pacientes y citas</h2>
+          <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={monthlyData} margin={{ left: -20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} allowDecimals={false} />
-                <Tooltip formatter={(v: number) => [v, "Pacientes"]} contentStyle={{ borderRadius: 10, border: "1px solid #e2e8f0", fontSize: 12 }} />
-                <Line type="monotone" dataKey="patients" stroke="#7c3aed" strokeWidth={2.5} dot={{ r: 4, fill: "#7c3aed" }} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ borderRadius: 10, fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Line type="monotone" dataKey="patients" name="Pacientes nuevos" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="appointments" name="Citas" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Appointment status */}
-        <div className="rounded-xl border border-border bg-white p-5 shadow-card">
-          <h2 className="text-sm font-bold mb-4">📅 Estado de citas</h2>
-          {pieData.length === 0 ? (
-            <div className="h-40 flex items-center justify-center text-muted-foreground text-sm">Sin datos aún</div>
+        <div className="bg-white border border-border rounded-xl p-5 shadow-card">
+          <h2 className="text-sm font-bold mb-4">Tipos de consulta más frecuentes</h2>
+          {topTypes.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">Sin datos aún</p>
           ) : (
-            <div className="h-40">
+            <div className="space-y-3">
+              {topTypes.map((t, i) => {
+                const max = topTypes[0]._count.id;
+                const pct = Math.round((t._count.id / max) * 100);
+                return (
+                  <div key={t.type}>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="font-medium">{t.type}</span>
+                      <span className="text-muted-foreground font-bold">{t._count.id}</span>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: COLORS[i % COLORS.length] }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white border border-border rounded-xl p-5 shadow-card">
+          <h2 className="text-sm font-bold mb-4">Estado de citas</h2>
+          {pieData.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">Sin datos aún</p>
+          ) : (
+            <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={pieData} cx="40%" cy="50%" innerRadius={45} outerRadius={70} dataKey="value" paddingAngle={3}>
-                    {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={75} dataKey="value" paddingAngle={3}>
+                    {pieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Pie>
-                  <Legend layout="vertical" align="right" verticalAlign="middle" iconSize={10} iconType="circle" formatter={(v) => <span style={{ fontSize: 11 }}>{v}</span>} />
-                  <Tooltip formatter={(v: number) => [v, "Citas"]} contentStyle={{ borderRadius: 10, border: "1px solid #e2e8f0", fontSize: 12 }} />
+                  <Tooltip contentStyle={{ borderRadius: 10, fontSize: 12 }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -98,32 +120,28 @@ export function ReportsClient({ monthlyData, topTypes, byStatus }: Props) {
         </div>
       </div>
 
-      {/* Top appointment types */}
-      {topTypes.length > 0 && (
-        <div className="rounded-xl border border-border bg-white p-5 shadow-card">
-          <h2 className="text-sm font-bold mb-4">🏥 Tipos de cita más frecuentes</h2>
-          <div className="space-y-2.5">
-            {topTypes.map((t, i) => {
-              const max = topTypes[0]._count.id;
-              const pct = Math.round((t._count.id / max) * 100);
-              return (
-                <div key={t.type} className="flex items-center gap-3">
-                  <div className="w-4 text-xs font-bold text-muted-foreground text-right">{i+1}</div>
-                  <div className="flex-1">
-                    <div className="flex justify-between text-xs font-semibold mb-1">
-                      <span>{t.type}</span>
-                      <span className="text-muted-foreground">{t._count.id} citas</span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                      <div className="h-full rounded-full bg-brand-600 transition-all" style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      <div className="bg-white border border-border rounded-xl p-5 shadow-card">
+        <h2 className="text-sm font-bold mb-4">Resumen mensual</h2>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border bg-muted/30">
+              {["Mes","Ingresos","Pacientes nuevos","Citas"].map(h => (
+                <th key={h} className="text-left px-4 py-2.5 text-xs font-bold text-muted-foreground uppercase tracking-wide">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {[...monthlyData].reverse().map(row => (
+              <tr key={row.label} className="border-b border-border/60 hover:bg-muted/20">
+                <td className="px-4 py-3 font-semibold capitalize">{row.label}</td>
+                <td className="px-4 py-3 font-mono font-bold text-emerald-600">{formatCurrency(row.revenue)}</td>
+                <td className="px-4 py-3">{row.patients}</td>
+                <td className="px-4 py-3">{row.appointments}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

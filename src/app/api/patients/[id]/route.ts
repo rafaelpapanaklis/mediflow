@@ -16,12 +16,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if (!clinicId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const patient = await prisma.patient.findFirst({
     where: { id: params.id, clinicId },
-    include: {
-      appointments: { orderBy: { date: "desc" }, include: { doctor: true } },
-      records:      { orderBy: { visitDate: "desc" }, include: { doctor: true } },
-      invoices:     { orderBy: { createdAt: "desc" }, include: { payments: true } },
-      files:        { orderBy: { createdAt: "desc" } },
-    },
+    include: { appointments: { orderBy: { date: "desc" }, include: { doctor: true } }, records: { orderBy: { visitDate: "desc" }, include: { doctor: true } }, invoices: { include: { payments: true } } },
   });
   if (!patient) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json(patient);
@@ -35,13 +30,11 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     const data = patientSchema.parse(body);
     await prisma.patient.updateMany({
       where: { id: params.id, clinicId },
-      data: { ...data, dob: data.dob ? new Date(data.dob) : undefined, email: data.email || undefined },
+      data: { ...data, dob: data.dob ? new Date(data.dob) : undefined, email: data.email || undefined, gender: (data.gender ?? "OTHER") as any },
     });
     const updated = await prisma.patient.findUnique({ where: { id: params.id } });
     return NextResponse.json(updated);
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 });
-  }
+  } catch (err: any) { return NextResponse.json({ error: err.message }, { status: 400 }); }
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {

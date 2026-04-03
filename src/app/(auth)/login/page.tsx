@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { LoginForm } from "@/components/public/login-form";
-
 export const metadata: Metadata = { title: "Iniciar sesión — MediFlow" };
-
 export default function LoginPage() {
   return (
     <div className="flex min-h-screen">
@@ -12,7 +10,7 @@ export default function LoginPage() {
             <div className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center text-white text-xs font-extrabold">M</div>
             MediFlow
           </div>
-          <h1 className="text-2xl font-extrabold text-foreground mb-1">Bienvenido de vuelta</h1>
+          <h1 className="text-2xl font-extrabold mb-1">Bienvenido de vuelta</h1>
           <p className="text-sm text-muted-foreground mb-7">Ingresa a tu panel de control</p>
           <LoginForm />
         </div>
@@ -21,7 +19,7 @@ export default function LoginPage() {
         <div className="text-white max-w-xs text-center">
           <div className="text-5xl mb-6">🏥</div>
           <h2 className="text-2xl font-extrabold mb-3">+2,400 clínicas confían en MediFlow</h2>
-          <p className="text-white/70 text-sm leading-relaxed">Gestiona todo tu consultorio desde un solo panel. Citas, pacientes, expedientes y cobros.</p>
+          <p className="text-white/70 text-sm leading-relaxed">Gestiona todo tu consultorio desde un solo panel.</p>
         </div>
       </div>
     </div>

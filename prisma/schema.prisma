@@ -35,11 +35,7 @@ model Clinic {
   @@map("clinics")
 }
 
-enum Plan {
-  BASIC
-  PRO
-  CLINIC
-}
+enum Plan { BASIC PRO CLINIC }
 
 model User {
   id          String   @id @default(cuid())
@@ -63,13 +59,7 @@ model User {
   @@map("users")
 }
 
-enum Role {
-  SUPER_ADMIN
-  ADMIN
-  DOCTOR
-  RECEPTIONIST
-  READONLY
-}
+enum Role { SUPER_ADMIN ADMIN DOCTOR RECEPTIONIST READONLY }
 
 model Patient {
   id                  String        @id @default(cuid())
@@ -104,17 +94,8 @@ model Patient {
   @@map("patients")
 }
 
-enum Gender {
-  M
-  F
-  OTHER
-}
-
-enum PatientStatus {
-  ACTIVE
-  INACTIVE
-  ARCHIVED
-}
+enum Gender { M F OTHER }
+enum PatientStatus { ACTIVE INACTIVE ARCHIVED }
 
 model Appointment {
   id           String            @id @default(cuid())
@@ -136,22 +117,15 @@ model Appointment {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
-  clinic   Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  patient  Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  doctor   User     @relation(fields: [doctorId], references: [id])
-  invoice  Invoice?
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor  User    @relation(fields: [doctorId], references: [id])
+  invoice Invoice?
 
   @@map("appointments")
 }
 
-enum AppointmentStatus {
-  PENDING
-  CONFIRMED
-  IN_PROGRESS
-  COMPLETED
-  CANCELLED
-  NO_SHOW
-}
+enum AppointmentStatus { PENDING CONFIRMED IN_PROGRESS COMPLETED CANCELLED NO_SHOW }
 
 model MedicalRecord {
   id            String   @id @default(cuid())
@@ -206,14 +180,7 @@ model Invoice {
   @@map("invoices")
 }
 
-enum InvoiceStatus {
-  DRAFT
-  PENDING
-  PARTIAL
-  PAID
-  OVERDUE
-  CANCELLED
-}
+enum InvoiceStatus { DRAFT PENDING PARTIAL PAID OVERDUE CANCELLED }
 
 model Payment {
   id        String   @id @default(cuid())

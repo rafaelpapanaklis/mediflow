@@ -3,22 +3,10 @@ import { Sora, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "react-hot-toast";
 import "./globals.css";
 
-const sora = Sora({
-  subsets: ["latin"],
-  variable: "--font-sora",
-  display: "swap",
-});
+const sora = Sora({ subsets: ["latin"], variable: "--font-sora", display: "swap" });
+const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains-mono", display: "swap" });
 
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  variable: "--font-jetbrains-mono",
-  display: "swap",
-});
-
-export const metadata: Metadata = {
-  title: "MediFlow — Software médico para clínicas",
-  description: "Gestiona citas, pacientes, expedientes y facturación en un solo lugar.",
-};
+export const metadata: Metadata = { title: "MediFlow — Software médico para clínicas", description: "Gestiona citas, pacientes, expedientes y facturación en un solo lugar." };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

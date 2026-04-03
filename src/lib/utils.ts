@@ -14,10 +14,10 @@ export function formatDate(date: Date | string) {
 }
 
 export function getInitials(firstName: string, lastName: string) {
-  return `${firstName[0] ?? ""}${lastName[0] ?? ""}`.toUpperCase();
+  return `${firstName?.[0] ?? ""}${lastName?.[0] ?? ""}`.toUpperCase();
 }
 
 const AVATAR_COLORS = ["bg-violet-500","bg-blue-600","bg-emerald-600","bg-pink-500","bg-cyan-600","bg-amber-500","bg-rose-500","bg-indigo-500"];
 export function avatarColor(id: string) {
-  return AVATAR_COLORS[id.charCodeAt(0) % AVATAR_COLORS.length];
+  return AVATAR_COLORS[(id?.charCodeAt(0) ?? 0) % AVATAR_COLORS.length];
 }

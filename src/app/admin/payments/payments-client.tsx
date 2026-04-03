@@ -14,7 +14,8 @@ const BANK_INFO = {
 
 interface Props { clinics: any[] }
 
-export function AdminPaymentsClient({ clinics }: Props) {
+export function AdminPaymentsClient({ clinics: initial }: Props) {
+  const [clinics, setClinics] = useState(initial);
   const [activating, setActivating] = useState<string | null>(null);
   const [tab, setTab] = useState<"pending" | "all">("pending");
 
@@ -32,6 +33,9 @@ export function AdminPaymentsClient({ clinics }: Props) {
         body: JSON.stringify({ plan, trialEndsAt: newExpiry.toISOString() }),
       });
       if (!res.ok) throw new Error();
+      setClinics(prev => prev.map(c =>
+        c.id === clinicId ? { ...c, plan, trialEndsAt: newExpiry.toISOString() } : c
+      ));
       toast.success(`Plan ${plan} activado por ${months} mes${months > 1 ? "es" : ""}`);
     } catch {
       toast.error("Error al activar");

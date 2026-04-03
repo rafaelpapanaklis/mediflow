@@ -24,17 +24,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const { amount, method, reference, notes } = await req.json();
   const invoice = await prisma.invoice.findFirst({ where: { id: params.id, clinicId } });
   if (!invoice) return NextResponse.json({ error: "Not found" }, { status: 404 });
-
-  const newPaid    = invoice.paid + amount;
+  const newPaid = invoice.paid + amount;
   const newBalance = invoice.total - newPaid;
-  const newStatus  = newBalance <= 0 ? "PAID" : "PARTIAL";
-
+  const newStatus = newBalance <= 0 ? "PAID" : "PARTIAL";
   await prisma.$transaction([
     prisma.payment.create({ data: { invoiceId: params.id, amount, method, reference, notes } }),
-    prisma.invoice.update({
-      where: { id: params.id },
-      data: { paid: newPaid, balance: Math.max(0, newBalance), status: newStatus as any, paidAt: newStatus === "PAID" ? new Date() : undefined, paymentMethod: method },
-    }),
+    prisma.invoice.update({ where: { id: params.id }, data: { paid: newPaid, balance: Math.max(0, newBalance), status: newStatus as any, paidAt: newStatus === "PAID" ? new Date() : undefined, paymentMethod: method } }),
   ]);
   return NextResponse.json({ success: true });
 }

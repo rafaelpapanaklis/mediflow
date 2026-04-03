@@ -13,15 +13,12 @@ async function getClinicId() {
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const clinicId = await getClinicId();
   if (!clinicId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   const body = await req.json();
   const data: any = {};
-  if (body.status)       { data.status = body.status.toUpperCase(); }
+  if (body.status)  { data.status = body.status.toUpperCase(); }
   if (body.notes !== undefined) data.notes = body.notes;
-  if (body.cancelReason) data.cancelReason = body.cancelReason;
-  if (body.status === "CONFIRMED")   data.confirmedAt = new Date();
-  if (body.status === "CANCELLED")   data.cancelledAt = new Date();
-
+  if (body.status === "CONFIRMED") data.confirmedAt = new Date();
+  if (body.status === "CANCELLED") { data.cancelledAt = new Date(); if (body.cancelReason) data.cancelReason = body.cancelReason; }
   await prisma.appointment.updateMany({ where: { id: params.id, clinicId }, data });
   const updated = await prisma.appointment.findUnique({ where: { id: params.id }, include: { patient: true, doctor: true } });
   return NextResponse.json(updated);

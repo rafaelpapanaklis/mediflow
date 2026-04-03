@@ -13,8 +13,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const clinic = await prisma.clinic.update({
     where: { id: params.id },
     data: {
-      ...(body.plan        && { plan: body.plan }),
-      ...(body.trialEndsAt && { trialEndsAt: new Date(body.trialEndsAt) }),
+      ...(body.plan        ? { plan: body.plan as any } : {}),
+      ...(body.trialEndsAt ? { trialEndsAt: new Date(body.trialEndsAt) } : {}),
+      ...(body.name        ? { name: body.name } : {}),
     },
   });
   return NextResponse.json(clinic);
