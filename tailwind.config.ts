@@ -1,7 +1,7 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
-  darkMode: ["class"],
+  darkMode: "class",
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -14,6 +14,11 @@ const config: Config = {
         mono: ["var(--font-jetbrains-mono)", "monospace"],
       },
       colors: {
+        background:       "hsl(var(--background))",
+        foreground:       "hsl(var(--foreground))",
+        muted:            { DEFAULT: "hsl(var(--muted))", foreground: "hsl(var(--muted-foreground))" },
+        border:           "hsl(var(--border))",
+        card:             { DEFAULT: "hsl(var(--card))", foreground: "hsl(var(--card-foreground))" },
         brand: {
           50:  "#eff6ff",
           100: "#dbeafe",
@@ -25,29 +30,17 @@ const config: Config = {
           700: "#1d4ed8",
           800: "#1e40af",
           900: "#1e3a8a",
-        },
-        border: "hsl(var(--border))",
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
-        muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
+          950: "#172554",
         },
       },
-      boxShadow: {
-        card:    "0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)",
-        "card-md": "0 4px 16px rgba(0,0,0,0.08)",
-      },
-      borderRadius: { lg: "10px", xl: "14px", "2xl": "18px" },
-      animation: { "fade-up": "fadeUp 0.3s ease-out" },
-      keyframes: {
-        fadeUp: {
-          "0%":   { opacity: "0", transform: "translateY(8px)" },
-          "100%": { opacity: "1", transform: "translateY(0)" },
-        },
+      borderRadius: {
+        lg: "0.75rem",
+        xl: "1rem",
+        "2xl": "1.25rem",
       },
     },
   },
   plugins: [require("tailwindcss-animate")],
 };
+
 export default config;

@@ -1,14 +1,48 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
 @layer base {
-  :root { --background: 0 0% 100%; --foreground: 222 47% 11%; --muted: 210 40% 96%; --muted-foreground: 215 16% 47%; --border: 214 32% 91%; --ring: 221 83% 53%; }
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --border: 214 32% 91%;
+    --ring: 221 83% 53%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+  }
+
+  .dark {
+    --background: 222 47% 8%;
+    --foreground: 210 40% 96%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --border: 217 33% 20%;
+    --ring: 221 83% 53%;
+    --card: 222 47% 11%;
+    --card-foreground: 210 40% 96%;
+  }
+
   * { border-color: hsl(var(--border)); }
-  body { background: hsl(var(--background)); color: hsl(var(--foreground)); }
+
+  body {
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
 }
+
 @layer utilities {
   .shadow-card    { box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04); }
   .shadow-card-md { box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
+  .dark .shadow-card    { box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2); }
+  .dark .shadow-card-md { box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
   .animate-fade-up { animation: fadeUp 0.3s ease-out; }
 }
-@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

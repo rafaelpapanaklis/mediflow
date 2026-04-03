@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { LayoutDashboard, Calendar, Users, CreditCard, BarChart2, Settings, LogOut, Menu, X, Stethoscope, FileText } from "lucide-react";
+import { LayoutDashboard, Calendar, Users, CreditCard, BarChart2, Settings, LogOut, Menu, X, Stethoscope } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { ThemeToggle } from "./theme-toggle";
 import toast from "react-hot-toast";
 
 const NAV = [
@@ -37,11 +38,12 @@ export function Sidebar({ user, clinicName, plan }: SidebarProps) {
     router.refresh();
   }
 
-  const initials = `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase();
+  const initials  = `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase();
   const planColor: Record<string, string> = { BASIC: "bg-slate-500", PRO: "bg-brand-500", CLINIC: "bg-violet-500" };
 
   const Content = () => (
     <div className="flex flex-col h-full">
+      {/* Logo */}
       <div className="px-4 py-5 border-b border-white/10">
         <div className="flex items-center gap-2.5 mb-1">
           <div className="w-7 h-7 rounded-lg bg-brand-500 flex items-center justify-center text-xs font-extrabold text-white flex-shrink-0">M</div>
@@ -51,6 +53,7 @@ export function Sidebar({ user, clinicName, plan }: SidebarProps) {
         <div className="text-xs text-slate-400 truncate pl-9">{clinicName}</div>
       </div>
 
+      {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         {NAV.map(item => {
           const active = item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href);
@@ -67,9 +70,16 @@ export function Sidebar({ user, clinicName, plan }: SidebarProps) {
         })}
       </nav>
 
-      <div className="px-3 pb-4 border-t border-white/10 pt-3">
+      {/* Bottom — theme toggle + user */}
+      <div className="px-3 pb-4 border-t border-white/10 pt-3 space-y-1">
+        {/* Theme toggle */}
+        <ThemeToggle />
+
+        {/* User row */}
         <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/10 transition-colors group">
-          <div className="w-8 h-8 rounded-full bg-violet-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">{initials}</div>
+          <div className="w-8 h-8 rounded-full bg-violet-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+            {initials}
+          </div>
           <div className="flex-1 min-w-0">
             <div className="text-xs font-semibold text-white truncate">{user.firstName} {user.lastName}</div>
             <div className="text-[10px] text-slate-400 truncate">{user.email}</div>
