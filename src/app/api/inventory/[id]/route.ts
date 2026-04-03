@@ -15,29 +15,48 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!clinicId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
+  const item = await prisma.inventoryItem.findFirst({ where: { id: params.id, clinicId } });
+  if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // If it's a quantity change (+ or -)
+  // Delta change (+ or -)
   if (body.change !== undefined) {
-    const item = await prisma.inventoryItem.findFirst({ where: { id: params.id, clinicId } });
-    if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 });
     const newQty = Math.max(0, item.quantity + body.change);
-    const [updated] = await prisma.$transaction([
-      prisma.inventoryItem.update({ where: { id: params.id }, data: { quantity: newQty } }),
-      prisma.inventoryHistory.create({ data: { itemId: params.id, change: body.change, reason: body.reason ?? null } }),
-    ]);
+    const updated = await prisma.inventoryItem.update({
+      where: { id: params.id },
+      data: { quantity: newQty, updatedAt: new Date() },
+    });
+    await prisma.inventoryHistory.create({
+      data: { itemId: params.id, change: body.change, reason: body.reason ?? null },
+    });
     return NextResponse.json(updated);
   }
 
-  // Full update
-  const updated = await prisma.inventoryItem.updateMany({
-    where: { id: params.id, clinicId },
+  // Direct quantity set
+  if (body.quantity !== undefined) {
+    const newQty = Math.max(0, body.quantity);
+    const change = newQty - item.quantity;
+    const updated = await prisma.inventoryItem.update({
+      where: { id: params.id },
+      data: { quantity: newQty, updatedAt: new Date() },
+    });
+    if (change !== 0) {
+      await prisma.inventoryHistory.create({
+        data: { itemId: params.id, change, reason: "Ajuste directo" },
+      });
+    }
+    return NextResponse.json(updated);
+  }
+
+  // Update other fields (minQuantity, name, description, etc.)
+  const updated = await prisma.inventoryItem.update({
+    where: { id: params.id },
     data: {
-      ...(body.name        !== undefined && { name: body.name }),
-      ...(body.description !== undefined && { description: body.description }),
-      ...(body.quantity    !== undefined && { quantity: body.quantity }),
-      ...(body.minQuantity !== undefined && { minQuantity: body.minQuantity }),
-      ...(body.unit        !== undefined && { unit: body.unit }),
-      ...(body.price       !== undefined && { price: body.price }),
+      ...(body.minQuantity  !== undefined && { minQuantity:  body.minQuantity }),
+      ...(body.name         !== undefined && { name:         body.name }),
+      ...(body.description  !== undefined && { description:  body.description }),
+      ...(body.unit         !== undefined && { unit:         body.unit }),
+      ...(body.price        !== undefined && { price:        body.price }),
+      updatedAt: new Date(),
     },
   });
   return NextResponse.json(updated);
