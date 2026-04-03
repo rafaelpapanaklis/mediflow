@@ -9,21 +9,21 @@ datasource db {
 }
 
 model Clinic {
-  id           String    @id @default(cuid())
-  name         String
-  slug         String    @unique
-  specialty    String
-  country      String    @default("MX")
-  city         String?
-  address      String?
-  phone        String?
-  email        String?
-  logoUrl      String?
-  taxId        String?
-  plan         Plan      @default(PRO)
-  trialEndsAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  specialty   String
+  country     String    @default("MX")
+  city        String?
+  address     String?
+  phone       String?
+  email       String?
+  logoUrl     String?
+  taxId       String?
+  plan        Plan      @default(PRO)
+  trialEndsAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   users        User[]
   patients     Patient[]
@@ -35,22 +35,26 @@ model Clinic {
   @@map("clinics")
 }
 
-enum Plan { BASIC PRO CLINIC }
+enum Plan {
+  BASIC
+  PRO
+  CLINIC
+}
 
 model User {
-  id          String   @id @default(cuid())
-  supabaseId  String   @unique
-  clinicId    String
-  email       String
-  firstName   String
-  lastName    String
-  role        Role     @default(DOCTOR)
-  specialty   String?
-  avatarUrl   String?
-  phone       String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(cuid())
+  supabaseId String   @unique
+  clinicId   String
+  email      String
+  firstName  String
+  lastName   String
+  role       Role     @default(DOCTOR)
+  specialty  String?
+  avatarUrl  String?
+  phone      String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   clinic       Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointments Appointment[]
@@ -59,30 +63,36 @@ model User {
   @@map("users")
 }
 
-enum Role { SUPER_ADMIN ADMIN DOCTOR RECEPTIONIST READONLY }
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  DOCTOR
+  RECEPTIONIST
+  READONLY
+}
 
 model Patient {
-  id                  String        @id @default(cuid())
-  clinicId            String
-  patientNumber       String
-  firstName           String
-  lastName            String
-  email               String?
-  phone               String?
-  dob                 DateTime?
-  gender              Gender        @default(OTHER)
-  bloodType           String?
-  address             String?
-  insuranceProvider   String?
-  insurancePolicy     String?
-  allergies           String[]      @default([])
-  chronicConditions   String[]      @default([])
-  currentMedications  String[]      @default([])
-  tags                String[]      @default([])
-  notes               String?
-  status              PatientStatus @default(ACTIVE)
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
+  id                 String        @id @default(cuid())
+  clinicId           String
+  patientNumber      String
+  firstName          String
+  lastName           String
+  email              String?
+  phone              String?
+  dob                DateTime?
+  gender             Gender        @default(OTHER)
+  bloodType          String?
+  address            String?
+  insuranceProvider  String?
+  insurancePolicy    String?
+  allergies          String[]      @default([])
+  chronicConditions  String[]      @default([])
+  currentMedications String[]      @default([])
+  tags               String[]      @default([])
+  notes              String?
+  status             PatientStatus @default(ACTIVE)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 
   clinic       Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointments Appointment[]
@@ -94,8 +104,17 @@ model Patient {
   @@map("patients")
 }
 
-enum Gender { M F OTHER }
-enum PatientStatus { ACTIVE INACTIVE ARCHIVED }
+enum Gender {
+  M
+  F
+  OTHER
+}
+
+enum PatientStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
 
 model Appointment {
   id           String            @id @default(cuid())
@@ -117,15 +136,22 @@ model Appointment {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
-  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  doctor  User    @relation(fields: [doctorId], references: [id])
+  clinic  Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor  User     @relation(fields: [doctorId], references: [id])
   invoice Invoice?
 
   @@map("appointments")
 }
 
-enum AppointmentStatus { PENDING CONFIRMED IN_PROGRESS COMPLETED CANCELLED NO_SHOW }
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
 
 model MedicalRecord {
   id            String   @id @default(cuid())
@@ -180,7 +206,14 @@ model Invoice {
   @@map("invoices")
 }
 
-enum InvoiceStatus { DRAFT PENDING PARTIAL PAID OVERDUE CANCELLED }
+enum InvoiceStatus {
+  DRAFT
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+  CANCELLED
+}
 
 model Payment {
   id        String   @id @default(cuid())
