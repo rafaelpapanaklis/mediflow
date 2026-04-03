@@ -6,7 +6,7 @@ import { useState } from "react";
 import {
   LayoutDashboard, Calendar, Users, CreditCard,
   BarChart2, Settings, LogOut, Menu, X, Stethoscope,
-  Sun, Moon,
+  Sun, Moon, MessageCircle, Package,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -18,6 +18,8 @@ const NAV = [
   { href: "/dashboard/patients",     icon: Users,           label: "Pacientes"     },
   { href: "/dashboard/clinical",     icon: Stethoscope,     label: "Expedientes"   },
   { href: "/dashboard/billing",      icon: CreditCard,      label: "Facturación"   },
+  { href: "/dashboard/inventory",    icon: Package,         label: "Inventario"    },
+  { href: "/dashboard/whatsapp",     icon: MessageCircle,   label: "WhatsApp"      },
   { href: "/dashboard/reports",      icon: BarChart2,       label: "Reportes"      },
   { href: "/dashboard/settings",     icon: Settings,        label: "Configuración" },
 ];
@@ -49,8 +51,8 @@ function useDarkMode() {
 }
 
 export function Sidebar({ user, clinicName, plan }: SidebarProps) {
-  const pathname    = usePathname();
-  const router      = useRouter();
+  const pathname        = usePathname();
+  const router          = useRouter();
   const [open, setOpen] = useState(false);
   const { dark, toggle } = useDarkMode();
 
@@ -85,27 +87,31 @@ export function Sidebar({ user, clinicName, plan }: SidebarProps) {
         <div className="text-xs text-slate-400 truncate pl-9">{clinicName}</div>
       </div>
 
-      {/* Nav links */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+      {/* Nav */}
+      <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
         {NAV.map(item => {
           const active =
             item.href === "/dashboard"
               ? pathname === "/dashboard"
               : pathname.startsWith(item.href);
+          const isWa = item.href === "/dashboard/whatsapp";
           return (
             <Link
               key={item.href}
               href={item.href}
               onClick={() => setOpen(false)}
               className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all",
                 active
-                  ? "bg-brand-600 text-white"
+                  ? isWa ? "bg-emerald-600 text-white" : "bg-brand-600 text-white"
                   : "text-slate-400 hover:bg-white/10 hover:text-white"
               )}
             >
-              <item.icon className="w-4 h-4 flex-shrink-0" />
+              <item.icon className={cn("w-4 h-4 flex-shrink-0", isWa && !active && "text-emerald-400")} />
               {item.label}
+              {isWa && !active && (
+                <span className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
+              )}
             </Link>
           );
         })}
@@ -117,27 +123,17 @@ export function Sidebar({ user, clinicName, plan }: SidebarProps) {
         <button
           onClick={toggle}
           className="w-full flex items-center justify-between px-2 py-2 rounded-lg hover:bg-white/10 transition-colors"
-          title={dark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
         >
           <div className="flex items-center gap-2.5">
             <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
-              {dark
-                ? <Moon className="w-3.5 h-3.5 text-slate-300" />
-                : <Sun  className="w-3.5 h-3.5 text-amber-300" />}
+              {dark ? <Moon className="w-3.5 h-3.5 text-slate-300" /> : <Sun className="w-3.5 h-3.5 text-amber-300" />}
             </div>
             <span className="text-xs font-semibold text-slate-400">
               {dark ? "Modo oscuro" : "Modo claro"}
             </span>
           </div>
-          {/* Pill toggle */}
-          <div className={cn(
-            "w-9 h-5 rounded-full relative flex-shrink-0 transition-colors",
-            dark ? "bg-brand-600" : "bg-slate-600"
-          )}>
-            <div className={cn(
-              "absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all",
-              dark ? "left-[18px]" : "left-0.5"
-            )} />
+          <div className={cn("w-9 h-5 rounded-full relative flex-shrink-0 transition-colors", dark ? "bg-brand-600" : "bg-slate-600")}>
+            <div className={cn("absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all", dark ? "left-[18px]" : "left-0.5")} />
           </div>
         </button>
 
@@ -147,9 +143,7 @@ export function Sidebar({ user, clinicName, plan }: SidebarProps) {
             {initials}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-xs font-semibold text-white truncate">
-              {user.firstName} {user.lastName}
-            </div>
+            <div className="text-xs font-semibold text-white truncate">{user.firstName} {user.lastName}</div>
             <div className="text-[10px] text-slate-400 truncate">{user.email}</div>
           </div>
           <button
@@ -166,7 +160,6 @@ export function Sidebar({ user, clinicName, plan }: SidebarProps) {
 
   return (
     <>
-      {/* Desktop sidebar */}
       <aside className="hidden lg:flex flex-col w-52 flex-shrink-0 bg-slate-900 h-screen sticky top-0">
         <SidebarContent />
       </aside>
@@ -185,10 +178,7 @@ export function Sidebar({ user, clinicName, plan }: SidebarProps) {
         <div className="lg:hidden fixed inset-0 z-50 flex">
           <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
           <aside className="relative w-64 bg-slate-900 h-full flex flex-col">
-            <button
-              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-white"
-              onClick={() => setOpen(false)}
-            >
+            <button className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-white" onClick={() => setOpen(false)}>
               <X className="w-4 h-4" />
             </button>
             <SidebarContent />

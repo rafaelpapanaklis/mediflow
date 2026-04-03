@@ -25,12 +25,23 @@ model Clinic {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  // WhatsApp integration
+  waPhoneNumberId  String?
+  waAccessToken    String?
+  waConnected      Boolean @default(false)
+  waReminderActive Boolean @default(true)
+  waReminder24h    Boolean @default(true)
+  waReminder1h     Boolean @default(false)
+  waReminderMsg    String?
+
   users        User[]
   patients     Patient[]
   appointments Appointment[]
   records      MedicalRecord[]
   invoices     Invoice[]
   schedules    ClinicSchedule[]
+  inventory    InventoryItem[]
+  reminders    WhatsAppReminder[]
 
   @@map("clinics")
 }
@@ -136,10 +147,11 @@ model Appointment {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
-  clinic  Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  patient Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  doctor  User     @relation(fields: [doctorId], references: [id])
-  invoice Invoice?
+  clinic    Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient   Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor    User               @relation(fields: [doctorId], references: [id])
+  invoice   Invoice?
+  reminders WhatsAppReminder[]
 
   @@map("appointments")
 }
@@ -256,4 +268,64 @@ model PatientFile {
   patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
   @@map("patient_files")
+}
+
+// ─── INVENTORY ────────────────────────────────────────────────────────────────
+
+model InventoryItem {
+  id          String   @id @default(cuid())
+  clinicId    String
+  name        String
+  description String?
+  category    String
+  emoji       String   @default("📦")
+  quantity    Int      @default(0)
+  minQuantity Int      @default(5)
+  unit        String   @default("pza")
+  price       Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  clinic   Clinic              @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  history  InventoryHistory[]
+
+  @@map("inventory_items")
+}
+
+model InventoryHistory {
+  id        String   @id @default(cuid())
+  itemId    String
+  change    Int
+  reason    String?
+  createdAt DateTime @default(now())
+
+  item InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@map("inventory_history")
+}
+
+// ─── WHATSAPP REMINDERS ───────────────────────────────────────────────────────
+
+model WhatsAppReminder {
+  id            String               @id @default(cuid())
+  clinicId      String
+  appointmentId String
+  type          String
+  status        WhatsAppReminderStatus @default(PENDING)
+  sentAt        DateTime?
+  errorMsg      String?
+  scheduledFor  DateTime
+  createdAt     DateTime             @default(now())
+
+  clinic      Clinic      @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@map("whatsapp_reminders")
+}
+
+enum WhatsAppReminderStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
 }
