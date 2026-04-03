@@ -1,8 +1,7 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import toast from "react-hot-toast";
 
 const ACTIVITY_LEVELS = [
@@ -116,7 +115,7 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
         {(bmi || bmr) ? (
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             {[
-              { label:"IMC",        val: bmi ? `${bmi}`, sub: bmiCat?.label, color: bmiCat?.color },
+              { label:"IMC",        val: bmi ? `${bmi}` : "—", sub: bmiCat?.label ?? "", color: bmiCat?.color ?? "text-foreground" },
               { label:"TMB",        val: bmr ? `${bmr} kcal` : "—", sub:"Harris-Benedict", color:"text-foreground" },
               { label:"GET",        val: tdee ? `${tdee} kcal` : "—", sub:"Gasto energético total", color:"text-foreground" },
               { label:"ICC",        val: waistHipRatio || "—", sub:"Cintura/Cadera", color:"text-foreground" },
