@@ -30,9 +30,19 @@ export default async function AppointmentsPage() {
     }),
   ]);
 
+  // Serialize dates to strings for client component
+  const serializedAppts = appointments.map(a => ({
+    ...a,
+    date:        a.date instanceof Date ? a.date.toISOString() : String(a.date),
+    createdAt:   a.createdAt instanceof Date ? a.createdAt.toISOString() : String(a.createdAt),
+    updatedAt:   a.updatedAt instanceof Date ? a.updatedAt.toISOString() : String(a.updatedAt),
+    confirmedAt: a.confirmedAt instanceof Date ? a.confirmedAt.toISOString() : a.confirmedAt,
+    cancelledAt: a.cancelledAt instanceof Date ? a.cancelledAt.toISOString() : a.cancelledAt,
+  }));
+
   return (
     <AppointmentsClient
-      appointments={appointments as any}
+      appointments={serializedAppts as any}
       patients={patients}
       doctors={doctors}
       currentUserId={user.id}
