@@ -23,16 +23,16 @@
     --card-foreground:   210 40% 94%;
   }
 
-  * {
-    border-color: hsl(var(--border));
-  }
+  * { border-color: hsl(var(--border)); }
+
+  html { font-size: 17px; } /* ← Bigger base font */
 
   body {
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
-    /* Bigger base font for readability */
-    font-size: 16px;
-    line-height: 1.6;
+    font-size: 1rem;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
   }
 
   /* ─── Dark mode overrides ─── */
@@ -40,7 +40,7 @@
   .dark .bg-slate-50      { background-color: hsl(222 47% 11%) !important; }
   .dark .bg-muted\/30     { background-color: hsl(217 33% 13%) !important; }
   .dark .bg-muted\/20     { background-color: hsl(217 33% 12%) !important; }
-  .dark .bg-muted         { background-color: hsl(var(--muted)) !important; }
+  .dark .bg-muted         { background-color: hsl(var(--muted))  !important; }
   .dark .text-slate-600,
   .dark .text-slate-700,
   .dark .text-slate-800,
@@ -54,18 +54,14 @@
     border-color: hsl(var(--border)) !important;
   }
   .dark input::placeholder,
-  .dark textarea::placeholder {
-    color: hsl(var(--muted-foreground)) !important;
-  }
+  .dark textarea::placeholder { color: hsl(var(--muted-foreground)) !important; }
   .dark table tr:hover td { background-color: hsl(217 33% 16%) !important; }
   .dark thead tr          { background-color: hsl(222 47% 11%) !important; }
-
-  /* Badges */
-  .dark .bg-emerald-50  { background-color: rgb(6 78 59 / 0.3) !important; }
-  .dark .bg-amber-50    { background-color: rgb(120 53 15 / 0.3) !important; }
-  .dark .bg-rose-50     { background-color: rgb(136 19 55 / 0.3) !important; }
-  .dark .bg-blue-50     { background-color: rgb(23 37 84 / 0.3) !important; }
-  .dark .bg-violet-50   { background-color: rgb(76 29 149 / 0.3) !important; }
+  .dark .bg-emerald-50    { background-color: rgb(6 78 59 / 0.3)   !important; }
+  .dark .bg-amber-50      { background-color: rgb(120 53 15 / 0.3) !important; }
+  .dark .bg-rose-50       { background-color: rgb(136 19 55 / 0.3) !important; }
+  .dark .bg-blue-50       { background-color: rgb(23 37 84 / 0.3)  !important; }
+  .dark .bg-violet-50     { background-color: rgb(76 29 149 / 0.3) !important; }
 }
 
 @layer utilities {
