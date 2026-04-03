@@ -4,41 +4,93 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-    --border: 214 32% 91%;
-    --ring: 221 83% 53%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --background:        0 0% 96%;
+    --foreground:        222 47% 11%;
+    --muted:             210 40% 93%;
+    --muted-foreground:  215 16% 47%;
+    --border:            214 32% 88%;
+    --card:              0 0% 100%;
+    --card-foreground:   222 47% 11%;
+    --brand-600:         221 83% 53%;
   }
 
   .dark {
-    --background: 222 47% 8%;
-    --foreground: 210 40% 96%;
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-    --border: 217 33% 20%;
-    --ring: 221 83% 53%;
-    --card: 222 47% 11%;
-    --card-foreground: 210 40% 96%;
+    --background:        222 47% 8%;
+    --foreground:        210 40% 94%;
+    --muted:             217 33% 15%;
+    --muted-foreground:  215 20% 60%;
+    --border:            217 33% 22%;
+    --card:              222 47% 11%;
+    --card-foreground:   210 40% 94%;
   }
 
-  * { border-color: hsl(var(--border)); }
+  * {
+    border-color: hsl(var(--border));
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.1s ease;
+  }
 
   body {
-    background: hsl(var(--background));
+    background-color: hsl(var(--background));
     color: hsl(var(--foreground));
-    transition: background-color 0.2s ease, color 0.2s ease;
   }
+
+  /* ─── Cards / Panels ─── */
+  .dark .bg-white         { background-color: hsl(222 47% 13%) !important; }
+  .dark .bg-slate-50      { background-color: hsl(222 47% 11%) !important; }
+  .dark .bg-muted\/30     { background-color: hsl(217 33% 13%) !important; }
+  .dark .bg-muted\/20     { background-color: hsl(217 33% 12%) !important; }
+  .dark .bg-muted         { background-color: hsl(var(--muted))  !important; }
+
+  /* ─── Text ─── */
+  .dark .text-foreground  { color: hsl(var(--foreground)); }
+  .dark .text-muted-foreground { color: hsl(var(--muted-foreground)); }
+  .dark .text-slate-50,
+  .dark .text-slate-100,
+  .dark .text-slate-200   { color: #f1f5f9; }
+  .dark .text-slate-600,
+  .dark .text-slate-700,
+  .dark .text-slate-800,
+  .dark .text-slate-900   { color: hsl(var(--muted-foreground)); }
+
+  /* ─── Borders ─── */
+  .dark .border-border    { border-color: hsl(var(--border)); }
+  .dark .border-slate-200 { border-color: hsl(var(--border)); }
+  .dark [class*="border-border"] { border-color: hsl(var(--border)); }
+
+  /* ─── Inputs ─── */
+  .dark input,
+  .dark textarea,
+  .dark select {
+    background-color: hsl(222 47% 13%) !important;
+    color: hsl(var(--foreground)) !important;
+    border-color: hsl(var(--border)) !important;
+  }
+  .dark input::placeholder,
+  .dark textarea::placeholder {
+    color: hsl(var(--muted-foreground)) !important;
+  }
+
+  /* ─── Tables ─── */
+  .dark table tr:hover td { background-color: hsl(217 33% 16%) !important; }
+  .dark thead tr          { background-color: hsl(222 47% 11%) !important; }
+  .dark tbody tr          { border-color: hsl(var(--border)) !important; }
+
+  /* ─── Badges & pills (keep their colors) ─── */
+  .dark .bg-emerald-50  { background-color: rgb(6 78 59 / 0.3)  !important; }
+  .dark .bg-amber-50    { background-color: rgb(120 53 15 / 0.3) !important; }
+  .dark .bg-rose-50     { background-color: rgb(136 19 55 / 0.3) !important; }
+  .dark .bg-blue-50     { background-color: rgb(23 37 84 / 0.3)  !important; }
+  .dark .bg-violet-50   { background-color: rgb(76 29 149 / 0.3) !important; }
+  .dark .bg-brand-50    { background-color: rgb(23 37 84 / 0.3)  !important; }
+
+  /* ─── Shadows ─── */
+  .dark .shadow-card    { box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+  .dark .shadow-card-md { box-shadow: 0 4px 16px rgba(0,0,0,0.5); }
 }
 
 @layer utilities {
   .shadow-card    { box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04); }
   .shadow-card-md { box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
-  .dark .shadow-card    { box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2); }
-  .dark .shadow-card-md { box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
   .animate-fade-up { animation: fadeUp 0.3s ease-out; }
 }
 

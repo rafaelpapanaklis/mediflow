@@ -1,15 +1,28 @@
 import { getCurrentUser } from "@/lib/auth";
 import { Sidebar } from "@/components/dashboard/sidebar";
 
-export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default async function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const user   = await getCurrentUser();
   const clinic = user.clinic;
-  const isSuspended = clinic.trialEndsAt && new Date(clinic.trialEndsAt) < new Date();
+  const isSuspended =
+    clinic.trialEndsAt && new Date(clinic.trialEndsAt) < new Date();
+
+  // Only pass serializable (plain) data — no functions, no class instances
+  const userProps = {
+    firstName: user.firstName,
+    lastName:  user.lastName,
+    email:     user.email,
+    role:      user.role,
+  };
 
   return (
     <div className="flex min-h-screen bg-background font-sans">
       <Sidebar
-        user={{ firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role }}
+        user={userProps}
         clinicName={clinic.name}
         plan={clinic.plan}
       />
@@ -17,7 +30,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
         {isSuspended && (
           <div className="bg-rose-600 text-white text-xs font-bold px-4 py-2.5 text-center flex-shrink-0">
             ⚠️ Tu suscripción ha vencido.{" "}
-            <a href="/dashboard/suspended" className="underline hover:no-underline">Ver opciones de pago →</a>
+            <a href="/dashboard/suspended" className="underline hover:no-underline">
+              Ver opciones de pago →
+            </a>
           </div>
         )}
         <main className="flex-1 p-5 lg:p-6 pt-16 lg:pt-6">{children}</main>
