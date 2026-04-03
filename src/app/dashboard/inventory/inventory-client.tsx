@@ -55,9 +55,10 @@ interface Item {
   minQuantity: number; unit: string; price: number | null;
 }
 
-type StatusTab = "disponible" | "poco" | "sin" | "inactivo";
+type StatusTab = "todos" | "disponible" | "poco" | "sin" | "inactivo";
 
 const TABS: { id: StatusTab; label: string; activeClass: string }[] = [
+  { id:"todos",      label:"📋 Todos",       activeClass:"bg-brand-600 text-white border-brand-600"     },
   { id:"disponible", label:"✅ Disponible",  activeClass:"bg-emerald-500 text-white border-emerald-500" },
   { id:"poco",       label:"⚠️ Poco stock",  activeClass:"bg-amber-500 text-white border-amber-500"    },
   { id:"sin",        label:"🔴 Sin stock",   activeClass:"bg-rose-500 text-white border-rose-500"      },
@@ -114,7 +115,7 @@ function IconPicker({ selected, onSelect }: { selected: string; onSelect: (id: s
 
 export function InventoryClient({ initialItems, specialty }: { initialItems: Item[]; specialty: string }) {
   const [items,      setItems]      = useState<Item[]>(initialItems);
-  const [tab,        setTab]        = useState<StatusTab>("inactivo");
+  const [tab,        setTab]        = useState<StatusTab>("todos");
   const [search,     setSearch]     = useState("");
   const [showAdd,    setShowAdd]    = useState(false);
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
@@ -126,16 +127,24 @@ export function InventoryClient({ initialItems, specialty }: { initialItems: Ite
   });
 
   const counts = useMemo(() => {
-    const c: Record<StatusTab, number> = { disponible:0, poco:0, sin:0, inactivo:0 };
-    for (const item of items) c[getStatus(item)]++;
+    const c: Record<StatusTab, number> = { todos:0, disponible:0, poco:0, sin:0, inactivo:0 };
+    for (const item of items) { c[getStatus(item)]++; c.todos++; }
     return c;
   }, [items]);
 
   const filtered = useMemo(() => {
     return items
-      .filter(i => getStatus(i) === tab)
+      .filter(i => tab === "todos" || getStatus(i) === tab)
       .filter(i => !search || i.name.toLowerCase().includes(search.toLowerCase()) || i.category.toLowerCase().includes(search.toLowerCase()))
-      .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+      .sort((a, b) => {
+        if (tab === "todos") {
+          const order: Record<string, number> = { disponible:0, poco:1, sin:2, inactivo:3 };
+          const sa = order[getStatus(a)] ?? 9;
+          const sb = order[getStatus(b)] ?? 9;
+          if (sa !== sb) return sa - sb;
+        }
+        return a.category.localeCompare(b.category) || a.name.localeCompare(b.name);
+      });
   }, [items, tab, search]);
 
   async function setQuantityDirect(id: string, qtyStr: string) {
@@ -223,7 +232,7 @@ export function InventoryClient({ initialItems, specialty }: { initialItems: Ite
       </div>
 
       {/* Status tabs */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-5 gap-3 mb-6">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`rounded-2xl border-2 p-4 text-left transition-all ${tab === t.id ? t.activeClass : "bg-white dark:bg-slate-900 border-border hover:border-slate-400"}`}>
