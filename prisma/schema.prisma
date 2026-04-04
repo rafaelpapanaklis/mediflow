@@ -25,7 +25,7 @@ model Clinic {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  // WhatsApp integration
+  // WhatsApp
   waPhoneNumberId  String?
   waAccessToken    String?
   waConnected      Boolean @default(false)
@@ -33,6 +33,20 @@ model Clinic {
   waReminder24h    Boolean @default(true)
   waReminder1h     Boolean @default(false)
   waReminderMsg    String?
+
+  // CFDI / Facturación SAT
+  // Facturapi organization ID for this clinic
+  facturApiOrgId    String?
+  // RFC del emisor (la clínica)
+  rfcEmisor         String?
+  regimenFiscal     String?
+  cpEmisor          String?
+  facturApiEnabled  Boolean @default(false)
+
+  // AI Assistant usage tracking (tokens per month)
+  aiTokensUsed      Int     @default(0)
+  aiTokensLimit     Int     @default(50000)   // 50k tokens/month default (~100 consults)
+  aiLastResetAt     DateTime @default(now())
 
   users        User[]
   patients     Patient[]
@@ -42,6 +56,7 @@ model Clinic {
   schedules    ClinicSchedule[]
   inventory    InventoryItem[]
   reminders    WhatsAppReminder[]
+  cfdis        CfdiRecord[]
 
   @@map("clinics")
 }
@@ -64,21 +79,20 @@ model User {
   avatarUrl  String?
   phone      String?
   isActive   Boolean  @default(true)
-  // Color for agenda — each doctor gets a unique color
   color      String   @default("#3b82f6")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  // Google Calendar integration
+  // Google Calendar
   googleCalendarToken   String?
   googleRefreshToken    String?
   googleCalendarEmail   String?
   googleCalendarEnabled Boolean @default(false)
 
-  clinic           Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  appointments     Appointment[]
-  records          MedicalRecord[]
-  primaryPatients  Patient[]       @relation("PrimaryDoctor")
+  clinic          Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  appointments    Appointment[]
+  records         MedicalRecord[]
+  primaryPatients Patient[]       @relation("PrimaryDoctor")
 
   @@map("users")
 }
@@ -111,33 +125,34 @@ model Patient {
   tags               String[]      @default([])
   notes              String?
   status             PatientStatus @default(ACTIVE)
-  // Primary doctor assigned to this patient
   primaryDoctorId    String?
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
 
-  clinic         Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  primaryDoctor  User?           @relation("PrimaryDoctor", fields: [primaryDoctorId], references: [id])
-  appointments   Appointment[]
-  records        MedicalRecord[]
-  invoices       Invoice[]
-  files          PatientFile[]
+  // Portal del paciente — token único para acceso sin login
+  portalToken       String?   @unique
+  portalTokenExpiry DateTime?
+
+  // Datos fiscales para CFDI
+  rfcPaciente       String?
+  regimenFiscalPac  String?
+  cpPaciente        String?
+  razonSocialPac    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clinic        Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  primaryDoctor User?           @relation("PrimaryDoctor", fields: [primaryDoctorId], references: [id])
+  appointments  Appointment[]
+  records       MedicalRecord[]
+  invoices      Invoice[]
+  files         PatientFile[]
 
   @@unique([clinicId, patientNumber])
   @@map("patients")
 }
 
-enum Gender {
-  M
-  F
-  OTHER
-}
-
-enum PatientStatus {
-  ACTIVE
-  INACTIVE
-  ARCHIVED
-}
+enum Gender { M F OTHER }
+enum PatientStatus { ACTIVE INACTIVE ARCHIVED }
 
 model Appointment {
   id                    String            @id @default(cuid())
@@ -157,6 +172,11 @@ model Appointment {
   cancelledAt           DateTime?
   cancelReason          String?
   googleCalendarEventId String?
+  // Precio de la consulta para pre-cobro
+  price                 Float?
+  // Stripe payment intent
+  stripePaymentIntentId String?
+  isPaid                Boolean           @default(false)
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
 
@@ -170,12 +190,7 @@ model Appointment {
 }
 
 enum AppointmentStatus {
-  PENDING
-  CONFIRMED
-  IN_PROGRESS
-  COMPLETED
-  CANCELLED
-  NO_SHOW
+  PENDING CONFIRMED IN_PROGRESS COMPLETED CANCELLED NO_SHOW
 }
 
 model MedicalRecord {
@@ -202,6 +217,31 @@ model MedicalRecord {
   @@map("medical_records")
 }
 
+// CFDI records — tracks every invoice emitted via Facturapi
+model CfdiRecord {
+  id              String   @id @default(cuid())
+  clinicId        String
+  invoiceId       String?
+  // Facturapi invoice ID
+  facturapiId     String
+  // UUID fiscal (folio)
+  uuid            String   @unique
+  // Type: I=ingreso, E=egreso, P=pago
+  tipoComprobante String   @default("I")
+  receptor        Json     // { rfc, nombre, regimen, cp }
+  conceptos       Json     // array of items
+  total           Float
+  status          String   @default("valid") // valid | cancelled
+  xmlUrl          String?
+  pdfUrl          String?
+  cancelledAt     DateTime?
+  createdAt       DateTime @default(now())
+
+  clinic  Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@map("cfdi_records")
+}
+
 model Invoice {
   id            String        @id @default(cuid())
   clinicId      String
@@ -219,6 +259,8 @@ model Invoice {
   notes         String?
   dueDate       DateTime?
   paidAt        DateTime?
+  // CFDI UUID if invoiced
+  cfdiUuid      String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
@@ -231,14 +273,7 @@ model Invoice {
   @@map("invoices")
 }
 
-enum InvoiceStatus {
-  DRAFT
-  PENDING
-  PARTIAL
-  PAID
-  OVERDUE
-  CANCELLED
-}
+enum InvoiceStatus { DRAFT PENDING PARTIAL PAID OVERDUE CANCELLED }
 
 model Payment {
   id        String   @id @default(cuid())
@@ -332,9 +367,4 @@ model WhatsAppReminder {
   @@map("whatsapp_reminders")
 }
 
-enum WhatsAppReminderStatus {
-  PENDING
-  SENT
-  FAILED
-  CANCELLED
-}
+enum WhatsAppReminderStatus { PENDING SENT FAILED CANCELLED }
