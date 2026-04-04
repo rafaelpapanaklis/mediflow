@@ -1,65 +1,69 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthContext, buildPatientWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { patientSchema } from "@/lib/validations";
-
-async function getClinicId() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id } });
-  return dbUser?.clinicId ?? null;
-}
-
-async function nextPatientNumber(clinicId: string) {
-  const last = await prisma.patient.findFirst({ where: { clinicId }, orderBy: { patientNumber: "desc" } });
-  const num = last ? parseInt(last.patientNumber) + 1 : 1;
-  return String(num).padStart(4, "0");
-}
 
 export async function GET(req: NextRequest) {
-  const clinicId = await getClinicId();
-  if (!clinicId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const ctx = await getAuthContext();
+  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const { searchParams } = new URL(req.url);
-  const search = searchParams.get("search") ?? "";
-  const page = parseInt(searchParams.get("page") ?? "1");
-  const limit = 20;
-  const where: any = { clinicId };
-  if (search) { where.OR = [
-    { firstName: { contains: search, mode: "insensitive" } },
-    { lastName:  { contains: search, mode: "insensitive" } },
-    { email:     { contains: search, mode: "insensitive" } },
-    { phone:     { contains: search } },
-    { patientNumber: { contains: search } },
-  ]; }
-  const [total, patients] = await Promise.all([
-    prisma.patient.count({ where }),
-    prisma.patient.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page-1)*limit, take: limit,
-      include: { appointments: { orderBy: { date: "desc" }, take: 1, select: { date: true, status: true } }, _count: { select: { appointments: true } } } }),
-  ]);
-  return NextResponse.json({ patients, total, page, limit });
+  const search = searchParams.get("search");
+  const status = searchParams.get("status");
+
+  const patients = await prisma.patient.findMany({
+    where: buildPatientWhere(ctx, {
+      ...(status && { status }),
+      ...(search && {
+        OR: [
+          { firstName: { contains: search, mode: "insensitive" } },
+          { lastName:  { contains: search, mode: "insensitive" } },
+          { email:     { contains: search, mode: "insensitive" } },
+          { phone:     { contains: search, mode: "insensitive" } },
+          { patientNumber: { contains: search, mode: "insensitive" } },
+        ],
+      }),
+    }),
+    include: {
+      primaryDoctor: { select: { id: true, firstName: true, lastName: true, color: true } },
+      appointments: { orderBy: { date: "desc" }, take: 1, select: { date: true, status: true } },
+      _count: { select: { appointments: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+
+  return NextResponse.json(patients);
 }
 
 export async function POST(req: NextRequest) {
-  const clinicId = await getClinicId();
-  if (!clinicId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  try {
-    const body = await req.json();
-    const data = patientSchema.parse(body);
-    const patient = await prisma.patient.create({
-      data: {
-        clinicId, patientNumber: await nextPatientNumber(clinicId),
-        firstName: data.firstName ?? "", lastName: data.lastName ?? "",
-        email: data.email || undefined, phone: data.phone,
-        dob: data.dob ? new Date(data.dob) : undefined,
-        gender: (data.gender ?? "OTHER") as any,
-        bloodType: data.bloodType, address: data.address,
-        insuranceProvider: data.insuranceProvider, insurancePolicy: data.insurancePolicy,
-        allergies: data.allergies ?? [], chronicConditions: data.chronicConditions ?? [],
-        currentMedications: data.currentMedications ?? [], tags: data.tags ?? [],
-        notes: data.notes, status: "ACTIVE",
-      },
-    });
-    return NextResponse.json(patient, { status: 201 });
-  } catch (err: any) { return NextResponse.json({ error: err.message }, { status: 400 }); }
+  const ctx = await getAuthContext();
+  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await req.json();
+
+  // Generate patient number
+  const count = await prisma.patient.count({ where: { clinicId: ctx.clinicId } });
+  const patientNumber = `P${String(count + 1).padStart(4, "0")}`;
+
+  const patient = await prisma.patient.create({
+    data: {
+      clinicId:      ctx.clinicId,
+      patientNumber,
+      firstName:     body.firstName,
+      lastName:      body.lastName,
+      email:         body.email ?? null,
+      phone:         body.phone ?? null,
+      dob:           body.dob ? new Date(body.dob) : null,
+      gender:        body.gender ?? "OTHER",
+      bloodType:     body.bloodType ?? null,
+      address:       body.address ?? null,
+      notes:         body.notes ?? null,
+      allergies:     body.allergies ?? [],
+      chronicConditions: body.chronicConditions ?? [],
+      // Auto-assign primary doctor: if doctor creates patient, assign self
+      primaryDoctorId: body.primaryDoctorId ?? (ctx.isDoctor ? ctx.userId : null),
+    },
+  });
+
+  return NextResponse.json(patient, { status: 201 });
 }

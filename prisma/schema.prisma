@@ -64,6 +64,8 @@ model User {
   avatarUrl  String?
   phone      String?
   isActive   Boolean  @default(true)
+  // Color for agenda — each doctor gets a unique color
+  color      String   @default("#3b82f6")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -73,9 +75,10 @@ model User {
   googleCalendarEmail   String?
   googleCalendarEnabled Boolean @default(false)
 
-  clinic       Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  appointments Appointment[]
-  records      MedicalRecord[]
+  clinic           Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  appointments     Appointment[]
+  records          MedicalRecord[]
+  primaryPatients  Patient[]       @relation("PrimaryDoctor")
 
   @@map("users")
 }
@@ -108,14 +111,17 @@ model Patient {
   tags               String[]      @default([])
   notes              String?
   status             PatientStatus @default(ACTIVE)
+  // Primary doctor assigned to this patient
+  primaryDoctorId    String?
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
-  clinic       Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  appointments Appointment[]
-  records      MedicalRecord[]
-  invoices     Invoice[]
-  files        PatientFile[]
+  clinic         Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  primaryDoctor  User?           @relation("PrimaryDoctor", fields: [primaryDoctorId], references: [id])
+  appointments   Appointment[]
+  records        MedicalRecord[]
+  invoices       Invoice[]
+  files          PatientFile[]
 
   @@unique([clinicId, patientNumber])
   @@map("patients")
@@ -134,25 +140,25 @@ enum PatientStatus {
 }
 
 model Appointment {
-  id           String            @id @default(cuid())
-  clinicId     String
-  patientId    String
-  doctorId     String
-  type         String
-  date         DateTime
-  startTime    String
-  endTime      String
-  durationMins Int               @default(30)
-  room         String?
-  status       AppointmentStatus @default(PENDING)
-  notes        String?
-  reminderSent Boolean           @default(false)
-  confirmedAt  DateTime?
-  cancelledAt  DateTime?
+  id                    String            @id @default(cuid())
+  clinicId              String
+  patientId             String
+  doctorId              String
+  type                  String
+  date                  DateTime
+  startTime             String
+  endTime               String
+  durationMins          Int               @default(30)
+  room                  String?
+  status                AppointmentStatus @default(PENDING)
+  notes                 String?
+  reminderSent          Boolean           @default(false)
+  confirmedAt           DateTime?
+  cancelledAt           DateTime?
   cancelReason          String?
   googleCalendarEventId String?
   createdAt             DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  updatedAt             DateTime          @updatedAt
 
   clinic    Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   patient   Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -277,8 +283,6 @@ model PatientFile {
   @@map("patient_files")
 }
 
-// ─── INVENTORY ────────────────────────────────────────────────────────────────
-
 model InventoryItem {
   id          String   @id @default(cuid())
   clinicId    String
@@ -293,8 +297,8 @@ model InventoryItem {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  clinic   Clinic              @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  history  InventoryHistory[]
+  clinic  Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  history InventoryHistory[]
 
   @@map("inventory_items")
 }
@@ -311,10 +315,8 @@ model InventoryHistory {
   @@map("inventory_history")
 }
 
-// ─── WHATSAPP REMINDERS ───────────────────────────────────────────────────────
-
 model WhatsAppReminder {
-  id            String               @id @default(cuid())
+  id            String                @id @default(cuid())
   clinicId      String
   appointmentId String
   type          String
@@ -322,7 +324,7 @@ model WhatsAppReminder {
   sentAt        DateTime?
   errorMsg      String?
   scheduledFor  DateTime
-  createdAt     DateTime             @default(now())
+  createdAt     DateTime              @default(now())
 
   clinic      Clinic      @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
