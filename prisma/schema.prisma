@@ -151,8 +151,16 @@ model Patient {
   @@map("patients")
 }
 
-enum Gender { M F OTHER }
-enum PatientStatus { ACTIVE INACTIVE ARCHIVED }
+enum Gender {
+  M
+  F
+  OTHER
+}
+enum PatientStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
 
 model Appointment {
   id                    String            @id @default(cuid())
@@ -190,7 +198,12 @@ model Appointment {
 }
 
 enum AppointmentStatus {
-  PENDING CONFIRMED IN_PROGRESS COMPLETED CANCELLED NO_SHOW
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
 }
 
 model MedicalRecord {
@@ -273,7 +286,14 @@ model Invoice {
   @@map("invoices")
 }
 
-enum InvoiceStatus { DRAFT PENDING PARTIAL PAID OVERDUE CANCELLED }
+enum InvoiceStatus {
+  DRAFT
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+  CANCELLED
+}
 
 model Payment {
   id        String   @id @default(cuid())
@@ -367,4 +387,9 @@ model WhatsAppReminder {
   @@map("whatsapp_reminders")
 }
 
-enum WhatsAppReminderStatus { PENDING SENT FAILED CANCELLED }
+enum WhatsAppReminderStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
+}
