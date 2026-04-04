@@ -58,11 +58,12 @@ interface Props {
   totalPaid:    number;
   totalBalance: number;
   totalPlan:    number;
+  portalUrl?:   string | null;
 }
 
 export function PatientDetailClient({
   patient, records: initialRecords, appointments, invoices,
-  doctors, currentUser, specialty, totalPaid, totalBalance, totalPlan,
+  doctors, currentUser, specialty, totalPaid, totalBalance, totalPlan, portalUrl,
 }: Props) {
   const router = useRouter();
   const [tab, setTab]         = useState("resumen");
@@ -74,6 +75,28 @@ export function PatientDetailClient({
     startTime: "09:00", endTime: "09:30", notes: "",
   });
   const [savingAppt, setSavingAppt] = useState(false);
+  const [portalLink, setPortalLink] = useState<string | null>(portalUrl ?? null);
+  const [generatingPortal, setGeneratingPortal] = useState(false);
+
+  async function generatePortalLink() {
+    setGeneratingPortal(true);
+    try {
+      const res = await fetch("/api/portal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ patientId: patient.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setPortalLink(data.portalUrl);
+      await navigator.clipboard.writeText(data.portalUrl);
+      toast.success("🔗 Link del portal copiado al portapapeles");
+    } catch (err: any) {
+      toast.error(err.message ?? "Error al generar portal");
+    } finally {
+      setGeneratingPortal(false);
+    }
+  }
 
   const detectedSpecialty = detectSpecialty(specialty);
   const age = patient.dob ? new Date().getFullYear() - new Date(patient.dob).getFullYear() : null;
@@ -139,6 +162,17 @@ export function PatientDetailClient({
           <button onClick={() => setTab("expediente")} className="flex items-center gap-1.5 text-xs font-semibold bg-muted border border-border px-3 py-1.5 rounded-lg hover:bg-muted/80 transition-colors">
             📝 Nueva nota
           </button>
+          {portalLink ? (
+            <button onClick={() => { navigator.clipboard.writeText(portalLink); toast.success("Link copiado"); }}
+              className="flex items-center gap-1.5 text-xs font-semibold bg-emerald-600 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-700 transition-colors">
+              🔗 Copiar portal
+            </button>
+          ) : (
+            <button onClick={generatePortalLink} disabled={generatingPortal}
+              className="flex items-center gap-1.5 text-xs font-semibold bg-muted border border-border px-3 py-1.5 rounded-lg hover:bg-muted/80 transition-colors disabled:opacity-50">
+              {generatingPortal ? "Generando…" : "🏥 Portal paciente"}
+            </button>
+          )}
           <button onClick={() => setShowNewAppt(true)} className="flex items-center gap-1.5 text-xs font-semibold bg-brand-600 text-white px-3 py-1.5 rounded-lg hover:bg-brand-700 transition-colors">
             <Plus className="w-3.5 h-3.5" />
             Agendar cita

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   ChevronLeft, ChevronRight, Plus, X,
   Phone, MessageCircle, Ban,
@@ -137,6 +138,19 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
   const [showEdit,    setShowEdit]    = useState(false);
   const [filterDoc,   setFilterDoc]   = useState<string>("all");
   const [loading,     setLoading]     = useState(false);
+
+  const searchParams = useSearchParams();
+
+  // Auto-open new appointment modal if ?new=1 in URL
+  useEffect(() => {
+    if (searchParams.get("new") === "1") {
+      setShowNew(true);
+      // Clean URL without reload
+      const url = new URL(window.location.href);
+      url.searchParams.delete("new");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [searchParams]);
 
   const emptyForm = { patientId:"", doctorId:currentUserId, type:"Consulta general", date:toDateStr(today), startTime:"09:00", durationMins:30, notes:"" };
   const [form, setForm] = useState(emptyForm);
