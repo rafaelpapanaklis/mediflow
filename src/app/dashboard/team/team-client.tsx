@@ -23,7 +23,7 @@ const SPECIALTIES = ["Medicina General","Odontología","Psicología","Nutrición
 interface TeamMember {
   id: string; firstName: string; lastName: string; email: string;
   role: string; specialty: string | null; color: string; avatarUrl: string | null;
-  phone: string | null; isActive: boolean; createdAt: string;
+  phone: string | null; isActive: boolean; createdAt: string; services: string[];
   _count: { appointments: number; records: number; primaryPatients: number };
 }
 
@@ -36,7 +36,8 @@ export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Pro
   const [loading,   setLoading]   = useState(false);
   const [filter,    setFilter]    = useState<"all"|"active"|"inactive">("active");
 
-  const emptyForm = { firstName:"", lastName:"", email:"", role:"DOCTOR", specialty:"", color:DOCTOR_COLORS[0], phone:"" };
+  const emptyForm = { firstName:"", lastName:"", email:"", role:"DOCTOR", specialty:"", color:DOCTOR_COLORS[0], phone:"", services:[] as string[] };
+  const [serviceInput, setServiceInput] = useState("");
   const [form, setForm] = useState(emptyForm);
   const setF = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
 
@@ -181,6 +182,47 @@ export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Pro
           <input className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
             placeholder="+52 999 000 0000" value={form.phone} onChange={e => setF("phone", e.target.value)} />
         </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-base font-semibold">Servicios / Tratamientos que realiza</Label>
+        <div className="flex gap-2">
+          <input
+            className="flex h-11 flex-1 rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
+            placeholder="Ej: Ortodoncia, Implantes, Blanqueamiento…"
+            value={serviceInput}
+            onChange={e => setServiceInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Enter" || e.key === ",") {
+                e.preventDefault();
+                const val = serviceInput.trim().replace(/,$/,"");
+                if (val && !form.services.includes(val)) setF("services", [...form.services, val]);
+                setServiceInput("");
+              }
+            }}
+          />
+          <button type="button"
+            onClick={() => {
+              const val = serviceInput.trim().replace(/,$/,"");
+              if (val && !form.services.includes(val)) setF("services", [...form.services, val]);
+              setServiceInput("");
+            }}
+            className="h-11 px-4 rounded-xl border border-border bg-white dark:bg-slate-800 text-base font-bold hover:bg-muted transition-colors">
+            +
+          </button>
+        </div>
+        <p className="text-sm text-muted-foreground">Presiona Enter o coma para agregar cada servicio</p>
+        {form.services.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-1">
+            {form.services.map((s: string) => (
+              <span key={s} className="flex items-center gap-1.5 text-sm font-semibold bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 px-3 py-1 rounded-full">
+                {s}
+                <button type="button" onClick={() => setF("services", form.services.filter((x: string) => x !== s))}
+                  className="text-brand-500 hover:text-brand-900 font-bold leading-none">×</button>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="space-y-2">

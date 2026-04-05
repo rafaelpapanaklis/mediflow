@@ -25,6 +25,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic }: Props) {
   const [saving,   setSaving]   = useState(false);
   const [user,     setUser]     = useState(initUser);
   const [clinic,   setClinic]   = useState(initClinic);
+  const [isPublic, setIsPublic] = useState<boolean>(Boolean(initClinic.isPublic ?? false));
   const [schedule, setSchedule] = useState<Record<number,{enabled:boolean;open:string;close:string}>>(
     Object.fromEntries((initClinic.schedules ?? []).map((s: any) => [s.dayOfWeek, { enabled:s.enabled, open:s.openTime, close:s.closeTime }]))
   );
@@ -53,7 +54,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic }: Props) {
     try {
       const res = await fetch("/api/clinic", {
         method: "PATCH", headers: { "Content-Type":"application/json" },
-        body: JSON.stringify({ name:clinic.name, city:clinic.city, phone:clinic.phone, email:clinic.email }),
+        body: JSON.stringify({ name:clinic.name, city:clinic.city, phone:clinic.phone, email:clinic.email, address:clinic.address, description:clinic.description, isPublic }),
       });
       if (!res.ok) throw new Error();
       toast.success("Datos de la clínica actualizados");
@@ -160,6 +161,35 @@ export function SettingsClient({ user: initUser, clinic: initClinic }: Props) {
           </div>
           <div className="space-y-1.5"><Label>Teléfono</Label><Input value={clinic.phone ?? ""} onChange={e => setClinic((c: any) => ({ ...c, phone: e.target.value }))} /></div>
           <div className="space-y-1.5"><Label>Email de contacto</Label><Input type="email" value={clinic.email ?? ""} onChange={e => setClinic((c: any) => ({ ...c, email: e.target.value }))} /></div>
+          <div className="space-y-1.5">
+            <Label>Descripción corta (visible en el directorio)</Label>
+            <textarea
+              className="flex w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 py-3 text-sm focus:outline-none resize-none"
+              rows={2}
+              placeholder="Ej: Clínica dental especializada en ortodoncia e implantes en Mérida"
+              value={clinic.description ?? ""}
+              onChange={e => setClinic((c: any) => ({ ...c, description: e.target.value }))}
+            />
+          </div>
+          <div className="flex items-center justify-between p-4 rounded-2xl border-2 transition-colors"
+            style={{ borderColor: isPublic ? "#2563eb" : "#e2e8f0", background: isPublic ? "#eff6ff" : "transparent" }}>
+            <div>
+              <div className="text-sm font-bold" style={{ color: isPublic ? "#1d4ed8" : "#0f172a" }}>
+                {isPublic ? "🌐 Clínica pública" : "🔒 Clínica privada"}
+              </div>
+              <div className="text-xs mt-0.5" style={{ color: isPublic ? "#3b82f6" : "#64748b" }}>
+                {isPublic
+                  ? "Apareces en el directorio /clinicas y recibes reservas en línea"
+                  : "Solo tu equipo accede. No apareces en el directorio público."}
+              </div>
+            </div>
+            <button type="button" onClick={() => setIsPublic((p: boolean) => !p)}
+              className="relative flex-shrink-0 w-11 h-6 rounded-full transition-colors ml-4"
+              style={{ background: isPublic ? "#2563eb" : "#cbd5e1" }}>
+              <div className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-all"
+                style={{ left: isPublic ? "22px" : "2px" }} />
+            </button>
+          </div>
           <div className="pt-2 flex items-center justify-between">
             <span className={`text-sm font-bold px-3 py-1 rounded-full border ${clinic.plan==="CLINIC"?"bg-violet-50 text-violet-700 border-violet-200":clinic.plan==="PRO"?"bg-brand-50 text-brand-700 border-brand-200":"bg-slate-100 text-slate-600 border-slate-200"}`}>
               Plan {clinic.plan}

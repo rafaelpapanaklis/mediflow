@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
     where: { clinicId: ctx!.clinicId },
     select: {
       id: true, firstName: true, lastName: true, email: true,
-      role: true, specialty: true, color: true, avatarUrl: true,
+      role: true, specialty: true, color: true, services: true, avatarUrl: true,
       phone: true, isActive: true, createdAt: true,
       googleCalendarEnabled: true, googleCalendarEmail: true,
       _count: {

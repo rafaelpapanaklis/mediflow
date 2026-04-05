@@ -25,6 +25,12 @@ model Clinic {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  // ── NEW: Public booking directory ──────────────────────────────
+  // If true, clinic appears in /clinicas and accepts public bookings
+  isPublic    Boolean   @default(false)
+  // Short description shown in the public directory
+  description String?
+
   // WhatsApp
   waPhoneNumberId  String?
   waAccessToken    String?
@@ -35,13 +41,13 @@ model Clinic {
   waReminderMsg    String?
 
   // CFDI / Facturación SAT
-  facturApiOrgId    String?
-  rfcEmisor         String?
-  regimenFiscal     String?
-  cpEmisor          String?
-  facturApiEnabled  Boolean @default(false)
+  facturApiOrgId   String?
+  rfcEmisor        String?
+  regimenFiscal    String?
+  cpEmisor         String?
+  facturApiEnabled Boolean @default(false)
 
-  // AI Assistant usage tracking
+  // AI usage
   aiTokensUsed  Int      @default(0)
   aiTokensLimit Int      @default(50000)
   aiLastResetAt DateTime @default(now())
@@ -81,6 +87,10 @@ model User {
   color      String   @default("#3b82f6")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  // ── NEW: Services/treatments this doctor performs ───────────────
+  // Stored as array of strings e.g. ["Ortodoncia", "Implantes", "Blanqueamiento"]
+  services   String[] @default([])
 
   // Google Calendar
   googleCalendarToken   String?
@@ -127,11 +137,9 @@ model Patient {
   status             PatientStatus @default(ACTIVE)
   primaryDoctorId    String?
 
-  // Portal del paciente
   portalToken       String?   @unique
   portalTokenExpiry DateTime?
 
-  // Datos fiscales para CFDI
   rfcPaciente      String?
   regimenFiscalPac String?
   cpPaciente       String?
@@ -230,25 +238,23 @@ model MedicalRecord {
   @@map("medical_records")
 }
 
-// ── IDEA 2: Treatment Plans ────────────────────────────────────────────────
 model TreatmentPlan {
-  id          String              @id @default(cuid())
-  clinicId    String
-  patientId   String
-  doctorId    String
-  name        String              // "Ortodoncia 18 meses", "Rehabilitación periodontal"
-  description String?
-  totalSessions Int               @default(1)
-  sessionIntervalDays Int         @default(30) // expected days between sessions
-  totalCost   Float               @default(0)
-  status      TreatmentStatus     @default(ACTIVE)
-  startDate   DateTime            @default(now())
-  endDate     DateTime?           // expected end date
-  // Follow-up tracking
-  lastFollowUpSent DateTime?       // last time we sent a follow-up WhatsApp
-  nextExpectedDate DateTime?       // next expected session date
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+  id                  String          @id @default(cuid())
+  clinicId            String
+  patientId           String
+  doctorId            String
+  name                String
+  description         String?
+  totalSessions       Int             @default(1)
+  sessionIntervalDays Int             @default(30)
+  totalCost           Float           @default(0)
+  status              TreatmentStatus @default(ACTIVE)
+  startDate           DateTime        @default(now())
+  endDate             DateTime?
+  lastFollowUpSent    DateTime?
+  nextExpectedDate    DateTime?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 
   clinic   Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   patient  Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -259,12 +265,12 @@ model TreatmentPlan {
 }
 
 model TreatmentSession {
-  id            String          @id @default(cuid())
+  id            String    @id @default(cuid())
   treatmentId   String
   sessionNumber Int
   notes         String?
-  completedAt   DateTime?       // null = not yet done
-  createdAt     DateTime        @default(now())
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
 
   treatment TreatmentPlan @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
 
@@ -278,22 +284,21 @@ enum TreatmentStatus {
   PAUSED
 }
 
-// ── CFDI records ──────────────────────────────────────────────────────────
 model CfdiRecord {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   clinicId        String
   invoiceId       String?
   facturapiId     String
-  uuid            String   @unique
-  tipoComprobante String   @default("I")
+  uuid            String    @unique
+  tipoComprobante String    @default("I")
   receptor        Json
   conceptos       Json
   total           Float
-  status          String   @default("valid")
+  status          String    @default("valid")
   xmlUrl          String?
   pdfUrl          String?
   cancelledAt     DateTime?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime  @default(now())
 
   clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 

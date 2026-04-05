@@ -70,6 +70,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       ...(body.avatarUrl  !== undefined && { avatarUrl:  body.avatarUrl  }),
       ...(body.role       !== undefined && { role:       body.role       }),
       ...(body.isActive   !== undefined && { isActive:   body.isActive   }),
+      ...(body.services   !== undefined && { services:   body.services   }),
     },
   });
 
