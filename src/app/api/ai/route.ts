@@ -22,17 +22,23 @@ export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Check API key is configured
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json({
+      error: "El Asistente IA no está configurado. Agrega ANTHROPIC_API_KEY en las variables de entorno de Vercel.",
+    }, { status: 503 });
+  }
+
   const { message, patientContext, conversationHistory } = await req.json();
   if (!message?.trim()) return NextResponse.json({ error: "Mensaje vacío" }, { status: 400 });
 
   const clinic = await prisma.clinic.findUnique({
-    where: { id: ctx.clinicId },
+    where:  { id: ctx.clinicId },
     select: { aiTokensUsed: true, aiTokensLimit: true, aiLastResetAt: true },
   });
-
   if (!clinic) return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
 
-  // FIX: use local mutable variable instead of mutating Prisma readonly object
   let currentTokensUsed = clinic.aiTokensUsed;
 
   // Reset monthly counter if needed
@@ -48,7 +54,7 @@ export async function POST(req: NextRequest) {
     currentTokensUsed = 0;
   }
 
-  // Check limit
+  // Check monthly token limit
   if (currentTokensUsed >= clinic.aiTokensLimit) {
     const resetDate = new Date(lastReset.getFullYear(), lastReset.getMonth() + 1, 1);
     return NextResponse.json({
@@ -71,7 +77,11 @@ export async function POST(req: NextRequest) {
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method:  "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type":      "application/json",
+        "x-api-key":         apiKey,              // ← THE FIX
+        "anthropic-version": "2023-06-01",         // required by Anthropic API
+      },
       body: JSON.stringify({
         model:      "claude-haiku-4-5-20251001",
         max_tokens: 600,
@@ -81,7 +91,10 @@ export async function POST(req: NextRequest) {
     });
 
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error?.message ?? "Error de API");
+    if (!response.ok) {
+      console.error("Anthropic API error:", data);
+      throw new Error(data.error?.message ?? "Error de API de Anthropic");
+    }
 
     const inputTokens  = data.usage?.input_tokens  ?? 0;
     const outputTokens = data.usage?.output_tokens ?? 0;
@@ -104,6 +117,6 @@ export async function POST(req: NextRequest) {
 
   } catch (err: any) {
     console.error("AI error:", err);
-    return NextResponse.json({ error: "Error al consultar el asistente IA" }, { status: 500 });
+    return NextResponse.json({ error: err.message ?? "Error al consultar el asistente IA" }, { status: 500 });
   }
 }
