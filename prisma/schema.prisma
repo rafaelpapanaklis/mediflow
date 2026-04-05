@@ -35,18 +35,16 @@ model Clinic {
   waReminderMsg    String?
 
   // CFDI / Facturación SAT
-  // Facturapi organization ID for this clinic
   facturApiOrgId    String?
-  // RFC del emisor (la clínica)
   rfcEmisor         String?
   regimenFiscal     String?
   cpEmisor          String?
   facturApiEnabled  Boolean @default(false)
 
-  // AI Assistant usage tracking (tokens per month)
-  aiTokensUsed      Int     @default(0)
-  aiTokensLimit     Int     @default(50000)   // 50k tokens/month default (~100 consults)
-  aiLastResetAt     DateTime @default(now())
+  // AI Assistant usage tracking
+  aiTokensUsed  Int      @default(0)
+  aiTokensLimit Int      @default(50000)
+  aiLastResetAt DateTime @default(now())
 
   users        User[]
   patients     Patient[]
@@ -57,6 +55,7 @@ model Clinic {
   inventory    InventoryItem[]
   reminders    WhatsAppReminder[]
   cfdis        CfdiRecord[]
+  treatments   TreatmentPlan[]
 
   @@map("clinics")
 }
@@ -93,6 +92,7 @@ model User {
   appointments    Appointment[]
   records         MedicalRecord[]
   primaryPatients Patient[]       @relation("PrimaryDoctor")
+  treatments      TreatmentPlan[]
 
   @@map("users")
 }
@@ -127,15 +127,15 @@ model Patient {
   status             PatientStatus @default(ACTIVE)
   primaryDoctorId    String?
 
-  // Portal del paciente — token único para acceso sin login
+  // Portal del paciente
   portalToken       String?   @unique
   portalTokenExpiry DateTime?
 
   // Datos fiscales para CFDI
-  rfcPaciente       String?
-  regimenFiscalPac  String?
-  cpPaciente        String?
-  razonSocialPac    String?
+  rfcPaciente      String?
+  regimenFiscalPac String?
+  cpPaciente       String?
+  razonSocialPac   String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -146,6 +146,7 @@ model Patient {
   records       MedicalRecord[]
   invoices      Invoice[]
   files         PatientFile[]
+  treatments    TreatmentPlan[]
 
   @@unique([clinicId, patientNumber])
   @@map("patients")
@@ -156,6 +157,7 @@ enum Gender {
   F
   OTHER
 }
+
 enum PatientStatus {
   ACTIVE
   INACTIVE
@@ -180,9 +182,7 @@ model Appointment {
   cancelledAt           DateTime?
   cancelReason          String?
   googleCalendarEventId String?
-  // Precio de la consulta para pre-cobro
   price                 Float?
-  // Stripe payment intent
   stripePaymentIntentId String?
   isPaid                Boolean           @default(false)
   createdAt             DateTime          @default(now())
@@ -230,27 +230,72 @@ model MedicalRecord {
   @@map("medical_records")
 }
 
-// CFDI records — tracks every invoice emitted via Facturapi
+// ── IDEA 2: Treatment Plans ────────────────────────────────────────────────
+model TreatmentPlan {
+  id          String              @id @default(cuid())
+  clinicId    String
+  patientId   String
+  doctorId    String
+  name        String              // "Ortodoncia 18 meses", "Rehabilitación periodontal"
+  description String?
+  totalSessions Int               @default(1)
+  sessionIntervalDays Int         @default(30) // expected days between sessions
+  totalCost   Float               @default(0)
+  status      TreatmentStatus     @default(ACTIVE)
+  startDate   DateTime            @default(now())
+  endDate     DateTime?           // expected end date
+  // Follow-up tracking
+  lastFollowUpSent DateTime?       // last time we sent a follow-up WhatsApp
+  nextExpectedDate DateTime?       // next expected session date
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  clinic   Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient  Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor   User               @relation(fields: [doctorId], references: [id])
+  sessions TreatmentSession[]
+
+  @@map("treatment_plans")
+}
+
+model TreatmentSession {
+  id            String          @id @default(cuid())
+  treatmentId   String
+  sessionNumber Int
+  notes         String?
+  completedAt   DateTime?       // null = not yet done
+  createdAt     DateTime        @default(now())
+
+  treatment TreatmentPlan @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
+
+  @@map("treatment_sessions")
+}
+
+enum TreatmentStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+  PAUSED
+}
+
+// ── CFDI records ──────────────────────────────────────────────────────────
 model CfdiRecord {
   id              String   @id @default(cuid())
   clinicId        String
   invoiceId       String?
-  // Facturapi invoice ID
   facturapiId     String
-  // UUID fiscal (folio)
   uuid            String   @unique
-  // Type: I=ingreso, E=egreso, P=pago
   tipoComprobante String   @default("I")
-  receptor        Json     // { rfc, nombre, regimen, cp }
-  conceptos       Json     // array of items
+  receptor        Json
+  conceptos       Json
   total           Float
-  status          String   @default("valid") // valid | cancelled
+  status          String   @default("valid")
   xmlUrl          String?
   pdfUrl          String?
   cancelledAt     DateTime?
   createdAt       DateTime @default(now())
 
-  clinic  Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
   @@map("cfdi_records")
 }
@@ -272,7 +317,6 @@ model Invoice {
   notes         String?
   dueDate       DateTime?
   paidAt        DateTime?
-  // CFDI UUID if invoiced
   cfdiUuid      String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
@@ -371,7 +415,7 @@ model InventoryHistory {
 }
 
 model WhatsAppReminder {
-  id            String                @id @default(cuid())
+  id            String                 @id @default(cuid())
   clinicId      String
   appointmentId String
   type          String
@@ -379,7 +423,7 @@ model WhatsAppReminder {
   sentAt        DateTime?
   errorMsg      String?
   scheduledFor  DateTime
-  createdAt     DateTime              @default(now())
+  createdAt     DateTime               @default(now())
 
   clinic      Clinic      @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
