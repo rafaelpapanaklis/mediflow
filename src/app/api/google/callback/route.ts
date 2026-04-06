@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
-import { getOAuthClient } from "@/lib/google-calendar";
+import { getOAuthClient, getOrCreateClinicCalendar } from "@/lib/google-calendar";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
@@ -71,7 +71,6 @@ export async function GET(req: NextRequest) {
 
       // Try to create clinic calendar (non-fatal if fails)
       try {
-        const { getOrCreateClinicCalendar } = await import("@/lib/google-calendar");
         const calendarId = await getOrCreateClinicCalendar(accessToken, refreshToken!, user.clinic.name);
         if (calendarId) {
           await prisma.clinic.update({
