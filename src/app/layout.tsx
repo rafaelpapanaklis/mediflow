@@ -11,6 +11,12 @@ export const metadata: Metadata = {
   description: "Gestiona citas, pacientes, expedientes y facturación en un solo lugar.",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1, // prevents iOS double-tap zoom
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" className={`${sora.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>

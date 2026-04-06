@@ -310,12 +310,13 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
 
   const MonthView = () => (
     <div>
-      <div className="grid grid-cols-7 border-b border-border bg-muted/20">
+      <div className="overflow-x-auto">
+      <div className="grid grid-cols-7 border-b border-border bg-muted/20 min-w-[560px]">
         {DAYS_ES.map(d => (
           <div key={d} className="py-3 text-center text-sm font-bold text-muted-foreground uppercase tracking-wider">{d}</div>
         ))}
       </div>
-      <div className="grid grid-cols-7" style={{ minHeight: 500 }}>
+      <div className="grid grid-cols-7 min-w-[560px]" style={{ minHeight: 500 }}>
         {calDays.map((day, idx) => {
           if (!day) return <div key={idx} className="border-r border-b border-border bg-muted/5 min-h-[100px]" />;
           const ds       = toDateStr(day);
@@ -352,7 +353,8 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
     const weekDays = Array.from({ length: 7 }, (_, i) => new Date(weekStart.getTime() + i * 86400000));
     return (
       <div>
-        <div className="grid grid-cols-8 border-b border-border bg-muted/20">
+        <div className="overflow-x-auto">
+        <div className="grid grid-cols-8 border-b border-border bg-muted/20 min-w-[640px]">
           <div className="py-3 border-r border-border" />
           {weekDays.map((d, i) => {
             const ds = toDateStr(d); const isToday = ds === todayStr; const cnt = (apptsByDate[ds]??[]).length;

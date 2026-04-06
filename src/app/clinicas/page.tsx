@@ -132,7 +132,7 @@ export default function ClinicasPage() {
             {POPULAR_SERVICES.map(s => (
               <button key={s} onClick={() => service === s ? clearService() : selectService(s)}
                 style={{
-                  padding:"6px 14px", borderRadius:999, fontSize:12, fontWeight:600, cursor:"pointer", border:"1.5px solid",
+                  padding:"10px 16px", borderRadius:999, fontSize:12, fontWeight:600, cursor:"pointer", border:"1.5px solid",
                   background: service === s ? "#eff6ff" : "#fff",
                   borderColor: service === s ? "#2563eb" : "#e2e8f0",
                   color: service === s ? "#1d4ed8" : "#475569",

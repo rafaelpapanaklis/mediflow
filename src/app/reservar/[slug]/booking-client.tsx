@@ -31,7 +31,7 @@ function parseYMD(s: string) {
 const S = {
   page:    { minHeight:"100vh", background:"#0f172a", color:"#f1f5f9", fontFamily:"system-ui,-apple-system,sans-serif" },
   card:    { background:"#1e293b", border:"1px solid #334155", borderRadius:16 },
-  input:   { width:"100%", padding:"11px 14px", borderRadius:12, border:"1.5px solid #334155", background:"#0f172a", color:"#f1f5f9", fontSize:14, outline:"none", boxSizing:"border-box" as const },
+  input:   { width:"100%", padding:"11px 14px", borderRadius:12, border:"1.5px solid #334155", background:"#0f172a", color:"#f1f5f9", fontSize:16, outline:"none", boxSizing:"border-box" as const },
   label:   { fontSize:13, fontWeight:600, color:"#94a3b8", display:"block", marginBottom:6 },
   muted:   { color:"#64748b" },
   primary: { background:"#2563eb", color:"#fff", fontWeight:700, border:"none", cursor:"pointer", transition:"background 0.15s" },
@@ -464,7 +464,7 @@ function DarkField({ label, value, onChange, placeholder, type="text" }: {
   const S_input: React.CSSProperties = {
     width:"100%", padding:"11px 14px", borderRadius:12,
     border:"1.5px solid #334155", background:"#0f172a",
-    color:"#f1f5f9", fontSize:14, outline:"none", boxSizing:"border-box",
+    color:"#f1f5f9", fontSize:16, outline:"none", boxSizing:"border-box",
   };
   return (
     <div>

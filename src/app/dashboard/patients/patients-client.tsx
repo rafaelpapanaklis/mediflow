@@ -44,7 +44,8 @@ export function PatientsClient({ patients: initial }: { patients: any[] }) {
         <Input className="pl-9" placeholder="Buscar por nombre, teléfono o expediente…" value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
-      <div className="rounded-xl border border-border bg-white shadow-card overflow-hidden">
+      <div className="overflow-x-auto rounded-xl">
+      <div className="border border-border bg-white shadow-card overflow-hidden min-w-[500px]">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
@@ -94,6 +95,7 @@ export function PatientsClient({ patients: initial }: { patients: any[] }) {
             ))}
           </tbody>
         </table>
+      </div>
       </div>
       <NewPatientModal open={showNew} onClose={() => setShowNew(false)} onCreated={handleCreated} />
     </div>
