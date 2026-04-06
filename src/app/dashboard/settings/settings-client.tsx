@@ -18,9 +18,9 @@ const REGIMENES   = [
   { clave:"616", desc:"Sin obligaciones fiscales" },
 ];
 
-interface Props { user: any; clinic: any }
+interface Props { user: any; clinic: any; initialTab?: string; gcalStatus?: string }
 
-export function SettingsClient({ user: initUser, clinic: initClinic }: Props) {
+export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus }: Props) {
   const [tab,      setTab]      = useState(initialTab ?? "clinica");
   const [saving,   setSaving]   = useState(false);
   const [user,     setUser]     = useState(initUser);
