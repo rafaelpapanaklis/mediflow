@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { authenticator } from "otplib";
 
 export async function POST(req: NextRequest) {
   const { step, password, totp } = await req.json();
@@ -25,7 +26,6 @@ export async function POST(req: NextRequest) {
     // Verify TOTP using otplib
     let isValid = false;
     try {
-      const { authenticator } = await import("otplib");
       authenticator.options = { window: 1 }; // Allow 30s window
       isValid = authenticator.verify({ token: totp, secret: adminTotp });
     } catch (e) {
