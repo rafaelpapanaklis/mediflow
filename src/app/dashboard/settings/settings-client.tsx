@@ -18,14 +18,13 @@ const REGIMENES   = [
   { clave:"616", desc:"Sin obligaciones fiscales" },
 ];
 
-interface Props { user: any; clinic: any }
+interface Props { user: any; clinic: any; clinicGcal?: { enabled: boolean; email: string | null; calendarId: string | null } }
 
-export function SettingsClient({ user: initUser, clinic: initClinic }: Props) {
+export function SettingsClient({ user: initUser, clinic: initClinic, clinicGcal }: Props) {
   const [tab,      setTab]      = useState("clinica");
   const [saving,   setSaving]   = useState(false);
   const [user,     setUser]     = useState(initUser);
   const [clinic,   setClinic]   = useState(initClinic);
-  const [isPublic, setIsPublic] = useState<boolean>(Boolean(initClinic.isPublic ?? false));
   const [schedule, setSchedule] = useState<Record<number,{enabled:boolean;open:string;close:string}>>(
     Object.fromEntries((initClinic.schedules ?? []).map((s: any) => [s.dayOfWeek, { enabled:s.enabled, open:s.openTime, close:s.closeTime }]))
   );
@@ -54,7 +53,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic }: Props) {
     try {
       const res = await fetch("/api/clinic", {
         method: "PATCH", headers: { "Content-Type":"application/json" },
-        body: JSON.stringify({ name:clinic.name, city:clinic.city, phone:clinic.phone, email:clinic.email, address:clinic.address, description:clinic.description, isPublic })
+        body: JSON.stringify({ name:clinic.name, city:clinic.city, phone:clinic.phone, email:clinic.email }),
       });
       if (!res.ok) throw new Error();
       toast.success("Datos de la clínica actualizados");
@@ -161,35 +160,6 @@ export function SettingsClient({ user: initUser, clinic: initClinic }: Props) {
           </div>
           <div className="space-y-1.5"><Label>Teléfono</Label><Input value={clinic.phone ?? ""} onChange={e => setClinic((c: any) => ({ ...c, phone: e.target.value }))} /></div>
           <div className="space-y-1.5"><Label>Email de contacto</Label><Input type="email" value={clinic.email ?? ""} onChange={e => setClinic((c: any) => ({ ...c, email: e.target.value }))} /></div>
-          <div className="space-y-1.5">
-            <Label>Descripción corta (visible en el directorio)</Label>
-            <textarea
-              className="flex w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 py-3 text-sm focus:outline-none resize-none"
-              rows={2}
-              placeholder="Ej: Clínica dental especializada en ortodoncia e implantes en Mérida"
-              value={clinic.description ?? ""}
-              onChange={e => setClinic((c: any) => ({ ...c, description: e.target.value }))}
-            />
-          </div>
-          <div className="flex items-center justify-between p-4 rounded-2xl border-2 transition-colors"
-            style={{ borderColor: isPublic ? "#2563eb" : "#e2e8f0", background: isPublic ? "#eff6ff" : "transparent" }}>
-            <div>
-              <div className="text-sm font-bold" style={{ color: isPublic ? "#1d4ed8" : "#0f172a" }}>
-                {isPublic ? "🌐 Clínica pública" : "🔒 Clínica privada"}
-              </div>
-              <div className="text-xs mt-0.5" style={{ color: isPublic ? "#3b82f6" : "#64748b" }}>
-                {isPublic
-                  ? "Apareces en el directorio /clinicas y recibes reservas en línea"
-                  : "Solo tu equipo accede. No apareces en el directorio público."}
-              </div>
-            </div>
-            <button type="button" onClick={() => setIsPublic((p: boolean) => !p)}
-              className="relative flex-shrink-0 w-11 h-6 rounded-full transition-colors ml-4"
-              style={{ background: isPublic ? "#2563eb" : "#cbd5e1" }}>
-              <div className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-all"
-                style={{ left: isPublic ? "22px" : "2px" }} />
-            </button>
-          </div>
           <div className="pt-2 flex items-center justify-between">
             <span className={`text-sm font-bold px-3 py-1 rounded-full border ${clinic.plan==="CLINIC"?"bg-violet-50 text-violet-700 border-violet-200":clinic.plan==="PRO"?"bg-brand-50 text-brand-700 border-brand-200":"bg-slate-100 text-slate-600 border-slate-200"}`}>
               Plan {clinic.plan}
@@ -359,7 +329,11 @@ export function SettingsClient({ user: initUser, clinic: initClinic }: Props) {
                 <div className="w-11 h-11 rounded-2xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-2xl">📅</div>
                 <div>
                   <h2 className="text-base font-bold">Google Calendar</h2>
-                  <p className="text-sm text-muted-foreground">Sincroniza tus citas automáticamente</p>
+                  <p className="text-sm text-muted-foreground">
+                    {(initUser.role === "ADMIN" || initUser.role === "SUPER_ADMIN")
+                      ? "Calendario compartido de la clínica"
+                      : "Sincroniza tus citas automáticamente"}
+                  </p>
                 </div>
               </div>
               {gcalConnected
@@ -374,16 +348,46 @@ export function SettingsClient({ user: initUser, clinic: initClinic }: Props) {
                   <div>
                     <div className="text-sm font-bold text-emerald-700 dark:text-emerald-300">Cuenta conectada</div>
                     <div className="text-sm text-emerald-600 dark:text-emerald-400">{user.googleCalendarEmail}</div>
+                    {(initUser.role === "ADMIN" || initUser.role === "SUPER_ADMIN") && clinicGcal?.calendarId && (
+                      <div className="text-xs text-emerald-600 dark:text-emerald-500 mt-1">
+                        📅 Calendario "{initClinic.name}" creado — todas las citas se sincronizan ahí
+                      </div>
+                    )}
                   </div>
                 </div>
-                <p className="text-sm text-muted-foreground">Cada nueva cita que se agende para ti aparecerá automáticamente en tu Google Calendar con recordatorio 24h antes.</p>
+                {(initUser.role === "ADMIN" || initUser.role === "SUPER_ADMIN") ? (
+                  <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-xl p-3 text-sm text-blue-700 dark:text-blue-300">
+                    <div className="font-bold mb-1">¿Cómo funciona?</div>
+                    <ul className="space-y-1 text-xs">
+                      <li>✅ Cada cita agendada en MediFlow aparece en tu calendario <strong>"{initClinic.name}"</strong></li>
+                      <li>✅ Incluye el nombre del doctor y paciente en cada evento</li>
+                      <li>✅ Puedes compartir ese calendario con tu recepcionista desde Google Calendar</li>
+                      <li>✅ Los doctores no necesitan conectar su propio Google Calendar</li>
+                    </ul>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Cada nueva cita que se agende para ti aparecerá automáticamente en tu Google Calendar con recordatorio 24h antes.</p>
+                )}
                 <Button variant="outline" onClick={disconnectGcal} className="border-rose-300 text-rose-700 hover:bg-rose-50">
                   Desconectar Google Calendar
                 </Button>
               </div>
             ) : (
               <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">Conecta tu Google Calendar para que cada cita agendada para ti aparezca automáticamente con recordatorios.</p>
+                {(initUser.role === "ADMIN" || initUser.role === "SUPER_ADMIN") ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Al conectar, MediFlow crea automáticamente un calendario <strong>"{initClinic.name}"</strong> en tu Google Calendar.
+                      Todas las citas de todos los doctores aparecerán ahí — puedes compartirlo con tu recepcionista desde Google Calendar.
+                    </p>
+                    <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/30 rounded-xl p-3">
+                      <span className="mt-0.5">ℹ️</span>
+                      <span>Los doctores pueden conectar su propio Google Calendar por separado si quieren ver sus citas en su cuenta personal.</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Conecta tu Google Calendar para que cada cita agendada para ti aparezca automáticamente con recordatorios.</p>
+                )}
                 <a href="/api/google"
                   className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-800 border-2 border-border rounded-xl font-semibold text-base hover:border-blue-400 transition-colors w-fit">
                   <span className="text-xl">G</span> Conectar con Google

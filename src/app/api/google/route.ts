@@ -1,29 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { prisma } from "@/lib/prisma";
+import { getAuthContext } from "@/lib/auth-context";
 import { getAuthUrl } from "@/lib/google-calendar";
-
-async function getDbUser() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  return prisma.user.findUnique({ where: { supabaseId: user.id } });
-}
 
 // GET → redirect to Google OAuth
 export async function GET(req: NextRequest) {
-  const user = await getDbUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const url = getAuthUrl(user.id);
+  const ctx = await getAuthContext();
+  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const url = getAuthUrl(ctx.userId);
   return NextResponse.redirect(url);
 }
 
-// DELETE → disconnect
+// DELETE → disconnect Google Calendar
 export async function DELETE(req: NextRequest) {
-  const user = await getDbUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const ctx = await getAuthContext();
+  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { prisma } = await import("@/lib/prisma");
+
+  // Always disconnect the user
   await prisma.user.update({
-    where: { id: user.id },
+    where: { id: ctx.userId },
     data: {
       googleCalendarToken:   null,
       googleRefreshToken:    null,
@@ -31,5 +27,20 @@ export async function DELETE(req: NextRequest) {
       googleCalendarEnabled: false,
     },
   });
+
+  // If admin → also disconnect clinic-level calendar
+  if (ctx.isAdmin) {
+    await prisma.clinic.update({
+      where: { id: ctx.clinicId },
+      data: {
+        googleCalendarToken:    null,
+        googleRefreshToken:     null,
+        googleCalendarEmail:    null,
+        googleCalendarEnabled:  false,
+        googleClinicCalendarId: null,
+      },
+    });
+  }
+
   return NextResponse.json({ success: true });
 }

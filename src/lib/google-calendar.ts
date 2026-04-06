@@ -1,6 +1,10 @@
 import { google } from "googleapis";
 
-const SCOPES = ["https://www.googleapis.com/auth/calendar.events"];
+// FIX: Added calendar scope to create/manage clinic calendars
+const SCOPES = [
+  "https://www.googleapis.com/auth/calendar",        // create/manage calendars
+  "https://www.googleapis.com/auth/calendar.events", // create/update events
+];
 
 export function getOAuthClient() {
   return new google.auth.OAuth2(
@@ -14,12 +18,64 @@ export function getAuthUrl(userId: string) {
   const oauth2Client = getOAuthClient();
   return oauth2Client.generateAuthUrl({
     access_type: "offline",
-    prompt: "consent",
-    scope: SCOPES,
-    state: userId,
+    prompt:      "consent",
+    scope:       SCOPES,
+    state:       userId,
   });
 }
 
+/**
+ * Creates or finds an existing calendar with the clinic name.
+ * Returns the calendarId of the clinic calendar.
+ */
+export async function getOrCreateClinicCalendar(
+  accessToken: string,
+  refreshToken: string,
+  clinicName: string
+): Promise<string | null> {
+  try {
+    const oauth2Client = getOAuthClient();
+    oauth2Client.setCredentials({ access_token: accessToken, refresh_token: refreshToken });
+    const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+
+    // Check if clinic calendar already exists
+    const listRes = await calendar.calendarList.list();
+    const existing = listRes.data.items?.find(
+      c => c.summary === clinicName || c.description?.includes("MediFlow-clinic")
+    );
+    if (existing?.id) return existing.id;
+
+    // Create new calendar for the clinic
+    const newCal = await calendar.calendars.insert({
+      requestBody: {
+        summary:     clinicName,
+        description: `Agenda de ${clinicName} — MediFlow-clinic`,
+        timeZone:    "America/Mexico_City",
+      },
+    });
+
+    const calendarId = newCal.data.id ?? null;
+
+    // Set a distinct color (blue) for the clinic calendar
+    if (calendarId) {
+      await calendar.calendarList.patch({
+        calendarId,
+        requestBody: { colorId: "9" }, // blue
+      });
+    }
+
+    return calendarId;
+  } catch (err) {
+    console.error("Error creating clinic calendar:", err);
+    return null;
+  }
+}
+
+/**
+ * Creates an event in the specified calendar (defaults to primary).
+ * For clinic calendar: pass the clinic calendarId.
+ * For doctor personal: pass "primary".
+ */
 export async function createCalendarEvent(
   accessToken: string,
   refreshToken: string,
@@ -33,8 +89,10 @@ export async function createCalendarEvent(
     clinicName: string;
     clinicAddress?: string | null;
     notes?: string | null;
+    doctorName?: string | null;
     doctorEmail?: string | null;
     patientEmail?: string | null;
+    calendarId?: string; // target calendar — defaults to "primary"
   }
 ): Promise<string | null> {
   try {
@@ -43,28 +101,29 @@ export async function createCalendarEvent(
 
     const calendar = google.calendar({ version: "v3", auth: oauth2Client });
 
-    // Build datetime strings (Mexico City timezone)
-    const tz = "America/Mexico_City";
+    const tz      = "America/Mexico_City";
     const dateStr = appt.date.split("T")[0];
     const startDT = `${dateStr}T${appt.startTime}:00`;
     const endDT   = `${dateStr}T${appt.endTime}:00`;
 
     const attendees: { email: string }[] = [];
-    if (appt.doctorEmail) attendees.push({ email: appt.doctorEmail });
+    if (appt.doctorEmail)  attendees.push({ email: appt.doctorEmail  });
     if (appt.patientEmail) attendees.push({ email: appt.patientEmail });
 
+    const descLines = [
+      `Paciente: ${appt.patientName}`,
+      `Tipo: ${appt.type}`,
+      appt.doctorName ? `Doctor/a: ${appt.doctorName}` : "",
+      appt.notes ? `Notas: ${appt.notes}` : "",
+      `\nAgendado desde MediFlow`,
+    ].filter(Boolean).join("\n");
+
     const event = await calendar.events.insert({
-      calendarId: "primary",
-      sendUpdates: "all",
+      calendarId:  appt.calendarId ?? "primary",
+      sendUpdates: attendees.length > 0 ? "all" : "none",
       requestBody: {
         summary:     `🏥 ${appt.type} — ${appt.patientName}`,
-        description: [
-          `Clínica: ${appt.clinicName}`,
-          `Paciente: ${appt.patientName}`,
-          `Tipo: ${appt.type}`,
-          appt.notes ? `Notas: ${appt.notes}` : "",
-          `\nAgendado desde MediFlow`,
-        ].filter(Boolean).join("\n"),
+        description: descLines,
         location:    appt.clinicAddress ?? appt.clinicName,
         start:       { dateTime: startDT, timeZone: tz },
         end:         { dateTime: endDT,   timeZone: tz },
@@ -76,13 +135,13 @@ export async function createCalendarEvent(
             { method: "popup", minutes: 30 },
           ],
         },
-        colorId: "2", // Sage green
+        colorId: "2", // sage green
       },
     });
 
     return event.data.id ?? null;
   } catch (err) {
-    console.error("Google Calendar error:", err);
+    console.error("Google Calendar createEvent error:", err);
     return null;
   }
 }
@@ -90,13 +149,18 @@ export async function createCalendarEvent(
 export async function deleteCalendarEvent(
   accessToken: string,
   refreshToken: string,
-  googleEventId: string
+  googleEventId: string,
+  calendarId = "primary"
 ): Promise<void> {
   try {
     const oauth2Client = getOAuthClient();
     oauth2Client.setCredentials({ access_token: accessToken, refresh_token: refreshToken });
     const calendar = google.calendar({ version: "v3", auth: oauth2Client });
-    await calendar.events.delete({ calendarId: "primary", eventId: googleEventId, sendUpdates: "all" });
+    await calendar.events.delete({
+      calendarId,
+      eventId:     googleEventId,
+      sendUpdates: "all",
+    });
   } catch (err) {
     console.error("Error deleting Google Calendar event:", err);
   }

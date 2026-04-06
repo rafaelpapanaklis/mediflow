@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const appts = await prisma.appointment.findMany({
-    where: buildAppointmentWhere(ctx), // Doctors only see their own
+    where: buildAppointmentWhere(ctx),
     include: {
       patient: { select: { id: true, firstName: true, lastName: true, phone: true } },
       doctor:  { select: { id: true, firstName: true, lastName: true, color: true } },
@@ -16,7 +16,6 @@ export async function GET(req: NextRequest) {
     orderBy: [{ date: "asc" }, { startTime: "asc" }],
   });
 
-  // Serialize dates
   return NextResponse.json(appts.map(a => ({
     ...a,
     date:      a.date instanceof Date ? a.date.toISOString() : a.date,
@@ -31,15 +30,21 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
 
-  // Doctors can only create appointments for themselves
   const doctorId = ctx.isDoctor ? ctx.userId : (body.doctorId ?? ctx.userId);
 
-  // Verify patient belongs to this clinic
   const patient = await prisma.patient.findFirst({
-    where: { id: body.patientId, clinicId: ctx.clinicId },
+    where:  { id: body.patientId, clinicId: ctx.clinicId },
     select: { id: true, firstName: true, lastName: true, email: true },
   });
   if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
+
+  // Get doctor info
+  const doctor = await prisma.user.findUnique({
+    where:  { id: doctorId },
+    select: { id: true, firstName: true, lastName: true, email: true,
+              googleCalendarToken: true, googleRefreshToken: true,
+              googleCalendarEnabled: true, googleCalendarEmail: true },
+  });
 
   const appt = await prisma.appointment.create({
     data: {
@@ -54,30 +59,86 @@ export async function POST(req: NextRequest) {
       status:       "PENDING",
       notes:        body.notes ?? null,
     },
-    include: {
-      patient: { select: { id: true, firstName: true, lastName: true, phone: true } },
-      doctor:  { select: { id: true, firstName: true, lastName: true, color: true, googleCalendarToken: true, googleRefreshToken: true, googleCalendarEnabled: true, googleCalendarEmail: true, email: true } },
+  });
+
+  // ── Google Calendar sync ────────────────────────────────────────────────
+  // STRATEGY: Use clinic-level calendar if admin has connected Google.
+  // Otherwise fall back to the doctor's personal calendar.
+
+  const clinic = await prisma.clinic.findUnique({
+    where:  { id: ctx.clinicId },
+    select: {
+      name: true, address: true,
+      googleCalendarEnabled: true,
+      googleCalendarToken:   true,
+      googleRefreshToken:    true,
+      googleClinicCalendarId: true,
     },
   });
 
-  // Google Calendar sync
-  if (appt.doctor.googleCalendarEnabled && appt.doctor.googleRefreshToken) {
-    let token = appt.doctor.googleCalendarToken;
+  let gcalEventId: string | null = null;
+
+  // Option A: Clinic calendar (admin connected)
+  if (clinic?.googleCalendarEnabled && clinic.googleRefreshToken && clinic.googleClinicCalendarId) {
+    let token = clinic.googleCalendarToken;
+
+    // Refresh if needed
     if (!token) {
-      token = await refreshAccessToken(appt.doctor.googleRefreshToken);
+      token = await refreshAccessToken(clinic.googleRefreshToken);
+      if (token) {
+        await prisma.clinic.update({ where: { id: ctx.clinicId }, data: { googleCalendarToken: token } });
+      }
+    }
+
+    if (token) {
+      gcalEventId = await createCalendarEvent(token, clinic.googleRefreshToken, {
+        id:          appt.id,
+        type:        appt.type,
+        date:        body.date,
+        startTime:   appt.startTime,
+        endTime:     appt.endTime,
+        patientName: `${patient.firstName} ${patient.lastName}`,
+        clinicName:  clinic.name,
+        clinicAddress: clinic.address,
+        notes:       appt.notes,
+        doctorName:  doctor ? `${doctor.firstName} ${doctor.lastName}` : null,
+        doctorEmail: null, // don't add as attendee — just informational
+        patientEmail: patient.email ?? null,
+        calendarId:  clinic.googleClinicCalendarId, // ← clinic calendar, not primary
+      });
+    }
+  }
+  // Option B: Doctor's personal calendar (fallback)
+  else if (doctor?.googleCalendarEnabled && doctor.googleRefreshToken) {
+    let token = doctor.googleCalendarToken;
+    if (!token) {
+      token = await refreshAccessToken(doctor.googleRefreshToken);
       if (token) await prisma.user.update({ where: { id: doctorId }, data: { googleCalendarToken: token } });
     }
     if (token) {
-      const gcalEventId = await createCalendarEvent(token, appt.doctor.googleRefreshToken, {
-        id: appt.id, type: appt.type, date: body.date,
-        startTime: appt.startTime, endTime: appt.endTime,
+      gcalEventId = await createCalendarEvent(token, doctor.googleRefreshToken, {
+        id:          appt.id,
+        type:        appt.type,
+        date:        body.date,
+        startTime:   appt.startTime,
+        endTime:     appt.endTime,
         patientName: `${patient.firstName} ${patient.lastName}`,
-        clinicName: ctx.clinic.name, clinicAddress: ctx.clinic.address,
-        notes: appt.notes, doctorEmail: appt.doctor.googleCalendarEmail ?? appt.doctor.email,
+        clinicName:  clinic?.name ?? ctx.clinic.name,
+        clinicAddress: clinic?.address,
+        notes:       appt.notes,
+        doctorName:  doctor ? `${doctor.firstName} ${doctor.lastName}` : null,
+        doctorEmail: doctor.googleCalendarEmail ?? doctor.email,
         patientEmail: patient.email ?? null,
+        calendarId:  "primary",
       });
-      if (gcalEventId) await prisma.appointment.update({ where: { id: appt.id }, data: { googleCalendarEventId: gcalEventId } });
     }
+  }
+
+  if (gcalEventId) {
+    await prisma.appointment.update({
+      where: { id: appt.id },
+      data:  { googleCalendarEventId: gcalEventId },
+    });
   }
 
   return NextResponse.json({

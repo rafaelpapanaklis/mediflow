@@ -16,12 +16,19 @@ export default async function SettingsPage() {
     include: {
       schedules: { orderBy: { dayOfWeek: "asc" } },
     },
+    // also fetch clinic-level google calendar status
+
   });
 
   return (
     <SettingsClient
       user={user as any}
       clinic={clinic as any}
+      clinicGcal={{
+        enabled:    clinic?.googleCalendarEnabled ?? false,
+        email:      clinic?.googleCalendarEmail    ?? null,
+        calendarId: clinic?.googleClinicCalendarId ?? null,
+      }}
     />
   );
 }
