@@ -44,8 +44,10 @@ export function SettingsClient({ user: initUser, clinic: initClinic, clinicGcal 
   const aiPercent   = Math.min(100, Math.round((aiUsed / aiLimit) * 100));
   const aiRemaining = Math.max(0, aiLimit - aiUsed);
 
-  // Google Calendar status
-  const gcalConnected = user.googleCalendarEnabled && user.googleCalendarEmail;
+  // Google Calendar status — check user level OR clinic level (admin)
+  const gcalConnected = (user.googleCalendarEnabled && user.googleCalendarEmail)
+    || (clinicGcal?.enabled && clinicGcal?.email);
+  const gcalEmail = user.googleCalendarEmail || clinicGcal?.email || "";
 
   // ── Save functions ────────────────────────────────────────────────────────
   async function saveClinic() {
@@ -347,7 +349,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, clinicGcal 
                   <CalendarCheck className="w-5 h-5 text-emerald-600 flex-shrink-0" />
                   <div>
                     <div className="text-sm font-bold text-emerald-700 dark:text-emerald-300">Cuenta conectada</div>
-                    <div className="text-sm text-emerald-600 dark:text-emerald-400">{user.googleCalendarEmail}</div>
+                    <div className="text-sm text-emerald-600 dark:text-emerald-400">{gcalEmail}</div>
                     {(initUser.role === "ADMIN" || initUser.role === "SUPER_ADMIN") && clinicGcal?.calendarId && (
                       <div className="text-xs text-emerald-600 dark:text-emerald-500 mt-1">
                         📅 Calendario "{initClinic.name}" creado — todas las citas se sincronizan ahí
