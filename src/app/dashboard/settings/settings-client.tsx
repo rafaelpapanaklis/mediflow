@@ -54,7 +54,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic }: Props) {
     try {
       const res = await fetch("/api/clinic", {
         method: "PATCH", headers: { "Content-Type":"application/json" },
-        body: JSON.stringify({ name:clinic.name, city:clinic.city, phone:clinic.phone, email:clinic.email, address:clinic.address, description:clinic.description, isPublic }),
+        body: JSON.stringify({ name:clinic.name, city:clinic.city, phone:clinic.phone, email:clinic.email, address:clinic.address, description:clinic.description, isPublic })
       });
       if (!res.ok) throw new Error();
       toast.success("Datos de la clínica actualizados");
