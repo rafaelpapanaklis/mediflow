@@ -1,10 +1,12 @@
 import { getCurrentUser } from "@/lib/auth";
 import { Sidebar } from "@/components/dashboard/sidebar";
+import { QuickActionsBar } from "@/components/dashboard/quick-actions";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user   = await getCurrentUser();
   const clinic = user.clinic;
   const isSuspended = clinic.trialEndsAt && new Date(clinic.trialEndsAt) < new Date();
+  const isAdmin = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
 
   return (
     <div className="flex min-h-screen bg-background font-sans">
@@ -26,7 +28,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <a href="/dashboard/suspended" className="underline hover:no-underline">Ver opciones de pago →</a>
           </div>
         )}
-        <main className="flex-1 p-5 lg:p-6 pt-16 lg:pt-6">{children}</main>
+        <main className="flex-1 p-5 lg:p-6 pt-16 lg:pt-6">
+          {/* Quick actions bar - visible on all pages */}
+          <QuickActionsBar
+            currentUserId={user.id}
+            clinicId={user.clinicId}
+            isAdmin={isAdmin}
+          />
+          {children}
+        </main>
       </div>
     </div>
   );
