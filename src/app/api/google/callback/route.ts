@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { google } from "googleapis";
 import { getOAuthClient, getOrCreateClinicCalendar } from "@/lib/google-calendar";
 import { prisma } from "@/lib/prisma";
 
@@ -19,25 +18,25 @@ export async function GET(req: NextRequest) {
     const oauth2Client = getOAuthClient();
     const { tokens } = await oauth2Client.getToken(code);
 
-    if (!tokens.access_token && !tokens.refresh_token) {
+    const accessToken  = tokens.access_token  ?? null;
+    const refreshToken = tokens.refresh_token ?? null;
+
+    if (!accessToken && !refreshToken) {
       throw new Error("No tokens received from Google");
     }
 
-    // Set ALL credentials at once before making any API calls
-    oauth2Client.setCredentials({
-      access_token:  tokens.access_token,
-      refresh_token: tokens.refresh_token,
-      token_type:    tokens.token_type,
-      expiry_date:   tokens.expiry_date,
-    });
-
-    // Get user email from Google
-    const oauth2Api = google.oauth2({ version: "v2", auth: oauth2Client });
-    const { data: gUser } = await oauth2Api.userinfo.get();
-    const email = gUser.email ?? null;
-
-    const accessToken  = tokens.access_token  ?? null;
-    const refreshToken = tokens.refresh_token ?? null;
+    // Extract email from id_token JWT — always present, no extra API call needed.
+    // This avoids the 401 error when calling userinfo endpoint with a null access_token.
+    let email: string | null = null;
+    if (tokens.id_token) {
+      try {
+        const parts   = tokens.id_token.split(".");
+        const payload = JSON.parse(Buffer.from(parts[1], "base64").toString("utf8"));
+        email = payload.email ?? null;
+      } catch {
+        // non-fatal — email stays null
+      }
+    }
 
     // Get user from DB
     const user = await prisma.user.findUnique({
@@ -69,11 +68,11 @@ export async function GET(req: NextRequest) {
         },
       });
 
-      if (accessToken) {
+      if (refreshToken) {
         try {
           const calendarId = await getOrCreateClinicCalendar(
-            accessToken,
-            refreshToken ?? accessToken,
+            accessToken ?? refreshToken,
+            refreshToken,
             user.clinic.name
           );
           if (calendarId) {
