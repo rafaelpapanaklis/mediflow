@@ -20,6 +20,8 @@ model Clinic {
   email       String?
   logoUrl     String?
   taxId       String?
+  isPublic    Boolean   @default(false)
+  description String?
   plan        Plan      @default(PRO)
   trialEndsAt DateTime?
   createdAt   DateTime  @default(now())
@@ -94,6 +96,7 @@ model User {
   googleRefreshToken    String?
   googleCalendarEmail   String?
   googleCalendarEnabled Boolean @default(false)
+  services              String[] @default([])
 
   clinic          Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointments    Appointment[]
