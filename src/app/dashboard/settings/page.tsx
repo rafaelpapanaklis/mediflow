@@ -10,14 +10,22 @@ export const metadata: Metadata = { title: "Configuración — MediFlow" };
 export default async function SettingsPage() {
   const user = await getCurrentUser();
 
-  // Get clinic with full data including AI usage and schedules
   const clinic = await prisma.clinic.findUnique({
     where: { id: user.clinicId },
     include: {
       schedules: { orderBy: { dayOfWeek: "asc" } },
     },
-    // also fetch clinic-level google calendar status
+  });
 
+  // Fetch Google Calendar status separately with explicit select
+  // This ensures the fields are read even if Prisma client cache is stale
+  const clinicGcalRaw = await prisma.clinic.findUnique({
+    where:  { id: user.clinicId },
+    select: {
+      googleCalendarEnabled:  true,
+      googleCalendarEmail:    true,
+      googleClinicCalendarId: true,
+    },
   });
 
   return (
@@ -25,9 +33,9 @@ export default async function SettingsPage() {
       user={user as any}
       clinic={clinic as any}
       clinicGcal={{
-        enabled:    clinic?.googleCalendarEnabled ?? false,
-        email:      clinic?.googleCalendarEmail    ?? null,
-        calendarId: clinic?.googleClinicCalendarId ?? null,
+        enabled:    clinicGcalRaw?.googleCalendarEnabled  ?? false,
+        email:      clinicGcalRaw?.googleCalendarEmail    ?? null,
+        calendarId: clinicGcalRaw?.googleClinicCalendarId ?? null,
       }}
     />
   );
