@@ -190,6 +190,38 @@ export function SettingsClient({ user: initUser, clinic: initClinic }: Props) {
                 style={{ left: isPublic ? "22px" : "2px" }} />
             </button>
           </div>
+          <div className="space-y-1.5">
+            <Label className="text-base font-semibold">🔗 Link de reservas</Label>
+            <p className="text-sm text-muted-foreground">Comparte este link con tus pacientes para que agenden en línea</p>
+            <div className="flex gap-2">
+              <div className="flex-1 flex items-center h-11 rounded-xl border border-border bg-muted/40 px-4 text-sm text-muted-foreground font-mono overflow-hidden">
+                <span className="truncate">/reservar/{clinic.slug}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const url = `${window.location.origin}/reservar/${clinic.slug}`;
+                  navigator.clipboard.writeText(url).then(() => toast.success("¡Link copiado!"));
+                }}
+                className="h-11 px-4 rounded-xl border border-border bg-white dark:bg-slate-800 text-sm font-semibold hover:bg-muted transition-colors flex-shrink-0">
+                📋 Copiar
+              </button>
+            </div>
+            <div className="flex gap-3 flex-wrap">
+              <a href={`/reservar/${clinic.slug}`} target="_blank" rel="noopener noreferrer"
+                className="text-sm text-brand-600 hover:underline font-semibold">
+                🌐 Ver página →
+              </a>
+              <button type="button"
+                onClick={() => {
+                  const url = `${window.location.origin}/reservar/${clinic.slug}`;
+                  window.open(`https://wa.me/?text=${encodeURIComponent(`Agenda tu cita aquí: ${url}`)}`, "_blank");
+                }}
+                className="text-sm text-emerald-600 hover:underline font-semibold bg-none border-none cursor-pointer p-0">
+                💬 Compartir por WhatsApp
+              </button>
+            </div>
+          </div>
           <div className="pt-2 flex items-center justify-between">
             <span className={`text-sm font-bold px-3 py-1 rounded-full border ${clinic.plan==="CLINIC"?"bg-violet-50 text-violet-700 border-violet-200":clinic.plan==="PRO"?"bg-brand-50 text-brand-700 border-brand-200":"bg-slate-100 text-slate-600 border-slate-200"}`}>
               Plan {clinic.plan}
