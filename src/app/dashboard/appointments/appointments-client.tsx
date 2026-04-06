@@ -311,12 +311,12 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
   const MonthView = () => (
     <div>
       <div className="overflow-x-auto">
-      <div className="grid grid-cols-7 border-b border-border bg-muted/20 min-w-[560px]">
-        {DAYS_ES.map(d => (
-          <div key={d} className="py-3 text-center text-sm font-bold text-muted-foreground uppercase tracking-wider">{d}</div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 min-w-[560px]" style={{ minHeight: 500 }}>
+        <div className="grid grid-cols-7 border-b border-border bg-muted/20 min-w-[560px]">
+          {DAYS_ES.map(d => (
+            <div key={d} className="py-3 text-center text-sm font-bold text-muted-foreground uppercase tracking-wider">{d}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 min-w-[560px]" style={{ minHeight: 500 }}>
         {calDays.map((day, idx) => {
           if (!day) return <div key={idx} className="border-r border-b border-border bg-muted/5 min-h-[100px]" />;
           const ds       = toDateStr(day);
@@ -343,7 +343,8 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
             </div>
           );
         })}
-      </div>
+        </div>
+      </div>{/* end overflow-x-auto */}
     </div>
   );
 
@@ -354,19 +355,20 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
     return (
       <div>
         <div className="overflow-x-auto">
-        <div className="grid grid-cols-8 border-b border-border bg-muted/20 min-w-[640px]">
-          <div className="py-3 border-r border-border" />
-          {weekDays.map((d, i) => {
-            const ds = toDateStr(d); const isToday = ds === todayStr; const cnt = (apptsByDate[ds]??[]).length;
-            return (
-              <div key={i} className={`py-3 text-center border-r border-border ${isToday?"bg-brand-50 dark:bg-brand-950/20":""}`}>
-                <div className="text-xs font-bold text-muted-foreground uppercase">{DAYS_ES[i]}</div>
-                <div className={`text-xl font-bold ${isToday?"text-brand-600":""}`}>{d.getDate()}</div>
-                {cnt > 0 && <div className="text-xs text-muted-foreground">{cnt} cita{cnt>1?"s":""}</div>}
-              </div>
-            );
-          })}
-        </div>
+          <div className="grid grid-cols-8 border-b border-border bg-muted/20 min-w-[640px]">
+            <div className="py-3 border-r border-border" />
+            {weekDays.map((d, i) => {
+              const ds = toDateStr(d); const isToday = ds === todayStr; const cnt = (apptsByDate[ds]??[]).length;
+              return (
+                <div key={i} className={`py-3 text-center border-r border-border ${isToday?"bg-brand-50 dark:bg-brand-950/20":""}`}>
+                  <div className="text-xs font-bold text-muted-foreground uppercase">{DAYS_ES[i]}</div>
+                  <div className={`text-xl font-bold ${isToday?"text-brand-600":""}`}>{d.getDate()}</div>
+                  {cnt > 0 && <div className="text-xs text-muted-foreground">{cnt} cita{cnt>1?"s":""}</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>{/* end overflow-x-auto */}
         <div className="overflow-y-auto" style={{ maxHeight: 520 }}>
           {HOURS.map(hour => (
             <div key={hour} className="grid grid-cols-8 border-b border-border/40" style={{ minHeight: 64 }}>

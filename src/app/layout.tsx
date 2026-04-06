@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Sora, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "react-hot-toast";
 import "./globals.css";
@@ -11,17 +11,16 @@ export const metadata: Metadata = {
   description: "Gestiona citas, pacientes, expedientes y facturación en un solo lugar.",
 };
 
-export const viewport = {
+export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1, // prevents iOS double-tap zoom
+  maximumScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" className={`${sora.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <head>
-        {/* Default: DARK mode. Only switch to light if user explicitly chose light. */}
         <script dangerouslySetInnerHTML={{ __html: `
           (function() {
             try {
