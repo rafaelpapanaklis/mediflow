@@ -9,32 +9,40 @@ import { PatientContextPanel } from "@/components/dashboard/patient-context";
 export default async function PatientDetailPage({ params }: { params: { id: string } }) {
   const user = await getCurrentUser();
 
-  const patient = await prisma.patient.findFirst({
-    where: { id: params.id, clinicId: user.clinicId },
-    include: {
-      primaryDoctor: { select: { id: true, firstName: true, lastName: true, color: true } },
-      appointments: {
-        orderBy: { date: "desc" },
-        take: 30,
-        include: { doctor: { select: { id: true, firstName: true, lastName: true } } },
+  const [patient, doctors] = await Promise.all([
+    prisma.patient.findFirst({
+      where: { id: params.id, clinicId: user.clinicId },
+      include: {
+        primaryDoctor: { select: { id: true, firstName: true, lastName: true, color: true } },
+        appointments: {
+          orderBy: { date: "desc" },
+          take: 30,
+          include: { doctor: { select: { id: true, firstName: true, lastName: true } } },
+        },
+        records: {
+          orderBy: { visitDate: "desc" },
+          take: 20,
+          include: { doctor: { select: { id: true, firstName: true, lastName: true } } },
+        },
+        invoices: { include: { payments: true } },
+        // FIX: fetch treatment plans for the Tratamientos tab
+        treatments: {
+          orderBy: { createdAt: "desc" },
+          include: {
+            doctor:   { select: { id: true, firstName: true, lastName: true, color: true } },
+            sessions: { where: { completedAt: { not: null } }, orderBy: { sessionNumber: "asc" } },
+          },
+        },
       },
-      records: {
-        orderBy: { visitDate: "desc" },
-        take: 20,
-        include: { doctor: { select: { id: true, firstName: true, lastName: true } } },
-      },
-      invoices: { include: { payments: true } },
-    },
-  });
+    }),
+    prisma.user.findMany({
+      where:  { clinicId: user.clinicId, isActive: true },
+      select: { id: true, firstName: true, lastName: true },
+    }),
+  ]);
 
   if (!patient) notFound();
 
-  const doctors = await prisma.user.findMany({
-    where: { clinicId: user.clinicId, isActive: true },
-    select: { id: true, firstName: true, lastName: true },
-  });
-
-  // Generate portal link if token exists
   const portalUrl = patient.portalToken
     ? `${process.env.NEXT_PUBLIC_APP_URL}/portal/${patient.portalToken}`
     : null;
@@ -43,11 +51,10 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   const totalBalance = patient.invoices.reduce((s, i) => s + i.balance, 0);
   const totalPlan    = patient.invoices.reduce((s, i) => s + i.total, 0);
 
-  // Compute last visit and visit count for context panel
-  const lastVisit   = patient.appointments[0]?.date?.toISOString() ?? null;
-  const visitCount  = patient.appointments.filter(a => a.status === "COMPLETED").length;
+  const lastVisit  = patient.appointments[0]?.date?.toISOString() ?? null;
+  const visitCount = patient.appointments.filter(a => a.status === "COMPLETED").length;
 
-  // Serialize dates
+  // Serialize all dates
   const serializedAppts = patient.appointments.map(a => ({
     ...a,
     date:      a.date instanceof Date ? a.date.toISOString() : String(a.date),
@@ -62,9 +69,23 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     updatedAt: r.updatedAt instanceof Date ? r.updatedAt.toISOString() : String(r.updatedAt),
   }));
 
+  const serializedTreatments = patient.treatments.map(t => ({
+    ...t,
+    startDate:        t.startDate instanceof Date ? t.startDate.toISOString() : String(t.startDate),
+    endDate:          t.endDate instanceof Date ? t.endDate.toISOString() : (t.endDate ?? null),
+    nextExpectedDate: t.nextExpectedDate instanceof Date ? t.nextExpectedDate.toISOString() : (t.nextExpectedDate ?? null),
+    lastFollowUpSent: t.lastFollowUpSent instanceof Date ? t.lastFollowUpSent.toISOString() : (t.lastFollowUpSent ?? null),
+    createdAt:        t.createdAt instanceof Date ? t.createdAt.toISOString() : String(t.createdAt),
+    updatedAt:        t.updatedAt instanceof Date ? t.updatedAt.toISOString() : String(t.updatedAt),
+    sessions: t.sessions.map(s => ({
+      ...s,
+      completedAt: s.completedAt instanceof Date ? s.completedAt.toISOString() : (s.completedAt ?? null),
+      createdAt:   s.createdAt instanceof Date ? s.createdAt.toISOString() : String(s.createdAt),
+    })),
+  }));
+
   return (
     <div>
-      {/* Patient context panel — always visible at the top */}
       <PatientContextPanel patient={{
         firstName:          patient.firstName,
         lastName:           patient.lastName,
@@ -79,12 +100,12 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
         visitCount,
       }} />
 
-      {/* Existing patient detail client */}
       <PatientDetailClient
         patient={patient as any}
         records={serializedRecords as any}
         appointments={serializedAppts as any}
         invoices={patient.invoices as any}
+        treatments={serializedTreatments as any}
         doctors={doctors}
         currentUser={{ id: user.id, firstName: user.firstName, lastName: user.lastName }}
         specialty={user.clinic.specialty}

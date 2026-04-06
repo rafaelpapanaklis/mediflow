@@ -58,12 +58,13 @@ interface Props {
   totalPaid:    number;
   totalBalance: number;
   totalPlan:    number;
+  treatments:   any[];
   portalUrl?:   string | null;
 }
 
 export function PatientDetailClient({
   patient, records: initialRecords, appointments, invoices,
-  doctors, currentUser, specialty, totalPaid, totalBalance, totalPlan, portalUrl,
+  doctors, currentUser, specialty, totalPaid, totalBalance, totalPlan, treatments, portalUrl,
 }: Props) {
   const router = useRouter();
   const [tab, setTab]         = useState("resumen");
@@ -501,38 +502,61 @@ export function PatientDetailClient({
 
           {/* ===== TAB: PLAN DE TRATAMIENTO ===== */}
           {tab === "tratamiento" && (
-            <div className="bg-white border border-border rounded-xl overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                <h2 className="text-sm font-bold">Plan de tratamiento</h2>
-                <button onClick={() => setTab("expediente")} className="text-xs font-semibold text-brand-600 hover:underline">+ Agregar procedimiento</button>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold">Planes de tratamiento</h2>
+                <a href="/dashboard/treatments" className="text-xs font-semibold text-brand-600 hover:underline">
+                  + Nuevo plan →
+                </a>
               </div>
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-muted/30 border-b border-border">
-                    {["#","Procedimiento","Diente","Estado","Doctor","Fecha","Costo"].map(h => (
-                      <th key={h} className="text-left px-4 py-2.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wide">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {records.flatMap((r, ri) =>
-                    (r.specialtyData?.procedures ?? []).map((proc: string, pi: number) => (
-                      <tr key={`${ri}-${pi}`} className="border-b border-border/50 hover:bg-muted/20">
-                        <td className="px-4 py-2 text-muted-foreground">{pi + 1}</td>
-                        <td className="px-4 py-2 font-semibold">{proc}</td>
-                        <td className="px-4 py-2 text-muted-foreground">—</td>
-                        <td className="px-4 py-2"><span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Realizado</span></td>
-                        <td className="px-4 py-2 text-muted-foreground">{r.doctor?.firstName} {r.doctor?.lastName}</td>
-                        <td className="px-4 py-2 text-muted-foreground">{formatDate(r.visitDate)}</td>
-                        <td className="px-4 py-2 font-bold">—</td>
-                      </tr>
-                    ))
-                  )}
-                  {records.flatMap(r => r.specialtyData?.procedures ?? []).length === 0 && (
-                    <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Sin procedimientos registrados</td></tr>
-                  )}
-                </tbody>
-              </table>
+              {treatments.length === 0 ? (
+                <div className="bg-white border border-border rounded-xl px-5 py-10 text-center text-muted-foreground">
+                  <div className="text-3xl mb-2">💊</div>
+                  <div className="text-sm font-semibold">Sin planes de tratamiento</div>
+                  <a href="/dashboard/treatments" className="text-xs text-brand-600 hover:underline mt-1 block">
+                    Crear primer plan →
+                  </a>
+                </div>
+              ) : treatments.map((t: any) => {
+                const pct = t.totalSessions > 0 ? Math.round((t.sessions.length / t.totalSessions) * 100) : 0;
+                const STATUS_CFG: Record<string,{label:string;cls:string}> = {
+                  ACTIVE:    { label:"Activo",     cls:"bg-emerald-50 text-emerald-700 border-emerald-200" },
+                  COMPLETED: { label:"Completado", cls:"bg-slate-100 text-slate-500 border-slate-200"      },
+                  ABANDONED: { label:"Abandonado", cls:"bg-rose-50 text-rose-700 border-rose-200"          },
+                  PAUSED:    { label:"Pausado",    cls:"bg-amber-50 text-amber-700 border-amber-200"       },
+                };
+                const cfg = STATUS_CFG[t.status] ?? STATUS_CFG.ACTIVE;
+                return (
+                  <div key={t.id} className="bg-white border border-border rounded-xl p-4">
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div>
+                        <div className="font-bold text-sm">{t.name}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          Dr/a. {t.doctor?.firstName} {t.doctor?.lastName}
+                        </div>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 ${cfg.cls}`}>
+                        {cfg.label}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-brand-500 rounded-full" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="text-xs font-bold text-muted-foreground">
+                        {t.sessions.length}/{t.totalSessions} sesiones
+                      </span>
+                    </div>
+                    <div className="flex gap-4 text-xs text-muted-foreground">
+                      <span>💰 {formatCurrency(t.totalCost)}</span>
+                      <span>📅 Cada {t.sessionIntervalDays} días</span>
+                      {t.nextExpectedDate && (
+                        <span>⏰ Próxima: {new Date(t.nextExpectedDate).toLocaleDateString("es-MX",{day:"numeric",month:"short"})}</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
 
