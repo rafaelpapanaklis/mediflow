@@ -362,7 +362,7 @@ export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Pro
 
             {/* Actions */}
             <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-              <button onClick={() => { setForm({ firstName:member.firstName, lastName:member.lastName, email:member.email, role:member.role, specialty:member.specialty??"", color:member.color, phone:member.phone??"" }); setShowEdit(member); }}
+              <button onClick={() => { setForm({ firstName:member.firstName, lastName:member.lastName, email:member.email, role:member.role, specialty:member.specialty??"", color:member.color, phone:member.phone??"", services:member.services??[] }); setServiceInput(""); setShowEdit(member); }}
                 className="p-2 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Editar">
                 <Edit className="w-4 h-4" />
               </button>
