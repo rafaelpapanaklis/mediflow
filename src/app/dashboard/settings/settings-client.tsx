@@ -18,10 +18,11 @@ const REGIMENES   = [
   { clave:"616", desc:"Sin obligaciones fiscales" },
 ];
 
-interface Props { user: any; clinic: any; clinicGcal?: { enabled: boolean; email: string | null; calendarId: string | null } }
+interface Props { user: any; clinic: any }
 
-export function SettingsClient({ user: initUser, clinic: initClinic, clinicGcal }: Props) {
-  const [tab,      setTab]      = useState("clinica");
+export function SettingsClient({ user: initUser, clinic: initClinic }: Props) {
+  const searchParams = useSearchParams();
+  const [tab,      setTab]      = useState(searchParams.get("tab") ?? "clinica");
   const [saving,   setSaving]   = useState(false);
   const [user,     setUser]     = useState(initUser);
   const [clinic,   setClinic]   = useState(initClinic);
@@ -44,10 +45,15 @@ export function SettingsClient({ user: initUser, clinic: initClinic, clinicGcal 
   const aiPercent   = Math.min(100, Math.round((aiUsed / aiLimit) * 100));
   const aiRemaining = Math.max(0, aiLimit - aiUsed);
 
-  // Google Calendar status — check user level OR clinic level (admin)
-  const gcalConnected = (user.googleCalendarEnabled && user.googleCalendarEmail)
-    || (clinicGcal?.enabled && clinicGcal?.email);
-  const gcalEmail = user.googleCalendarEmail || clinicGcal?.email || "";
+  // Google Calendar status
+  const gcalConnected = user.googleCalendarEnabled && user.googleCalendarEmail;
+
+  // Show toast after OAuth redirect
+  useEffect(() => {
+    const gcal = searchParams.get("gcal");
+    if (gcal === "success") toast.success("✅ Google Calendar conectado correctamente");
+    if (gcal === "error")   toast.error("Error al conectar Google Calendar");
+  }, []);
 
   // ── Save functions ────────────────────────────────────────────────────────
   async function saveClinic() {
@@ -331,11 +337,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, clinicGcal 
                 <div className="w-11 h-11 rounded-2xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-2xl">📅</div>
                 <div>
                   <h2 className="text-base font-bold">Google Calendar</h2>
-                  <p className="text-sm text-muted-foreground">
-                    {(initUser.role === "ADMIN" || initUser.role === "SUPER_ADMIN")
-                      ? "Calendario compartido de la clínica"
-                      : "Sincroniza tus citas automáticamente"}
-                  </p>
+                  <p className="text-sm text-muted-foreground">Sincroniza tus citas automáticamente</p>
                 </div>
               </div>
               {gcalConnected
@@ -349,47 +351,17 @@ export function SettingsClient({ user: initUser, clinic: initClinic, clinicGcal 
                   <CalendarCheck className="w-5 h-5 text-emerald-600 flex-shrink-0" />
                   <div>
                     <div className="text-sm font-bold text-emerald-700 dark:text-emerald-300">Cuenta conectada</div>
-                    <div className="text-sm text-emerald-600 dark:text-emerald-400">{gcalEmail}</div>
-                    {(initUser.role === "ADMIN" || initUser.role === "SUPER_ADMIN") && clinicGcal?.calendarId && (
-                      <div className="text-xs text-emerald-600 dark:text-emerald-500 mt-1">
-                        📅 Calendario "{initClinic.name}" creado — todas las citas se sincronizan ahí
-                      </div>
-                    )}
+                    <div className="text-sm text-emerald-600 dark:text-emerald-400">{user.googleCalendarEmail}</div>
                   </div>
                 </div>
-                {(initUser.role === "ADMIN" || initUser.role === "SUPER_ADMIN") ? (
-                  <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-xl p-3 text-sm text-blue-700 dark:text-blue-300">
-                    <div className="font-bold mb-1">¿Cómo funciona?</div>
-                    <ul className="space-y-1 text-xs">
-                      <li>✅ Cada cita agendada en MediFlow aparece en tu calendario <strong>"{initClinic.name}"</strong></li>
-                      <li>✅ Incluye el nombre del doctor y paciente en cada evento</li>
-                      <li>✅ Puedes compartir ese calendario con tu recepcionista desde Google Calendar</li>
-                      <li>✅ Los doctores no necesitan conectar su propio Google Calendar</li>
-                    </ul>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Cada nueva cita que se agende para ti aparecerá automáticamente en tu Google Calendar con recordatorio 24h antes.</p>
-                )}
+                <p className="text-sm text-muted-foreground">Cada nueva cita que se agende para ti aparecerá automáticamente en tu Google Calendar con recordatorio 24h antes.</p>
                 <Button variant="outline" onClick={disconnectGcal} className="border-rose-300 text-rose-700 hover:bg-rose-50">
                   Desconectar Google Calendar
                 </Button>
               </div>
             ) : (
               <div className="space-y-3">
-                {(initUser.role === "ADMIN" || initUser.role === "SUPER_ADMIN") ? (
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">
-                      Al conectar, MediFlow crea automáticamente un calendario <strong>"{initClinic.name}"</strong> en tu Google Calendar.
-                      Todas las citas de todos los doctores aparecerán ahí — puedes compartirlo con tu recepcionista desde Google Calendar.
-                    </p>
-                    <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/30 rounded-xl p-3">
-                      <span className="mt-0.5">ℹ️</span>
-                      <span>Los doctores pueden conectar su propio Google Calendar por separado si quieren ver sus citas en su cuenta personal.</span>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Conecta tu Google Calendar para que cada cita agendada para ti aparezca automáticamente con recordatorios.</p>
-                )}
+                <p className="text-sm text-muted-foreground">Conecta tu Google Calendar para que cada cita agendada para ti aparezca automáticamente con recordatorios.</p>
                 <a href="/api/google"
                   className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-800 border-2 border-border rounded-xl font-semibold text-base hover:border-blue-400 transition-colors w-fit">
                   <span className="text-xl">G</span> Conectar con Google
