@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const code  = searchParams.get("code");
-  const state = searchParams.get("state"); // userId
+  const state = searchParams.get("state");
   const error = searchParams.get("error");
 
   const REDIRECT_BASE = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/settings?tab=integraciones`;
@@ -19,23 +19,25 @@ export async function GET(req: NextRequest) {
     const oauth2Client = getOAuthClient();
     const { tokens } = await oauth2Client.getToken(code);
 
-    // FIX: access_token can be null on re-auth, use refresh_token to get a fresh one
-    let accessToken = tokens.access_token;
-    if (!accessToken && tokens.refresh_token) {
-      oauth2Client.setCredentials({ refresh_token: tokens.refresh_token });
-      const { credentials } = await oauth2Client.refreshAccessToken();
-      accessToken = credentials.access_token ?? null;
+    if (!tokens.access_token && !tokens.refresh_token) {
+      throw new Error("No tokens received from Google");
     }
 
-    if (!accessToken) {
-      throw new Error("No access token received from Google");
-    }
+    // Set ALL credentials at once before making any API calls
+    oauth2Client.setCredentials({
+      access_token:  tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      token_type:    tokens.token_type,
+      expiry_date:   tokens.expiry_date,
+    });
 
-    // Get Google user info
-    oauth2Client.setCredentials({ access_token: accessToken, refresh_token: tokens.refresh_token });
-    const oauth2   = google.oauth2({ version: "v2", auth: oauth2Client });
-    const { data: gUser } = await oauth2.userinfo.get();
+    // Get user email from Google
+    const oauth2Api = google.oauth2({ version: "v2", auth: oauth2Client });
+    const { data: gUser } = await oauth2Api.userinfo.get();
     const email = gUser.email ?? null;
+
+    const accessToken  = tokens.access_token  ?? null;
+    const refreshToken = tokens.refresh_token ?? null;
 
     // Get user from DB
     const user = await prisma.user.findUnique({
@@ -44,9 +46,7 @@ export async function GET(req: NextRequest) {
     });
     if (!user) throw new Error("User not found");
 
-    const refreshToken = tokens.refresh_token ?? null;
-
-    // Always save on user
+    // Save tokens on user
     await prisma.user.update({
       where: { id: state },
       data: {
@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // If admin → save on clinic too + create clinic calendar
+    // If admin → save on clinic + create clinic calendar
     if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") {
       await prisma.clinic.update({
         where: { id: user.clinicId },
@@ -69,17 +69,22 @@ export async function GET(req: NextRequest) {
         },
       });
 
-      // Try to create clinic calendar (non-fatal if fails)
-      try {
-        const calendarId = await getOrCreateClinicCalendar(accessToken, refreshToken!, user.clinic.name);
-        if (calendarId) {
-          await prisma.clinic.update({
-            where: { id: user.clinicId },
-            data:  { googleClinicCalendarId: calendarId },
-          });
+      if (accessToken) {
+        try {
+          const calendarId = await getOrCreateClinicCalendar(
+            accessToken,
+            refreshToken ?? accessToken,
+            user.clinic.name
+          );
+          if (calendarId) {
+            await prisma.clinic.update({
+              where: { id: user.clinicId },
+              data:  { googleClinicCalendarId: calendarId },
+            });
+          }
+        } catch (calErr) {
+          console.error("Clinic calendar creation failed (non-fatal):", calErr);
         }
-      } catch (calErr) {
-        console.error("Clinic calendar creation failed (non-fatal):", calErr);
       }
     }
 
