@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { getAuthUrl } from "@/lib/google-calendar";
+import { prisma } from "@/lib/prisma";
 
 // GET → redirect to Google OAuth
 export async function GET(req: NextRequest) {
@@ -14,8 +15,6 @@ export async function GET(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { prisma } = await import("@/lib/prisma");
 
   // Always disconnect the user
   await prisma.user.update({

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { google } from "googleapis";
 import { getOAuthClient, getOrCreateClinicCalendar } from "@/lib/google-calendar";
 import { prisma } from "@/lib/prisma";
 
@@ -19,7 +20,6 @@ export async function GET(req: NextRequest) {
     const { tokens } = await oauth2Client.getToken(code);
 
     oauth2Client.setCredentials(tokens);
-    const { google } = await import("googleapis");
     const oauth2 = google.oauth2({ version: "v2", auth: oauth2Client });
     const { data: gUser } = await oauth2.userinfo.get();
 
