@@ -18,9 +18,10 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
 interface Props {
   invoices: any[]; patients: any[];
   totalPaid: number; totalPending: number;
+  clinic: { facturApiEnabled: boolean; rfcEmisor: string | null };
 }
 
-export function BillingClient({ invoices: initial, patients, totalPaid, totalPending }: Props) {
+export function BillingClient({ invoices: initial, patients, totalPaid, totalPending, clinic }: Props) {
   const router = useRouter();
   const [invoices, setInvoices] = useState(initial);
   const [showNew, setShowNew]   = useState(false);
@@ -29,6 +30,12 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
   const [payAmount, setPayAmount] = useState("");
   const [payMethod, setPayMethod] = useState("CASH");
   const [form, setForm] = useState({ patientId: "", description: "", quantity: "1", unitPrice: "", notes: "" });
+  // CFDI state
+  const [cfdiInv,    setCfdiInv]    = useState<string | null>(null); // invoiceId being timbrado
+  const [cfdiLoading,setCfdiLoading]= useState(false);
+  const [cfdiForm,   setCfdiForm]   = useState({
+    rfc: "", nombre: "", regimenFiscal: "616", cp: "", usoCfdi: "D01", formaPago: "01",
+  });
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
   async function createInvoice(e: React.FormEvent) {
@@ -58,6 +65,43 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
       setPaying(null); setPayAmount("");
       router.refresh();
     } catch (err: any) { toast.error(err.message ?? "Error"); }
+  }
+
+  async function timbraCfdi(invoiceId: string) {
+    if (!cfdiForm.rfc.trim() || !cfdiForm.nombre.trim() || !cfdiForm.cp.trim()) {
+      toast.error("RFC, nombre y código postal del paciente son requeridos");
+      return;
+    }
+    setCfdiLoading(true);
+    try {
+      const res = await fetch("/api/cfdi", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          invoiceId,
+          receptor: {
+            rfc:           cfdiForm.rfc.trim().toUpperCase(),
+            nombre:        cfdiForm.nombre.trim().toUpperCase(),
+            regimenFiscal: cfdiForm.regimenFiscal,
+            cp:            cfdiForm.cp.trim(),
+          },
+          usoCfdi:     cfdiForm.usoCfdi,
+          paymentForm: cfdiForm.formaPago,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setInvoices(prev => prev.map(inv =>
+        inv.id === invoiceId ? { ...inv, cfdiUuid: data.uuid } : inv
+      ));
+      setCfdiInv(null);
+      toast.success("✅ CFDI timbrado correctamente ante el SAT");
+      // Open PDF in new tab if available
+      if (data.pdfUrl) window.open(data.pdfUrl, "_blank");
+    } catch (err: any) {
+      toast.error(err.message ?? "Error al timbrar");
+    } finally {
+      setCfdiLoading(false);
+    }
   }
 
   return (
@@ -129,7 +173,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
-              {["Factura","Paciente","Monto","Pagado","Saldo","Estado",""].map(h => (
+              {["Factura","Paciente","Monto","Pagado","Saldo","Estado","CFDI",""].map(h => (
                 <th key={h} className="text-left px-4 py-3 text-xs font-bold text-muted-foreground uppercase tracking-wide first:pl-5">{h}</th>
               ))}
             </tr>
@@ -151,6 +195,21 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                     <td className="px-4 py-3 font-mono font-bold text-rose-600">{formatCurrency(inv.balance)}</td>
                     <td className="px-4 py-3"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${s.cls}`}>{s.label}</span></td>
                     <td className="px-4 py-3">
+                      {inv.cfdiUuid ? (
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                          ✅ Timbrado
+                        </span>
+                      ) : clinic.facturApiEnabled ? (
+                        <button
+                          onClick={() => { setCfdiInv(cfdiInv === inv.id ? null : inv.id); }}
+                          className="text-xs font-semibold text-violet-600 hover:underline">
+                          🏛 Timbrar CFDI
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground">SAT no configurado</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
                       {!["PAID","CANCELLED"].includes(inv.status) && (
                         <button onClick={() => setPaying(paying === inv.id ? null : inv.id)} className="text-xs font-semibold text-brand-600 hover:underline">Registrar pago</button>
                       )}
@@ -158,7 +217,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                   </tr>
                   {paying === inv.id && (
                     <tr key={`pay-${inv.id}`} className="bg-brand-50">
-                      <td colSpan={7} className="px-5 py-3">
+                      <td colSpan={8} className="px-5 py-3">
                         <div className="flex items-center gap-3 flex-wrap">
                           <span className="text-xs font-bold text-brand-700">Saldo: {formatCurrency(inv.balance)}</span>
                           <input type="number" placeholder="Monto" className="h-8 w-28 rounded-lg border border-border bg-white px-3 text-sm" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
@@ -167,6 +226,84 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                           </select>
                           <Button size="sm" onClick={() => registerPayment(inv.id)}>Registrar</Button>
                           <button className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setPaying(null)}>Cancelar</button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {cfdiInv === inv.id && !inv.cfdiUuid && (
+                    <tr key={`cfdi-${inv.id}`} className="bg-violet-50 dark:bg-violet-950/20">
+                      <td colSpan={8} className="px-5 py-4">
+                        <div className="space-y-3">
+                          <div className="text-xs font-bold text-violet-700 dark:text-violet-300 mb-2">
+                            🏛 Datos del receptor para CFDI — Factura {inv.invoiceNumber} · {formatCurrency(inv.total)}
+                          </div>
+                          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-xs font-bold text-muted-foreground">RFC receptor *</label>
+                              <input className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none uppercase"
+                                placeholder="XAXX010101000"
+                                value={cfdiForm.rfc}
+                                onChange={e => setCfdiForm(f => ({ ...f, rfc: e.target.value.toUpperCase() }))} />
+                            </div>
+                            <div className="space-y-1 lg:col-span-2">
+                              <label className="text-xs font-bold text-muted-foreground">Nombre / Razón social *</label>
+                              <input className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none uppercase"
+                                placeholder="JUAN PÉREZ GARCÍA"
+                                value={cfdiForm.nombre}
+                                onChange={e => setCfdiForm(f => ({ ...f, nombre: e.target.value }))} />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs font-bold text-muted-foreground">C.P. receptor *</label>
+                              <input className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none"
+                                placeholder="97000" maxLength={5}
+                                value={cfdiForm.cp}
+                                onChange={e => setCfdiForm(f => ({ ...f, cp: e.target.value }))} />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs font-bold text-muted-foreground">Régimen fiscal</label>
+                              <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-2 text-sm focus:outline-none"
+                                value={cfdiForm.regimenFiscal}
+                                onChange={e => setCfdiForm(f => ({ ...f, regimenFiscal: e.target.value }))}>
+                                <option value="616">616 — Sin obligaciones fiscales</option>
+                                <option value="605">605 — Sueldos y salarios</option>
+                                <option value="612">612 — Personas físicas con actividad</option>
+                                <option value="626">626 — Régimen simplificado de confianza</option>
+                              </select>
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs font-bold text-muted-foreground">Uso CFDI</label>
+                              <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-2 text-sm focus:outline-none"
+                                value={cfdiForm.usoCfdi}
+                                onChange={e => setCfdiForm(f => ({ ...f, usoCfdi: e.target.value }))}>
+                                <option value="D01">D01 — Honorarios médicos</option>
+                                <option value="D07">D07 — Primas seguros</option>
+                                <option value="G03">G03 — Gastos en general</option>
+                                <option value="S01">S01 — Sin efectos fiscales</option>
+                              </select>
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs font-bold text-muted-foreground">Forma de pago</label>
+                              <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-2 text-sm focus:outline-none"
+                                value={cfdiForm.formaPago}
+                                onChange={e => setCfdiForm(f => ({ ...f, formaPago: e.target.value }))}>
+                                <option value="01">01 — Efectivo</option>
+                                <option value="02">02 — Cheque</option>
+                                <option value="03">03 — Transferencia</option>
+                                <option value="04">04 — Tarjeta de crédito</option>
+                                <option value="28">28 — Tarjeta de débito</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 pt-1">
+                            <Button size="sm" onClick={() => timbraCfdi(inv.id)} disabled={cfdiLoading}
+                              className="bg-violet-600 hover:bg-violet-700">
+                              {cfdiLoading ? "Timbrando…" : "🏛 Timbrar CFDI ante SAT"}
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => setCfdiInv(null)}>Cancelar</Button>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            El CFDI se timbra vía Facturapi. El paciente podrá descargar XML y PDF.
+                          </p>
                         </div>
                       </td>
                     </tr>
