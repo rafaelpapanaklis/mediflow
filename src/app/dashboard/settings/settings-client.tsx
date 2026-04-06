@@ -21,8 +21,7 @@ const REGIMENES   = [
 interface Props { user: any; clinic: any }
 
 export function SettingsClient({ user: initUser, clinic: initClinic }: Props) {
-  const searchParams = useSearchParams();
-  const [tab,      setTab]      = useState(searchParams.get("tab") ?? "clinica");
+  const [tab,      setTab]      = useState(initialTab ?? "clinica");
   const [saving,   setSaving]   = useState(false);
   const [user,     setUser]     = useState(initUser);
   const [clinic,   setClinic]   = useState(initClinic);
@@ -50,10 +49,9 @@ export function SettingsClient({ user: initUser, clinic: initClinic }: Props) {
 
   // Show toast after OAuth redirect
   useEffect(() => {
-    const gcal = searchParams.get("gcal");
-    if (gcal === "success") toast.success("✅ Google Calendar conectado correctamente");
-    if (gcal === "error")   toast.error("Error al conectar Google Calendar");
-  }, []);
+    if (gcalStatus === "success") toast.success("✅ Google Calendar conectado correctamente");
+    if (gcalStatus === "error")   toast.error("Error al conectar Google Calendar");
+  }, [gcalStatus]);
 
   // ── Save functions ────────────────────────────────────────────────────────
   async function saveClinic() {
