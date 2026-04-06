@@ -1,7 +1,5 @@
 import { getCurrentUser } from "@/lib/auth";
-import { Sidebar }       from "@/components/dashboard/sidebar";
-import { QuickActions }  from "@/components/dashboard/quick-actions";
-import { TodayStrip }    from "@/components/dashboard/today-strip";
+import { Sidebar } from "@/components/dashboard/sidebar";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user   = await getCurrentUser();
@@ -28,8 +26,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <a href="/dashboard/suspended" className="underline hover:no-underline">Ver opciones de pago →</a>
           </div>
         )}
-        <QuickActions />
-        <TodayStrip />
         <main className="flex-1 p-5 lg:p-6 pt-16 lg:pt-6">{children}</main>
       </div>
     </div>
