@@ -63,12 +63,11 @@ interface Props {
   totalBalance: number;
   totalPlan:    number;
   portalUrl?:   string | null;
-  treatments?:  any[];
 }
 
 export function PatientDetailClient({
   patient, records: initialRecords, appointments, invoices,
-  doctors, currentUser, specialty, totalPaid, totalBalance, totalPlan, portalUrl, treatments = [],
+  doctors, currentUser, specialty, totalPaid, totalBalance, totalPlan, portalUrl,
 }: Props) {
   const router = useRouter();
   const [tab, setTab]         = useState("resumen");
@@ -1151,6 +1150,7 @@ function ConsentTab({ patientId }: { patientId: string }) {
   const [loading, setLoading]   = React.useState(true);
   const [generating, setGenerating] = React.useState(false);
   const [procedure, setProcedure] = React.useState(PROCEDURES[0]);
+  const [viewingConsent, setViewingConsent] = React.useState<any | null>(null);
 
   React.useEffect(() => { loadForms(); }, [patientId]);
 
@@ -1227,13 +1227,66 @@ function ConsentTab({ patientId }: { patientId: string }) {
                     Copiar enlace
                   </button>
                 )}
-                {f.signatureUrl && (
-                  <a href={f.signatureUrl} target="_blank" rel="noreferrer"
-                    className="text-xs text-muted-foreground hover:text-foreground underline">Ver firma</a>
+                {f.signedAt && (
+                  <button onClick={() => setViewingConsent(f)}
+                    className="text-xs font-semibold text-brand-600 border border-brand-300 px-2 py-1 rounded-full hover:bg-brand-50">
+                    Ver documento
+                  </button>
                 )}
               </div>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );      </div>
+
+      {/* Consent viewer modal */}
+      {viewingConsent && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setViewingConsent(null)}>
+          <div className="bg-background rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-border">
+              <div>
+                <div className="font-bold">{viewingConsent.procedure}</div>
+                <div className="text-xs text-muted-foreground">
+                  Firmado el {new Date(viewingConsent.signedAt).toLocaleDateString("es-MX", { weekday:"long", day:"numeric", month:"long", year:"numeric" })}
+                </div>
+              </div>
+              <button onClick={() => setViewingConsent(null)}
+                className="text-sm px-3 py-1.5 border border-border rounded-lg hover:bg-muted">✕</button>
+            </div>
+            <div className="p-5 space-y-5">
+              {/* Consent content */}
+              <div>
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Contenido del consentimiento</div>
+                <div className="bg-muted/40 rounded-xl p-4 text-sm leading-relaxed whitespace-pre-wrap text-foreground">
+                  {viewingConsent.content}
+                </div>
+              </div>
+              {/* Signature */}
+              {viewingConsent.signatureUrl && (
+                <div>
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Firma del paciente</div>
+                  <div className="border border-border rounded-xl p-3 bg-white dark:bg-slate-900">
+                    <img src={viewingConsent.signatureUrl} alt="Firma" className="max-h-32 mx-auto" />
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1.5 text-center">
+                    Firmado digitalmente el {new Date(viewingConsent.signedAt).toLocaleString("es-MX")}
+                  </div>
+                </div>
+              )}
+              <div className="flex gap-2 pt-2">
+                <button onClick={() => window.print()}
+                  className="flex-1 text-sm border border-border rounded-lg py-2 hover:bg-muted font-semibold">
+                  🖨️ Imprimir
+                </button>
+                <button onClick={() => setViewingConsent(null)}
+                  className="flex-1 text-sm bg-brand-600 text-white rounded-lg py-2 font-semibold hover:bg-brand-700">
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
