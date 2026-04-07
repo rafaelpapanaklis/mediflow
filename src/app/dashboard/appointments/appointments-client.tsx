@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   ChevronLeft, ChevronRight, Plus, X,
@@ -127,6 +127,78 @@ function PatientSearch({ patients, value, onChange }: { patients: Patient[]; val
   );
 }
 
+// ── ApptForm — defined OUTSIDE main component to prevent focus loss ──────────
+interface ApptFormProps {
+  form: { patientId: string; doctorId: string; type: string; date: string; startTime: string; durationMins: number; notes: string };
+  setForm: React.Dispatch<React.SetStateAction<any>>;
+  doctors: { id: string; firstName: string; lastName: string }[];
+  patients: Patient[];
+  loading: boolean;
+  onSubmit: () => void;
+  onCancel: () => void;
+  label: string;
+}
+
+function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCancel, label }: ApptFormProps) {
+  function setF(k: string, v: any) { setForm((f: any) => ({ ...f, [k]: v })); }
+  return (
+    <div className="px-6 py-5 space-y-4">
+      <div className="space-y-1.5">
+        <Label className="text-base font-semibold">Paciente *</Label>
+        <PatientSearch patients={patients} value={form.patientId} onChange={id => setF("patientId", id)} />
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-base font-semibold">Doctor *</Label>
+        <select className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          value={form.doctorId} onChange={e => setF("doctorId", e.target.value)}>
+          {doctors.map(d => <option key={d.id} value={d.id}>Dr/a. {d.firstName} {d.lastName}</option>)}
+        </select>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-base font-semibold">Tipo de cita</Label>
+        <select className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          value={form.type} onChange={e => setF("type", e.target.value)}>
+          {APPT_TYPES.map(t => <option key={t}>{t}</option>)}
+        </select>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        <div className="col-span-3 space-y-1.5">
+          <Label className="text-base font-semibold">Fecha</Label>
+          <input type="date" className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            value={form.date} onChange={e => setF("date", e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-base font-semibold">Hora inicio</Label>
+          <input type="time" className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            value={form.startTime} onChange={e => setF("startTime", e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-base font-semibold">Duración</Label>
+          <select className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
+            value={form.durationMins} onChange={e => setF("durationMins", parseInt(e.target.value))}>
+            {DURATIONS.map(d => <option key={d} value={d}>{d} min</option>)}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-base font-semibold">Hora fin</Label>
+          <input readOnly className="flex h-11 w-full rounded-xl border border-border bg-muted px-4 text-base text-muted-foreground"
+            value={addTime(form.startTime, form.durationMins)} />
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-base font-semibold">Notas</Label>
+        <textarea className="flex min-h-[80px] w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 py-3 text-base placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          placeholder="Motivo de consulta, indicaciones especiales…"
+          value={form.notes} onChange={e => setF("notes", e.target.value)} />
+      </div>
+      <div className="flex gap-3 pt-1">
+        <Button variant="outline" onClick={onCancel} className="flex-1 h-12 text-base">Cancelar</Button>
+        <Button onClick={onSubmit} disabled={loading} className="flex-1 h-12 text-base">{loading ? "Guardando…" : label}</Button>
+      </div>
+    </div>
+  );
+}
+
 export function AppointmentsClient({ appointments: initialAppts, patients, doctors, currentUserId, clinicId, waConnected }: Props) {
   const today = new Date();
   const [appts,       setAppts]       = useState<Appt[]>(initialAppts);
@@ -219,16 +291,10 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, endTime, clinicId }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Error");
-      // Fetch fresh appointments list to get complete data with patient/doctor
-      const fresh = await fetch("/api/appointments");
-      if (fresh.ok) {
-        const freshData = await fresh.json();
-        setAppts(freshData.map(serializeAppt));
-      } else {
-        setAppts(prev => [...prev, serializeAppt(data)]);
-      }
+      if (!res.ok) throw new Error((await res.json()).error ?? "Error");
+      const created = await res.json();
+      // FIX: serialize date from API before adding to state
+      setAppts(prev => [...prev, serializeAppt(created)]);
       setSelectedDay(form.date);
       setShowNew(false);
       setForm(emptyForm);
@@ -439,63 +505,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
   const selAppts = (apptsByDate[selectedDay]??[]).sort((a,b) => a.startTime.localeCompare(b.startTime));
 
   // Shared form for new and edit
-  // eslint-disable-next-line react/display-name
-  const ApptForm = useCallback(({ onSubmit, label }: { onSubmit: () => void; label: string }) => (
-    <div className="px-6 py-5 space-y-4">
-      <div className="space-y-1.5">
-        <Label className="text-base font-semibold">Paciente *</Label>
-        <PatientSearch patients={patients} value={form.patientId} onChange={id => setF("patientId", id)} />
-      </div>
-      <div className="space-y-1.5">
-        <Label className="text-base font-semibold">Doctor *</Label>
-        <select className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-          value={form.doctorId} onChange={e => setF("doctorId", e.target.value)}>
-          {doctors.map(d => <option key={d.id} value={d.id}>Dr/a. {d.firstName} {d.lastName}</option>)}
-        </select>
-      </div>
-      <div className="space-y-1.5">
-        <Label className="text-base font-semibold">Tipo de cita</Label>
-        <select className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-          value={form.type} onChange={e => setF("type", e.target.value)}>
-          {APPT_TYPES.map(t => <option key={t}>{t}</option>)}
-        </select>
-      </div>
-      <div className="grid grid-cols-3 gap-3">
-        <div className="col-span-3 space-y-1.5">
-          <Label className="text-base font-semibold">Fecha</Label>
-          <input type="date" className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-            value={form.date} onChange={e => setF("date", e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-base font-semibold">Hora inicio</Label>
-          <input type="time" className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-            value={form.startTime} onChange={e => setF("startTime", e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-base font-semibold">Duración</Label>
-          <select className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
-            value={form.durationMins} onChange={e => setF("durationMins", parseInt(e.target.value))}>
-            {DURATIONS.map(d => <option key={d} value={d}>{d} min</option>)}
-          </select>
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-base font-semibold">Hora fin</Label>
-          <input readOnly className="flex h-11 w-full rounded-xl border border-border bg-muted px-4 text-base text-muted-foreground"
-            value={addTime(form.startTime, form.durationMins)} />
-        </div>
-      </div>
-      <div className="space-y-1.5">
-        <Label className="text-base font-semibold">Notas</Label>
-        <textarea className="flex min-h-[80px] w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 py-3 text-base placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-          placeholder="Motivo de consulta, indicaciones especiales…"
-          value={form.notes} onChange={e => setF("notes", e.target.value)} />
-      </div>
-      <div className="flex gap-3 pt-1">
-        <Button variant="outline" onClick={() => { setShowNew(false); setShowEdit(false); }} className="flex-1 h-12 text-base">Cancelar</Button>
-        <Button onClick={onSubmit} disabled={loading} className="flex-1 h-12 text-base">{loading ? "Guardando…" : label}</Button>
-      </div>
-    </div>
-  ), [form, doctors, patients, loading]);
+  // ApptForm moved outside — see standalone function below
 
   return (
     <div className="flex gap-5 h-full">
@@ -607,7 +617,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
               <h2 className="text-xl font-bold">Nueva cita</h2>
               <button onClick={() => setShowNew(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
             </div>
-            <ApptForm onSubmit={createAppt} label="✅ Agendar cita" />
+            <ApptForm form={form} setForm={setForm} doctors={doctors} patients={patients} loading={loading} onSubmit={createAppt} onCancel={() => { setShowNew(false); setShowEdit(false); }} label="✅ Agendar cita" />
           </div>
         </div>
       )}
@@ -620,7 +630,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
               <h2 className="text-xl font-bold">Editar cita</h2>
               <button onClick={() => setShowEdit(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
             </div>
-            <ApptForm onSubmit={saveEdit} label="💾 Guardar cambios" />
+            <ApptForm form={form} setForm={setForm} doctors={doctors} patients={patients} loading={loading} onSubmit={saveEdit} onCancel={() => { setShowNew(false); setShowEdit(false); }} label="💾 Guardar cambios" />
           </div>
         </div>
       )}
