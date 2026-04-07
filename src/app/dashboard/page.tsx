@@ -18,42 +18,64 @@ const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
 function TrendBadge({ value }: { value: number }) {
   if (value === 0) return <span className="text-xs text-muted-foreground">Sin cambio</span>;
   const up = value > 0;
-  return <span className={`text-xs font-semibold ${up ? "text-emerald-600" : "text-rose-600"}`}>{up?"↑":"↓"} {Math.abs(value)}% vs mes anterior</span>;
+  return <span className={`text-xs font-semibold ${up ? "text-emerald-600" : "text-rose-600"}`}>{up ? "↑" : "↓"} {Math.abs(value)}% vs mes anterior</span>;
 }
 
 export default async function DashboardPage() {
   const user     = await getCurrentUser();
   const clinicId = user.clinicId;
-  const now      = new Date();
-  const today    = new Date(now); today.setHours(0,0,0,0);
-  const todayEnd = new Date(now); todayEnd.setHours(23,59,59,999);
+
+  const now        = new Date();
+  const today      = new Date(now); today.setHours(0,0,0,0);
+  const todayEnd   = new Date(now); todayEnd.setHours(23,59,59,999);
   const firstMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const firstPrev  = new Date(now.getFullYear(), now.getMonth()-1, 1);
   const lastPrev   = new Date(now.getFullYear(), now.getMonth(), 0); lastPrev.setHours(23,59,59,999);
   const nextWeek   = new Date(now); nextWeek.setDate(nextWeek.getDate()+7);
 
-  const [todayAppts, monthAppts, prevAppts, monthPatients, prevPatients, monthRevenue, prevRevenue,
-         pendingInvoices, pendingCount, unconfirmed, nextWeekAppts, allInventory, doctorStats, activeDoctor, paidCount] =
+  // Batch 1 — today + month comparisons (max 7 items for TypeScript inference)
+  const [todayAppts, monthAppts, prevAppts, monthPatients, prevPatients, monthRevenue, prevRevenue] =
     await Promise.all([
-      prisma.appointment.findMany({ where:{ clinicId, date:{gte:today,lte:todayEnd} },
-        include:{ patient:{select:{id:true,firstName:true,lastName:true}}, doctor:{select:{id:true,firstName:true,lastName:true,color:true}} },
-        orderBy:{ startTime:"asc" } }),
-      prisma.appointment.count({ where:{ clinicId, date:{gte:firstMonth}, status:{not:"CANCELLED"} } }),
-      prisma.appointment.count({ where:{ clinicId, date:{gte:firstPrev,lte:lastPrev}, status:{not:"CANCELLED"} } }),
-      prisma.patient.count({ where:{ clinicId, createdAt:{gte:firstMonth} } }),
-      prisma.patient.count({ where:{ clinicId, createdAt:{gte:firstPrev,lte:lastPrev} } }),
+      prisma.appointment.findMany({
+        where: { clinicId, date: { gte: today, lte: todayEnd } },
+        include: {
+          patient: { select: { id:true, firstName:true, lastName:true } },
+          doctor:  { select: { id:true, firstName:true, lastName:true, color:true } },
+        },
+        orderBy: { startTime: "asc" },
+      }),
+      prisma.appointment.count({ where: { clinicId, date:{gte:firstMonth}, status:{not:"CANCELLED"} } }),
+      prisma.appointment.count({ where: { clinicId, date:{gte:firstPrev,lte:lastPrev}, status:{not:"CANCELLED"} } }),
+      prisma.patient.count({ where: { clinicId, createdAt:{gte:firstMonth} } }),
+      prisma.patient.count({ where: { clinicId, createdAt:{gte:firstPrev,lte:lastPrev} } }),
       prisma.invoice.aggregate({ where:{ clinicId, status:{in:["PAID","PARTIAL"]}, updatedAt:{gte:firstMonth} }, _sum:{paid:true} }),
       prisma.invoice.aggregate({ where:{ clinicId, status:{in:["PAID","PARTIAL"]}, updatedAt:{gte:firstPrev,lte:lastPrev} }, _sum:{paid:true} }),
-      prisma.invoice.aggregate({ where:{ clinicId, status:{in:["PENDING","PARTIAL"]} }, _sum:{balance:true} }),
-      prisma.invoice.count({ where:{ clinicId, status:{in:["PENDING","PARTIAL"]} } }),
-      prisma.appointment.count({ where:{ clinicId, date:{gte:today}, status:"PENDING" } }),
-      prisma.appointment.findMany({ where:{ clinicId, date:{gt:todayEnd,lte:nextWeek}, status:{not:"CANCELLED"} },
-        include:{ patient:{select:{firstName:true,lastName:true}}, doctor:{select:{firstName:true,lastName:true,color:true}} },
-        orderBy:[{date:"asc"},{startTime:"asc"}], take:8 }),
-      prisma.inventoryItem.findMany({ where:{ clinicId }, orderBy:{ quantity:"asc" }, take:10,
-        select:{id:true,name:true,quantity:true,minQuantity:true,unit:true,emoji:true} }),
-      prisma.appointment.groupBy({ by:["doctorId"], where:{ clinicId, date:{gte:firstMonth}, status:{not:"CANCELLED"} }, _count:{id:true} }),
-      prisma.user.count({ where:{ clinicId, isActive:true, role:{in:["DOCTOR","ADMIN"]} } }),
+    ]);
+
+  // Batch 2 — pending, upcoming, inventory, doctors
+  const [pendingInvoices, unconfirmed, nextWeekAppts, allInventory, doctorStats, activeDoctor, paidCount] =
+    await Promise.all([
+      prisma.invoice.aggregate({ where:{ clinicId, status:{in:["PENDING","PARTIAL"]} }, _sum:{balance:true}, _count:true }),
+      prisma.appointment.count({ where: { clinicId, date:{gte:today}, status:"PENDING" } }),
+      prisma.appointment.findMany({
+        where: { clinicId, date:{gt:todayEnd,lte:nextWeek}, status:{not:"CANCELLED"} },
+        include: {
+          patient: { select: { firstName:true, lastName:true } },
+          doctor:  { select: { firstName:true, lastName:true, color:true } },
+        },
+        orderBy: [{ date:"asc" }, { startTime:"asc" }],
+        take: 8,
+      }),
+      prisma.inventoryItem.findMany({
+        where: { clinicId }, orderBy: { quantity:"asc" }, take: 10,
+        select: { id:true, name:true, quantity:true, minQuantity:true, unit:true, emoji:true },
+      }),
+      prisma.appointment.groupBy({
+        by: ["doctorId"],
+        where: { clinicId, date:{gte:firstMonth}, status:{not:"CANCELLED"} },
+        _count: { id: true },
+      }),
+      prisma.user.count({ where: { clinicId, isActive:true, role:{in:["DOCTOR","ADMIN"]} } }),
       prisma.invoice.count({ where:{ clinicId, status:{in:["PAID","PARTIAL"]}, updatedAt:{gte:firstMonth} } }),
     ]);
 
@@ -66,16 +88,21 @@ export default async function DashboardPage() {
   const occupancy     = activeDoctor*workingDays*8 > 0 ? Math.min(100, Math.round((monthAppts/(activeDoctor*workingDays*8))*100)) : 0;
   const avgTicket     = paidCount > 0 ? Math.round(currentRev/paidCount) : 0;
   const lowAlerts     = allInventory.filter(i => i.quantity <= i.minQuantity);
-  const doctorIds     = doctorStats.map(d => d.doctorId);
-  const doctors       = await prisma.user.findMany({ where:{id:{in:doctorIds}}, select:{id:true,firstName:true,lastName:true,color:true} });
-  const doctorMap     = Object.fromEntries(doctors.map(d => [d.id, d]));
-  const monthName     = now.toLocaleDateString("es-MX", { month:"long" });
-  const todayCompleted = todayAppts.filter(a=>a.status==="COMPLETED").length;
-  const todayPending   = todayAppts.filter(a=>a.status==="PENDING").length;
-  const todayConfirmed = todayAppts.filter(a=>a.status==="CONFIRMED").length;
+
+  const doctorIds = doctorStats.map(d => d.doctorId);
+  const doctors   = await prisma.user.findMany({ where:{id:{in:doctorIds}}, select:{id:true,firstName:true,lastName:true,color:true} });
+  const doctorMap = Object.fromEntries(doctors.map(d => [d.id, d]));
+
+  const monthName      = now.toLocaleDateString("es-MX", { month:"long" });
+  const todayCompleted = todayAppts.filter(a => a.status==="COMPLETED").length;
+  const todayPending   = todayAppts.filter(a => a.status==="PENDING").length;
+  const todayConfirmed = todayAppts.filter(a => a.status==="CONFIRMED").length;
+  const pendingBalance = pendingInvoices._sum.balance ?? 0;
+  const pendingCount   = typeof pendingInvoices._count === "number" ? pendingInvoices._count : 0;
 
   return (
     <div className="flex-1 min-w-0 space-y-5 p-4 sm:p-6">
+
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -98,22 +125,42 @@ export default async function DashboardPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {[
-          { label:`Ingresos ${monthName}`, value:formatCurrency(currentRev), sub:`Ticket promedio: ${formatCurrency(avgTicket)}`, trend:revenueChange, icon:"💰" },
-          { label:`Citas ${monthName}`, value:monthAppts.toString(), sub:`Ocupación: ${occupancy}%`, trend:apptChange, icon:"📅" },
-          { label:"Pacientes nuevos", value:monthPatients.toString(), sub:`Este ${monthName}`, trend:patientChange, icon:"👤" },
-          { label:"Saldo pendiente", value:formatCurrency(pendingInvoices._sum.balance??0), sub:`${pendingCount} facturas`, trend:0, icon:"⏳" },
-        ].map(k => (
-          <div key={k.label} className="bg-card border border-border rounded-2xl p-4 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide leading-tight">{k.label}</span>
-              <span className="text-xl">{k.icon}</span>
-            </div>
-            <div className="text-2xl font-bold">{k.value}</div>
-            <div className="text-xs text-muted-foreground">{k.sub}</div>
-            <TrendBadge value={k.trend} />
+        <div className="bg-card border border-border rounded-2xl p-4 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide capitalize">Ingresos {monthName}</span>
+            <span className="text-xl">💰</span>
           </div>
-        ))}
+          <div className="text-2xl font-bold">{formatCurrency(currentRev)}</div>
+          <div className="text-xs text-muted-foreground">Ticket promedio: {formatCurrency(avgTicket)}</div>
+          <TrendBadge value={revenueChange} />
+        </div>
+        <div className="bg-card border border-border rounded-2xl p-4 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide capitalize">Citas {monthName}</span>
+            <span className="text-xl">📅</span>
+          </div>
+          <div className="text-2xl font-bold">{monthAppts}</div>
+          <div className="text-xs text-muted-foreground">Ocupación: {occupancy}%</div>
+          <TrendBadge value={apptChange} />
+        </div>
+        <div className="bg-card border border-border rounded-2xl p-4 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Pacientes nuevos</span>
+            <span className="text-xl">👤</span>
+          </div>
+          <div className="text-2xl font-bold">{monthPatients}</div>
+          <div className="text-xs text-muted-foreground capitalize">Este {monthName}</div>
+          <TrendBadge value={patientChange} />
+        </div>
+        <div className="bg-card border border-border rounded-2xl p-4 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Saldo pendiente</span>
+            <span className="text-xl">⏳</span>
+          </div>
+          <div className="text-2xl font-bold">{formatCurrency(pendingBalance)}</div>
+          <div className="text-xs text-muted-foreground">{pendingCount} factura{pendingCount !== 1 ? "s" : ""} por cobrar</div>
+          {pendingCount > 0 && <Link href="/dashboard/billing" className="text-xs text-brand-600 font-semibold hover:underline">Ver →</Link>}
+        </div>
       </div>
 
       {/* Today + Doctor breakdown */}
@@ -122,9 +169,9 @@ export default async function DashboardPage() {
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-bold text-sm">Citas de hoy ({todayAppts.length})</h2>
             <div className="flex gap-3 text-xs">
-              {todayCompleted>0 && <span className="text-emerald-600 font-semibold">{todayCompleted} completas</span>}
-              {todayConfirmed>0 && <span className="text-brand-600 font-semibold">{todayConfirmed} confirm.</span>}
-              {todayPending>0 && <span className="text-amber-600 font-semibold">{todayPending} pendientes</span>}
+              {todayCompleted > 0 && <span className="text-emerald-600 font-semibold">{todayCompleted} completas</span>}
+              {todayConfirmed > 0 && <span className="text-brand-600 font-semibold">{todayConfirmed} confirm.</span>}
+              {todayPending > 0 && <span className="text-amber-600 font-semibold">{todayPending} pendientes</span>}
             </div>
           </div>
           {todayAppts.length === 0 ? (
@@ -149,7 +196,6 @@ export default async function DashboardPage() {
             </div>
           )}
         </div>
-
         <div className="bg-card border border-border rounded-2xl p-4">
           <h2 className="font-bold text-sm mb-3 capitalize">Doctores — {monthName}</h2>
           {doctorStats.length === 0 ? (
@@ -157,7 +203,7 @@ export default async function DashboardPage() {
           ) : (
             <div className="space-y-4">
               {[...doctorStats].sort((a,b)=>b._count.id-a._count.id).map(d => {
-                const doc = doctorMap[d.doctorId]; if(!doc) return null;
+                const doc = doctorMap[d.doctorId]; if (!doc) return null;
                 const pct = monthAppts > 0 ? Math.round((d._count.id/monthAppts)*100) : 0;
                 return (
                   <div key={d.doctorId}>
@@ -210,7 +256,6 @@ export default async function DashboardPage() {
             </div>
           )}
         </div>
-
         <div className="bg-card border border-border rounded-2xl p-4">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-bold text-sm">Inventario</h2>
@@ -228,12 +273,12 @@ export default async function DashboardPage() {
                       <span className="text-lg">{item.emoji}</span>
                       <div className="min-w-0">
                         <div className="text-sm font-semibold truncate">{item.name}</div>
-                        <div className={`text-xs font-semibold ${critical?"text-red-600 dark:text-red-400":"text-amber-600 dark:text-amber-400"}`}>
+                        <div className={`text-xs font-semibold ${critical ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}>
                           {critical ? "⚠️ Sin stock" : `${item.quantity} ${item.unit} · mín: ${item.minQuantity}`}
                         </div>
                       </div>
                     </div>
-                    <Link href="/dashboard/inventory" className={`text-xs font-semibold px-2 py-1 rounded-full shrink-0 ml-2 ${critical?"bg-red-100 text-red-700 dark:bg-red-900/40":"bg-amber-100 text-amber-700 dark:bg-amber-900/40"}`}>
+                    <Link href="/dashboard/inventory" className={`text-xs font-semibold px-2 py-1 rounded-full shrink-0 ml-2 ${critical ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
                       Reponer
                     </Link>
                   </div>
