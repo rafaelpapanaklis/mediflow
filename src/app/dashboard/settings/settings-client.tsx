@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Building, User, Clock, Shield, Receipt, Bot, CalendarCheck, ExternalLink, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,9 +44,9 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
   const aiPercent   = Math.min(100, Math.round((aiUsed / aiLimit) * 100));
   const aiRemaining = Math.max(0, aiLimit - aiUsed);
 
-  // Google Calendar status
-  const gcalConnected = (user.googleCalendarEnabled || (initClinic?.googleCalendarEnabled && initClinic?.googleCalendarEmail);
-  const gcalEmail = user.googleCalendarEmail || initClinic?.googleCalendarEmail || "";
+  // Google Calendar status — check user OR clinic level (admin saves on clinic)
+  const gcalConnected = user.googleCalendarEnabled || initClinic?.googleCalendarEnabled;
+  const gcalEmail = user.googleCalendarEmail || initClinic?.googleCalendarEmail || "Conectado";
 
   // Show toast after OAuth redirect
   useEffect(() => {
@@ -350,7 +350,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   <CalendarCheck className="w-5 h-5 text-emerald-600 flex-shrink-0" />
                   <div>
                     <div className="text-sm font-bold text-emerald-700 dark:text-emerald-300">Cuenta conectada</div>
-                    <div className="text-sm text-emerald-600 dark:text-emerald-400">{user.googleCalendarEmail}</div>
+                    <div className="text-sm text-emerald-600 dark:text-emerald-400">{gcalEmail}</div>
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground">Cada nueva cita que se agende para ti aparecerá automáticamente en tu Google Calendar con recordatorio 24h antes.</p>
