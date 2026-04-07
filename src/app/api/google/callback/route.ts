@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
 
   const REDIRECT_BASE = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/settings?tab=integraciones`;
 
+  console.log("CALLBACK HIT", {code: !!code, state: !!state, error});
   if (error || !code || !state) {
     return NextResponse.redirect(`${REDIRECT_BASE}&gcal=error`);
   }
