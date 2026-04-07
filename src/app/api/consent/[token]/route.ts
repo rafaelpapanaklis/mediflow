@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { createClient as createAdmin } from "@supabase/supabase-js";
 
 // GET /api/consent/[token] — public, get form content for patient to read
 export async function GET(req: NextRequest, { params }: { params: { token: string } }) {
@@ -31,8 +32,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
   // Upload signature to Supabase Storage
   let signatureUrl: string | null = null;
   try {
-    const { createClient } = await import("@supabase/supabase-js");
-    const supabase = createClient(
+    const supabase = createAdmin(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
       { auth: { persistSession: false } }
