@@ -1181,6 +1181,7 @@ function ConsentTab({ patientId }: { patientId: string }) {
   if (loading) return <div className="p-8 text-center text-muted-foreground">Cargando...</div>;
 
   return (
+    <>
     <div className="p-4 space-y-4">
       <h3 className="font-bold text-base">Consentimientos Informados</h3>
 
@@ -1239,7 +1240,6 @@ function ConsentTab({ patientId }: { patientId: string }) {
         </div>
       )}
     </div>
-  );      </div>
 
       {/* Consent viewer modal */}
       {viewingConsent && (
@@ -1289,6 +1289,6 @@ function ConsentTab({ patientId }: { patientId: string }) {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
