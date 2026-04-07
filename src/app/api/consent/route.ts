@@ -134,4 +134,3 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ...form, signUrl }, { status: 201 });
 }
 
-export const CONSENT_PROCEDURE_LIST = Object.keys(CONSENT_TEMPLATES);

@@ -33,7 +33,7 @@ export default async function DashboardPage() {
   const nextWeek   = new Date(now); nextWeek.setDate(nextWeek.getDate()+7);
 
   const [todayAppts, monthAppts, prevAppts, monthPatients, prevPatients, monthRevenue, prevRevenue,
-         pendingInvoices, unconfirmed, nextWeekAppts, allInventory, doctorStats, activeDoctor, paidCount] =
+         pendingInvoices, pendingCount, unconfirmed, nextWeekAppts, allInventory, doctorStats, activeDoctor, paidCount] =
     await Promise.all([
       prisma.appointment.findMany({ where:{ clinicId, date:{gte:today,lte:todayEnd} },
         include:{ patient:{select:{id:true,firstName:true,lastName:true}}, doctor:{select:{id:true,firstName:true,lastName:true,color:true}} },
@@ -44,7 +44,8 @@ export default async function DashboardPage() {
       prisma.patient.count({ where:{ clinicId, createdAt:{gte:firstPrev,lte:lastPrev} } }),
       prisma.invoice.aggregate({ where:{ clinicId, status:{in:["PAID","PARTIAL"]}, updatedAt:{gte:firstMonth} }, _sum:{paid:true} }),
       prisma.invoice.aggregate({ where:{ clinicId, status:{in:["PAID","PARTIAL"]}, updatedAt:{gte:firstPrev,lte:lastPrev} }, _sum:{paid:true} }),
-      prisma.invoice.aggregate({ where:{ clinicId, status:{in:["PENDING","PARTIAL"]} }, _sum:{balance:true}, _count:true }),
+      prisma.invoice.aggregate({ where:{ clinicId, status:{in:["PENDING","PARTIAL"]} }, _sum:{balance:true} }),
+      prisma.invoice.count({ where:{ clinicId, status:{in:["PENDING","PARTIAL"]} } }),
       prisma.appointment.count({ where:{ clinicId, date:{gte:today}, status:"PENDING" } }),
       prisma.appointment.findMany({ where:{ clinicId, date:{gt:todayEnd,lte:nextWeek}, status:{not:"CANCELLED"} },
         include:{ patient:{select:{firstName:true,lastName:true}}, doctor:{select:{firstName:true,lastName:true,color:true}} },
@@ -101,7 +102,7 @@ export default async function DashboardPage() {
           { label:`Ingresos ${monthName}`, value:formatCurrency(currentRev), sub:`Ticket promedio: ${formatCurrency(avgTicket)}`, trend:revenueChange, icon:"💰" },
           { label:`Citas ${monthName}`, value:monthAppts.toString(), sub:`Ocupación: ${occupancy}%`, trend:apptChange, icon:"📅" },
           { label:"Pacientes nuevos", value:monthPatients.toString(), sub:`Este ${monthName}`, trend:patientChange, icon:"👤" },
-          { label:"Saldo pendiente", value:formatCurrency(pendingInvoices._sum.balance??0), sub:`${pendingInvoices._count??0} facturas`, trend:0, icon:"⏳" },
+          { label:"Saldo pendiente", value:formatCurrency(pendingInvoices._sum.balance??0), sub:`${pendingCount} facturas`, trend:0, icon:"⏳" },
         ].map(k => (
           <div key={k.label} className="bg-card border border-border rounded-2xl p-4 space-y-1.5">
             <div className="flex items-center justify-between">
