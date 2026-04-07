@@ -44,8 +44,11 @@ export async function POST(req: NextRequest) {
     if (!clinic) return NextResponse.json({ ok: true });
 
     // Find patient by phone number
+    // Normalize incoming number: Meta sends full international number e.g. "521234567890"
+    // Strip country code (52 for MX) to get last 10 digits for matching
+    const fromNormalized = from.replace(/^52/, "").slice(-10);
     const patient = await prisma.patient.findFirst({
-      where: { clinicId: clinic.id, phone: { contains: from.slice(-10) } },
+      where: { clinicId: clinic.id, phone: { contains: fromNormalized } },
     });
     if (!patient) return NextResponse.json({ ok: true });
 
