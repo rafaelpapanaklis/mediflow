@@ -45,7 +45,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
   const aiRemaining = Math.max(0, aiLimit - aiUsed);
 
   // Google Calendar status
-  const gcalConnected = (user.googleCalendarEnabled && user.googleCalendarEmail) || (initClinic?.googleCalendarEnabled && initClinic?.googleCalendarEmail);
+  const gcalConnected = (user.googleCalendarEnabled || (initClinic?.googleCalendarEnabled && initClinic?.googleCalendarEmail);
   const gcalEmail = user.googleCalendarEmail || initClinic?.googleCalendarEmail || "";
 
   // Show toast after OAuth redirect
