@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
       throw new Error("No tokens received from Google");
     }
 
-    // v4 — Extract email from id_token JWT — no API call needed
+    // Extract email from id_token JWT — no API call needed
     let email: string | null = null;
     if (tokens.id_token) {
       try {
@@ -37,35 +37,37 @@ export async function GET(req: NextRequest) {
 
     // Get user from DB
     const user = await prisma.user.findUnique({
-      where:   { id: state },
-      select:  { id: true, role: true, clinicId: true, clinic: { select: { name: true } } },
+      where:  { id: state },
+      select: { id: true, role: true, clinicId: true, clinic: { select: { name: true } } },
     });
     if (!user) throw new Error("User not found");
 
-    // Save tokens on user using raw SQL to avoid Prisma client cache issues
-    await prisma.$executeRaw`
-      UPDATE users SET
-        "googleCalendarToken"   = ${accessToken},
-        "googleRefreshToken"    = ${refreshToken},
-        "googleCalendarEmail"   = ${email},
-        "googleCalendarEnabled" = true,
-        "updatedAt"             = NOW()
-      WHERE id = ${state}
-    `;
+    // Save on user — use executeRawUnsafe for reliable parameterized SQL
+    await prisma.$executeRawUnsafe(
+      `UPDATE users SET 
+        "googleCalendarToken" = $1, 
+        "googleRefreshToken" = $2, 
+        "googleCalendarEmail" = $3, 
+        "googleCalendarEnabled" = true, 
+        "updatedAt" = NOW() 
+       WHERE id = $4`,
+      accessToken, refreshToken, email, state
+    );
 
     // If admin → save on clinic too
     if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") {
-      await prisma.$executeRaw`
-        UPDATE clinics SET
-          "googleCalendarToken"   = ${accessToken},
-          "googleRefreshToken"    = ${refreshToken},
-          "googleCalendarEmail"   = ${email},
-          "googleCalendarEnabled" = true,
-          "updatedAt"             = NOW()
-        WHERE id = ${user.clinicId}
-      `;
+      await prisma.$executeRawUnsafe(
+        `UPDATE clinics SET 
+          "googleCalendarToken" = $1, 
+          "googleRefreshToken" = $2, 
+          "googleCalendarEmail" = $3, 
+          "googleCalendarEnabled" = true, 
+          "updatedAt" = NOW() 
+         WHERE id = $4`,
+        accessToken, refreshToken, email, user.clinicId
+      );
 
-      // Try to create clinic calendar
+      // Try to create clinic calendar (non-fatal)
       if (refreshToken) {
         try {
           const calendarId = await getOrCreateClinicCalendar(
@@ -74,10 +76,10 @@ export async function GET(req: NextRequest) {
             user.clinic.name
           );
           if (calendarId) {
-            await prisma.$executeRaw`
-              UPDATE clinics SET "googleClinicCalendarId" = ${calendarId}
-              WHERE id = ${user.clinicId}
-            `;
+            await prisma.$executeRawUnsafe(
+              `UPDATE clinics SET "googleClinicCalendarId" = $1 WHERE id = $2`,
+              calendarId, user.clinicId
+            );
           }
         } catch (calErr) {
           console.error("Clinic calendar creation failed (non-fatal):", calErr);
