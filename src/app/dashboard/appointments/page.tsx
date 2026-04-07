@@ -3,7 +3,6 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Suspense } from "react";
 import { AppointmentsClient } from "./appointments-client";
 
 export const metadata: Metadata = { title: "Agenda — MediFlow" };
@@ -42,15 +41,13 @@ export default async function AppointmentsPage() {
   }));
 
   return (
-    <Suspense fallback={<div className="flex items-center justify-center h-64 text-muted-foreground">Cargando agenda…</div>}>
-      <AppointmentsClient
-        appointments={serializedAppts as any}
-        patients={patients}
-        doctors={doctors}
-        currentUserId={user.id}
-        clinicId={user.clinicId}
-        waConnected={user.clinic.waConnected ?? false}
-      />
-    </Suspense>
+    <AppointmentsClient
+      appointments={serializedAppts as any}
+      patients={patients}
+      doctors={doctors}
+      currentUserId={user.id}
+      clinicId={user.clinicId}
+      waConnected={user.clinic.waConnected ?? false}
+    />
   );
 }

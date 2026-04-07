@@ -64,7 +64,9 @@ model Clinic {
   inventory    InventoryItem[]
   reminders    WhatsAppReminder[]
   cfdis        CfdiRecord[]
-  treatments   TreatmentPlan[]
+  treatments    TreatmentPlan[]
+  paymentPlans  PaymentPlan[]
+  consentForms  ConsentForm[]
 
   @@map("clinics")
 }
@@ -157,6 +159,8 @@ model Patient {
   invoices      Invoice[]
   files         PatientFile[]
   treatments    TreatmentPlan[]
+  paymentPlans  PaymentPlan[]
+  consentForms  ConsentForm[]
 
   @@unique([clinicId, patientNumber])
   @@map("patients")
@@ -378,19 +382,111 @@ model ClinicSchedule {
 }
 
 model PatientFile {
-  id        String   @id @default(cuid())
-  patientId String
-  name      String
-  url       String
-  size      Int?
-  mimeType  String?
-  category  String?
-  createdAt DateTime @default(now())
+  id          String       @id @default(cuid())
+  patientId   String
+  clinicId    String
+  uploadedBy  String?
+  name        String
+  url         String
+  size        Int?
+  mimeType    String?
+  category    FileCategory @default(OTHER)
+  toothNumber Int?
+  notes       String?
+  takenAt     DateTime?
+  createdAt   DateTime     @default(now())
 
   patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
   @@map("patient_files")
 }
+
+enum FileCategory {
+  XRAY_PERIAPICAL
+  XRAY_PANORAMIC
+  XRAY_BITEWING
+  XRAY_OCCLUSAL
+  PHOTO_FRONTAL
+  PHOTO_LATERAL
+  PHOTO_OCCLUSAL_UPPER
+  PHOTO_OCCLUSAL_LOWER
+  PHOTO_INTRAORAL
+  CONSENT_FORM
+  OTHER
+}
+
+// ── Payment Plans ─────────────────────────────────────────────────────
+model PaymentPlan {
+  id           String           @id @default(cuid())
+  clinicId     String
+  patientId    String
+  invoiceId    String?
+  name         String
+  totalAmount  Float
+  downPayment  Float            @default(0)
+  installments Int              @default(12)
+  frequency    PaymentFrequency @default(MONTHLY)
+  startDate    DateTime         @default(now())
+  notes        String?
+  status       PlanStatus       @default(ACTIVE)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  clinic   Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient  Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  payments PlanPayment[]
+
+  @@map("payment_plans")
+}
+
+model PlanPayment {
+  id          String    @id @default(cuid())
+  planId      String
+  installment Int
+  amount      Float
+  dueDate     DateTime
+  paidAt      DateTime?
+  method      String?
+  notes       String?
+  createdAt   DateTime  @default(now())
+
+  plan PaymentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@map("plan_payments")
+}
+
+enum PaymentFrequency {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
+enum PlanStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  OVERDUE
+}
+
+// ── Consent Forms ─────────────────────────────────────────────────────
+model ConsentForm {
+  id           String    @id @default(cuid())
+  clinicId     String
+  patientId    String
+  procedure    String
+  content      String
+  signedAt     DateTime?
+  signatureUrl String?
+  token        String    @unique
+  expiresAt    DateTime
+  createdAt    DateTime  @default(now())
+
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("consent_forms")
+}
+
 
 model InventoryItem {
   id          String   @id @default(cuid())
@@ -433,6 +529,8 @@ model WhatsAppReminder {
   sentAt        DateTime?
   errorMsg      String?
   scheduledFor  DateTime
+  patientReply  String?
+  repliedAt     DateTime?
   createdAt     DateTime               @default(now())
 
   clinic      Clinic      @relation(fields: [clinicId], references: [id], onDelete: Cascade)
