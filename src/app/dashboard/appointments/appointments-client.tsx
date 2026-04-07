@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   ChevronLeft, ChevronRight, Plus, X,
@@ -219,10 +219,16 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, endTime, clinicId }),
       });
-      if (!res.ok) throw new Error((await res.json()).error ?? "Error");
-      const created = await res.json();
-      // FIX: serialize date from API before adding to state
-      setAppts(prev => [...prev, serializeAppt(created)]);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error");
+      // Fetch fresh appointments list to get complete data with patient/doctor
+      const fresh = await fetch("/api/appointments");
+      if (fresh.ok) {
+        const freshData = await fresh.json();
+        setAppts(freshData.map(serializeAppt));
+      } else {
+        setAppts(prev => [...prev, serializeAppt(data)]);
+      }
       setSelectedDay(form.date);
       setShowNew(false);
       setForm(emptyForm);
@@ -310,13 +316,12 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
 
   const MonthView = () => (
     <div>
-      <div className="overflow-x-auto">
-        <div className="grid grid-cols-7 border-b border-border bg-muted/20 min-w-[560px]">
-          {DAYS_ES.map(d => (
-            <div key={d} className="py-3 text-center text-sm font-bold text-muted-foreground uppercase tracking-wider">{d}</div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 min-w-[560px]" style={{ minHeight: 500 }}>
+      <div className="grid grid-cols-7 border-b border-border bg-muted/20">
+        {DAYS_ES.map(d => (
+          <div key={d} className="py-3 text-center text-sm font-bold text-muted-foreground uppercase tracking-wider">{d}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7" style={{ minHeight: 500 }}>
         {calDays.map((day, idx) => {
           if (!day) return <div key={idx} className="border-r border-b border-border bg-muted/5 min-h-[100px]" />;
           const ds       = toDateStr(day);
@@ -343,8 +348,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
             </div>
           );
         })}
-        </div>
-      </div>{/* end overflow-x-auto */}
+      </div>
     </div>
   );
 
@@ -354,21 +358,19 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
     const weekDays = Array.from({ length: 7 }, (_, i) => new Date(weekStart.getTime() + i * 86400000));
     return (
       <div>
-        <div className="overflow-x-auto">
-          <div className="grid grid-cols-8 border-b border-border bg-muted/20 min-w-[640px]">
-            <div className="py-3 border-r border-border" />
-            {weekDays.map((d, i) => {
-              const ds = toDateStr(d); const isToday = ds === todayStr; const cnt = (apptsByDate[ds]??[]).length;
-              return (
-                <div key={i} className={`py-3 text-center border-r border-border ${isToday?"bg-brand-50 dark:bg-brand-950/20":""}`}>
-                  <div className="text-xs font-bold text-muted-foreground uppercase">{DAYS_ES[i]}</div>
-                  <div className={`text-xl font-bold ${isToday?"text-brand-600":""}`}>{d.getDate()}</div>
-                  {cnt > 0 && <div className="text-xs text-muted-foreground">{cnt} cita{cnt>1?"s":""}</div>}
-                </div>
-              );
-            })}
-          </div>
-        </div>{/* end overflow-x-auto */}
+        <div className="grid grid-cols-8 border-b border-border bg-muted/20">
+          <div className="py-3 border-r border-border" />
+          {weekDays.map((d, i) => {
+            const ds = toDateStr(d); const isToday = ds === todayStr; const cnt = (apptsByDate[ds]??[]).length;
+            return (
+              <div key={i} className={`py-3 text-center border-r border-border ${isToday?"bg-brand-50 dark:bg-brand-950/20":""}`}>
+                <div className="text-xs font-bold text-muted-foreground uppercase">{DAYS_ES[i]}</div>
+                <div className={`text-xl font-bold ${isToday?"text-brand-600":""}`}>{d.getDate()}</div>
+                {cnt > 0 && <div className="text-xs text-muted-foreground">{cnt} cita{cnt>1?"s":""}</div>}
+              </div>
+            );
+          })}
+        </div>
         <div className="overflow-y-auto" style={{ maxHeight: 520 }}>
           {HOURS.map(hour => (
             <div key={hour} className="grid grid-cols-8 border-b border-border/40" style={{ minHeight: 64 }}>
@@ -437,7 +439,8 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
   const selAppts = (apptsByDate[selectedDay]??[]).sort((a,b) => a.startTime.localeCompare(b.startTime));
 
   // Shared form for new and edit
-  const ApptForm = ({ onSubmit, label }: { onSubmit: () => void; label: string }) => (
+  // eslint-disable-next-line react/display-name
+  const ApptForm = useCallback(({ onSubmit, label }: { onSubmit: () => void; label: string }) => (
     <div className="px-6 py-5 space-y-4">
       <div className="space-y-1.5">
         <Label className="text-base font-semibold">Paciente *</Label>
@@ -492,7 +495,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
         <Button onClick={onSubmit} disabled={loading} className="flex-1 h-12 text-base">{loading ? "Guardando…" : label}</Button>
       </div>
     </div>
-  );
+  ), [form, doctors, patients, loading]);
 
   return (
     <div className="flex gap-5 h-full">
