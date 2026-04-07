@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
     const oauth2Client = getOAuthClient();
     const { tokens } = await oauth2Client.getToken(code);
 
+    console.log("TOKENS:", JSON.stringify({at: !!tokens.access_token, rt: !!tokens.refresh_token, idt: !!tokens.id_token}));
     const accessToken  = tokens.access_token  ?? null;
     const refreshToken = tokens.refresh_token ?? null;
 
