@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import {useState, useEffect} from "react";
 import { Building, User, Clock, Shield, Receipt, Bot, CalendarCheck, ExternalLink, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

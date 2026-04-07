@@ -67,6 +67,7 @@ model Clinic {
   treatments    TreatmentPlan[]
   paymentPlans  PaymentPlan[]
   consentForms  ConsentForm[]
+  files         PatientFile[]
 
   @@map("clinics")
 }
@@ -397,6 +398,7 @@ model PatientFile {
   createdAt   DateTime     @default(now())
 
   patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
   @@map("patient_files")
 }
