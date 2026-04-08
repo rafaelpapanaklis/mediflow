@@ -63,11 +63,12 @@ interface Props {
   totalBalance: number;
   totalPlan:    number;
   portalUrl?:   string | null;
+  treatments?:  any[];
 }
 
 export function PatientDetailClient({
   patient, records: initialRecords, appointments, invoices,
-  doctors, currentUser, specialty, totalPaid, totalBalance, totalPlan, portalUrl,
+  doctors, currentUser, specialty, totalPaid, totalBalance, totalPlan, portalUrl, treatments = [],
 }: Props) {
   const router = useRouter();
   const [tab, setTab]         = useState("resumen");
