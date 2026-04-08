@@ -2,8 +2,69 @@ export const dynamic = "force-dynamic";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PatientsClient } from "./patients-client";
-export default async function PatientsPage() {
-  const user = await getCurrentUser();
-  const patients = await prisma.patient.findMany({ where: { clinicId: user.clinicId, status: { not: "ARCHIVED" } }, orderBy: { createdAt: "desc" }, include: { appointments: { orderBy: { date: "desc" }, take: 1, select: { date: true, status: true } }, _count: { select: { appointments: true } } } });
-  return <PatientsClient patients={patients as any} />;
+
+const PAGE_SIZE = 50;
+
+export default async function PatientsPage({
+  searchParams,
+}: {
+  searchParams: { search?: string; page?: string };
+}) {
+  const user    = await getCurrentUser();
+  const search  = searchParams.search?.trim() ?? "";
+  const page    = Math.max(1, parseInt(searchParams.page ?? "1"));
+  const skip    = (page - 1) * PAGE_SIZE;
+
+  const where = {
+    clinicId: user.clinicId,
+    status: { not: "ARCHIVED" as const },
+    ...(search ? {
+      OR: [
+        { firstName: { contains: search, mode: "insensitive" as const } },
+        { lastName:  { contains: search, mode: "insensitive" as const } },
+        { phone:     { contains: search } },
+        { patientNumber: { contains: search } },
+      ],
+    } : {}),
+  };
+
+  const [patients, total] = await Promise.all([
+    prisma.patient.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: PAGE_SIZE,
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        patientNumber: true,
+        phone: true,
+        email: true,
+        gender: true,
+        status: true,
+        createdAt: true,
+        tags: true,
+        _count: { select: { appointments: true } },
+        appointments: {
+          orderBy: { date: "desc" },
+          take: 1,
+          select: { date: true, status: true },
+        },
+      },
+    }),
+    prisma.patient.count({ where }),
+  ]);
+
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+
+  return (
+    <PatientsClient
+      patients={patients as any}
+      total={total}
+      page={page}
+      totalPages={totalPages}
+      search={search}
+    />
+  );
 }

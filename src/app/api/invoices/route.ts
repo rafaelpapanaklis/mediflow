@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { invoiceSchema } from "@/lib/validations";
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
         dueDate: data.dueDate ? new Date(data.dueDate) : undefined },
       include: { patient: true },
     });
-    return NextResponse.json(invoice, { status: 201 });
+    revalidatePath("/dashboard");
+  return NextResponse.json(invoice, { status: 201 });
   } catch (err: any) { return NextResponse.json({ error: err.message }, { status: 400 }); }
 }

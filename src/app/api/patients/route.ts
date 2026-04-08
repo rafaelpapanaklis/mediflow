@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { getAuthContext, buildPatientWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 
@@ -65,5 +66,7 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/patients");
   return NextResponse.json(patient, { status: 201 });
 }

@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { unstable_cache } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency } from "@/lib/utils";
@@ -21,88 +22,122 @@ function TrendBadge({ value }: { value: number }) {
   return <span className={`text-xs font-semibold ${up ? "text-emerald-600" : "text-rose-600"}`}>{up ? "↑" : "↓"} {Math.abs(value)}% vs mes anterior</span>;
 }
 
+// ── Cached KPI queries (5 min cache) ─────────────────────────────────────────
+// These change slowly - revenue, monthly counts, inventory alerts
+function getKpiData(clinicId: string) {
+  return unstable_cache(
+    async () => {
+      const now          = new Date();
+      const firstMonth   = new Date(now.getFullYear(), now.getMonth(), 1);
+      const firstPrev    = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lastPrev     = new Date(now.getFullYear(), now.getMonth(), 0);
+      lastPrev.setHours(23, 59, 59, 999);
+
+      const [monthAppts, prevAppts, monthPatients, prevPatients,
+             monthRevenue, prevRevenue, pendingInvoices, allInventory,
+             doctorStats, activeDoctor, paidCount] = await Promise.all([
+        prisma.appointment.count({ where: { clinicId, date:{gte:firstMonth}, status:{not:"CANCELLED"} } }),
+        prisma.appointment.count({ where: { clinicId, date:{gte:firstPrev,lte:lastPrev}, status:{not:"CANCELLED"} } }),
+        prisma.patient.count({ where: { clinicId, createdAt:{gte:firstMonth} } }),
+        prisma.patient.count({ where: { clinicId, createdAt:{gte:firstPrev,lte:lastPrev} } }),
+        prisma.invoice.aggregate({ where:{ clinicId, status:{in:["PAID","PARTIAL"]}, updatedAt:{gte:firstMonth} }, _sum:{paid:true} }),
+        prisma.invoice.aggregate({ where:{ clinicId, status:{in:["PAID","PARTIAL"]}, updatedAt:{gte:firstPrev,lte:lastPrev} }, _sum:{paid:true} }),
+        prisma.invoice.aggregate({ where:{ clinicId, status:{in:["PENDING","PARTIAL"]} }, _sum:{balance:true}, _count:true }),
+        prisma.inventoryItem.findMany({
+          where: { clinicId }, orderBy: { quantity:"asc" }, take: 10,
+          select: { id:true, name:true, quantity:true, minQuantity:true, unit:true, emoji:true },
+        }),
+        prisma.appointment.groupBy({
+          by: ["doctorId"],
+          where: { clinicId, date:{gte:firstMonth}, status:{not:"CANCELLED"} },
+          _count: { id: true },
+        }),
+        prisma.user.count({ where: { clinicId, isActive:true, role:{in:["DOCTOR","ADMIN"]} } }),
+        prisma.invoice.count({ where:{ clinicId, status:{in:["PAID","PARTIAL"]}, updatedAt:{gte:firstMonth} } }),
+      ]);
+
+      const doctorIds = doctorStats.map(d => d.doctorId);
+      const doctors   = await prisma.user.findMany({
+        where: { id:{in:doctorIds} },
+        select: { id:true, firstName:true, lastName:true, color:true },
+      });
+
+      return { monthAppts, prevAppts, monthPatients, prevPatients,
+               monthRevenue, prevRevenue, pendingInvoices, allInventory,
+               doctorStats, doctors, activeDoctor, paidCount };
+    },
+    [`dashboard-kpi-${clinicId}`],
+    { revalidate: 300, tags: [`dashboard-${clinicId}`] } // 5 min cache
+  )();
+}
+
+// ── Real-time queries (no cache) ──────────────────────────────────────────────
+// Today's appointments and upcoming must always be fresh
+async function getRealTimeData(clinicId: string) {
+  const now      = new Date();
+  const today    = new Date(now); today.setHours(0, 0, 0, 0);
+  const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999);
+  const nextWeek = new Date(now); nextWeek.setDate(nextWeek.getDate() + 7);
+
+  const [todayAppts, unconfirmed, nextWeekAppts] = await Promise.all([
+    prisma.appointment.findMany({
+      where: { clinicId, date:{ gte:today, lte:todayEnd } },
+      include: {
+        patient: { select: { id:true, firstName:true, lastName:true } },
+        doctor:  { select: { id:true, firstName:true, lastName:true, color:true } },
+      },
+      orderBy: { startTime: "asc" },
+    }),
+    prisma.appointment.count({ where: { clinicId, date:{gte:today}, status:"PENDING" } }),
+    prisma.appointment.findMany({
+      where: { clinicId, date:{gt:todayEnd,lte:nextWeek}, status:{not:"CANCELLED"} },
+      include: {
+        patient: { select: { firstName:true, lastName:true } },
+        doctor:  { select: { firstName:true, lastName:true, color:true } },
+      },
+      orderBy: [{ date:"asc" }, { startTime:"asc" }],
+      take: 8,
+    }),
+  ]);
+
+  return { todayAppts, unconfirmed, nextWeekAppts };
+}
+
 export default async function DashboardPage() {
   const user     = await getCurrentUser();
   const clinicId = user.clinicId;
 
-  const now        = new Date();
-  const today      = new Date(now); today.setHours(0,0,0,0);
-  const todayEnd   = new Date(now); todayEnd.setHours(23,59,59,999);
-  const firstMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const firstPrev  = new Date(now.getFullYear(), now.getMonth()-1, 1);
-  const lastPrev   = new Date(now.getFullYear(), now.getMonth(), 0); lastPrev.setHours(23,59,59,999);
-  const nextWeek   = new Date(now); nextWeek.setDate(nextWeek.getDate()+7);
+  // Run cached + real-time in parallel
+  const [kpi, realTime] = await Promise.all([
+    getKpiData(clinicId),
+    getRealTimeData(clinicId),
+  ]);
 
-  // Batch 1 — today + month comparisons (max 7 items for TypeScript inference)
-  const [todayAppts, monthAppts, prevAppts, monthPatients, prevPatients, monthRevenue, prevRevenue] =
-    await Promise.all([
-      prisma.appointment.findMany({
-        where: { clinicId, date: { gte: today, lte: todayEnd } },
-        include: {
-          patient: { select: { id:true, firstName:true, lastName:true } },
-          doctor:  { select: { id:true, firstName:true, lastName:true, color:true } },
-        },
-        orderBy: { startTime: "asc" },
-      }),
-      prisma.appointment.count({ where: { clinicId, date:{gte:firstMonth}, status:{not:"CANCELLED"} } }),
-      prisma.appointment.count({ where: { clinicId, date:{gte:firstPrev,lte:lastPrev}, status:{not:"CANCELLED"} } }),
-      prisma.patient.count({ where: { clinicId, createdAt:{gte:firstMonth} } }),
-      prisma.patient.count({ where: { clinicId, createdAt:{gte:firstPrev,lte:lastPrev} } }),
-      prisma.invoice.aggregate({ where:{ clinicId, status:{in:["PAID","PARTIAL"]}, updatedAt:{gte:firstMonth} }, _sum:{paid:true} }),
-      prisma.invoice.aggregate({ where:{ clinicId, status:{in:["PAID","PARTIAL"]}, updatedAt:{gte:firstPrev,lte:lastPrev} }, _sum:{paid:true} }),
-    ]);
+  const { monthAppts, prevAppts, monthPatients, prevPatients,
+          monthRevenue, prevRevenue, pendingInvoices, allInventory,
+          doctorStats, doctors, activeDoctor, paidCount } = kpi;
+  const { todayAppts, unconfirmed, nextWeekAppts } = realTime;
 
-  // Batch 2 — pending, upcoming, inventory, doctors
-  const [pendingInvoices, unconfirmed, nextWeekAppts, allInventory, doctorStats, activeDoctor, paidCount] =
-    await Promise.all([
-      prisma.invoice.aggregate({ where:{ clinicId, status:{in:["PENDING","PARTIAL"]} }, _sum:{balance:true}, _count:true }),
-      prisma.appointment.count({ where: { clinicId, date:{gte:today}, status:"PENDING" } }),
-      prisma.appointment.findMany({
-        where: { clinicId, date:{gt:todayEnd,lte:nextWeek}, status:{not:"CANCELLED"} },
-        include: {
-          patient: { select: { firstName:true, lastName:true } },
-          doctor:  { select: { firstName:true, lastName:true, color:true } },
-        },
-        orderBy: [{ date:"asc" }, { startTime:"asc" }],
-        take: 8,
-      }),
-      prisma.inventoryItem.findMany({
-        where: { clinicId }, orderBy: { quantity:"asc" }, take: 10,
-        select: { id:true, name:true, quantity:true, minQuantity:true, unit:true, emoji:true },
-      }),
-      prisma.appointment.groupBy({
-        by: ["doctorId"],
-        where: { clinicId, date:{gte:firstMonth}, status:{not:"CANCELLED"} },
-        _count: { id: true },
-      }),
-      prisma.user.count({ where: { clinicId, isActive:true, role:{in:["DOCTOR","ADMIN"]} } }),
-      prisma.invoice.count({ where:{ clinicId, status:{in:["PAID","PARTIAL"]}, updatedAt:{gte:firstMonth} } }),
-    ]);
-
+  const doctorMap     = Object.fromEntries(doctors.map(d => [d.id, d]));
+  const now           = new Date();
   const currentRev    = monthRevenue._sum.paid ?? 0;
   const prevRev       = prevRevenue._sum.paid ?? 0;
-  const revenueChange = prevRev > 0 ? Math.round(((currentRev-prevRev)/prevRev)*100) : 0;
-  const apptChange    = prevAppts > 0 ? Math.round(((monthAppts-prevAppts)/prevAppts)*100) : 0;
-  const patientChange = prevPatients > 0 ? Math.round(((monthPatients-prevPatients)/prevPatients)*100) : 0;
+  const revenueChange = prevRev > 0 ? Math.round(((currentRev - prevRev) / prevRev) * 100) : 0;
+  const apptChange    = prevAppts > 0 ? Math.round(((monthAppts - prevAppts) / prevAppts) * 100) : 0;
+  const patientChange = prevPatients > 0 ? Math.round(((monthPatients - prevPatients) / prevPatients) * 100) : 0;
   const workingDays   = Math.min(now.getDate(), 22);
-  const occupancy     = activeDoctor*workingDays*8 > 0 ? Math.min(100, Math.round((monthAppts/(activeDoctor*workingDays*8))*100)) : 0;
-  const avgTicket     = paidCount > 0 ? Math.round(currentRev/paidCount) : 0;
+  const occupancy     = activeDoctor * workingDays * 8 > 0 ? Math.min(100, Math.round((monthAppts / (activeDoctor * workingDays * 8)) * 100)) : 0;
+  const avgTicket     = paidCount > 0 ? Math.round(currentRev / paidCount) : 0;
   const lowAlerts     = allInventory.filter(i => i.quantity <= i.minQuantity);
-
-  const doctorIds = doctorStats.map(d => d.doctorId);
-  const doctors   = await prisma.user.findMany({ where:{id:{in:doctorIds}}, select:{id:true,firstName:true,lastName:true,color:true} });
-  const doctorMap = Object.fromEntries(doctors.map(d => [d.id, d]));
-
-  const monthName      = now.toLocaleDateString("es-MX", { month:"long" });
-  const todayCompleted = todayAppts.filter(a => a.status==="COMPLETED").length;
-  const todayPending   = todayAppts.filter(a => a.status==="PENDING").length;
-  const todayConfirmed = todayAppts.filter(a => a.status==="CONFIRMED").length;
   const pendingBalance = pendingInvoices._sum.balance ?? 0;
   const pendingCount   = typeof pendingInvoices._count === "number" ? pendingInvoices._count : 0;
+  const monthName      = now.toLocaleDateString("es-MX", { month: "long" });
+  const todayCompleted = todayAppts.filter(a => a.status === "COMPLETED").length;
+  const todayPending   = todayAppts.filter(a => a.status === "PENDING").length;
+  const todayConfirmed = todayAppts.filter(a => a.status === "CONFIRMED").length;
 
   return (
     <div className="flex-1 min-w-0 space-y-5 p-4 sm:p-6">
-
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -204,7 +239,7 @@ export default async function DashboardPage() {
             <div className="space-y-4">
               {[...doctorStats].sort((a,b)=>b._count.id-a._count.id).map(d => {
                 const doc = doctorMap[d.doctorId]; if (!doc) return null;
-                const pct = monthAppts > 0 ? Math.round((d._count.id/monthAppts)*100) : 0;
+                const pct = monthAppts > 0 ? Math.round((d._count.id / monthAppts) * 100) : 0;
                 return (
                   <div key={d.doctorId}>
                     <div className="flex items-center justify-between text-xs mb-1.5">

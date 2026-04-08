@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
-import { Search, Plus, Phone, Mail, Users } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Search, Plus, Phone, Mail, Users, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,19 +14,25 @@ const STATUS_COLORS: Record<string, string> = {
   INACTIVE: "bg-amber-50 text-amber-700 border-amber-200",
 };
 
-export function PatientsClient({ patients: initial }: { patients: any[] }) {
-  const [patients, setPatients] = useState(initial);
-  const [search, setSearch]     = useState("");
-  const [showNew, setShowNew]   = useState(false);
+export function PatientsClient({ patients, total, page, totalPages, search: initialSearch }: {
+  patients: any[]; total: number; page: number; totalPages: number; search: string;
+}) {
+  const [showNew, setShowNew] = useState(false);
+  const [search, setSearch]   = useState(initialSearch);
+  const router = useRouter();
 
-  const filtered = patients.filter(p => {
-    const q = search.toLowerCase();
-    return p.firstName.toLowerCase().includes(q) || p.lastName.toLowerCase().includes(q) ||
-      p.email?.toLowerCase().includes(q) || p.phone?.includes(q) || p.patientNumber.includes(q);
-  });
+  const filtered = patients; // Server-side filtered
+
+  function handleSearch(value: string) {
+    setSearch(value);
+    const params = new URLSearchParams();
+    if (value) params.set("search", value);
+    params.set("page", "1");
+    router.push(`/dashboard/patients?${params.toString()}`);
+  }
 
   function handleCreated(patient: any) {
-    setPatients(prev => [{ ...patient, appointments: [], _count: { appointments: 0 } }, ...prev]);
+    router.refresh();
     setShowNew(false);
   }
 
@@ -34,18 +41,17 @@ export function PatientsClient({ patients: initial }: { patients: any[] }) {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-extrabold">Pacientes</h1>
-          <p className="text-sm text-muted-foreground">{patients.length} pacientes registrados</p>
+          <p className="text-sm text-muted-foreground">{total} pacientes registrados</p>
         </div>
         <Button onClick={() => setShowNew(true)}><Plus className="w-4 h-4" />Nuevo paciente</Button>
       </div>
 
       <div className="relative mb-5">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input className="pl-9" placeholder="Buscar por nombre, teléfono o expediente…" value={search} onChange={e => setSearch(e.target.value)} />
+        <Input className="pl-9" placeholder="Buscar por nombre, teléfono o expediente…" value={search} onChange={e => handleSearch(e.target.value)} />
       </div>
 
-      <div className="overflow-x-auto rounded-xl">
-      <div className="border border-border bg-white shadow-card overflow-hidden min-w-[500px]">
+      <div className="rounded-xl border border-border bg-white shadow-card overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
@@ -95,7 +101,6 @@ export function PatientsClient({ patients: initial }: { patients: any[] }) {
             ))}
           </tbody>
         </table>
-      </div>
       </div>
       <NewPatientModal open={showNew} onClose={() => setShowNew(false)} onCreated={handleCreated} />
     </div>

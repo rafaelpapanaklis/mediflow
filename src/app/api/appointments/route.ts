@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { getAuthContext, buildAppointmentWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createCalendarEvent, refreshAccessToken } from "@/lib/google-calendar";
@@ -140,6 +141,9 @@ export async function POST(req: NextRequest) {
       data:  { googleCalendarEventId: gcalEventId },
     });
   }
+
+  // Invalidate dashboard cache so KPIs refresh
+  revalidatePath("/dashboard");
 
   return NextResponse.json({
     ...appt,
