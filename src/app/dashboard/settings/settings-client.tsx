@@ -9,7 +9,17 @@ import { createClient } from "@/lib/supabase/client";
 import toast from "react-hot-toast";
 
 const DAYS        = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
-const SPECIALTIES = ["dental","medicine","nutrition","psychology","dermatology","other"];
+const CATEGORIES = [
+  { id:"DENTAL", label:"Odontología" }, { id:"MEDICINE", label:"Medicina General" },
+  { id:"NUTRITION", label:"Nutrición" }, { id:"PSYCHOLOGY", label:"Psicología" },
+  { id:"DERMATOLOGY", label:"Dermatología" }, { id:"AESTHETIC_MEDICINE", label:"Medicina Estética" },
+  { id:"HAIR_RESTORATION", label:"Clínicas Capilares" }, { id:"BEAUTY_CENTER", label:"Centros de Estética" },
+  { id:"BROW_LASH", label:"Cejas y Pestañas" }, { id:"MASSAGE", label:"Masajes" },
+  { id:"LASER_HAIR_REMOVAL", label:"Depilación Láser" }, { id:"HAIR_SALON", label:"Peluquerías" },
+  { id:"ALTERNATIVE_MEDICINE", label:"Medicina Alternativa" }, { id:"NAIL_SALON", label:"Uñas" },
+  { id:"SPA", label:"Spas" }, { id:"PHYSIOTHERAPY", label:"Fisioterapia" },
+  { id:"PODIATRY", label:"Podología" }, { id:"OTHER", label:"Otra" },
+];
 const REGIMENES   = [
   { clave:"601", desc:"General de Ley Personas Morales" },
   { clave:"612", desc:"Personas Físicas con Actividades Empresariales y Profesionales" },
@@ -18,9 +28,10 @@ const REGIMENES   = [
   { clave:"616", desc:"Sin obligaciones fiscales" },
 ];
 
-interface Props { user: any; clinic: any; initialTab?: string; gcalStatus?: string }
+interface TeamMember { id: string; firstName: string; lastName: string; role: string; services: string[] }
+interface Props { user: any; clinic: any; initialTab?: string; gcalStatus?: string; teamMembers?: TeamMember[] }
 
-export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus }: Props) {
+export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, teamMembers: initTeam = [] }: Props) {
   const [tab,      setTab]      = useState(initialTab || "clinica");
   const [saving,   setSaving]   = useState(false);
   const [user,     setUser]     = useState(initUser);
@@ -54,7 +65,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
     try {
       const res = await fetch("/api/clinic", {
         method: "PATCH", headers: { "Content-Type":"application/json" },
-        body: JSON.stringify({ name:clinic.name, city:clinic.city, phone:clinic.phone, email:clinic.email, address:clinic.address, description:clinic.description, isPublic })
+        body: JSON.stringify({ name:clinic.name, city:clinic.city, phone:clinic.phone, email:clinic.email, address:clinic.address, description:clinic.description, isPublic, category:clinic.category })
       });
       if (!res.ok) throw new Error();
       toast.success("Datos de la clínica actualizados");
@@ -111,14 +122,56 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
     } catch { toast.error("Error al desconectar"); }
   }
 
+  const [team, setTeam] = useState<TeamMember[]>(initTeam);
+  const [newService, setNewService] = useState("");
+  const [savingServices, setSavingServices] = useState<string | null>(null);
+
+  async function addServiceToMember(memberId: string, service: string) {
+    if (!service.trim()) return;
+    const member = team.find(m => m.id === memberId);
+    if (!member || member.services.includes(service.trim())) return;
+    const updated = [...member.services, service.trim()];
+    setSavingServices(memberId);
+    try {
+      const res = await fetch(`/api/team/${memberId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ services: updated }),
+      });
+      if (!res.ok) throw new Error();
+      setTeam(t => t.map(m => m.id === memberId ? { ...m, services: updated } : m));
+      toast.success("Servicio agregado");
+    } catch { toast.error("Error al guardar"); }
+    finally { setSavingServices(null); }
+  }
+
+  async function removeServiceFromMember(memberId: string, service: string) {
+    const member = team.find(m => m.id === memberId);
+    if (!member) return;
+    const updated = member.services.filter(s => s !== service);
+    setSavingServices(memberId);
+    try {
+      const res = await fetch(`/api/team/${memberId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ services: updated }),
+      });
+      if (!res.ok) throw new Error();
+      setTeam(t => t.map(m => m.id === memberId ? { ...m, services: updated } : m));
+      toast.success("Servicio eliminado");
+    } catch { toast.error("Error al guardar"); }
+    finally { setSavingServices(null); }
+  }
+
+  const isAdminUser = initUser.role === "ADMIN" || initUser.role === "SUPER_ADMIN";
+
   const TABS = [
-    { id:"clinica",     label:"Mi clínica",    icon:Building,      show:true                    },
-    { id:"perfil",      label:"Mi perfil",     icon:User,          show:true                    },
-    { id:"facturacion", label:"Facturación",   icon:Receipt,       show:initUser.role==="ADMIN" || initUser.role==="SUPER_ADMIN" },
-    { id:"ia",          label:"Asistente IA",  icon:Bot,           show:true                    },
-    { id:"integraciones",label:"Integraciones",icon:CalendarCheck, show:true                    },
-    { id:"horarios",    label:"Horarios",      icon:Clock,         show:initUser.role==="ADMIN" || initUser.role==="SUPER_ADMIN" },
-    { id:"seguridad",   label:"Seguridad",     icon:Shield,        show:true                    },
+    { id:"clinica",     label:"Mi clínica",    icon:Building,      show:true        },
+    { id:"servicios",   label:"Servicios",     icon:Zap,           show:isAdminUser },
+    { id:"perfil",      label:"Mi perfil",     icon:User,          show:true        },
+    { id:"facturacion", label:"Facturación",   icon:Receipt,       show:isAdminUser },
+    { id:"ia",          label:"Asistente IA",  icon:Bot,           show:true        },
+    { id:"integraciones",label:"Integraciones",icon:CalendarCheck, show:true        },
+    { id:"horarios",    label:"Horarios",      icon:Clock,         show:isAdminUser },
+    { id:"seguridad",   label:"Seguridad",     icon:Shield,        show:true        },
   ].filter(t => t.show);
 
   return (
@@ -149,10 +202,10 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             <Input value={clinic.name ?? ""} onChange={e => setClinic((c: any) => ({ ...c, name: e.target.value }))} />
           </div>
           <div className="space-y-1.5">
-            <Label>Especialidad</Label>
+            <Label>Categoría</Label>
             <select className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
-              value={clinic.specialty ?? ""} onChange={e => setClinic((c: any) => ({ ...c, specialty: e.target.value }))}>
-              {SPECIALTIES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+              value={clinic.category ?? "OTHER"} onChange={e => setClinic((c: any) => ({ ...c, category: e.target.value }))}>
+              {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -195,6 +248,76 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               Plan {clinic.plan}
             </span>
             <Button onClick={saveClinic} disabled={saving}>{saving ? "Guardando…" : "Guardar cambios"}</Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── SERVICIOS POR DOCTOR ── */}
+      {tab === "servicios" && (
+        <div className="space-y-5 max-w-2xl">
+          <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl p-6 shadow-card">
+            <h2 className="text-base font-bold mb-1">Servicios por profesional</h2>
+            <p className="text-sm text-muted-foreground mb-5">
+              Asigna los servicios que ofrece cada profesional. Estos aparecerán en la página de reservas para que los pacientes elijan.
+            </p>
+
+            {team.length === 0 ? (
+              <div className="text-sm text-muted-foreground text-center py-8">No hay profesionales activos</div>
+            ) : (
+              <div className="space-y-4">
+                {team.map(member => (
+                  <div key={member.id} className="border border-border rounded-xl p-4">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-9 h-9 rounded-full bg-brand-600 flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
+                        {member.firstName[0]}{member.lastName[0]}
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold">{member.firstName} {member.lastName}</div>
+                        <div className="text-xs text-muted-foreground">{member.role === "SUPER_ADMIN" ? "Admin" : member.role === "ADMIN" ? "Admin" : "Doctor"}</div>
+                      </div>
+                    </div>
+
+                    {/* Current services */}
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                      {member.services.length === 0 && (
+                        <span className="text-xs text-muted-foreground italic">Sin servicios asignados — agrega al menos uno</span>
+                      )}
+                      {member.services.map(svc => (
+                        <span key={svc} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-brand-50 dark:bg-brand-950/30 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
+                          {svc}
+                          <button onClick={() => removeServiceFromMember(member.id, svc)}
+                            className="ml-0.5 text-brand-400 hover:text-rose-500 transition-colors" title="Quitar">×</button>
+                        </span>
+                      ))}
+                    </div>
+
+                    {/* Add service */}
+                    <div className="flex gap-2">
+                      <input
+                        className="flex-1 h-9 rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                        placeholder="Ej: Consulta general, Ortodoncia, Limpieza…"
+                        onKeyDown={e => {
+                          if (e.key === "Enter") {
+                            addServiceToMember(member.id, (e.target as HTMLInputElement).value);
+                            (e.target as HTMLInputElement).value = "";
+                          }
+                        }}
+                      />
+                      <Button
+                        size="sm"
+                        disabled={savingServices === member.id}
+                        onClick={e => {
+                          const input = (e.currentTarget.previousElementSibling as HTMLInputElement);
+                          addServiceToMember(member.id, input.value);
+                          input.value = "";
+                        }}>
+                        {savingServices === member.id ? "…" : "+ Agregar"}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

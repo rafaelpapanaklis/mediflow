@@ -64,7 +64,7 @@ export async function GET() {
     const doctorIds   = doctorStats.map(d => d.doctorId);
     const doctors     = await prisma.user.findMany({ where:{id:{in:doctorIds}}, select:{id:true,firstName:true,lastName:true,color:true} });
     const doctorMap   = Object.fromEntries(doctors.map(d => [d.id, d]));
-    const activeDoctor = await prisma.user.count({ where:{clinicId,isActive:true,role:{in:["DOCTOR","ADMIN"]}} });
+    const activeDoctor = await prisma.user.count({ where:{clinicId,isActive:true,role:{in:["DOCTOR","ADMIN","SUPER_ADMIN"]}} });
     const paidCount   = await prisma.invoice.count({ where:{clinicId,status:{in:["PAID","PARTIAL"]},updatedAt:{gte:firstMonth}} });
 
     const currentRev    = monthRevenue._sum.paid ?? 0;

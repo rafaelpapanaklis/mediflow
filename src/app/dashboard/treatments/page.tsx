@@ -33,7 +33,7 @@ export default async function TreatmentsPage() {
   });
 
   const doctors = await prisma.user.findMany({
-    where:  { clinicId: user.clinicId, isActive: true, role: { in: ["DOCTOR","ADMIN"] } },
+    where:  { clinicId: user.clinicId, isActive: true, role: { in: ["DOCTOR","ADMIN","SUPER_ADMIN"] } },
     select: { id: true, firstName: true, lastName: true, color: true },
   });
 

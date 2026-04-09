@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
         select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
       },
       users: {
-        where:  { isActive: true, role: { in: ["DOCTOR","ADMIN"] } },
+        where:  { isActive: true, role: { in: ["DOCTOR","ADMIN","SUPER_ADMIN"] } },
         select: { id: true, firstName: true, lastName: true, specialty: true, color: true },
         orderBy: { firstName: "asc" },
       },

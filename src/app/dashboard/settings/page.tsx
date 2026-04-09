@@ -19,12 +19,19 @@ export default async function SettingsPage({ searchParams }: Props) {
     include: { schedules: { orderBy: { dayOfWeek: "asc" } } },
   });
 
+  const teamMembers = await prisma.user.findMany({
+    where:   { clinicId: user.clinicId, isActive: true, role: { in: ["DOCTOR","ADMIN","SUPER_ADMIN"] } },
+    select:  { id: true, firstName: true, lastName: true, role: true, services: true },
+    orderBy: { firstName: "asc" },
+  });
+
   return (
     <SettingsClient
       user={user as any}
       clinic={clinic as any}
       initialTab={searchParams.tab}
       gcalStatus={searchParams.gcal}
+      teamMembers={teamMembers as any}
     />
   );
 }

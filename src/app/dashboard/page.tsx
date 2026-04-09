@@ -52,7 +52,7 @@ function getKpiData(clinicId: string) {
           where: { clinicId, date:{gte:firstMonth}, status:{not:"CANCELLED"} },
           _count: { id: true },
         }),
-        prisma.user.count({ where: { clinicId, isActive:true, role:{in:["DOCTOR","ADMIN"]} } }),
+        prisma.user.count({ where: { clinicId, isActive:true, role:{in:["DOCTOR","ADMIN","SUPER_ADMIN"]} } }),
         prisma.invoice.count({ where:{ clinicId, status:{in:["PAID","PARTIAL"]}, updatedAt:{gte:firstMonth} } }),
       ]);
 

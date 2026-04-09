@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
 
   // ── Verify doctor belongs to this clinic ──────────────────────────────────
   const doctor = await prisma.user.findFirst({
-    where: { id: doctorId, clinicId: clinic.id, isActive: true, role: { in: ["DOCTOR","ADMIN"] } },
+    where: { id: doctorId, clinicId: clinic.id, isActive: true, role: { in: ["DOCTOR","ADMIN","SUPER_ADMIN"] } },
     select: { id: true, firstName: true, lastName: true },
   });
   if (!doctor) return NextResponse.json({ error: "Doctor no disponible" }, { status: 404 });

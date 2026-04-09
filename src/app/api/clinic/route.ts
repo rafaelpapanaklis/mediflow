@@ -27,6 +27,7 @@ export async function PATCH(req: NextRequest) {
     data.isPublic      = Boolean(body.isPublic);
     data.landingActive = Boolean(body.isPublic);
   }
+  if (body.category    !== undefined) data.category    = body.category;
 
   const updated = await prisma.clinic.update({
     where: { id: dbUser.clinicId },

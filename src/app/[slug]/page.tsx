@@ -50,7 +50,7 @@ export default async function ClinicLandingPage({ params }: Props) {
   const clinic = await prisma.clinic.findUnique({
     where:   { slug: params.slug },
     include: {
-      users:     { where: { isActive: true, role: { in: ["DOCTOR","ADMIN"] } },
+      users:     { where: { isActive: true, role: { in: ["DOCTOR","ADMIN","SUPER_ADMIN"] } },
                    select: { id:true, firstName:true, lastName:true, specialty:true, color:true, avatarUrl:true, services:true } },
       schedules: { orderBy: { dayOfWeek: "asc" } },
     },
