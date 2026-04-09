@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   LayoutDashboard, Calendar, Users, CreditCard,
-  BarChart2, Settings, LogOut, Menu, X, Stethoscope,
+  BarChart2, Settings, LogOut, Menu, X, Stethoscope, Globe,
   Sun, Moon, MessageCircle, Package, UserCog,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -56,6 +56,7 @@ export function Sidebar({ user, clinicName, plan, onboardingSlot }: SidebarProps
     { href:"/dashboard/whatsapp",     icon:MessageCircle,   label:"WhatsApp",      show: isAdmin      },
     { href:"/dashboard/team",         icon:UserCog,         label:"Equipo",        show: isAdmin      },
     { href:"/dashboard/reports",      icon:BarChart2,       label:"Reportes",      show: isAdmin      },
+    { href:"/dashboard/landing",      icon:Globe,           label:"Mi página",     show: isAdmin      },
     { href:"/dashboard/settings",     icon:Settings,        label:"Configuración", show: true         },
   ].filter(n => n.show);
 

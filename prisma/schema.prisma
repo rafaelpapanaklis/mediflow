@@ -58,6 +58,22 @@ model Clinic {
   recallMonths         Int       @default(6)  // months before annual reminder
   recallActive         Boolean   @default(false)
 
+  // Landing page / Micrositio público
+  landingActive      Boolean  @default(false)  // si la landing está publicada
+  landingThemeColor  String?  @default("#2563eb") // color principal
+  landingCoverUrl    String?  // foto de portada
+  landingGallery     String[] @default([])  // URLs de fotos de galería
+  landingTestimonials Json?   // [{name, text, rating, avatarUrl}]
+  landingFaqs        Json?    // [{question, answer}]
+  landingServices    Json?    // [{name, desc, price?, icon?}]
+  landingHours       Json?    // override de horarios para mostrar en landing
+  landingWhatsapp    String?  // número WA para contacto directo
+  landingInstagram   String?  // @handle
+  landingFacebook    String?  // URL
+  landingTiktok      String?  // @handle
+  landingMapEmbed    String?  // Google Maps embed URL
+  landingTagline     String?  // slogan corto
+
   // AI Assistant usage tracking
   aiTokensUsed  Int      @default(0)
   aiTokensLimit Int      @default(50000)
