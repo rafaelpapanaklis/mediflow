@@ -217,12 +217,32 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
   useEffect(() => {
     if (searchParams.get("new") === "1") {
       setShowNew(true);
-      // Clean URL without reload
       const url = new URL(window.location.href);
       url.searchParams.delete("new");
       window.history.replaceState({}, "", url.toString());
     }
   }, [searchParams]);
+
+  // Refresh appointments when page gains focus (back from another page/tab)
+  useEffect(() => {
+    async function refresh() {
+      try {
+        const res = await fetch("/api/appointments");
+        if (res.ok) {
+          const data = await res.json();
+          setAppts(data);
+        }
+      } catch { /* silent */ }
+    }
+    window.addEventListener("focus", refresh);
+    // Also refresh on navigation (visibilitychange)
+    function onVisible() { if (document.visibilityState === "visible") refresh(); }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
 
   const emptyForm = { patientId:"", doctorId:currentUserId, type:"Consulta general", date:toDateStr(today), startTime:"09:00", durationMins:30, notes:"" };
   const [form, setForm] = useState(emptyForm);
