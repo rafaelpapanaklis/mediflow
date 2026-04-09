@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { Search } from "lucide-react";
 import { getInitials, avatarColor } from "@/lib/utils";
 import { DentalForm }          from "@/components/clinical/dental-form";
@@ -10,13 +11,44 @@ import { PsychologyForm }      from "@/components/clinical/psychology-form";
 import { GeneralMedicineForm } from "@/components/clinical/medicine-form";
 import { ClinicalRecordsList } from "@/components/clinical/records-list";
 
+const AestheticMedicineForm = dynamic(() => import("@/components/clinical/aesthetic-medicine-form").then(m => ({ default: m.AestheticMedicineForm })));
+const HairRestorationForm = dynamic(() => import("@/components/clinical/hair-restoration-form").then(m => ({ default: m.HairRestorationForm })));
+const BeautyCenterForm = dynamic(() => import("@/components/clinical/beauty-center-form").then(m => ({ default: m.BeautyCenterForm })));
+const BrowLashForm = dynamic(() => import("@/components/clinical/brow-lash-form").then(m => ({ default: m.BrowLashForm })));
+const MassageForm = dynamic(() => import("@/components/clinical/massage-form").then(m => ({ default: m.MassageForm })));
+const LaserForm = dynamic(() => import("@/components/clinical/laser-form").then(m => ({ default: m.LaserForm })));
+const HairSalonForm = dynamic(() => import("@/components/clinical/hair-salon-form").then(m => ({ default: m.HairSalonForm })));
+const AlternativeMedicineForm = dynamic(() => import("@/components/clinical/alternative-medicine-form").then(m => ({ default: m.AlternativeMedicineForm })));
+const NailSalonForm = dynamic(() => import("@/components/clinical/nail-salon-form").then(m => ({ default: m.NailSalonForm })));
+const SpaForm = dynamic(() => import("@/components/clinical/spa-form").then(m => ({ default: m.SpaForm })));
+const PhysiotherapyForm = dynamic(() => import("@/components/clinical/physiotherapy-form").then(m => ({ default: m.PhysiotherapyForm })));
+const PodiatryForm = dynamic(() => import("@/components/clinical/podiatry-form").then(m => ({ default: m.PodiatryForm })));
+
+// Map ClinicCategory enum → internal key
+const CATEGORY_TO_SPECIALTY: Record<string, string> = {
+  DENTAL: "dental", MEDICINE: "medicine", NUTRITION: "nutrition",
+  PSYCHOLOGY: "psychology", DERMATOLOGY: "dermatology",
+  AESTHETIC_MEDICINE: "aesthetic_medicine", HAIR_RESTORATION: "hair_restoration",
+  BEAUTY_CENTER: "beauty_center", BROW_LASH: "brow_lash", MASSAGE: "massage",
+  LASER_HAIR_REMOVAL: "laser_hair_removal", HAIR_SALON: "hair_salon",
+  ALTERNATIVE_MEDICINE: "alternative_medicine", NAIL_SALON: "nail_salon",
+  SPA: "spa", PHYSIOTHERAPY: "physiotherapy", PODIATRY: "podiatry", OTHER: "medicine",
+};
+
+// Legacy fuzzy matching fallback
 const SPECIALTY_MAP: Record<string, string> = {
   dental: "dental", odontologia: "dental", odontología: "dental",
   nutrition: "nutrition", nutricion: "nutrition", nutrición: "nutrition",
   psychology: "psychology", psicologia: "psychology", psicología: "psychology",
+  dermatology: "dermatology", dermatologia: "dermatology",
 };
 
-function detectSpecialty(raw: string): string {
+function detectSpecialty(raw: string, clinicCategory?: string): string {
+  // Prefer the enum-based category if available
+  if (clinicCategory && CATEGORY_TO_SPECIALTY[clinicCategory]) {
+    return CATEGORY_TO_SPECIALTY[clinicCategory];
+  }
+  // Fallback: fuzzy match on legacy specialty string
   const lower = raw.toLowerCase();
   for (const [key, val] of Object.entries(SPECIALTY_MAP)) {
     if (lower.includes(key)) return val;
@@ -26,6 +58,7 @@ function detectSpecialty(raw: string): string {
 
 interface Props {
   specialty:         string;
+  clinicCategory?:   string;
   patients:          any[];
   selectedPatient:   any;
   records:           any[];
@@ -34,7 +67,7 @@ interface Props {
 }
 
 export function ClinicalClient({
-  specialty, patients, selectedPatient: initialPatient,
+  specialty, clinicCategory, patients, selectedPatient: initialPatient,
   records: initialRecords, sessionCount: initialSessionCount,
   currentPatientId,
 }: Props) {
@@ -46,7 +79,7 @@ export function ClinicalClient({
   const [loading, setLoading]       = useState(false);
   const [tab, setTab]               = useState<"new" | "history">("new");
 
-  const detectedSpecialty = detectSpecialty(specialty);
+  const detectedSpecialty = detectSpecialty(specialty, clinicCategory);
 
   // When patient changes via URL, reload records from API
   useEffect(() => {
@@ -140,9 +173,11 @@ export function ClinicalClient({
         {!selectedPatient ? (
           <div className="rounded-xl border border-border bg-white shadow-card p-16 text-center">
             <div className="text-4xl mb-4">
-              {detectedSpecialty === "dental"     ? "🦷" :
-               detectedSpecialty === "nutrition"  ? "🥗" :
-               detectedSpecialty === "psychology" ? "🧠" : "🩺"}
+              {{ dental:"🦷", nutrition:"🥗", psychology:"🧠", dermatology:"✨",
+                 aesthetic_medicine:"💉", hair_restoration:"💇", beauty_center:"⭐",
+                 brow_lash:"👁", massage:"💆", laser_hair_removal:"⚡", hair_salon:"✂️",
+                 alternative_medicine:"🌿", nail_salon:"💅", spa:"🧖", physiotherapy:"🏋️",
+                 podiatry:"🦶" }[detectedSpecialty] ?? "🩺"}
             </div>
             <h2 className="text-lg font-bold mb-2">Expediente Clínico</h2>
             <p className="text-sm text-muted-foreground">
@@ -191,15 +226,31 @@ export function ClinicalClient({
                 {tab === "new" && (
                   <div className="rounded-xl border border-border bg-white shadow-card p-5">
                     <h2 className="text-sm font-bold mb-4">
-                      {detectedSpecialty === "dental"     ? "🦷 Consulta dental" :
-                       detectedSpecialty === "nutrition"  ? "🥗 Consulta nutricional" :
-                       detectedSpecialty === "psychology" ? "🧠 Sesión de psicología" :
-                       "🩺 Consulta médica"}
+                      {{ dental:"🦷 Consulta dental", nutrition:"🥗 Consulta nutricional",
+                         psychology:"🧠 Sesión de psicología", dermatology:"✨ Consulta dermatológica",
+                         aesthetic_medicine:"💉 Medicina estética", hair_restoration:"💇 Restauración capilar",
+                         beauty_center:"⭐ Centro de estética", brow_lash:"👁 Cejas y pestañas",
+                         massage:"💆 Sesión de masaje", laser_hair_removal:"⚡ Depilación láser",
+                         hair_salon:"✂️ Peluquería", alternative_medicine:"🌿 Medicina alternativa",
+                         nail_salon:"💅 Uñas", spa:"🧖 Spa", physiotherapy:"🏋️ Fisioterapia",
+                         podiatry:"🦶 Podología" }[detectedSpecialty] ?? "🩺 Consulta médica"}
                     </h2>
-                    {detectedSpecialty === "dental"     && <DentalForm          patientId={selectedPatient.id} onSaved={handleSaved} />}
-                    {detectedSpecialty === "nutrition"  && <NutritionForm       patientId={selectedPatient.id} patient={selectedPatient} onSaved={handleSaved} />}
-                    {detectedSpecialty === "psychology" && <PsychologyForm      patientId={selectedPatient.id} sessionNum={sessionCount} onSaved={handleSaved} />}
-                    {detectedSpecialty === "medicine"   && <GeneralMedicineForm patientId={selectedPatient.id} onSaved={handleSaved} />}
+                    {detectedSpecialty === "dental"               && <DentalForm          patientId={selectedPatient.id} onSaved={handleSaved} />}
+                    {detectedSpecialty === "nutrition"            && <NutritionForm       patientId={selectedPatient.id} patient={selectedPatient} onSaved={handleSaved} />}
+                    {detectedSpecialty === "psychology"           && <PsychologyForm      patientId={selectedPatient.id} sessionNum={sessionCount} onSaved={handleSaved} />}
+                    {detectedSpecialty === "aesthetic_medicine"   && <AestheticMedicineForm patientId={selectedPatient.id} onSaved={handleSaved} />}
+                    {detectedSpecialty === "hair_restoration"     && <HairRestorationForm  patientId={selectedPatient.id} onSaved={handleSaved} />}
+                    {detectedSpecialty === "beauty_center"        && <BeautyCenterForm     patientId={selectedPatient.id} onSaved={handleSaved} />}
+                    {detectedSpecialty === "brow_lash"            && <BrowLashForm         patientId={selectedPatient.id} onSaved={handleSaved} />}
+                    {detectedSpecialty === "massage"              && <MassageForm          patientId={selectedPatient.id} onSaved={handleSaved} />}
+                    {detectedSpecialty === "laser_hair_removal"   && <LaserForm            patientId={selectedPatient.id} onSaved={handleSaved} />}
+                    {detectedSpecialty === "hair_salon"           && <HairSalonForm        patientId={selectedPatient.id} onSaved={handleSaved} />}
+                    {detectedSpecialty === "alternative_medicine" && <AlternativeMedicineForm patientId={selectedPatient.id} onSaved={handleSaved} />}
+                    {detectedSpecialty === "nail_salon"           && <NailSalonForm        patientId={selectedPatient.id} onSaved={handleSaved} />}
+                    {detectedSpecialty === "spa"                  && <SpaForm              patientId={selectedPatient.id} onSaved={handleSaved} />}
+                    {detectedSpecialty === "physiotherapy"        && <PhysiotherapyForm    patientId={selectedPatient.id} onSaved={handleSaved} />}
+                    {detectedSpecialty === "podiatry"             && <PodiatryForm         patientId={selectedPatient.id} onSaved={handleSaved} />}
+                    {(detectedSpecialty === "medicine" || detectedSpecialty === "dermatology") && <GeneralMedicineForm patientId={selectedPatient.id} onSaved={handleSaved} />}
                   </div>
                 )}
 

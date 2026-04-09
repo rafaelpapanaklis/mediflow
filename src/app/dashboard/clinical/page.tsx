@@ -15,5 +15,5 @@ export default async function ClinicalPage({ searchParams }: { searchParams: { p
       sessionCount = records.length + 1;
     }
   }
-  return <ClinicalClient specialty={user.clinic.specialty} patients={patients} selectedPatient={selectedPatient} records={records} sessionCount={sessionCount} currentPatientId={searchParams.patientId} />;
+  return <ClinicalClient specialty={user.clinic.specialty} clinicCategory={user.clinic.category} patients={patients} selectedPatient={selectedPatient} records={records} sessionCount={sessionCount} currentPatientId={searchParams.patientId} />;
 }

@@ -12,7 +12,8 @@ model Clinic {
   id          String    @id @default(cuid())
   name        String
   slug        String    @unique
-  specialty   String
+  specialty   String // @deprecated — usar category en su lugar
+  category    ClinicCategory @default(OTHER)
   country     String    @default("MX")
   city        String?
   address     String?
@@ -96,8 +97,35 @@ model Clinic {
   subscriptionInvoices SubscriptionInvoice[]
   files                PatientFile[]
   auditLogs            AuditLog[]
+  beforeAfterPhotos    BeforeAfterPhoto[]
+  servicePackages      ServicePackage[]
+  formulaRecords       FormulaRecord[]
+  bodyMapAnnotations   BodyMapAnnotation[]
+  walkInQueue          WalkInQueue[]
+  resourceBookings     ResourceBooking[]
 
   @@map("clinics")
+}
+
+enum ClinicCategory {
+  DENTAL
+  MEDICINE
+  NUTRITION
+  PSYCHOLOGY
+  DERMATOLOGY
+  AESTHETIC_MEDICINE
+  HAIR_RESTORATION
+  BEAUTY_CENTER
+  BROW_LASH
+  MASSAGE
+  LASER_HAIR_REMOVAL
+  HAIR_SALON
+  ALTERNATIVE_MEDICINE
+  NAIL_SALON
+  SPA
+  PHYSIOTHERAPY
+  PODIATRY
+  OTHER
 }
 
 enum Plan {
@@ -182,6 +210,16 @@ model Patient {
   cpPaciente       String?
   razonSocialPac   String?
 
+  // Extended fields for multi-category
+  skinPhototype     String?
+  hairType          String?
+  nailCondition     String?
+  painAreas         Json?
+  mobilityNotes     String?
+  diabeticRisk      String?
+  doshaType         String?
+  preferredPressure Int?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -195,6 +233,10 @@ model Patient {
   paymentPlans  PaymentPlan[]
   consentForms        ConsentForm[]
   periodontalRecords  PeriodontalRecord[]
+  beforeAfterPhotos   BeforeAfterPhoto[]
+  formulaRecords      FormulaRecord[]
+  bodyMapAnnotations  BodyMapAnnotation[]
+  packageRedemptions  PackageRedemption[]
 
   @@unique([clinicId, patientNumber])
   @@map("patients")
@@ -645,4 +687,117 @@ enum WhatsAppReminderStatus {
   SENT
   FAILED
   CANCELLED
+}
+
+// ── Multi-category models ─────────────────────────────────────────────────────
+
+model BeforeAfterPhoto {
+  id          String   @id @default(cuid())
+  clinicId    String
+  patientId   String
+  category    String   // "before" | "after"
+  angle       String   // "front", "left", "right", "top"
+  sessionId   String?
+  url         String
+  takenAt     DateTime @default(now())
+  notes       String?
+  clinic      Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  @@index([patientId, category])
+  @@index([clinicId])
+  @@map("before_after_photos")
+}
+
+model ServicePackage {
+  id              String   @id @default(cuid())
+  clinicId        String
+  name            String
+  description     String?
+  totalSessions   Int
+  price           Float
+  validDays       Int      @default(365)
+  bodyZone        String?
+  isActive        Boolean  @default(true)
+  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  redemptions     PackageRedemption[]
+  @@index([clinicId])
+  @@map("service_packages")
+}
+
+model PackageRedemption {
+  id            String   @id @default(cuid())
+  packageId     String
+  patientId     String
+  clinicId      String
+  purchasedAt   DateTime @default(now())
+  expiresAt     DateTime
+  sessionsUsed  Int      @default(0)
+  totalSessions Int
+  status        String   @default("ACTIVE")
+  package       ServicePackage @relation(fields: [packageId], references: [id])
+  patient       Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  @@index([patientId])
+  @@index([clinicId])
+  @@map("package_redemptions")
+}
+
+model FormulaRecord {
+  id          String   @id @default(cuid())
+  clinicId    String
+  patientId   String
+  type        String   // "hair_color", "lash_extension", "brow_tint", "herbal"
+  formula     Json
+  notes       String?
+  appliedAt   DateTime @default(now())
+  appliedBy   String?
+  clinic      Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  @@index([patientId, type])
+  @@index([clinicId])
+  @@map("formula_records")
+}
+
+model BodyMapAnnotation {
+  id          String   @id @default(cuid())
+  clinicId    String
+  patientId   String
+  recordId    String?
+  mapType     String   // "full_body", "face", "scalp", "feet_dorsal", "feet_plantar"
+  annotations Json
+  createdAt   DateTime @default(now())
+  clinic      Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  @@index([patientId])
+  @@index([clinicId])
+  @@map("body_map_annotations")
+}
+
+model WalkInQueue {
+  id          String    @id @default(cuid())
+  clinicId    String
+  patientId   String?
+  patientName String
+  service     String
+  priority    Int       @default(0)
+  status      String    @default("WAITING")
+  assignedTo  String?
+  joinedAt    DateTime  @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+  clinic      Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  @@index([clinicId, status])
+  @@map("walk_in_queue")
+}
+
+model ResourceBooking {
+  id            String   @id @default(cuid())
+  clinicId      String
+  appointmentId String?
+  resourceType  String
+  resourceName  String
+  startTime     DateTime
+  endTime       DateTime
+  clinic        Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  @@index([clinicId, resourceType, startTime])
+  @@map("resource_bookings")
 }

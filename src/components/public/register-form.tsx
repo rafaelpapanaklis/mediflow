@@ -3,18 +3,36 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, X, Loader2 } from "lucide-react";
+import { Check, X, Loader2, Stethoscope, Heart, Apple, Brain, Scan, Activity, Footprints, Sparkles, Scissors, Star, Eye, Hand, Zap, Leaf, Palette, Waves } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 
-const SPECIALTIES = [
-  { id: "dental",      icon: "🦷", label: "Odontología"      },
-  { id: "medicine",    icon: "🩺", label: "Medicina General" },
-  { id: "nutrition",   icon: "🥗", label: "Nutrición"        },
-  { id: "psychology",  icon: "🧠", label: "Psicología"       },
-  { id: "dermatology", icon: "✨", label: "Dermatología"     },
-  { id: "other",       icon: "🏥", label: "Otra"             },
+const CATEGORIES = [
+  { group: "Salud", items: [
+    { id: "DENTAL", label: "Odontología", icon: Stethoscope },
+    { id: "MEDICINE", label: "Medicina General", icon: Heart },
+    { id: "NUTRITION", label: "Nutrición", icon: Apple },
+    { id: "PSYCHOLOGY", label: "Psicología", icon: Brain },
+    { id: "DERMATOLOGY", label: "Dermatología", icon: Scan },
+    { id: "PHYSIOTHERAPY", label: "Fisioterapia", icon: Activity },
+    { id: "PODIATRY", label: "Podología", icon: Footprints },
+  ]},
+  { group: "Medicina Estética", items: [
+    { id: "AESTHETIC_MEDICINE", label: "Medicina Estética", icon: Sparkles },
+    { id: "HAIR_RESTORATION", label: "Clínicas Capilares", icon: Scissors },
+  ]},
+  { group: "Belleza y Bienestar", items: [
+    { id: "BEAUTY_CENTER", label: "Centros de Estética", icon: Star },
+    { id: "BROW_LASH", label: "Cejas y Pestañas", icon: Eye },
+    { id: "MASSAGE", label: "Masajes", icon: Hand },
+    { id: "LASER_HAIR_REMOVAL", label: "Depilación Láser", icon: Zap },
+    { id: "HAIR_SALON", label: "Peluquerías y Barberías", icon: Scissors },
+    { id: "ALTERNATIVE_MEDICINE", label: "Medicina Alternativa", icon: Leaf },
+    { id: "NAIL_SALON", label: "Uñas", icon: Palette },
+    { id: "SPA", label: "Spas", icon: Waves },
+  ]},
 ];
+const ALL_CATEGORIES = CATEGORIES.flatMap(g => g.items);
 
 const PLANS = [
   { id: "BASIC",  name: "Básico",        price: "$49",  per: "mes", desc: "1 profesional · 200 pacientes",                          features: ["Agenda y citas","Pacientes básico","Facturación","Soporte email"] },
@@ -46,7 +64,7 @@ export function RegisterForm() {
   const [loading, setLoading]   = useState(false);
   const [checkingSlug, setCheckingSlug] = useState(false);
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
-  const [specialty, setSpecialty] = useState("dental");
+  const [category, setCategory] = useState("DENTAL");
   const [plan, setPlan]           = useState("PRO");
   const [payMethod, setPayMethod] = useState<"stripe" | "transfer">("transfer");
   const [error, setError]         = useState("");
@@ -113,7 +131,7 @@ export function RegisterForm() {
           firstName: form.firstName, lastName: form.lastName,
           email: form.email, password: form.password,
           clinicName: form.clinicName, slug: form.slug,
-          specialty, country: form.country, city: form.city,
+          category, country: form.country, city: form.city,
           phone: form.phone, plan, paymentMethod: payMethod,
         }),
       });
@@ -302,20 +320,30 @@ export function RegisterForm() {
         </div>
       )}
 
-      {/* STEP 2 - Specialty */}
+      {/* STEP 2 - Category */}
       {step === 2 && (
         <div className="animate-fade-up">
           <h1 className="text-2xl font-extrabold mb-1">Tu especialidad</h1>
           <p className="text-sm text-muted-foreground mb-6">Paso 3 de 6</p>
-          <div className="grid grid-cols-2 gap-2 mb-5">
-            {SPECIALTIES.map(s => (
-              <button key={s.id} onClick={() => setSpecialty(s.id)}
-                className={cn("flex items-center gap-2.5 p-3.5 rounded-xl border text-sm font-semibold text-left transition-all",
-                  specialty === s.id ? "border-brand-300 bg-brand-50 text-brand-700 shadow-sm" : "border-border bg-white text-muted-foreground hover:border-brand-200"
-                )}>
-                <span className="text-lg">{s.icon}</span>
-                <span>{s.label}</span>
-              </button>
+          <div className="space-y-4 mb-5 max-h-[50vh] overflow-y-auto pr-1">
+            {CATEGORIES.map(group => (
+              <div key={group.group}>
+                <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">{group.group}</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {group.items.map(item => {
+                    const Icon = item.icon;
+                    return (
+                      <button key={item.id} onClick={() => setCategory(item.id)}
+                        className={cn("flex items-center gap-2.5 p-3 rounded-xl border text-sm font-semibold text-left transition-all",
+                          category === item.id ? "border-brand-300 bg-brand-50 text-brand-700 shadow-sm" : "border-border bg-white text-muted-foreground hover:border-brand-200"
+                        )}>
+                        <Icon className="w-4 h-4 flex-shrink-0" />
+                        <span className="text-xs">{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             ))}
           </div>
           <div className="flex gap-2">
@@ -431,7 +459,7 @@ export function RegisterForm() {
               { label: "Email",        val: form.email                            },
               { label: "Clínica",      val: form.clinicName                       },
               { label: "URL",          val: `${form.slug}.mediflow.app`            },
-              { label: "Especialidad", val: SPECIALTIES.find(s => s.id === specialty)?.label ?? specialty },
+              { label: "Especialidad", val: ALL_CATEGORIES.find(s => s.id === category)?.label ?? category },
               { label: "Plan",         val: `${PLANS.find(p => p.id === plan)?.name} · ${PLANS.find(p => p.id === plan)?.price}/mes` },
               { label: "Pago",         val: payMethod === "stripe" ? "Tarjeta de crédito" : "Transferencia SPEI" },
             ].map(r => (

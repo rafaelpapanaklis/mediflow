@@ -4,10 +4,20 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { rateLimit } from "@/lib/rate-limit";
 
+const CATEGORY_MAP: Record<string, string> = {
+  dental: "DENTAL", odontologia: "DENTAL",
+  medicine: "MEDICINE", medicina: "MEDICINE",
+  nutrition: "NUTRITION", nutricion: "NUTRITION",
+  psychology: "PSYCHOLOGY", psicologia: "PSYCHOLOGY",
+  dermatology: "DERMATOLOGY", dermatologia: "DERMATOLOGY",
+};
+
 const schema = z.object({
   firstName: z.string().min(2), lastName: z.string().min(2),
   email: z.string().email(), password: z.string().min(8),
-  clinicName: z.string().min(2), specialty: z.string().min(1),
+  clinicName: z.string().min(2),
+  specialty: z.string().optional(), // @deprecated — backwards compat
+  category: z.string().optional(),  // new: ClinicCategory enum value
   country: z.string().min(1), city: z.string().optional(),
   phone: z.string().optional(), plan: z.enum(["BASIC","PRO","CLINIC"]).default("PRO"),
   slug: z.string().optional(), paymentMethod: z.enum(["stripe","transfer"]).default("transfer"),
@@ -47,12 +57,21 @@ export async function POST(req: NextRequest) {
     const trialEndsAt = new Date();
     trialEndsAt.setDate(trialEndsAt.getDate() + 14);
 
+    // Resolve category from new field or legacy specialty
+    const resolvedCategory = data.category
+      ? data.category
+      : data.specialty
+        ? (CATEGORY_MAP[data.specialty.toLowerCase()] ?? "OTHER")
+        : "OTHER";
+    const specialtyLabel = data.specialty ?? data.category ?? "other";
+
     await prisma.clinic.create({
       data: {
-        name: data.clinicName, slug, specialty: data.specialty,
+        name: data.clinicName, slug, specialty: specialtyLabel,
+        category: resolvedCategory as any,
         country: data.country, city: data.city, phone: data.phone,
         email: data.email, plan: data.plan as any, trialEndsAt,
-        users: { create: { supabaseId: authData.user.id, email: data.email, firstName: data.firstName, lastName: data.lastName, role: "SUPER_ADMIN", specialty: data.specialty } },
+        users: { create: { supabaseId: authData.user.id, email: data.email, firstName: data.firstName, lastName: data.lastName, role: "SUPER_ADMIN", specialty: specialtyLabel } },
         schedules: { createMany: { data: [0,1,2,3,4].map(day => ({ dayOfWeek: day, enabled: true, openTime: "09:00", closeTime: "18:00" })) } },
       },
     });
