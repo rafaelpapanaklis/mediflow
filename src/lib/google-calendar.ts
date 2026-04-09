@@ -27,7 +27,10 @@ export function signState(userId: string): string {
 
 /** Verify and extract userId from signed state */
 export function verifyState(state: string): string | null {
-  const [userId, hmac] = state.split(".");
+  const dotIdx = state.lastIndexOf(".");
+  if (dotIdx === -1) return null;
+  const userId = state.substring(0, dotIdx);
+  const hmac = state.substring(dotIdx + 1);
   if (!userId || !hmac) return null;
   const expected = crypto.createHmac("sha256", STATE_SECRET).update(userId).digest("hex").slice(0, 16);
   if (hmac !== expected) return null;
