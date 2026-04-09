@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { getAuthContext, buildAppointmentWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createCalendarEvent, refreshAccessToken, getOrCreateClinicCalendar } from "@/lib/google-calendar";
+import { sendWhatsAppMessage } from "@/lib/whatsapp";
 
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
 
   const patient = await prisma.patient.findFirst({
     where:  { id: body.patientId, clinicId: ctx.clinicId },
-    select: { id: true, firstName: true, lastName: true, email: true },
+    select: { id: true, firstName: true, lastName: true, email: true, phone: true },
   });
   if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
 
@@ -153,6 +154,38 @@ export async function POST(req: NextRequest) {
       where: { id: appt.id },
       data:  { googleCalendarEventId: gcalEventId },
     });
+  }
+
+  // ── WhatsApp confirmation to patient ──────────────────────────────────────
+  const clinicWa = await prisma.clinic.findUnique({
+    where: { id: ctx.clinicId },
+    select: { waConnected: true, waPhoneNumberId: true, waAccessToken: true, name: true },
+  });
+
+  if (clinicWa?.waConnected && clinicWa.waPhoneNumberId && clinicWa.waAccessToken && patient.phone) {
+    try {
+      const dateObj = new Date(body.date);
+      const dateFormatted = dateObj.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
+      const msg = `✅ Cita agendada en ${clinicWa.name}\n\n📅 ${dateFormatted}\n🕐 ${appt.startTime} - ${appt.endTime}\n📋 ${appt.type}\n${doctor ? `👨‍⚕️ ${doctor.firstName} ${doctor.lastName}` : ""}\n\n¿Confirmas tu asistencia? Responde *sí* o *no*`;
+
+      await sendWhatsAppMessage(clinicWa.waPhoneNumberId, clinicWa.waAccessToken, patient.phone, msg);
+
+      // Create reminder record for tracking
+      await prisma.whatsAppReminder.create({
+        data: {
+          clinicId:      ctx.clinicId,
+          appointmentId: appt.id,
+          patientPhone:  patient.phone,
+          type:          "CONFIRMATION",
+          message:       msg,
+          status:        "SENT",
+          sentAt:        new Date(),
+        },
+      });
+    } catch (e) {
+      console.error("WhatsApp confirmation failed:", e);
+      // Don't fail the appointment creation
+    }
   }
 
   // Invalidate dashboard cache so KPIs refresh

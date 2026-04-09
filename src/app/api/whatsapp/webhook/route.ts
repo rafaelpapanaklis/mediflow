@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createHmac } from "crypto";
+import { sendWhatsAppMessage } from "@/lib/whatsapp";
 
 // GET — webhook verification by Meta
 export async function GET(req: NextRequest) {
@@ -22,10 +23,10 @@ export async function POST(req: NextRequest) {
   try {
     const rawBody = await req.text();
 
-    // Verify X-Hub-Signature-256 from Meta
+    // Verify X-Hub-Signature-256 from Meta (REQUIRED)
     const appSecret = process.env.WHATSAPP_APP_SECRET;
+    const signature = req.headers.get("x-hub-signature-256");
     if (appSecret) {
-      const signature = req.headers.get("x-hub-signature-256");
       if (!signature) return NextResponse.json({ error: "Missing signature" }, { status: 403 });
       const expectedSig = "sha256=" + createHmac("sha256", appSecret).update(rawBody).digest("hex");
       if (signature !== expectedSig) {
@@ -44,9 +45,8 @@ export async function POST(req: NextRequest) {
     if (!messages?.length) return NextResponse.json({ ok: true });
 
     const msg      = messages[0];
-    const from     = msg.from;           // patient's phone number
+    const from     = msg.from;           // patient's phone number (international format)
     const text     = msg.text?.body?.trim().toLowerCase() ?? "";
-    const msgId    = msg.id;
 
     if (!from || !text) return NextResponse.json({ ok: true });
 
@@ -58,8 +58,7 @@ export async function POST(req: NextRequest) {
     if (!clinic) return NextResponse.json({ ok: true });
 
     // Find patient by phone number
-    // Normalize incoming number: Meta sends full international number e.g. "521234567890"
-    // Strip country code (52 for MX) to get last 10 digits for matching
+    // Normalize: Meta sends "521234567890", strip country code to get last 10 digits
     const fromNormalized = from.replace(/^52/, "").slice(-10);
     const patient = await prisma.patient.findFirst({
       where: { clinicId: clinic.id, phone: { contains: fromNormalized } },
@@ -85,7 +84,6 @@ export async function POST(req: NextRequest) {
     const isCancel  = ["no","cancelar","cancelo","cancel","2"].some(k => text.includes(k));
 
     if (isConfirm) {
-      // Confirm appointment
       await prisma.appointment.update({
         where: { id: reminder.appointmentId },
         data:  { status: "CONFIRMED", confirmedAt: new Date() },
@@ -95,18 +93,16 @@ export async function POST(req: NextRequest) {
         text, reminder.id
       );
 
-      // Send confirmation response
       if (clinic.waAccessToken && clinic.waPhoneNumberId) {
         const appt = reminder.appointment;
         const dateStr = new Date(appt.date).toLocaleDateString("es-MX", {
           weekday: "long", day: "numeric", month: "long"
         });
-        await sendWA(clinic.waPhoneNumberId, clinic.waAccessToken, from,
+        await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, from,
           `✅ ¡Perfecto! Tu cita del ${dateStr} a las ${appt.startTime} está *confirmada*. Te esperamos. 😊`
         );
       }
     } else if (isCancel) {
-      // Cancel appointment
       await prisma.appointment.update({
         where: { id: reminder.appointmentId },
         data:  { status: "CANCELLED", cancelledAt: new Date(), cancelReason: "Cancelado por paciente vía WhatsApp" },
@@ -117,7 +113,7 @@ export async function POST(req: NextRequest) {
       );
 
       if (clinic.waAccessToken && clinic.waPhoneNumberId) {
-        await sendWA(clinic.waPhoneNumberId, clinic.waAccessToken, from,
+        await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, from,
           `❌ Tu cita ha sido *cancelada*. Si deseas reagendar, comunícate con nosotros. ¡Hasta pronto!`
         );
       }
@@ -134,17 +130,4 @@ export async function POST(req: NextRequest) {
     console.error("WhatsApp webhook error:", err);
     return NextResponse.json({ ok: true }); // always 200 to avoid Meta retries
   }
-}
-
-async function sendWA(phoneNumberId: string, accessToken: string, to: string, message: string) {
-  await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
-    method:  "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-    body:    JSON.stringify({
-      messaging_product: "whatsapp",
-      to,
-      type: "text",
-      text: { body: message },
-    }),
-  });
 }

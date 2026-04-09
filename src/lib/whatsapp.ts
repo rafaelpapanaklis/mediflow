@@ -4,12 +4,13 @@ export async function sendWhatsAppMessage(
   to: string,
   message: string
 ) {
+  // Normalize Mexican phone: always output 52 + 10 digits = 12 digits
   let phone = to.replace(/[\s\-\(\)\+]/g, "");
-  if (phone.startsWith("52") && phone.length === 12) {
-    // Already has country code and correct length — leave as is
-  } else if (phone.length === 10) {
-    phone = `52${phone}`;
-  }
+  // Strip country code if present to get raw 10 digits
+  if (phone.startsWith("521") && phone.length === 13) phone = phone.slice(3); // 521XXXXXXXXXX → 10 digits (old MX mobile format)
+  else if (phone.startsWith("52") && phone.length === 12) phone = phone.slice(2); // 52XXXXXXXXXX → 10 digits
+  // Now phone should be 10 digits, add country code
+  if (phone.length === 10) phone = `52${phone}`;
   const formattedPhone = phone;
 
   const res = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
