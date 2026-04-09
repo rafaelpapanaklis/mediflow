@@ -86,19 +86,6 @@ export function AdminClinicsClient({ clinics: initial }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      <nav className="bg-slate-900 border-b border-slate-700 px-6 h-14 flex items-center gap-4">
-        <Link href="/admin" className="flex items-center gap-2 font-extrabold text-brand-400">
-          <div className="w-6 h-6 rounded-lg bg-brand-600 flex items-center justify-center text-[11px] font-extrabold text-white">M</div>
-          MediFlow Admin
-        </Link>
-        <div className="flex items-center gap-1 ml-4">
-          {[{href:"/admin",label:"Dashboard"},{href:"/admin/clinics",label:"Clínicas"},{href:"/admin/payments",label:"Pagos"},{href:"/admin/settings",label:"Config"}].map(item => (
-            <Link key={item.href} href={item.href} className="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">{item.label}</Link>
-          ))}
-        </div>
-      </nav>
-
       <div className="p-6">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -234,6 +221,5 @@ export function AdminClinicsClient({ clinics: initial }: Props) {
           </table>
         </div>
       </div>
-    </div>
   );
 }

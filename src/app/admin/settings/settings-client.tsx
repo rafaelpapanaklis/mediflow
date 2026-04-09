@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { Shield, Mail, CreditCard, Building, Bell, Globe } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -36,19 +35,6 @@ export function AdminSettingsClient() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      <nav className="bg-slate-900 border-b border-slate-700 px-6 h-14 flex items-center gap-4">
-        <Link href="/admin" className="flex items-center gap-2 font-extrabold text-brand-400">
-          <div className="w-6 h-6 rounded-lg bg-brand-600 flex items-center justify-center text-[11px] font-extrabold text-white">M</div>
-          MediFlow Admin
-        </Link>
-        <div className="flex items-center gap-1 ml-4">
-          {[{href:"/admin",label:"Dashboard"},{href:"/admin/clinics",label:"Clínicas"},{href:"/admin/payments",label:"Pagos"},{href:"/admin/settings",label:"Config"}].map(item => (
-            <Link key={item.href} href={item.href} className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${item.href === "/admin/settings" ? "bg-slate-700 text-white" : "text-slate-400 hover:text-white hover:bg-slate-800"}`}>{item.label}</Link>
-          ))}
-        </div>
-      </nav>
-
       <div className="p-6">
         <div className="mb-6">
           <h1 className="text-xl font-extrabold">Configuración del sistema</h1>
@@ -309,6 +295,5 @@ export function AdminSettingsClient() {
           </div>
         )}
       </div>
-    </div>
   );
 }

@@ -49,28 +49,7 @@ export default async function AdminPage() {
   const pendingPay   = subInvoices.filter(i => i.status==="pending").reduce((s,i)=>s+i.amount,0);
   const growthRate   = newClinicsPrev > 0 ? Math.round(((newClinicsMonth-newClinicsPrev)/newClinicsPrev)*100) : 0;
 
-  const nav = [
-    {href:"/admin",label:"Dashboard"},
-    {href:"/admin/clinics",label:"Clínicas"},
-    {href:"/admin/payments",label:"Pagos"},
-    {href:"/admin/churn",label:`Churn (${churnRisk.length+inactiveTrial.length})`},
-    {href:"/admin/settings",label:"Config"},
-  ];
-
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      <nav className="bg-slate-900 border-b border-slate-700 px-6 h-14 flex items-center gap-4">
-        <Link href="/admin" className="flex items-center gap-2 font-extrabold text-brand-400">
-          <div className="w-6 h-6 rounded-lg bg-brand-600 flex items-center justify-center text-[11px] font-extrabold text-white">M</div>
-          MediFlow Admin
-        </Link>
-        <div className="flex items-center gap-1 ml-4">
-          {nav.map(item => (
-            <Link key={item.href} href={item.href} className="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">{item.label}</Link>
-          ))}
-        </div>
-      </nav>
-
       <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
         <div>
           <h1 className="text-2xl font-extrabold">Dashboard financiero</h1>
@@ -221,6 +200,5 @@ export default async function AdminPage() {
           </table>
         </div>
       </div>
-    </div>
   );
 }
