@@ -18,9 +18,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   });
   if (!clinic) return { title: "Clínica no encontrada" };
   return {
-    title: `${clinic.name} — Agenda tu cita en línea`,
-    description: clinic.description ?? `Agenda tu cita en ${clinic.name}`,
-    openGraph: { images: clinic.logoUrl ? [clinic.logoUrl] : [] },
+    title: `${clinicData.name} — Agenda tu cita en línea`,
+    description: clinic.description ?? `Agenda tu cita en ${clinicData.name}`,
+    openGraph: { images: clinicData.logoUrl ? [clinicData.logoUrl] : [] },
   };
 }
 
@@ -37,15 +37,16 @@ export default async function ClinicLandingPage({ params }: Props) {
   });
 
   if (!clinic) notFound();
-  if (!clinic.landingActive) {
+  const clinicData = clinic as any;
+  if (!clinicData.landingActive) {
     // Show a simple "coming soon" instead of 404
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-white text-center px-4">
-        <div className="text-5xl mb-4">{clinic.logoUrl ? <img src={clinic.logoUrl} alt={clinic.name} className="h-16 mx-auto rounded-2xl" /> : "🏥"}</div>
-        <h1 className="text-2xl font-bold mb-2">{clinic.name}</h1>
+        <div className="text-5xl mb-4">{clinicData.logoUrl ? <img src={clinicData.logoUrl} alt={clinicData.name} className="h-16 mx-auto rounded-2xl" /> : "🏥"}</div>
+        <h1 className="text-2xl font-bold mb-2">{clinicData.name}</h1>
         <p className="text-slate-400 mb-6">Nuestro sitio web estará disponible pronto.</p>
-        {clinic.phone && (
-          <a href={`tel:${clinic.phone}`} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-semibold">
+        {clinicData.phone && (
+          <a href={`tel:${clinicData.phone}`} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-semibold">
             📞 Llamar para agendar
           </a>
         )}
@@ -53,5 +54,5 @@ export default async function ClinicLandingPage({ params }: Props) {
     );
   }
 
-  return <ClinicLandingClient clinic={clinic as any} />;
+  return <ClinicLandingClient clinic={clinicData} />;
 }
