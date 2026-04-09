@@ -169,6 +169,60 @@ export async function createCalendarEvent(
   }
 }
 
+export async function updateCalendarEvent(
+  accessToken: string,
+  refreshToken: string,
+  googleEventId: string,
+  appt: {
+    type: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    patientName: string;
+    clinicName: string;
+    clinicAddress?: string | null;
+    notes?: string | null;
+    doctorName?: string | null;
+    calendarId?: string;
+  }
+): Promise<boolean> {
+  try {
+    const oauth2Client = getOAuthClient();
+    oauth2Client.setCredentials({ access_token: accessToken, refresh_token: refreshToken });
+    const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+
+    const tz      = "America/Mexico_City";
+    const dateStr = appt.date.split("T")[0];
+    const startDT = `${dateStr}T${appt.startTime}:00`;
+    const endDT   = `${dateStr}T${appt.endTime}:00`;
+
+    const descLines = [
+      `Paciente: ${appt.patientName}`,
+      `Tipo: ${appt.type}`,
+      appt.doctorName ? `Doctor/a: ${appt.doctorName}` : "",
+      appt.notes ? `Notas: ${appt.notes}` : "",
+      `\nAgendado desde MediFlow`,
+    ].filter(Boolean).join("\n");
+
+    await calendar.events.update({
+      calendarId: appt.calendarId ?? "primary",
+      eventId:    googleEventId,
+      requestBody: {
+        summary:     `🏥 ${appt.type} — ${appt.patientName}`,
+        description: descLines,
+        location:    appt.clinicAddress ?? appt.clinicName,
+        start:       { dateTime: startDT, timeZone: tz },
+        end:         { dateTime: endDT,   timeZone: tz },
+        colorId: "2",
+      },
+    });
+    return true;
+  } catch (err) {
+    console.error("Google Calendar updateEvent error:", err);
+    return false;
+  }
+}
+
 export async function deleteCalendarEvent(
   accessToken: string,
   refreshToken: string,
