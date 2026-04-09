@@ -120,6 +120,7 @@ model User {
   primaryPatients Patient[]       @relation("PrimaryDoctor")
   treatments          TreatmentPlan[]
   periodontalRecords  PeriodontalRecord[]
+  auditLogs           AuditLog[]
 
   @@map("users")
 }
