@@ -4,6 +4,7 @@ import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
+  try {
   const rl = rateLimit(req, 10); // 10 requests per minute per IP
   if (rl) return rl;
 
@@ -190,4 +191,8 @@ export async function POST(req: NextRequest) {
     patientId:     patient.id,
     message:       "¡Cita agendada con éxito! Te enviaremos un recordatorio por WhatsApp.",
   });
+  } catch (err: any) {
+    console.error("Booking error:", err);
+    return NextResponse.json({ error: err.message ?? "Error interno al agendar" }, { status: 500 });
+  }
 }
