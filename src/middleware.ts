@@ -6,6 +6,13 @@ const RESERVED_PATHS = new Set([
   "admin","api","dashboard","auth","login","register",
   "pricing","features","contact","consentimiento","portal",
   "favicon.ico","_next","fonts","images",
+  // Specialty pages
+  "dental","medicina-general","nutricion","psicologia",
+  "dermatologia","fisioterapia","podologia",
+  "medicina-estetica","clinicas-capilares",
+  "centros-estetica","cejas-pestanas","masajes",
+  "depilacion-laser","peluquerias","medicina-alternativa",
+  "unas","spas",
 ]);
 
 export async function middleware(request: NextRequest) {

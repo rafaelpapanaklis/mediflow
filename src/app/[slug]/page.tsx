@@ -27,6 +27,12 @@ const CATEGORY_HIGHLIGHTS: Record<string, string[]> = {
 const RESERVED = [
   "dashboard","admin","api","auth","login","register",
   "pricing","features","contact","consentimiento","portal",
+  "dental","medicina-general","nutricion","psicologia",
+  "dermatologia","fisioterapia","podologia",
+  "medicina-estetica","clinicas-capilares",
+  "centros-estetica","cejas-pestanas","masajes",
+  "depilacion-laser","peluquerias","medicina-alternativa",
+  "unas","spas",
 ];
 
 interface Props { params: { slug: string } }
