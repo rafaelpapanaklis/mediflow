@@ -55,6 +55,7 @@ export default async function ReservarPage({ params, searchParams }: Props) {
       city:      true,
       logoUrl:   true,
       description: true,
+      landingServices: true,
       schedules: {
         select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
       },
@@ -69,7 +70,13 @@ export default async function ReservarPage({ params, searchParams }: Props) {
   if (!clinic) notFound();
 
   const category = (clinic as any).category ?? "OTHER";
-  const categoryServices = CATEGORY_SERVICES[category] ?? CATEGORY_SERVICES.OTHER;
+  // Use landing page services if configured, otherwise fall back to category defaults
+  const landingServiceNames = Array.isArray((clinic as any).landingServices)
+    ? (clinic as any).landingServices.map((s: any) => s.name).filter(Boolean)
+    : [];
+  const categoryServices = landingServiceNames.length > 0
+    ? landingServiceNames
+    : (CATEGORY_SERVICES[category] ?? CATEGORY_SERVICES.OTHER);
 
   return (
     <BookingClient
