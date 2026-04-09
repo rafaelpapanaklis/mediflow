@@ -51,11 +51,11 @@ export function NewPatientModal({ open, onClose, onCreated }: Props) {
             <div className="space-y-1.5">
             <Label>Tipo de paciente</Label>
             <div className="flex gap-2">
-              <button type="button" onClick={() => set("isChild", false)}
+              <button type="button" onClick={() => setForm(f => ({ ...f, isChild: false }))}
                 className={`flex-1 py-2 text-sm font-semibold rounded-xl border transition-colors ${!form.isChild ? "bg-brand-600 text-white border-brand-600" : "border-border hover:bg-muted"}`}>
                 🦷 Adulto
               </button>
-              <button type="button" onClick={() => set("isChild", true)}
+              <button type="button" onClick={() => setForm(f => ({ ...f, isChild: true }))}
                 className={`flex-1 py-2 text-sm font-semibold rounded-xl border transition-colors ${form.isChild ? "bg-amber-500 text-white border-amber-500" : "border-border hover:bg-muted"}`}>
                 🧒 Niño (dentición temporal)
               </button>
