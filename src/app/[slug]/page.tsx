@@ -14,12 +14,12 @@ interface Props { params: { slug: string } }
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const clinic = await prisma.clinic.findUnique({
     where: { slug: params.slug },
-    select: { name: true, description: true, landingTagline: true, logoUrl: true },
+    select: { name: true, description: true, logoUrl: true },
   });
   if (!clinic) return { title: "Clínica no encontrada" };
   return {
     title: `${clinic.name} — Agenda tu cita en línea`,
-    description: clinic.landingTagline ?? clinic.description ?? `Agenda tu cita en ${clinic.name}`,
+    description: clinic.description ?? `Agenda tu cita en ${clinic.name}`,
     openGraph: { images: clinic.logoUrl ? [clinic.logoUrl] : [] },
   };
 }
