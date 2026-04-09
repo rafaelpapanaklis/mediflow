@@ -35,7 +35,7 @@ export async function logAudit(opts: AuditOptions) {
 // Calculate diff between two objects - returns only changed fields
 export function diffObjects(before: Record<string, any>, after: Record<string, any>): Record<string, { before: any; after: any }> {
   const changes: Record<string, { before: any; after: any }> = {};
-  const allKeys = new Set([...Object.keys(before), ...Object.keys(after)]);
+  const allKeys = Array.from(new Set([...Object.keys(before), ...Object.keys(after)]));
 
   for (const key of allKeys) {
     // Skip metadata fields
