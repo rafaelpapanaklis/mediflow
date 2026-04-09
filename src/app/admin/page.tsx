@@ -9,6 +9,28 @@ export const metadata: Metadata = { title: "Super Admin — MediFlow" };
 const PLAN_PRICES: Record<string, number> = { BASIC: 299, PRO: 499, CLINIC: 799 };
 
 export default async function AdminPage() {
+  try {
+    return await renderAdminDashboard();
+  } catch (err: any) {
+    console.error("Admin page error:", err);
+    return (
+      <div className="max-w-3xl mx-auto px-6 py-12">
+        <div className="bg-red-950/50 border border-red-800 rounded-2xl p-6">
+          <h1 className="text-xl font-bold text-red-400 mb-3">Error al cargar el panel admin</h1>
+          <p className="text-sm text-red-300 mb-4">{err.message ?? "Error desconocido"}</p>
+          {err.message?.includes("column") || err.message?.includes("relation") ? (
+            <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 text-sm text-slate-300">
+              <p className="font-bold mb-2">La base de datos necesita ser migrada.</p>
+              <p className="text-slate-400">Ve a tu Supabase SQL Editor y ejecuta el archivo <code className="text-brand-400">sql/migration_multi_category.sql</code></p>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+}
+
+async function renderAdminDashboard() {
   const now    = new Date();
   const month1 = new Date(now.getFullYear(), now.getMonth(), 1);
   const prev1  = new Date(now.getFullYear(), now.getMonth() - 1, 1);
