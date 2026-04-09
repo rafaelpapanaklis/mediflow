@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { rateLimit } from "@/lib/rate-limit";
 
 const schema = z.object({
   firstName: z.string().min(2), lastName: z.string().min(2),
@@ -21,6 +22,9 @@ async function generateSlug(name: string) {
 }
 
 export async function POST(req: NextRequest) {
+  const rl = rateLimit(req, 5); // 5 requests per minute per IP
+  if (rl) return rl;
+
   try {
     const body = await req.json();
     const data = schema.parse(body);

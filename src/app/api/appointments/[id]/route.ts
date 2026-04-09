@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { deleteCalendarEvent, refreshAccessToken } from "@/lib/google-calendar";
+import { revalidatePath } from "next/cache";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -34,6 +36,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     },
   });
 
+  revalidatePath("/dashboard");
+
   return NextResponse.json({
     ...updated,
     date:      updated.date instanceof Date ? updated.date.toISOString() : updated.date,
@@ -49,6 +53,27 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   // Only admins and receptionists can delete appointments
   if (ctx.isDoctor) {
     return NextResponse.json({ error: "Los doctores no pueden eliminar citas" }, { status: 403 });
+  }
+
+  // Read appointment to get Google Calendar event ID before deleting
+  const appt = await prisma.appointment.findFirst({
+    where: { id: params.id, clinicId: ctx.clinicId },
+    select: { googleCalendarEventId: true, clinicId: true },
+  });
+
+  if (appt?.googleCalendarEventId) {
+    try {
+      const clinic = await prisma.clinic.findUnique({
+        where: { id: appt.clinicId },
+        select: { googleCalendarToken: true, googleRefreshToken: true },
+      });
+      if (clinic?.googleCalendarToken && clinic?.googleRefreshToken) {
+        const token = await refreshAccessToken(clinic.googleRefreshToken) ?? clinic.googleCalendarToken;
+        await deleteCalendarEvent(token, clinic.googleRefreshToken, appt.googleCalendarEventId);
+      }
+    } catch (e) {
+      console.error("Failed to delete Google Calendar event:", e);
+    }
   }
 
   await prisma.appointment.deleteMany({

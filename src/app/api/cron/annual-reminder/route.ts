@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
       const msg = `Hola ${patient.firstName} 😊\n\nTe contactamos de *${clinic.name}*.\n\nNos damos cuenta que tu última visita fue ${lastVisitText} y queremos recordarte que una revisión periódica es importante para mantener tu salud dental.\n\n🦷 Te invitamos a agendar tu cita de revisión.\n¿Te gustaría programar una? Responde *SÍ* y te contactamos de inmediato.`;
 
       try {
-        await sendWhatsAppMessage(patient.phone, msg, clinic.waPhoneNumberId!, clinic.waAccessToken!);
+        await sendWhatsAppMessage(clinic.waPhoneNumberId!, clinic.waAccessToken!, patient.phone, msg);
 
         // Log reminder
         await prisma.whatsAppReminder.create({

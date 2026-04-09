@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { createHmac } from "crypto";
 
 // GET — webhook verification by Meta
 export async function GET(req: NextRequest) {
@@ -19,7 +20,20 @@ export async function GET(req: NextRequest) {
 // POST — incoming messages from Meta
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const rawBody = await req.text();
+
+    // Verify X-Hub-Signature-256 from Meta
+    const appSecret = process.env.WHATSAPP_APP_SECRET;
+    if (appSecret) {
+      const signature = req.headers.get("x-hub-signature-256");
+      if (!signature) return NextResponse.json({ error: "Missing signature" }, { status: 403 });
+      const expectedSig = "sha256=" + createHmac("sha256", appSecret).update(rawBody).digest("hex");
+      if (signature !== expectedSig) {
+        return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
+      }
+    }
+
+    const body = JSON.parse(rawBody);
 
     // Extract message from WhatsApp webhook payload
     const entry    = body?.entry?.[0];

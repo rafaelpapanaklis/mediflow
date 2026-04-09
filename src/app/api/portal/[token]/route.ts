@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { rateLimit } from "@/lib/rate-limit";
 
 // GET /api/portal/[token] — public endpoint, no auth required
 // Returns patient's own data for the portal
 export async function GET(req: NextRequest, { params }: { params: { token: string } }) {
+  const rl = rateLimit(req, 20); // 20 requests per minute per IP
+  if (rl) return rl;
+
   const patient = await prisma.patient.findUnique({
     where: { portalToken: params.token },
     include: {

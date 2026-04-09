@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { z } from "zod";
+
+const recordSchema = z.object({
+  patientId:     z.string().min(1),
+  subjective:    z.string().optional().nullable(),
+  objective:     z.string().optional().nullable(),
+  assessment:    z.string().optional().nullable(),
+  plan:          z.string().optional().nullable(),
+  diagnoses:     z.any().optional().nullable(),
+  vitals:        z.any().optional().nullable(),
+  specialtyData: z.any().optional().nullable(),
+  isPrivate:     z.boolean().optional(),
+});
 
 async function getDbUser() {
   const supabase = createClient();
@@ -27,7 +40,33 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const dbUser = await getDbUser();
   if (!dbUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const body = await req.json();
-  const record = await prisma.medicalRecord.create({ data: { ...body, clinicId: dbUser.clinicId, doctorId: dbUser.id } });
+  const parsed = recordSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Datos inválidos", details: parsed.error.flatten() }, { status: 400 });
+  }
+
+  // Verify patient belongs to this clinic
+  const patient = await prisma.patient.findFirst({
+    where: { id: parsed.data.patientId, clinicId: dbUser.clinicId },
+  });
+  if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
+
+  const record = await prisma.medicalRecord.create({
+    data: {
+      clinicId:      dbUser.clinicId,
+      doctorId:      dbUser.id,
+      patientId:     parsed.data.patientId,
+      subjective:    parsed.data.subjective ?? null,
+      objective:     parsed.data.objective ?? null,
+      assessment:    parsed.data.assessment ?? null,
+      plan:          parsed.data.plan ?? null,
+      diagnoses:     parsed.data.diagnoses ?? undefined,
+      vitals:        parsed.data.vitals ?? undefined,
+      specialtyData: parsed.data.specialtyData ?? undefined,
+      isPrivate:     parsed.data.isPrivate ?? false,
+    },
+  });
   return NextResponse.json(record, { status: 201 });
 }

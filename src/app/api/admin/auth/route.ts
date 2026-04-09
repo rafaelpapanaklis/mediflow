@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { authenticator } from "otplib";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
+  const rl = rateLimit(req, 5); // 5 requests per minute per IP
+  if (rl) return rl;
+
   const { step, password, totp } = await req.json();
   const adminPassword = process.env.ADMIN_PASSWORD;
   const adminTotp     = process.env.ADMIN_TOTP_SECRET;
@@ -28,9 +32,8 @@ export async function POST(req: NextRequest) {
     try {
       authenticator.options = { window: 1 }; // Allow 30s window
       isValid = authenticator.verify({ token: totp, secret: adminTotp });
-    } catch (e) {
-      // If otplib not available, fallback: accept any 6-digit code that matches env
-      isValid = totp === process.env.ADMIN_TOTP_OVERRIDE;
+    } catch {
+      isValid = false;
     }
 
     if (!isValid) return NextResponse.json({ error: "Código 2FA incorrecto o expirado" }, { status: 401 });

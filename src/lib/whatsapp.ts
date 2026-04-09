@@ -4,8 +4,13 @@ export async function sendWhatsAppMessage(
   to: string,
   message: string
 ) {
-  const phone = to.replace(/[\s\-\(\)]/g, "");
-  const formattedPhone = phone.startsWith("+") ? phone.slice(1) : phone.startsWith("52") ? phone : `52${phone}`;
+  let phone = to.replace(/[\s\-\(\)\+]/g, "");
+  if (phone.startsWith("52") && phone.length === 12) {
+    // Already has country code and correct length — leave as is
+  } else if (phone.length === 10) {
+    phone = `52${phone}`;
+  }
+  const formattedPhone = phone;
 
   const res = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
     method: "POST",

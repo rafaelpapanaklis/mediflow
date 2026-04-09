@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdmin } from "@supabase/supabase-js";
+import { rateLimit } from "@/lib/rate-limit";
 
 // GET /api/consent/[token] — public, get form content for patient to read
 export async function GET(req: NextRequest, { params }: { params: { token: string } }) {
+  const rl = rateLimit(req, 20); // 20 requests per minute per IP
+  if (rl) return rl;
+
   const form = await prisma.consentForm.findUnique({
     where:   { token: params.token },
     include: {
@@ -41,8 +45,8 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     const buffer = Buffer.from(base64, "base64");
     const path   = `signatures/${form.clinicId}/${form.id}.png`;
     await supabase.storage.from("patient-files").upload(path, buffer, { contentType: "image/png", upsert: true });
-    const { data: { publicUrl } } = supabase.storage.from("patient-files").getPublicUrl(path);
-    signatureUrl = publicUrl;
+    const { data: signedData } = await supabase.storage.from("patient-files").createSignedUrl(path, 3600);
+    signatureUrl = signedData?.signedUrl ?? null;
   } catch (e) {
     console.error("Signature upload error:", e);
   }

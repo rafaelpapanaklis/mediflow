@@ -26,6 +26,13 @@ export async function POST(req: NextRequest) {
   const dbUser = await getDbUser();
   if (!dbUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await req.json();
+
+  // Verify patient belongs to this clinic
+  const patient = await prisma.patient.findFirst({
+    where: { id: body.patientId, clinicId: dbUser.clinicId },
+  });
+  if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
+
   const record = await prisma.medicalRecord.create({
     data: { clinicId: dbUser.clinicId, patientId: body.patientId, doctorId: dbUser.id,
       visitDate: new Date(), subjective: body.subjective, objective: body.objective,

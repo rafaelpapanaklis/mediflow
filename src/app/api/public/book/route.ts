@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
+  const rl = rateLimit(req, 10); // 10 requests per minute per IP
+  if (rl) return rl;
+
   const body = await req.json();
   const { slug, doctorId, date, startTime, type, firstName, lastName, phone, email, notes } = body;
 
@@ -75,21 +79,6 @@ export async function POST(req: NextRequest) {
   const dateStart = new Date(y, m - 1, d, 0, 0, 0, 0);
   const dateEnd   = new Date(y, m - 1, d, 23, 59, 59, 999);
 
-  const conflict = await prisma.appointment.findFirst({
-    where: {
-      clinicId:  clinic.id,
-      doctorId,
-      date:      { gte: dateStart, lte: dateEnd },
-      startTime,
-      status:    { notIn: ["CANCELLED","NO_SHOW"] },
-    },
-  });
-  if (conflict) {
-    return NextResponse.json({
-      error: "Este horario ya fue reservado. Por favor elige otro horario.",
-    }, { status: 409 });
-  }
-
   // ── Calculate end time ─────────────────────────────────────────────────────
   const endMins = slotMins + 30;
   const endTime = `${String(Math.floor(endMins / 60)).padStart(2,"0")}:${String(endMins % 60).padStart(2,"0")}`;
@@ -100,7 +89,6 @@ export async function POST(req: NextRequest) {
   });
 
   if (!patient) {
-    // FIX: Use a retry loop to handle race condition on patientNumber uniqueness
     let attempts = 0;
     while (!patient && attempts < 3) {
       attempts++;
@@ -120,7 +108,6 @@ export async function POST(req: NextRequest) {
           },
         });
       } catch (err: any) {
-        // Unique constraint violation on patientNumber — retry with next number
         if (err.code === "P2002" && attempts < 3) continue;
         throw err;
       }
@@ -131,21 +118,45 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Error creando perfil de paciente" }, { status: 500 });
   }
 
-  // ── Create appointment ─────────────────────────────────────────────────────
-  const appt = await prisma.appointment.create({
-    data: {
-      clinicId:    clinic.id,
-      patientId:   patient.id,
-      doctorId,
-      type:        type?.trim() || "Consulta general",
-      date:        apptDate,
-      startTime,
-      endTime,
-      durationMins:30,
-      status:      "PENDING",
-      notes:       notes?.trim() || null,
-    },
+  // ── Check conflict + create appointment in a transaction (prevent double-booking) ──
+  const appt = await prisma.$transaction(async (tx) => {
+    const conflict = await tx.appointment.findFirst({
+      where: {
+        clinicId:  clinic.id,
+        doctorId,
+        date:      { gte: dateStart, lte: dateEnd },
+        startTime,
+        status:    { notIn: ["CANCELLED","NO_SHOW"] },
+      },
+    });
+    if (conflict) {
+      throw new Error("SLOT_TAKEN");
+    }
+
+    return tx.appointment.create({
+      data: {
+        clinicId:    clinic.id,
+        patientId:   patient!.id,
+        doctorId,
+        type:        type?.trim() || "Consulta general",
+        date:        apptDate,
+        startTime,
+        endTime,
+        durationMins:30,
+        status:      "PENDING",
+        notes:       notes?.trim() || null,
+      },
+    });
+  }).catch((err) => {
+    if (err.message === "SLOT_TAKEN") return null;
+    throw err;
   });
+
+  if (!appt) {
+    return NextResponse.json({
+      error: "Este horario ya fue reservado. Por favor elige otro horario.",
+    }, { status: 409 });
+  }
 
   // ── Send WhatsApp confirmation ─────────────────────────────────────────────
   if (clinic.waConnected && clinic.waPhoneNumberId && clinic.waAccessToken) {

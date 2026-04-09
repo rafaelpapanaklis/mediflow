@@ -1,7 +1,6 @@
 "use client";
 
-import {useState, useEffect} from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { Building, User, Clock, Shield, Receipt, Bot, CalendarCheck, ExternalLink, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,11 +21,11 @@ const REGIMENES   = [
 interface Props { user: any; clinic: any; initialTab?: string; gcalStatus?: string }
 
 export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus }: Props) {
-  const router = useRouter();
-  const [tab,      setTab]      = useState(initialTab ?? "clinica");
+  const [tab,      setTab]      = useState(initialTab || "clinica");
   const [saving,   setSaving]   = useState(false);
   const [user,     setUser]     = useState(initUser);
   const [clinic,   setClinic]   = useState(initClinic);
+  const [isPublic, setIsPublic] = useState<boolean>(Boolean(initClinic.isPublic ?? false));
   const [schedule, setSchedule] = useState<Record<number,{enabled:boolean;open:string;close:string}>>(
     Object.fromEntries((initClinic.schedules ?? []).map((s: any) => [s.dayOfWeek, { enabled:s.enabled, open:s.openTime, close:s.closeTime }]))
   );
@@ -46,15 +45,8 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
   const aiPercent   = Math.min(100, Math.round((aiUsed / aiLimit) * 100));
   const aiRemaining = Math.max(0, aiLimit - aiUsed);
 
-  // Google Calendar status — check user OR clinic level (admin saves on clinic)
-  const gcalConnected = user.googleCalendarEnabled || initClinic?.googleCalendarEnabled;
-  const gcalEmail = user.googleCalendarEmail || initClinic?.googleCalendarEmail || "Conectado";
-
-  // Show toast after OAuth redirect
-  useEffect(() => {
-    if (gcalStatus === "success") toast.success("✅ Google Calendar conectado correctamente");
-    if (gcalStatus === "error")   toast.error("Error al conectar Google Calendar");
-  }, [gcalStatus]);
+  // Google Calendar status
+  const gcalConnected = user.googleCalendarEnabled && user.googleCalendarEmail;
 
   // ── Save functions ────────────────────────────────────────────────────────
   async function saveClinic() {
@@ -62,7 +54,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
     try {
       const res = await fetch("/api/clinic", {
         method: "PATCH", headers: { "Content-Type":"application/json" },
-        body: JSON.stringify({ name:clinic.name, city:clinic.city, phone:clinic.phone, email:clinic.email }),
+        body: JSON.stringify({ name:clinic.name, city:clinic.city, phone:clinic.phone, email:clinic.email, address:clinic.address, description:clinic.description, isPublic })
       });
       if (!res.ok) throw new Error();
       toast.success("Datos de la clínica actualizados");
@@ -169,6 +161,35 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           </div>
           <div className="space-y-1.5"><Label>Teléfono</Label><Input value={clinic.phone ?? ""} onChange={e => setClinic((c: any) => ({ ...c, phone: e.target.value }))} /></div>
           <div className="space-y-1.5"><Label>Email de contacto</Label><Input type="email" value={clinic.email ?? ""} onChange={e => setClinic((c: any) => ({ ...c, email: e.target.value }))} /></div>
+          <div className="space-y-1.5">
+            <Label>Descripción corta (visible en el directorio)</Label>
+            <textarea
+              className="flex w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 py-3 text-sm focus:outline-none resize-none"
+              rows={2}
+              placeholder="Ej: Clínica dental especializada en ortodoncia e implantes en Mérida"
+              value={clinic.description ?? ""}
+              onChange={e => setClinic((c: any) => ({ ...c, description: e.target.value }))}
+            />
+          </div>
+          <div className="flex items-center justify-between p-4 rounded-2xl border-2 transition-colors"
+            style={{ borderColor: isPublic ? "#2563eb" : "#e2e8f0", background: isPublic ? "#eff6ff" : "transparent" }}>
+            <div>
+              <div className="text-sm font-bold" style={{ color: isPublic ? "#1d4ed8" : "#0f172a" }}>
+                {isPublic ? "🌐 Clínica pública" : "🔒 Clínica privada"}
+              </div>
+              <div className="text-xs mt-0.5" style={{ color: isPublic ? "#3b82f6" : "#64748b" }}>
+                {isPublic
+                  ? "Apareces en el directorio /clinicas y recibes reservas en línea"
+                  : "Solo tu equipo accede. No apareces en el directorio público."}
+              </div>
+            </div>
+            <button type="button" onClick={() => setIsPublic((p: boolean) => !p)}
+              className="relative flex-shrink-0 w-11 h-6 rounded-full transition-colors ml-4"
+              style={{ background: isPublic ? "#2563eb" : "#cbd5e1" }}>
+              <div className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-all"
+                style={{ left: isPublic ? "22px" : "2px" }} />
+            </button>
+          </div>
           <div className="pt-2 flex items-center justify-between">
             <span className={`text-sm font-bold px-3 py-1 rounded-full border ${clinic.plan==="CLINIC"?"bg-violet-50 text-violet-700 border-violet-200":clinic.plan==="PRO"?"bg-brand-50 text-brand-700 border-brand-200":"bg-slate-100 text-slate-600 border-slate-200"}`}>
               Plan {clinic.plan}
@@ -352,7 +373,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   <CalendarCheck className="w-5 h-5 text-emerald-600 flex-shrink-0" />
                   <div>
                     <div className="text-sm font-bold text-emerald-700 dark:text-emerald-300">Cuenta conectada</div>
-                    <div className="text-sm text-emerald-600 dark:text-emerald-400">{gcalEmail}</div>
+                    <div className="text-sm text-emerald-600 dark:text-emerald-400">{user.googleCalendarEmail}</div>
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground">Cada nueva cita que se agende para ti aparecerá automáticamente en tu Google Calendar con recordatorio 24h antes.</p>
@@ -385,33 +406,6 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               <a href="/dashboard/whatsapp" className="text-sm font-semibold text-brand-600 hover:underline">
                 Ir a configuración de WhatsApp →
               </a>
-
-              {/* Recall / Revisión anual */}
-              <div className="mt-6 pt-5 border-t border-border">
-                <h3 className="text-sm font-bold mb-1">🔔 Recordatorio de revisión anual</h3>
-                <p className="text-xs text-muted-foreground mb-3">
-                  Envía WhatsApp automático a pacientes sin cita en X meses. Requiere WhatsApp conectado.
-                </p>
-                <div className="flex items-center gap-3 mb-3">
-                  <label className="text-sm font-semibold">Activar</label>
-                  <button
-                    onClick={async () => {
-                      const res = await fetch("/api/settings", { method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ recallActive: !(clinic as any).recallActive }) });
-                      if (res.ok) { toast.success("Guardado"); router.refresh(); }
-                    }}
-                    className={`w-10 h-5 rounded-full relative transition-colors ${ (clinic as any).recallActive ? "bg-brand-600" : "bg-muted" }`}>
-                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${ (clinic as any).recallActive ? "left-[22px]" : "left-0.5" }`} />
-                  </button>
-                </div>
-                <div className="flex items-center gap-3">
-                  <label className="text-sm font-semibold whitespace-nowrap">Meses sin visita</label>
-                  <select defaultValue={(clinic as any).recallMonths ?? 6}
-                    onChange={async e => { await fetch("/api/settings", { method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ recallMonths: parseInt(e.target.value) }) }); toast.success("Guardado"); }}
-                    className="text-sm border border-border rounded-lg px-3 py-1.5 bg-background">
-                    {[3,6,9,12].map(n => <option key={n} value={n}>{n} meses</option>)}
-                  </select>
-                </div>
-              </div>
             </div>
           )}
         </div>

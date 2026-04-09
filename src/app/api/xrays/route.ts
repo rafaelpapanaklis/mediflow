@@ -45,6 +45,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "file y patientId requeridos" }, { status: 400 });
   }
 
+  const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf", "image/bmp", "image/tiff"];
+  const MAX_SIZE = 50 * 1024 * 1024; // 50MB
+  if (!ALLOWED_TYPES.includes(file.type)) {
+    return NextResponse.json({ error: "Tipo de archivo no permitido" }, { status: 400 });
+  }
+  if (file.size > MAX_SIZE) {
+    return NextResponse.json({ error: "Archivo demasiado grande (máx 50MB)" }, { status: 400 });
+  }
+
   const patient = await prisma.patient.findFirst({
     where: { id: patientId, clinicId: ctx.clinicId },
   });
@@ -64,9 +73,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Error al subir archivo" }, { status: 500 });
   }
 
-  const { data: { publicUrl } } = supabase.storage
+  const { data: signedData, error: signedError } = await supabase.storage
     .from("patient-files")
-    .getPublicUrl(path);
+    .createSignedUrl(path, 3600);
+
+  if (signedError || !signedData?.signedUrl) {
+    return NextResponse.json({ error: "Error generando URL" }, { status: 500 });
+  }
 
   const record = await prisma.patientFile.create({
     data: {
@@ -74,7 +87,7 @@ export async function POST(req: NextRequest) {
       clinicId:   ctx.clinicId,
       uploadedBy: ctx.userId,
       name:       file.name,
-      url:        publicUrl,
+      url:        signedData.signedUrl,
       size:       file.size,
       mimeType:   file.type,
       category:   category as any,

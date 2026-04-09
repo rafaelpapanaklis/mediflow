@@ -62,10 +62,14 @@ export async function POST(req: NextRequest) {
   const installmentData = Array.from({ length: installments }, (_, i) => {
     const dueDate = new Date(start);
     dueDate.setDate(dueDate.getDate() + freqDays * (i + 1));
+    // Last installment gets the residual to avoid rounding errors
+    const amount = i === installments - 1
+      ? Math.round((remaining - perInstall * (installments - 1)) * 100) / 100
+      : perInstall;
     return {
       planId:      plan.id,
       installment: i + 1,
-      amount:      perInstall,
+      amount,
       dueDate,
     };
   });

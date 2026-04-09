@@ -20,6 +20,13 @@ export async function POST(req: NextRequest) {
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { patientId, measurements, notes, bleedingIndex, plaquIndex } = await req.json();
   if (!patientId || !measurements) return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+
+  // Verify patient belongs to this clinic
+  const patient = await prisma.patient.findFirst({
+    where: { id: patientId, clinicId: ctx.clinicId },
+  });
+  if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
+
   const record = await prisma.periodontalRecord.create({
     data: { patientId, clinicId: ctx.clinicId, doctorId: ctx.userId, measurements, notes, bleedingIndex, plaquIndex },
   });

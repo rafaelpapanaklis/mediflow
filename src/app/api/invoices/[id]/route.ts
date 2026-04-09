@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
 
 async function getClinicId() {
   const supabase = createClient();
@@ -31,5 +32,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     prisma.payment.create({ data: { invoiceId: params.id, amount, method, reference, notes } }),
     prisma.invoice.update({ where: { id: params.id }, data: { paid: newPaid, balance: Math.max(0, newBalance), status: newStatus as any, paidAt: newStatus === "PAID" ? new Date() : undefined, paymentMethod: method } }),
   ]);
+  revalidatePath("/dashboard");
   return NextResponse.json({ success: true });
 }

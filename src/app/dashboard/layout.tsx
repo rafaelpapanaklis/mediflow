@@ -1,31 +1,38 @@
-import { OnboardingChecklist } from "@/components/dashboard/onboarding-checklist";
-import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { Sidebar } from "@/components/dashboard/sidebar";
+import { Sidebar }       from "@/components/dashboard/sidebar";
+import { QuickActionsBar }  from "@/components/dashboard/quick-actions";
+import { TodayStrip }    from "@/components/dashboard/today-strip";
+import { prisma }        from "@/lib/prisma";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user   = await getCurrentUser();
   const clinic = user.clinic;
   const isSuspended = clinic.trialEndsAt && new Date(clinic.trialEndsAt) < new Date();
 
-  // Onboarding: check which steps are completed
-  const [hasDoctor, hasPatient, hasAppt, hasRecord, hasInvoice] = await Promise.all([
-    prisma.user.count({ where: { clinicId: user.clinicId, role: "DOCTOR" } }),
-    prisma.patient.count({ where: { clinicId: user.clinicId } }),
-    prisma.appointment.count({ where: { clinicId: user.clinicId } }),
-    prisma.medicalRecord.count({ where: { clinicId: user.clinicId } }),
-    prisma.invoice.count({ where: { clinicId: user.clinicId } }),
-  ]);
+  // Fetch today's appointments for TodayStrip
+  const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+  const todayEnd   = new Date(); todayEnd.setHours(23,59,59,999);
+  const isDoctor   = user.role === "DOCTOR";
 
-  const completedSteps = [
-    ...(hasDoctor > 0           ? ["doctor"]      : []),
-    // schedule: checked separately to avoid extra query in layout
-    ...(hasPatient > 0          ? ["patient"]     : []),
-    ...(hasAppt > 0             ? ["appointment"] : []),
-    ...(hasRecord > 0           ? ["record"]      : []),
-    ...(hasInvoice > 0          ? ["invoice"]     : []),
-    ...(clinic.waConnected      ? ["whatsapp"]    : []),
-  ];
+  const todayAppts = await prisma.appointment.findMany({
+    where: {
+      clinicId: clinic.id,
+      date: { gte: todayStart, lte: todayEnd },
+      status: { notIn: ["CANCELLED"] },
+      ...(isDoctor ? { doctorId: user.id } : {}),
+    },
+    include: {
+      patient: { select: { id: true, firstName: true, lastName: true, phone: true } },
+      doctor:  { select: { id: true, firstName: true, lastName: true, color: true } },
+    },
+    orderBy: { startTime: "asc" },
+  });
+
+  const serializedAppts = todayAppts.map(a => ({
+    id: a.id, type: a.type, startTime: a.startTime, endTime: a.endTime,
+    durationMins: a.durationMins, status: a.status, notes: a.notes,
+    patient: a.patient, doctor: a.doctor as any,
+  }));
 
   return (
     <div className="flex min-h-screen bg-background font-sans">
@@ -39,11 +46,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
         }}
         clinicName={clinic.name}
         plan={clinic.plan}
-        onboardingSlot={
-          <div className="px-3 pb-3">
-            <OnboardingChecklist completed={completedSteps} clinicId={user.clinicId} />
-          </div>
-        }
       />
       <div className="flex-1 flex flex-col min-h-screen lg:max-h-screen lg:overflow-y-auto">
         {isSuspended && (
@@ -52,6 +54,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <a href="/dashboard/suspended" className="underline hover:no-underline">Ver opciones de pago →</a>
           </div>
         )}
+        <QuickActionsBar
+          currentUserId={user.id}
+          clinicId={clinic.id}
+          isAdmin={user.role === "ADMIN" || user.role === "SUPER_ADMIN"}
+        />
+        <TodayStrip initialAppts={serializedAppts} />
         <main className="flex-1 p-5 lg:p-6 pt-16 lg:pt-6">{children}</main>
       </div>
     </div>
