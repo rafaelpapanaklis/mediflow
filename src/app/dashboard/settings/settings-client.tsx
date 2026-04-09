@@ -417,7 +417,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
         </div>
       )}
 
-      {/* ── HORARIOS ── */}}
+      {/* ── HORARIOS ── */}
       {tab === "horarios" && (
         <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl p-6 shadow-card max-w-lg">
           <h2 className="text-base font-bold mb-4">Horario de atención</h2>
