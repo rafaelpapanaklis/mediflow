@@ -12,8 +12,15 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname.startsWith("/admin") && pathname !== "/admin/login") {
-    const token = request.cookies.get("admin_token")?.value;
-    if (!token || token !== process.env.ADMIN_SECRET_TOKEN) {
+    try {
+      const token = request.cookies.get("admin_token")?.value;
+      const secret = process.env.ADMIN_SECRET_TOKEN;
+      if (!token || !secret || token !== secret) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/admin/login";
+        return NextResponse.redirect(url);
+      }
+    } catch {
       const url = request.nextUrl.clone();
       url.pathname = "/admin/login";
       return NextResponse.redirect(url);

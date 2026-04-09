@@ -41,11 +41,16 @@ export function AdminLoginForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ step: "totp", password, totp }),
       });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error); return; }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        setError(data.error ?? `Error ${res.status}`);
+        return;
+      }
       // Hard redirect so the browser sends the new cookie on the server request
       window.location.href = "/admin";
       return;
+    } catch (err: any) {
+      setError(err.message ?? "Error de conexión");
     } finally {
       setLoading(false);
     }
