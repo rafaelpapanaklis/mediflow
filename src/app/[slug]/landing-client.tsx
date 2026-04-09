@@ -25,6 +25,7 @@ interface Clinic {
   landingServices:any; landingWhatsapp:string|null; landingInstagram:string|null;
   landingFacebook:string|null; landingTiktok:string|null; landingMapEmbed:string|null;
   landingTagline:string|null;
+  googlePlaceId:string|null;
   users:{id:string;firstName:string;lastName:string;specialty:string|null;color:string;avatarUrl:string|null;services:string[]}[];
   schedules:{dayOfWeek:number;enabled:boolean;openTime:string;closeTime:string}[];
 }
@@ -37,6 +38,15 @@ export function ClinicLandingClient({ clinic }:{ clinic:Clinic }) {
   const [openFaq, setOpenFaq]   = useState<number|null>(null);
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenu, setMobileMenu] = useState(false);
+  const [googleReviews, setGoogleReviews] = useState<{reviews:any[];rating:number|null;total:number}|null>(null);
+
+  useEffect(() => {
+    if (!clinic.googlePlaceId) return;
+    fetch(`/api/google-reviews?slug=${clinic.slug}`)
+      .then(r => r.json())
+      .then(d => { if (d.reviews?.length > 0) setGoogleReviews(d); })
+      .catch(() => {});
+  }, [clinic.slug, clinic.googlePlaceId]);
 
   const testimonials:any[] = Array.isArray(clinic.landingTestimonials) ? clinic.landingTestimonials : [];
   const faqs:any[]         = Array.isArray(clinic.landingFaqs) ? clinic.landingFaqs : [];
@@ -331,6 +341,60 @@ export function ClinicLandingClient({ clinic }:{ clinic:Clinic }) {
             </div>
           </div>
         </section>
+      )}
+
+      {/* GOOGLE REVIEWS - shown when googlePlaceId configured and no manual testimonials */}
+      {googleReviews && googleReviews.reviews.length > 0 && testimonials.length === 0 && (
+        <section className="py-28" style={{background:`linear-gradient(135deg,${theme}06 0%,${theme}03 100%)`}}>
+          <div className="max-w-6xl mx-auto px-5">
+            <div className="text-center mb-14">
+              <div className="text-xs font-bold uppercase tracking-widest mb-5 px-4 py-2 rounded-full inline-block" style={{background:`${theme}12`,color:theme}}>Reseñas de Google</div>
+              <h2 className="l-serif text-5xl font-bold text-gray-900 mb-4">Lo que dicen nuestros pacientes</h2>
+              {googleReviews.rating && (
+                <div className="flex items-center justify-center gap-1.5 mt-3">
+                  {Array.from({length:5}).map((_,i)=>(
+                    <Star key={i} size={18} className={i<Math.round(googleReviews.rating!)?"fill-amber-400 text-amber-400":"text-gray-200 fill-gray-200"}/>
+                  ))}
+                  <span className="ml-2 font-bold text-gray-800">{googleReviews.rating.toFixed(1)}</span>
+                  <span className="text-gray-400 text-sm">({googleReviews.total} reseñas en Google)</span>
+                </div>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {googleReviews.reviews.slice(0,6).map((r:any, i:number) => (
+                <div key={i} className="l-card bg-white rounded-3xl p-7 shadow-sm border border-gray-50 relative overflow-hidden">
+                  <div className="flex gap-0.5 mb-5">
+                    {Array.from({length:5}).map((_,j)=>(
+                      <Star key={j} size={15} className={j<r.rating?"fill-amber-400 text-amber-400":"text-gray-100 fill-gray-100"}/>
+                    ))}
+                  </div>
+                  {r.text && <p className="text-gray-600 text-sm leading-loose mb-6">"{r.text}"</p>}
+                  <div className="flex items-center gap-3 pt-5 border-t border-gray-50">
+                    {r.photoUrl
+                      ? <img src={r.photoUrl} alt={r.name} className="w-10 h-10 rounded-full object-cover shrink-0"/>
+                      : <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0" style={{background:theme}}>{r.name?.[0]??"G"}</div>
+                    }
+                    <div>
+                      <div className="font-bold text-sm text-gray-900">{r.name}</div>
+                      <div className="text-xs text-gray-400 flex items-center gap-1">{r.relativeTime} · <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/32px-Google_%22G%22_logo.svg.png" alt="Google" className="h-3 w-3 inline"/></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* GOOGLE REVIEWS - shown alongside manual testimonials */}
+      {googleReviews && googleReviews.reviews.length > 0 && testimonials.length > 0 && (
+        <div className="max-w-6xl mx-auto px-5 pb-4 text-center">
+          <a href={`https://search.google.com/local/reviews?placeid=${clinic.googlePlaceId}`} target="_blank" rel="noreferrer"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-gray-700 transition-colors">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/32px-Google_%22G%22_logo.svg.png" alt="Google" className="h-4 w-4"/>
+            Ver {googleReviews.total} reseñas en Google · {googleReviews.rating?.toFixed(1)} ⭐
+          </a>
+        </div>
       )}
 
       {/* FAQs */}

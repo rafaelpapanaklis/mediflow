@@ -49,6 +49,7 @@ const TABS = [
   { id: "facturacion", label: "Facturación"        },
   { id: "imagenes",       label: "📷 Imágenes"         },
   { id: "periodontograma", label: "🦷 Periodontograma"   },
+  { id: "historial",      label: "📋 Historial cambios"  },
   { id: "pagos",       label: "💳 Pagos a plazos"    },
   { id: "consentimientos", label: "✍️ Consentimientos" },
 ];
@@ -626,6 +627,9 @@ export function PatientDetailClient({
         )}
         {tab === "consentimientos" && (
           <ConsentTab patientId={patient.id} />
+        )}
+        {tab === "historial" && (
+          <AuditTab patientId={patient.id} />
         )}
         {tab === "periodontograma" && (
           <div className="p-4">
@@ -1301,3 +1305,81 @@ function ConsentTab({ patientId }: { patientId: string }) {
     </>
   );
 }
+
+// ══════════════════════════════════════════════════════════════
+// TAB: Historial de cambios (Audit Log)
+// ══════════════════════════════════════════════════════════════
+function AuditTab({ patientId }: { patientId: string }) {
+  const [logs, setLogs]       = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    fetch(`/api/audit-log?entityType=patient&entityId=${patientId}`)
+      .then(r => r.json())
+      .then(d => setLogs(Array.isArray(d) ? d : []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [patientId]);
+
+  const ACTION_LABEL: Record<string, { label: string; color: string }> = {
+    create: { label: "Creación",      color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30" },
+    update: { label: "Actualización", color: "text-blue-600 bg-blue-50 dark:bg-blue-900/30" },
+    delete: { label: "Eliminación",   color: "text-red-600 bg-red-50 dark:bg-red-900/30" },
+    view:   { label: "Consulta",      color: "text-gray-600 bg-gray-100" },
+  };
+
+  if (loading) return <div className="p-8 text-center text-muted-foreground text-sm">Cargando historial…</div>;
+
+  if (logs.length === 0) return (
+    <div className="p-8 text-center text-muted-foreground">
+      <div className="text-3xl mb-2">📋</div>
+      <p className="text-sm">Sin cambios registrados aún</p>
+      <p className="text-xs mt-1 text-muted-foreground/60">Los cambios futuros aparecerán aquí</p>
+    </div>
+  );
+
+  return (
+    <div className="p-4 space-y-3">
+      <div className="text-sm text-muted-foreground mb-4">
+        Registro de todos los cambios realizados en este expediente
+      </div>
+      {logs.map(log => (
+        <div key={log.id} className="border border-border rounded-xl p-4">
+          <div className="flex items-start justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2">
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${ACTION_LABEL[log.action]?.color ?? "text-gray-600 bg-gray-100"}`}>
+                {ACTION_LABEL[log.action]?.label ?? log.action}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {log.user.firstName} {log.user.lastName}
+                <span className="text-muted-foreground/50 ml-1">({log.user.role})</span>
+              </span>
+            </div>
+            <span className="text-xs text-muted-foreground shrink-0">
+              {new Date(log.createdAt).toLocaleString("es-MX", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" })}
+            </span>
+          </div>
+          {log.changes && Object.keys(log.changes).length > 0 && (
+            <div className="mt-2 space-y-1.5">
+              {Object.entries(log.changes).map(([field, change]: [string, any]) => (
+                <div key={field} className="text-xs bg-muted/40 rounded-lg p-2">
+                  <span className="font-semibold text-foreground">{field}</span>
+                  <div className="flex gap-2 mt-1 text-muted-foreground">
+                    <span className="text-red-500/70 line-through truncate max-w-[40%]">
+                      {JSON.stringify(change.before) ?? "—"}
+                    </span>
+                    <span>→</span>
+                    <span className="text-emerald-600 truncate max-w-[40%]">
+                      {JSON.stringify(change.after) ?? "—"}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+

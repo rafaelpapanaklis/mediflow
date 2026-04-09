@@ -57,22 +57,7 @@ model Clinic {
   monthlyPrice         Float?    @default(0)
   recallMonths         Int       @default(6)  // months before annual reminder
   recallActive         Boolean   @default(false)
-
-  // Landing page / Micrositio público
-  landingActive      Boolean  @default(false)  // si la landing está publicada
-  landingThemeColor  String?  @default("#2563eb") // color principal
-  landingCoverUrl    String?  // foto de portada
-  landingGallery     String[] @default([])  // URLs de fotos de galería
-  landingTestimonials Json?   // [{name, text, rating, avatarUrl}]
-  landingFaqs        Json?    // [{question, answer}]
-  landingServices    Json?    // [{name, desc, price?, icon?}]
-  landingHours       Json?    // override de horarios para mostrar en landing
-  landingWhatsapp    String?  // número WA para contacto directo
-  landingInstagram   String?  // @handle
-  landingFacebook    String?  // URL
-  landingTiktok      String?  // @handle
-  landingMapEmbed    String?  // Google Maps embed URL
-  landingTagline     String?  // slogan corto
+  googlePlaceId        String?   // Google Maps Place ID for fetching reviews
 
   // AI Assistant usage tracking
   aiTokensUsed  Int      @default(0)
@@ -94,6 +79,7 @@ model Clinic {
   periodontalRecords   PeriodontalRecord[]
   subscriptionInvoices SubscriptionInvoice[]
   files                PatientFile[]
+  auditLogs            AuditLog[]
 
   @@map("clinics")
 }
@@ -134,6 +120,7 @@ model User {
   primaryPatients Patient[]       @relation("PrimaryDoctor")
   treatments          TreatmentPlan[]
   periodontalRecords  PeriodontalRecord[]
+  auditLogs           AuditLog[]
 
   @@map("users")
 }
@@ -192,6 +179,7 @@ model Patient {
   paymentPlans  PaymentPlan[]
   consentForms        ConsentForm[]
   periodontalRecords  PeriodontalRecord[]
+  auditLogs           AuditLog[]
 
   @@unique([clinicId, patientNumber])
   @@map("patients")
@@ -559,6 +547,28 @@ model SubscriptionInvoice {
   clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
   @@map("subscription_invoices")
+}
+
+
+// ── Audit Log ─────────────────────────────────────────────────────────────────
+model AuditLog {
+  id         String   @id @default(cuid())
+  clinicId   String
+  userId     String
+  entityType String   // "patient" | "appointment" | "invoice" | "record"
+  entityId   String
+  action     String   // "create" | "update" | "delete" | "view"
+  changes    Json?    // { field: { before, after } }
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([clinicId, entityType, entityId])
+  @@index([clinicId, createdAt])
+  @@map("audit_logs")
 }
 
 
