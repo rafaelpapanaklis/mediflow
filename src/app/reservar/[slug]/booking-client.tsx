@@ -39,7 +39,7 @@ const S = {
 };
 
 export function BookingClient({ clinic, preselectedService, categoryServices }: { clinic: Clinic; preselectedService: string | null; categoryServices?: string[] }) {
-  const [step,       setStep]       = useState(1);
+  const [step,       setStep]       = useState(preselectedService ? 2 : 1);
   const [doctor,     setDoctor]     = useState<Doctor | null>(null);
   const [calDate,    setCalDate]    = useState(new Date());
   const [selDate,    setSelDate]    = useState("");
@@ -50,37 +50,22 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
   const [error,      setError]      = useState("");
   const [form, setForm] = useState({
     firstName:"", lastName:"", phone:"", email:"",
-    type: preselectedService ?? "Consulta general", notes:"",
+    type: preselectedService ?? "", notes:"",
   });
 
+  // All available services: landing services > category services > fallback
+  const allServices = useMemo(() => {
+    if (categoryServices && categoryServices.length > 0) return categoryServices;
+    return FALLBACK_TYPES;
+  }, [categoryServices]);
+
+  // Filter doctors by selected service
   const visibleDoctors = useMemo(() => {
-    if (!preselectedService) return clinic.users;
-    const svc = preselectedService.toLowerCase();
+    if (!form.type) return clinic.users;
+    const svc = form.type.toLowerCase();
     const filtered = clinic.users.filter(d => d.services.some(s => s.toLowerCase().includes(svc)));
     return filtered.length > 0 ? filtered : clinic.users;
-  }, [clinic.users, preselectedService]);
-
-  const apptTypes = useMemo(() => {
-    if (doctor && doctor.services.length > 0) {
-      return [...doctor.services, ...FALLBACK_TYPES.filter(t =>
-        !doctor.services.some(s => s.toLowerCase() === t.toLowerCase())
-      )];
-    }
-    if (categoryServices && categoryServices.length > 0) {
-      return [...categoryServices, ...FALLBACK_TYPES.filter(t =>
-        !categoryServices.some(s => s.toLowerCase() === t.toLowerCase())
-      )];
-    }
-    return FALLBACK_TYPES;
-  }, [doctor, categoryServices]);
-
-  useEffect(() => {
-    if (!doctor) return;
-    const match = preselectedService
-      ? doctor.services.find(s => s.toLowerCase().includes(preselectedService.toLowerCase()))
-      : null;
-    setForm(f => ({ ...f, type: match ?? (doctor.services[0] ?? "Consulta general") }));
-  }, [doctor, preselectedService]);
+  }, [clinic.users, form.type]);
 
   const schedMap = Object.fromEntries(clinic.schedules.map(s => [s.dayOfWeek, s]));
 
@@ -127,9 +112,11 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
           notes: form.notes.trim() || undefined,
         }),
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data: any;
+      try { data = JSON.parse(text); } catch { data = { error: text || `Error del servidor (${res.status})` }; }
       if (!res.ok) throw new Error(data.error ?? "Error al agendar");
-      setStep(4);
+      setStep(5);
     } catch (err: any) { setError(err.message); }
     finally { setSubmitting(false); }
   }
@@ -163,17 +150,10 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
 
       <main style={{ maxWidth:580, margin:"0 auto", padding:"20px 16px 48px" }}>
 
-        {/* Service banner */}
-        {preselectedService && step < 4 && (
-          <div style={{ background:"#1e3a5f", border:"1px solid #2563eb", borderRadius:12, padding:"10px 14px", marginBottom:16, fontSize:13, color:"#93c5fd", fontWeight:600 }}>
-            🔍 Mostrando doctores para: <strong style={{ color:"#60a5fa" }}>{preselectedService}</strong>
-          </div>
-        )}
-
         {/* Progress */}
-        {step < 4 && (
+        {step < 5 && (
           <div style={{ display:"flex", alignItems:"center", marginBottom:24 }}>
-            {[{n:1,l:"Doctor"},{n:2,l:"Fecha y hora"},{n:3,l:"Confirmar"}].map((s,i) => (
+            {[{n:1,l:"Servicio"},{n:2,l:"Doctor"},{n:3,l:"Fecha y hora"},{n:4,l:"Confirmar"}].map((s,i) => (
               <div key={s.n} style={{ display:"flex", alignItems:"center", flex:1 }}>
                 <div style={{ display:"flex", flexDirection:"column", alignItems:"center" }}>
                   <div style={{
@@ -188,18 +168,52 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
                   </div>
                   <div style={{ fontSize:11, marginTop:4, color: step===s.n ? "#60a5fa" : "#475569", fontWeight: step===s.n ? 600 : 400, whiteSpace:"nowrap" }}>{s.l}</div>
                 </div>
-                {i < 2 && <div style={{ flex:1, height:2, background: step > s.n ? "#059669" : "#1e293b", marginBottom:18, marginLeft:4, marginRight:4 }} />}
+                {i < 3 && <div style={{ flex:1, height:2, background: step > s.n ? "#059669" : "#1e293b", marginBottom:18, marginLeft:4, marginRight:4 }} />}
               </div>
             ))}
           </div>
         )}
 
-        {/* ── STEP 1: Doctor ── */}
+        {/* ── STEP 1: Service ── */}
         {step === 1 && (
           <div>
             <h1 style={{ fontSize:22, fontWeight:800, color:"#f1f5f9", marginBottom:4 }}>
-              {preselectedService ? `Doctores · ${preselectedService}` : "Elige tu doctor"}
+              ¿Qué servicio necesitas?
             </h1>
+            <p style={{ fontSize:13, color:"#64748b", marginBottom:20 }}>
+              Selecciona el tratamiento o servicio que deseas
+            </p>
+
+            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+              {allServices.map(svc => (
+                <button key={svc}
+                  onClick={() => { setForm(f => ({ ...f, type: svc })); setStep(2); }}
+                  style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 18px", ...S.card, cursor:"pointer", textAlign:"left", width:"100%", transition:"border-color 0.15s" }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = "#2563eb")}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = "#334155")}>
+                  <span style={{ fontWeight:600, fontSize:15, color:"#f1f5f9" }}>{svc}</span>
+                  <ChevronRight size={18} color="#334155" />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── STEP 2: Doctor ── */}
+        {step === 2 && (
+          <div>
+            <button onClick={() => { setStep(1); setDoctor(null); }}
+              style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, color:"#64748b", background:"none", border:"none", cursor:"pointer", marginBottom:16, padding:0 }}>
+              <ChevronLeft size={16}/> Cambiar servicio
+            </button>
+            <h1 style={{ fontSize:22, fontWeight:800, color:"#f1f5f9", marginBottom:4 }}>
+              Elige tu doctor
+            </h1>
+            {form.type && (
+              <div style={{ background:"#1e3a5f", border:"1px solid #2563eb", borderRadius:12, padding:"10px 14px", marginBottom:16, fontSize:13, color:"#93c5fd", fontWeight:600 }}>
+                📋 {form.type}
+              </div>
+            )}
             <p style={{ fontSize:13, color:"#64748b", marginBottom:20 }}>
               {visibleDoctors.length} doctor{visibleDoctors.length !== 1 ? "es" : ""} disponible{visibleDoctors.length !== 1 ? "s" : ""}
             </p>
@@ -207,7 +221,7 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
             <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
               {visibleDoctors.map(doc => (
                 <button key={doc.id}
-                  onClick={() => { setDoctor(doc); setStep(2); }}
+                  onClick={() => { setDoctor(doc); setStep(3); }}
                   style={{ display:"flex", alignItems:"center", gap:14, padding:"16px 18px", ...S.card, cursor:"pointer", textAlign:"left", width:"100%", transition:"border-color 0.15s" }}
                   onMouseEnter={e => (e.currentTarget.style.borderColor = "#2563eb")}
                   onMouseLeave={e => (e.currentTarget.style.borderColor = "#334155")}>
@@ -244,12 +258,12 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
           </div>
         )}
 
-        {/* ── STEP 2: Date + Time ── */}
-        {step === 2 && doctor && (
+        {/* ── STEP 3: Date + Time ── */}
+        {step === 3 && doctor && (
           <div>
-            <button onClick={() => { setStep(1); setSelDate(""); setSelSlot(""); }}
+            <button onClick={() => { setStep(2); setSelDate(""); setSelSlot(""); }}
               style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, color:"#64748b", background:"none", border:"none", cursor:"pointer", marginBottom:16, padding:0 }}>
-              <ChevronLeft size={16}/> Cambiar doctor
+              <ChevronLeft size={16}/> Cambiar doctor/servicio
             </button>
             <h1 style={{ fontSize:22, fontWeight:800, color:"#f1f5f9", marginBottom:4 }}>Fecha y hora</h1>
             <p style={{ fontSize:13, color:"#64748b", marginBottom:18 }}>Dr/a. {doctor.firstName} {doctor.lastName} · {form.type}</p>
@@ -336,7 +350,7 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
               </div>
             )}
 
-            <button disabled={!selSlot} onClick={() => setStep(3)}
+            <button disabled={!selSlot} onClick={() => setStep(4)}
               style={{ width:"100%", padding:"14px", borderRadius:14, fontSize:15, fontWeight:700,
                 ...( selSlot ? S.primary : { background:"#1e293b", color:"#475569", border:"none", cursor:"default" }) }}>
               {selSlot ? `Continuar — ${selSlot}` : "Elige un horario"}
@@ -344,10 +358,10 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
           </div>
         )}
 
-        {/* ── STEP 3: Details ── */}
-        {step === 3 && (
+        {/* ── STEP 4: Details ── */}
+        {step === 4 && (
           <div>
-            <button onClick={() => setStep(2)}
+            <button onClick={() => setStep(3)}
               style={{ display:"flex", alignItems:"center", gap:6, fontSize:13, color:"#64748b", background:"none", border:"none", cursor:"pointer", marginBottom:16, padding:0 }}>
               <ChevronLeft size={16}/> Cambiar horario
             </button>
@@ -373,11 +387,8 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
               <DarkField label="Email (opcional)" value={form.email} onChange={v => setForm(f=>({...f,email:v}))} placeholder="correo@ejemplo.com" type="email"/>
 
               <div>
-                <label style={S.label}>Motivo de la cita</label>
-                <select value={form.type} onChange={e => setForm(f=>({...f,type:e.target.value}))}
-                  style={{ ...S.input }}>
-                  {apptTypes.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
+                <label style={S.label}>Servicio seleccionado</label>
+                <div style={{ ...S.input, background:"#1e293b", color:"#93c5fd", fontWeight:600 }}>{form.type || "Consulta general"}</div>
               </div>
 
               <div>
@@ -409,8 +420,8 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
           </div>
         )}
 
-        {/* ── STEP 4: Success ── */}
-        {step === 4 && (
+        {/* ── STEP 5: Success ── */}
+        {step === 5 && (
           <div style={{ textAlign:"center", padding:"32px 0" }}>
             <div style={{ width:80, height:80, borderRadius:"50%", background:"#052e16", border:"2px solid #16a34a", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 24px" }}>
               <Check size={40} color="#4ade80"/>
@@ -438,7 +449,7 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
             )}
 
             <br/>
-            <button onClick={() => { setStep(1); setSelDate(""); setSelSlot(""); setDoctor(null); setForm({firstName:"",lastName:"",phone:"",email:"",type:preselectedService ?? "Consulta general",notes:""}); }}
+            <button onClick={() => { setStep(1); setSelDate(""); setSelSlot(""); setDoctor(null); setForm({firstName:"",lastName:"",phone:"",email:"",type:"",notes:""}); }}
               style={{ padding:"10px 24px", borderRadius:12, ...S.ghost, fontWeight:600, fontSize:14 }}>
               Agendar otra cita
             </button>
