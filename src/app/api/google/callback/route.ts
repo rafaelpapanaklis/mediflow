@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOAuthClient } from "@/lib/google-calendar";
+import { getOAuthClient, verifyState } from "@/lib/google-calendar";
 import { prisma } from "@/lib/prisma";
-import { getAuthContext } from "@/lib/auth-context";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -13,10 +12,12 @@ export async function GET(req: NextRequest) {
   if (error || !code || !state) return NextResponse.redirect(`${BASE}&gcal=error`);
 
   try {
-    // Verify authenticated session and match state to logged-in user
-    const ctx = await getAuthContext();
-    if (!ctx || ctx.userId !== state) {
-      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login`);
+    // Verify state signature (HMAC) instead of session cookie
+    // Cookies often don't survive external OAuth redirects
+    const userId = verifyState(state);
+    if (!userId) {
+      console.error("Google OAuth: invalid state signature");
+      return NextResponse.redirect(`${BASE}&gcal=error`);
     }
 
     const oauth2Client = getOAuthClient();
@@ -36,14 +37,14 @@ export async function GET(req: NextRequest) {
     }
 
     const user = await prisma.user.findUnique({
-      where:  { id: state },
+      where:  { id: userId },
       select: { id: true, role: true, clinicId: true, clinic: { select: { name: true } } },
     });
     if (!user) throw new Error("User not found");
 
     await prisma.$executeRawUnsafe(
       `UPDATE users SET "googleCalendarToken"=$1,"googleRefreshToken"=$2,"googleCalendarEmail"=$3,"googleCalendarEnabled"=true,"updatedAt"=NOW() WHERE id=$4`,
-      accessToken, refreshToken, email, state
+      accessToken, refreshToken, email, userId
     );
 
     if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") {

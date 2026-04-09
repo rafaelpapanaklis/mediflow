@@ -1,10 +1,13 @@
 import { google } from "googleapis";
+import crypto from "crypto";
 
 // FIX: Added calendar scope to create/manage clinic calendars
 const SCOPES = [
   "https://www.googleapis.com/auth/calendar",        // create/manage calendars
   "https://www.googleapis.com/auth/calendar.events", // create/update events
 ];
+
+const STATE_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? "mediflow-gcal-state";
 
 export function getOAuthClient() {
   return new google.auth.OAuth2(
@@ -14,13 +17,28 @@ export function getOAuthClient() {
   );
 }
 
+/** Sign the userId so the callback can verify it without needing a session cookie */
+export function signState(userId: string): string {
+  const hmac = crypto.createHmac("sha256", STATE_SECRET).update(userId).digest("hex").slice(0, 16);
+  return `${userId}.${hmac}`;
+}
+
+/** Verify and extract userId from signed state */
+export function verifyState(state: string): string | null {
+  const [userId, hmac] = state.split(".");
+  if (!userId || !hmac) return null;
+  const expected = crypto.createHmac("sha256", STATE_SECRET).update(userId).digest("hex").slice(0, 16);
+  if (hmac !== expected) return null;
+  return userId;
+}
+
 export function getAuthUrl(userId: string) {
   const oauth2Client = getOAuthClient();
   return oauth2Client.generateAuthUrl({
     access_type: "offline",
     prompt:      "consent",
     scope:       SCOPES,
-    state:       userId,
+    state:       signState(userId),
   });
 }
 

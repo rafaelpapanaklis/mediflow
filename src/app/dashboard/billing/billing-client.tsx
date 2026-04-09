@@ -169,8 +169,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-xl">
-      <div className="rounded-xl border border-border bg-white shadow-card overflow-hidden min-w-[640px]">
+      <div className="rounded-xl border border-border bg-white shadow-card overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
@@ -314,7 +313,6 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
             })}
           </tbody>
         </table>
-      </div>
       </div>
     </div>
   );
