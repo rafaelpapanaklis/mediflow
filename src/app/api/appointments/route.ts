@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getAuthContext, buildAppointmentWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { createCalendarEvent, refreshAccessToken } from "@/lib/google-calendar";
+import { createCalendarEvent, refreshAccessToken, getOrCreateClinicCalendar } from "@/lib/google-calendar";
 
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
   let gcalEventId: string | null = null;
 
   // Option A: Clinic calendar (admin connected)
-  if (clinic?.googleCalendarEnabled && clinic.googleRefreshToken && clinic.googleClinicCalendarId) {
+  if (clinic?.googleCalendarEnabled && clinic.googleRefreshToken) {
     let token = clinic.googleCalendarToken;
 
     // Refresh if needed
@@ -92,6 +92,19 @@ export async function POST(req: NextRequest) {
     }
 
     if (token) {
+      // Auto-create clinic calendar if it doesn't exist yet
+      let calendarId = clinic.googleClinicCalendarId;
+      if (!calendarId) {
+        try {
+          calendarId = await getOrCreateClinicCalendar(token, clinic.googleRefreshToken, clinic.name);
+          if (calendarId) {
+            await prisma.clinic.update({ where: { id: ctx.clinicId }, data: { googleClinicCalendarId: calendarId } });
+          }
+        } catch (err) {
+          console.error("Error creating clinic calendar on-the-fly:", err);
+        }
+      }
+
       gcalEventId = await createCalendarEvent(token, clinic.googleRefreshToken, {
         id:          appt.id,
         type:        appt.type,
@@ -103,9 +116,9 @@ export async function POST(req: NextRequest) {
         clinicAddress: clinic.address,
         notes:       appt.notes,
         doctorName:  doctor ? `${doctor.firstName} ${doctor.lastName}` : null,
-        doctorEmail: null, // don't add as attendee — just informational
+        doctorEmail: null,
         patientEmail: patient.email ?? null,
-        calendarId:  clinic.googleClinicCalendarId, // ← clinic calendar, not primary
+        calendarId:  calendarId ?? "primary",
       });
     }
   }

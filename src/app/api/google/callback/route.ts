@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOAuthClient, verifyState } from "@/lib/google-calendar";
+import { getOAuthClient, verifyState, getOrCreateClinicCalendar } from "@/lib/google-calendar";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
@@ -13,7 +13,6 @@ export async function GET(req: NextRequest) {
 
   try {
     // Verify state signature (HMAC) instead of session cookie
-    // Cookies often don't survive external OAuth redirects
     const userId = verifyState(state);
     if (!userId) {
       console.error("Google OAuth: invalid state signature");
@@ -42,15 +41,31 @@ export async function GET(req: NextRequest) {
     });
     if (!user) throw new Error("User not found");
 
+    // Update user-level Google Calendar fields
     await prisma.$executeRawUnsafe(
       `UPDATE users SET "googleCalendarToken"=$1,"googleRefreshToken"=$2,"googleCalendarEmail"=$3,"googleCalendarEnabled"=true,"updatedAt"=NOW() WHERE id=$4`,
       accessToken, refreshToken, email, userId
     );
 
+    // If admin/super_admin, also set clinic-level AND create the clinic calendar
     if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") {
+      // Create or find the clinic's dedicated Google Calendar
+      let clinicCalendarId: string | null = null;
+      if (accessToken && refreshToken) {
+        try {
+          clinicCalendarId = await getOrCreateClinicCalendar(
+            accessToken,
+            refreshToken,
+            user.clinic.name
+          );
+        } catch (err) {
+          console.error("Error creating clinic calendar:", err);
+        }
+      }
+
       await prisma.$executeRawUnsafe(
-        `UPDATE clinics SET "googleCalendarToken"=$1,"googleRefreshToken"=$2,"googleCalendarEmail"=$3,"googleCalendarEnabled"=true,"updatedAt"=NOW() WHERE id=$4`,
-        accessToken, refreshToken, email, user.clinicId
+        `UPDATE clinics SET "googleCalendarToken"=$1,"googleRefreshToken"=$2,"googleCalendarEmail"=$3,"googleCalendarEnabled"=true,"googleClinicCalendarId"=$4,"updatedAt"=NOW() WHERE id=$5`,
+        accessToken, refreshToken, email, clinicCalendarId, user.clinicId
       );
     }
 

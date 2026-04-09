@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
-import { createCalendarEvent, refreshAccessToken } from "@/lib/google-calendar";
+import { createCalendarEvent, refreshAccessToken, getOrCreateClinicCalendar } from "@/lib/google-calendar";
 import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
@@ -197,13 +197,26 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    if (clinicGcal?.googleCalendarEnabled && clinicGcal.googleRefreshToken && clinicGcal.googleClinicCalendarId) {
+    if (clinicGcal?.googleCalendarEnabled && clinicGcal.googleRefreshToken) {
       let token = clinicGcal.googleCalendarToken;
       if (!token) {
         token = await refreshAccessToken(clinicGcal.googleRefreshToken);
         if (token) await prisma.clinic.update({ where: { id: clinic.id }, data: { googleCalendarToken: token } });
       }
       if (token) {
+        // Auto-create clinic calendar if missing
+        let calendarId = clinicGcal.googleClinicCalendarId;
+        if (!calendarId) {
+          try {
+            calendarId = await getOrCreateClinicCalendar(token, clinicGcal.googleRefreshToken, clinicGcal.name);
+            if (calendarId) {
+              await prisma.clinic.update({ where: { id: clinic.id }, data: { googleClinicCalendarId: calendarId } });
+            }
+          } catch (err) {
+            console.error("Error creating clinic calendar on-the-fly:", err);
+          }
+        }
+
         const gcalEventId = await createCalendarEvent(token, clinicGcal.googleRefreshToken, {
           id: appt.id, type: type?.trim() || "Consulta general",
           date, startTime, endTime,
@@ -212,7 +225,7 @@ export async function POST(req: NextRequest) {
           notes: notes?.trim() || null,
           doctorName: `${doctor.firstName} ${doctor.lastName}`,
           doctorEmail: null, patientEmail: email?.trim() || null,
-          calendarId: clinicGcal.googleClinicCalendarId,
+          calendarId: calendarId ?? "primary",
         });
         if (gcalEventId) {
           await prisma.appointment.update({ where: { id: appt.id }, data: { googleCalendarEventId: gcalEventId } });
