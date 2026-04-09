@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect } from "react";
 import Link from "next/link";
 import {
   Stethoscope, Heart, Apple, Brain, Scan, Activity, Footprints,
@@ -108,6 +111,14 @@ function SpecialtyCard({ icon: Icon, name, desc, color, bg }: { icon: any; name:
 /* ------------------------------------------------------------------ */
 
 export default function HomePage() {
+  // Force light mode on landing page, restore on unmount
+  useEffect(() => {
+    const html = document.documentElement;
+    const wasDark = html.classList.contains("dark");
+    html.classList.remove("dark");
+    return () => { if (wasDark) html.classList.add("dark"); };
+  }, []);
+
   return (
     <div className="min-h-screen bg-white text-slate-900 font-[Sora,sans-serif] overflow-x-hidden">
 
