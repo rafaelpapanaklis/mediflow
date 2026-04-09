@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Building, User, Clock, Shield, Receipt, Bot, CalendarCheck, ExternalLink, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,12 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
   );
   const [pwForm,   setPwForm]   = useState({ current:"", next:"", confirm:"" });
 
+  // Show toast feedback from Google Calendar OAuth redirect
+  useEffect(() => {
+    if (gcalStatus === "success") toast.success("Google Calendar conectado exitosamente");
+    if (gcalStatus === "error") toast.error("Error al conectar Google Calendar — verifica tus credenciales");
+  }, [gcalStatus]);
+
   // CFDI form state
   const [cfdiForm, setCfdiForm] = useState({
     rfcEmisor:    clinic.rfcEmisor    ?? "",
@@ -57,7 +63,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
   const aiRemaining = Math.max(0, aiLimit - aiUsed);
 
   // Google Calendar status
-  const gcalConnected = user.googleCalendarEnabled && user.googleCalendarEmail;
+  const gcalConnected = !!user.googleCalendarEnabled;
 
   // ── Save functions ────────────────────────────────────────────────────────
   async function saveClinic() {

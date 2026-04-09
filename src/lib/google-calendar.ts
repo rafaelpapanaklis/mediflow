@@ -1,8 +1,10 @@
 import { google } from "googleapis";
 import crypto from "crypto";
 
-// FIX: Added calendar scope to create/manage clinic calendars
+// FIX: openid + email required so Google returns id_token with user email
 const SCOPES = [
+  "openid",
+  "email",
   "https://www.googleapis.com/auth/calendar",        // create/manage calendars
   "https://www.googleapis.com/auth/calendar.events", // create/update events
 ];
