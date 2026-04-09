@@ -43,7 +43,9 @@ export function AdminLoginForm() {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error); return; }
-      router.push("/admin");
+      // Hard redirect so the browser sends the new cookie on the server request
+      window.location.href = "/admin";
+      return;
     } finally {
       setLoading(false);
     }

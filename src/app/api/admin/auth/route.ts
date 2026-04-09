@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { authenticator } from "otplib";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -38,12 +37,15 @@ export async function POST(req: NextRequest) {
 
     if (!isValid) return NextResponse.json({ error: "Código 2FA incorrecto o expirado" }, { status: 401 });
 
-    const cookieStore = cookies();
-    cookieStore.set("admin_token", adminToken, {
-      httpOnly: true, secure: process.env.NODE_ENV === "production",
-      sameSite: "strict", maxAge: 60 * 60 * 8, path: "/",
+    const response = NextResponse.json({ ok: true });
+    response.cookies.set("admin_token", adminToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 60 * 60 * 8,
+      path: "/",
     });
-    return NextResponse.json({ ok: true });
+    return response;
   }
 
   return NextResponse.json({ error: "Paso inválido" }, { status: 400 });
