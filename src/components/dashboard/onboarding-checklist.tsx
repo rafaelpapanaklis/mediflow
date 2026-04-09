@@ -4,13 +4,13 @@ import { CheckCircle, Circle, ChevronDown, ChevronUp, X } from "lucide-react";
 import Link from "next/link";
 
 const STEPS = [
-  { id:"doctor",    label:"Agrega un doctor",       desc:"Ve a Configuración → Equipo",   href:"/dashboard/settings#team",       emoji:"👨‍⚕️" },
-  { id:"schedule",  label:"Configura tu horario",   desc:"Configuración → Horarios",       href:"/dashboard/settings#schedule",   emoji:"🕐" },
-  { id:"patient",   label:"Registra un paciente",   desc:"Ve a Pacientes → Nuevo paciente",href:"/dashboard/patients",            emoji:"👤" },
-  { id:"appointment",label:"Agenda una cita",       desc:"Ve a Agenda → Nueva cita",       href:"/dashboard/appointments",        emoji:"📅" },
-  { id:"record",    label:"Registra una consulta",  desc:"Abre un expediente → Nueva consulta", href:"/dashboard/patients",       emoji:"📋" },
-  { id:"invoice",   label:"Crea una factura",       desc:"Ve a Facturación",               href:"/dashboard/billing",             emoji:"💳" },
-  { id:"whatsapp",  label:"Conecta WhatsApp",       desc:"Configuración → WhatsApp",       href:"/dashboard/settings#whatsapp",   emoji:"💬" },
+  { id:"doctor",     label:"Agrega un doctor",      desc:"Ve a Equipo → Nuevo usuario",        href:"/dashboard/team",         emoji:"👨‍⚕️" },
+  { id:"schedule",   label:"Configura tu horario",  desc:"Ve a Configuración → Horarios",      href:"/dashboard/settings",     emoji:"🕐" },
+  { id:"patient",    label:"Registra un paciente",  desc:"Ve a Pacientes → Nuevo paciente",    href:"/dashboard/patients",     emoji:"👤" },
+  { id:"appointment",label:"Agenda una cita",       desc:"Ve a Agenda → Nueva cita",           href:"/dashboard/appointments", emoji:"📅" },
+  { id:"record",     label:"Registra una consulta", desc:"Expedientes → Nuevo expediente",     href:"/dashboard/clinical",     emoji:"📋" },
+  { id:"invoice",    label:"Crea una factura",      desc:"Ve a Facturación",                   href:"/dashboard/billing",      emoji:"💳" },
+  { id:"whatsapp",   label:"Conecta WhatsApp",      desc:"Ve a WhatsApp → Configurar",         href:"/dashboard/whatsapp",     emoji:"💬" },
 ];
 
 interface Props {
