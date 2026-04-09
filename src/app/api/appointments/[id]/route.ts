@@ -36,6 +36,24 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     },
   });
 
+  // Delete Google Calendar event when appointment is cancelled or no-show
+  if ((body.status === "CANCELLED" || body.status === "NO_SHOW") && appt.googleCalendarEventId) {
+    try {
+      const clinic = await prisma.clinic.findUnique({
+        where: { id: ctx.clinicId },
+        select: { googleCalendarToken: true, googleRefreshToken: true, googleClinicCalendarId: true },
+      });
+      if (clinic?.googleRefreshToken) {
+        const token = await refreshAccessToken(clinic.googleRefreshToken) ?? clinic.googleCalendarToken;
+        if (token) {
+          await deleteCalendarEvent(token, clinic.googleRefreshToken, appt.googleCalendarEventId, clinic.googleClinicCalendarId ?? "primary");
+        }
+      }
+    } catch (e) {
+      console.error("Failed to delete Google Calendar event on cancel:", e);
+    }
+  }
+
   revalidatePath("/dashboard");
 
   return NextResponse.json({
@@ -65,11 +83,13 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     try {
       const clinic = await prisma.clinic.findUnique({
         where: { id: appt.clinicId },
-        select: { googleCalendarToken: true, googleRefreshToken: true },
+        select: { googleCalendarToken: true, googleRefreshToken: true, googleClinicCalendarId: true },
       });
-      if (clinic?.googleCalendarToken && clinic?.googleRefreshToken) {
+      if (clinic?.googleRefreshToken) {
         const token = await refreshAccessToken(clinic.googleRefreshToken) ?? clinic.googleCalendarToken;
-        await deleteCalendarEvent(token, clinic.googleRefreshToken, appt.googleCalendarEventId);
+        if (token) {
+          await deleteCalendarEvent(token, clinic.googleRefreshToken, appt.googleCalendarEventId, clinic.googleClinicCalendarId ?? "primary");
+        }
       }
     } catch (e) {
       console.error("Failed to delete Google Calendar event:", e);
