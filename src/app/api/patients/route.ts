@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { revalidatePath } from "next/cache";
 import { getAuthContext, buildPatientWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 
@@ -61,12 +60,11 @@ export async function POST(req: NextRequest) {
       notes:         body.notes ?? null,
       allergies:     body.allergies ?? [],
       chronicConditions: body.chronicConditions ?? [],
+      isChild:       body.isChild ?? false,
       // Auto-assign primary doctor: if doctor creates patient, assign self
       primaryDoctorId: body.primaryDoctorId ?? (ctx.isDoctor ? ctx.userId : null),
     },
   });
 
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/patients");
   return NextResponse.json(patient, { status: 201 });
 }

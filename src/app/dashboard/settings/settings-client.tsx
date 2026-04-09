@@ -1,6 +1,7 @@
 "use client";
 
 import {useState, useEffect} from "react";
+import { useRouter } from "next/navigation";
 import { Building, User, Clock, Shield, Receipt, Bot, CalendarCheck, ExternalLink, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,7 @@ const REGIMENES   = [
 interface Props { user: any; clinic: any; initialTab?: string; gcalStatus?: string }
 
 export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus }: Props) {
+  const router = useRouter();
   const [tab,      setTab]      = useState(initialTab ?? "clinica");
   const [saving,   setSaving]   = useState(false);
   const [user,     setUser]     = useState(initUser);
@@ -383,12 +385,39 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               <a href="/dashboard/whatsapp" className="text-sm font-semibold text-brand-600 hover:underline">
                 Ir a configuración de WhatsApp →
               </a>
+
+              {/* Recall / Revisión anual */}
+              <div className="mt-6 pt-5 border-t border-border">
+                <h3 className="text-sm font-bold mb-1">🔔 Recordatorio de revisión anual</h3>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Envía WhatsApp automático a pacientes sin cita en X meses. Requiere WhatsApp conectado.
+                </p>
+                <div className="flex items-center gap-3 mb-3">
+                  <label className="text-sm font-semibold">Activar</label>
+                  <button
+                    onClick={async () => {
+                      const res = await fetch("/api/settings", { method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ recallActive: !(clinic as any).recallActive }) });
+                      if (res.ok) { toast.success("Guardado"); router.refresh(); }
+                    }}
+                    className={`w-10 h-5 rounded-full relative transition-colors ${ (clinic as any).recallActive ? "bg-brand-600" : "bg-muted" }`}>
+                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${ (clinic as any).recallActive ? "left-[22px]" : "left-0.5" }`} />
+                  </button>
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="text-sm font-semibold whitespace-nowrap">Meses sin visita</label>
+                  <select defaultValue={(clinic as any).recallMonths ?? 6}
+                    onChange={async e => { await fetch("/api/settings", { method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ recallMonths: parseInt(e.target.value) }) }); toast.success("Guardado"); }}
+                    className="text-sm border border-border rounded-lg px-3 py-1.5 bg-background">
+                    {[3,6,9,12].map(n => <option key={n} value={n}>{n} meses</option>)}
+                  </select>
+                </div>
+              </div>
             </div>
           )}
         </div>
       )}
 
-      {/* ── HORARIOS ── */}
+      {/* ── HORARIOS ── */}}
       {tab === "horarios" && (
         <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl p-6 shadow-card max-w-lg">
           <h2 className="text-base font-bold mb-4">Horario de atención</h2>

@@ -1,50 +1,78 @@
 "use client";
-
 import { useState } from "react";
 import Link from "next/link";
 import { formatCurrency } from "@/lib/utils";
 import toast from "react-hot-toast";
 
-const PLAN_PRICES: Record<string, number> = { BASIC: 49, PRO: 99, CLINIC: 249 };
-const BANK_INFO = {
-  nombre: "Efthymios Rafail Papanaklis",
-  clabe:  "012910015008025244",
-  banco:  "BBVA",
-};
+const PLAN_PRICES: Record<string, number> = { BASIC: 299, PRO: 499, CLINIC: 799 };
 
-interface Props { clinics: any[] }
+const PAYMENT_METHODS = [
+  { value:"transfer",    label:"💳 Transferencia BBVA",   info:"CLABE: 012 345 678 901 234 567 | Rafael Papanaklis" },
+  { value:"deposit",     label:"🏦 Depósito BBVA",        info:"Cuenta: 4152 3137 1234 5678 | Rafael Papanaklis" },
+  { value:"paypal",      label:"🅿️ PayPal",               info:"rafaelpapanaklis@gmail.com" },
+  { value:"stripe",      label:"💳 Stripe (tarjeta)",     info:"Pago con tarjeta de crédito/débito" },
+  { value:"mercadopago", label:"🟡 Mercado Pago",         info:"Link de pago por Mercado Pago" },
+  { value:"cash",        label:"💵 Efectivo",             info:"Pago en efectivo" },
+];
 
-export function AdminPaymentsClient({ clinics: initial }: Props) {
-  const [clinics, setClinics] = useState(initial);
-  const [activating, setActivating] = useState<string | null>(null);
-  const [tab, setTab] = useState<"pending" | "all">("pending");
+interface Props { clinics: any[]; invoices: any[] }
 
-  const expiredClinics = clinics.filter(c => c.trialEndsAt && new Date(c.trialEndsAt) < new Date());
-  const activeClinics  = clinics.filter(c => c.trialEndsAt && new Date(c.trialEndsAt) > new Date());
+export function AdminPaymentsClient({ clinics: initClinics, invoices: initInvoices }: Props) {
+  const [invoices, setInvoices]   = useState(initInvoices);
+  const [showForm, setShowForm]   = useState(false);
+  const [saving, setSaving]       = useState(false);
+  const [filter, setFilter]       = useState("all");
 
-  async function activatePlan(clinicId: string, plan: string, months: number) {
-    setActivating(clinicId);
-    try {
-      const newExpiry = new Date();
-      newExpiry.setMonth(newExpiry.getMonth() + months);
-      const res = await fetch(`/api/admin/clinics/${clinicId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan, trialEndsAt: newExpiry.toISOString() }),
-      });
-      if (!res.ok) throw new Error();
-      setClinics(prev => prev.map(c =>
-        c.id === clinicId ? { ...c, plan, trialEndsAt: newExpiry.toISOString() } : c
-      ));
-      toast.success(`Plan ${plan} activado por ${months} mes${months > 1 ? "es" : ""}`);
-    } catch {
-      toast.error("Error al activar");
-    } finally {
-      setActivating(null);
-    }
+  const [form, setForm] = useState({
+    clinicId:    "",
+    amount:      "",
+    method:      "transfer",
+    reference:   "",
+    periodStart: "",
+    periodEnd:   "",
+    notes:       "",
+    status:      "paid",
+  });
+
+  function setF(k: string, v: string) { setForm(f => ({ ...f, [k]: v })); }
+
+  // Auto-fill amount from clinic plan
+  function onClinicChange(clinicId: string) {
+    const clinic = initClinics.find(c => c.id === clinicId);
+    const price  = clinic?.monthlyPrice || PLAN_PRICES[clinic?.plan] || 0;
+    const now    = new Date();
+    const start  = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`;
+    const end    = new Date(now.getFullYear(), now.getMonth()+1, 0);
+    const endStr = `${end.getFullYear()}-${String(end.getMonth()+1).padStart(2,"0")}-${String(end.getDate()).padStart(2,"0")}`;
+    setForm(f => ({ ...f, clinicId, amount: String(price), periodStart: start, periodEnd: endStr }));
   }
 
-  const displayList = tab === "pending" ? expiredClinics : clinics;
+  async function save() {
+    if (!form.clinicId || !form.amount || !form.periodStart || !form.periodEnd) {
+      toast.error("Completa todos los campos obligatorios"); return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/admin/subscriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, amount: parseFloat(form.amount) }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      const inv = await res.json();
+      setInvoices(prev => [inv, ...prev]);
+      setShowForm(false);
+      setForm({ clinicId:"", amount:"", method:"transfer", reference:"", periodStart:"", periodEnd:"", notes:"", status:"paid" });
+      toast.success("✅ Pago registrado");
+    } catch(e: any) { toast.error(e.message); }
+    finally { setSaving(false); }
+  }
+
+  const filtered = invoices.filter(i => filter === "all" || i.status === filter);
+  const totalPaid    = invoices.filter(i=>i.status==="paid").reduce((s,i)=>s+i.amount,0);
+  const totalPending = invoices.filter(i=>i.status==="pending").reduce((s,i)=>s+i.amount,0);
+
+  const selectedMethod = PAYMENT_METHODS.find(m => m.value === form.method);
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -54,122 +82,169 @@ export function AdminPaymentsClient({ clinics: initial }: Props) {
           MediFlow Admin
         </Link>
         <div className="flex items-center gap-1 ml-4">
-          {[{href:"/admin",label:"Dashboard"},{href:"/admin/clinics",label:"Clínicas"},{href:"/admin/payments",label:"Pagos"},{href:"/admin/settings",label:"Config"}].map(item => (
-            <Link key={item.href} href={item.href} className="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">{item.label}</Link>
+          {[{href:"/admin",l:"Dashboard"},{href:"/admin/clinics",l:"Clínicas"},{href:"/admin/payments",l:"Pagos"},{href:"/admin/churn",l:"Churn"},{href:"/admin/settings",l:"Config"}].map(i=>(
+            <Link key={i.href} href={i.href} className="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800">{i.l}</Link>
           ))}
         </div>
       </nav>
 
-      <div className="p-6">
-        <div className="mb-6">
-          <h1 className="text-xl font-extrabold">Gestión de Pagos</h1>
-          <p className="text-slate-400 text-sm">Activa planes después de verificar transferencias SPEI</p>
+      <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-extrabold">Pagos de suscripción</h1>
+            <p className="text-slate-400 text-sm">Registra y gestiona los pagos de las clínicas</p>
+          </div>
+          <button onClick={() => setShowForm(!showForm)}
+            className="bg-brand-600 hover:bg-brand-700 text-white font-bold px-4 py-2 rounded-xl text-sm">
+            + Registrar pago
+          </button>
         </div>
 
-        {/* Bank info */}
-        <div className="bg-slate-900 border border-brand-700 rounded-xl p-5 mb-6">
-          <div className="text-xs font-bold text-brand-400 uppercase tracking-wide mb-3">📋 Datos bancarios para transferencias SPEI</div>
-          <div className="grid grid-cols-3 gap-4 text-sm">
-            <div><div className="text-slate-400 text-xs mb-1">Nombre</div><div className="font-semibold text-white">{BANK_INFO.nombre}</div></div>
-            <div><div className="text-slate-400 text-xs mb-1">CLABE</div><div className="font-mono font-bold text-brand-400 text-lg tracking-wide">{BANK_INFO.clabe}</div></div>
-            <div><div className="text-slate-400 text-xs mb-1">Banco</div><div className="font-semibold text-white">{BANK_INFO.banco}</div></div>
+        {/* Summary */}
+        <div className="grid grid-cols-3 gap-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-4">
+            <div className="text-xs text-slate-400 mb-1">Total cobrado</div>
+            <div className="text-2xl font-extrabold text-emerald-400">{formatCurrency(totalPaid)}</div>
           </div>
-          <div className="mt-3 text-xs text-slate-500">
-            Cuando una clínica haga transferencia, busca la referencia (generalmente el nombre de la clínica) y activa el plan manualmente abajo.
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-4">
+            <div className="text-xs text-slate-400 mb-1">Pendiente</div>
+            <div className="text-2xl font-extrabold text-amber-400">{formatCurrency(totalPending)}</div>
+          </div>
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-4">
+            <div className="text-xs text-slate-400 mb-1">Total registros</div>
+            <div className="text-2xl font-extrabold text-white">{invoices.length}</div>
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          {[
-            { label: "Pagos pendientes",   value: expiredClinics.length, color: "text-amber-400" },
-            { label: "Clínicas activas",   value: activeClinics.length,  color: "text-emerald-400" },
-            { label: "MRR estimado",       value: formatCurrency(clinics.reduce((s, c) => s + (PLAN_PRICES[c.plan] ?? 49), 0), "MXN"), color: "text-violet-400" },
-          ].map(k => (
-            <div key={k.label} className="bg-slate-900 border border-slate-700 rounded-xl p-4">
-              <div className={`text-2xl font-extrabold ${k.color}`}>{k.value}</div>
-              <div className="text-xs text-slate-400">{k.label}</div>
+        {/* Payment methods info */}
+        <div className="bg-slate-900 border border-slate-700 rounded-2xl p-4">
+          <div className="font-bold text-sm mb-3">📋 Datos de pago para clínicas</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {PAYMENT_METHODS.map(m => (
+              <div key={m.value} className="flex items-start gap-2 p-2 rounded-lg bg-slate-800">
+                <span className="text-sm shrink-0">{m.label}</span>
+                <span className="text-xs text-slate-400">{m.info}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* New payment form */}
+        {showForm && (
+          <div className="bg-slate-900 border border-brand-700 rounded-2xl p-5 space-y-4">
+            <div className="font-bold">Registrar nuevo pago</div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">Clínica *</label>
+                <select value={form.clinicId} onChange={e => onClinicChange(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white">
+                  <option value="">Selecciona clínica</option>
+                  {initClinics.map(c => (
+                    <option key={c.id} value={c.id}>{c.name} ({c.plan})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">Monto (MXN) *</label>
+                <input type="number" value={form.amount} onChange={e => setF("amount", e.target.value)}
+                  placeholder="499" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">Método de pago *</label>
+                <select value={form.method} onChange={e => setF("method", e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white">
+                  {PAYMENT_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                </select>
+                {selectedMethod && <p className="text-xs text-slate-500 mt-1">{selectedMethod.info}</p>}
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">Referencia / Folio</label>
+                <input value={form.reference} onChange={e => setF("reference", e.target.value)}
+                  placeholder="Número de transferencia, orden MP, etc."
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">Periodo inicio *</label>
+                <input type="date" value={form.periodStart} onChange={e => setF("periodStart", e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">Periodo fin *</label>
+                <input type="date" value={form.periodEnd} onChange={e => setF("periodEnd", e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">Estado</label>
+                <select value={form.status} onChange={e => setF("status", e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white">
+                  <option value="paid">✅ Pagado</option>
+                  <option value="pending">⏳ Pendiente</option>
+                  <option value="failed">❌ Fallido</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">Notas</label>
+                <input value={form.notes} onChange={e => setF("notes", e.target.value)}
+                  placeholder="Observaciones opcionales"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white" />
+              </div>
             </div>
+            <div className="flex gap-2">
+              <button onClick={() => setShowForm(false)}
+                className="flex-1 border border-slate-700 rounded-xl py-2 text-sm font-semibold hover:bg-slate-800">
+                Cancelar
+              </button>
+              <button onClick={save} disabled={saving}
+                className="flex-1 bg-brand-600 hover:bg-brand-700 text-white rounded-xl py-2 text-sm font-bold disabled:opacity-50">
+                {saving ? "Guardando..." : "✅ Guardar pago"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Filter */}
+        <div className="flex gap-2">
+          {[{v:"all",l:"Todos"},{v:"paid",l:"Pagados"},{v:"pending",l:"Pendientes"},{v:"failed",l:"Fallidos"}].map(f=>(
+            <button key={f.v} onClick={() => setFilter(f.v)}
+              className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${filter===f.v?"bg-brand-600 border-brand-600 text-white":"border-slate-700 text-slate-400 hover:text-white"}`}>
+              {f.l}
+            </button>
           ))}
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 bg-slate-900 border border-slate-700 rounded-xl p-1 w-fit mb-4">
-          <button onClick={() => setTab("pending")} className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${tab === "pending" ? "bg-amber-600 text-white" : "text-slate-400 hover:text-white"}`}>
-            ⚠️ Pagos pendientes ({expiredClinics.length})
-          </button>
-          <button onClick={() => setTab("all")} className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${tab === "all" ? "bg-brand-600 text-white" : "text-slate-400 hover:text-white"}`}>
-            Todas las clínicas ({clinics.length})
-          </button>
-        </div>
-
-        {/* Clinic list */}
-        <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden">
+        {/* Invoices table */}
+        <div className="bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-700">
-                {["Clínica","Contacto","Plan actual","Vencimiento","Activar plan"].map(h => (
-                  <th key={h} className="text-left px-4 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-wide">{h}</th>
-                ))}
-              </tr>
-            </thead>
+            <thead><tr className="text-xs text-slate-400 border-b border-slate-700">
+              <th className="px-5 py-3 text-left">Clínica</th>
+              <th className="px-5 py-3 text-left">Monto</th>
+              <th className="px-5 py-3 text-left">Método</th>
+              <th className="px-5 py-3 text-left">Periodo</th>
+              <th className="px-5 py-3 text-left">Estado</th>
+              <th className="px-5 py-3 text-left">Fecha</th>
+            </tr></thead>
             <tbody>
-              {displayList.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-500">
-                  {tab === "pending" ? "✅ Sin pagos pendientes" : "Sin clínicas"}
-                </td></tr>
-              ) : displayList.map(clinic => {
-                const expired    = clinic.trialEndsAt && new Date(clinic.trialEndsAt) < new Date();
-                const daysLeft   = clinic.trialEndsAt ? Math.ceil((new Date(clinic.trialEndsAt).getTime() - Date.now()) / 86400000) : null;
-                const owner      = clinic.users[0];
-                const isLoading  = activating === clinic.id;
-
-                return (
-                  <tr key={clinic.id} className={`border-b border-slate-800 transition-colors ${expired ? "bg-rose-950/20" : "hover:bg-slate-800/40"}`}>
-                    <td className="px-4 py-3">
-                      <div className="font-semibold text-white">{clinic.name}</div>
-                      <div className="text-[10px] text-slate-500">{clinic.specialty} · {clinic._count.patients} pacientes</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {owner && (
-                        <>
-                          <div className="text-xs text-slate-300">{owner.firstName} {owner.lastName}</div>
-                          <div className="text-[10px] text-slate-500">{owner.email}</div>
-                          {owner.phone && <div className="text-[10px] text-slate-500">{owner.phone}</div>}
-                        </>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs font-bold">{clinic.plan}</span>
-                      <div className="text-[10px] text-slate-500">{formatCurrency(PLAN_PRICES[clinic.plan] ?? 49, "MXN")}/mes</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {expired ? (
-                        <span className="text-[10px] font-bold text-rose-400">⚠️ Expirado</span>
-                      ) : (
-                        <span className="text-[10px] font-bold text-amber-400">⏳ {daysLeft} días</span>
-                      )}
-                      <div className="text-[10px] text-slate-600">{clinic.trialEndsAt ? new Date(clinic.trialEndsAt).toLocaleDateString("es-MX") : "—"}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col gap-1.5">
-                        {["BASIC","PRO","CLINIC"].map(plan => (
-                          <div key={plan} className="flex gap-1">
-                            <button onClick={() => activatePlan(clinic.id, plan, 1)} disabled={isLoading}
-                              className="text-[10px] font-bold px-2 py-1 rounded-lg bg-emerald-900/40 text-emerald-400 border border-emerald-700 hover:bg-emerald-900/70 transition-colors disabled:opacity-50">
-                              {plan} 1 mes
-                            </button>
-                            <button onClick={() => activatePlan(clinic.id, plan, 12)} disabled={isLoading}
-                              className="text-[10px] font-bold px-2 py-1 rounded-lg bg-violet-900/40 text-violet-400 border border-violet-700 hover:bg-violet-900/70 transition-colors disabled:opacity-50">
-                              {plan} 12 meses
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+              {filtered.length === 0 ? (
+                <tr><td colSpan={6} className="py-10 text-center text-slate-500">Sin registros</td></tr>
+              ) : filtered.map((inv: any) => (
+                <tr key={inv.id} className="border-b border-slate-800 hover:bg-slate-800/50">
+                  <td className="px-5 py-3 font-semibold">{inv.clinic.name}</td>
+                  <td className="px-5 py-3 text-emerald-400 font-bold">{formatCurrency(inv.amount)}</td>
+                  <td className="px-5 py-3 text-slate-400 capitalize">
+                    {PAYMENT_METHODS.find(m=>m.value===inv.method)?.label ?? inv.method ?? "—"}
+                  </td>
+                  <td className="px-5 py-3 text-slate-400 text-xs">
+                    {new Date(inv.periodStart).toLocaleDateString("es-MX",{month:"short",day:"numeric"})} — {new Date(inv.periodEnd).toLocaleDateString("es-MX",{month:"short",day:"numeric",year:"numeric"})}
+                  </td>
+                  <td className="px-5 py-3">
+                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${inv.status==="paid"?"bg-emerald-900/50 text-emerald-400":inv.status==="failed"?"bg-red-900/50 text-red-400":"bg-amber-900/50 text-amber-400"}`}>
+                      {inv.status==="paid"?"Pagado":inv.status==="failed"?"Fallido":"Pendiente"}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 text-slate-400 text-xs">{new Date(inv.createdAt).toLocaleDateString("es-MX")}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Plus, Printer, Edit } from "lucide-react";
 import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
 import { DentalForm }          from "@/components/clinical/dental-form";
+import { PeriodontalForm }      from "@/components/clinical/periodontal-form";
 import { NutritionForm }       from "@/components/clinical/nutrition-form";
 import { PsychologyForm }      from "@/components/clinical/psychology-form";
 import { GeneralMedicineForm } from "@/components/clinical/medicine-form";
@@ -46,7 +47,8 @@ const TABS = [
   { id: "tratamiento", label: "Plan de tratamiento" },
   { id: "agenda",      label: "Citas"             },
   { id: "facturacion", label: "Facturación"        },
-  { id: "imagenes",    label: "📷 Imágenes"          },
+  { id: "imagenes",       label: "📷 Imágenes"         },
+  { id: "periodontograma", label: "🦷 Periodontograma"   },
   { id: "pagos",       label: "💳 Pagos a plazos"    },
   { id: "consentimientos", label: "✍️ Consentimientos" },
 ];
@@ -424,7 +426,7 @@ export function PatientDetailClient({
                  detectedSpecialty === "psychology" ? "🧠 Nueva sesión" :
                  "🩺 Nueva consulta médica"}
               </h2>
-              {detectedSpecialty === "dental"     && <DentalForm          patientId={patient.id} onSaved={handleRecordSaved} />}
+              {detectedSpecialty === "dental"     && <DentalForm          patientId={patient.id} isChild={patient.isChild ?? false} onSaved={handleRecordSaved} />}
               {detectedSpecialty === "nutrition"  && <NutritionForm       patientId={patient.id} patient={patient} onSaved={handleRecordSaved} />}
               {detectedSpecialty === "psychology" && <PsychologyForm      patientId={patient.id} sessionNum={records.length + 1} onSaved={handleRecordSaved} />}
               {detectedSpecialty === "medicine"   && <GeneralMedicineForm patientId={patient.id} onSaved={handleRecordSaved} />}
@@ -624,6 +626,12 @@ export function PatientDetailClient({
         )}
         {tab === "consentimientos" && (
           <ConsentTab patientId={patient.id} />
+        )}
+        {tab === "periodontograma" && (
+          <div className="p-4">
+            <h2 className="font-bold text-base mb-4">Periodontograma</h2>
+            <PeriodontalForm patientId={patient.id} clinicId={patient.clinicId} />
+          </div>
         )}
         {tab === "facturacion" && (
             <div className="bg-white border border-border rounded-xl overflow-hidden">

@@ -1,12 +1,31 @@
+import { OnboardingChecklist } from "@/components/dashboard/onboarding-checklist";
+import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { Sidebar } from "@/components/dashboard/sidebar";
-import { QuickActionsBar } from "@/components/dashboard/quick-actions";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user   = await getCurrentUser();
   const clinic = user.clinic;
   const isSuspended = clinic.trialEndsAt && new Date(clinic.trialEndsAt) < new Date();
-  const isAdmin = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
+
+  // Onboarding: check which steps are completed
+  const [hasDoctor, hasPatient, hasAppt, hasRecord, hasInvoice] = await Promise.all([
+    prisma.user.count({ where: { clinicId: user.clinicId, role: "DOCTOR" } }),
+    prisma.patient.count({ where: { clinicId: user.clinicId } }),
+    prisma.appointment.count({ where: { clinicId: user.clinicId } }),
+    prisma.medicalRecord.count({ where: { clinicId: user.clinicId } }),
+    prisma.invoice.count({ where: { clinicId: user.clinicId } }),
+  ]);
+
+  const completedSteps = [
+    ...(hasDoctor > 0           ? ["doctor"]      : []),
+    // schedule: checked separately to avoid extra query in layout
+    ...(hasPatient > 0          ? ["patient"]     : []),
+    ...(hasAppt > 0             ? ["appointment"] : []),
+    ...(hasRecord > 0           ? ["record"]      : []),
+    ...(hasInvoice > 0          ? ["invoice"]     : []),
+    ...(clinic.waConnected      ? ["whatsapp"]    : []),
+  ];
 
   return (
     <div className="flex min-h-screen bg-background font-sans">
@@ -20,6 +39,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
         }}
         clinicName={clinic.name}
         plan={clinic.plan}
+        onboardingSlot={
+          <div className="px-3 pb-3">
+            <OnboardingChecklist completed={completedSteps} clinicId={user.clinicId} />
+          </div>
+        }
       />
       <div className="flex-1 flex flex-col min-h-screen lg:max-h-screen lg:overflow-y-auto">
         {isSuspended && (
@@ -28,15 +52,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <a href="/dashboard/suspended" className="underline hover:no-underline">Ver opciones de pago →</a>
           </div>
         )}
-        <main className="flex-1 p-5 lg:p-6 pt-16 lg:pt-6">
-          {/* Quick actions bar - visible on all pages */}
-          <QuickActionsBar
-            currentUserId={user.id}
-            clinicId={user.clinicId}
-            isAdmin={isAdmin}
-          />
-          {children}
-        </main>
+        <main className="flex-1 p-5 lg:p-6 pt-16 lg:pt-6">{children}</main>
       </div>
     </div>
   );

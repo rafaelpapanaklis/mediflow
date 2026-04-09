@@ -10,7 +10,7 @@ interface Props { open: boolean; onClose: () => void; onCreated: (patient: any) 
 
 export function NewPatientModal({ open, onClose, onCreated }: Props) {
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", gender: "OTHER", dob: "", address: "", allergies: "", notes: "" });
+  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", gender: "OTHER", dob: "", address: "", allergies: "", notes: "", isChild: false });
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
   async function handleSubmit(e: React.FormEvent) {
@@ -21,12 +21,12 @@ export function NewPatientModal({ open, onClose, onCreated }: Props) {
       const res = await fetch("/api/patients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, allergies: form.allergies ? form.allergies.split(",").map(s => s.trim()).filter(Boolean) : [] }),
+        body: JSON.stringify({ ...form, isChild: form.isChild, allergies: form.allergies ? form.allergies.split(",").map(s => s.trim()).filter(Boolean) : [] }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
       const patient = await res.json();
       onCreated(patient);
-      setForm({ firstName:"", lastName:"", email:"", phone:"", gender:"OTHER", dob:"", address:"", allergies:"", notes:"" });
+      setForm({ firstName:"", lastName:"", email:"", phone:"", gender:"OTHER", dob:"", address:"", allergies:"", notes:"", isChild:false });
       toast.success(`Paciente ${patient.firstName} creado`);
     } catch (err: any) {
       toast.error(err.message ?? "Error al crear paciente");
@@ -48,7 +48,20 @@ export function NewPatientModal({ open, onClose, onCreated }: Props) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5"><Label>Fecha de nacimiento</Label><Input type="date" value={form.dob} onChange={e => set("dob", e.target.value)} /></div>
-            <div className="space-y-1.5"><Label>Género</Label>
+            <div className="space-y-1.5">
+            <Label>Tipo de paciente</Label>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => set("isChild", false)}
+                className={`flex-1 py-2 text-sm font-semibold rounded-xl border transition-colors ${!form.isChild ? "bg-brand-600 text-white border-brand-600" : "border-border hover:bg-muted"}`}>
+                🦷 Adulto
+              </button>
+              <button type="button" onClick={() => set("isChild", true)}
+                className={`flex-1 py-2 text-sm font-semibold rounded-xl border transition-colors ${form.isChild ? "bg-amber-500 text-white border-amber-500" : "border-border hover:bg-muted"}`}>
+                🧒 Niño (dentición temporal)
+              </button>
+            </div>
+          </div>
+          <div className="space-y-1.5"><Label>Género</Label>
               <select className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20" value={form.gender} onChange={e => set("gender", e.target.value)}>
                 <option value="M">Masculino</option><option value="F">Femenino</option><option value="OTHER">Otro</option>
               </select>

@@ -50,6 +50,14 @@ model Clinic {
   cpEmisor          String?
   facturApiEnabled  Boolean @default(false)
 
+  // Subscription / Billing
+  subscriptionStatus   String?   // active, trialing, past_due, cancelled
+  subscriptionId       String?   // Stripe/MP subscription ID
+  nextBillingDate      DateTime?
+  monthlyPrice         Float?    @default(0)
+  recallMonths         Int       @default(6)  // months before annual reminder
+  recallActive         Boolean   @default(false)
+
   // AI Assistant usage tracking
   aiTokensUsed  Int      @default(0)
   aiTokensLimit Int      @default(50000)
@@ -66,8 +74,9 @@ model Clinic {
   cfdis        CfdiRecord[]
   treatments    TreatmentPlan[]
   paymentPlans  PaymentPlan[]
-  consentForms  ConsentForm[]
-  files         PatientFile[]
+  consentForms         ConsentForm[]
+  periodontalRecords   PeriodontalRecord[]
+  subscriptionInvoices SubscriptionInvoice[]
 
   @@map("clinics")
 }
@@ -91,6 +100,7 @@ model User {
   phone      String?
   isActive   Boolean  @default(true)
   color      String   @default("#3b82f6")
+  lastLogin  DateTime?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -105,7 +115,8 @@ model User {
   appointments    Appointment[]
   records         MedicalRecord[]
   primaryPatients Patient[]       @relation("PrimaryDoctor")
-  treatments      TreatmentPlan[]
+  treatments          TreatmentPlan[]
+  periodontalRecords  PeriodontalRecord[]
 
   @@map("users")
 }
@@ -138,6 +149,7 @@ model Patient {
   tags               String[]      @default([])
   notes              String?
   status             PatientStatus @default(ACTIVE)
+  isChild            Boolean   @default(false)  // true = dentición temporal
   primaryDoctorId    String?
 
   // Portal del paciente
@@ -161,7 +173,8 @@ model Patient {
   files         PatientFile[]
   treatments    TreatmentPlan[]
   paymentPlans  PaymentPlan[]
-  consentForms  ConsentForm[]
+  consentForms        ConsentForm[]
+  periodontalRecords  PeriodontalRecord[]
 
   @@unique([clinicId, patientNumber])
   @@map("patients")
@@ -490,6 +503,48 @@ model ConsentForm {
 }
 
 
+// ── Periodontal Records ────────────────────────────────────────────────────────
+model PeriodontalRecord {
+  id          String   @id @default(cuid())
+  patientId   String
+  clinicId    String
+  doctorId    String
+  recordedAt  DateTime @default(now())
+  // JSON: { "11": { "buccal": [2,3,2], "lingual": [2,2,3], "bleeding": [false,true,false], "furcation": 0 }, ... }
+  measurements Json
+  plaquIndex  Float?
+  bleedingIndex Float?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  doctor  User    @relation(fields: [doctorId], references: [id])
+
+  @@map("periodontal_records")
+}
+
+// ── Subscription Invoices (for admin billing) ──────────────────────────────────
+model SubscriptionInvoice {
+  id          String   @id @default(cuid())
+  clinicId    String
+  amount      Float
+  currency    String   @default("MXN")
+  status      String   @default("pending") // pending, paid, failed
+  method      String?  // stripe, mercadopago, transfer, deposit
+  reference   String?  // payment reference/ID
+  periodStart DateTime
+  periodEnd   DateTime
+  paidAt      DateTime?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@map("subscription_invoices")
+}
+
+
 model InventoryItem {
   id          String   @id @default(cuid())
   clinicId    String
@@ -525,18 +580,20 @@ model InventoryHistory {
 model WhatsAppReminder {
   id            String                 @id @default(cuid())
   clinicId      String
-  appointmentId String
-  type          String
+  appointmentId String?   // null for non-appointment reminders (recalls)
+  patientPhone  String?   // for recall reminders without appointment
+  message       String?   // message sent
+  type          String    @default("APPOINTMENT") // APPOINTMENT | RECALL
   status        WhatsAppReminderStatus @default(PENDING)
   sentAt        DateTime?
   errorMsg      String?
-  scheduledFor  DateTime
+  scheduledFor  DateTime  @default(now())
   patientReply  String?
   repliedAt     DateTime?
   createdAt     DateTime               @default(now())
 
   clinic      Clinic      @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
 
   @@map("whatsapp_reminders")
 }

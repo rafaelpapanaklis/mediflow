@@ -17,14 +17,20 @@ const TOOTH_CONDITIONS: Record<string, { label: string; color: string; bg: strin
 
 const UPPER_TEETH = [18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28];
 const LOWER_TEETH = [48,47,46,45,44,43,42,41, 31,32,33,34,35,36,37,38];
+
+// Dentición temporal (FDI notation for primary teeth)
+const UPPER_PRIMARY = [55,54,53,52,51, 61,62,63,64,65];
+const LOWER_PRIMARY = [85,84,83,82,81, 71,72,73,74,75];
 const PROCEDURES = ["Profilaxis","Tartrectomía","Extracción simple","Extracción quirúrgica","Restauración resina","Amalgama","Corona porcelana","Corona metal-porcelana","Endodoncia unirradicular","Endodoncia birradicular","Endodoncia multirradicular","Implante dental","Ortodoncia brackets","Ortodoncia invisible","Carilla dental","Blanqueamiento","Periodoncia","Cirugía periodontal","Injerto óseo"];
 
-interface Props { patientId: string; onSaved: (record: any) => void }
+interface Props { patientId: string; onSaved: (record: any) => void; isChild?: boolean }
 
-export function DentalForm({ patientId, onSaved }: Props) {
+export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
   const [saving,     setSaving]     = useState(false);
   const [activeTool, setActiveTool] = useState<keyof typeof TOOTH_CONDITIONS>("caries");
   const [odontogram, setOdontogram] = useState<Record<number, string>>({});
+  const upperTeeth = isChild ? UPPER_PRIMARY : UPPER_TEETH;
+  const lowerTeeth = isChild ? LOWER_PRIMARY : LOWER_TEETH;
   const [selectedProcs, setSelectedProcs] = useState<string[]>([]);
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null);
   const [form, setForm] = useState({
@@ -128,9 +134,9 @@ export function DentalForm({ patientId, onSaved }: Props) {
 
         {/* Upper arch */}
         <div className="text-[10px] text-center text-muted-foreground mb-1 font-semibold">SUPERIOR</div>
-        <div className="flex justify-center gap-1 mb-1">{UPPER_TEETH.map(renderTooth)}</div>
+        <div className="flex justify-center gap-1 mb-1">{upperTeeth.map(renderTooth)}</div>
         <div className="border-t-2 border-b-2 border-dashed border-muted my-2" />
-        <div className="flex justify-center gap-1 mb-1">{LOWER_TEETH.map(renderTooth)}</div>
+        <div className="flex justify-center gap-1 mb-1">{lowerTeeth.map(renderTooth)}</div>
         <div className="text-[10px] text-center text-muted-foreground mt-1 font-semibold">INFERIOR</div>
 
         {/* Legend */}

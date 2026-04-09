@@ -1,3 +1,4 @@
+import React from "react";
 "use client";
 
 import Link from "next/link";
@@ -6,13 +7,14 @@ import { useState } from "react";
 import {
   LayoutDashboard, Calendar, Users, CreditCard,
   BarChart2, Settings, LogOut, Menu, X, Stethoscope,
-  Sun, Moon, MessageCircle, Package, UserCog, Activity,
+  Sun, Moon, MessageCircle, Package, UserCog,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import toast from "react-hot-toast";
 
 interface SidebarProps {
+  onboardingSlot?: React.ReactNode;
   user:       { firstName: string; lastName: string; email: string; role: string; color?: string };
   clinicName: string;
   plan:       string;
@@ -35,7 +37,7 @@ function useDarkMode() {
   return { dark, toggle };
 }
 
-export function Sidebar({ user, clinicName, plan }: SidebarProps) {
+export function Sidebar({ user, clinicName, plan, onboardingSlot }: SidebarProps) {
   const pathname        = usePathname();
   const router          = useRouter();
   const [open, setOpen] = useState(false);
@@ -50,7 +52,6 @@ export function Sidebar({ user, clinicName, plan }: SidebarProps) {
     { href:"/dashboard/appointments", icon:Calendar,        label:"Agenda",        show: true         },
     { href:"/dashboard/patients",     icon:Users,           label:"Pacientes",     show: true         },
     { href:"/dashboard/clinical",     icon:Stethoscope,     label:"Expedientes",   show: true         },
-    { href:"/dashboard/treatments",     icon:Activity,        label:"Tratamientos",  show: true         },
     { href:"/dashboard/billing",      icon:CreditCard,      label:"Facturación",   show: isAdmin      },
     { href:"/dashboard/inventory",    icon:Package,         label:"Inventario",    show: isAdmin      },
     { href:"/dashboard/whatsapp",     icon:MessageCircle,   label:"WhatsApp",      show: isAdmin      },
@@ -105,6 +106,9 @@ export function Sidebar({ user, clinicName, plan }: SidebarProps) {
           );
         })}
       </nav>
+
+      {/* Onboarding checklist */}
+      {onboardingSlot}
 
       {/* Bottom */}
       <div className="px-3 pb-4 border-t border-white/10 pt-3 space-y-1">
