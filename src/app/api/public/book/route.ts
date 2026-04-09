@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { createCalendarEvent, refreshAccessToken } from "@/lib/google-calendar";
 import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
@@ -183,6 +184,43 @@ export async function POST(req: NextRequest) {
       console.error("WhatsApp confirmation failed:", e);
       // Don't fail the booking — WhatsApp is best-effort
     }
+  }
+
+  // ── Google Calendar sync ─────────────────────────────────────────────────
+  try {
+    const clinicGcal = await prisma.clinic.findUnique({
+      where: { id: clinic.id },
+      select: {
+        name: true, address: true,
+        googleCalendarEnabled: true, googleCalendarToken: true,
+        googleRefreshToken: true, googleClinicCalendarId: true,
+      },
+    });
+
+    if (clinicGcal?.googleCalendarEnabled && clinicGcal.googleRefreshToken && clinicGcal.googleClinicCalendarId) {
+      let token = clinicGcal.googleCalendarToken;
+      if (!token) {
+        token = await refreshAccessToken(clinicGcal.googleRefreshToken);
+        if (token) await prisma.clinic.update({ where: { id: clinic.id }, data: { googleCalendarToken: token } });
+      }
+      if (token) {
+        const gcalEventId = await createCalendarEvent(token, clinicGcal.googleRefreshToken, {
+          id: appt.id, type: type?.trim() || "Consulta general",
+          date, startTime, endTime,
+          patientName: `${firstName.trim()} ${lastName.trim()}`,
+          clinicName: clinicGcal.name, clinicAddress: clinicGcal.address,
+          notes: notes?.trim() || null,
+          doctorName: `${doctor.firstName} ${doctor.lastName}`,
+          doctorEmail: null, patientEmail: email?.trim() || null,
+          calendarId: clinicGcal.googleClinicCalendarId,
+        });
+        if (gcalEventId) {
+          await prisma.appointment.update({ where: { id: appt.id }, data: { googleCalendarEventId: gcalEventId } });
+        }
+      }
+    }
+  } catch (e) {
+    console.error("Google Calendar sync failed:", e);
   }
 
   return NextResponse.json({
