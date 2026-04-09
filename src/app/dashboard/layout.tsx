@@ -46,6 +46,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         }}
         clinicName={clinic.name}
         plan={clinic.plan}
+        clinicCategory={(clinic as any).category ?? "OTHER"}
       />
       <div className="flex-1 flex flex-col min-h-screen lg:max-h-screen lg:overflow-y-auto">
         {isSuspended && (

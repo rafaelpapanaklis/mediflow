@@ -5,18 +5,41 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   LayoutDashboard, Calendar, Users, CreditCard,
-  BarChart2, Settings, LogOut, Menu, X, Stethoscope, Globe,
-  Sun, Moon, MessageCircle, Package, UserCog,
+  BarChart2, Settings, LogOut, Menu, X, Stethoscope,
+  Sun, Moon, MessageCircle, Package, UserCog, Activity,
+  Camera, Gift, FlaskConical, Clock, DoorOpen, Dumbbell,
+  Footprints, FileImage, Globe, Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import toast from "react-hot-toast";
 
+const CATEGORY_FEATURES: Record<string, string[]> = {
+  DENTAL: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","xrays","whatsapp","team","reports","settings","landing","ai-assistant"],
+  MEDICINE: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","xrays","whatsapp","team","reports","settings","landing","ai-assistant"],
+  NUTRITION: ["dashboard","appointments","patients","clinical","treatments","billing","whatsapp","team","reports","settings","landing","ai-assistant"],
+  PSYCHOLOGY: ["dashboard","appointments","patients","clinical","treatments","billing","whatsapp","team","reports","settings","landing","ai-assistant"],
+  DERMATOLOGY: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","before-after","xrays","whatsapp","team","reports","settings","landing","ai-assistant"],
+  AESTHETIC_MEDICINE: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","before-after","packages","whatsapp","team","reports","settings","landing","ai-assistant"],
+  HAIR_RESTORATION: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","before-after","whatsapp","team","reports","settings","landing","ai-assistant"],
+  BEAUTY_CENTER: ["dashboard","appointments","patients","clinical","packages","billing","inventory","before-after","whatsapp","team","reports","settings","landing","ai-assistant"],
+  BROW_LASH: ["dashboard","appointments","patients","clinical","formulas","packages","billing","inventory","before-after","whatsapp","team","reports","settings","landing","ai-assistant"],
+  MASSAGE: ["dashboard","appointments","patients","clinical","billing","whatsapp","team","reports","settings","landing","ai-assistant"],
+  LASER_HAIR_REMOVAL: ["dashboard","appointments","patients","clinical","packages","billing","inventory","before-after","whatsapp","team","reports","settings","landing","ai-assistant"],
+  HAIR_SALON: ["dashboard","appointments","patients","clinical","formulas","billing","inventory","walk-in","whatsapp","team","reports","settings","landing","ai-assistant"],
+  ALTERNATIVE_MEDICINE: ["dashboard","appointments","patients","clinical","treatments","formulas","billing","inventory","whatsapp","team","reports","settings","landing","ai-assistant"],
+  NAIL_SALON: ["dashboard","appointments","patients","clinical","billing","inventory","walk-in","whatsapp","team","reports","settings","landing","ai-assistant"],
+  SPA: ["dashboard","appointments","patients","clinical","packages","billing","inventory","resources","whatsapp","team","reports","settings","landing","ai-assistant"],
+  PHYSIOTHERAPY: ["dashboard","appointments","patients","clinical","treatments","billing","exercises","whatsapp","team","reports","settings","landing","ai-assistant"],
+  PODIATRY: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","orthotics","whatsapp","team","reports","settings","landing","ai-assistant"],
+  OTHER: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","whatsapp","team","reports","settings","landing","ai-assistant"],
+};
+
 interface SidebarProps {
-  onboardingSlot?: React.ReactNode;
-  user:       { firstName: string; lastName: string; email: string; role: string; color?: string };
-  clinicName: string;
-  plan:       string;
+  user:            { firstName: string; lastName: string; email: string; role: string; color?: string };
+  clinicName:      string;
+  plan:            string;
+  clinicCategory?: string;
 }
 
 function useDarkMode() {
@@ -36,7 +59,7 @@ function useDarkMode() {
   return { dark, toggle };
 }
 
-export function Sidebar({ user, clinicName, plan, onboardingSlot }: SidebarProps) {
+export function Sidebar({ user, clinicName, plan, clinicCategory = "OTHER" }: SidebarProps) {
   const pathname        = usePathname();
   const router          = useRouter();
   const [open, setOpen] = useState(false);
@@ -45,20 +68,38 @@ export function Sidebar({ user, clinicName, plan, onboardingSlot }: SidebarProps
   const isAdmin = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
   const isDoctor = user.role === "DOCTOR";
 
-  // Build navigation based on role
-  const NAV = [
-    { href:"/dashboard",              icon:LayoutDashboard, label:"Dashboard",     show: true         },
-    { href:"/dashboard/appointments", icon:Calendar,        label:"Agenda",        show: true         },
-    { href:"/dashboard/patients",     icon:Users,           label:"Pacientes",     show: true         },
-    { href:"/dashboard/clinical",     icon:Stethoscope,     label:"Expedientes",   show: true         },
-    { href:"/dashboard/billing",      icon:CreditCard,      label:"Facturación",   show: isAdmin      },
-    { href:"/dashboard/inventory",    icon:Package,         label:"Inventario",    show: isAdmin      },
-    { href:"/dashboard/whatsapp",     icon:MessageCircle,   label:"WhatsApp",      show: isAdmin      },
-    { href:"/dashboard/team",         icon:UserCog,         label:"Equipo",        show: isAdmin      },
-    { href:"/dashboard/reports",      icon:BarChart2,       label:"Reportes",      show: isAdmin      },
-    { href:"/dashboard/landing",      icon:Globe,           label:"Mi página",     show: isAdmin      },
-    { href:"/dashboard/settings",     icon:Settings,        label:"Configuración", show: true         },
-  ].filter(n => n.show);
+  const features = CATEGORY_FEATURES[clinicCategory] ?? CATEGORY_FEATURES.OTHER;
+
+  // Build navigation based on role + category
+  const ALL_NAV = [
+    { key:"dashboard",     href:"/dashboard",              icon:LayoutDashboard, label:"Dashboard",       adminOnly: false },
+    { key:"appointments",  href:"/dashboard/appointments", icon:Calendar,        label:"Agenda",          adminOnly: false },
+    { key:"patients",      href:"/dashboard/patients",     icon:Users,           label:"Pacientes",       adminOnly: false },
+    { key:"clinical",      href:"/dashboard/clinical",     icon:Stethoscope,     label:"Expedientes",     adminOnly: false },
+    { key:"treatments",    href:"/dashboard/treatments",   icon:Activity,        label:"Tratamientos",    adminOnly: false },
+    { key:"before-after",  href:"/dashboard/before-after", icon:Camera,          label:"Antes/Después",   adminOnly: false },
+    { key:"packages",      href:"/dashboard/packages",     icon:Gift,            label:"Paquetes",        adminOnly: true  },
+    { key:"formulas",      href:"/dashboard/formulas",     icon:FlaskConical,    label:"Fórmulas",        adminOnly: false },
+    { key:"walk-in",       href:"/dashboard/walk-in",      icon:Clock,           label:"Lista de espera", adminOnly: false },
+    { key:"exercises",     href:"/dashboard/exercises",    icon:Dumbbell,        label:"Ejercicios",      adminOnly: false },
+    { key:"orthotics",     href:"/dashboard/orthotics",    icon:Footprints,      label:"Ortesis",         adminOnly: false },
+    { key:"resources",     href:"/dashboard/resources",    icon:DoorOpen,        label:"Recursos/Salas",  adminOnly: true  },
+    { key:"billing",       href:"/dashboard/billing",      icon:CreditCard,      label:"Facturación",     adminOnly: true  },
+    { key:"inventory",     href:"/dashboard/inventory",    icon:Package,         label:"Inventario",      adminOnly: true  },
+    { key:"xrays",         href:"/dashboard/xrays",        icon:FileImage,       label:"Radiografías",    adminOnly: false },
+    { key:"whatsapp",      href:"/dashboard/whatsapp",     icon:MessageCircle,   label:"WhatsApp",        adminOnly: true  },
+    { key:"team",          href:"/dashboard/team",         icon:UserCog,         label:"Equipo",          adminOnly: true  },
+    { key:"reports",       href:"/dashboard/reports",      icon:BarChart2,       label:"Reportes",        adminOnly: true  },
+    { key:"settings",      href:"/dashboard/settings",     icon:Settings,        label:"Configuración",   adminOnly: false },
+    { key:"landing",       href:"/dashboard/landing",      icon:Globe,           label:"Página web",      adminOnly: true  },
+    { key:"ai-assistant",  href:"/dashboard/ai-assistant", icon:Sparkles,        label:"IA Asistente",    adminOnly: false },
+  ];
+
+  const NAV = ALL_NAV.filter(n => {
+    if (!features.includes(n.key)) return false;
+    if (n.adminOnly && !isAdmin) return false;
+    return true;
+  });
 
   async function logout() {
     const supabase = createClient();
@@ -106,9 +147,6 @@ export function Sidebar({ user, clinicName, plan, onboardingSlot }: SidebarProps
           );
         })}
       </nav>
-
-      {/* Onboarding checklist */}
-      {onboardingSlot}
 
       {/* Bottom */}
       <div className="px-3 pb-4 border-t border-white/10 pt-3 space-y-1">

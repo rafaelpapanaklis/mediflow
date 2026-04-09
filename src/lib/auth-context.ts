@@ -9,6 +9,7 @@ export interface AuthContext {
   color:        string;
   clinic:       any;
   user:         any;
+  clinicCategory: string; // ClinicCategory enum value
   // Role helpers
   isSuperAdmin: boolean;  // Platform owner — global access
   isAdmin:      boolean;  // Clinic admin — full access to their clinic
@@ -48,6 +49,7 @@ export async function getAuthContext(): Promise<AuthContext | null> {
       color:          dbUser.color ?? "#3b82f6",
       clinic:         dbUser.clinic,
       user:           dbUser,
+      clinicCategory: (dbUser.clinic as any).category ?? "OTHER",
       isSuperAdmin,
       isAdmin,
       isDoctor,

@@ -137,7 +137,7 @@ export default async function InventoryPage() {
     orderBy: [{ category: "asc" }, { name: "asc" }],
   });
 
-  if (items.length === 0 && user.clinic.specialty === "Odontología") {
+  if (items.length === 0 && ((user.clinic as any).category === "DENTAL" || user.clinic.specialty === "Odontología")) {
     const existing = new Set(items.map((i: any) => i.name));
     const toCreate = DENTAL_SEED.filter(d => !existing.has(d.name));
     if (toCreate.length > 0) {

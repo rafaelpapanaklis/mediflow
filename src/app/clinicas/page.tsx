@@ -13,7 +13,17 @@ interface Clinic {
   city: string | null; address: string | null; phone: string | null;
   logoUrl: string | null; description: string | null;
   doctorCount: number; doctors: Doctor[]; openDays: number[];
+  category?: string;
 }
+
+const CATEGORY_LABELS: Record<string, string> = {
+  DENTAL: "Odontología", MEDICINE: "Medicina General", NUTRITION: "Nutrición",
+  PSYCHOLOGY: "Psicología", DERMATOLOGY: "Dermatología", AESTHETIC_MEDICINE: "Medicina Estética",
+  HAIR_RESTORATION: "Capilares", BEAUTY_CENTER: "Estética", BROW_LASH: "Cejas y Pestañas",
+  MASSAGE: "Masajes", LASER_HAIR_REMOVAL: "Láser", HAIR_SALON: "Peluquerías",
+  ALTERNATIVE_MEDICINE: "Alternativa", NAIL_SALON: "Uñas", SPA: "Spas",
+  PHYSIOTHERAPY: "Fisioterapia", PODIATRY: "Podología", OTHER: "Otra",
+};
 
 const SPECIALTY_ICONS: Record<string, string> = {
   dental: "🦷", odontología: "🦷", odontologia: "🦷",
@@ -38,17 +48,19 @@ export default function ClinicasPage() {
   const [query,    setQuery]    = useState("");
   const [service,  setService]  = useState("");
   const [city,     setCity]     = useState("");
+  const [category, setCategory] = useState("");
   const [clinics,  setClinics]  = useState<Clinic[]>([]);
   const [loading,  setLoading]  = useState(false);
   const [searched, setSearched] = useState(false);
 
-  const search = useCallback(async (q: string, svc: string, ct: string) => {
+  const search = useCallback(async (q: string, svc: string, ct: string, cat: string = "") => {
     setLoading(true); setSearched(true);
     try {
       const params = new URLSearchParams();
-      if (q)   params.set("q",       q);
-      if (svc) params.set("service", svc);
-      if (ct)  params.set("city",    ct);
+      if (q)   params.set("q",        q);
+      if (svc) params.set("service",  svc);
+      if (ct)  params.set("city",     ct);
+      if (cat) params.set("category", cat);
       const res  = await fetch(`/api/public/clinicas?${params}`);
       const data = await res.json();
       setClinics(Array.isArray(data) ? data : []);
@@ -57,21 +69,26 @@ export default function ClinicasPage() {
   }, []);
 
   // Load all public clinics on mount
-  useEffect(() => { search("", "", ""); }, [search]);
+  useEffect(() => { search("", "", "", ""); }, [search]);
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
-    search(query, service, city);
+    search(query, service, city, category);
   }
 
   function selectService(svc: string) {
     setService(svc);
-    search(query, svc, city);
+    search(query, svc, city, category);
   }
 
   function clearService() {
     setService("");
-    search(query, "", city);
+    search(query, "", city, category);
+  }
+
+  function selectCategory(cat: string) {
+    setCategory(cat);
+    search(query, service, city, cat);
   }
 
   return (
@@ -124,6 +141,36 @@ export default function ClinicasPage() {
       </div>
 
       <div style={{ maxWidth:960, margin:"0 auto", padding:"28px 16px" }}>
+
+        {/* Category filter */}
+        <div style={{ marginBottom:20 }}>
+          <div style={{ fontSize:13, fontWeight:700, color:"#475569", marginBottom:10 }}>Categoría:</div>
+          <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}>
+            <button onClick={() => selectCategory("")}
+              style={{
+                padding:"10px 16px", borderRadius:999, fontSize:12, fontWeight:600, cursor:"pointer", border:"1.5px solid",
+                whiteSpace:"nowrap",
+                background: category === "" ? "#eff6ff" : "#fff",
+                borderColor: category === "" ? "#2563eb" : "#e2e8f0",
+                color: category === "" ? "#1d4ed8" : "#475569",
+              }}>
+              Todas
+            </button>
+            {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
+              <button key={key} onClick={() => selectCategory(category === key ? "" : key)}
+                style={{
+                  padding:"10px 16px", borderRadius:999, fontSize:12, fontWeight:600, cursor:"pointer", border:"1.5px solid",
+                  whiteSpace:"nowrap", display:"flex", alignItems:"center", gap:6,
+                  background: category === key ? "#eff6ff" : "#fff",
+                  borderColor: category === key ? "#2563eb" : "#e2e8f0",
+                  color: category === key ? "#1d4ed8" : "#475569",
+                }}>
+                {label}
+                {category === key && <X size={12} />}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* Popular services filter */}
         <div style={{ marginBottom:24 }}>
@@ -182,6 +229,11 @@ export default function ClinicasPage() {
                         <span style={{ fontSize:12, fontWeight:600, color:"#2563eb", background:"#eff6ff", padding:"2px 8px", borderRadius:999 }}>
                           {specialtyIcon(clinic.specialty)} {clinic.specialty}
                         </span>
+                        {clinic.category && CATEGORY_LABELS[clinic.category] && (
+                          <span style={{ fontSize:11, fontWeight:600, color:"#7c3aed", background:"#f5f3ff", padding:"2px 8px", borderRadius:999 }}>
+                            {CATEGORY_LABELS[clinic.category]}
+                          </span>
+                        )}
                         {clinic.city && (
                           <span style={{ fontSize:12, color:"#64748b", display:"flex", alignItems:"center", gap:3 }}>
                             <MapPin size={11} /> {clinic.city}
@@ -263,7 +315,7 @@ export default function ClinicasPage() {
             <div style={{ fontSize:14, color:"#64748b", marginBottom:20 }}>
               Intenta con otro servicio o ciudad
             </div>
-            <button onClick={() => { setQuery(""); setService(""); setCity(""); search("","",""); }}
+            <button onClick={() => { setQuery(""); setService(""); setCity(""); setCategory(""); search("","","",""); }}
               style={{ background:"#2563eb", color:"#fff", fontWeight:700, fontSize:14, padding:"10px 24px", borderRadius:12, border:"none", cursor:"pointer" }}>
               Ver todas las clínicas
             </button>

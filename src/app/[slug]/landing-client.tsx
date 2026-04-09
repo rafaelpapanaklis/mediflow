@@ -30,7 +30,7 @@ interface Clinic {
   schedules:{dayOfWeek:number;enabled:boolean;openTime:string;closeTime:string}[];
 }
 
-export function ClinicLandingClient({ clinic }:{ clinic:Clinic }) {
+export function ClinicLandingClient({ clinic, highlights }:{ clinic:Clinic; highlights?:string[] }) {
   const theme     = clinic.landingThemeColor ?? "#0f766e";
   const themeDark = hexAdjust(theme, -35);
   const [showBook, setShowBook] = useState(false);
@@ -154,7 +154,16 @@ export function ClinicLandingClient({ clinic }:{ clinic:Clinic }) {
               <p className="l-anim l-delay1 text-xl sm:text-2xl text-white/75 font-light mb-4">{clinic.landingTagline}</p>
             )}
             {clinic.description && (
-              <p className="l-anim l-delay2 text-white/60 text-base leading-relaxed mb-10 max-w-lg">{clinic.description}</p>
+              <p className="l-anim l-delay2 text-white/60 text-base leading-relaxed mb-6 max-w-lg">{clinic.description}</p>
+            )}
+            {highlights && highlights.length > 0 && (
+              <div className="l-anim l-delay2 flex flex-wrap gap-2 mb-10">
+                {highlights.map(h => (
+                  <span key={h} className="inline-flex items-center gap-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/15 px-3.5 py-1.5 text-white/85 text-xs font-semibold">
+                    <Check size={12} className="text-emerald-400" /> {h}
+                  </span>
+                ))}
+              </div>
             )}
             <div className="l-anim l-delay2 flex flex-wrap gap-3">
               <button onClick={() => setShowBook(true)} className="l-btn px-8 py-4 rounded-2xl text-base font-bold flex items-center gap-2.5">

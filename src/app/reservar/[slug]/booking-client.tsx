@@ -38,7 +38,7 @@ const S = {
   ghost:   { background:"#1e293b", color:"#94a3b8", border:"1px solid #334155", cursor:"pointer", transition:"all 0.15s" },
 };
 
-export function BookingClient({ clinic, preselectedService }: { clinic: Clinic; preselectedService: string | null }) {
+export function BookingClient({ clinic, preselectedService, categoryServices }: { clinic: Clinic; preselectedService: string | null; categoryServices?: string[] }) {
   const [step,       setStep]       = useState(1);
   const [doctor,     setDoctor]     = useState<Doctor | null>(null);
   const [calDate,    setCalDate]    = useState(new Date());
@@ -61,11 +61,18 @@ export function BookingClient({ clinic, preselectedService }: { clinic: Clinic; 
   }, [clinic.users, preselectedService]);
 
   const apptTypes = useMemo(() => {
-    if (!doctor || doctor.services.length === 0) return FALLBACK_TYPES;
-    return [...doctor.services, ...FALLBACK_TYPES.filter(t =>
-      !doctor.services.some(s => s.toLowerCase() === t.toLowerCase())
-    )];
-  }, [doctor]);
+    if (doctor && doctor.services.length > 0) {
+      return [...doctor.services, ...FALLBACK_TYPES.filter(t =>
+        !doctor.services.some(s => s.toLowerCase() === t.toLowerCase())
+      )];
+    }
+    if (categoryServices && categoryServices.length > 0) {
+      return [...categoryServices, ...FALLBACK_TYPES.filter(t =>
+        !categoryServices.some(s => s.toLowerCase() === t.toLowerCase())
+      )];
+    }
+    return FALLBACK_TYPES;
+  }, [doctor, categoryServices]);
 
   useEffect(() => {
     if (!doctor) return;
