@@ -59,6 +59,22 @@ model Clinic {
   recallActive         Boolean   @default(false)
   googlePlaceId        String?   // Google Maps Place ID for fetching reviews
 
+  // Landing page
+  landingActive       Boolean  @default(false)
+  landingThemeColor   String?  @default("#2563eb")
+  landingCoverUrl     String?
+  landingGallery      String[] @default([])
+  landingTestimonials Json?
+  landingFaqs         Json?
+  landingServices     Json?
+  landingHours        Json?
+  landingWhatsapp     String?
+  landingInstagram    String?
+  landingFacebook     String?
+  landingTiktok       String?
+  landingMapEmbed     String?
+  landingTagline      String?
+
   // AI Assistant usage tracking
   aiTokensUsed  Int      @default(0)
   aiTokensLimit Int      @default(50000)

@@ -23,7 +23,10 @@ export async function PATCH(req: NextRequest) {
   if (body.phone       !== undefined) data.phone       = body.phone       || null;
   if (body.email       !== undefined) data.email       = body.email       || null;
   if (body.description !== undefined) data.description = body.description || null;
-  if (body.isPublic    !== undefined) data.isPublic    = Boolean(body.isPublic);
+  if (body.isPublic    !== undefined) {
+    data.isPublic      = Boolean(body.isPublic);
+    data.landingActive = Boolean(body.isPublic);
+  }
 
   const updated = await prisma.clinic.update({
     where: { id: dbUser.clinicId },
