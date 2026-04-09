@@ -1,5 +1,4 @@
 "use client";
-import React from "react";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -7,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Plus, Printer, Edit } from "lucide-react";
 import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
 import { DentalForm }          from "@/components/clinical/dental-form";
-import { PeriodontalForm }      from "@/components/clinical/periodontal-form";
 import { NutritionForm }       from "@/components/clinical/nutrition-form";
 import { PsychologyForm }      from "@/components/clinical/psychology-form";
 import { GeneralMedicineForm } from "@/components/clinical/medicine-form";
@@ -40,19 +38,28 @@ const INV_STATUS: Record<string, { label: string; cls: string }> = {
 };
 
 const TABS = [
-  { id: "resumen",     label: "Resumen"          },
-  { id: "historia",    label: "Historia clínica"  },
-  { id: "expediente",  label: "Nueva consulta"    },
-  { id: "evolucion",   label: "Evolución / Notas" },
-  { id: "tratamiento", label: "Plan de tratamiento" },
-  { id: "agenda",      label: "Citas"             },
-  { id: "facturacion", label: "Facturación"        },
-  { id: "imagenes",       label: "📷 Imágenes"         },
-  { id: "periodontograma", label: "🦷 Periodontograma"   },
-  { id: "historial",      label: "📋 Historial cambios"  },
-  { id: "pagos",       label: "💳 Pagos a plazos"    },
-  { id: "consentimientos", label: "✍️ Consentimientos" },
+  { id: "resumen",       label: "Resumen"             },
+  { id: "historia",      label: "Historia clínica"     },
+  { id: "expediente",    label: "Nueva consulta"       },
+  { id: "evolucion",     label: "Evolución / Notas"    },
+  { id: "radiografias",  label: "Radiografías"         },
+  { id: "tratamiento",   label: "Plan de tratamiento"  },
+  { id: "agenda",        label: "Citas"                },
+  { id: "facturacion",   label: "Facturación"          },
 ];
+
+const SEV_STYLES: Record<string, { bg: string; text: string; label: string }> = {
+  alta:        { bg: "bg-rose-50 border-rose-200",    text: "text-rose-700",    label: "Prioridad alta"  },
+  media:       { bg: "bg-amber-50 border-amber-200",  text: "text-amber-700",   label: "Prioridad media" },
+  baja:        { bg: "bg-blue-50 border-blue-200",    text: "text-blue-700",    label: "Prioridad baja"  },
+  informativo: { bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-700", label: "Informativo" },
+};
+
+const FILE_CAT_LABELS: Record<string, string> = {
+  XRAY_PERIAPICAL: "Periapical", XRAY_PANORAMIC: "Panorámica", XRAY_BITEWING: "Bitewing",
+  XRAY_OCCLUSAL: "Oclusal", PHOTO_INTRAORAL: "Foto intraoral", PHOTO_EXTRAORAL: "Foto extraoral",
+  PHOTO_PROGRESS: "Progreso", CONSENT_FORM: "Consentimiento", OTHER: "Otro",
+};
 
 interface Props {
   patient:      any;
@@ -65,13 +72,13 @@ interface Props {
   totalPaid:    number;
   totalBalance: number;
   totalPlan:    number;
+  treatments:   any[];
   portalUrl?:   string | null;
-  treatments?:  any[];
 }
 
 export function PatientDetailClient({
   patient, records: initialRecords, appointments, invoices,
-  doctors, currentUser, specialty, totalPaid, totalBalance, totalPlan, portalUrl, treatments = [],
+  doctors, currentUser, specialty, totalPaid, totalBalance, totalPlan, treatments, portalUrl,
 }: Props) {
   const router = useRouter();
   const [tab, setTab]         = useState("resumen");
@@ -85,6 +92,63 @@ export function PatientDetailClient({
   const [savingAppt, setSavingAppt] = useState(false);
   const [portalLink, setPortalLink] = useState<string | null>(portalUrl ?? null);
   const [generatingPortal, setGeneratingPortal] = useState(false);
+  // Radiografias state
+  const [files, setFiles]             = useState<any[]>([]);
+  const [filesLoaded, setFilesLoaded] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [analyzing, setAnalyzing]     = useState<string | null>(null); // fileId being analyzed
+  const [analyses, setAnalyses]       = useState<Record<string, any>>({}); // fileId -> analysis result
+  const [expandedFile, setExpandedFile] = useState<string | null>(null);
+
+  async function loadFiles() {
+    if (filesLoaded) return;
+    try {
+      const res = await fetch(`/api/xrays?patientId=${patient.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setFiles(data);
+      }
+    } catch { /* ignore */ }
+    setFilesLoaded(true);
+  }
+
+  async function uploadFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingFile(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("patientId", patient.id);
+      formData.append("category", "XRAY_PERIAPICAL");
+      const res = await fetch("/api/xrays", { method: "POST", body: formData });
+      if (!res.ok) throw new Error((await res.json()).error);
+      const newFile = await res.json();
+      setFiles(prev => [newFile, ...prev]);
+      toast.success("Archivo subido");
+    } catch (err: any) {
+      toast.error(err.message ?? "Error al subir");
+    } finally {
+      setUploadingFile(false);
+      e.target.value = "";
+    }
+  }
+
+  async function analyzeFile(fileId: string) {
+    setAnalyzing(fileId);
+    try {
+      const res = await fetch(`/api/xrays/${fileId}/analyze`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setAnalyses(prev => ({ ...prev, [fileId]: data }));
+      setExpandedFile(fileId);
+      toast.success(`Análisis completado — ${data.analysis.findings?.length ?? 0} hallazgos`);
+    } catch (err: any) {
+      toast.error(err.message ?? "Error al analizar");
+    } finally {
+      setAnalyzing(null);
+    }
+  }
 
   async function generatePortalLink() {
     setGeneratingPortal(true);
@@ -427,7 +491,7 @@ export function PatientDetailClient({
                  detectedSpecialty === "psychology" ? "🧠 Nueva sesión" :
                  "🩺 Nueva consulta médica"}
               </h2>
-              {detectedSpecialty === "dental"     && <DentalForm          patientId={patient.id} isChild={patient.isChild ?? false} onSaved={handleRecordSaved} />}
+              {detectedSpecialty === "dental"     && <DentalForm          patientId={patient.id} onSaved={handleRecordSaved} />}
               {detectedSpecialty === "nutrition"  && <NutritionForm       patientId={patient.id} patient={patient} onSaved={handleRecordSaved} />}
               {detectedSpecialty === "psychology" && <PsychologyForm      patientId={patient.id} sessionNum={records.length + 1} onSaved={handleRecordSaved} />}
               {detectedSpecialty === "medicine"   && <GeneralMedicineForm patientId={patient.id} onSaved={handleRecordSaved} />}
@@ -509,38 +573,61 @@ export function PatientDetailClient({
 
           {/* ===== TAB: PLAN DE TRATAMIENTO ===== */}
           {tab === "tratamiento" && (
-            <div className="bg-white border border-border rounded-xl overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                <h2 className="text-sm font-bold">Plan de tratamiento</h2>
-                <button onClick={() => setTab("expediente")} className="text-xs font-semibold text-brand-600 hover:underline">+ Agregar procedimiento</button>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold">Planes de tratamiento</h2>
+                <a href="/dashboard/treatments" className="text-xs font-semibold text-brand-600 hover:underline">
+                  + Nuevo plan →
+                </a>
               </div>
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-muted/30 border-b border-border">
-                    {["#","Procedimiento","Diente","Estado","Doctor","Fecha","Costo"].map(h => (
-                      <th key={h} className="text-left px-4 py-2.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wide">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {records.flatMap((r, ri) =>
-                    (r.specialtyData?.procedures ?? []).map((proc: string, pi: number) => (
-                      <tr key={`${ri}-${pi}`} className="border-b border-border/50 hover:bg-muted/20">
-                        <td className="px-4 py-2 text-muted-foreground">{pi + 1}</td>
-                        <td className="px-4 py-2 font-semibold">{proc}</td>
-                        <td className="px-4 py-2 text-muted-foreground">—</td>
-                        <td className="px-4 py-2"><span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Realizado</span></td>
-                        <td className="px-4 py-2 text-muted-foreground">{r.doctor?.firstName} {r.doctor?.lastName}</td>
-                        <td className="px-4 py-2 text-muted-foreground">{formatDate(r.visitDate)}</td>
-                        <td className="px-4 py-2 font-bold">—</td>
-                      </tr>
-                    ))
-                  )}
-                  {records.flatMap(r => r.specialtyData?.procedures ?? []).length === 0 && (
-                    <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Sin procedimientos registrados</td></tr>
-                  )}
-                </tbody>
-              </table>
+              {treatments.length === 0 ? (
+                <div className="bg-white border border-border rounded-xl px-5 py-10 text-center text-muted-foreground">
+                  <div className="text-3xl mb-2">💊</div>
+                  <div className="text-sm font-semibold">Sin planes de tratamiento</div>
+                  <a href="/dashboard/treatments" className="text-xs text-brand-600 hover:underline mt-1 block">
+                    Crear primer plan →
+                  </a>
+                </div>
+              ) : treatments.map((t: any) => {
+                const pct = t.totalSessions > 0 ? Math.round((t.sessions.length / t.totalSessions) * 100) : 0;
+                const STATUS_CFG: Record<string,{label:string;cls:string}> = {
+                  ACTIVE:    { label:"Activo",     cls:"bg-emerald-50 text-emerald-700 border-emerald-200" },
+                  COMPLETED: { label:"Completado", cls:"bg-slate-100 text-slate-500 border-slate-200"      },
+                  ABANDONED: { label:"Abandonado", cls:"bg-rose-50 text-rose-700 border-rose-200"          },
+                  PAUSED:    { label:"Pausado",    cls:"bg-amber-50 text-amber-700 border-amber-200"       },
+                };
+                const cfg = STATUS_CFG[t.status] ?? STATUS_CFG.ACTIVE;
+                return (
+                  <div key={t.id} className="bg-white border border-border rounded-xl p-4">
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div>
+                        <div className="font-bold text-sm">{t.name}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          Dr/a. {t.doctor?.firstName} {t.doctor?.lastName}
+                        </div>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 ${cfg.cls}`}>
+                        {cfg.label}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-brand-500 rounded-full" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="text-xs font-bold text-muted-foreground">
+                        {t.sessions.length}/{t.totalSessions} sesiones
+                      </span>
+                    </div>
+                    <div className="flex gap-4 text-xs text-muted-foreground">
+                      <span>💰 {formatCurrency(t.totalCost)}</span>
+                      <span>📅 Cada {t.sessionIntervalDays} días</span>
+                      {t.nextExpectedDate && (
+                        <span>⏰ Próxima: {new Date(t.nextExpectedDate).toLocaleDateString("es-MX",{day:"numeric",month:"short"})}</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -619,25 +706,165 @@ export function PatientDetailClient({
           )}
 
           {/* ===== TAB: FACTURACION ===== */}
-          {tab === "imagenes" && (
-          <XrayTab patientId={patient.id} clinicId={patient.clinicId} />
-        )}
-        {tab === "pagos" && (
-          <PaymentPlanTab patientId={patient.id} patientName={`${patient.firstName} ${patient.lastName}`} />
-        )}
-        {tab === "consentimientos" && (
-          <ConsentTab patientId={patient.id} />
-        )}
-        {tab === "historial" && (
-          <AuditTab patientId={patient.id} />
-        )}
-        {tab === "periodontograma" && (
-          <div className="p-4">
-            <h2 className="font-bold text-base mb-4">Periodontograma</h2>
-            <PeriodontalForm patientId={patient.id} clinicId={patient.clinicId} />
-          </div>
-        )}
-        {tab === "facturacion" && (
+          {/* ===== TAB: RADIOGRAFIAS ===== */}
+          {tab === "radiografias" && (() => {
+            if (!filesLoaded) loadFiles();
+            return (
+              <div className="space-y-4">
+                {/* Upload bar */}
+                <div className="bg-white border border-border rounded-xl p-4 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-sm font-bold">Radiografías y archivos</h2>
+                    <p className="text-xs text-muted-foreground">{files.length} archivo{files.length !== 1 ? "s" : ""}</p>
+                  </div>
+                  <label className="flex items-center gap-1.5 text-xs font-semibold bg-brand-600 text-white px-3 py-2 rounded-lg cursor-pointer hover:bg-brand-700 transition-colors">
+                    <Plus className="w-3.5 h-3.5" />
+                    {uploadingFile ? "Subiendo…" : "Subir archivo"}
+                    <input type="file" className="hidden" accept="image/*,application/pdf" onChange={uploadFile} disabled={uploadingFile} />
+                  </label>
+                </div>
+
+                {files.length === 0 && filesLoaded && (
+                  <div className="bg-white border border-border rounded-xl p-10 text-center">
+                    <div className="text-3xl mb-2">🩻</div>
+                    <p className="text-sm font-semibold text-muted-foreground">Sin radiografías</p>
+                    <p className="text-xs text-muted-foreground mt-1">Sube la primera radiografía para poder analizarla con IA</p>
+                  </div>
+                )}
+
+                {/* File cards */}
+                {files.map((f: any) => {
+                  const isImage = f.mimeType?.startsWith("image/");
+                  const result  = analyses[f.id];
+                  const isExp   = expandedFile === f.id;
+
+                  return (
+                    <div key={f.id} className="bg-white border border-border rounded-xl overflow-hidden">
+                      <div className="flex gap-4 p-4">
+                        {/* Thumbnail */}
+                        {isImage && (
+                          <div className="w-32 h-24 bg-black rounded-lg overflow-hidden flex-shrink-0 relative">
+                            <img src={f.url} alt={f.name} className="w-full h-full object-cover opacity-90" />
+                          </div>
+                        )}
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-bold truncate">{f.name}</span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                              {FILE_CAT_LABELS[f.category] ?? f.category}
+                            </span>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {f.toothNumber && <span>Pieza #{f.toothNumber} · </span>}
+                            {f.size ? `${(f.size / 1024).toFixed(0)} KB · ` : ""}
+                            {new Date(f.createdAt).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" })}
+                          </div>
+                          {f.notes && <p className="text-xs text-muted-foreground mt-1">{f.notes}</p>}
+
+                          {/* Action buttons */}
+                          <div className="flex gap-2 mt-3">
+                            {isImage && (
+                              <button
+                                onClick={() => analyzeFile(f.id)}
+                                disabled={analyzing === f.id}
+                                className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${
+                                  result
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                    : "bg-violet-600 text-white hover:bg-violet-700"
+                                } disabled:opacity-60`}
+                              >
+                                {analyzing === f.id ? (
+                                  <><span className="inline-block w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Analizando…</>
+                                ) : result ? (
+                                  <><span>✓</span> {result.analysis.findings?.length ?? 0} hallazgos — Ver</>
+                                ) : (
+                                  <><span>🔬</span> Analizar con IA</>
+                                )}
+                              </button>
+                            )}
+                            {result && (
+                              <button
+                                onClick={() => setExpandedFile(isExp ? null : f.id)}
+                                className="text-xs font-semibold text-muted-foreground border border-border px-3 py-1.5 rounded-lg hover:bg-muted/50"
+                              >
+                                {isExp ? "Ocultar" : "Mostrar"} resultados
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* AI Analysis results (expanded) */}
+                      {result && isExp && (
+                        <div className="border-t border-border bg-slate-50 p-4 space-y-3">
+                          {/* Summary */}
+                          <div className="bg-violet-50 border border-violet-200 rounded-xl p-3">
+                            <h4 className="text-xs font-bold text-violet-700 mb-1">Resumen del análisis IA</h4>
+                            <p className="text-xs text-violet-900 leading-relaxed">{result.analysis.summary}</p>
+                          </div>
+
+                          {/* Findings */}
+                          {result.analysis.findings?.map((finding: any, i: number) => {
+                            const sev = SEV_STYLES[finding.severity] ?? SEV_STYLES.informativo;
+                            return (
+                              <div key={i} className={`border rounded-xl p-3 ${sev.bg}`}>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${sev.text} bg-white border`}>
+                                    {finding.id ?? i + 1}
+                                  </span>
+                                  <span className={`text-xs font-bold ${sev.text}`}>{finding.title}</span>
+                                  <span className={`ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full border ${sev.bg} ${sev.text}`}>
+                                    {sev.label}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-700 ml-7 leading-relaxed">{finding.description}</p>
+                                {finding.tooth && (
+                                  <p className="text-[10px] text-slate-500 ml-7 mt-1">{finding.tooth}</p>
+                                )}
+                                <div className="flex items-center gap-1.5 ml-7 mt-1.5">
+                                  <div className="w-14 h-1 bg-slate-200 rounded-full overflow-hidden">
+                                    <div className="h-full rounded-full" style={{
+                                      width: `${finding.confidence}%`,
+                                      backgroundColor: finding.confidence > 80 ? "#22c55e" : finding.confidence > 60 ? "#eab308" : "#ef4444",
+                                    }} />
+                                  </div>
+                                  <span className="text-[10px] text-slate-500">Confianza: {finding.confidence}%</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                          {/* Recommendations */}
+                          {result.analysis.recommendations && (
+                            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+                              <h4 className="text-xs font-bold text-blue-700 mb-1">Recomendaciones</h4>
+                              <p className="text-xs text-blue-900">{result.analysis.recommendations}</p>
+                            </div>
+                          )}
+
+                          {/* Disclaimer + tokens */}
+                          <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-[10px] text-amber-700 leading-relaxed">
+                                <strong>Herramienta de apoyo diagnóstico.</strong> Este análisis es generado por IA y NO sustituye el juicio clínico del profesional.
+                              </p>
+                              <p className="text-[10px] text-amber-600 mt-1">
+                                Tokens usados: {result.tokensUsed?.toLocaleString()} · Restantes: {result.tokensRemaining?.toLocaleString()} / {result.tokensLimit?.toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {tab === "facturacion" && (
             <div className="bg-white border border-border rounded-xl overflow-hidden">
               <div className="px-5 py-4 border-b border-border">
                 <h2 className="text-sm font-bold">Facturación</h2>
@@ -682,6 +909,7 @@ export function PatientDetailClient({
                 { icon: "📅", label: "Agendar cita",        action: () => setShowNewAppt(true) },
                 { icon: "📝", label: "Nueva consulta",       action: () => setTab("expediente")  },
                 { icon: "📊", label: "Ver evolución",        action: () => setTab("evolucion")   },
+                { icon: "🩻", label: "Radiografías",          action: () => setTab("radiografias") },
                 { icon: "🦷", label: "Plan tratamiento",     action: () => setTab("tratamiento") },
                 { icon: "💳", label: "Ver facturación",      action: () => setTab("facturacion") },
               ].map(btn => (
@@ -742,644 +970,3 @@ export function PatientDetailClient({
     </div>
   );
 }
-
-
-// ══════════════════════════════════════════════════════════════
-// TAB: Imágenes / Radiografías
-// ══════════════════════════════════════════════════════════════
-const CATEGORY_LABELS: Record<string, string> = {
-  XRAY_PERIAPICAL:     "Rx Periapical",
-  XRAY_PANORAMIC:      "Rx Panorámica",
-  XRAY_BITEWING:       "Rx Aleta",
-  XRAY_OCCLUSAL:       "Rx Oclusal",
-  PHOTO_FRONTAL:       "Foto Frontal",
-  PHOTO_LATERAL:       "Foto Lateral",
-  PHOTO_OCCLUSAL_UPPER: "Foto Oclusal Sup",
-  PHOTO_OCCLUSAL_LOWER: "Foto Oclusal Inf",
-  PHOTO_INTRAORAL:     "Foto Intraoral",
-  CONSENT_FORM:        "Consentimiento",
-  OTHER:               "Otro",
-};
-
-function XrayTab({ patientId, clinicId }: { patientId: string; clinicId: string }) {
-  const [files, setFiles]       = React.useState<any[]>([]);
-  const [loading, setLoading]   = React.useState(true);
-  const [uploading, setUploading] = React.useState(false);
-  const [selected, setSelected] = React.useState<any | null>(null);
-  const [showUpload, setShowUpload] = React.useState(false);
-  const [form, setForm]         = React.useState({ category: "XRAY_PERIAPICAL", notes: "", toothNumber: "", takenAt: "" });
-  const fileRef                 = React.useRef<HTMLInputElement>(null);
-
-  React.useEffect(() => { loadFiles(); }, [patientId]);
-
-  async function loadFiles() {
-    setLoading(true);
-    const res = await fetch(`/api/xrays?patientId=${patientId}`);
-    if (res.ok) setFiles(await res.json());
-    setLoading(false);
-  }
-
-  async function upload() {
-    const file = fileRef.current?.files?.[0];
-    if (!file) { toast.error("Selecciona un archivo"); return; }
-    setUploading(true);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("patientId", patientId);
-      fd.append("category", form.category);
-      if (form.notes) fd.append("notes", form.notes);
-      if (form.toothNumber) fd.append("toothNumber", form.toothNumber);
-      if (form.takenAt) fd.append("takenAt", form.takenAt);
-      const res = await fetch("/api/xrays", { method: "POST", body: fd });
-      if (!res.ok) throw new Error((await res.json()).error);
-      toast.success("✅ Archivo subido");
-      setShowUpload(false);
-      setForm({ category: "XRAY_PERIAPICAL", notes: "", toothNumber: "", takenAt: "" });
-      loadFiles();
-    } catch(e: any) { toast.error(e.message); }
-    finally { setUploading(false); }
-  }
-
-  async function deleteFile(id: string) {
-    if (!confirm("¿Eliminar este archivo?")) return;
-    await fetch(`/api/xrays/${id}`, { method: "DELETE" });
-    setFiles(f => f.filter(x => x.id !== id));
-    if (selected?.id === id) setSelected(null);
-    toast.success("Eliminado");
-  }
-
-  const isImage = (url: string) => /\.(jpg|jpeg|png|gif|webp)$/i.test(url);
-
-  if (loading) return <div className="p-8 text-center text-muted-foreground">Cargando imágenes...</div>;
-
-  return (
-    <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="font-bold text-base">Radiografías y Fotografías ({files.length})</h3>
-        <button onClick={() => setShowUpload(true)}
-          className="flex items-center gap-1.5 text-sm font-semibold bg-brand-600 text-white px-3 py-1.5 rounded-lg hover:bg-brand-700 transition-colors">
-          + Subir imagen
-        </button>
-      </div>
-
-      {showUpload && (
-        <div className="border border-border rounded-xl p-4 bg-muted/30 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground mb-1 block">Tipo</label>
-              <select className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background"
-                value={form.category} onChange={e => setForm(f=>({...f, category:e.target.value}))}>
-                {Object.entries(CATEGORY_LABELS).filter(([k])=>k!=="CONSENT_FORM").map(([k,v]) => (
-                  <option key={k} value={k}>{v}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground mb-1 block">Diente # (opcional)</label>
-              <input type="number" min="11" max="48" placeholder="ej: 36"
-                className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background"
-                value={form.toothNumber} onChange={e => setForm(f=>({...f, toothNumber:e.target.value}))} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground mb-1 block">Fecha de toma</label>
-              <input type="date" className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background"
-                value={form.takenAt} onChange={e => setForm(f=>({...f, takenAt:e.target.value}))} />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground mb-1 block">Notas</label>
-              <input type="text" placeholder="Observaciones..."
-                className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background"
-                value={form.notes} onChange={e => setForm(f=>({...f, notes:e.target.value}))} />
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-muted-foreground mb-1 block">Archivo (imagen o PDF)</label>
-            <input ref={fileRef} type="file" accept="image/*,.pdf"
-              className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background file:mr-2 file:text-xs file:font-semibold file:bg-brand-50 file:text-brand-700 file:border-0 file:rounded file:px-2 file:py-0.5" />
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => setShowUpload(false)}
-              className="flex-1 text-sm border border-border rounded-lg py-2 hover:bg-muted transition-colors">Cancelar</button>
-            <button onClick={upload} disabled={uploading}
-              className="flex-1 text-sm bg-brand-600 text-white rounded-lg py-2 font-semibold hover:bg-brand-700 disabled:opacity-50 transition-colors">
-              {uploading ? "Subiendo..." : "Subir archivo"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {files.length === 0 ? (
-        <div className="py-12 text-center text-muted-foreground">
-          <div className="text-4xl mb-2">🦷</div>
-          <p className="text-sm">No hay imágenes aún</p>
-          <p className="text-xs">Sube radiografías o fotografías del paciente</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {files.map(f => (
-            <div key={f.id} className="border border-border rounded-xl overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
-              onClick={() => setSelected(f)}>
-              {isImage(f.url) ? (
-                <img src={f.url} alt={f.name} className="w-full h-28 object-cover" />
-              ) : (
-                <div className="w-full h-28 bg-muted flex items-center justify-center text-4xl">📄</div>
-              )}
-              <div className="p-2">
-                <div className="text-xs font-semibold truncate">{CATEGORY_LABELS[f.category] ?? f.category}</div>
-                {f.toothNumber && <div className="text-xs text-muted-foreground">Diente {f.toothNumber}</div>}
-                <div className="text-xs text-muted-foreground">{new Date(f.createdAt).toLocaleDateString("es-MX")}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {selected && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setSelected(null)}>
-          <div className="bg-background rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-4 border-b border-border">
-              <div>
-                <div className="font-bold">{CATEGORY_LABELS[selected.category] ?? selected.category}</div>
-                {selected.toothNumber && <div className="text-sm text-muted-foreground">Diente {selected.toothNumber}</div>}
-                {selected.notes && <div className="text-sm text-muted-foreground">{selected.notes}</div>}
-              </div>
-              <div className="flex gap-2">
-                <a href={selected.url} target="_blank" rel="noreferrer"
-                  className="text-sm font-semibold text-brand-600 hover:underline px-3 py-1.5 border border-brand-600 rounded-lg">
-                  Abrir
-                </a>
-                <button onClick={() => deleteFile(selected.id)}
-                  className="text-sm font-semibold text-red-600 hover:underline px-3 py-1.5 border border-red-300 rounded-lg">
-                  Eliminar
-                </button>
-                <button onClick={() => setSelected(null)}
-                  className="text-sm px-3 py-1.5 border border-border rounded-lg hover:bg-muted">✕</button>
-              </div>
-            </div>
-            <div className="p-4">
-              {isImage(selected.url) ? (
-                <img src={selected.url} alt={selected.name} className="w-full rounded-xl" />
-              ) : (
-                <div className="text-center py-8">
-                  <div className="text-6xl mb-3">📄</div>
-                  <a href={selected.url} target="_blank" rel="noreferrer"
-                    className="text-brand-600 font-semibold hover:underline">Ver documento PDF</a>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════
-// TAB: Pagos a Plazos
-// ══════════════════════════════════════════════════════════════
-function PaymentPlanTab({ patientId, patientName }: { patientId: string; patientName: string }) {
-  const [plans, setPlans]       = React.useState<any[]>([]);
-  const [loading, setLoading]   = React.useState(true);
-  const [showNew, setShowNew]   = React.useState(false);
-  const [saving, setSaving]     = React.useState(false);
-  const [expanded, setExpanded] = React.useState<string | null>(null);
-  const [form, setForm] = React.useState({
-    name: "", totalAmount: "", downPayment: "0",
-    installments: "12", frequency: "MONTHLY", startDate: "", notes: ""
-  });
-
-  React.useEffect(() => { loadPlans(); }, [patientId]);
-
-  async function loadPlans() {
-    setLoading(true);
-    const res = await fetch(`/api/payment-plans?patientId=${patientId}`);
-    if (res.ok) setPlans(await res.json());
-    setLoading(false);
-  }
-
-  async function createPlan() {
-    if (!form.name || !form.totalAmount) { toast.error("Nombre y monto son requeridos"); return; }
-    setSaving(true);
-    try {
-      const res = await fetch("/api/payment-plans", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patientId, ...form, totalAmount: parseFloat(form.totalAmount),
-          downPayment: parseFloat(form.downPayment||"0"), installments: parseInt(form.installments) }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error);
-      toast.success("✅ Plan creado");
-      setShowNew(false);
-      loadPlans();
-    } catch(e: any) { toast.error(e.message); }
-    finally { setSaving(false); }
-  }
-
-  async function registerPayment(planId: string, installmentId: string) {
-    const method = prompt("Método de pago (Efectivo, Tarjeta, Transferencia):", "Efectivo");
-    if (method === null) return;
-    const res = await fetch(`/api/payment-plans/${planId}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ installmentId, method }),
-    });
-    if (res.ok) { toast.success("✅ Abono registrado"); loadPlans(); }
-    else toast.error("Error al registrar");
-  }
-
-  const statusColor: Record<string, string> = {
-    ACTIVE: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
-    COMPLETED: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
-    CANCELLED: "bg-slate-100 text-slate-500",
-    OVERDUE: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
-  };
-  const statusLabel: Record<string, string> = { ACTIVE:"Activo", COMPLETED:"Completado", CANCELLED:"Cancelado", OVERDUE:"Vencido" };
-  const freqLabel: Record<string, string> = { WEEKLY:"Semanal", BIWEEKLY:"Quincenal", MONTHLY:"Mensual" };
-
-  if (loading) return <div className="p-8 text-center text-muted-foreground">Cargando planes...</div>;
-
-  return (
-    <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="font-bold text-base">Planes de pago ({plans.length})</h3>
-        <button onClick={() => setShowNew(true)}
-          className="flex items-center gap-1.5 text-sm font-semibold bg-brand-600 text-white px-3 py-1.5 rounded-lg hover:bg-brand-700">
-          + Nuevo plan
-        </button>
-      </div>
-
-      {showNew && (
-        <div className="border border-border rounded-xl p-4 bg-muted/30 space-y-3">
-          <div className="font-semibold text-sm">Nuevo plan de pago — {patientName}</div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <label className="text-xs font-semibold text-muted-foreground mb-1 block">Nombre del plan *</label>
-              <input type="text" placeholder="ej: Ortodoncia 18 meses"
-                className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background"
-                value={form.name} onChange={e => setForm(f=>({...f,name:e.target.value}))} />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground mb-1 block">Monto total *</label>
-              <input type="number" placeholder="45000"
-                className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background"
-                value={form.totalAmount} onChange={e => setForm(f=>({...f,totalAmount:e.target.value}))} />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground mb-1 block">Anticipo</label>
-              <input type="number" placeholder="0"
-                className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background"
-                value={form.downPayment} onChange={e => setForm(f=>({...f,downPayment:e.target.value}))} />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground mb-1 block">Número de pagos</label>
-              <input type="number" min="1" max="60"
-                className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background"
-                value={form.installments} onChange={e => setForm(f=>({...f,installments:e.target.value}))} />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground mb-1 block">Frecuencia</label>
-              <select className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background"
-                value={form.frequency} onChange={e => setForm(f=>({...f,frequency:e.target.value}))}>
-                <option value="MONTHLY">Mensual</option>
-                <option value="BIWEEKLY">Quincenal</option>
-                <option value="WEEKLY">Semanal</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground mb-1 block">Fecha inicio</label>
-              <input type="date" className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background"
-                value={form.startDate} onChange={e => setForm(f=>({...f,startDate:e.target.value}))} />
-            </div>
-            <div className="col-span-2">
-              <label className="text-xs font-semibold text-muted-foreground mb-1 block">Notas</label>
-              <input type="text" placeholder="Notas adicionales..."
-                className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background"
-                value={form.notes} onChange={e => setForm(f=>({...f,notes:e.target.value}))} />
-            </div>
-          </div>
-          {form.totalAmount && form.installments && (
-            <div className="bg-brand-50 dark:bg-brand-900/20 rounded-lg p-3 text-sm">
-              Cuota estimada: <span className="font-bold">
-                ${Math.round((parseFloat(form.totalAmount||"0") - parseFloat(form.downPayment||"0")) / parseInt(form.installments||"1")).toLocaleString("es-MX")}
-              </span> / {freqLabel[form.frequency]}
-            </div>
-          )}
-          <div className="flex gap-2">
-            <button onClick={() => setShowNew(false)}
-              className="flex-1 text-sm border border-border rounded-lg py-2 hover:bg-muted">Cancelar</button>
-            <button onClick={createPlan} disabled={saving}
-              className="flex-1 text-sm bg-brand-600 text-white rounded-lg py-2 font-semibold disabled:opacity-50">
-              {saving ? "Creando..." : "Crear plan"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {plans.length === 0 ? (
-        <div className="py-12 text-center text-muted-foreground">
-          <div className="text-4xl mb-2">💳</div>
-          <p className="text-sm">No hay planes de pago</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {plans.map(plan => {
-            const paid = plan.payments.filter((p: any) => p.paidAt).length;
-            const total = plan.payments.length;
-            const paidAmount = plan.payments.filter((p:any)=>p.paidAt).reduce((s:number,p:any)=>s+p.amount,0);
-            const progress = total > 0 ? Math.round((paid/total)*100) : 0;
-            const isExpanded = expanded === plan.id;
-            return (
-              <div key={plan.id} className="border border-border rounded-xl overflow-hidden">
-                <button className="w-full text-left p-4 hover:bg-muted/30 transition-colors" onClick={() => setExpanded(isExpanded ? null : plan.id)}>
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm truncate">{plan.name}</span>
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${statusColor[plan.status]}`}>{statusLabel[plan.status]}</span>
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        ${plan.totalAmount.toLocaleString("es-MX")} total · {freqLabel[plan.frequency]} · {paid}/{total} pagos
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="text-sm font-bold">${paidAmount.toLocaleString("es-MX")}</div>
-                      <div className="text-xs text-muted-foreground">de ${plan.totalAmount.toLocaleString("es-MX")}</div>
-                    </div>
-                  </div>
-                  <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full bg-brand-500 rounded-full transition-all" style={{ width:`${progress}%` }} />
-                  </div>
-                </button>
-                {isExpanded && (
-                  <div className="border-t border-border p-4 space-y-2">
-                    {plan.payments.map((p: any) => (
-                      <div key={p.id} className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0">
-                        <div>
-                          <span className="text-sm font-medium">Cuota {p.installment}</span>
-                          <span className="text-xs text-muted-foreground ml-2">
-                            Vence: {new Date(p.dueDate).toLocaleDateString("es-MX")}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold">${p.amount.toLocaleString("es-MX")}</span>
-                          {p.paidAt ? (
-                            <span className="text-xs text-green-600 font-semibold bg-green-50 dark:bg-green-900/30 px-2 py-0.5 rounded-full">
-                              ✓ {new Date(p.paidAt).toLocaleDateString("es-MX")}
-                            </span>
-                          ) : plan.status === "ACTIVE" ? (
-                            <button onClick={() => registerPayment(plan.id, p.id)}
-                              className="text-xs font-semibold text-brand-600 border border-brand-300 px-2 py-0.5 rounded-full hover:bg-brand-50">
-                              Registrar
-                            </button>
-                          ) : (
-                            <span className="text-xs text-muted-foreground px-2 py-0.5">Pendiente</span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════
-// TAB: Consentimientos Informados
-// ══════════════════════════════════════════════════════════════
-const PROCEDURES = [
-  "Extracción simple", "Endodoncia", "Implante dental",
-  "Ortodoncia", "Blanqueamiento", "Extracción quirúrgica",
-  "Cirugía periodontal", "Injerto óseo",
-];
-
-function ConsentTab({ patientId }: { patientId: string }) {
-  const [forms, setForms]       = React.useState<any[]>([]);
-  const [loading, setLoading]   = React.useState(true);
-  const [generating, setGenerating] = React.useState(false);
-  const [procedure, setProcedure] = React.useState(PROCEDURES[0]);
-  const [viewingConsent, setViewingConsent] = React.useState<any | null>(null);
-
-  React.useEffect(() => { loadForms(); }, [patientId]);
-
-  async function loadForms() {
-    setLoading(true);
-    const res = await fetch(`/api/consent?patientId=${patientId}`);
-    if (res.ok) setForms(await res.json());
-    setLoading(false);
-  }
-
-  async function generate() {
-    setGenerating(true);
-    try {
-      const res = await fetch("/api/consent", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patientId, procedure }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error);
-      const data = await res.json();
-      // Copy link to clipboard
-      await navigator.clipboard.writeText(data.signUrl).catch(() => {});
-      toast.success("✅ Enlace copiado. Comparte con el paciente por WhatsApp");
-      loadForms();
-    } catch(e: any) { toast.error(e.message); }
-    finally { setGenerating(false); }
-  }
-
-  if (loading) return <div className="p-8 text-center text-muted-foreground">Cargando...</div>;
-
-  return (
-    <>
-    <div className="p-4 space-y-4">
-      <h3 className="font-bold text-base">Consentimientos Informados</h3>
-
-      <div className="border border-border rounded-xl p-4 bg-muted/30 space-y-3">
-        <div className="text-sm font-semibold">Generar nuevo consentimiento</div>
-        <div className="flex gap-2">
-          <select className="flex-1 text-sm border border-border rounded-lg px-3 py-2 bg-background"
-            value={procedure} onChange={e => setProcedure(e.target.value)}>
-            {PROCEDURES.map(p => <option key={p}>{p}</option>)}
-          </select>
-          <button onClick={generate} disabled={generating}
-            className="text-sm font-semibold bg-brand-600 text-white px-4 py-2 rounded-lg hover:bg-brand-700 disabled:opacity-50 whitespace-nowrap">
-            {generating ? "..." : "Generar y copiar enlace"}
-          </button>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Se genera un enlace único válido 7 días que el paciente puede abrir desde su celular para firmar digitalmente.
-        </p>
-      </div>
-
-      {forms.length === 0 ? (
-        <div className="py-8 text-center text-muted-foreground text-sm">No hay consentimientos generados</div>
-      ) : (
-        <div className="space-y-2">
-          {forms.map(f => (
-            <div key={f.id} className="flex items-center justify-between p-3 border border-border rounded-xl">
-              <div>
-                <div className="font-semibold text-sm">{f.procedure}</div>
-                <div className="text-xs text-muted-foreground">{new Date(f.createdAt).toLocaleDateString("es-MX")}</div>
-              </div>
-              <div className="flex items-center gap-2">
-                {f.signedAt ? (
-                  <span className="text-xs font-semibold text-green-600 bg-green-50 dark:bg-green-900/30 px-2 py-1 rounded-full">
-                    ✅ Firmado {new Date(f.signedAt).toLocaleDateString("es-MX")}
-                  </span>
-                ) : new Date() > new Date(f.expiresAt) ? (
-                  <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">Expirado</span>
-                ) : (
-                  <button onClick={() => {
-                    const url = `${window.location.origin}/consentimiento/${f.token}`;
-                    navigator.clipboard.writeText(url).catch(()=>{});
-                    toast.success("Enlace copiado");
-                  }} className="text-xs font-semibold text-brand-600 border border-brand-300 px-2 py-1 rounded-full hover:bg-brand-50">
-                    Copiar enlace
-                  </button>
-                )}
-                {f.signedAt && (
-                  <button onClick={() => setViewingConsent(f)}
-                    className="text-xs font-semibold text-brand-600 border border-brand-300 px-2 py-1 rounded-full hover:bg-brand-50">
-                    Ver documento
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-
-      {/* Consent viewer modal */}
-      {viewingConsent && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setViewingConsent(null)}>
-          <div className="bg-background rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-4 border-b border-border">
-              <div>
-                <div className="font-bold">{viewingConsent.procedure}</div>
-                <div className="text-xs text-muted-foreground">
-                  Firmado el {new Date(viewingConsent.signedAt).toLocaleDateString("es-MX", { weekday:"long", day:"numeric", month:"long", year:"numeric" })}
-                </div>
-              </div>
-              <button onClick={() => setViewingConsent(null)}
-                className="text-sm px-3 py-1.5 border border-border rounded-lg hover:bg-muted">✕</button>
-            </div>
-            <div className="p-5 space-y-5">
-              {/* Consent content */}
-              <div>
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Contenido del consentimiento</div>
-                <div className="bg-muted/40 rounded-xl p-4 text-sm leading-relaxed whitespace-pre-wrap text-foreground">
-                  {viewingConsent.content}
-                </div>
-              </div>
-              {/* Signature */}
-              {viewingConsent.signatureUrl && (
-                <div>
-                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Firma del paciente</div>
-                  <div className="border border-border rounded-xl p-3 bg-white dark:bg-slate-900">
-                    <img src={viewingConsent.signatureUrl} alt="Firma" className="max-h-32 mx-auto" />
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1.5 text-center">
-                    Firmado digitalmente el {new Date(viewingConsent.signedAt).toLocaleString("es-MX")}
-                  </div>
-                </div>
-              )}
-              <div className="flex gap-2 pt-2">
-                <button onClick={() => window.print()}
-                  className="flex-1 text-sm border border-border rounded-lg py-2 hover:bg-muted font-semibold">
-                  🖨️ Imprimir
-                </button>
-                <button onClick={() => setViewingConsent(null)}
-                  className="flex-1 text-sm bg-brand-600 text-white rounded-lg py-2 font-semibold hover:bg-brand-700">
-                  Cerrar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════
-// TAB: Historial de cambios (Audit Log)
-// ══════════════════════════════════════════════════════════════
-function AuditTab({ patientId }: { patientId: string }) {
-  const [logs, setLogs]       = React.useState<any[]>([]);
-  const [loading, setLoading] = React.useState(true);
-
-  React.useEffect(() => {
-    fetch(`/api/audit-log?entityType=patient&entityId=${patientId}`)
-      .then(r => r.json())
-      .then(d => setLogs(Array.isArray(d) ? d : []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [patientId]);
-
-  const ACTION_LABEL: Record<string, { label: string; color: string }> = {
-    create: { label: "Creación",      color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30" },
-    update: { label: "Actualización", color: "text-blue-600 bg-blue-50 dark:bg-blue-900/30" },
-    delete: { label: "Eliminación",   color: "text-red-600 bg-red-50 dark:bg-red-900/30" },
-    view:   { label: "Consulta",      color: "text-gray-600 bg-gray-100" },
-  };
-
-  if (loading) return <div className="p-8 text-center text-muted-foreground text-sm">Cargando historial…</div>;
-
-  if (logs.length === 0) return (
-    <div className="p-8 text-center text-muted-foreground">
-      <div className="text-3xl mb-2">📋</div>
-      <p className="text-sm">Sin cambios registrados aún</p>
-      <p className="text-xs mt-1 text-muted-foreground/60">Los cambios futuros aparecerán aquí</p>
-    </div>
-  );
-
-  return (
-    <div className="p-4 space-y-3">
-      <div className="text-sm text-muted-foreground mb-4">
-        Registro de todos los cambios realizados en este expediente
-      </div>
-      {logs.map(log => (
-        <div key={log.id} className="border border-border rounded-xl p-4">
-          <div className="flex items-start justify-between gap-2 mb-2">
-            <div className="flex items-center gap-2">
-              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${ACTION_LABEL[log.action]?.color ?? "text-gray-600 bg-gray-100"}`}>
-                {ACTION_LABEL[log.action]?.label ?? log.action}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {log.user.firstName} {log.user.lastName}
-                <span className="text-muted-foreground/50 ml-1">({log.user.role})</span>
-              </span>
-            </div>
-            <span className="text-xs text-muted-foreground shrink-0">
-              {new Date(log.createdAt).toLocaleString("es-MX", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" })}
-            </span>
-          </div>
-          {log.changes && Object.keys(log.changes).length > 0 && (
-            <div className="mt-2 space-y-1.5">
-              {Object.entries(log.changes).map(([field, change]: [string, any]) => (
-                <div key={field} className="text-xs bg-muted/40 rounded-lg p-2">
-                  <span className="font-semibold text-foreground">{field}</span>
-                  <div className="flex gap-2 mt-1 text-muted-foreground">
-                    <span className="text-red-500/70 line-through truncate max-w-[40%]">
-                      {JSON.stringify(change.before) ?? "—"}
-                    </span>
-                    <span>→</span>
-                    <span className="text-emerald-600 truncate max-w-[40%]">
-                      {JSON.stringify(change.after) ?? "—"}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-

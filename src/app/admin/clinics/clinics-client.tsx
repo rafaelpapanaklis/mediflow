@@ -129,7 +129,7 @@ export function AdminClinicsClient({ clinics: initial }: Props) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-700">
-                {["Clínica","Contacto","Plan","Pacientes","Trial / Estado","Acciones"].map(h => (
+                {["Clínica","Contacto","Plan","Pacientes","Tokens IA","Trial / Estado","Acciones"].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -174,6 +174,23 @@ export function AdminClinicsClient({ clinics: initial }: Props) {
                       <div className="text-[10px] text-slate-500">{clinic._count.appointments} citas</div>
                     </td>
                     <td className="px-4 py-3">
+                      {(() => {
+                        const used  = clinic.aiTokensUsed ?? 0;
+                        const limit = clinic.aiTokensLimit ?? 50000;
+                        const pct   = limit > 0 ? Math.round((used / limit) * 100) : 0;
+                        const color = pct > 90 ? "#ef4444" : pct > 60 ? "#eab308" : "#22c55e";
+                        return (
+                          <div>
+                            <div className="text-xs text-slate-300 font-bold">{used.toLocaleString()}<span className="text-slate-500 font-normal"> / {limit.toLocaleString()}</span></div>
+                            <div className="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden mt-1">
+                              <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
+                            </div>
+                            <div className="text-[10px] text-slate-500 mt-0.5">{pct}% usado</div>
+                          </div>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-4 py-3">
                       {expired ? (
                         <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-rose-900/50 text-rose-400 border border-rose-700">
                           ✗ Expirado
@@ -211,7 +228,7 @@ export function AdminClinicsClient({ clinics: initial }: Props) {
                 );
               })}
               {filtered.length === 0 && (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-500">Sin resultados</td></tr>
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-500">Sin resultados</td></tr>
               )}
             </tbody>
           </table>
