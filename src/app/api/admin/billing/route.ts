@@ -94,8 +94,11 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   if (!isAdmin(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  try {
   const body = await req.json();
   const { action } = body;
+
+  if (!action) return NextResponse.json({ error: "action is required" }, { status: 400 });
 
   if (action === "verify_payment") {
     const { invoiceId } = body;
@@ -160,4 +163,8 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+  } catch (err: any) {
+    console.error("Admin billing error:", err);
+    return NextResponse.json({ error: err.message ?? "Internal error" }, { status: 500 });
+  }
 }

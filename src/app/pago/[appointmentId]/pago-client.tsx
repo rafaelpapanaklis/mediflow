@@ -30,6 +30,7 @@ export function PagoClient({
   telePatientToken,
 }: PagoClientProps) {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const formattedDate = new Date(date).toLocaleDateString("es-MX", {
     weekday: "long",
@@ -52,14 +53,14 @@ export function PagoClient({
         body: JSON.stringify({ appointmentId }),
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error al procesar pago");
       if (data.url) {
         window.location.href = data.url;
       } else {
-        console.error("No checkout URL returned");
-        setLoading(false);
+        throw new Error("No se pudo generar el enlace de pago");
       }
-    } catch (err) {
-      console.error("Error creating checkout session:", err);
+    } catch (err: any) {
+      setError(err.message ?? "Error al procesar el pago. Intenta de nuevo.");
       setLoading(false);
     }
   };
@@ -137,9 +138,15 @@ export function PagoClient({
             </div>
           </div>
 
+          {error && (
+            <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-sm rounded-xl px-4 py-3">
+              {error}
+            </div>
+          )}
+
           {/* Pay button */}
           <button
-            onClick={handlePay}
+            onClick={() => { setError(""); handlePay(); }}
             disabled={loading}
             className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl text-lg transition-colors"
           >

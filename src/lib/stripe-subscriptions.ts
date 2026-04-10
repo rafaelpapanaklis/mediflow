@@ -46,7 +46,7 @@ export async function createSubscription(params: {
   return {
     subscriptionId: subscription.id,
     clientSecret,
-    url: clientSecret ? null as any : subscription.id, // Will be handled by checkout
+    url: null as any, // URL comes from checkout session, not subscription directly
   };
 }
 
