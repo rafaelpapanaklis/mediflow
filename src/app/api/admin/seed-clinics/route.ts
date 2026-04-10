@@ -9,13 +9,28 @@ import { prisma } from "@/lib/prisma";
  */
 export async function POST(req: NextRequest) {
   try {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Allow access from admin panel (admin_token cookie) OR from the user's own session
+  const adminToken = req.cookies.get("admin_token")?.value;
+  const isAdmin = adminToken && adminToken === process.env.ADMIN_SECRET_TOKEN;
 
-  const ALLOWED_EMAIL = "rafaelpapanaklis@gmail.com";
-  if (user.email !== ALLOWED_EMAIL) {
-    return NextResponse.json({ error: "Not allowed" }, { status: 403 });
+  let supabaseId: string;
+  let email: string;
+
+  if (isAdmin) {
+    // Called from admin panel — find the target user by email
+    const TARGET_EMAIL = "rafaelpapanaklis@gmail.com";
+    const targetUser = await prisma.user.findFirst({ where: { email: TARGET_EMAIL }, select: { supabaseId: true, email: true } });
+    if (!targetUser) return NextResponse.json({ error: "Target user not found" }, { status: 404 });
+    supabaseId = targetUser.supabaseId;
+    email = targetUser.email;
+  } else {
+    // Called from user's own session
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (user.email !== "rafaelpapanaklis@gmail.com") return NextResponse.json({ error: "Not allowed" }, { status: 403 });
+    supabaseId = user.id;
+    email = user.email!;
   }
 
   const CATEGORIES = [
@@ -52,15 +67,15 @@ export async function POST(req: NextRequest) {
     if (existing) {
       // Check if user already has access
       const existingUser = await prisma.user.findFirst({
-        where: { supabaseId: user.id, clinicId: existing.id },
+        where: { supabaseId: supabaseId, clinicId: existing.id },
       });
       if (!existingUser) {
         // Create user in existing clinic
         await prisma.user.create({
           data: {
-            supabaseId: user.id,
+            supabaseId: supabaseId,
             clinicId: existing.id,
-            email: user.email!,
+            email: email,
             firstName: "Rafael",
             lastName: "Papanaklis",
             role: "SUPER_ADMIN",
@@ -83,13 +98,13 @@ export async function POST(req: NextRequest) {
         category: cat.id as any,
         country: "México",
         city: "Mérida",
-        email: user.email,
+        email: email,
         plan: "PRO",
         trialEndsAt,
         users: {
           create: {
-            supabaseId: user.id,
-            email: user.email!,
+            supabaseId: supabaseId,
+            email: email,
             firstName: "Rafael",
             lastName: "Papanaklis",
             role: "SUPER_ADMIN",
