@@ -113,7 +113,7 @@ export function RegisterForm() {
       try {
         const res = await fetch(`/api/auth/check-email?email=${encodeURIComponent(form.email)}`);
         const data = await res.json();
-        if (data.exists) { setError("Este correo electrónico ya está registrado. ¿Ya tienes cuenta? Inicia sesión."); return false; }
+        if (data.exists) { setError("EMAIL_EXISTS"); return false; }
       } catch { /* if check fails, let registration handle it */ }
     }
     if (step === 1) {
@@ -218,7 +218,11 @@ export function RegisterForm() {
       <StepDots current={step} total={6} />
 
       {error && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-4 py-3 mb-4">{error}</div>
+        <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-4 py-3 mb-4">
+          {error === "EMAIL_EXISTS" ? (
+            <>Este correo electrónico ya está registrado. ¿Ya tienes cuenta? <Link href="/login" className="font-bold underline hover:text-rose-900">Inicia sesión →</Link></>
+          ) : error}
+        </div>
       )}
 
       {/* STEP 0 - Personal info */}
