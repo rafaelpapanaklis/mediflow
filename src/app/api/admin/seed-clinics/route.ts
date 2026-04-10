@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
  * Only works for the specified email. Safe to call multiple times — skips existing.
  */
 export async function POST(req: NextRequest) {
+  try {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -42,8 +43,10 @@ export async function POST(req: NextRequest) {
 
   const created: string[] = [];
   const skipped: string[] = [];
+  const errors: string[] = [];
 
   for (const cat of CATEGORIES) {
+    try {
     // Check if clinic with this slug already exists
     const existing = await prisma.clinic.findUnique({ where: { slug: cat.slug } });
     if (existing) {
@@ -107,11 +110,20 @@ export async function POST(req: NextRequest) {
     });
 
     created.push(cat.id);
+    } catch (err: any) {
+      console.error(`Seed error for ${cat.id}:`, err);
+      errors.push(`${cat.id}: ${err.message ?? "Unknown error"}`);
+    }
   }
 
   return NextResponse.json({
-    message: `Done. Created: ${created.length}, Skipped: ${skipped.length}`,
+    message: `Done. Created: ${created.length}, Skipped: ${skipped.length}, Errors: ${errors.length}`,
     created,
     skipped,
+    errors,
   });
+  } catch (err: any) {
+    console.error("Seed clinics fatal error:", err);
+    return NextResponse.json({ error: err.message ?? "Internal server error", stack: err.stack?.split("\n").slice(0, 5) }, { status: 500 });
+  }
 }
