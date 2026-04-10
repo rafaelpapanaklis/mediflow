@@ -89,8 +89,8 @@ export function Sidebar({ user, clinicName, clinicId, plan, clinicCategory = "OT
       });
       if (!res.ok) throw new Error();
       setShowSwitcher(false);
-      router.push("/dashboard");
-      router.refresh();
+      // Hard reload to ensure all server components get the new clinic context
+      window.location.href = "/dashboard";
     } catch {
       toast.error("Error al cambiar de clínica");
     } finally {
