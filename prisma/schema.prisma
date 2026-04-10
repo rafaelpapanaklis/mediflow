@@ -136,7 +136,7 @@ enum Plan {
 
 model User {
   id         String   @id @default(cuid())
-  supabaseId String   @unique
+  supabaseId String
   clinicId   String
   email      String
   firstName  String
@@ -166,6 +166,8 @@ model User {
   periodontalRecords  PeriodontalRecord[]
   auditLogs           AuditLog[]
 
+  @@unique([supabaseId, clinicId])
+  @@index([supabaseId])
   @@map("users")
 }
 

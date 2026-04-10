@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 
 export interface AuthContext {
   userId:       string;
@@ -30,26 +31,38 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
-    const dbUser = await prisma.user.findUnique({
-      where: { supabaseId: user.id },
+    const cookieStore = cookies();
+    const activeClinicId = cookieStore.get("activeClinicId")?.value;
+
+    // Try active clinic first, then fallback to first clinic
+    const dbUser = activeClinicId
+      ? await prisma.user.findFirst({
+          where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true },
+          include: { clinic: true },
+        })
+      : null;
+
+    const finalUser = dbUser ?? await prisma.user.findFirst({
+      where: { supabaseId: user.id, isActive: true },
       include: { clinic: true },
+      orderBy: { createdAt: "asc" },
     });
 
-    if (!dbUser || !dbUser.isActive) return null;
+    if (!finalUser || !finalUser.isActive) return null;
 
-    const isSuperAdmin   = dbUser.role === "SUPER_ADMIN";
-    const isAdmin        = dbUser.role === "ADMIN" || isSuperAdmin;
-    const isDoctor       = dbUser.role === "DOCTOR";
-    const isReceptionist = dbUser.role === "RECEPTIONIST";
+    const isSuperAdmin   = finalUser.role === "SUPER_ADMIN";
+    const isAdmin        = finalUser.role === "ADMIN" || isSuperAdmin;
+    const isDoctor       = finalUser.role === "DOCTOR";
+    const isReceptionist = finalUser.role === "RECEPTIONIST";
 
     return {
-      userId:         dbUser.id,
-      clinicId:       dbUser.clinicId,
-      role:           dbUser.role,
-      color:          dbUser.color ?? "#3b82f6",
-      clinic:         dbUser.clinic,
-      user:           dbUser,
-      clinicCategory: (dbUser.clinic as any).category ?? "OTHER",
+      userId:         finalUser.id,
+      clinicId:       finalUser.clinicId,
+      role:           finalUser.role,
+      color:          finalUser.color ?? "#3b82f6",
+      clinic:         finalUser.clinic,
+      user:           finalUser,
+      clinicCategory: (finalUser.clinic as any).category ?? "OTHER",
       isSuperAdmin,
       isAdmin,
       isDoctor,

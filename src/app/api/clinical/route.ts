@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 
@@ -6,7 +7,13 @@ async function getDbUser() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
-  return prisma.user.findUnique({ where: { supabaseId: user.id }, include: { clinic: true } });
+  const cookieStore = cookies();
+  const activeClinicId = cookieStore.get("activeClinicId")?.value;
+  if (activeClinicId) {
+    const u = await prisma.user.findFirst({ where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true }, include: { clinic: true } });
+    if (u) return u;
+  }
+  return prisma.user.findFirst({ where: { supabaseId: user.id, isActive: true }, include: { clinic: true }, orderBy: { createdAt: "asc" } });
 }
 
 export async function GET(req: NextRequest) {

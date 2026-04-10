@@ -1,4 +1,4 @@
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getUserClinics } from "@/lib/auth";
 import { Sidebar }       from "@/components/dashboard/sidebar";
 import { QuickActionsBar }  from "@/components/dashboard/quick-actions";
 import { TodayStrip }    from "@/components/dashboard/today-strip";
@@ -7,6 +7,7 @@ import { prisma }        from "@/lib/prisma";
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user   = await getCurrentUser();
   const clinic = user.clinic;
+  const allClinics = await getUserClinics();
   const isSuspended = clinic.trialEndsAt && new Date(clinic.trialEndsAt) < new Date();
 
   // Fetch today's appointments for TodayStrip
@@ -45,8 +46,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
           color:     user.color ?? "#7c3aed",
         }}
         clinicName={clinic.name}
+        clinicId={clinic.id}
         plan={clinic.plan}
         clinicCategory={(clinic as any).category ?? "OTHER"}
+        allClinics={allClinics}
       />
       <div className="flex-1 flex flex-col min-h-screen lg:max-h-screen lg:overflow-y-auto">
         {isSuspended && (

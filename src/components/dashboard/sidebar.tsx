@@ -8,7 +8,7 @@ import {
   BarChart2, Settings, LogOut, Menu, X, Stethoscope,
   Sun, Moon, MessageCircle, Package, UserCog, Activity,
   Camera, Gift, FlaskConical, Clock, DoorOpen, Dumbbell,
-  Footprints, FileImage, Globe, Sparkles,
+  Footprints, FileImage, Globe, Sparkles, ChevronDown, Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -35,11 +35,21 @@ const CATEGORY_FEATURES: Record<string, string[]> = {
   OTHER: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","whatsapp","team","reports","settings","landing","ai-assistant"],
 };
 
+interface ClinicOption {
+  clinicId: string;
+  clinicName: string;
+  category: string;
+  plan: string;
+  role: string;
+}
+
 interface SidebarProps {
   user:            { firstName: string; lastName: string; email: string; role: string; color?: string };
   clinicName:      string;
+  clinicId:        string;
   plan:            string;
   clinicCategory?: string;
+  allClinics?:     ClinicOption[];
 }
 
 function useDarkMode() {
@@ -59,11 +69,42 @@ function useDarkMode() {
   return { dark, toggle };
 }
 
-export function Sidebar({ user, clinicName, plan, clinicCategory = "OTHER" }: SidebarProps) {
+export function Sidebar({ user, clinicName, clinicId, plan, clinicCategory = "OTHER", allClinics = [] }: SidebarProps) {
   const pathname        = usePathname();
   const router          = useRouter();
   const [open, setOpen] = useState(false);
+  const [showSwitcher, setShowSwitcher] = useState(false);
+  const [switching, setSwitching] = useState(false);
   const { dark, toggle } = useDarkMode();
+  const hasMultipleClinics = allClinics.length > 1;
+
+  async function switchClinic(targetClinicId: string) {
+    if (targetClinicId === clinicId || switching) return;
+    setSwitching(true);
+    try {
+      const res = await fetch("/api/switch-clinic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clinicId: targetClinicId }),
+      });
+      if (!res.ok) throw new Error();
+      setShowSwitcher(false);
+      router.push("/dashboard");
+      router.refresh();
+    } catch {
+      toast.error("Error al cambiar de clínica");
+    } finally {
+      setSwitching(false);
+    }
+  }
+
+  const CATEGORY_LABELS: Record<string, string> = {
+    DENTAL:"Odontología", MEDICINE:"Medicina", NUTRITION:"Nutrición", PSYCHOLOGY:"Psicología",
+    DERMATOLOGY:"Dermatología", AESTHETIC_MEDICINE:"Med. Estética", HAIR_RESTORATION:"Capilar",
+    BEAUTY_CENTER:"Estética", BROW_LASH:"Cejas/Pestañas", MASSAGE:"Masajes",
+    LASER_HAIR_REMOVAL:"Láser", HAIR_SALON:"Peluquería", ALTERNATIVE_MEDICINE:"Med. Alternativa",
+    NAIL_SALON:"Uñas", SPA:"Spa", PHYSIOTHERAPY:"Fisioterapia", PODIATRY:"Podología", OTHER:"Otra",
+  };
 
   const isAdmin = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
   const isDoctor = user.role === "DOCTOR";
@@ -114,14 +155,59 @@ export function Sidebar({ user, clinicName, plan, clinicCategory = "OTHER" }: Si
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
-      {/* Logo */}
+      {/* Logo + Clinic Switcher */}
       <div className="px-4 py-5 border-b border-white/10">
         <div className="flex items-center gap-2.5 mb-1">
           <div className="w-8 h-8 rounded-lg bg-brand-500 flex items-center justify-center text-sm font-extrabold text-white flex-shrink-0">M</div>
           <span className="font-extrabold text-white text-base">MediFlow</span>
           <span className={cn("ml-auto text-xs font-bold text-white px-2 py-0.5 rounded-full", planColor[plan] ?? "bg-brand-500")}>{plan}</span>
         </div>
-        <div className="text-sm text-slate-400 truncate pl-10">{clinicName}</div>
+        {hasMultipleClinics ? (
+          <div className="relative pl-10">
+            <button
+              onClick={() => setShowSwitcher(s => !s)}
+              className="flex items-center gap-1.5 w-full text-left text-sm text-slate-300 hover:text-white transition-colors rounded-lg hover:bg-white/5 px-2 py-1.5 -mx-2"
+            >
+              <Building2 className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" />
+              <span className="truncate flex-1 font-semibold">{clinicName}</span>
+              <ChevronDown className={cn("w-3.5 h-3.5 flex-shrink-0 text-slate-400 transition-transform", showSwitcher && "rotate-180")} />
+            </button>
+            {showSwitcher && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setShowSwitcher(false)} />
+                <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-slate-800 border border-white/10 rounded-xl shadow-2xl overflow-hidden max-h-[50vh] overflow-y-auto">
+                  <div className="px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Cambiar clínica</div>
+                  {allClinics.map(c => (
+                    <button
+                      key={c.clinicId}
+                      onClick={() => switchClinic(c.clinicId)}
+                      disabled={switching}
+                      className={cn(
+                        "w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors",
+                        c.clinicId === clinicId
+                          ? "bg-brand-600/20 text-white"
+                          : "text-slate-300 hover:bg-white/5 hover:text-white"
+                      )}
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
+                        {c.clinicName[0]?.toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold truncate">{c.clinicName}</div>
+                        <div className="text-[10px] text-slate-400">{CATEGORY_LABELS[c.category] ?? c.category} · {c.plan}</div>
+                      </div>
+                      {c.clinicId === clinicId && (
+                        <div className="w-2 h-2 rounded-full bg-brand-500 flex-shrink-0" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="text-sm text-slate-400 truncate pl-10">{clinicName}</div>
+        )}
       </div>
 
       {/* Nav */}
