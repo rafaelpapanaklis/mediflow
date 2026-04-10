@@ -102,12 +102,19 @@ export function RegisterForm() {
     }
   }
 
-  function validateStep() {
+  async function validateStep(): Promise<boolean> {
     if (step === 0) {
       if (!form.firstName || !form.lastName) { setError("Nombre y apellido son requeridos"); return false; }
       if (!form.email) { setError("El email es requerido"); return false; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) { setError("El formato de email no es válido"); return false; }
       if (form.password.length < 8) { setError("La contraseña debe tener mínimo 8 caracteres"); return false; }
       if (form.password !== form.password2) { setError("Las contraseñas no coinciden"); return false; }
+      // Check if email already exists
+      try {
+        const res = await fetch(`/api/auth/check-email?email=${encodeURIComponent(form.email)}`);
+        const data = await res.json();
+        if (data.exists) { setError("Este correo electrónico ya está registrado. ¿Ya tienes cuenta? Inicia sesión."); return false; }
+      } catch { /* if check fails, let registration handle it */ }
     }
     if (step === 1) {
       if (!form.clinicName) { setError("El nombre de la clínica es requerido"); return false; }
@@ -117,7 +124,7 @@ export function RegisterForm() {
     return true;
   }
 
-  function next() { if (validateStep()) { setError(""); setStep(s => s + 1); } }
+  async function next() { setLoading(true); const valid = await validateStep(); setLoading(false); if (valid) { setError(""); setStep(s => s + 1); } }
   function back() { setError(""); setStep(s => s - 1); }
 
   async function handleSubmit() {
@@ -165,7 +172,7 @@ export function RegisterForm() {
           <p className="text-sm text-muted-foreground">Tu clínica está lista. Solo falta activar tu plan.</p>
         </div>
 
-        <div className="rounded-xl border border-border bg-white p-5 mb-4">
+        <div className="rounded-xl border border-border bg-white dark:bg-slate-900 p-5 mb-4">
           <div className="text-sm font-bold mb-3">💳 Realiza tu pago por transferencia SPEI</div>
           <div className="space-y-2.5 text-sm">
             <div className="flex justify-between py-2 border-b border-border">
@@ -190,7 +197,7 @@ export function RegisterForm() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-border bg-white p-4 mb-4 text-sm">
+        <div className="rounded-xl border border-border bg-white dark:bg-slate-900 p-4 mb-4 text-sm">
           <div className="font-bold mb-1">Mientras tanto puedes acceder con 14 días de prueba gratuita</div>
           <p className="text-xs text-muted-foreground">Tu cuenta ya está creada. Puedes ingresar ahora y empezar a usar el sistema.</p>
         </div>
@@ -223,32 +230,34 @@ export function RegisterForm() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-sm font-semibold">Nombre *</label>
-                <input className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                <input className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-slate-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   placeholder="Ana" value={form.firstName} onChange={e => set("firstName", e.target.value)} />
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-semibold">Apellido *</label>
-                <input className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                <input className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-slate-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   placeholder="García" value={form.lastName} onChange={e => set("lastName", e.target.value)} />
               </div>
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-semibold">Correo electrónico *</label>
-              <input type="email" className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              <input type="email" className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-slate-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                 placeholder="ana@miclinica.com" value={form.email} onChange={e => set("email", e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-semibold">Contraseña * (mínimo 8 caracteres)</label>
-              <input type="password" className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              <input type="password" className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-slate-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                 placeholder="••••••••" value={form.password} onChange={e => set("password", e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-semibold">Confirmar contraseña *</label>
-              <input type="password" className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              <input type="password" className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-slate-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                 placeholder="••••••••" value={form.password2} onChange={e => set("password2", e.target.value)} />
             </div>
           </div>
-          <button onClick={next} className="w-full mt-5 h-11 bg-brand-600 text-white font-bold rounded-xl hover:bg-brand-700 transition-colors">Continuar →</button>
+          <button onClick={next} disabled={loading} className="w-full mt-5 h-11 bg-brand-600 text-white font-bold rounded-xl hover:bg-brand-700 disabled:opacity-50 transition-colors">
+            {loading ? "Verificando…" : "Continuar →"}
+          </button>
           <p className="text-center text-sm text-muted-foreground mt-4">
             ¿Ya tienes cuenta? <Link href="/login" className="text-brand-600 font-semibold hover:underline">Inicia sesión</Link>
           </p>
@@ -263,14 +272,14 @@ export function RegisterForm() {
           <div className="space-y-3">
             <div className="space-y-1.5">
               <label className="text-sm font-semibold">Nombre de tu clínica *</label>
-              <input className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              <input className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-slate-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                 placeholder="Clínica Dental García" value={form.clinicName}
                 onChange={e => handleClinicNameChange(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-semibold">Tu URL / subdominio *</label>
               <div className="relative">
-                <div className="flex items-center h-10 rounded-lg border border-border bg-white overflow-hidden focus-within:ring-2 focus-within:ring-brand-600/20 focus-within:border-brand-600">
+                <div className="flex items-center h-10 rounded-lg border border-border bg-white dark:bg-slate-900 overflow-hidden focus-within:ring-2 focus-within:ring-brand-600/20 focus-within:border-brand-600">
                   <input className="flex-1 px-3 text-sm focus:outline-none bg-transparent"
                     placeholder="mi-clinica"
                     value={form.slug}
@@ -296,20 +305,20 @@ export function RegisterForm() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-sm font-semibold">País</label>
-                <select className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                <select className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-slate-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   value={form.country} onChange={e => set("country", e.target.value)}>
                   {["México","Colombia","Argentina","Chile","España","Perú","Ecuador","Otro"].map(c => <option key={c}>{c}</option>)}
                 </select>
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-semibold">Ciudad</label>
-                <input className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                <input className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-slate-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   placeholder="CDMX" value={form.city} onChange={e => set("city", e.target.value)} />
               </div>
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-semibold">Teléfono</label>
-              <input className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              <input className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-slate-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                 placeholder="+52 55..." value={form.phone} onChange={e => set("phone", e.target.value)} />
             </div>
           </div>
@@ -362,7 +371,7 @@ export function RegisterForm() {
             {PLANS.map(p => (
               <button key={p.id} onClick={() => setPlan(p.id)}
                 className={cn("w-full p-4 rounded-xl border text-left transition-all",
-                  plan === p.id ? "border-brand-300 bg-brand-50 shadow-sm" : "border-border bg-white hover:border-brand-200"
+                  plan === p.id ? "border-brand-300 bg-brand-50 dark:bg-brand-950/30 shadow-sm" : "border-border bg-white dark:bg-slate-900 hover:border-brand-200"
                 )}>
                 <div className="flex items-center gap-3 mb-2">
                   <div className={cn("w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center",
@@ -397,7 +406,7 @@ export function RegisterForm() {
             {/* Stripe */}
             <button onClick={() => setPayMethod("stripe")}
               className={cn("w-full p-4 rounded-xl border text-left transition-all",
-                payMethod === "stripe" ? "border-brand-300 bg-brand-50 shadow-sm" : "border-border bg-white hover:border-brand-200")}>
+                payMethod === "stripe" ? "border-brand-300 bg-brand-50 dark:bg-brand-950/30 shadow-sm" : "border-border bg-white dark:bg-slate-900 hover:border-brand-200")}>
               <div className="flex items-center gap-3">
                 <div className={cn("w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center",
                   payMethod === "stripe" ? "border-brand-600 bg-brand-600" : "border-muted-foreground/40")}>
@@ -416,7 +425,7 @@ export function RegisterForm() {
             {/* Transfer */}
             <button onClick={() => setPayMethod("transfer")}
               className={cn("w-full p-4 rounded-xl border text-left transition-all",
-                payMethod === "transfer" ? "border-brand-300 bg-brand-50 shadow-sm" : "border-border bg-white hover:border-brand-200")}>
+                payMethod === "transfer" ? "border-brand-300 bg-brand-50 dark:bg-brand-950/30 shadow-sm" : "border-border bg-white dark:bg-slate-900 hover:border-brand-200")}>
               <div className="flex items-center gap-3">
                 <div className={cn("w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center",
                   payMethod === "transfer" ? "border-brand-600 bg-brand-600" : "border-muted-foreground/40")}>
@@ -429,7 +438,7 @@ export function RegisterForm() {
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5">Transferencia bancaria a cuenta BBVA</div>
                   {payMethod === "transfer" && (
-                    <div className="mt-2 p-2.5 bg-white border border-border rounded-lg text-xs space-y-1">
+                    <div className="mt-2 p-2.5 bg-slate-50 dark:bg-slate-800 border border-border rounded-lg text-xs space-y-1">
                       <div className="flex justify-between"><span className="text-muted-foreground">Nombre</span><span className="font-semibold">{BANK_INFO.nombre}</span></div>
                       <div className="flex justify-between"><span className="text-muted-foreground">CLABE</span><span className="font-mono font-bold text-brand-700">{BANK_INFO.clabe}</span></div>
                       <div className="flex justify-between"><span className="text-muted-foreground">Banco</span><span className="font-semibold">{BANK_INFO.banco}</span></div>
@@ -453,7 +462,7 @@ export function RegisterForm() {
           <h1 className="text-2xl font-extrabold mb-1">Confirmar y crear</h1>
           <p className="text-sm text-muted-foreground mb-5">Paso 6 de 6 · Revisa tu información</p>
 
-          <div className="rounded-xl border border-border bg-white divide-y divide-border mb-5">
+          <div className="rounded-xl border border-border bg-white dark:bg-slate-900 divide-y divide-border mb-5">
             {[
               { label: "Nombre",       val: `${form.firstName} ${form.lastName}` },
               { label: "Email",        val: form.email                            },
