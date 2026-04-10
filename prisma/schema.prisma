@@ -53,9 +53,18 @@ model Clinic {
 
   // Subscription / Billing
   subscriptionStatus   String?   // active, trialing, past_due, cancelled
-  subscriptionId       String?   // Stripe/MP subscription ID
+  subscriptionId       String?   // legacy — Stripe/MP subscription ID
   nextBillingDate      DateTime?
   monthlyPrice         Float?    @default(0)
+  // Stripe subscription billing
+  stripeCustomerId       String?   // Stripe Customer ID for the clinic owner
+  stripeSubscriptionId   String?   // Stripe Subscription ID (recurring)
+  stripePaymentMethodId  String?   // default payment method
+  // PayPal
+  paypalSubscriptionId   String?   // PayPal subscription ID (recurring)
+  paypalEmail            String?   // PayPal email for manual payments
+  // Payment preferences
+  preferredPaymentMethod String?   // stripe, paypal, transfer, oxxo
   recallMonths         Int       @default(6)  // months before annual reminder
   recallActive         Boolean   @default(false)
   googlePlaceId        String?   // Google Maps Place ID for fetching reviews
