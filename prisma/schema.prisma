@@ -81,6 +81,11 @@ model Clinic {
   aiTokensLimit Int      @default(50000)
   aiLastResetAt DateTime @default(now())
 
+  // Telemedicine
+  teleEnabled         Boolean  @default(false)
+  teleCommissionPct   Float    @default(15)
+  dailyApiKey         String?
+
   users        User[]
   patients     Patient[]
   appointments Appointment[]
@@ -157,6 +162,11 @@ model User {
   googleCalendarEmail   String?
   googleCalendarEnabled Boolean @default(false)
   services              String[] @default([])
+
+  // Stripe Connect (telemedicine payments)
+  stripeAccountId     String?
+  stripeOnboarded     Boolean  @default(false)
+  teleconsultPrice    Float?
 
   clinic          Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointments    Appointment[]
@@ -277,6 +287,19 @@ model Appointment {
   price                 Float?
   stripePaymentIntentId String?
   isPaid                Boolean           @default(false)
+
+  // Telemedicine
+  mode              AppointmentMode @default(IN_PERSON)
+  teleRoomId        String?
+  teleRoomUrl       String?
+  teleDoctorToken   String?
+  telePatientToken  String?
+  teleRecordingUrl  String?
+  paymentStatus     String?
+  paymentAmount     Float?
+  stripePaymentId   String?
+  stripeSessionId   String?
+
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
 
@@ -287,6 +310,11 @@ model Appointment {
   reminders WhatsAppReminder[]
 
   @@map("appointments")
+}
+
+enum AppointmentMode {
+  IN_PERSON
+  TELECONSULTATION
 }
 
 enum AppointmentStatus {

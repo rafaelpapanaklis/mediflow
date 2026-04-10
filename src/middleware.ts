@@ -13,6 +13,7 @@ const RESERVED_PATHS = new Set([
   "centros-estetica","cejas-pestanas","masajes",
   "depilacion-laser","peluquerias","medicina-alternativa",
   "unas","spas",
+  "teleconsulta","pago",
 ]);
 
 export async function middleware(request: NextRequest) {

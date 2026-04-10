@@ -45,8 +45,19 @@ export async function POST(req: NextRequest) {
     where:  { id: doctorId },
     select: { id: true, firstName: true, lastName: true, email: true,
               googleCalendarToken: true, googleRefreshToken: true,
-              googleCalendarEnabled: true, googleCalendarEmail: true },
+              googleCalendarEnabled: true, googleCalendarEmail: true,
+              stripeAccountId: true, stripeOnboarded: true, teleconsultPrice: true },
   });
+
+  // Teleconsultation validations
+  if (body.mode === "TELECONSULTATION") {
+    if (!doctor?.stripeAccountId || !doctor?.stripeOnboarded) {
+      return NextResponse.json({ error: "El doctor no tiene configurado Stripe para recibir pagos" }, { status: 400 });
+    }
+    if (!doctor.teleconsultPrice) {
+      return NextResponse.json({ error: "El doctor no tiene precio de teleconsulta configurado" }, { status: 400 });
+    }
+  }
 
   const appt = await prisma.appointment.create({
     data: {
@@ -60,6 +71,11 @@ export async function POST(req: NextRequest) {
       durationMins: body.durationMins ?? 30,
       status:       "PENDING",
       notes:        body.notes ?? null,
+      mode:         body.mode || "IN_PERSON",
+      ...(body.mode === "TELECONSULTATION" && {
+        paymentStatus: "pending",
+        paymentAmount: doctor!.teleconsultPrice,
+      }),
     },
   });
 
@@ -156,7 +172,8 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // ── WhatsApp confirmation to patient ──────────────────────────────────────
+  // ── WhatsApp confirmation to patient (skip for teleconsultation — sent after payment) ──
+  if (body.mode !== "TELECONSULTATION") {
   const clinicWa = await prisma.clinic.findUnique({
     where: { id: ctx.clinicId },
     select: { waConnected: true, waPhoneNumberId: true, waAccessToken: true, name: true },
@@ -188,11 +205,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  } // end if not TELECONSULTATION
+
   // Invalidate dashboard cache so KPIs refresh
   revalidatePath("/dashboard");
 
   return NextResponse.json({
     ...appt,
     date: appt.date instanceof Date ? appt.date.toISOString() : appt.date,
+    ...(body.mode === "TELECONSULTATION" && { paymentUrl: `/pago/${appt.id}` }),
   }, { status: 201 });
 }

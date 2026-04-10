@@ -8,31 +8,31 @@ import {
   BarChart2, Settings, LogOut, Menu, X, Stethoscope,
   Sun, Moon, MessageCircle, Package, UserCog, Activity,
   Camera, Gift, FlaskConical, Clock, DoorOpen, Dumbbell,
-  Footprints, FileImage, Globe, Sparkles, ChevronDown, Building2,
+  Footprints, FileImage, Globe, Sparkles, ChevronDown, Building2, Video,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import toast from "react-hot-toast";
 
 const CATEGORY_FEATURES: Record<string, string[]> = {
-  DENTAL: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","xrays","whatsapp","team","reports","settings","landing","ai-assistant"],
-  MEDICINE: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","xrays","whatsapp","team","reports","settings","landing","ai-assistant"],
-  NUTRITION: ["dashboard","appointments","patients","clinical","treatments","billing","whatsapp","team","reports","settings","landing","ai-assistant"],
-  PSYCHOLOGY: ["dashboard","appointments","patients","clinical","treatments","billing","whatsapp","team","reports","settings","landing","ai-assistant"],
-  DERMATOLOGY: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","before-after","packages","xrays","whatsapp","team","reports","settings","landing","ai-assistant"],
-  AESTHETIC_MEDICINE: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","before-after","packages","whatsapp","team","reports","settings","landing","ai-assistant"],
-  HAIR_RESTORATION: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","before-after","whatsapp","team","reports","settings","landing","ai-assistant"],
-  BEAUTY_CENTER: ["dashboard","appointments","patients","clinical","packages","billing","inventory","before-after","whatsapp","team","reports","settings","landing","ai-assistant"],
-  BROW_LASH: ["dashboard","appointments","patients","clinical","formulas","packages","billing","inventory","before-after","whatsapp","team","reports","settings","landing","ai-assistant"],
-  MASSAGE: ["dashboard","appointments","patients","clinical","packages","billing","whatsapp","team","reports","settings","landing","ai-assistant"],
-  LASER_HAIR_REMOVAL: ["dashboard","appointments","patients","clinical","packages","billing","inventory","before-after","whatsapp","team","reports","settings","landing","ai-assistant"],
+  DENTAL: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","xrays","whatsapp","team","reports","settings","landing","ai-assistant","teleconsulta"],
+  MEDICINE: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","xrays","whatsapp","team","reports","settings","landing","ai-assistant","teleconsulta"],
+  NUTRITION: ["dashboard","appointments","patients","clinical","treatments","billing","whatsapp","team","reports","settings","landing","ai-assistant","teleconsulta"],
+  PSYCHOLOGY: ["dashboard","appointments","patients","clinical","treatments","billing","whatsapp","team","reports","settings","landing","ai-assistant","teleconsulta"],
+  DERMATOLOGY: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","before-after","packages","xrays","whatsapp","team","reports","settings","landing","ai-assistant","teleconsulta"],
+  AESTHETIC_MEDICINE: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","before-after","packages","whatsapp","team","reports","settings","landing","ai-assistant","teleconsulta"],
+  HAIR_RESTORATION: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","before-after","whatsapp","team","reports","settings","landing","ai-assistant","teleconsulta"],
+  BEAUTY_CENTER: ["dashboard","appointments","patients","clinical","packages","billing","inventory","before-after","whatsapp","team","reports","settings","landing","ai-assistant","teleconsulta"],
+  BROW_LASH: ["dashboard","appointments","patients","clinical","formulas","packages","billing","inventory","before-after","whatsapp","team","reports","settings","landing","ai-assistant","teleconsulta"],
+  MASSAGE: ["dashboard","appointments","patients","clinical","packages","billing","whatsapp","team","reports","settings","landing","ai-assistant","teleconsulta"],
+  LASER_HAIR_REMOVAL: ["dashboard","appointments","patients","clinical","packages","billing","inventory","before-after","whatsapp","team","reports","settings","landing","ai-assistant","teleconsulta"],
   HAIR_SALON: ["dashboard","appointments","patients","clinical","formulas","billing","inventory","walk-in","before-after","packages","whatsapp","team","reports","settings","landing","ai-assistant"],
-  ALTERNATIVE_MEDICINE: ["dashboard","appointments","patients","clinical","treatments","formulas","billing","inventory","whatsapp","team","reports","settings","landing","ai-assistant"],
+  ALTERNATIVE_MEDICINE: ["dashboard","appointments","patients","clinical","treatments","formulas","billing","inventory","whatsapp","team","reports","settings","landing","ai-assistant","teleconsulta"],
   NAIL_SALON: ["dashboard","appointments","patients","clinical","billing","inventory","walk-in","whatsapp","team","reports","settings","landing","ai-assistant"],
-  SPA: ["dashboard","appointments","patients","clinical","packages","billing","inventory","resources","before-after","whatsapp","team","reports","settings","landing","ai-assistant"],
-  PHYSIOTHERAPY: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","exercises","whatsapp","team","reports","settings","landing","ai-assistant"],
-  PODIATRY: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","orthotics","exercises","whatsapp","team","reports","settings","landing","ai-assistant"],
-  OTHER: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","whatsapp","team","reports","settings","landing","ai-assistant"],
+  SPA: ["dashboard","appointments","patients","clinical","packages","billing","inventory","resources","before-after","whatsapp","team","reports","settings","landing","ai-assistant","teleconsulta"],
+  PHYSIOTHERAPY: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","exercises","whatsapp","team","reports","settings","landing","ai-assistant","teleconsulta"],
+  PODIATRY: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","orthotics","exercises","whatsapp","team","reports","settings","landing","ai-assistant","teleconsulta"],
+  OTHER: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","whatsapp","team","reports","settings","landing","ai-assistant","teleconsulta"],
 };
 
 interface ClinicOption {
@@ -134,6 +134,7 @@ export function Sidebar({ user, clinicName, clinicId, plan, clinicCategory = "OT
     { key:"settings",      href:"/dashboard/settings",     icon:Settings,        label:"Configuración",   adminOnly: false },
     { key:"landing",       href:"/dashboard/landing",      icon:Globe,           label:"Página web",      adminOnly: true  },
     { key:"ai-assistant",  href:"/dashboard/ai-assistant", icon:Sparkles,        label:"IA Asistente",    adminOnly: false },
+    { key:"teleconsulta",  href:"/dashboard/teleconsulta", icon:Video,          label:"Teleconsulta",    adminOnly: false },
   ];
 
   const NAV = ALL_NAV.filter(n => {

@@ -19,6 +19,7 @@ interface Appt {
   date: string; startTime: string; endTime: string; durationMins: number;
   status: string; notes?: string | null; reminderSent: boolean;
   googleCalendarEventId?: string | null;
+  mode?: string; paymentStatus?: string;
   patient: { id: string; firstName: string; lastName: string; phone?: string | null };
   doctor:  { id: string; firstName: string; lastName: string };
 }
@@ -129,7 +130,7 @@ function PatientSearch({ patients, value, onChange }: { patients: Patient[]; val
 
 // ── ApptForm — defined OUTSIDE main component to prevent focus loss ──────────
 interface ApptFormProps {
-  form: { patientId: string; doctorId: string; type: string; date: string; startTime: string; durationMins: number; notes: string };
+  form: { patientId: string; doctorId: string; type: string; date: string; startTime: string; durationMins: number; notes: string; mode: string };
   setForm: React.Dispatch<React.SetStateAction<any>>;
   doctors: { id: string; firstName: string; lastName: string }[];
   patients: Patient[];
@@ -160,6 +161,19 @@ function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCance
           value={form.type} onChange={e => setF("type", e.target.value)}>
           {APPT_TYPES.map(t => <option key={t}>{t}</option>)}
         </select>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-base font-semibold">Modo</Label>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setF("mode", "IN_PERSON")}
+            className={`flex-1 flex items-center justify-center gap-2 h-11 rounded-xl border text-sm font-semibold transition-all ${form.mode !== "TELECONSULTATION" ? "border-brand-500 bg-brand-50 dark:bg-brand-950/30 text-brand-700" : "border-border hover:border-brand-300"}`}>
+            🏥 Presencial
+          </button>
+          <button type="button" onClick={() => setF("mode", "TELECONSULTATION")}
+            className={`flex-1 flex items-center justify-center gap-2 h-11 rounded-xl border text-sm font-semibold transition-all ${form.mode === "TELECONSULTATION" ? "border-violet-500 bg-violet-50 dark:bg-violet-950/30 text-violet-700" : "border-border hover:border-violet-300"}`}>
+            📹 Teleconsulta
+          </button>
+        </div>
       </div>
       <div className="grid grid-cols-3 gap-3">
         <div className="col-span-3 space-y-1.5">
@@ -249,7 +263,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
     };
   }, []);
 
-  const emptyForm = { patientId:"", doctorId:currentUserId, type:"Consulta general", date:toDateStr(today), startTime:"09:00", durationMins:30, notes:"" };
+  const emptyForm = { patientId:"", doctorId:currentUserId, type:"Consulta general", date:toDateStr(today), startTime:"09:00", durationMins:30, notes:"", mode:"IN_PERSON" };
   const [form, setForm] = useState(emptyForm);
   const setF = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
 
@@ -397,6 +411,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
         <div className="flex items-center gap-1.5">
           <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
           <span className="font-bold text-foreground truncate">{appt.startTime} {appt.patient.firstName}</span>
+          {appt.mode === "TELECONSULTATION" && <span className="flex-shrink-0" title="Teleconsulta">📹</span>}
         </div>
         {!compact && appt.notes && (
           <div className="text-muted-foreground truncate pl-3 mt-0.5">{appt.notes}</div>
@@ -506,6 +521,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                       <div className="flex items-center gap-2 flex-wrap">
                         <div className={`w-2.5 h-2.5 rounded-full ${cfg.dot}`} />
                         <span className="text-base font-bold">{a.startTime} – {a.endTime}</span>
+                        {a.mode === "TELECONSULTATION" && <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">📹 Teleconsulta</span>}
                         <span className={`text-sm font-bold px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.text} ml-auto`}>{cfg.label}</span>
                         {/* Improvement 4: Google Calendar indicator */}
                         {a.googleCalendarEventId && <span title="Sincronizado con Google Calendar"><CalendarCheck className="w-4 h-4 text-brand-500" /></span>}
@@ -677,7 +693,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                   {/* Improvement 5: Edit button in detail */}
                   <button onClick={() => {
                     setForm({ patientId:appt.patientId, doctorId:appt.doctorId, type:appt.type,
-                      date:appt.date.split("T")[0], startTime:appt.startTime, durationMins:appt.durationMins, notes:appt.notes??""
+                      date:appt.date.split("T")[0], startTime:appt.startTime, durationMins:appt.durationMins, notes:appt.notes??"", mode:appt.mode??"IN_PERSON"
                     });
                     setShowEdit(true);
                   }} className="p-2 rounded-lg hover:bg-muted text-muted-foreground" title="Editar cita">
@@ -721,7 +737,38 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                       <MessageCircle className="w-4 h-4"/> Recordatorio WhatsApp enviado
                     </div>
                   )}
+                  {appt.mode === "TELECONSULTATION" && (
+                    <div className="flex items-center gap-1.5 text-sm font-semibold text-violet-600 bg-violet-50 dark:bg-violet-950/30 border border-violet-200 px-3 py-1.5 rounded-full">
+                      📹 Teleconsulta
+                    </div>
+                  )}
                 </div>
+                {appt.mode === "TELECONSULTATION" && (
+                  <div className="space-y-2">
+                    {appt.paymentStatus === "paid" ? (
+                      <a href={`/teleconsulta/${appt.id}?role=doctor`} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-2 w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition-colors">
+                        📹 Unirse a videollamada
+                      </a>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-1.5 text-sm font-semibold text-amber-600 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 px-3 py-1.5 rounded-full w-fit">
+                          ⏳ Pago pendiente
+                        </div>
+                        <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/pago/${appt.id}`); toast.success("Link de pago copiado"); }}
+                          className="flex items-center justify-center gap-2 w-full h-11 rounded-xl border border-border hover:bg-muted text-sm font-bold transition-colors">
+                          📋 Copiar link de pago
+                        </button>
+                      </div>
+                    )}
+                    {waConnected && (
+                      <button onClick={() => sendWA(appt.id)}
+                        className="flex items-center justify-center gap-2 w-full h-11 rounded-xl border border-emerald-300 hover:bg-emerald-50 text-emerald-700 text-sm font-bold transition-colors">
+                        <MessageCircle className="w-4 h-4"/> Enviar link por WhatsApp
+                      </button>
+                    )}
+                  </div>
+                )}
                 {appt.notes && (
                   <div className="bg-muted/20 rounded-xl p-4">
                     <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">📝 Notas</div>
