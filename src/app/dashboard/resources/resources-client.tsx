@@ -35,10 +35,17 @@ export function ResourcesClient({ initialBookings }: { initialBookings: Booking[
       return;
     }
     try {
+      // Convert time strings (HH:MM) to full ISO datetime using today's date
+      const today = new Date().toISOString().split("T")[0];
+      const payload = {
+        ...form,
+        startTime: new Date(`${today}T${form.startTime}:00`).toISOString(),
+        endTime: new Date(`${today}T${form.endTime}:00`).toISOString(),
+      };
       const res = await fetch("/api/resources", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error();
       const created = await res.json();
