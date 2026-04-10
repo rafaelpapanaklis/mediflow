@@ -31,8 +31,11 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
-    const cookieStore = cookies();
-    const activeClinicId = cookieStore.get("activeClinicId")?.value;
+    let activeClinicId: string | undefined;
+    try {
+      const cookieStore = cookies();
+      activeClinicId = cookieStore.get("activeClinicId")?.value;
+    } catch { /* cookies() can fail in some contexts */ }
 
     // Try active clinic first, then fallback to first clinic
     const dbUser = activeClinicId

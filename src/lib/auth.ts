@@ -17,8 +17,11 @@ export async function requireAuth() {
 
 export async function getCurrentUser() {
   const supabaseUser = await requireAuth();
-  const cookieStore = cookies();
-  const activeClinicId = cookieStore.get("activeClinicId")?.value;
+  let activeClinicId: string | undefined;
+  try {
+    const cookieStore = cookies();
+    activeClinicId = cookieStore.get("activeClinicId")?.value;
+  } catch { /* cookies() can fail in some contexts */ }
 
   // If there's an active clinic cookie, try to find the user in that clinic
   if (activeClinicId) {

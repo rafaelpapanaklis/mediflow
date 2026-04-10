@@ -21,12 +21,11 @@ export default async function TeamPage() {
     select: {
       id: true, firstName: true, lastName: true, email: true,
       role: true, specialty: true, color: true, avatarUrl: true,
-      phone: true, isActive: true, createdAt: true,
+      phone: true, isActive: true, createdAt: true, services: true,
       _count: {
         select: {
           appointments: { where: { status: { not: "CANCELLED" } } },
           records: true,
-          primaryPatients: true,
         },
       },
     },
