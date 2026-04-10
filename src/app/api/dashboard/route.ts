@@ -68,7 +68,7 @@ export async function GET() {
     const paidCount   = await prisma.invoice.count({ where:{clinicId,status:{in:["PAID","PARTIAL"]},updatedAt:{gte:firstMonth}} });
 
     const currentRev    = monthRevenue._sum.paid ?? 0;
-    const prevRev       = prevMonthRevenue._sum.paid ?? 1;
+    const prevRev       = prevMonthRevenue._sum.paid ?? 0;
     const revenueChange = prevRev > 0 ? Math.round(((currentRev-prevRev)/prevRev)*100) : 0;
     const apptChange    = prevMonthAppts > 0 ? Math.round(((monthAppts-prevMonthAppts)/prevMonthAppts)*100) : 0;
     const patientChange = prevMonthPatients > 0 ? Math.round(((monthPatients-prevMonthPatients)/prevMonthPatients)*100) : 0;

@@ -24,6 +24,24 @@ export function BeautyCenterForm({ patientId, onSaved }: Props) {
     contraindicaciones: [] as string[],
     observaciones: "",
     planSiguiente: "",
+    // Baumann skin type
+    baumannHidratacion: "" as "" | "O" | "D",
+    baumannSensibilidad: "" as "" | "S" | "R",
+    baumannPigmentacion: "" as "" | "P" | "N",
+    baumannArrugas: "" as "" | "W" | "T",
+    // Equipment parameters
+    equipoUtilizado: "",
+    energia: "",
+    frecuencia: "",
+    profundidad: "",
+    tiempoExposicion: "",
+    modoPrograma: "",
+    // Post-treatment reactions
+    reaccionEritema: 0,
+    reaccionEdema: 0,
+    reaccionSensibilidad: 0,
+    reaccionDescamacion: 0,
+    tiempoResolucion: "",
   });
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
 
@@ -57,6 +75,24 @@ export function BeautyCenterForm({ patientId, onSaved }: Props) {
             contraindicaciones: form.contraindicaciones,
             observaciones: form.observaciones,
             planSiguiente: form.planSiguiente,
+            baumannType: `${form.baumannHidratacion}${form.baumannSensibilidad}${form.baumannPigmentacion}${form.baumannArrugas}`,
+            baumannHidratacion: form.baumannHidratacion,
+            baumannSensibilidad: form.baumannSensibilidad,
+            baumannPigmentacion: form.baumannPigmentacion,
+            baumannArrugas: form.baumannArrugas,
+            equipoUtilizado: form.equipoUtilizado,
+            energia: form.energia,
+            frecuencia: form.frecuencia,
+            profundidad: form.profundidad,
+            tiempoExposicion: form.tiempoExposicion,
+            modoPrograma: form.modoPrograma,
+            reacciones: {
+              eritema: form.reaccionEritema,
+              edema: form.reaccionEdema,
+              sensibilidad: form.reaccionSensibilidad,
+              descamacion: form.reaccionDescamacion,
+            },
+            tiempoResolucion: form.tiempoResolucion,
           },
         }),
       });
@@ -145,6 +181,131 @@ export function BeautyCenterForm({ patientId, onSaved }: Props) {
           <Label>Observaciones</Label>
           <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Observaciones adicionales del tratamiento…" value={form.observaciones} onChange={e => set("observaciones", e.target.value)} />
+        </div>
+      </div>
+
+      {/* TIPO DE PIEL BAUMANN */}
+      <div className="rounded-xl border border-border p-4">
+        <h3 className="text-sm font-bold mb-3">Tipo de piel Baumann</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Hidratación</Label>
+            <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              value={form.baumannHidratacion} onChange={e => set("baumannHidratacion", e.target.value)}>
+              <option value="">Seleccionar…</option>
+              <option value="O">Oleosa (O)</option>
+              <option value="D">Seca (D)</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Sensibilidad</Label>
+            <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              value={form.baumannSensibilidad} onChange={e => set("baumannSensibilidad", e.target.value)}>
+              <option value="">Seleccionar…</option>
+              <option value="S">Sensible (S)</option>
+              <option value="R">Resistente (R)</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Pigmentación</Label>
+            <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              value={form.baumannPigmentacion} onChange={e => set("baumannPigmentacion", e.target.value)}>
+              <option value="">Seleccionar…</option>
+              <option value="P">Pigmentada (P)</option>
+              <option value="N">No pigmentada (N)</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Arrugas</Label>
+            <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              value={form.baumannArrugas} onChange={e => set("baumannArrugas", e.target.value)}>
+              <option value="">Seleccionar…</option>
+              <option value="W">Con arrugas (W)</option>
+              <option value="T">Tirante (T)</option>
+            </select>
+          </div>
+        </div>
+        {(form.baumannHidratacion || form.baumannSensibilidad || form.baumannPigmentacion || form.baumannArrugas) && (
+          <div className="mt-3 flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Tipo Baumann:</span>
+            <span className="inline-flex items-center rounded-full bg-brand-100 dark:bg-brand-900/30 px-3 py-0.5 text-sm font-bold text-brand-700 dark:text-brand-300">
+              {form.baumannHidratacion || "–"}{form.baumannSensibilidad || "–"}{form.baumannPigmentacion || "–"}{form.baumannArrugas || "–"}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* PARÁMETROS DEL EQUIPO */}
+      <div className="rounded-xl border border-border p-4">
+        <h3 className="text-sm font-bold mb-3">Parámetros del equipo</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Equipo utilizado</Label>
+            <input className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              placeholder="Nombre del equipo" value={form.equipoUtilizado} onChange={e => set("equipoUtilizado", e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Energía (J/cm²)</Label>
+            <input type="number" min={0} step="0.1" className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              placeholder="0" value={form.energia} onChange={e => set("energia", e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Frecuencia (Hz)</Label>
+            <input type="number" min={0} step="0.1" className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              placeholder="0" value={form.frecuencia} onChange={e => set("frecuencia", e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Profundidad (mm)</Label>
+            <input type="number" min={0} step="0.1" className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              placeholder="0" value={form.profundidad} onChange={e => set("profundidad", e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Tiempo de exposición (seg)</Label>
+            <input type="number" min={0} step="1" className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              placeholder="0" value={form.tiempoExposicion} onChange={e => set("tiempoExposicion", e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Modo/Programa</Label>
+            <input className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              placeholder="Modo o programa utilizado" value={form.modoPrograma} onChange={e => set("modoPrograma", e.target.value)} />
+          </div>
+        </div>
+      </div>
+
+      {/* EVALUACIÓN DE REACCIONES POST-TRATAMIENTO */}
+      <div className="rounded-xl border border-border p-4">
+        <h3 className="text-sm font-bold mb-3">Evaluación de reacciones post-tratamiento</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+          {([
+            { key: "reaccionEritema", label: "Eritema" },
+            { key: "reaccionEdema", label: "Edema" },
+            { key: "reaccionSensibilidad", label: "Sensibilidad" },
+            { key: "reaccionDescamacion", label: "Descamación" },
+          ] as const).map(item => (
+            <div key={item.key} className="space-y-1">
+              <Label className="text-xs">{item.label}</Label>
+              <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                value={(form as any)[item.key]} onChange={e => set(item.key, Number(e.target.value))}>
+                <option value={0}>0 - Ninguna</option>
+                <option value={1}>1 - Leve</option>
+                <option value={2}>2 - Moderada</option>
+                <option value={3}>3 - Severa</option>
+              </select>
+            </div>
+          ))}
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Tiempo de resolución estimado</Label>
+          <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 max-w-xs"
+            value={form.tiempoResolucion} onChange={e => set("tiempoResolucion", e.target.value)}>
+            <option value="">Seleccionar…</option>
+            <option value="Inmediata">Inmediata</option>
+            <option value="24h">24h</option>
+            <option value="48h">48h</option>
+            <option value="72h">72h</option>
+            <option value="1 semana">1 semana</option>
+            <option value="> 1 semana">&gt; 1 semana</option>
+          </select>
         </div>
       </div>
 

@@ -9,6 +9,9 @@ const NORWOOD = ["Norwood I", "Norwood II", "Norwood III", "Norwood III Vertex",
 const LUDWIG = ["Ludwig I", "Ludwig II", "Ludwig III"] as const;
 const TREATED_ZONES = ["frontal", "temporal", "vertex", "occipital", "línea capilar"] as const;
 const FOLLOWUP_MONTHS = ["3", "6", "12"] as const;
+const DENSITY_ZONES = ["Frontal", "Temporal", "Vertex", "Occipital (donante)"] as const;
+const TIMELINE_MILESTONES = ["1 mes", "3 meses", "6 meses", "9 meses", "12 meses"] as const;
+const SURVIVAL_ZONES = ["Frontal", "Temporal", "Vertex", "Línea de implantación"] as const;
 
 interface Props { patientId: string; onSaved: (record: any) => void; }
 
@@ -29,6 +32,9 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
     seguimientoMeses: "",
     supervivencia: "",
     notasQuirurgicas: "",
+    densidadZonas: Object.fromEntries(DENSITY_ZONES.map(z => [z, { antes: "", despues: "" }])) as Record<string, { antes: string; despues: string }>,
+    timelineMilestones: {} as Record<string, { checked: boolean; observaciones: string }>,
+    supervivenciaInjertos: Object.fromEntries(SURVIVAL_ZONES.map(z => [z, { implantados: "", supervivencia: "" }])) as Record<string, { implantados: string; supervivencia: string }>,
   });
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
 
@@ -63,6 +69,9 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
             seguimientoMeses: form.seguimientoMeses,
             supervivencia: form.supervivencia,
             notasQuirurgicas: form.notasQuirurgicas,
+            densidadZonas: form.densidadZonas,
+            timelineMilestones: form.timelineMilestones,
+            supervivenciaInjertos: form.supervivenciaInjertos,
           },
         }),
       });
@@ -114,6 +123,40 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
               {TECHNIQUES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
+        </div>
+      </div>
+
+      {/* DENSIDAD BASELINE POR ZONA */}
+      <div className="rounded-xl border border-border p-4">
+        <h3 className="text-sm font-bold mb-3">📐 Densidad folicular por zona (folículos/cm²)</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {DENSITY_ZONES.map(zone => {
+            const antes = Number(form.densidadZonas[zone]?.antes) || 0;
+            const despues = Number(form.densidadZonas[zone]?.despues) || 0;
+            const pctChange = antes > 0 ? (((despues - antes) / antes) * 100).toFixed(1) : null;
+            return (
+              <div key={zone} className="space-y-2 rounded-lg border border-border/60 p-3">
+                <span className="text-xs font-semibold">{zone}</span>
+                <div className="space-y-1">
+                  <Label className="text-xs">Antes</Label>
+                  <input type="number" min={0} className="flex h-8 w-full rounded-lg border border-border bg-white dark:bg-zinc-900 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                    placeholder="0" value={form.densidadZonas[zone]?.antes ?? ""}
+                    onChange={e => setForm(f => ({ ...f, densidadZonas: { ...f.densidadZonas, [zone]: { ...f.densidadZonas[zone], antes: e.target.value } } }))} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Después</Label>
+                  <input type="number" min={0} className="flex h-8 w-full rounded-lg border border-border bg-white dark:bg-zinc-900 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                    placeholder="0" value={form.densidadZonas[zone]?.despues ?? ""}
+                    onChange={e => setForm(f => ({ ...f, densidadZonas: { ...f.densidadZonas, [zone]: { ...f.densidadZonas[zone], despues: e.target.value } } }))} />
+                </div>
+                {pctChange !== null && (
+                  <p className={`text-xs font-medium ${Number(pctChange) >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                    {Number(pctChange) >= 0 ? "+" : ""}{pctChange}%
+                  </p>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -180,6 +223,46 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
         </div>
       </div>
 
+      {/* TIMELINE DE EVOLUCIÓN */}
+      <div className="rounded-xl border border-border p-4">
+        <h3 className="text-sm font-bold mb-3">📸 Timeline de evolución post-procedimiento</h3>
+        <div className="space-y-3">
+          {TIMELINE_MILESTONES.map(milestone => {
+            const entry = form.timelineMilestones[milestone];
+            const isChecked = entry?.checked ?? false;
+            return (
+              <div key={milestone} className="space-y-1.5">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={isChecked}
+                    onChange={() => setForm(f => ({
+                      ...f,
+                      timelineMilestones: {
+                        ...f.timelineMilestones,
+                        [milestone]: { checked: !isChecked, observaciones: entry?.observaciones ?? "" },
+                      },
+                    }))}
+                    className="w-4 h-4 accent-brand-600" />
+                  <span className="text-sm font-medium">{milestone}</span>
+                </label>
+                {isChecked && (
+                  <textarea className="flex min-h-[60px] w-full rounded-lg border border-border bg-white dark:bg-zinc-900 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none ml-6"
+                    placeholder={`Observaciones a los ${milestone}…`}
+                    value={entry?.observaciones ?? ""}
+                    onChange={e => setForm(f => ({
+                      ...f,
+                      timelineMilestones: {
+                        ...f.timelineMilestones,
+                        [milestone]: { ...f.timelineMilestones[milestone], checked: true, observaciones: e.target.value },
+                      },
+                    }))} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-xs text-muted-foreground mt-3">Las fotos comparativas se registran en la sección Antes/Después</p>
+      </div>
+
       {/* DIAGNÓSTICO & PLAN */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
@@ -199,6 +282,42 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
         <Label>Notas quirúrgicas</Label>
         <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
           placeholder="Detalles del procedimiento quirúrgico, complicaciones…" value={form.notasQuirurgicas} onChange={e => set("notasQuirurgicas", e.target.value)} />
+      </div>
+
+      {/* TASA DE SUPERVIVENCIA DE INJERTOS */}
+      <div className="rounded-xl border border-border p-4">
+        <h3 className="text-sm font-bold mb-3">📊 Supervivencia de injertos</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {SURVIVAL_ZONES.map(zone => (
+            <div key={zone} className="space-y-2 rounded-lg border border-border/60 p-3">
+              <span className="text-xs font-semibold">{zone}</span>
+              <div className="space-y-1">
+                <Label className="text-xs">Injertos implantados</Label>
+                <input type="number" min={0} className="flex h-8 w-full rounded-lg border border-border bg-white dark:bg-zinc-900 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                  placeholder="0" value={form.supervivenciaInjertos[zone]?.implantados ?? ""}
+                  onChange={e => setForm(f => ({ ...f, supervivenciaInjertos: { ...f.supervivenciaInjertos, [zone]: { ...f.supervivenciaInjertos[zone], implantados: e.target.value } } }))} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Supervivencia estimada %</Label>
+                <input type="number" min={0} max={100} className="flex h-8 w-full rounded-lg border border-border bg-white dark:bg-zinc-900 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                  placeholder="0" value={form.supervivenciaInjertos[zone]?.supervivencia ?? ""}
+                  onChange={e => setForm(f => ({ ...f, supervivenciaInjertos: { ...f.supervivenciaInjertos, [zone]: { ...f.supervivenciaInjertos[zone], supervivencia: e.target.value } } }))} />
+              </div>
+            </div>
+          ))}
+        </div>
+        {(() => {
+          const entries = Object.values(form.supervivenciaInjertos);
+          const totalInjertos = entries.reduce((sum, e) => sum + (Number(e.implantados) || 0), 0);
+          const weightedSum = entries.reduce((sum, e) => sum + (Number(e.implantados) || 0) * (Number(e.supervivencia) || 0), 0);
+          const avgSurvival = totalInjertos > 0 ? (weightedSum / totalInjertos).toFixed(1) : null;
+          return totalInjertos > 0 ? (
+            <div className="mt-3 flex gap-6 text-sm">
+              <span>Total injertos: <strong>{totalInjertos}</strong></span>
+              <span>Supervivencia promedio ponderada: <strong>{avgSurvival}%</strong></span>
+            </div>
+          ) : null;
+        })()}
       </div>
 
       <div className="flex justify-end">

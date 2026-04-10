@@ -55,13 +55,19 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <a href="/dashboard/suspended" className="underline hover:no-underline">Ver opciones de pago →</a>
           </div>
         )}
-        <QuickActionsBar
-          currentUserId={user.id}
-          clinicId={clinic.id}
-          isAdmin={user.role === "ADMIN" || user.role === "SUPER_ADMIN"}
-        />
-        <TodayStrip initialAppts={serializedAppts} />
-        <main className="flex-1 p-5 lg:p-6 pt-16 lg:pt-6">{children}</main>
+        <div className="pt-16 lg:pt-0">
+          <div className="px-4 lg:px-6 pt-3 lg:pt-4">
+            <QuickActionsBar
+              currentUserId={user.id}
+              clinicId={clinic.id}
+              isAdmin={user.role === "ADMIN" || user.role === "SUPER_ADMIN"}
+            />
+          </div>
+          <div className="px-4 lg:px-6">
+            <TodayStrip initialAppts={serializedAppts} />
+          </div>
+        </div>
+        <main className="flex-1 p-5 lg:p-6">{children}</main>
       </div>
     </div>
   );

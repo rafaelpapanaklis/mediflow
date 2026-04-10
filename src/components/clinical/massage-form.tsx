@@ -37,6 +37,34 @@ const CONTRAINDICACIONES = [
   "Heridas abiertas",
 ];
 
+const TRIGGER_POINTS = [
+  "Trapecio superior",
+  "Trapecio medio",
+  "Elevador de la escápula",
+  "Infraespinoso",
+  "Romboides",
+  "Suboccipitales",
+  "Esternocleidomastoideo",
+  "Piriforme",
+  "Psoas ilíaco",
+  "Cuadrado lumbar",
+  "Glúteo medio",
+  "Tensor de la fascia lata",
+];
+
+const EVALUACION_POSTURAL = [
+  "Cabeza adelantada",
+  "Hombros desnivelados",
+  "Hombros protruidos (redondeados)",
+  "Hipercifosis dorsal",
+  "Hiperlordosis lumbar",
+  "Escoliosis funcional",
+  "Pelvis en anteversión",
+  "Pelvis desnivelada",
+  "Genu valgum (rodillas en X)",
+  "Pie plano/cavo",
+];
+
 interface Props {
   patientId: string;
   onSaved: (record: any) => void;
@@ -56,11 +84,17 @@ export function MassageForm({ patientId, onSaved }: Props) {
     assessment: "",
     plan: "",
     recomendaciones: "",
+    dolorAntes: null as number | null,
+    dolorDespues: null as number | null,
+    triggerPoints: [] as string[],
+    triggerPointTipo: {} as Record<string, string>,
+    evaluacionPostural: [] as string[],
+    notasPosturales: "",
   });
 
   const set = (k: string, v: any) => setForm((f) => ({ ...f, [k]: v }));
 
-  const toggleArr = (key: "zonasEnfoque" | "zonasDolor" | "contraindicaciones", val: string) => {
+  const toggleArr = (key: "zonasEnfoque" | "zonasDolor" | "contraindicaciones" | "triggerPoints" | "evaluacionPostural", val: string) => {
     setForm((f) => {
       const arr = f[key] as string[];
       return { ...f, [key]: arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val] };
@@ -92,6 +126,12 @@ export function MassageForm({ patientId, onSaved }: Props) {
             tecnicas: form.tecnicas,
             contraindicaciones: form.contraindicaciones,
             recomendaciones: form.recomendaciones,
+            dolorAntes: form.dolorAntes,
+            dolorDespues: form.dolorDespues,
+            triggerPoints: form.triggerPoints,
+            triggerPointTipo: form.triggerPointTipo,
+            evaluacionPostural: form.evaluacionPostural,
+            notasPosturales: form.notasPosturales,
           },
         }),
       });
@@ -106,10 +146,10 @@ export function MassageForm({ patientId, onSaved }: Props) {
   }
 
   const inputCls =
-    "flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20";
+    "flex h-9 w-full rounded-lg border border-border bg-white dark:bg-gray-900 dark:text-gray-100 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20";
   const selectCls = inputCls;
   const textareaCls =
-    "flex min-h-[70px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none";
+    "flex min-h-[70px] w-full rounded-lg border border-border bg-white dark:bg-gray-900 dark:text-gray-100 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none";
 
   const PRESION_LABELS = ["1 - Suave", "2 - Ligera", "3 - Media", "4 - Profunda", "5 - Firme"];
 
@@ -164,7 +204,7 @@ export function MassageForm({ patientId, onSaved }: Props) {
               className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ${
                 form.zonasEnfoque.includes(z)
                   ? "bg-brand-600/10 border-brand-600 text-brand-600"
-                  : "border-border hover:bg-slate-50"
+                  : "border-border hover:bg-slate-50 dark:hover:bg-slate-800"
               }`}
             >
               <input
@@ -176,6 +216,87 @@ export function MassageForm({ patientId, onSaved }: Props) {
               {z}
             </label>
           ))}
+        </div>
+      </div>
+
+      {/* Trigger points identificados */}
+      <div className="rounded-xl border border-border p-4">
+        <h3 className="text-sm font-bold mb-3">{"\uD83C\uDFAF"} Trigger points identificados</h3>
+        <div className="flex flex-wrap gap-2">
+          {TRIGGER_POINTS.map((tp) => (
+            <label
+              key={tp}
+              className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ${
+                form.triggerPoints.includes(tp)
+                  ? "bg-purple-50 border-purple-400 text-purple-700 dark:bg-purple-900/30 dark:border-purple-500 dark:text-purple-300"
+                  : "border-border hover:bg-slate-50 dark:hover:bg-slate-800"
+              }`}
+            >
+              <input
+                type="checkbox"
+                className="accent-purple-600"
+                checked={form.triggerPoints.includes(tp)}
+                onChange={() => toggleArr("triggerPoints", tp)}
+              />
+              {tp}
+            </label>
+          ))}
+        </div>
+        {form.triggerPoints.length > 0 && (
+          <div className="mt-3 space-y-2">
+            {form.triggerPoints.map((tp) => (
+              <div key={tp} className="flex items-center gap-3">
+                <span className="text-sm min-w-[180px]">{tp}</span>
+                <select
+                  className={selectCls}
+                  value={form.triggerPointTipo[tp] || "Activo"}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      triggerPointTipo: { ...f.triggerPointTipo, [tp]: e.target.value },
+                    }))
+                  }
+                >
+                  <option value="Activo">Activo</option>
+                  <option value="Latente">Latente</option>
+                </select>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Evaluacion postural */}
+      <div className="rounded-xl border border-border p-4">
+        <h3 className="text-sm font-bold mb-3">{"\uD83E\uDDCD"} Evaluación postural</h3>
+        <div className="flex flex-wrap gap-2">
+          {EVALUACION_POSTURAL.map((ep) => (
+            <label
+              key={ep}
+              className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ${
+                form.evaluacionPostural.includes(ep)
+                  ? "bg-sky-50 border-sky-400 text-sky-700 dark:bg-sky-900/30 dark:border-sky-500 dark:text-sky-300"
+                  : "border-border hover:bg-slate-50 dark:hover:bg-slate-800"
+              }`}
+            >
+              <input
+                type="checkbox"
+                className="accent-sky-600"
+                checked={form.evaluacionPostural.includes(ep)}
+                onChange={() => toggleArr("evaluacionPostural", ep)}
+              />
+              {ep}
+            </label>
+          ))}
+        </div>
+        <div className="mt-3 space-y-1.5">
+          <Label className="text-xs">Notas posturales</Label>
+          <textarea
+            className={textareaCls}
+            placeholder="Observaciones adicionales sobre la postura..."
+            value={form.notasPosturales}
+            onChange={(e) => set("notasPosturales", e.target.value)}
+          />
         </div>
       </div>
 
@@ -237,6 +358,82 @@ export function MassageForm({ patientId, onSaved }: Props) {
               {c}
             </label>
           ))}
+        </div>
+      </div>
+
+      {/* Escala Visual Análoga de Dolor */}
+      <div className="rounded-xl border border-border p-4">
+        <h3 className="text-sm font-bold mb-3">{"\uD83D\uDCCA"} Escala Visual Análoga de Dolor</h3>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-xs">Dolor antes de la sesión</Label>
+            <div className="flex gap-1">
+              {Array.from({ length: 11 }, (_, i) => {
+                const hue = 120 - i * 12;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => set("dolorAntes", i)}
+                    className={`w-9 h-9 rounded-lg text-xs font-bold border-2 transition-all ${
+                      form.dolorAntes === i
+                        ? "ring-2 ring-offset-2 ring-brand-600 scale-110 dark:ring-offset-gray-900"
+                        : "opacity-70 hover:opacity-100"
+                    }`}
+                    style={{
+                      backgroundColor: `hsl(${hue}, 80%, ${form.dolorAntes === i ? "45%" : "55%"})`,
+                      borderColor: `hsl(${hue}, 80%, 35%)`,
+                      color: "white",
+                    }}
+                  >
+                    {i}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">Dolor después de la sesión</Label>
+            <div className="flex gap-1">
+              {Array.from({ length: 11 }, (_, i) => {
+                const hue = 120 - i * 12;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => set("dolorDespues", i)}
+                    className={`w-9 h-9 rounded-lg text-xs font-bold border-2 transition-all ${
+                      form.dolorDespues === i
+                        ? "ring-2 ring-offset-2 ring-brand-600 scale-110 dark:ring-offset-gray-900"
+                        : "opacity-70 hover:opacity-100"
+                    }`}
+                    style={{
+                      backgroundColor: `hsl(${hue}, 80%, ${form.dolorDespues === i ? "45%" : "55%"})`,
+                      borderColor: `hsl(${hue}, 80%, 35%)`,
+                      color: "white",
+                    }}
+                  >
+                    {i}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {form.dolorAntes !== null && form.dolorDespues !== null && (
+            <div className={`text-sm font-semibold px-3 py-2 rounded-lg ${
+              form.dolorAntes > form.dolorDespues
+                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
+                : form.dolorAntes === form.dolorDespues
+                  ? "bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                  : "bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-300"
+            }`}>
+              {form.dolorAntes > form.dolorDespues
+                ? `Reducción de ${form.dolorAntes - form.dolorDespues} puntos`
+                : form.dolorAntes === form.dolorDespues
+                  ? "Sin cambio en el dolor"
+                  : `Aumento de ${form.dolorDespues - form.dolorAntes} puntos`}
+            </div>
+          )}
         </div>
       </div>
 

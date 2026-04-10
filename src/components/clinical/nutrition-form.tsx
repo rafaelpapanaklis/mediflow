@@ -39,9 +39,19 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
     labResults: "", allergies: "", intolerances: "", supplements: "",
     subjective: "", assessment: "", goals: "", plan: "",
     mealPlan: { breakfast:"", morningSnack:"", lunch:"", afternoonSnack:"", dinner:"" },
+    foodFrequency: {
+      frutas:"", verduras:"", carnesRojas:"", pollosPavo:"", pescadoMariscos:"",
+      lacteos:"", legumbres:"", cerealesIntegrales:"", ultraprocesados:"",
+      bebidasAzucaradas:"", comidaRapida:"", snacksDulces:"",
+    } as Record<string, string>,
   });
+  const [smartGoals, setSmartGoals] = useState<{ objetivo: string; fechaMeta: string; progreso: string; estado: string }[]>([]);
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
   const setMP = (k: string, v: string) => setForm(f => ({ ...f, mealPlan: { ...f.mealPlan, [k]: v } }));
+  const setFF = (k: string, v: string) => setForm(f => ({ ...f, foodFrequency: { ...f.foodFrequency, [k]: v } }));
+  const addSmartGoal = () => setSmartGoals(g => [...g, { objetivo:"", fechaMeta:"", progreso:"0%", estado:"En progreso" }]);
+  const removeSmartGoal = (i: number) => setSmartGoals(g => g.filter((_, idx) => idx !== i));
+  const updateSmartGoal = (i: number, k: string, v: string) => setSmartGoals(g => g.map((goal, idx) => idx === i ? { ...goal, [k]: v } : goal));
 
   const w   = parseFloat(form.weight) || 0;
   const h   = parseFloat(form.height) || 0;
@@ -69,6 +79,7 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
             sleepHours: form.sleepHours, mealsPerDay: form.mealsPerDay, labResults: form.labResults,
             allergies: form.allergies, intolerances: form.intolerances, supplements: form.supplements,
             goals: form.goals, mealPlan: form.mealPlan,
+            foodFrequency: form.foodFrequency, smartGoals,
           },
         }),
       });
@@ -122,6 +133,28 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Tracking de medidas entre sesiones */}
+      <div className="rounded-xl border border-border p-4">
+        <h3 className="text-sm font-bold mb-2">📈 Tracking de medidas entre sesiones</h3>
+        <p className="text-xs text-muted-foreground mb-3">Evolución de medidas — los datos de hoy se guardan automáticamente para comparar con sesiones futuras</p>
+        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-3">
+          {[
+            { label:"Peso", val: w ? `${w} kg` : "—" },
+            { label:"% Grasa", val: form.bodyFat ? `${form.bodyFat}%` : "—" },
+            { label:"Masa muscular", val: form.muscleMass ? `${form.muscleMass} kg` : "—" },
+            { label:"IMC", val: bmi > 0 ? String(bmi) : "—" },
+            { label:"Cintura", val: form.waist ? `${form.waist} cm` : "—" },
+            { label:"Cadera", val: form.hip ? `${form.hip} cm` : "—" },
+          ].map(m => (
+            <div key={m.label} className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3 text-center">
+              <div className="text-lg font-extrabold text-foreground">{m.val}</div>
+              <div className="text-[10px] text-muted-foreground font-semibold">{m.label}</div>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground text-center">📊 Estos datos se guardan para generar gráficas de evolución</p>
       </div>
 
       <div className="rounded-xl border border-border p-4">
@@ -179,6 +212,41 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
         </div>
       </div>
 
+      {/* Frecuencia alimentaria semanal */}
+      <div className="rounded-xl border border-border p-4">
+        <h3 className="text-sm font-bold mb-3">📋 Frecuencia alimentaria semanal</h3>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            { key:"frutas", label:"Frutas" },
+            { key:"verduras", label:"Verduras" },
+            { key:"carnesRojas", label:"Carnes rojas" },
+            { key:"pollosPavo", label:"Pollo/Pavo" },
+            { key:"pescadoMariscos", label:"Pescado/Mariscos" },
+            { key:"lacteos", label:"Lácteos" },
+            { key:"legumbres", label:"Legumbres" },
+            { key:"cerealesIntegrales", label:"Cereales integrales" },
+            { key:"ultraprocesados", label:"Ultraprocesados" },
+            { key:"bebidasAzucaradas", label:"Bebidas azucaradas" },
+            { key:"comidaRapida", label:"Comida rápida" },
+            { key:"snacksDulces", label:"Snacks/Dulces" },
+          ].map(f => (
+            <div key={f.key} className="space-y-1">
+              <Label className="text-xs">{f.label}</Label>
+              <select
+                className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none"
+                value={form.foodFrequency[f.key]} onChange={e => setFF(f.key, e.target.value)}>
+                <option value="">Seleccionar</option>
+                <option value="0">0</option>
+                <option value="1-2">1-2</option>
+                <option value="3-4">3-4</option>
+                <option value="5-6">5-6</option>
+                <option value="Diario">Diario</option>
+              </select>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="rounded-xl border border-border p-4">
         <h3 className="text-sm font-bold mb-1">🍽️ Plan alimenticio</h3>
         {tdee > 0 && <p className="text-xs text-muted-foreground mb-3">GET: <strong>{tdee} kcal/día</strong></p>}
@@ -215,6 +283,54 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
           <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Dieta hipocalórica…" value={form.plan} onChange={e => set("plan", e.target.value)} />
         </div>
+      </div>
+
+      {/* Objetivos SMART con seguimiento */}
+      <div className="rounded-xl border border-border p-4">
+        <h3 className="text-sm font-bold mb-3">🎯 Objetivos SMART con seguimiento</h3>
+        <div className="space-y-3">
+          {smartGoals.map((goal, i) => (
+            <div key={i} className="grid grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+              <div className="space-y-1 lg:col-span-1">
+                <Label className="text-xs">Objetivo</Label>
+                <input
+                  className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                  placeholder="Bajar 2kg por mes"
+                  value={goal.objetivo} onChange={e => updateSmartGoal(i, "objetivo", e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Fecha meta</Label>
+                <input type="date"
+                  className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                  value={goal.fechaMeta} onChange={e => updateSmartGoal(i, "fechaMeta", e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Progreso</Label>
+                <select
+                  className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none"
+                  value={goal.progreso} onChange={e => updateSmartGoal(i, "progreso", e.target.value)}>
+                  {["0%","25%","50%","75%","100%"].map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Estado</Label>
+                <select
+                  className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none"
+                  value={goal.estado} onChange={e => updateSmartGoal(i, "estado", e.target.value)}>
+                  {["En progreso","Logrado","No logrado"].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <Button variant="outline" size="sm" onClick={() => removeSmartGoal(i)} className="text-rose-600 border-rose-300 hover:bg-rose-50">
+                  Eliminar
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <Button variant="outline" size="sm" onClick={addSmartGoal} className="mt-3">
+          + Agregar objetivo
+        </Button>
       </div>
 
       <div className="flex justify-end">

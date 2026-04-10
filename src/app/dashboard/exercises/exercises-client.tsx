@@ -57,7 +57,8 @@ export function ExercisesClient({ initialExercises }: { initialExercises: Exerci
   async function handleDelete(id: string) {
     if (!confirm("¿Eliminar este ejercicio?")) return;
     try {
-      await fetch(`/api/inventory/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/inventory/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Error al eliminar");
       setExercises(prev => prev.filter(e => e.id !== id));
       toast.success("Ejercicio eliminado");
     } catch {

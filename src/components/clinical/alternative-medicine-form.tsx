@@ -52,11 +52,65 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
     tipoConstitucional: "",
     notasSesion: "",
     planTratamiento: "",
+    // Evaluación constitucional TCM
+    constitucionPredominante: "",
+    excesoDeficiencia: "",
+    frioCalor: "",
+    humedad: "",
+    estancamientoQi: "",
+    // Mapa de puntos de acupuntura
+    puntosDetallados: [{ punto: "", meridiano: "", lateralidad: "", tecnica: "" }] as { punto: string; meridiano: string; lateralidad: string; tecnica: string }[],
+    // Interacciones hierba-medicamento
+    medicamentosConvencionales: "",
+    formulaHerbalPrescrita: "",
+    interaccionesConocidas: [] as string[],
+    notasSeguridad: "",
   });
   const set = (k: string, v: any) => setForm((f) => ({ ...f, [k]: v }));
 
   const isAcupuntura = form.modalidad === "acupuntura";
   const isHerbolaria = form.modalidad === "herbolaria";
+
+  const MERIDIANOS = [
+    "Pulmón (LU)", "Intestino Grueso (LI)", "Estómago (ST)", "Bazo (SP)",
+    "Corazón (HT)", "Intestino Delgado (SI)", "Vejiga (BL)", "Riñón (KI)",
+    "Pericardio (PC)", "Triple Calentador (TE)", "Vesícula Biliar (GB)",
+    "Hígado (LR)", "Du Mai (GV)", "Ren Mai (CV)", "Extra",
+  ];
+
+  const INTERACCIONES_COMUNES = [
+    "Anticoagulantes + Ginkgo/Ginseng/Dong Quai",
+    "Antidepresivos ISRS + Hierba de San Juan",
+    "Antidiabéticos + Ginseng/Aloe vera",
+    "Antihipertensivos + Regaliz (Glycyrrhiza)",
+    "Inmunosupresores + Echinacea/Astrágalo",
+  ];
+
+  function addPuntoDetallado() {
+    set("puntosDetallados", [
+      ...form.puntosDetallados,
+      { punto: "", meridiano: "", lateralidad: "", tecnica: "" },
+    ]);
+  }
+
+  function removePuntoDetallado(i: number) {
+    set("puntosDetallados", form.puntosDetallados.filter((_: any, idx: number) => idx !== i));
+  }
+
+  function updatePuntoDetallado(i: number, field: string, value: string) {
+    const pts = [...form.puntosDetallados];
+    (pts[i] as any)[field] = value;
+    set("puntosDetallados", pts);
+  }
+
+  function toggleInteraccion(interaccion: string) {
+    const current = form.interaccionesConocidas;
+    if (current.includes(interaccion)) {
+      set("interaccionesConocidas", current.filter((i: string) => i !== interaccion));
+    } else {
+      set("interaccionesConocidas", [...current, interaccion]);
+    }
+  }
 
   async function handleSave() {
     if (!form.modalidad) {
@@ -92,6 +146,20 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
             tipoConstitucional: form.tipoConstitucional,
             notasSesion: form.notasSesion,
             planTratamiento: form.planTratamiento,
+            evaluacionConstitucional: {
+              constitucionPredominante: form.constitucionPredominante,
+              excesoDeficiencia: form.excesoDeficiencia,
+              frioCalor: form.frioCalor,
+              humedad: form.humedad,
+              estancamientoQi: form.estancamientoQi,
+            },
+            puntosDetallados: form.puntosDetallados,
+            interaccionesHierbaMedicamento: {
+              medicamentosConvencionales: form.medicamentosConvencionales,
+              formulaHerbalPrescrita: form.formulaHerbalPrescrita,
+              interaccionesConocidas: form.interaccionesConocidas,
+              notasSeguridad: form.notasSeguridad,
+            },
           },
         }),
       });
@@ -270,6 +338,165 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
         </div>
       </div>
 
+      {/* EVALUACIÓN CONSTITUCIONAL TCM */}
+      <div className="rounded-xl border border-border dark:border-gray-700 p-4">
+        <h3 className="text-sm font-bold mb-3 dark:text-white">☯ Evaluación constitucional</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label>Constitución predominante</Label>
+            <select
+              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              value={form.constitucionPredominante}
+              onChange={(e) => set("constitucionPredominante", e.target.value)}
+            >
+              <option value="">Seleccionar…</option>
+              <option value="madera">Madera (Hígado/Vesícula)</option>
+              <option value="fuego">Fuego (Corazón/Intestino D.)</option>
+              <option value="tierra">Tierra (Bazo/Estómago)</option>
+              <option value="metal">Metal (Pulmón/Intestino G.)</option>
+              <option value="agua">Agua (Riñón/Vejiga)</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Exceso/Deficiencia</Label>
+            <select
+              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              value={form.excesoDeficiencia}
+              onChange={(e) => set("excesoDeficiencia", e.target.value)}
+            >
+              <option value="">Seleccionar…</option>
+              <option value="exceso">Exceso (Shi)</option>
+              <option value="deficiencia">Deficiencia (Xu)</option>
+              <option value="mixto">Mixto</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Frío/Calor</Label>
+            <select
+              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              value={form.frioCalor}
+              onChange={(e) => set("frioCalor", e.target.value)}
+            >
+              <option value="">Seleccionar…</option>
+              <option value="frio">Patrón de frío</option>
+              <option value="calor">Patrón de calor</option>
+              <option value="mixto">Mixto</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Humedad</Label>
+            <select
+              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              value={form.humedad}
+              onChange={(e) => set("humedad", e.target.value)}
+            >
+              <option value="">Seleccionar…</option>
+              <option value="sin_humedad">Sin humedad</option>
+              <option value="leve">Humedad leve</option>
+              <option value="severa">Humedad severa</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Estancamiento de Qi</Label>
+            <select
+              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              value={form.estancamientoQi}
+              onChange={(e) => set("estancamientoQi", e.target.value)}
+            >
+              <option value="">Seleccionar…</option>
+              <option value="sin_estancamiento">Sin estancamiento</option>
+              <option value="leve">Leve</option>
+              <option value="moderado">Moderado</option>
+              <option value="severo">Severo</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* MAPA DE PUNTOS DE ACUPUNTURA */}
+      {isAcupuntura && (
+        <div className="rounded-xl border border-border dark:border-gray-700 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold dark:text-white">📍 Registro de puntos de acupuntura</h3>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-muted-foreground dark:text-gray-400">
+                Total de agujas: <span className="font-bold text-foreground dark:text-white">{form.puntosDetallados.filter((p: any) => p.punto).length}</span>
+              </span>
+              <button
+                type="button"
+                className="text-xs font-semibold text-brand-600 hover:underline"
+                onClick={addPuntoDetallado}
+              >
+                + Agregar punto
+              </button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {form.puntosDetallados.map((p: any, i: number) => (
+              <div key={i} className="grid grid-cols-[1fr_1fr_auto_auto_auto] gap-2 items-end">
+                <div className="space-y-1">
+                  <Label className="text-xs">Punto</Label>
+                  <input
+                    className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                    placeholder="Ej. LI4 Hegu"
+                    value={p.punto}
+                    onChange={(e) => updatePuntoDetallado(i, "punto", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Meridiano</Label>
+                  <select
+                    className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                    value={p.meridiano}
+                    onChange={(e) => updatePuntoDetallado(i, "meridiano", e.target.value)}
+                  >
+                    <option value="">Meridiano…</option>
+                    {MERIDIANOS.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Lateralidad</Label>
+                  <select
+                    className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                    value={p.lateralidad}
+                    onChange={(e) => updatePuntoDetallado(i, "lateralidad", e.target.value)}
+                  >
+                    <option value="">Lat…</option>
+                    <option value="izq">Izq</option>
+                    <option value="der">Der</option>
+                    <option value="bilateral">Bilateral</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Técnica</Label>
+                  <select
+                    className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                    value={p.tecnica}
+                    onChange={(e) => updatePuntoDetallado(i, "tecnica", e.target.value)}
+                  >
+                    <option value="">Técnica…</option>
+                    <option value="tonificacion">Tonificación</option>
+                    <option value="sedacion">Sedación</option>
+                    <option value="neutra">Neutra</option>
+                  </select>
+                </div>
+                {form.puntosDetallados.length > 1 && (
+                  <button
+                    type="button"
+                    className="h-9 px-2 text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                    onClick={() => removePuntoDetallado(i)}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* NOTAS Y PLAN */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
@@ -301,6 +528,56 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
           value={form.assessment}
           onChange={(e) => set("assessment", e.target.value)}
         />
+      </div>
+
+      {/* INTERACCIONES HIERBA-MEDICAMENTO */}
+      <div className="rounded-xl border border-amber-400 dark:border-amber-600 p-4">
+        <h3 className="text-sm font-bold mb-3 dark:text-white">⚠️ Alerta de interacciones</h3>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Medicamentos convencionales del paciente</Label>
+            <textarea
+              className="flex min-h-[60px] w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+              placeholder="Listar medicamentos convencionales que toma el paciente…"
+              value={form.medicamentosConvencionales}
+              onChange={(e) => set("medicamentosConvencionales", e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Fórmula herbal prescrita</Label>
+            <textarea
+              className="flex min-h-[60px] w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+              placeholder="Fórmula herbal prescrita en esta sesión…"
+              value={form.formulaHerbalPrescrita || form.formulaHerbal}
+              onChange={(e) => set("formulaHerbalPrescrita", e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Interacciones conocidas</Label>
+            <div className="space-y-2">
+              {INTERACCIONES_COMUNES.map((interaccion) => (
+                <label key={interaccion} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-border text-brand-600 focus:ring-brand-600/20"
+                    checked={form.interaccionesConocidas.includes(interaccion)}
+                    onChange={() => toggleInteraccion(interaccion)}
+                  />
+                  <span className="text-sm dark:text-gray-300">{interaccion}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Notas de seguridad</Label>
+            <textarea
+              className="flex min-h-[60px] w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+              placeholder="Precauciones adicionales, contraindicaciones observadas…"
+              value={form.notasSeguridad}
+              onChange={(e) => set("notasSeguridad", e.target.value)}
+            />
+          </div>
+        </div>
       </div>
 
       <div className="flex justify-end">

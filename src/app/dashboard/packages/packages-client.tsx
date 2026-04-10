@@ -60,7 +60,8 @@ export function PackagesClient({ initialPackages, initialRedemptions }: { initia
   async function handleDeletePackage(id: string) {
     if (!confirm("¿Eliminar este paquete?")) return;
     try {
-      await fetch(`/api/packages/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/packages/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Error al eliminar");
       setPackages(prev => prev.filter(p => p.id !== id));
       toast.success("Paquete eliminado");
     } catch {

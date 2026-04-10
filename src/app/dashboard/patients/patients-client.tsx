@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Plus, Phone, Mail, Users, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
@@ -10,8 +10,8 @@ import { NewPatientModal } from "@/components/dashboard/new-patient-modal";
 import toast from "react-hot-toast";
 
 const STATUS_COLORS: Record<string, string> = {
-  ACTIVE:   "bg-emerald-50 text-emerald-700 border-emerald-200",
-  INACTIVE: "bg-amber-50 text-amber-700 border-amber-200",
+  ACTIVE:   "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700",
+  INACTIVE: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700",
 };
 
 export function PatientsClient({ patients, total, page, totalPages, search: initialSearch }: {
@@ -20,14 +20,27 @@ export function PatientsClient({ patients, total, page, totalPages, search: init
   const [showNew, setShowNew] = useState(false);
   const [search, setSearch]   = useState(initialSearch);
   const router = useRouter();
+  const debounceRef = useRef<NodeJS.Timeout>();
 
   const filtered = patients; // Server-side filtered
 
-  function handleSearch(value: string) {
-    setSearch(value);
+  function navigateSearch(value: string) {
     const params = new URLSearchParams();
     if (value) params.set("search", value);
     params.set("page", "1");
+    router.push(`/dashboard/patients?${params.toString()}`);
+  }
+
+  function handleSearch(value: string) {
+    setSearch(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => navigateSearch(value), 350);
+  }
+
+  function goToPage(p: number) {
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    params.set("page", String(p));
     router.push(`/dashboard/patients?${params.toString()}`);
   }
 
@@ -51,7 +64,7 @@ export function PatientsClient({ patients, total, page, totalPages, search: init
         <Input className="pl-9" placeholder="Buscar por nombre, teléfono o expediente…" value={search} onChange={e => handleSearch(e.target.value)} />
       </div>
 
-      <div className="rounded-xl border border-border bg-white shadow-card overflow-hidden">
+      <div className="rounded-xl border border-border bg-white dark:bg-slate-900 shadow-card overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
@@ -102,6 +115,61 @@ export function PatientsClient({ patients, total, page, totalPages, search: init
           </tbody>
         </table>
       </div>
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-4 px-1">
+          <span className="text-sm text-muted-foreground">
+            Página {page} de {totalPages} · {total} pacientes
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => goToPage(page - 1)}
+            >
+              <ChevronLeft className="w-4 h-4 mr-1" /> Anterior
+            </Button>
+            {/* Page number pills */}
+            <div className="flex gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum: number;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (page <= 3) {
+                  pageNum = i + 1;
+                } else if (page >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = page - 2 + i;
+                }
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => goToPage(pageNum)}
+                    className={`w-8 h-8 rounded-lg text-sm font-semibold transition-colors ${
+                      pageNum === page
+                        ? "bg-brand-600 text-white"
+                        : "bg-white dark:bg-slate-900 border border-border hover:bg-muted text-foreground"
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages}
+              onClick={() => goToPage(page + 1)}
+            >
+              Siguiente <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       <NewPatientModal open={showNew} onClose={() => setShowNew(false)} onCreated={handleCreated} />
     </div>
   );

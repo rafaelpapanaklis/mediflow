@@ -23,6 +23,7 @@ const NailSalonForm = dynamic(() => import("@/components/clinical/nail-salon-for
 const SpaForm = dynamic(() => import("@/components/clinical/spa-form").then(m => ({ default: m.SpaForm })));
 const PhysiotherapyForm = dynamic(() => import("@/components/clinical/physiotherapy-form").then(m => ({ default: m.PhysiotherapyForm })));
 const PodiatryForm = dynamic(() => import("@/components/clinical/podiatry-form").then(m => ({ default: m.PodiatryForm })));
+const DermatologyForm = dynamic(() => import("@/components/clinical/dermatology-form").then(m => ({ default: m.DermatologyForm })));
 
 // Map ClinicCategory enum → internal key
 const CATEGORY_TO_SPECIALTY: Record<string, string> = {
@@ -90,11 +91,6 @@ export function ClinicalClient({
       return;
     }
 
-    // If it's the same patient already loaded, don't reload
-    if (selectedPatient?.id === currentPatientId && records.length === initialRecords.length) {
-      return;
-    }
-
     setLoading(true);
     // Load patient records
     fetch(`/api/clinical?patientId=${currentPatientId}`)
@@ -110,6 +106,7 @@ export function ClinicalClient({
     const patient = patients.find(p => p.id === currentPatientId);
     if (patient) setSelectedPatient(patient);
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPatientId]);
 
   const filtered = patients.filter(p => {
@@ -133,13 +130,13 @@ export function ClinicalClient({
     <div className="flex gap-5 h-full">
       {/* Patient list sidebar */}
       <div className="w-64 flex-shrink-0">
-        <div className="rounded-xl border border-border bg-white shadow-card overflow-hidden">
+        <div className="rounded-xl border border-border bg-white dark:bg-slate-900 shadow-card overflow-hidden">
           <div className="p-3 border-b border-border">
             <h2 className="text-sm font-bold mb-2">Pacientes</h2>
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <input
-                className="flex h-8 w-full rounded-lg border border-border bg-white pl-8 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                className="flex h-8 w-full rounded-lg border border-border bg-white dark:bg-slate-800 pl-8 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                 placeholder="Buscar…"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
@@ -171,7 +168,7 @@ export function ClinicalClient({
       {/* Main content */}
       <div className="flex-1 min-w-0">
         {!selectedPatient ? (
-          <div className="rounded-xl border border-border bg-white shadow-card p-16 text-center">
+          <div className="rounded-xl border border-border bg-white dark:bg-slate-900 shadow-card p-16 text-center">
             <div className="text-4xl mb-4">
               {{ dental:"🦷", nutrition:"🥗", psychology:"🧠", dermatology:"✨",
                  aesthetic_medicine:"💉", hair_restoration:"💇", beauty_center:"⭐",
@@ -218,13 +215,13 @@ export function ClinicalClient({
             </div>
 
             {loading ? (
-              <div className="rounded-xl border border-border bg-white shadow-card p-10 text-center text-sm text-muted-foreground">
+              <div className="rounded-xl border border-border bg-white dark:bg-slate-900 shadow-card p-10 text-center text-sm text-muted-foreground">
                 Cargando expediente…
               </div>
             ) : (
               <>
                 {tab === "new" && (
-                  <div className="rounded-xl border border-border bg-white shadow-card p-5">
+                  <div className="rounded-xl border border-border bg-white dark:bg-slate-900 shadow-card p-5">
                     <h2 className="text-sm font-bold mb-4">
                       {{ dental:"🦷 Consulta dental", nutrition:"🥗 Consulta nutricional",
                          psychology:"🧠 Sesión de psicología", dermatology:"✨ Consulta dermatológica",
@@ -235,7 +232,7 @@ export function ClinicalClient({
                          nail_salon:"💅 Uñas", spa:"🧖 Spa", physiotherapy:"🏋️ Fisioterapia",
                          podiatry:"🦶 Podología" }[detectedSpecialty] ?? "🩺 Consulta médica"}
                     </h2>
-                    {detectedSpecialty === "dental"               && <DentalForm          patientId={selectedPatient.id} onSaved={handleSaved} />}
+                    {detectedSpecialty === "dental"               && <DentalForm          patientId={selectedPatient.id} isChild={!!selectedPatient.isChild} onSaved={handleSaved} />}
                     {detectedSpecialty === "nutrition"            && <NutritionForm       patientId={selectedPatient.id} patient={selectedPatient} onSaved={handleSaved} />}
                     {detectedSpecialty === "psychology"           && <PsychologyForm      patientId={selectedPatient.id} sessionNum={sessionCount} onSaved={handleSaved} />}
                     {detectedSpecialty === "aesthetic_medicine"   && <AestheticMedicineForm patientId={selectedPatient.id} onSaved={handleSaved} />}
@@ -250,14 +247,15 @@ export function ClinicalClient({
                     {detectedSpecialty === "spa"                  && <SpaForm              patientId={selectedPatient.id} onSaved={handleSaved} />}
                     {detectedSpecialty === "physiotherapy"        && <PhysiotherapyForm    patientId={selectedPatient.id} onSaved={handleSaved} />}
                     {detectedSpecialty === "podiatry"             && <PodiatryForm         patientId={selectedPatient.id} onSaved={handleSaved} />}
-                    {(detectedSpecialty === "medicine" || detectedSpecialty === "dermatology") && <GeneralMedicineForm patientId={selectedPatient.id} onSaved={handleSaved} />}
+                    {detectedSpecialty === "medicine" && <GeneralMedicineForm patientId={selectedPatient.id} onSaved={handleSaved} />}
+                    {detectedSpecialty === "dermatology" && <DermatologyForm patientId={selectedPatient.id} onSaved={handleSaved} />}
                   </div>
                 )}
 
                 {tab === "history" && (
                   <div>
                     {records.length === 0 ? (
-                      <div className="rounded-xl border border-border bg-white shadow-card p-10 text-center">
+                      <div className="rounded-xl border border-border bg-white dark:bg-slate-900 shadow-card p-10 text-center">
                         <p className="text-sm text-muted-foreground mb-3">Sin consultas registradas para este paciente</p>
                         <button onClick={() => setTab("new")} className="text-xs font-semibold text-brand-600 hover:underline">
                           Registrar primera consulta →

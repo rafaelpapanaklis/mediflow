@@ -22,6 +22,14 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
   const [phq9,       setPHQ9]     = useState<number[]>(new Array(9).fill(0));
   const [gad7,       setGAD7]     = useState<number[]>(new Array(7).fill(0));
   const [applyScales, setApplyScales] = useState(true);
+  const [waisr,      setWaisr]    = useState<number[]>(new Array(4).fill(0));
+  const [auditC,     setAuditC]   = useState<number[]>(new Array(3).fill(0));
+  const [dastPositive, setDastPositive] = useState(false);
+  const [dastDetail, setDastDetail] = useState("");
+  const [safetyPlan, setSafetyPlan] = useState({
+    warningSignals: "", copingStrategies: "", supportPeople: "",
+    emergencyContacts: "", meansRestriction: "", reasonToLive: "",
+  });
   const [form, setForm] = useState({
     sessionType: SESSION_TYPES[0], approach: APPROACHES[0],
     subjective: "", objective: "", assessment: "", plan: "",
@@ -36,6 +44,13 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
 
   const phq9Score = phq9.reduce((a, b) => a + b, 0);
   const gad7Score = gad7.reduce((a, b) => a + b, 0);
+  const auditCScore = auditC.reduce((a, b) => a + b, 0);
+  const waisrRated = waisr.filter(v => v > 0);
+  const waisrAvg = waisrRated.length > 0 ? waisrRated.reduce((a, b) => a + b, 0) / waisrRated.length : 0;
+  const waisrLabel = waisrAvg <= 2 ? "Débil — requiere atención" : waisrAvg <= 3.5 ? "Moderada — en desarrollo" : "Fuerte";
+  const waisrColor = waisrAvg <= 2 ? "text-rose-600 dark:text-rose-400" : waisrAvg <= 3.5 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400";
+  const auditCLabel = auditCScore < 3 ? "Bajo riesgo" : auditCScore <= 7 ? "Riesgo moderado" : "Alto riesgo";
+  const auditCColor = auditCScore < 3 ? "text-emerald-600 dark:text-emerald-400" : auditCScore <= 7 ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400";
 
   function addGoal() { set("treatmentGoals", [...form.treatmentGoals, { goal: "", status: "En progreso" }]); }
 
@@ -59,6 +74,12 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
               gad7: { score: gad7Score, items: gad7, severity: GAD7_SEVERITY(gad7Score) },
             } : undefined,
             mentalStatus: form.mentalStatus,
+            waisr: { items: waisr, average: waisrRated.length > 0 ? Number(waisrAvg.toFixed(1)) : null, interpretation: waisrRated.length > 0 ? waisrLabel : null },
+            substanceScreening: {
+              auditC: { items: auditC, score: auditCScore, interpretation: auditCLabel },
+              dast: { positive: dastPositive, detail: dastPositive ? dastDetail : undefined },
+            },
+            safetyPlan: form.mentalStatus.suicidalIdeation !== "no" ? safetyPlan : undefined,
             interventions: form.interventions,
             patientResponse: form.patientResponse,
             homework: form.homework,
@@ -201,10 +222,71 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
           ))}
         </div>
         {form.mentalStatus.suicidalIdeation !== "no" && (
-          <div className="mt-3 p-3 bg-rose-50 border border-rose-300 rounded-xl text-xs text-rose-700 font-bold">
+          <div className="mt-3 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-700 rounded-xl text-xs text-rose-700 dark:text-rose-300 font-bold">
             ⚠️ Alerta: ideación suicida registrada. Evalúa protocolo de seguridad y documenta plan de crisis.
           </div>
         )}
+      </div>
+
+      {/* Plan de seguridad — solo si ideación suicida */}
+      {form.mentalStatus.suicidalIdeation !== "no" && (
+        <div className="rounded-xl border-2 border-rose-400 dark:border-rose-600 p-4 bg-white dark:bg-card">
+          <h3 className="text-sm font-bold mb-3 text-rose-700 dark:text-rose-300">🚨 Plan de seguridad</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {[
+              { key: "warningSignals",    label: "Señales de advertencia",                   ph: "¿Qué pensamientos, sentimientos o situaciones detonan la crisis?" },
+              { key: "copingStrategies",  label: "Estrategias de afrontamiento internas",    ph: "Cosas que puedo hacer solo/a para distraerme" },
+              { key: "supportPeople",     label: "Personas de apoyo",                        ph: "Nombres y teléfonos de personas a quién llamar" },
+              { key: "emergencyContacts", label: "Contactos profesionales de emergencia",    ph: "Línea de crisis, terapeuta de guardia, hospital" },
+              { key: "meansRestriction",  label: "Restricción de medios letales",            ph: "Pasos para limitar acceso a medios" },
+              { key: "reasonToLive",      label: "Razón para vivir",                         ph: "Lo más importante para mí en este momento" },
+            ].map(f => (
+              <div key={f.key} className="space-y-1">
+                <Label className="text-xs">{f.label}</Label>
+                <textarea
+                  className="flex min-h-[70px] w-full rounded-lg border border-border dark:border-border bg-white dark:bg-muted px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-rose-500/20 resize-none"
+                  placeholder={f.ph}
+                  value={(safetyPlan as any)[f.key]}
+                  onChange={e => setSafetyPlan(prev => ({ ...prev, [f.key]: e.target.value }))}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Alianza terapéutica (WAI-SR simplificada) */}
+      <div className="rounded-xl border border-border p-4 bg-white dark:bg-card">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold">🤝 Alianza terapéutica</h3>
+          {waisrRated.length > 0 && (
+            <div className="text-right">
+              <span className={`text-lg font-extrabold ${waisrColor}`}>{waisrAvg.toFixed(1)}</span>
+              <span className={`text-xs font-bold ml-1 ${waisrColor}`}>{waisrLabel}</span>
+            </div>
+          )}
+        </div>
+        <div className="space-y-2">
+          <div className="grid grid-cols-6 gap-1 text-[10px] font-bold text-center text-muted-foreground mb-1">
+            <span></span><span>Nunca (1)</span><span>Rara vez (2)</span><span>A veces (3)</span><span>Frecuente (4)</span><span>Siempre (5)</span>
+          </div>
+          {[
+            "El paciente y yo trabajamos hacia metas mutuamente acordadas",
+            "Se ha establecido un vínculo de confianza y respeto mutuo",
+            "Hay acuerdo sobre las tareas y métodos del tratamiento",
+            "El paciente se siente comprendido en la relación terapéutica",
+          ].map((item, i) => (
+            <div key={i} className="grid grid-cols-6 gap-1 items-center text-xs">
+              <span className="text-foreground leading-tight">{item}</span>
+              {[1,2,3,4,5].map(v => (
+                <button key={v} onClick={() => { const n = [...waisr]; n[i] = v; setWaisr(n); }}
+                  className={`h-7 rounded-lg border text-xs font-bold transition-all ${waisr[i] === v ? "bg-brand-600 text-white border-brand-600 dark:bg-brand-500 dark:border-brand-500" : "bg-white dark:bg-muted border-border hover:border-brand-300 dark:hover:border-brand-400"}`}>
+                  {v}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Escalas PHQ-9 y GAD-7 */}
@@ -240,6 +322,55 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Screening de sustancias */}
+      <div className="rounded-xl border border-border p-4 bg-white dark:bg-card">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold">🍷 Screening de sustancias</h3>
+          <div className="text-right">
+            <span className={`text-lg font-extrabold ${auditCColor}`}>{auditCScore}</span>
+            <span className={`text-xs font-bold ml-1 ${auditCColor}`}>{auditCLabel}</span>
+          </div>
+        </div>
+
+        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-2">AUDIT-C</h4>
+        <div className="space-y-2 mb-4">
+          {[
+            { label: "Frecuencia de consumo de alcohol", opts: ["Nunca (0)","Mensual o menos (1)","2-4 veces/mes (2)","2-3 veces/semana (3)","4+ veces/semana (4)"] },
+            { label: "Cantidad habitual de tragos por ocasión", opts: ["1-2 (0)","3-4 (1)","5-6 (2)","7-9 (3)","10+ (4)"] },
+            { label: "Frecuencia de consumo excesivo (6+ tragos)", opts: ["Nunca (0)","Menos de mensual (1)","Mensual (2)","Semanal (3)","Diario o casi (4)"] },
+          ].map((q, i) => (
+            <div key={i} className="space-y-1">
+              <Label className="text-xs">{q.label}</Label>
+              <select
+                className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-muted px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                value={auditC[i]}
+                onChange={e => { const n = [...auditC]; n[i] = Number(e.target.value); setAuditC(n); }}>
+                {q.opts.map((o, v) => <option key={v} value={v}>{o}</option>)}
+              </select>
+            </div>
+          ))}
+        </div>
+
+        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-2">DAST-10 (simplificado)</h4>
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={dastPositive} onChange={e => setDastPositive(e.target.checked)} className="accent-brand-600" />
+            ¿El paciente reporta uso de sustancias no prescritas?
+          </label>
+          {dastPositive && (
+            <div className="space-y-1">
+              <Label className="text-xs">Detalle de sustancias y frecuencia</Label>
+              <textarea
+                className="flex min-h-[70px] w-full rounded-lg border border-border dark:border-border bg-white dark:bg-muted px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+                placeholder="Ej: Cannabis 3 veces/semana, cocaína uso esporádico..."
+                value={dastDetail}
+                onChange={e => setDastDetail(e.target.value)}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Plan terapéutico con metas */}

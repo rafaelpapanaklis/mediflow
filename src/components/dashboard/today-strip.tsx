@@ -48,7 +48,7 @@ export function TodayStrip({ initialAppts }: { initialAppts: Appt[] }) {
   const timeStr = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
 
   return (
-    <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl shadow-card overflow-hidden mb-5">
+    <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl shadow-card overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-border">
         <div className="flex items-center gap-2.5">

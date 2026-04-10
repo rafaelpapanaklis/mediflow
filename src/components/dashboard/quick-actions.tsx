@@ -89,7 +89,7 @@ function CommandPalette({ onClose, clinicId }: { onClose: () => void; clinicId: 
                   <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                     {[
                       { label:"Expediente", path:`/dashboard/patients/${p.id}` },
-                      { label:"Cita",       path:`/dashboard/appointments` },
+                      { label:"Cita",       path:`/dashboard/appointments?new=1&patientId=${p.id}` },
                     ].map(a => (
                       <button key={a.label} onClick={() => go(a.path)}
                         className="text-xs font-semibold px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-border rounded-lg hover:border-brand-400 hover:text-brand-600 transition-colors">
@@ -189,7 +189,7 @@ export function QuickActionsBar({ currentUserId, clinicId, isAdmin }: QuickActio
 
   return (
     <>
-      <div className="flex items-center gap-2 mb-5 bg-white dark:bg-slate-900 border border-border rounded-2xl px-3 py-2.5 shadow-card flex-wrap">
+      <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-border rounded-2xl px-3 py-2.5 shadow-card flex-wrap">
         {ACTIONS.map((action, i) => (
           <button key={i} onClick={action.onClick}
             className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold transition-all hover:scale-105 active:scale-95

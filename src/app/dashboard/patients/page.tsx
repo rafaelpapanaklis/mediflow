@@ -42,6 +42,7 @@ export default async function PatientsPage({
         phone: true,
         email: true,
         gender: true,
+        dob: true,
         status: true,
         createdAt: true,
         tags: true,

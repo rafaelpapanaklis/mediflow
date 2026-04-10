@@ -213,12 +213,17 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
 
   const searchParams = useSearchParams();
 
-  // Auto-open new appointment modal if ?new=1 in URL
+  // Auto-open new appointment modal if ?new=1 in URL (with optional patientId)
   useEffect(() => {
     if (searchParams.get("new") === "1") {
+      const patientId = searchParams.get("patientId");
+      if (patientId) {
+        setForm(f => ({ ...f, patientId }));
+      }
       setShowNew(true);
       const url = new URL(window.location.href);
       url.searchParams.delete("new");
+      url.searchParams.delete("patientId");
       window.history.replaceState({}, "", url.toString());
     }
   }, [searchParams]);

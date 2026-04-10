@@ -21,6 +21,38 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
     sicLeave: { granted: false, days:"" },
     returnDate: "",
   });
+
+  /* ── Antecedentes personales y familiares ── */
+  const PERSONAL_CONDITIONS = ["Diabetes","Hipertensión","Asma/EPOC","Cardiopatía","Cáncer","Enfermedad renal","Hipotiroidismo","Depresión/Ansiedad","VIH","Hepatitis"] as const;
+  const FAMILY_CONDITIONS = ["Diabetes","HTA","Cáncer","Cardiopatía","Enf. mental"] as const;
+  const FAMILY_MEMBERS = ["Padre","Madre","Hermanos"] as const;
+  const [personalHistory, setPersonalHistory] = useState<Record<string,boolean>>({});
+  const [surgicalHistory, setSurgicalHistory] = useState("");
+  const [familyHistory, setFamilyHistory] = useState<Record<string,Record<string,boolean>>>({});
+
+  const togglePersonal = (c: string) => setPersonalHistory(p => ({ ...p, [c]: !p[c] }));
+  const toggleFamily = (cond: string, member: string) =>
+    setFamilyHistory(f => ({ ...f, [cond]: { ...f[cond], [member]: !f[cond]?.[member] } }));
+
+  /* ── Hábitos y factores de riesgo ── */
+  const [smoking, setSmoking] = useState("No fuma");
+  const [packsYear, setPacksYear] = useState("");
+  const [auditC, setAuditC] = useState([0, 0, 0]);
+  const auditCScore = auditC[0] + auditC[1] + auditC[2];
+  const auditCSeverity = auditCScore >= 8 ? "alto riesgo" : auditCScore >= 4 ? "riesgo moderado" : "bajo riesgo";
+  const auditCColor = auditCScore >= 8 ? "text-red-600" : auditCScore >= 4 ? "text-amber-600" : "text-green-600";
+  const [physicalActivity, setPhysicalActivity] = useState("");
+  const [drugs, setDrugs] = useState("");
+
+  const isSmoker = smoking !== "No fuma" && smoking !== "";
+
+  /* ── Diagnóstico diferencial ── */
+  const [diffDiagnoses, setDiffDiagnoses] = useState<{ diagnosis: string; probability: string }[]>([]);
+  const addDiffDiag = () => setDiffDiagnoses(d => [...d, { diagnosis: "", probability: "Media" }]);
+  const removeDiffDiag = (i: number) => setDiffDiagnoses(d => d.filter((_, j) => j !== i));
+  const updateDiffDiag = (i: number, field: string, value: string) =>
+    setDiffDiagnoses(d => d.map((item, j) => j === i ? { ...item, [field]: value } : item));
+
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
   const setV = (k: string, v: string) => setForm(f => ({ ...f, vitals: { ...f.vitals, [k]: v } }));
 
@@ -47,6 +79,11 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
             labs: form.labs, studies: form.studies,
             sicLeave: form.sicLeave.granted ? form.sicLeave : undefined,
             returnDate: form.returnDate,
+            personalHistory: Object.entries(personalHistory).filter(([,v]) => v).map(([k]) => k),
+            surgicalHistory,
+            familyHistory,
+            habits: { smoking, packsYear: isSmoker ? packsYear : undefined, auditC, auditCScore, physicalActivity, drugs },
+            differentialDiagnoses: diffDiagnoses.filter(d => d.diagnosis),
           },
         }),
       });
@@ -63,6 +100,169 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
         <Label>Motivo de consulta / Historia de la enfermedad actual (HEA)</Label>
         <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
           placeholder="Paciente de X años que acude por… Inicio: … Evolución: … Síntomas acompañantes: …" value={form.subjective} onChange={e => set("subjective", e.target.value)} />
+      </div>
+
+      {/* ANTECEDENTES PERSONALES Y FAMILIARES */}
+      <div className="rounded-xl border border-border p-4">
+        <h3 className="text-sm font-bold mb-3">📋 Antecedentes personales y familiares</h3>
+
+        {/* Antecedentes personales */}
+        <p className="text-xs font-semibold mb-2">Antecedentes personales patológicos</p>
+        <div className="grid grid-cols-5 gap-2 mb-4">
+          {PERSONAL_CONDITIONS.map(c => (
+            <label key={c} className="flex items-center gap-1.5 text-xs cursor-pointer">
+              <input type="checkbox" checked={!!personalHistory[c]} onChange={() => togglePersonal(c)} className="w-3.5 h-3.5 accent-brand-600" />
+              {c}
+            </label>
+          ))}
+        </div>
+
+        {/* Quirúrgicos */}
+        <div className="mb-4 space-y-1">
+          <Label className="text-xs">Antecedentes quirúrgicos</Label>
+          <textarea className="flex min-h-[60px] w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            placeholder="Apendicectomía 2015, colecistectomía 2020…" value={surgicalHistory} onChange={e => setSurgicalHistory(e.target.value)} />
+        </div>
+
+        {/* Antecedentes familiares */}
+        <p className="text-xs font-semibold mb-2">Antecedentes familiares</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="text-left py-1 pr-4 font-semibold">Condición</th>
+                {FAMILY_MEMBERS.map(m => <th key={m} className="text-center py-1 px-2 font-semibold">{m}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {FAMILY_CONDITIONS.map(cond => (
+                <tr key={cond} className="border-b border-border/50">
+                  <td className="py-1.5 pr-4">{cond}</td>
+                  {FAMILY_MEMBERS.map(member => (
+                    <td key={member} className="text-center py-1.5">
+                      <input type="checkbox" checked={!!familyHistory[cond]?.[member]} onChange={() => toggleFamily(cond, member)} className="w-3.5 h-3.5 accent-brand-600" />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* HÁBITOS Y FACTORES DE RIESGO */}
+      <div className="rounded-xl border border-border p-4">
+        <h3 className="text-sm font-bold mb-3">🚬 Hábitos y factores de riesgo</h3>
+
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          {/* Tabaquismo */}
+          <div className="space-y-1">
+            <Label className="text-xs">Tabaquismo</Label>
+            <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              value={smoking} onChange={e => setSmoking(e.target.value)}>
+              {["No fuma","Exfumador","< 10 cigarros/día","10-20/día","> 20/día"].map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+
+          {/* Paquetes/año - solo si fuma */}
+          {isSmoker && (
+            <div className="space-y-1">
+              <Label className="text-xs">Paquetes/año</Label>
+              <input type="number" min="0" className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                placeholder="Ej: 10" value={packsYear} onChange={e => setPacksYear(e.target.value)} />
+            </div>
+          )}
+
+          {/* Actividad física */}
+          <div className="space-y-1">
+            <Label className="text-xs">Actividad física</Label>
+            <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              value={physicalActivity} onChange={e => setPhysicalActivity(e.target.value)}>
+              <option value="">Seleccionar…</option>
+              {["Sedentario","Ligera (1-2x/sem)","Moderada (3-4x/sem)","Intensa (5+/sem)"].map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* AUDIT-C */}
+        <div className="mb-4 p-3 rounded-lg bg-slate-50 dark:bg-slate-700/30 space-y-3">
+          <p className="text-xs font-semibold">Alcohol (AUDIT-C simplificado)</p>
+
+          <div className="space-y-1">
+            <Label className="text-xs">¿Con qué frecuencia toma bebidas alcohólicas?</Label>
+            <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              value={auditC[0]} onChange={e => setAuditC(a => [Number(e.target.value), a[1], a[2]])}>
+              <option value={0}>Nunca</option>
+              <option value={1}>Mensual o menos</option>
+              <option value={2}>2-4 veces/mes</option>
+              <option value={3}>2-3 veces/semana</option>
+              <option value={4}>4+ veces/semana</option>
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-xs">¿Cuántas bebidas en un día normal?</Label>
+            <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              value={auditC[1]} onChange={e => setAuditC(a => [a[0], Number(e.target.value), a[2]])}>
+              <option value={0}>1-2</option>
+              <option value={1}>3-4</option>
+              <option value={2}>5-6</option>
+              <option value={3}>7-9</option>
+              <option value={4}>10+</option>
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-xs">¿Con qué frecuencia toma 6+ bebidas en una ocasión?</Label>
+            <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              value={auditC[2]} onChange={e => setAuditC(a => [a[0], a[1], Number(e.target.value)])}>
+              <option value={0}>Nunca</option>
+              <option value={1}>Menos que mensual</option>
+              <option value={2}>Mensual</option>
+              <option value={3}>Semanal</option>
+              <option value={4}>Diario o casi diario</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            <span className="text-xs font-semibold">Puntaje AUDIT-C:</span>
+            <span className={`text-sm font-bold ${auditCColor}`}>{auditCScore}/12 — {auditCSeverity}</span>
+          </div>
+        </div>
+
+        {/* Drogas */}
+        <div className="space-y-1">
+          <Label className="text-xs">Drogas / Otras sustancias</Label>
+          <textarea className="flex min-h-[50px] w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            placeholder="Marihuana, cocaína, benzodiacepinas sin Rx…" value={drugs} onChange={e => setDrugs(e.target.value)} />
+        </div>
+      </div>
+
+      {/* DIAGNÓSTICO DIFERENCIAL */}
+      <div className="rounded-xl border border-border p-4">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-sm font-bold">🔍 Diagnóstico diferencial</h3>
+          <button onClick={addDiffDiag} className="text-xs font-semibold text-brand-600 hover:underline">+ Agregar diagnóstico</button>
+        </div>
+        <p className="text-xs text-muted-foreground mb-3">Lista de posibles diagnósticos antes de confirmar el definitivo</p>
+        {diffDiagnoses.length === 0 && (
+          <p className="text-xs text-muted-foreground italic">Sin diagnósticos diferenciales. Haz clic en &quot;+ Agregar diagnóstico&quot; para añadir.</p>
+        )}
+        <div className="space-y-2">
+          {diffDiagnoses.map((dd, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input className="flex h-9 flex-1 rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                placeholder="Ej: Neumonía adquirida en comunidad" value={dd.diagnosis} onChange={e => updateDiffDiag(i, "diagnosis", e.target.value)} />
+              <select className="flex h-9 w-32 rounded-lg border border-border bg-white dark:bg-slate-800 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                value={dd.probability} onChange={e => updateDiffDiag(i, "probability", e.target.value)}>
+                <option value="Alta">Alta</option>
+                <option value="Media">Media</option>
+                <option value="Baja">Baja</option>
+              </select>
+              <button onClick={() => removeDiffDiag(i)} className="h-9 px-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors text-lg">×</button>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* SIGNOS VITALES */}

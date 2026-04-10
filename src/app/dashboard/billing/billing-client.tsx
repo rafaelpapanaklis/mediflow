@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import React, { useState } from "react";
 import { Plus, CreditCard, TrendingUp, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -120,7 +120,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
           { icon: <Clock className="w-4 h-4 text-amber-600" />,       label: "Por cobrar",     val: formatCurrency(totalPending), bg: "bg-amber-50"   },
           { icon: <CreditCard className="w-4 h-4 text-brand-600" />,  label: "Total facturas", val: String(invoices.length),      bg: "bg-brand-50"   },
         ].map(k => (
-          <div key={k.label} className="rounded-xl border border-border bg-white p-4 shadow-card">
+          <div key={k.label} className="rounded-xl border border-border bg-white dark:bg-slate-900 p-4 shadow-card">
             <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-3 ${k.bg}`}>{k.icon}</div>
             <div className="text-xl font-extrabold">{k.val}</div>
             <div className="text-xs text-muted-foreground">{k.label}</div>
@@ -134,22 +134,22 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
           <form onSubmit={createInvoice} className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="col-span-2 space-y-1">
               <label className="text-xs font-bold text-muted-foreground">Paciente *</label>
-              <select className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none" value={form.patientId} onChange={e => set("patientId", e.target.value)}>
+              <select className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none" value={form.patientId} onChange={e => set("patientId", e.target.value)}>
                 <option value="">Seleccionar…</option>
                 {patients.map(p => <option key={p.id} value={p.id}>#{p.patientNumber} — {p.firstName} {p.lastName}</option>)}
               </select>
             </div>
             <div className="col-span-2 space-y-1">
               <label className="text-xs font-bold text-muted-foreground">Descripción *</label>
-              <input className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none" placeholder="Consulta dental…" value={form.description} onChange={e => set("description", e.target.value)} />
+              <input className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none" placeholder="Consulta dental…" value={form.description} onChange={e => set("description", e.target.value)} />
             </div>
             <div className="space-y-1">
               <label className="text-xs font-bold text-muted-foreground">Cantidad</label>
-              <input type="number" min="1" className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none" value={form.quantity} onChange={e => set("quantity", e.target.value)} />
+              <input type="number" min="1" className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none" value={form.quantity} onChange={e => set("quantity", e.target.value)} />
             </div>
             <div className="space-y-1">
               <label className="text-xs font-bold text-muted-foreground">Precio unitario *</label>
-              <input type="number" min="0" className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none" placeholder="500" value={form.unitPrice} onChange={e => set("unitPrice", e.target.value)} />
+              <input type="number" min="0" className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none" placeholder="500" value={form.unitPrice} onChange={e => set("unitPrice", e.target.value)} />
             </div>
             <div className="space-y-1">
               <label className="text-xs font-bold text-muted-foreground">Total</label>
@@ -159,7 +159,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
             </div>
             <div className="space-y-1">
               <label className="text-xs font-bold text-muted-foreground">Notas</label>
-              <input className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none" placeholder="Opcional" value={form.notes} onChange={e => set("notes", e.target.value)} />
+              <input className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none" placeholder="Opcional" value={form.notes} onChange={e => set("notes", e.target.value)} />
             </div>
             <div className="col-span-2 lg:col-span-4 flex gap-2">
               <Button type="submit" disabled={loading} size="sm">{loading ? "Guardando…" : "Crear factura"}</Button>
@@ -169,7 +169,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
         </div>
       )}
 
-      <div className="rounded-xl border border-border bg-white shadow-card overflow-hidden">
+      <div className="rounded-xl border border-border bg-white dark:bg-slate-900 shadow-card overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
@@ -180,14 +180,14 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
           </thead>
           <tbody>
             {invoices.length === 0 ? (
-              <tr><td colSpan={7} className="px-5 py-16 text-center text-muted-foreground text-sm">
+              <tr><td colSpan={8} className="px-5 py-16 text-center text-muted-foreground text-sm">
                 No hay facturas. <button onClick={() => setShowNew(true)} className="text-brand-600 hover:underline">Crear primera →</button>
               </td></tr>
             ) : invoices.map(inv => {
               const s = STATUS_CONFIG[inv.status] ?? STATUS_CONFIG.PENDING;
               return (
-                <>
-                  <tr key={inv.id} className="border-b border-border/60 hover:bg-muted/20 transition-colors">
+                <React.Fragment key={inv.id}>
+                  <tr className="border-b border-border/60 hover:bg-muted/20 transition-colors">
                     <td className="px-5 py-3 font-mono text-xs font-bold">{inv.invoiceNumber}</td>
                     <td className="px-4 py-3 font-medium">{inv.patient?.firstName} {inv.patient?.lastName}</td>
                     <td className="px-4 py-3 font-mono font-bold">{formatCurrency(inv.total)}</td>
@@ -216,12 +216,12 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                     </td>
                   </tr>
                   {paying === inv.id && (
-                    <tr key={`pay-${inv.id}`} className="bg-brand-50">
+                    <tr key={`pay-${inv.id}`} className="bg-brand-50 dark:bg-brand-950/20">
                       <td colSpan={8} className="px-5 py-3">
                         <div className="flex items-center gap-3 flex-wrap">
                           <span className="text-xs font-bold text-brand-700">Saldo: {formatCurrency(inv.balance)}</span>
-                          <input type="number" placeholder="Monto" className="h-8 w-28 rounded-lg border border-border bg-white px-3 text-sm" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
-                          <select className="h-8 rounded-lg border border-border bg-white px-2 text-sm" value={payMethod} onChange={e => setPayMethod(e.target.value)}>
+                          <input type="number" placeholder="Monto" className="h-8 w-28 rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
+                          <select className="h-8 rounded-lg border border-border bg-white dark:bg-slate-800 px-2 text-sm" value={payMethod} onChange={e => setPayMethod(e.target.value)}>
                             <option value="CASH">Efectivo</option><option value="CARD">Tarjeta</option><option value="TRANSFER">Transferencia</option>
                           </select>
                           <Button size="sm" onClick={() => registerPayment(inv.id)}>Registrar</Button>
@@ -308,7 +308,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                       </td>
                     </tr>
                   )}
-                </>
+                </React.Fragment>
               );
             })}
           </tbody>

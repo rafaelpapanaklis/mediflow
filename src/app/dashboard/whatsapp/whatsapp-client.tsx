@@ -85,7 +85,7 @@ export function WhatsAppClient({ connected: initConnected, phoneNumberId: initPh
       {/* INTRO */}
       {step === "intro" && (
         <div className="space-y-4">
-          <div className="bg-white border border-border rounded-xl p-5 shadow-card">
+          <div className="bg-white dark:bg-slate-900 border border-border rounded-xl p-5 shadow-card">
             <h2 className="text-sm font-bold mb-3">¿Cómo funciona?</h2>
             <div className="space-y-3">
               {[
@@ -158,7 +158,7 @@ export function WhatsAppClient({ connected: initConnected, phoneNumberId: initPh
       {/* CONNECTED - Settings */}
       {step === "done" && (
         <div className="space-y-4">
-          <div className="bg-white border border-border rounded-xl p-5 shadow-card">
+          <div className="bg-white dark:bg-slate-900 border border-border rounded-xl p-5 shadow-card">
             <h2 className="text-sm font-bold mb-4">⏰ Cuándo enviar recordatorios</h2>
             <div className="space-y-3">
               {[
@@ -176,13 +176,13 @@ export function WhatsAppClient({ connected: initConnected, phoneNumberId: initPh
             </div>
           </div>
 
-          <div className="bg-white border border-border rounded-xl p-5 shadow-card">
+          <div className="bg-white dark:bg-slate-900 border border-border rounded-xl p-5 shadow-card">
             <h2 className="text-sm font-bold mb-2">💬 Mensaje del recordatorio</h2>
             <p className="text-xs text-muted-foreground mb-3">
               Usa <code className="bg-muted px-1 rounded">{"{nombre}"}</code>, <code className="bg-muted px-1 rounded">{"{fecha}"}</code>, <code className="bg-muted px-1 rounded">{"{hora}"}</code>, <code className="bg-muted px-1 rounded">{"{doctor}"}</code> como variables.
             </p>
             <textarea
-              className="flex min-h-[120px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+              className="flex min-h-[120px] w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
               value={msg} onChange={e => setMsg(e.target.value)} />
             <button onClick={() => setMsg(defaultMsg)} className="text-xs text-muted-foreground hover:text-foreground mt-1.5 hover:underline">
               Restablecer mensaje por defecto

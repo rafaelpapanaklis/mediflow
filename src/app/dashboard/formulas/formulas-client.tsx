@@ -45,7 +45,7 @@ export function FormulasClient({ patients }: { patients: Patient[] }) {
     if (!selectedPatient) { setRecords([]); return; }
     setLoading(true);
     fetch(`/api/formulas?patientId=${selectedPatient}`)
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error("Error"); return r.json(); })
       .then(data => setRecords(Array.isArray(data) ? data : []))
       .catch(() => toast.error("Error al cargar fórmulas"))
       .finally(() => setLoading(false));

@@ -491,7 +491,7 @@ export function PatientDetailClient({
                  detectedSpecialty === "psychology" ? "🧠 Nueva sesión" :
                  "🩺 Nueva consulta médica"}
               </h2>
-              {detectedSpecialty === "dental"     && <DentalForm          patientId={patient.id} onSaved={handleRecordSaved} />}
+              {detectedSpecialty === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} />}
               {detectedSpecialty === "nutrition"  && <NutritionForm       patientId={patient.id} patient={patient} onSaved={handleRecordSaved} />}
               {detectedSpecialty === "psychology" && <PsychologyForm      patientId={patient.id} sessionNum={records.length + 1} onSaved={handleRecordSaved} />}
               {detectedSpecialty === "medicine"   && <GeneralMedicineForm patientId={patient.id} onSaved={handleRecordSaved} />}

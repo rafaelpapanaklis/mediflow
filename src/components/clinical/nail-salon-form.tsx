@@ -28,6 +28,20 @@ const FORMAS = [
   "redonda",
 ];
 
+const DEDOS = ["Pulgar", "Índice", "Medio", "Anular", "Meñique"] as const;
+const CONDICIONES_UNA = ["Sana", "Hongos", "Estriada", "Manchada", "Frágil/Quebradiza", "Onicólisis", "Encarnada", "Engrosada"] as const;
+const TIPOS_SERVICIO_PREF = ["Manicure clásico", "Gel", "Acrílico", "Dip powder", "Nail art", "Natural"] as const;
+const LARGOS = ["Muy corto (natural)", "Corto", "Medio", "Largo", "Extra largo"] as const;
+const TIPOS_REACCION = ["Enrojecimiento", "Descamación", "Ampollas", "Dolor", "Hinchazón", "Reacción alérgica"] as const;
+const SEVERIDADES = ["Leve", "Moderada", "Severa"] as const;
+
+interface AlergiaEntry {
+  producto: string;
+  tipoReaccion: string;
+  severidad: string;
+  fecha: string;
+}
+
 interface Props {
   patientId: string;
   onSaved: (record: any) => void;
@@ -50,6 +64,35 @@ export function NailSalonForm({ patientId, onSaved }: Props) {
     notas: "",
   });
   const set = (k: string, v: any) => setForm((f) => ({ ...f, [k]: v }));
+
+  // Nail health evaluation state
+  const createFingerMap = () => Object.fromEntries(DEDOS.map(d => [d, ""]));
+  const [manoIzq, setManoIzq] = useState<Record<string, string>>(createFingerMap());
+  const [manoDer, setManoDer] = useState<Record<string, string>>(createFingerMap());
+  const [pieIzq, setPieIzq] = useState<Record<string, string>>(createFingerMap());
+  const [pieDer, setPieDer] = useState<Record<string, string>>(createFingerMap());
+  const [resumenSaludUngueal, setResumenSaludUngueal] = useState("");
+
+  // Preferences state
+  const [colorRecurrente, setColorRecurrente] = useState("");
+  const [tipoServicioPref, setTipoServicioPref] = useState("");
+  const [marcaFavorita, setMarcaFavorita] = useState("");
+  const [largoPreferido, setLargoPreferido] = useState("");
+  const [notasEstilo, setNotasEstilo] = useState("");
+
+  // Allergies state
+  const [alergias, setAlergias] = useState<AlergiaEntry[]>([]);
+  const [alergiaMetacrilato, setAlergiaMetacrilato] = useState(false);
+
+  function addAlergia() {
+    setAlergias(prev => [...prev, { producto: "", tipoReaccion: "", severidad: "", fecha: "" }]);
+  }
+  function removeAlergia(idx: number) {
+    setAlergias(prev => prev.filter((_, i) => i !== idx));
+  }
+  function updateAlergia(idx: number, field: keyof AlergiaEntry, value: string) {
+    setAlergias(prev => prev.map((a, i) => i === idx ? { ...a, [field]: value } : a));
+  }
 
   async function handleSave() {
     if (!form.servicio) {
@@ -77,6 +120,9 @@ export function NailSalonForm({ patientId, onSaved }: Props) {
             condicionUnas: form.condicionUnas,
             tecnicoAsignado: form.tecnicoAsignado,
             notas: form.notas,
+            saludUngueal: { manoIzq, manoDer, pieIzq, pieDer, resumen: resumenSaludUngueal },
+            preferencias: { colorRecurrente, tipoServicioPref, marcaFavorita, largoPreferido, notasEstilo, formaFavorita: form.formaPreferida },
+            alergias: { lista: alergias, alergiaMetacrilato },
           },
         }),
       });
@@ -208,6 +254,199 @@ export function NailSalonForm({ patientId, onSaved }: Props) {
             onChange={(e) => set("tecnicoAsignado", e.target.value)}
           />
         </div>
+      </div>
+
+      {/* EVALUACIÓN DE SALUD UNGUEAL */}
+      <div className="rounded-xl border border-border dark:border-gray-700 p-4">
+        <h3 className="text-sm font-bold mb-4 dark:text-white">🔍 Evaluación de salud ungueal</h3>
+
+        {/* Manos */}
+        <p className="text-xs font-semibold mb-2 dark:text-gray-300">Manos</p>
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          {([["Mano izquierda", manoIzq, setManoIzq], ["Mano derecha", manoDer, setManoDer]] as const).map(([label, state, setter]) => (
+            <div key={label}>
+              <p className="text-xs text-muted-foreground mb-1 dark:text-gray-400">{label}</p>
+              <div className="space-y-1">
+                {DEDOS.map(dedo => (
+                  <div key={dedo} className="flex items-center gap-2">
+                    <span className="text-xs w-16 shrink-0 dark:text-gray-300">{dedo}</span>
+                    <select
+                      className="flex h-7 w-full rounded-md border border-border bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                      value={(state as Record<string, string>)[dedo]}
+                      onChange={e => (setter as React.Dispatch<React.SetStateAction<Record<string, string>>>)(prev => ({ ...prev, [dedo]: e.target.value }))}
+                    >
+                      <option value="">—</option>
+                      {CONDICIONES_UNA.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Pies */}
+        <p className="text-xs font-semibold mb-2 dark:text-gray-300">Pies</p>
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          {([["Pie izquierdo", pieIzq, setPieIzq], ["Pie derecho", pieDer, setPieDer]] as const).map(([label, state, setter]) => (
+            <div key={label}>
+              <p className="text-xs text-muted-foreground mb-1 dark:text-gray-400">{label}</p>
+              <div className="space-y-1">
+                {DEDOS.map(dedo => (
+                  <div key={dedo} className="flex items-center gap-2">
+                    <span className="text-xs w-16 shrink-0 dark:text-gray-300">{dedo}</span>
+                    <select
+                      className="flex h-7 w-full rounded-md border border-border bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                      value={(state as Record<string, string>)[dedo]}
+                      onChange={e => (setter as React.Dispatch<React.SetStateAction<Record<string, string>>>)(prev => ({ ...prev, [dedo]: e.target.value }))}
+                    >
+                      <option value="">—</option>
+                      {CONDICIONES_UNA.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="dark:text-gray-300">Resumen general de salud ungueal</Label>
+          <textarea
+            className="flex min-h-[60px] w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            placeholder="Resumen general del estado de las uñas…"
+            value={resumenSaludUngueal}
+            onChange={e => setResumenSaludUngueal(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* PREFERENCIAS DE LA CLIENTA */}
+      <div className="rounded-xl border border-border dark:border-gray-700 p-4">
+        <h3 className="text-sm font-bold mb-3 dark:text-white">💅 Preferencias de la clienta</h3>
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="space-y-1.5">
+            <Label className="dark:text-gray-300">Forma favorita</Label>
+            <input
+              className="flex h-10 w-full rounded-lg border border-border bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-white px-3 text-sm focus:outline-none"
+              value={form.formaPreferida ? form.formaPreferida.charAt(0).toUpperCase() + form.formaPreferida.slice(1) : "Sin seleccionar"}
+              readOnly
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="dark:text-gray-300">Color recurrente</Label>
+            <div className="flex gap-2">
+              <input
+                className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                placeholder="Ej. Rojo cereza, Rosa pastel…"
+                value={colorRecurrente}
+                onChange={e => setColorRecurrente(e.target.value)}
+              />
+              {colorRecurrente && (
+                <div className="h-10 w-10 rounded-lg border border-border dark:border-gray-600 shrink-0" style={{ backgroundColor: colorRecurrente.toLowerCase().includes("roj") ? "#DC2626" : colorRecurrente.toLowerCase().includes("rosa") ? "#F9A8D4" : colorRecurrente.toLowerCase().includes("azul") ? "#3B82F6" : colorRecurrente.toLowerCase().includes("negro") ? "#000" : colorRecurrente.toLowerCase().includes("blanc") ? "#FFF" : colorRecurrente.toLowerCase().includes("morad") ? "#8B5CF6" : "#D1D5DB" }} />
+              )}
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="dark:text-gray-300">Tipo de servicio preferido</Label>
+            <select
+              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              value={tipoServicioPref}
+              onChange={e => setTipoServicioPref(e.target.value)}
+            >
+              <option value="">Seleccionar…</option>
+              {TIPOS_SERVICIO_PREF.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="dark:text-gray-300">Marca de esmalte favorita</Label>
+            <input
+              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              placeholder="Ej. OPI, Essie, Gelish…"
+              value={marcaFavorita}
+              onChange={e => setMarcaFavorita(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="dark:text-gray-300">Largo preferido</Label>
+            <select
+              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              value={largoPreferido}
+              onChange={e => setLargoPreferido(e.target.value)}
+            >
+              <option value="">Seleccionar…</option>
+              {LARGOS.map(l => <option key={l} value={l}>{l}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="mt-4 space-y-1.5">
+          <Label className="dark:text-gray-300">Notas de estilo</Label>
+          <textarea
+            className="flex min-h-[60px] w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            placeholder="Preferencias de diseño, inspiraciones, estilos favoritos…"
+            value={notasEstilo}
+            onChange={e => setNotasEstilo(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* ALERGIAS Y REACCIONES */}
+      <div className="rounded-xl border border-amber-400 dark:border-amber-600 p-4">
+        <h3 className="text-sm font-bold mb-3 dark:text-white">⚠️ Alergias y reacciones</h3>
+
+        <label className={`flex items-center gap-2 mb-4 p-2 rounded-lg cursor-pointer ${alergiaMetacrilato ? "bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700" : "bg-gray-50 dark:bg-gray-800 border border-border dark:border-gray-600"}`}>
+          <input type="checkbox" checked={alergiaMetacrilato} onChange={e => setAlergiaMetacrilato(e.target.checked)} className="w-4 h-4 accent-red-600" />
+          <span className={`text-sm font-medium ${alergiaMetacrilato ? "text-red-700 dark:text-red-400" : "dark:text-gray-300"}`}>Alergia confirmada al metacrilato</span>
+        </label>
+
+        {alergias.map((a, idx) => (
+          <div key={idx} className="grid grid-cols-[1fr_1fr_auto_auto_auto] gap-2 mb-2 items-end">
+            <div className="space-y-1">
+              {idx === 0 && <Label className="text-xs dark:text-gray-300">Producto/Material</Label>}
+              <input
+                className="flex h-9 w-full rounded-md border border-border bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                placeholder="Producto…"
+                value={a.producto}
+                onChange={e => updateAlergia(idx, "producto", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              {idx === 0 && <Label className="text-xs dark:text-gray-300">Tipo de reacción</Label>}
+              <select
+                className="flex h-9 w-full rounded-md border border-border bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                value={a.tipoReaccion}
+                onChange={e => updateAlergia(idx, "tipoReaccion", e.target.value)}
+              >
+                <option value="">Tipo…</option>
+                {TIPOS_REACCION.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1">
+              {idx === 0 && <Label className="text-xs dark:text-gray-300">Severidad</Label>}
+              <select
+                className="flex h-9 w-full rounded-md border border-border bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                value={a.severidad}
+                onChange={e => updateAlergia(idx, "severidad", e.target.value)}
+              >
+                <option value="">—</option>
+                {SEVERIDADES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1">
+              {idx === 0 && <Label className="text-xs dark:text-gray-300">Fecha</Label>}
+              <input
+                type="date"
+                className="flex h-9 rounded-md border border-border bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                value={a.fecha}
+                onChange={e => updateAlergia(idx, "fecha", e.target.value)}
+              />
+            </div>
+            <button type="button" onClick={() => removeAlergia(idx)} className="h-9 w-9 flex items-center justify-center rounded-md border border-red-200 dark:border-red-800 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 text-lg">×</button>
+          </div>
+        ))}
+        <Button type="button" variant="outline" size="sm" onClick={addAlergia} className="mt-2 dark:border-gray-600 dark:text-gray-300">
+          + Agregar alergia/reacción
+        </Button>
       </div>
 
       {/* RESULTADO Y NOTAS */}

@@ -47,6 +47,24 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
     productosAplicados: "",
     estilista: "",
     notasProximaVisita: "",
+    // Diagnóstico capilar
+    porosidad: "",
+    nivelDano: 0,
+    tipoCueroCabelludo: "",
+    elasticidad: "",
+    grosorCabello: "",
+    // Preferencias del cliente
+    estiloPreferido: "",
+    largoIdeal: "",
+    frecuenciaVisita: "",
+    productosFavoritos: "",
+    alergias: "",
+    // Recomendaciones para casa
+    champuRecomendado: "",
+    acondicionador: "",
+    tratamientoMascarilla: "",
+    frecuenciaLavado: "",
+    notasCuidado: "",
   });
   const set = (k: string, v: any) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -91,6 +109,27 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
             productosAplicados: form.productosAplicados,
             estilista: form.estilista,
             notasProximaVisita: form.notasProximaVisita,
+            diagnosticoCapilar: {
+              porosidad: form.porosidad,
+              nivelDano: form.nivelDano,
+              tipoCueroCabelludo: form.tipoCueroCabelludo,
+              elasticidad: form.elasticidad,
+              grosorCabello: form.grosorCabello,
+            },
+            preferenciasCliente: {
+              estiloPreferido: form.estiloPreferido,
+              largoIdeal: form.largoIdeal,
+              frecuenciaVisita: form.frecuenciaVisita,
+              productosFavoritos: form.productosFavoritos,
+              alergias: form.alergias,
+            },
+            recomendacionesCasa: {
+              champuRecomendado: form.champuRecomendado,
+              acondicionador: form.acondicionador,
+              tratamientoMascarilla: form.tratamientoMascarilla,
+              frecuenciaLavado: form.frecuenciaLavado,
+              notasCuidado: form.notasCuidado,
+            },
           },
         }),
       });
@@ -286,6 +325,215 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
               />
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* DIAGNÓSTICO CAPILAR */}
+      <div className="rounded-xl border border-border dark:border-gray-700 p-4">
+        <h3 className="text-sm font-bold mb-3 dark:text-white">🔍 Diagnóstico capilar</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label>Porosidad</Label>
+            <select
+              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              value={form.porosidad}
+              onChange={(e) => set("porosidad", e.target.value)}
+            >
+              <option value="">Seleccionar…</option>
+              <option value="baja">Baja (cerrada)</option>
+              <option value="media">Media (normal)</option>
+              <option value="alta">Alta (abierta)</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Tipo de cuero cabelludo</Label>
+            <select
+              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              value={form.tipoCueroCabelludo}
+              onChange={(e) => set("tipoCueroCabelludo", e.target.value)}
+            >
+              <option value="">Seleccionar…</option>
+              {["Normal", "Graso", "Seco", "Mixto", "Con caspa", "Con dermatitis"].map((t) => (
+                <option key={t} value={t.toLowerCase()}>{t}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Elasticidad</Label>
+            <select
+              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              value={form.elasticidad}
+              onChange={(e) => set("elasticidad", e.target.value)}
+            >
+              <option value="">Seleccionar…</option>
+              <option value="buena">Buena</option>
+              <option value="media">Media</option>
+              <option value="baja">Baja (se quiebra)</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Grosor del cabello</Label>
+            <select
+              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              value={form.grosorCabello}
+              onChange={(e) => set("grosorCabello", e.target.value)}
+            >
+              <option value="">Seleccionar…</option>
+              <option value="fino">Fino</option>
+              <option value="medio">Medio</option>
+              <option value="grueso">Grueso</option>
+            </select>
+          </div>
+        </div>
+        <div className="mt-4 space-y-1.5">
+          <Label>Nivel de daño (1-5)</Label>
+          <div className="flex gap-2">
+            {[1, 2, 3, 4, 5].map((n) => {
+              const colors = [
+                "bg-green-500 hover:bg-green-600",
+                "bg-lime-500 hover:bg-lime-600",
+                "bg-yellow-500 hover:bg-yellow-600",
+                "bg-orange-500 hover:bg-orange-600",
+                "bg-red-500 hover:bg-red-600",
+              ];
+              return (
+                <button
+                  key={n}
+                  type="button"
+                  className={`h-10 w-10 rounded-lg text-sm font-bold text-white transition-all ${
+                    form.nivelDano === n
+                      ? colors[n - 1] + " ring-2 ring-offset-2 ring-brand-600 dark:ring-offset-gray-900"
+                      : "bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:opacity-80"
+                  }`}
+                  onClick={() => set("nivelDano", n)}
+                >
+                  {n}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* PREFERENCIAS DEL CLIENTE */}
+      <div className="rounded-xl border border-border dark:border-gray-700 p-4">
+        <h3 className="text-sm font-bold mb-3 dark:text-white">💇 Preferencias del cliente</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label>Estilo preferido</Label>
+            <input
+              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              placeholder="Ej. Bob asimétrico, degradado…"
+              value={form.estiloPreferido}
+              onChange={(e) => set("estiloPreferido", e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Largo ideal</Label>
+            <select
+              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              value={form.largoIdeal}
+              onChange={(e) => set("largoIdeal", e.target.value)}
+            >
+              <option value="">Seleccionar…</option>
+              <option value="muy_corto">Muy corto (pixie)</option>
+              <option value="corto">Corto (por encima de hombros)</option>
+              <option value="medio">Medio (hombros)</option>
+              <option value="largo">Largo</option>
+              <option value="muy_largo">Muy largo</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Frecuencia de visita</Label>
+            <select
+              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              value={form.frecuenciaVisita}
+              onChange={(e) => set("frecuenciaVisita", e.target.value)}
+            >
+              <option value="">Seleccionar…</option>
+              <option value="3_semanas">Cada 3 semanas</option>
+              <option value="mensual">Mensual</option>
+              <option value="6_semanas">Cada 6 semanas</option>
+              <option value="2_meses">Cada 2 meses</option>
+              <option value="3_meses">Cada 3+ meses</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Productos favoritos</Label>
+            <input
+              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              placeholder="Marcas o productos que usa el cliente"
+              value={form.productosFavoritos}
+              onChange={(e) => set("productosFavoritos", e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="mt-4 space-y-1.5">
+          <Label>Alergias a tintes/productos</Label>
+          <textarea
+            className="flex min-h-[60px] w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            placeholder="Reacciones conocidas a tintes, químicos, ingredientes…"
+            value={form.alergias}
+            onChange={(e) => set("alergias", e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* RECOMENDACIONES PARA CASA */}
+      <div className="rounded-xl border border-border dark:border-gray-700 p-4">
+        <h3 className="text-sm font-bold mb-3 dark:text-white">🏠 Recomendaciones para casa</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label>Champú recomendado</Label>
+            <input
+              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              placeholder="Marca y tipo de champú"
+              value={form.champuRecomendado}
+              onChange={(e) => set("champuRecomendado", e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Acondicionador</Label>
+            <input
+              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              placeholder="Marca y tipo de acondicionador"
+              value={form.acondicionador}
+              onChange={(e) => set("acondicionador", e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Tratamiento/mascarilla</Label>
+            <input
+              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              placeholder="Tratamiento o mascarilla recomendada"
+              value={form.tratamientoMascarilla}
+              onChange={(e) => set("tratamientoMascarilla", e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Frecuencia de lavado</Label>
+            <select
+              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              value={form.frecuenciaLavado}
+              onChange={(e) => set("frecuenciaLavado", e.target.value)}
+            >
+              <option value="">Seleccionar…</option>
+              <option value="diario">Diario</option>
+              <option value="cada_2_dias">Cada 2 días</option>
+              <option value="cada_3_dias">Cada 3 días</option>
+              <option value="2_por_semana">2 veces por semana</option>
+              <option value="1_por_semana">1 vez por semana</option>
+            </select>
+          </div>
+        </div>
+        <div className="mt-4 space-y-1.5">
+          <Label>Notas adicionales de cuidado</Label>
+          <textarea
+            className="flex min-h-[60px] w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            placeholder="Evitar plancha, usar protector térmico, no lavar en 48h…"
+            value={form.notasCuidado}
+            onChange={(e) => set("notasCuidado", e.target.value)}
+          />
         </div>
       </div>
 

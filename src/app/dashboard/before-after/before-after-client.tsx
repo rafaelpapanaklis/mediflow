@@ -33,7 +33,7 @@ export function BeforeAfterClient({ patients }: { patients: Patient[] }) {
     if (!selectedPatient) { setPhotos([]); return; }
     setLoading(true);
     fetch(`/api/before-after?patientId=${selectedPatient}`)
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error("Error"); return r.json(); })
       .then(data => setPhotos(Array.isArray(data) ? data : []))
       .catch(() => toast.error("Error al cargar fotos"))
       .finally(() => setLoading(false));
