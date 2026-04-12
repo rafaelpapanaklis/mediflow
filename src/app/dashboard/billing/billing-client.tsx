@@ -7,12 +7,12 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 
 const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
-  PENDING:   { label: "Pendiente", cls: "text-amber-700 bg-amber-50 border-amber-200"       },
-  PARTIAL:   { label: "Parcial",   cls: "text-blue-700 bg-blue-50 border-blue-200"          },
-  PAID:      { label: "Pagado",    cls: "text-emerald-700 bg-emerald-50 border-emerald-200"  },
-  OVERDUE:   { label: "Vencido",   cls: "text-rose-700 bg-rose-50 border-rose-200"           },
-  DRAFT:     { label: "Borrador",  cls: "text-slate-600 bg-slate-50 border-slate-200"        },
-  CANCELLED: { label: "Cancelado", cls: "text-slate-500 bg-slate-50 border-slate-200"        },
+  PENDING:   { label: "Pendiente", cls: "text-amber-700 bg-amber-50 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300"       },
+  PARTIAL:   { label: "Parcial",   cls: "text-blue-700 bg-blue-50 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300"          },
+  PAID:      { label: "Pagado",    cls: "text-emerald-700 bg-emerald-50 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300"  },
+  OVERDUE:   { label: "Vencido",   cls: "text-rose-700 bg-rose-50 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300"           },
+  DRAFT:     { label: "📝 Borrador",cls: "text-violet-700 bg-violet-50 border-violet-300 dark:bg-violet-900/30 dark:text-violet-300"       },
+  CANCELLED: { label: "Cancelado", cls: "text-slate-500 bg-slate-50 border-slate-200 dark:bg-slate-800 dark:text-slate-400"        },
 };
 
 interface Props {
@@ -65,6 +65,33 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
       setPaying(null); setPayAmount("");
       router.refresh();
     } catch (err: any) { toast.error(err.message ?? "Error"); }
+  }
+
+  async function confirmDraft(invoiceId: string) {
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "PENDING" }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      setInvoices(prev => prev.map(i => i.id === invoiceId ? { ...i, status: "PENDING" } : i));
+      toast.success("✅ Factura confirmada — ya puedes registrar pagos");
+    } catch (err: any) {
+      toast.error(err.message ?? "Error al confirmar factura");
+    }
+  }
+
+  async function deleteDraft(invoiceId: string) {
+    if (!confirm("¿Eliminar esta factura borrador?")) return;
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error((await res.json()).error);
+      setInvoices(prev => prev.filter(i => i.id !== invoiceId));
+      toast.success("Factura borrador eliminada");
+    } catch (err: any) {
+      toast.error(err.message ?? "Error");
+    }
   }
 
   async function timbraCfdi(invoiceId: string) {
@@ -185,10 +212,13 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
               </td></tr>
             ) : invoices.map(inv => {
               const s = STATUS_CONFIG[inv.status] ?? STATUS_CONFIG.PENDING;
+              const isDraft = inv.status === "DRAFT";
               return (
                 <React.Fragment key={inv.id}>
-                  <tr className="border-b border-border/60 hover:bg-muted/20 transition-colors">
-                    <td className="px-5 py-3 font-mono text-xs font-bold">{inv.invoiceNumber}</td>
+                  <tr className={`border-b border-border/60 hover:bg-muted/20 transition-colors ${isDraft ? "bg-violet-50/50 dark:bg-violet-950/10" : ""}`}>
+                    <td className="px-5 py-3 font-mono text-xs font-bold">
+                      {isDraft && <span className="mr-1">📝</span>}{inv.invoiceNumber}
+                    </td>
                     <td className="px-4 py-3 font-medium">{inv.patient?.firstName} {inv.patient?.lastName}</td>
                     <td className="px-4 py-3 font-mono font-bold">{formatCurrency(inv.total)}</td>
                     <td className="px-4 py-3 text-emerald-600 font-mono">{formatCurrency(inv.paid)}</td>
@@ -210,9 +240,14 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {!["PAID","CANCELLED"].includes(inv.status) && (
+                      {isDraft ? (
+                        <div className="flex gap-2">
+                          <button onClick={() => confirmDraft(inv.id)} className="text-xs font-bold text-emerald-600 hover:underline">✅ Confirmar</button>
+                          <button onClick={() => deleteDraft(inv.id)} className="text-xs font-semibold text-rose-500 hover:underline">Eliminar</button>
+                        </div>
+                      ) : !["PAID","CANCELLED"].includes(inv.status) ? (
                         <button onClick={() => setPaying(paying === inv.id ? null : inv.id)} className="text-xs font-semibold text-brand-600 hover:underline">Registrar pago</button>
-                      )}
+                      ) : null}
                     </td>
                   </tr>
                   {paying === inv.id && (

@@ -1,8 +1,12 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { formatCurrency } from "@/lib/utils";
 import toast from "react-hot-toast";
+
+interface CatalogProcedure { id: string; name: string; basePrice: number; category: string }
+interface SelectedProcedure { id: string; name: string; price: number; quantity: number }
 
 const TOOTH_CONDITIONS: Record<string, { label: string; color: string; bg: string; border: string }> = {
   healthy:      { label: "Sano",          color: "#94a3b8", bg: "#fff",    border: "#94a3b8" },
@@ -21,7 +25,7 @@ const LOWER_TEETH = [48,47,46,45,44,43,42,41, 31,32,33,34,35,36,37,38];
 // Dentición temporal (FDI notation for primary teeth)
 const UPPER_PRIMARY = [55,54,53,52,51, 61,62,63,64,65];
 const LOWER_PRIMARY = [85,84,83,82,81, 71,72,73,74,75];
-const PROCEDURES = ["Profilaxis","Tartrectomía","Extracción simple","Extracción quirúrgica","Restauración resina","Amalgama","Corona porcelana","Corona metal-porcelana","Endodoncia unirradicular","Endodoncia birradicular","Endodoncia multirradicular","Implante dental","Ortodoncia brackets","Ortodoncia invisible","Carilla dental","Blanqueamiento","Periodoncia","Cirugía periodontal","Injerto óseo"];
+// Procedures are now loaded from /api/procedures catalog per clinic
 
 // Surface keys: O=Oclusal/Incisal, M=Mesial, D=Distal, V=Vestibular, L=Lingual/Palatino
 const SURFACES = ["O","M","D","V","L"] as const;
@@ -39,8 +43,29 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
   const [odontogram, setOdontogram] = useState<Record<number, ToothSurfaces>>({});
   const upperTeeth = isChild ? UPPER_PRIMARY : UPPER_TEETH;
   const lowerTeeth = isChild ? LOWER_PRIMARY : LOWER_TEETH;
-  const [selectedProcs, setSelectedProcs] = useState<string[]>([]);
+  const [catalog, setCatalog] = useState<CatalogProcedure[]>([]);
+  const [selectedProcs, setSelectedProcs] = useState<SelectedProcedure[]>([]);
+  const [procSearch, setProcSearch] = useState("");
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null);
+
+  // Load procedure catalog on mount
+  useEffect(() => {
+    fetch("/api/procedures")
+      .then(r => { if (!r.ok) throw new Error("Error"); return r.json(); })
+      .then((data: CatalogProcedure[]) => setCatalog(Array.isArray(data) ? data : []))
+      .catch(() => setCatalog([]));
+  }, []);
+
+  const filteredCatalog = useMemo(() => {
+    const q = procSearch.toLowerCase().trim();
+    if (!q) return catalog;
+    return catalog.filter(p => p.name.toLowerCase().includes(q));
+  }, [catalog, procSearch]);
+
+  const proceduresTotal = useMemo(
+    () => selectedProcs.reduce((sum, p) => sum + (p.price * p.quantity), 0),
+    [selectedProcs]
+  );
   const [form, setForm] = useState({
     subjective:  "",
     objective:   "",
@@ -78,8 +103,24 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
     }
   }
 
-  function toggleProc(p: string) {
-    setSelectedProcs(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
+  function toggleProc(cat: CatalogProcedure) {
+    setSelectedProcs(prev => {
+      const exists = prev.find(p => p.id === cat.id);
+      if (exists) return prev.filter(p => p.id !== cat.id);
+      return [...prev, { id: cat.id, name: cat.name, price: cat.basePrice, quantity: 1 }];
+    });
+  }
+
+  function updateProcPrice(id: string, price: number) {
+    setSelectedProcs(prev => prev.map(p => p.id === id ? { ...p, price: Math.max(0, price) } : p));
+  }
+
+  function updateProcQty(id: string, qty: number) {
+    setSelectedProcs(prev => prev.map(p => p.id === id ? { ...p, quantity: Math.max(1, qty) } : p));
+  }
+
+  function removeProc(id: string) {
+    setSelectedProcs(prev => prev.filter(p => p.id !== id));
   }
 
   async function handleSave() {
@@ -92,9 +133,12 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
           patientId,
           subjective: form.subjective, objective: form.objective,
           assessment: form.assessment, plan: form.plan,
+          // When procedures have prices, also auto-create a draft invoice
+          autoInvoice: selectedProcs.length > 0,
           specialtyData: {
             type: "dental", odontogram,
-            procedures: selectedProcs,
+            procedures: selectedProcs, // now array of {id, name, price, quantity}
+            proceduresTotal,
             periodontal: form.periodontal,
             occlusal: form.occlusal,
             tmj: form.tmj,
@@ -107,7 +151,11 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
       if (!res.ok) throw new Error((await res.json()).error);
       const record = await res.json();
       onSaved(record);
-      toast.success("Expediente dental guardado");
+      if (selectedProcs.length > 0) {
+        toast.success(`✅ Expediente guardado y factura borrador creada por ${formatCurrency(proceduresTotal)}`);
+      } else {
+        toast.success("Expediente dental guardado");
+      }
     } catch (err: any) { toast.error(err.message ?? "Error al guardar"); } finally { setSaving(false); }
   }
 
@@ -482,17 +530,100 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
         </div>
       </div>
 
-      {/* PROCEDIMIENTOS */}
+      {/* PROCEDIMIENTOS Y FACTURACIÓN */}
       <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Procedimientos realizados en esta visita</h3>
-        <div className="flex flex-wrap gap-2">
-          {PROCEDURES.map(p => (
-            <button key={p} onClick={() => toggleProc(p)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedProcs.includes(p) ? "bg-brand-600 text-white border-brand-600" : "bg-white dark:bg-slate-900 text-muted-foreground border-border hover:border-brand-300 hover:text-brand-600"}`}>
-              {p}
-            </button>
-          ))}
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold">💰 Procedimientos realizados</h3>
+          {selectedProcs.length > 0 && (
+            <div className="text-sm font-bold text-brand-700 dark:text-brand-400">
+              Total: {formatCurrency(proceduresTotal)}
+            </div>
+          )}
         </div>
+
+        {/* Selected procedures table */}
+        {selectedProcs.length > 0 && (
+          <div className="mb-3 rounded-lg border border-border overflow-hidden">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/30">
+                <tr>
+                  <th className="text-left px-3 py-2 font-bold">Procedimiento</th>
+                  <th className="text-center px-2 py-2 font-bold w-16">Cant.</th>
+                  <th className="text-right px-2 py-2 font-bold w-24">Precio</th>
+                  <th className="text-right px-3 py-2 font-bold w-24">Subtotal</th>
+                  <th className="w-8" />
+                </tr>
+              </thead>
+              <tbody>
+                {selectedProcs.map(p => (
+                  <tr key={p.id} className="border-t border-border/50">
+                    <td className="px-3 py-1.5 font-semibold">{p.name}</td>
+                    <td className="px-2 py-1.5">
+                      <input type="number" min="1" value={p.quantity}
+                        onChange={e => updateProcQty(p.id, parseInt(e.target.value) || 1)}
+                        className="w-14 h-7 text-center rounded border border-border bg-white dark:bg-slate-800 text-xs" />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input type="number" min="0" step="0.01" value={p.price}
+                        onChange={e => updateProcPrice(p.id, parseFloat(e.target.value) || 0)}
+                        className="w-20 h-7 text-right rounded border border-border bg-white dark:bg-slate-800 text-xs" />
+                    </td>
+                    <td className="px-3 py-1.5 text-right font-mono font-bold">{formatCurrency(p.price * p.quantity)}</td>
+                    <td className="pr-2">
+                      <button onClick={() => removeProc(p.id)} className="text-rose-500 hover:text-rose-700 text-sm">×</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-brand-50 dark:bg-brand-950/30">
+                <tr>
+                  <td colSpan={3} className="px-3 py-2 text-right font-bold">TOTAL</td>
+                  <td className="px-3 py-2 text-right font-mono font-extrabold text-brand-700 dark:text-brand-400">{formatCurrency(proceduresTotal)}</td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+
+        {/* Catalog search */}
+        <div className="mb-2">
+          <input
+            type="text"
+            placeholder="🔍 Buscar procedimiento del catálogo..."
+            className="w-full h-9 rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            value={procSearch}
+            onChange={e => setProcSearch(e.target.value)}
+          />
+        </div>
+
+        {/* Available procedures */}
+        <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
+          {filteredCatalog.length === 0 ? (
+            <div className="text-xs text-muted-foreground py-2">
+              {catalog.length === 0
+                ? "No hay procedimientos en el catálogo. Ve a Configuración → Procedimientos para agregar."
+                : "Sin resultados"}
+            </div>
+          ) : filteredCatalog.map(p => {
+            const isSelected = selectedProcs.some(sp => sp.id === p.id);
+            return (
+              <button key={p.id} type="button" onClick={() => toggleProc(p)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${isSelected ? "bg-brand-600 text-white border-brand-600" : "bg-white dark:bg-slate-900 text-muted-foreground border-border hover:border-brand-300 hover:text-brand-600"}`}>
+                {isSelected && "✓"} {p.name}
+                <span className={`text-[10px] ${isSelected ? "text-white/80" : "text-brand-600"}`}>
+                  {formatCurrency(p.basePrice)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {selectedProcs.length > 0 && (
+          <div className="mt-3 p-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg text-xs text-amber-700 dark:text-amber-300">
+            💡 Al guardar el expediente se creará automáticamente una factura borrador con estos procedimientos. Podrás editarla en la sección de Facturación antes de confirmar.
+          </div>
+        )}
       </div>
 
       {/* PRESCRIPCIÓN */}

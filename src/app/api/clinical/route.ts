@@ -48,7 +48,56 @@ export async function POST(req: NextRequest) {
       vitals: body.vitals, specialtyData: body.specialtyData },
     include: { doctor: { select: { id: true, firstName: true, lastName: true } } },
   });
+
+  // ── Auto-create draft invoice from procedures (if any had prices) ──────────
+  let draftInvoice = null;
+  if (body.autoInvoice && Array.isArray(body.specialtyData?.procedures) && body.specialtyData.procedures.length > 0) {
+    try {
+      const procedures = body.specialtyData.procedures as Array<{ id?: string; name: string; price: number; quantity: number }>;
+      const validProcs = procedures.filter(p => p.name && typeof p.price === "number" && p.price > 0);
+
+      if (validProcs.length > 0) {
+        const items = validProcs.map(p => ({
+          description: p.name,
+          quantity: p.quantity || 1,
+          unitPrice: p.price,
+          total: (p.quantity || 1) * p.price,
+        }));
+        const subtotal = items.reduce((s, i) => s + i.total, 0);
+
+        // Generate invoice number (clinic-scoped)
+        const lastInvoice = await prisma.invoice.findFirst({
+          where: { clinicId: dbUser.clinicId },
+          orderBy: { createdAt: "desc" },
+          select: { invoiceNumber: true },
+        });
+        const lastNum = lastInvoice?.invoiceNumber ? parseInt(lastInvoice.invoiceNumber.replace(/\D/g, "")) || 0 : 0;
+        const invoiceNumber = `MF-${String(lastNum + 1).padStart(4, "0")}`;
+
+        draftInvoice = await prisma.invoice.create({
+          data: {
+            clinicId: dbUser.clinicId,
+            patientId: body.patientId,
+            invoiceNumber,
+            items: items as any,
+            subtotal,
+            discount: 0,
+            total: subtotal,
+            paid: 0,
+            balance: subtotal,
+            status: "DRAFT",
+            notes: `Auto-generada desde expediente clínico del ${new Date().toLocaleDateString("es-MX")}`,
+          },
+        });
+      }
+    } catch (err) {
+      console.error("Error creating draft invoice:", err);
+      // Don't fail the clinical record creation if invoice fails
+    }
+  }
+
   revalidatePath("/dashboard/clinical");
   revalidatePath("/dashboard/patients");
-  return NextResponse.json(record, { status: 201 });
+  revalidatePath("/dashboard/billing");
+  return NextResponse.json({ ...record, draftInvoice }, { status: 201 });
 }
