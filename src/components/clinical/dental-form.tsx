@@ -243,12 +243,12 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label>Motivo de consulta / HEA</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="¿Por qué viene el paciente hoy?" value={form.subjective} onChange={e => set("subjective", e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <Label>Antecedentes médicos relevantes</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Diabetes, hipertensión, medicamentos actuales…" value={form.objective} onChange={e => set("objective", e.target.value)} />
         </div>
       </div>
@@ -334,7 +334,7 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
           ].map(f => (
             <div key={f.key} className="space-y-1">
               <Label className="text-xs">{f.label}</Label>
-              <input className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              <input className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                 placeholder={f.placeholder}
                 value={(form.periodontal as any)[f.key] ?? ""}
                 onChange={e => set("periodontal", { ...form.periodontal, [f.key]: e.target.value })} />
@@ -488,7 +488,7 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
         <div className="flex flex-wrap gap-2">
           {PROCEDURES.map(p => (
             <button key={p} onClick={() => toggleProc(p)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedProcs.includes(p) ? "bg-brand-600 text-white border-brand-600" : "bg-white text-muted-foreground border-border hover:border-brand-300 hover:text-brand-600"}`}>
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedProcs.includes(p) ? "bg-brand-600 text-white border-brand-600" : "bg-white dark:bg-slate-900 text-muted-foreground border-border hover:border-brand-300 hover:text-brand-600"}`}>
               {p}
             </button>
           ))}
@@ -505,11 +505,11 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
         <div className="space-y-2">
           {form.medications.map((med, i) => (
             <div key={i} className="grid grid-cols-3 gap-2">
-              <input className="flex h-9 rounded-lg border border-border bg-white px-3 text-sm focus:outline-none" placeholder="Medicamento" value={med.drug}
+              <input className="flex h-9 rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none" placeholder="Medicamento" value={med.drug}
                 onChange={e => { const m = [...form.medications]; m[i].drug = e.target.value; set("medications", m); }} />
-              <input className="flex h-9 rounded-lg border border-border bg-white px-3 text-sm focus:outline-none" placeholder="Dosis (ej. 500mg c/8h)" value={med.dose}
+              <input className="flex h-9 rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none" placeholder="Dosis (ej. 500mg c/8h)" value={med.dose}
                 onChange={e => { const m = [...form.medications]; m[i].dose = e.target.value; set("medications", m); }} />
-              <input className="flex h-9 rounded-lg border border-border bg-white px-3 text-sm focus:outline-none" placeholder="Duración (ej. 7 días)" value={med.duration}
+              <input className="flex h-9 rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none" placeholder="Duración (ej. 7 días)" value={med.duration}
                 onChange={e => { const m = [...form.medications]; m[i].duration = e.target.value; set("medications", m); }} />
             </div>
           ))}
@@ -520,12 +520,12 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label>Observaciones clínicas / Diagnóstico</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Diagnóstico, hallazgos clínicos…" value={form.assessment} onChange={e => set("assessment", e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <Label>Plan de tratamiento futuro</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Próximos procedimientos a realizar…" value={form.plan} onChange={e => set("plan", e.target.value)} />
         </div>
       </div>
@@ -533,12 +533,12 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label>Radiografías tomadas</Label>
-          <input className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          <input className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
             placeholder="Rx panorámica, periapical #26…" value={form.xrays} onChange={e => set("xrays", e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <Label>Próxima cita recomendada</Label>
-          <input className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          <input className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
             placeholder="En 3 meses, urgente, etc." value={form.nextVisit} onChange={e => set("nextVisit", e.target.value)} />
         </div>
       </div>

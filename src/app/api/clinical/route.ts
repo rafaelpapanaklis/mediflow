@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
 
 async function getDbUser() {
   const supabase = createClient();
@@ -47,5 +48,7 @@ export async function POST(req: NextRequest) {
       vitals: body.vitals, specialtyData: body.specialtyData },
     include: { doctor: { select: { id: true, firstName: true, lastName: true } } },
   });
+  revalidatePath("/dashboard/clinical");
+  revalidatePath("/dashboard/patients");
   return NextResponse.json(record, { status: 201 });
 }

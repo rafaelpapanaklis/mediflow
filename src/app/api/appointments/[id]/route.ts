@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { deleteCalendarEvent, updateCalendarEvent, refreshAccessToken } from "@/lib/google-calendar";
 import { revalidatePath } from "next/cache";
+import { sendWhatsAppMessage } from "@/lib/whatsapp";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -39,7 +40,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       ...(body.status === "CANCELLED"     && { cancelledAt:  new Date(), cancelReason: body.cancelReason ?? null }),
     },
     include: {
-      patient: { select: { firstName: true, lastName: true, email: true } },
+      patient: { select: { firstName: true, lastName: true, email: true, phone: true } },
       doctor:  { select: { firstName: true, lastName: true } },
     },
   });
@@ -83,7 +84,34 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
   }
 
+  // WhatsApp notification on reschedule
+  if (body.date !== undefined || body.startTime !== undefined) {
+    try {
+      const waClinic = await prisma.clinic.findUnique({
+        where: { id: appt.clinicId },
+        select: { waConnected: true, waPhoneNumberId: true, waAccessToken: true, name: true },
+      });
+
+      if (waClinic?.waConnected && waClinic.waPhoneNumberId && waClinic.waAccessToken && updated.patient.phone) {
+        const fecha = updated.date instanceof Date
+          ? updated.date.toLocaleDateString("es-MX", { weekday: "long", year: "numeric", month: "long", day: "numeric" })
+          : new Date(updated.date as string).toLocaleDateString("es-MX", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+        const hora = updated.startTime ?? "";
+
+        await sendWhatsAppMessage(
+          waClinic.waPhoneNumberId,
+          waClinic.waAccessToken,
+          updated.patient.phone,
+          `📅 Tu cita en ${waClinic.name} ha sido reprogramada.\n\nNueva fecha: ${fecha}\nNueva hora: ${hora}\n\nSi necesitas cancelar, responde este mensaje.`
+        );
+      }
+    } catch (e) {
+      console.error("WhatsApp reschedule notification failed:", e);
+    }
+  }
+
   revalidatePath("/dashboard");
+  revalidatePath("/dashboard/appointments");
 
   return NextResponse.json({
     ...updated,
@@ -126,5 +154,9 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   await prisma.appointment.deleteMany({
     where: { id: params.id, clinicId: ctx.clinicId },
   });
+
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/appointments");
+
   return NextResponse.json({ success: true });
 }

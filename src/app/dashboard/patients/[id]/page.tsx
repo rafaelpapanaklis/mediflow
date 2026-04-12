@@ -30,7 +30,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           orderBy: { createdAt: "desc" },
           include: {
             doctor:   { select: { id: true, firstName: true, lastName: true, color: true } },
-            sessions: { where: { completedAt: { not: null } }, orderBy: { sessionNumber: "asc" } },
+            sessions: { orderBy: { sessionNumber: "asc" } },
           },
         },
       },

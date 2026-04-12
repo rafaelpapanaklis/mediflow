@@ -32,6 +32,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const { amount, method, reference, notes } = await req.json();
   const invoice = await prisma.invoice.findFirst({ where: { id: params.id, clinicId } });
   if (!invoice) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (amount <= 0) return NextResponse.json({ error: "El monto debe ser mayor a 0" }, { status: 400 });
+  if (amount > invoice.balance) return NextResponse.json({ error: "El monto excede el saldo pendiente" }, { status: 400 });
   const newPaid = invoice.paid + amount;
   const newBalance = invoice.total - newPaid;
   const newStatus = newBalance <= 0 ? "PAID" : "PARTIAL";

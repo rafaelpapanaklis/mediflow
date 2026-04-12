@@ -43,18 +43,41 @@ function DentalRecordDetail({ data, record }: { data: any; record: any }) {
           </div>
         </div>
       )}
-      {data.odontogram && Object.keys(data.odontogram).length > 0 && (
-        <div>
-          <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-2">Odontograma</div>
-          <div className="flex flex-wrap gap-1.5">
-            {Object.entries(data.odontogram).map(([num, state]: [string, any]) => (
-              <span key={num} className="text-[10px] font-semibold bg-white border border-border rounded-lg px-2 py-1">
-                <span className="text-muted-foreground">D{num}:</span> {state.condition}
-              </span>
-            ))}
+      {data.odontogram && Object.keys(data.odontogram).length > 0 && (() => {
+        const conditionLabels: Record<string, string> = {
+          healthy: "Sano", caries: "Caries", restoration: "Restauración",
+          crown: "Corona", endo: "Endodoncia", absent: "Ausente",
+          extraction: "Extracción", implant: "Implante",
+        };
+        return (
+          <div>
+            <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-2">Odontograma</div>
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(data.odontogram).map(([num, state]: [string, any]) => {
+                if (typeof state === "string") {
+                  // OLD format: { "26": "caries" }
+                  return (
+                    <span key={num} className="text-[10px] font-semibold bg-white dark:bg-slate-800 border border-border rounded-lg px-2 py-1">
+                      <span className="text-muted-foreground">D{num}:</span> {conditionLabels[state] ?? state}
+                    </span>
+                  );
+                }
+                // NEW format: { "26": { "O": "caries", "M": "restoration" } }
+                const surfaces = Object.entries(state as Record<string, string>)
+                  .filter(([, v]) => v && v !== "healthy")
+                  .map(([s, v]) => `${s}=${conditionLabels[v] ?? v}`)
+                  .join(", ");
+                if (!surfaces) return null;
+                return (
+                  <span key={num} className="text-[10px] font-semibold bg-white dark:bg-slate-800 border border-border rounded-lg px-2 py-1">
+                    <span className="text-muted-foreground">D{num}:</span> {surfaces}
+                  </span>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
       {data.procedures?.length > 0 && (
         <div>
           <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-2">Procedimientos realizados</div>
