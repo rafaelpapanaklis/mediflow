@@ -209,12 +209,12 @@ export function QuickActionsBar({ currentUserId, clinicId, isAdmin }: QuickActio
               className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold transition-all hover:scale-105 active:scale-95
                 ${action.primary
                   ? "bg-brand-600 text-white hover:bg-brand-700 shadow-sm"
-                  : action.ai
-                    ? (active
-                        ? "bg-violet-600 text-white shadow-sm ring-2 ring-violet-300 dark:ring-violet-700"
-                        : "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 hover:bg-violet-200")
+                  : action.ai && active
+                    ? "bg-violet-600 text-white shadow-md ring-2 ring-violet-400 ring-offset-2 ring-offset-white dark:ring-offset-slate-900"
+                    : action.ai
+                      ? "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 hover:bg-violet-200"
                     : active
-                      ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 ring-1 ring-brand-300 dark:ring-brand-700"
+                      ? "bg-brand-600 text-white shadow-md ring-2 ring-brand-400 ring-offset-2 ring-offset-white dark:ring-offset-slate-900"
                       : "hover:bg-muted text-muted-foreground hover:text-foreground"}`}>
               {action.icon}
               <span className="hidden sm:inline">{action.label}</span>
