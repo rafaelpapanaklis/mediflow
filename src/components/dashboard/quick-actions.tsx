@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import {
   Plus, Search, FileText, Bot, Calendar, Pill,
   X, Clock, User, ChevronRight,
@@ -138,6 +138,7 @@ function CommandPalette({ onClose, clinicId }: { onClose: () => void; clinicId: 
 export function QuickActionsBar({ currentUserId, clinicId, isAdmin }: QuickActionsProps) {
   const [showPalette, setShowPalette] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
 
   // Cmd+K / Ctrl+K global shortcut
   useEffect(() => {
@@ -157,6 +158,7 @@ export function QuickActionsBar({ currentUserId, clinicId, isAdmin }: QuickActio
       label: "Nueva cita",
       onClick: () => router.push("/dashboard/appointments?new=1"),
       primary: true,
+      // primary is always highlighted regardless of path
     },
     {
       icon: <Search className="w-5 h-5" />,
@@ -167,42 +169,61 @@ export function QuickActionsBar({ currentUserId, clinicId, isAdmin }: QuickActio
     {
       icon: <Calendar className="w-5 h-5" />,
       label: "Mi agenda",
+      path: "/dashboard/appointments",
       onClick: () => router.push("/dashboard/appointments"),
     },
     {
       icon: <FileText className="w-5 h-5" />,
       label: "Expedientes",
+      path: "/dashboard/clinical",
       onClick: () => router.push("/dashboard/clinical"),
     },
     {
       icon: <Bot className="w-5 h-5" />,
       label: "Asistente IA",
+      path: "/dashboard/ai-assistant",
       onClick: () => router.push("/dashboard/ai-assistant"),
       ai: true,
     },
     ...(isAdmin ? [{
       icon: <Pill className="w-5 h-5" />,
       label: "Facturación",
+      path: "/dashboard/billing",
       onClick: () => router.push("/dashboard/billing"),
     }] : []),
   ];
 
+  function isActive(path?: string): boolean {
+    if (!path) return false;
+    if (path === "/dashboard") return pathname === "/dashboard";
+    return pathname.startsWith(path);
+  }
+
   return (
     <>
       <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-border rounded-2xl px-3 py-2.5 shadow-card flex-wrap">
-        {ACTIONS.map((action, i) => (
-          <button key={i} onClick={action.onClick}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold transition-all hover:scale-105 active:scale-95
-              ${action.primary ? "bg-brand-600 text-white hover:bg-brand-700 shadow-sm" :
-                action.ai ? "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 hover:bg-violet-200" :
-                "hover:bg-muted text-muted-foreground hover:text-foreground"}`}>
-            {action.icon}
-            <span className="hidden sm:inline">{action.label}</span>
-            {action.shortcut && (
-              <kbd className="hidden lg:inline text-xs px-1.5 py-0.5 bg-black/10 dark:bg-white/10 rounded font-mono">{action.shortcut}</kbd>
-            )}
-          </button>
-        ))}
+        {ACTIONS.map((action, i) => {
+          const active = isActive((action as any).path);
+          return (
+            <button key={i} onClick={action.onClick}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold transition-all hover:scale-105 active:scale-95
+                ${action.primary
+                  ? "bg-brand-600 text-white hover:bg-brand-700 shadow-sm"
+                  : action.ai
+                    ? (active
+                        ? "bg-violet-600 text-white shadow-sm ring-2 ring-violet-300 dark:ring-violet-700"
+                        : "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 hover:bg-violet-200")
+                    : active
+                      ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 ring-1 ring-brand-300 dark:ring-brand-700"
+                      : "hover:bg-muted text-muted-foreground hover:text-foreground"}`}>
+              {action.icon}
+              <span className="hidden sm:inline">{action.label}</span>
+              {action.shortcut && (
+                <kbd className="hidden lg:inline text-xs px-1.5 py-0.5 bg-black/10 dark:bg-white/10 rounded font-mono">{action.shortcut}</kbd>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {showPalette && <CommandPalette onClose={() => setShowPalette(false)} clinicId={clinicId} />}
