@@ -362,11 +362,13 @@ export function XraysClient({ patients, recentFiles: initialFiles, clinicId, aiU
               )}
             </div>
 
-            {/* Panel de IA — solo para imágenes */}
+            {/* Botón compacto de IA — solo para imágenes */}
             {previewFile.mimeType?.startsWith("image/") && (
-              <div className="p-4 md:p-5">
+              <div className="flex justify-end border-t border-border/40 p-3 md:p-4">
                 <XrayAiPanel
                   fileId={previewFile.id}
+                  fileUrl={previewFile.url}
+                  fileName={previewFile.name}
                   mimeType={previewFile.mimeType}
                   initialTokensRemaining={initialTokensRemaining}
                   tokensLimit={aiLimit}

@@ -3,18 +3,33 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 
-const ANALYSIS_SYSTEM_PROMPT = `Eres un asistente de apoyo en radiología dental. Analizas radiografías dentales para ayudar al odontólogo a identificar hallazgos relevantes.
+const ANALYSIS_SYSTEM_PROMPT = `Actúas como un asistente de análisis radiográfico dental. Tu rol es identificar hallazgos visibles en la imagen y reportarlos con confianza calibrada a lo que realmente se ve. NO eres el diagnóstico final — el doctor revisa tu análisis y decide. Por eso no necesitas ser excesivamente conservador: reporta con confianza lo que ves claramente.
 
 INSTRUCCIONES:
 - Analiza la imagen dental proporcionada
 - Identifica hallazgos clínicamente relevantes: caries, lesiones periapicales, pérdida ósea, restauraciones existentes, fracturas, dientes impactados, cálculo, reabsorción radicular, etc.
-- Para cada hallazgo indica: diente/zona afectada, descripción, severidad (alta/media/baja/informativo), y nivel de confianza (0-100)
+- Para cada hallazgo indica: diente/zona afectada, descripción, severidad (alta/media/baja/informativo), nivel de confianza (entero 0-100) y una breve justificación de ese nivel de confianza
 - Usa nomenclatura dental estándar (numeración FDI/universal)
 - Responde SIEMPRE en español clínico
 - Sé específico pero conciso
 - Máximo 6 hallazgos, priorizando los más relevantes clínicamente
 
-IMPORTANTE: Esto es una herramienta de APOYO. Siempre indica que los hallazgos deben ser confirmados clínicamente.
+ESCALA DE CONFIANZA (aplica al campo "confidence", entero 0-100):
+- 90-100: Hallazgo visualmente inequívoco, claramente visible en la imagen, sin ambigüedad
+- 75-89:  Hallazgo probable con señales radiográficas claras y consistentes
+- 60-74:  Hallazgo sospechoso pero con ambigüedad (puede tener múltiples causas)
+- 40-59:  Hallazgo posible pero poco claro, se recomienda proyección adicional
+- 0-39:   Muy ambiguo, casi descartable
+
+IMPORTANTE SOBRE CONFIANZA: Sé confiado cuando el hallazgo es visualmente claro. NO bajes la confianza por "precaución diagnóstica general" — la baja confianza se reserva para imágenes con ruido, recorte pobre, o hallazgos verdaderamente ambiguos. Un hallazgo claro y visible debe tener confianza 85 o superior, aunque luego el doctor lo confirme con su criterio clínico.
+
+EJEMPLOS DE CALIBRACIÓN CORRECTA:
+- "Caries visible en molar inferior derecho con pérdida de esmalte clara" → confidence 92
+- "Zona radiolúcida periapical sugestiva de lesión, con contornos definidos" → confidence 85
+- "Posible reabsorción radicular, aunque la imagen tiene algo de ruido" → confidence 65
+- "Sombra ambigua que podría ser artefacto o lesión temprana" → confidence 45
+
+NOTA FINAL: Esto es una herramienta de APOYO al doctor. La nota de "los hallazgos deben ser confirmados clínicamente" va en el campo "recommendations", NO afecta tu calibración de confianza.
 
 Responde EXCLUSIVAMENTE en este formato JSON (sin markdown, sin backticks):
 {
@@ -26,7 +41,8 @@ Responde EXCLUSIVAMENTE en este formato JSON (sin markdown, sin backticks):
       "description": "Descripción detallada",
       "tooth": "Pieza #XX (Nombre del diente)",
       "severity": "alta|media|baja|informativo",
-      "confidence": 85
+      "confidence": 85,
+      "confidenceRationale": "Breve razón del nivel de confianza (opcional)"
     }
   ],
   "recommendations": "Recomendaciones generales en 1-2 líneas"
@@ -41,6 +57,7 @@ interface Finding {
   tooth?: string;
   severity: Severity;
   confidence: number;
+  confidenceRationale?: string;
 }
 
 interface Analysis {
@@ -232,16 +249,40 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // Patient context
   const patient = await prisma.patient.findUnique({
     where: { id: file.patientId },
-    select: { firstName: true, lastName: true, dob: true, gender: true },
+    select: {
+      firstName:         true,
+      lastName:          true,
+      dob:               true,
+      gender:            true,
+      allergies:         true,
+      chronicConditions: true,
+    },
   });
 
-  const patientInfo = patient
-    ? `Paciente: ${patient.firstName} ${patient.lastName}, ${patient.gender === "M" ? "masculino" : "femenino"}${patient.dob ? `, ${new Date().getFullYear() - new Date(patient.dob).getFullYear()} años` : ""}.`
+  const age = patient?.dob
+    ? new Date().getFullYear() - new Date(patient.dob).getFullYear()
+    : null;
+
+  const clinicalContextLines: string[] = [];
+  if (patient) {
+    clinicalContextLines.push(`- Paciente: ${patient.firstName} ${patient.lastName}`);
+    if (patient.gender) clinicalContextLines.push(`- Sexo: ${patient.gender === "M" ? "masculino" : "femenino"}`);
+    if (age !== null)   clinicalContextLines.push(`- Edad: ${age} años`);
+    if (patient.chronicConditions && patient.chronicConditions.length > 0) {
+      clinicalContextLines.push(`- Condiciones crónicas: ${patient.chronicConditions.join(", ")}`);
+    }
+    if (patient.allergies && patient.allergies.length > 0) {
+      clinicalContextLines.push(`- Alergias: ${patient.allergies.join(", ")}`);
+    }
+  }
+
+  const clinicalContext = clinicalContextLines.length > 0
+    ? `CONTEXTO DEL PACIENTE:\n${clinicalContextLines.join("\n")}\n\n`
     : "";
 
   const categoryLabel = file.category?.replace(/_/g, " ").toLowerCase() ?? "radiografía dental";
   const toothInfo = file.toothNumber ? ` Zona de interés: pieza #${file.toothNumber}.` : "";
-  const userMessage = `Analiza esta ${categoryLabel}.${toothInfo} ${patientInfo} ${file.notes ? `Notas del doctor: ${file.notes}` : ""}`;
+  const userMessage = `${clinicalContext}Analiza esta ${categoryLabel}.${toothInfo}${file.notes ? ` Notas del doctor: ${file.notes}` : ""}`;
 
   const MODEL = "claude-sonnet-4-6";
 
