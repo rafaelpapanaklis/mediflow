@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { FileImage, Upload, Trash2, Search, Eye, Download } from "lucide-react";
+import { FileImage, Upload, Trash2, Search, Eye, Download, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { cn } from "@/lib/utils";
+import { XrayAiPanel } from "@/components/xrays/xray-ai-panel";
 
 interface Patient {
   id: string;
@@ -31,6 +32,8 @@ interface Props {
   patients: Patient[];
   recentFiles: PatientFile[];
   clinicId: string;
+  aiUsed: number;
+  aiLimit: number;
 }
 
 const CATEGORIES = [
@@ -45,7 +48,7 @@ const CATEGORIES = [
   { id: "OTHER",             label: "Otro" },
 ];
 
-export function XraysClient({ patients, recentFiles: initialFiles, clinicId }: Props) {
+export function XraysClient({ patients, recentFiles: initialFiles, clinicId, aiUsed, aiLimit }: Props) {
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [patientFiles, setPatientFiles] = useState<PatientFile[]>([]);
   const [allFiles, setAllFiles] = useState<PatientFile[]>(initialFiles);
@@ -53,8 +56,10 @@ export function XraysClient({ patients, recentFiles: initialFiles, clinicId }: P
   const [uploading, setUploading] = useState(false);
   const [category, setCategory] = useState("OTHER");
   const [notes, setNotes] = useState("");
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewFile, setPreviewFile] = useState<PatientFile | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const initialTokensRemaining = Math.max(0, aiLimit - aiUsed);
 
   const filtered = patients.filter(p => {
     const q = search.toLowerCase();
@@ -255,7 +260,7 @@ export function XraysClient({ patients, recentFiles: initialFiles, clinicId }: P
                         </div>
                         <div className="flex items-center gap-1">
                           <button
-                            onClick={() => setPreviewUrl(f.url)}
+                            onClick={() => setPreviewFile(f)}
                             className="p-2 rounded-lg hover:bg-muted/40 text-muted-foreground hover:text-foreground transition-colors"
                             title="Ver"
                           >
@@ -325,20 +330,48 @@ export function XraysClient({ patients, recentFiles: initialFiles, clinicId }: P
         </div>
       </div>
 
-      {/* Preview modal */}
-      {previewUrl && (
+      {/* Preview modal con panel de IA */}
+      {previewFile && (
         <div
-          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
-          onClick={() => setPreviewUrl(null)}
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 md:items-center"
+          onClick={() => setPreviewFile(null)}
         >
           <div
-            className="bg-white dark:bg-slate-900 rounded-2xl max-w-4xl max-h-[90vh] overflow-auto p-2"
+            className="relative my-8 w-full max-w-4xl rounded-2xl bg-white shadow-2xl dark:bg-slate-900"
             onClick={e => e.stopPropagation()}
           >
-            {previewUrl.includes(".pdf") ? (
-              <iframe src={previewUrl} className="w-full h-[80vh] rounded-xl" />
-            ) : (
-              <img src={previewUrl} alt="Preview" className="max-w-full max-h-[80vh] rounded-xl object-contain" />
+            {/* Close button */}
+            <button
+              onClick={() => setPreviewFile(null)}
+              className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur transition-colors hover:bg-black/60"
+              aria-label="Cerrar preview"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            {/* Image / PDF preview */}
+            <div className="flex items-center justify-center bg-slate-950 p-2">
+              {previewFile.url.includes(".pdf") || previewFile.mimeType === "application/pdf" ? (
+                <iframe src={previewFile.url} className="h-[60vh] w-full rounded-xl" />
+              ) : (
+                <img
+                  src={previewFile.url}
+                  alt={previewFile.name}
+                  className="max-h-[60vh] w-auto rounded-xl object-contain"
+                />
+              )}
+            </div>
+
+            {/* Panel de IA — solo para imágenes */}
+            {previewFile.mimeType?.startsWith("image/") && (
+              <div className="p-4 md:p-5">
+                <XrayAiPanel
+                  fileId={previewFile.id}
+                  mimeType={previewFile.mimeType}
+                  initialTokensRemaining={initialTokensRemaining}
+                  tokensLimit={aiLimit}
+                />
+              </div>
             )}
           </div>
         </div>

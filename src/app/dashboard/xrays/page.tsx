@@ -11,32 +11,42 @@ export default async function XraysPage() {
   const user = await getCurrentUser();
   const clinicId = user.clinicId;
 
-  const patients = await prisma.patient.findMany({
-    where: { clinicId, status: "ACTIVE" },
-    orderBy: { firstName: "asc" },
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      patientNumber: true,
-      _count: { select: { files: true } },
-    },
-  });
+  const [patients, recentFiles, clinic] = await Promise.all([
+    prisma.patient.findMany({
+      where: { clinicId, status: "ACTIVE" },
+      orderBy: { firstName: "asc" },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        patientNumber: true,
+        _count: { select: { files: true } },
+      },
+    }),
+    prisma.patientFile.findMany({
+      where: { clinicId },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      include: {
+        patient: { select: { id: true, firstName: true, lastName: true, patientNumber: true } },
+      },
+    }),
+    prisma.clinic.findUnique({
+      where: { id: clinicId },
+      select: { aiTokensUsed: true, aiTokensLimit: true },
+    }),
+  ]);
 
-  const recentFiles = await prisma.patientFile.findMany({
-    where: { clinicId },
-    orderBy: { createdAt: "desc" },
-    take: 20,
-    include: {
-      patient: { select: { id: true, firstName: true, lastName: true, patientNumber: true } },
-    },
-  });
+  const aiUsed  = clinic?.aiTokensUsed  ?? 0;
+  const aiLimit = clinic?.aiTokensLimit ?? 0;
 
   return (
     <XraysClient
       patients={patients as any}
       recentFiles={recentFiles as any}
       clinicId={clinicId}
+      aiUsed={aiUsed}
+      aiLimit={aiLimit}
     />
   );
 }
