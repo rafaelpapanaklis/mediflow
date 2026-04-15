@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { Sparkles, AlertTriangle, CheckCircle2, X, RefreshCw, Loader2, Info } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Sparkles, AlertTriangle, CheckCircle2, X, RefreshCw, Loader2, Info, Archive } from "lucide-react";
 import toast from "react-hot-toast";
+import { formatDistanceToNow } from "date-fns";
+import { es } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /* ──────────────────────────────────────────────────────────────── */
-/*  Tipos que devuelve POST /api/xrays/[id]/analyze                 */
+/*  Tipos                                                            */
 /* ──────────────────────────────────────────────────────────────── */
 
 type Severity = "alta" | "media" | "baja" | "informativo";
@@ -30,13 +32,20 @@ interface AnalysisResult {
 
 interface AnalyzeResponse {
   analysis: AnalysisResult;
+  severity?: Severity;
+  confidence?: number;
   tokensUsed: number;
+  /** Cuando cached: tokens originalmente gastados al generarlo */
+  originalTokensUsed?: number;
   tokensRemaining: number;
   tokensLimit: number;
+  cached: boolean;
+  analyzedAt: string;
+  modelUsed?: string;
 }
 
 /* ──────────────────────────────────────────────────────────────── */
-/*  Mapas estáticos (Tailwind JIT los detecta)                      */
+/*  Mapas estáticos                                                  */
 /* ──────────────────────────────────────────────────────────────── */
 
 const severityStyle: Record<Severity, { bg: string; text: string; border: string; label: string }> = {
@@ -78,23 +87,77 @@ interface Props {
 
 export function XrayAiPanel({ fileId, mimeType, initialTokensRemaining, tokensLimit }: Props) {
   const [remaining, setRemaining] = useState(initialTokensRemaining);
-  const [loading, setLoading]     = useState(false);
+  const [loadingInitial, setLoadingInitial] = useState(true);   // GET del cache al montar
+  const [loadingAnalysis, setLoadingAnalysis] = useState(false); // POST de análisis
   const [result, setResult]       = useState<AnalysisResult | null>(null);
   const [analyzedAt, setAnalyzedAt] = useState<Date | null>(null);
+  const [cached, setCached]         = useState(false);
+  const [originalTokens, setOriginalTokens] = useState<number | null>(null);
 
   const isImage    = mimeType.startsWith("image/");
   const bar        = tokenBarStyle(remaining, tokensLimit);
-  const disabled   = !isImage || loading || remaining <= 0;
+  const disabled   = !isImage || loadingAnalysis || remaining <= 0;
   const pct        = tokensLimit > 0 ? Math.min(100, Math.max(0, (remaining / tokensLimit) * 100)) : 0;
 
-  async function runAnalysis() {
+  /* Carga inicial: GET cache cuando cambia fileId */
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingInitial(true);
+    setResult(null);
+    setAnalyzedAt(null);
+    setCached(false);
+    setOriginalTokens(null);
+
+    if (!isImage) {
+      setLoadingInitial(false);
+      return;
+    }
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/xrays/${fileId}/analyze`, { method: "GET" });
+        if (cancelled) return;
+        if (res.status === 404) {
+          return;
+        }
+        if (!res.ok) {
+          return;
+        }
+        const data = (await res.json()) as AnalyzeResponse;
+        if (cancelled) return;
+        setResult(data.analysis);
+        setAnalyzedAt(new Date(data.analyzedAt));
+        setCached(true);
+        setOriginalTokens(data.tokensUsed);
+        setRemaining(data.tokensRemaining);
+      } catch {
+        /* silencioso: un fallo del GET no debe bloquear el flujo, el usuario
+           puede seguir dando click a "Analizar" y el POST se encarga */
+      } finally {
+        if (!cancelled) setLoadingInitial(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fileId, isImage]);
+
+  async function runAnalysis(refresh = false) {
     if (!isImage) {
       toast.error("Solo se pueden analizar imágenes");
       return;
     }
-    setLoading(true);
+
+    if (refresh) {
+      const confirmed = window.confirm("Esto consumirá tokens IA nuevamente. ¿Continuar?");
+      if (!confirmed) return;
+    }
+
+    setLoadingAnalysis(true);
     try {
-      const res = await fetch(`/api/xrays/${fileId}/analyze`, { method: "POST" });
+      const qs  = refresh ? "?refresh=true" : "";
+      const res = await fetch(`/api/xrays/${fileId}/analyze${qs}`, { method: "POST" });
       const data = await res.json();
 
       if (!res.ok) {
@@ -114,21 +177,40 @@ export function XrayAiPanel({ fileId, mimeType, initialTokensRemaining, tokensLi
       const payload = data as AnalyzeResponse;
       setResult(payload.analysis);
       setRemaining(payload.tokensRemaining);
-      setAnalyzedAt(new Date());
-      toast.success(`Análisis completado · ${formatNumber(payload.tokensUsed)} tokens`);
+      setAnalyzedAt(new Date(payload.analyzedAt));
+      setCached(payload.cached);
+      setOriginalTokens(payload.cached ? (payload.originalTokensUsed ?? payload.tokensUsed) : payload.tokensUsed);
+
+      if (payload.cached) {
+        toast.success("Análisis cargado desde caché · 0 tokens");
+      } else {
+        toast.success(`Análisis completado · ${formatNumber(payload.tokensUsed)} tokens`);
+      }
     } catch {
       toast.error("No se pudo analizar la radiografía. Intenta de nuevo");
     } finally {
-      setLoading(false);
+      setLoadingAnalysis(false);
     }
   }
 
   function closeResult() {
     setResult(null);
     setAnalyzedAt(null);
+    setCached(false);
+    setOriginalTokens(null);
   }
 
-  /* Antes del análisis: solo botón + saldo */
+  /* Loading state del GET inicial */
+  if (loadingInitial) {
+    return (
+      <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/40 p-5 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin text-violet-400" />
+        Cargando análisis guardado...
+      </div>
+    );
+  }
+
+  /* Antes del análisis (sin cache) */
   if (!result) {
     return (
       <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-5">
@@ -146,37 +228,30 @@ export function XrayAiPanel({ fileId, mimeType, initialTokensRemaining, tokensLi
           </div>
 
           <Button
-            onClick={runAnalysis}
+            onClick={() => runAnalysis(false)}
             disabled={disabled}
             className="shrink-0 gap-2"
             aria-label="Analizar radiografía con IA"
           >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {loading ? "Analizando..." : "Analizar con IA"}
+            {loadingAnalysis ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {loadingAnalysis ? "Analizando..." : "Analizar con IA"}
           </Button>
         </div>
 
-        {/* Barra de saldo */}
         <div className="mt-4">
           <div className="flex items-center justify-between text-xs">
             <span className="font-medium text-muted-foreground">
               Saldo IA: {formatNumber(remaining)} / {formatNumber(tokensLimit)} tokens
             </span>
             {bar.warn && (
-              <span
-                className="flex items-center gap-1 text-rose-400"
-                title={bar.warn}
-              >
+              <span className="flex items-center gap-1 text-rose-400" title={bar.warn}>
                 <Info className="h-3 w-3" />
                 {bar.warn}
               </span>
             )}
           </div>
           <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
-            <div
-              className={cn("h-full transition-all", bar.color)}
-              style={{ width: `${pct}%` }}
-            />
+            <div className={cn("h-full transition-all", bar.color)} style={{ width: `${pct}%` }} />
           </div>
         </div>
 
@@ -189,7 +264,7 @@ export function XrayAiPanel({ fileId, mimeType, initialTokensRemaining, tokensLi
     );
   }
 
-  /* Después del análisis */
+  /* Con resultado (recién generado o cacheado) */
   const maxSev   = pickMaxSeverity(result.findings);
   const severSty = severityStyle[maxSev];
   const recsArray =
@@ -198,6 +273,8 @@ export function XrayAiPanel({ fileId, mimeType, initialTokensRemaining, tokensLi
       : result.recommendations
         ? [result.recommendations]
         : [];
+
+  const relativeTime = analyzedAt ? formatDistanceToNow(analyzedAt, { addSuffix: true, locale: es }) : "";
 
   return (
     <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-5">
@@ -218,6 +295,15 @@ export function XrayAiPanel({ fileId, mimeType, initialTokensRemaining, tokensLi
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {cached && (
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/15 px-2.5 py-1 text-[11px] font-semibold text-violet-300"
+              title={originalTokens !== null ? `Generado con ${formatNumber(originalTokens)} tokens` : undefined}
+            >
+              <Archive className="h-3 w-3" />
+              Análisis guardado · {relativeTime}
+            </span>
+          )}
           <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold", severSty.bg, severSty.text, severSty.border)}>
             <AlertTriangle className="h-3 w-3" />
             {severSty.label}
@@ -230,7 +316,7 @@ export function XrayAiPanel({ fileId, mimeType, initialTokensRemaining, tokensLi
         </div>
       </div>
 
-      {/* Sección 2 — Resumen general */}
+      {/* Sección 2 — Resumen */}
       {result.summary && (
         <div className="mt-5">
           <h4 className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Resumen</h4>
@@ -248,7 +334,7 @@ export function XrayAiPanel({ fileId, mimeType, initialTokensRemaining, tokensLi
               return (
                 <li
                   key={f.id}
-                  className={cn("flex gap-3 rounded-xl border p-3", s.border, "bg-white/[0.02]")}
+                  className={cn("flex gap-3 rounded-xl border p-3 bg-white/[0.02]", s.border)}
                 >
                   <AlertTriangle className={cn("h-4 w-4 shrink-0 translate-y-0.5", s.text)} />
                   <div className="min-w-0 flex-1">
@@ -296,6 +382,11 @@ export function XrayAiPanel({ fileId, mimeType, initialTokensRemaining, tokensLi
       <p className="mt-5 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
         <Info className="mr-1 inline h-3 w-3" />
         Este análisis es orientativo y no reemplaza el criterio profesional del doctor.
+        {cached && originalTokens !== null && (
+          <>
+            {" "}Generado originalmente con <span className="font-semibold text-violet-300">{formatNumber(originalTokens)} tokens</span>.
+          </>
+        )}
       </p>
 
       {/* Sección 6 — Acciones */}
@@ -304,23 +395,19 @@ export function XrayAiPanel({ fileId, mimeType, initialTokensRemaining, tokensLi
           Saldo restante: {formatNumber(remaining)} / {formatNumber(tokensLimit)}
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={closeResult}
-            className="gap-1.5"
-          >
+          <Button variant="ghost" size="sm" onClick={closeResult} className="gap-1.5">
             <X className="h-3.5 w-3.5" />
             Cerrar análisis
           </Button>
           <Button
             size="sm"
-            onClick={runAnalysis}
+            onClick={() => runAnalysis(true)}
             disabled={disabled}
             className="gap-1.5"
+            aria-label="Re-analizar radiografía (consume tokens de nuevo)"
           >
-            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-            Nuevo análisis
+            {loadingAnalysis ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            Re-analizar
           </Button>
         </div>
       </div>

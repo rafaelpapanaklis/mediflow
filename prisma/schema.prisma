@@ -118,6 +118,7 @@ model Clinic {
   walkInQueue          WalkInQueue[]
   resourceBookings     ResourceBooking[]
   procedureCatalog     ProcedureCatalog[]
+  xrayAnalyses         XrayAnalysis[]
 
   @@map("clinics")
 }
@@ -259,6 +260,7 @@ model Patient {
   formulaRecords      FormulaRecord[]
   bodyMapAnnotations  BodyMapAnnotation[]
   packageRedemptions  PackageRedemption[]
+  xrayAnalyses        XrayAnalysis[]
 
   @@unique([clinicId, patientNumber])
   @@map("patients")
@@ -512,10 +514,42 @@ model PatientFile {
   takenAt     DateTime?
   createdAt   DateTime     @default(now())
 
-  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient      Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic       Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  xrayAnalysis XrayAnalysis?
 
   @@map("patient_files")
+}
+
+// ── AI analysis of radiographs (cached per file) ──────────────────────
+model XrayAnalysis {
+  id              String   @id @default(cuid())
+  fileId          String   @unique
+  file            PatientFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  clinicId        String
+  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patientId       String
+  patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  // Contenido del análisis
+  summary         String   @db.Text
+  findings        Json     // array con { id, title, description, tooth, severity, confidence }
+  recommendations Json     // string o array — el endpoint lo persiste tal cual
+
+  // Top-level derivados (para queries/filtros sin parsear JSON)
+  severity        String   // max de findings: alta | media | baja | informativo
+  confidence      Float    // avg de findings, 0-100
+
+  // Metadata
+  tokensUsed      Int      @default(0)
+  modelUsed       String   @default("claude-sonnet-4-6")
+  createdAt       DateTime @default(now())
+  createdBy       String?  // userId del doctor que lo generó
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([severity])
+  @@map("xray_analyses")
 }
 
 enum FileCategory {

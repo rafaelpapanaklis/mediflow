@@ -32,6 +32,23 @@ Responde EXCLUSIVAMENTE en este formato JSON (sin markdown, sin backticks):
   "recommendations": "Recomendaciones generales en 1-2 líneas"
 }`;
 
+type Severity = "alta" | "media" | "baja" | "informativo";
+
+interface Finding {
+  id: number;
+  title: string;
+  description: string;
+  tooth?: string;
+  severity: Severity;
+  confidence: number;
+}
+
+interface Analysis {
+  summary: string;
+  findings: Finding[];
+  recommendations: string | string[];
+}
+
 function getAdminSupabase() {
   return createAdmin(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -40,27 +57,122 @@ function getAdminSupabase() {
   );
 }
 
+/** Max severity encontrada en findings (alta > media > baja > informativo) */
+function topSeverity(findings: Finding[]): Severity {
+  const order: Severity[] = ["alta", "media", "baja", "informativo"];
+  for (const s of order) if (findings.some((f) => f.severity === s)) return s;
+  return "informativo";
+}
+
+/** Avg confidence en findings, clamp 0-100 */
+function avgConfidence(findings: Finding[]): number {
+  if (findings.length === 0) return 0;
+  const sum = findings.reduce((acc, f) => acc + (Number(f.confidence) || 0), 0);
+  return Math.round((sum / findings.length) * 10) / 10;
+}
+
+/** Calcula tokens restantes usando el estado actual de la clínica */
+async function computeRemaining(clinicId: string): Promise<{ remaining: number; limit: number }> {
+  const c = await prisma.clinic.findUnique({
+    where: { id: clinicId },
+    select: { aiTokensUsed: true, aiTokensLimit: true },
+  });
+  if (!c) return { remaining: 0, limit: 0 };
+  return { remaining: Math.max(0, c.aiTokensLimit - c.aiTokensUsed), limit: c.aiTokensLimit };
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/*  GET — devuelve el análisis guardado si existe, 404 si no           */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+  const ctx = await getAuthContext();
+  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Verifica que el archivo pertenece a la clínica del ctx
+  const file = await prisma.patientFile.findFirst({
+    where: { id: params.id, clinicId: ctx.clinicId },
+    select: { id: true },
+  });
+  if (!file) return NextResponse.json({ error: "Archivo no encontrado" }, { status: 404 });
+
+  const existing = await prisma.xrayAnalysis.findUnique({
+    where: { fileId: params.id },
+  });
+  if (!existing) return NextResponse.json({ error: "Análisis no encontrado" }, { status: 404 });
+
+  const { remaining, limit } = await computeRemaining(ctx.clinicId);
+
+  return NextResponse.json({
+    analysis: {
+      summary:         existing.summary,
+      findings:        existing.findings,
+      recommendations: existing.recommendations,
+    },
+    severity:        existing.severity,
+    confidence:      existing.confidence,
+    tokensUsed:      existing.tokensUsed,
+    tokensRemaining: remaining,
+    tokensLimit:     limit,
+    modelUsed:       existing.modelUsed,
+    cached:          true,
+    analyzedAt:      existing.createdAt.toISOString(),
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/*  POST — analiza (usa cache salvo ?refresh=true)                     */
+/* ═══════════════════════════════════════════════════════════════════ */
+
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const url = new URL(req.url);
+  const refresh = url.searchParams.get("refresh") === "true";
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: "IA no configurada. Agrega ANTHROPIC_API_KEY." }, { status: 503 });
   }
 
-  // Fetch the file record
+  // Fetch file (cross-tenant guard)
   const file = await prisma.patientFile.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },
   });
   if (!file) return NextResponse.json({ error: "Archivo no encontrado" }, { status: 404 });
 
-  // Only allow image files
   if (!file.mimeType?.startsWith("image/")) {
     return NextResponse.json({ error: "Solo se pueden analizar imágenes" }, { status: 400 });
   }
 
-  // Check AI token limit
+  // Fast path: cache hit
+  if (!refresh) {
+    const existing = await prisma.xrayAnalysis.findUnique({
+      where: { fileId: params.id },
+    });
+    if (existing) {
+      const { remaining, limit } = await computeRemaining(ctx.clinicId);
+      return NextResponse.json({
+        analysis: {
+          summary:         existing.summary,
+          findings:        existing.findings,
+          recommendations: existing.recommendations,
+        },
+        severity:        existing.severity,
+        confidence:      existing.confidence,
+        tokensUsed:      0,                     // no gastamos nada ahora
+        originalTokensUsed: existing.tokensUsed, // para mostrar en UI
+        tokensRemaining: remaining,
+        tokensLimit:     limit,
+        modelUsed:       existing.modelUsed,
+        cached:          true,
+        analyzedAt:      existing.createdAt.toISOString(),
+      });
+    }
+  }
+
+  // Check AI token limit (y reset mensual)
   const clinic = await prisma.clinic.findUnique({
     where: { id: ctx.clinicId },
     select: { aiTokensUsed: true, aiTokensLimit: true, aiLastResetAt: true },
@@ -69,7 +181,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   let currentTokensUsed = clinic.aiTokensUsed;
 
-  // Reset monthly counter if needed
   const lastReset  = new Date(clinic.aiLastResetAt);
   const now        = new Date();
   const monthsDiff = (now.getFullYear() - lastReset.getFullYear()) * 12 + (now.getMonth() - lastReset.getMonth());
@@ -89,14 +200,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }, { status: 429 });
   }
 
-  // Download the image from Supabase Storage to get raw bytes
-  // Extract the storage path from the URL or use the file record
+  // Download image from Supabase Storage
   const supabase = getAdminSupabase();
-
-  // The file URL is a signed URL — we need the storage path
-  // Storage path pattern: {clinicId}/{patientId}/{timestamp}_{random}.{ext}
-  // We can reconstruct it or download via the signed URL
-  // Safest: generate a fresh signed URL and download from it
   const storagePath = file.url.includes("/patient-files/")
     ? file.url.split("/patient-files/").pop()?.split("?")[0] ?? ""
     : "";
@@ -105,7 +210,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   let mediaType: string;
 
   if (storagePath) {
-    // Download directly from Supabase Storage
     const { data, error } = await supabase.storage.from("patient-files").download(storagePath);
     if (error || !data) {
       return NextResponse.json({ error: "No se pudo descargar la imagen" }, { status: 500 });
@@ -114,7 +218,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     imageBase64 = buffer.toString("base64");
     mediaType = file.mimeType || "image/jpeg";
   } else {
-    // Fallback: try fetching from the URL directly
     try {
       const imgRes = await fetch(file.url);
       if (!imgRes.ok) throw new Error("Failed to fetch image");
@@ -126,7 +229,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
   }
 
-  // Get patient context for better analysis
+  // Patient context
   const patient = await prisma.patient.findUnique({
     where: { id: file.patientId },
     select: { firstName: true, lastName: true, dob: true, gender: true },
@@ -140,6 +243,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const toothInfo = file.toothNumber ? ` Zona de interés: pieza #${file.toothNumber}.` : "";
   const userMessage = `Analiza esta ${categoryLabel}.${toothInfo} ${patientInfo} ${file.notes ? `Notas del doctor: ${file.notes}` : ""}`;
 
+  const MODEL = "claude-sonnet-4-6";
+
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -149,24 +254,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model:      "claude-sonnet-4-6",
+        model:      MODEL,
         max_tokens: 1500,
         system:     ANALYSIS_SYSTEM_PROMPT,
         messages: [{
           role: "user",
           content: [
-            {
-              type: "image",
-              source: {
-                type:       "base64",
-                media_type: mediaType,
-                data:       imageBase64,
-              },
-            },
-            {
-              type: "text",
-              text: userMessage,
-            },
+            { type: "image", source: { type: "base64", media_type: mediaType, data: imageBase64 } },
+            { type: "text", text: userMessage },
           ],
         }],
       }),
@@ -190,23 +285,66 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     const rawText = data.content?.[0]?.text ?? "";
 
-    // Parse JSON response from Claude
-    let analysis;
+    // Parse JSON response
+    let analysis: Analysis;
     try {
-      // Try to extract JSON from the response (Claude might wrap it in backticks sometimes)
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-      analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : { summary: rawText, findings: [], recommendations: "" };
+      analysis = jsonMatch
+        ? JSON.parse(jsonMatch[0])
+        : { summary: rawText, findings: [], recommendations: "" };
     } catch {
       analysis = { summary: rawText, findings: [], recommendations: "" };
     }
 
+    const findings       = Array.isArray(analysis.findings) ? analysis.findings : [];
+    const topSev         = topSeverity(findings);
+    const avgConf        = avgConfidence(findings);
+
+    // Upsert en DB — create o sobreescribe si ya existe (refresh=true)
+    await prisma.xrayAnalysis.upsert({
+      where:  { fileId: params.id },
+      create: {
+        fileId:          params.id,
+        clinicId:        ctx.clinicId,
+        patientId:       file.patientId,
+        summary:         analysis.summary ?? "",
+        findings:        findings as any,
+        recommendations: (analysis.recommendations ?? "") as any,
+        severity:        topSev,
+        confidence:      avgConf,
+        tokensUsed:      totalTokens,
+        modelUsed:       MODEL,
+        createdBy:       ctx.userId ?? null,
+      },
+      update: {
+        summary:         analysis.summary ?? "",
+        findings:        findings as any,
+        recommendations: (analysis.recommendations ?? "") as any,
+        severity:        topSev,
+        confidence:      avgConf,
+        tokensUsed:      totalTokens,
+        modelUsed:       MODEL,
+        createdAt:       new Date(),   // bump timestamp en refresh
+        createdBy:       ctx.userId ?? null,
+      },
+    });
+
     const tokensRemaining = Math.max(0, clinic.aiTokensLimit - currentTokensUsed - totalTokens);
 
     return NextResponse.json({
-      analysis,
-      tokensUsed: totalTokens,
+      analysis: {
+        summary:         analysis.summary ?? "",
+        findings,
+        recommendations: analysis.recommendations ?? "",
+      },
+      severity:        topSev,
+      confidence:      avgConf,
+      tokensUsed:      totalTokens,
       tokensRemaining,
-      tokensLimit: clinic.aiTokensLimit,
+      tokensLimit:     clinic.aiTokensLimit,
+      modelUsed:       MODEL,
+      cached:          false,
+      analyzedAt:      new Date().toISOString(),
     });
   } catch (err: any) {
     console.error("AI X-ray analysis error:", err);
