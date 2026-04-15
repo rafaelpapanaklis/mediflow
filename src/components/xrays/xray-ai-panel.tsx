@@ -50,8 +50,6 @@ interface AnalyzeResponse {
   cached: boolean;
   analyzedAt: string;
   modelUsed?: string;
-  doctorNotes?: string;
-  doctorNotesUpdatedAt?: string | null;
 }
 
 /* ──────────────────────────────────────────────────────────────── */
@@ -178,11 +176,15 @@ interface Props {
   mimeType: string;
   initialTokensRemaining: number;
   tokensLimit: number;
+  /** Notas del doctor sobre este PatientFile — vienen del server component / API list */
+  initialDoctorNotes: string;
+  initialDoctorNotesUpdatedAt: string | null;
 }
 
 export function XrayAiPanel({
   fileId, fileUrl, fileName, mimeType,
   initialTokensRemaining, tokensLimit,
+  initialDoctorNotes, initialDoctorNotesUpdatedAt,
 }: Props) {
   const [open, setOpen]                       = useState(false);
   const [remaining, setRemaining]             = useState(initialTokensRemaining);
@@ -194,16 +196,14 @@ export function XrayAiPanel({
   const [originalTokens, setOriginalTokens]   = useState<number | null>(null);
   const [currentSpent, setCurrentSpent]       = useState<number | null>(null);
   const [brokenLegacy, setBrokenLegacy]       = useState(false); // record viejo con formato irrecuperable
-  // Notas del doctor
-  const [savedNotes, setSavedNotes]           = useState("");
-  const [notesUpdatedAt, setNotesUpdatedAt]   = useState<Date | null>(null);
-  const [hasAnalysisRecord, setHasAnalysisRecord] = useState(false); // solo se pueden guardar notas si hay record
 
   const isImage    = mimeType.startsWith("image/");
   const outOfCreds = remaining <= 0;
   const cls        = balanceColorClasses(remaining, tokensLimit);
 
-  /* Carga inicial: GET cache al montar / cambiar fileId */
+  /* Carga inicial: GET cache de análisis al montar / cambiar fileId.
+     Nota: las notas del doctor NO vienen de aquí — vienen como props del parent
+     (leídas del PatientFile en el server component). */
   useEffect(() => {
     let cancelled = false;
     setLoadingInitial(true);
@@ -213,9 +213,6 @@ export function XrayAiPanel({
     setOriginalTokens(null);
     setCurrentSpent(null);
     setBrokenLegacy(false);
-    setSavedNotes("");
-    setNotesUpdatedAt(null);
-    setHasAnalysisRecord(false);
     setRemaining(initialTokensRemaining);
 
     if (!isImage) {
@@ -238,9 +235,6 @@ export function XrayAiPanel({
         setCached(true);
         setOriginalTokens(data.tokensUsed);
         setRemaining(data.tokensRemaining);
-        setSavedNotes(data.doctorNotes ?? "");
-        setNotesUpdatedAt(data.doctorNotesUpdatedAt ? new Date(data.doctorNotesUpdatedAt) : null);
-        setHasAnalysisRecord(true);
       } catch {
         /* silencioso — el usuario puede intentar con el botón */
       } finally {
@@ -291,12 +285,6 @@ export function XrayAiPanel({
       setCached(payload.cached);
       setOriginalTokens(payload.cached ? (payload.originalTokensUsed ?? payload.tokensUsed) : payload.tokensUsed);
       setCurrentSpent(payload.cached ? 0 : payload.tokensUsed);
-      // Notas preservadas en refresh — payload puede traerlas
-      if (typeof payload.doctorNotes === "string") setSavedNotes(payload.doctorNotes);
-      if (payload.doctorNotesUpdatedAt !== undefined) {
-        setNotesUpdatedAt(payload.doctorNotesUpdatedAt ? new Date(payload.doctorNotesUpdatedAt) : null);
-      }
-      setHasAnalysisRecord(true);
 
       if (payload.cached) {
         toast.success("Análisis cargado desde caché · 0 tokens");
@@ -382,17 +370,13 @@ export function XrayAiPanel({
               />
             </div>
 
-            {/* Sección — Notas del doctor (entre imagen y análisis IA) */}
+            {/* Sección — Notas del doctor (entre imagen y análisis IA).
+                SIEMPRE habilitado, independiente del análisis. Vive en PatientFile. */}
             <div className="px-5 pt-5">
               <DoctorNotesSection
                 fileId={fileId}
-                initialNotes={savedNotes}
-                initialUpdatedAt={notesUpdatedAt}
-                enabled={hasAnalysisRecord}
-                onSaved={(notes, updatedAt) => {
-                  setSavedNotes(notes);
-                  setNotesUpdatedAt(updatedAt);
-                }}
+                initialNotes={initialDoctorNotes}
+                initialUpdatedAt={initialDoctorNotesUpdatedAt ? new Date(initialDoctorNotesUpdatedAt) : null}
               />
             </div>
 
@@ -705,13 +689,11 @@ const NOTES_MAX = 5000;
 const AUTO_SAVE_DELAY_MS = 3000;
 
 function DoctorNotesSection({
-  fileId, initialNotes, initialUpdatedAt, enabled, onSaved,
+  fileId, initialNotes, initialUpdatedAt,
 }: {
   fileId: string;
   initialNotes: string;
   initialUpdatedAt: Date | null;
-  enabled: boolean;
-  onSaved: (notes: string, updatedAt: Date | null) => void;
 }) {
   const [draft, setDraft]               = useState(initialNotes);
   const [saving, setSaving]             = useState(false);
@@ -736,11 +718,10 @@ function DoctorNotesSection({
   const overLimit = draft.length > NOTES_MAX;
 
   const save = useCallback(async (value: string) => {
-    if (!enabled) return;
     if (value.length > NOTES_MAX) return;
     setSaving(true);
     try {
-      const res = await fetch(`/api/xrays/${fileId}/analyze/notes`, {
+      const res = await fetch(`/api/xrays/${fileId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ doctorNotes: value }),
@@ -753,18 +734,17 @@ function DoctorNotesSection({
       const updatedAt = data.doctorNotesUpdatedAt ? new Date(data.doctorNotesUpdatedAt) : null;
       setLastSavedValue(data.doctorNotes);
       setLastSavedAt(updatedAt);
-      onSaved(data.doctorNotes, updatedAt);
       toast.success("Notas guardadas");
     } catch (err: any) {
       toast.error(err?.message ?? "No se pudieron guardar las notas. Intenta de nuevo.");
     } finally {
       setSaving(false);
     }
-  }, [fileId, enabled, onSaved]);
+  }, [fileId]);
 
   // Auto-save con debounce
   useEffect(() => {
-    if (!enabled || !isDirty || overLimit) return;
+    if (!isDirty || overLimit) return;
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => {
       save(draft);
@@ -775,7 +755,7 @@ function DoctorNotesSection({
         autoSaveTimer.current = null;
       }
     };
-  }, [draft, isDirty, overLimit, enabled, save]);
+  }, [draft, isDirty, overLimit, save]);
 
   const handleManualSave = () => {
     if (autoSaveTimer.current) {
@@ -816,17 +796,13 @@ function DoctorNotesSection({
         id={`xray-notes-${fileId}`}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
-        placeholder={enabled
-          ? "Anota aquí lo que observas en la radiografía antes o después de ver el análisis IA..."
-          : "Genera primero un análisis IA para poder guardar tus notas."}
-        disabled={!enabled}
+        placeholder="Anota aquí lo que observas en la radiografía antes o después de ver el análisis IA..."
         rows={4}
         maxLength={NOTES_MAX + 200}
         aria-describedby={`xray-notes-counter-${fileId}`}
         className={cn(
           "w-full resize-y rounded-xl border bg-[#05070F] px-4 py-3 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/40",
           overLimit ? "border-rose-500/40" : "border-white/10",
-          !enabled && "cursor-not-allowed opacity-60",
         )}
       />
 
@@ -841,7 +817,7 @@ function DoctorNotesSection({
         <Button
           variant={isDirty ? "default" : "ghost"}
           size="sm"
-          disabled={!enabled || !isDirty || overLimit || saving}
+          disabled={!isDirty || overLimit || saving}
           onClick={handleManualSave}
           className="gap-1.5"
           aria-label="Guardar notas manualmente"

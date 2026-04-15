@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdmin } from "@supabase/supabase-js";
-import { logAudit } from "@/lib/audit";
 
 const ANALYSIS_SYSTEM_PROMPT = `Actúas como un asistente de análisis radiográfico dental. Tu rol es identificar hallazgos visibles en la imagen y reportarlos con confianza calibrada a lo que realmente se ve. NO eres el diagnóstico final — el doctor revisa tu análisis y decide.
 
@@ -195,80 +193,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     tokensRemaining:      remaining,
     tokensLimit:          limit,
     modelUsed:            existing.modelUsed,
-    doctorNotes:          existing.doctorNotes ?? "",
-    doctorNotesUpdatedAt: existing.doctorNotesUpdatedAt?.toISOString() ?? null,
     cached:               true,
     analyzedAt:           existing.createdAt.toISOString(),
-  });
-}
-
-/* ═══════════════════════════════════════════════════════════════════ */
-/*  PATCH — actualiza las notas manuales del doctor                    */
-/* ═══════════════════════════════════════════════════════════════════ */
-
-const UpdateNotesSchema = z.object({
-  doctorNotes: z.string().max(5000, "Las notas no pueden exceder 5000 caracteres"),
-});
-
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const ctx = await getAuthContext();
-  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  // Parse + validate body
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
-  }
-  const parsed = UpdateNotesSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.errors[0]?.message ?? "Body inválido" }, { status: 400 });
-  }
-
-  // Multi-tenant guard: el análisis debe existir Y pertenecer a la clínica del ctx
-  const existing = await prisma.xrayAnalysis.findUnique({
-    where:  { fileId: params.id },
-    select: { id: true, clinicId: true, doctorNotes: true },
-  });
-  if (!existing) {
-    return NextResponse.json({ error: "Análisis no encontrado" }, { status: 404 });
-  }
-  if (existing.clinicId !== ctx.clinicId) {
-    return NextResponse.json({ error: "No tienes permiso para editar estas notas" }, { status: 403 });
-  }
-
-  // Update
-  const updated = await prisma.xrayAnalysis.update({
-    where: { id: existing.id },
-    data:  {
-      doctorNotes:          parsed.data.doctorNotes,
-      doctorNotesUpdatedAt: new Date(),
-    },
-    select: {
-      doctorNotes:          true,
-      doctorNotesUpdatedAt: true,
-    },
-  });
-
-  // Audit log
-  await logAudit({
-    clinicId:   ctx.clinicId,
-    userId:     ctx.userId,
-    entityType: "xray-analysis",
-    entityId:   existing.id,
-    action:     "XRAY_NOTES_UPDATED",
-    changes: {
-      doctorNotes: {
-        before: existing.doctorNotes ?? "",
-        after:  parsed.data.doctorNotes,
-      },
-    },
-  });
-
-  return NextResponse.json({
-    doctorNotes:          updated.doctorNotes ?? "",
-    doctorNotesUpdatedAt: updated.doctorNotesUpdatedAt?.toISOString() ?? null,
   });
 }
 
@@ -311,17 +237,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           findings:        existing.findings,
           recommendations: existing.recommendations,
         },
-        severity:             existing.severity,
-        confidence:           existing.confidence,
-        tokensUsed:           0,                     // no gastamos nada ahora
-        originalTokensUsed:   existing.tokensUsed,   // para mostrar en UI
-        tokensRemaining:      remaining,
-        tokensLimit:          limit,
-        modelUsed:            existing.modelUsed,
-        doctorNotes:          existing.doctorNotes ?? "",
-        doctorNotesUpdatedAt: existing.doctorNotesUpdatedAt?.toISOString() ?? null,
-        cached:               true,
-        analyzedAt:           existing.createdAt.toISOString(),
+        severity:           existing.severity,
+        confidence:         existing.confidence,
+        tokensUsed:         0,                     // no gastamos nada ahora
+        originalTokensUsed: existing.tokensUsed,   // para mostrar en UI
+        tokensRemaining:    remaining,
+        tokensLimit:        limit,
+        modelUsed:          existing.modelUsed,
+        cached:             true,
+        analyzedAt:         existing.createdAt.toISOString(),
       });
     }
   }
@@ -541,8 +465,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       : avgConfidence(findings);
 
     // Upsert en DB — create o sobreescribe si ya existe (refresh=true)
-    // NOTA: update NO toca doctorNotes/doctorNotesUpdatedAt — se preservan en refresh
-    const saved = await prisma.xrayAnalysis.upsert({
+    await prisma.xrayAnalysis.upsert({
       where:  { fileId: params.id },
       create: {
         fileId:          params.id,
@@ -568,10 +491,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         createdAt:       new Date(),   // bump timestamp en refresh
         createdBy:       ctx.userId ?? null,
       },
-      select: {
-        doctorNotes:          true,
-        doctorNotesUpdatedAt: true,
-      },
     });
 
     const tokensRemaining = Math.max(0, clinic.aiTokensLimit - currentTokensUsed - totalTokens);
@@ -582,16 +501,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         findings,
         recommendations: analysis.recommendations ?? "",
       },
-      severity:             topSev,
-      confidence:           avgConf,
-      tokensUsed:           totalTokens,
+      severity:        topSev,
+      confidence:      avgConf,
+      tokensUsed:      totalTokens,
       tokensRemaining,
-      tokensLimit:          clinic.aiTokensLimit,
-      modelUsed:            MODEL,
-      doctorNotes:          saved.doctorNotes ?? "",
-      doctorNotesUpdatedAt: saved.doctorNotesUpdatedAt?.toISOString() ?? null,
-      cached:               false,
-      analyzedAt:           new Date().toISOString(),
+      tokensLimit:     clinic.aiTokensLimit,
+      modelUsed:       MODEL,
+      cached:          false,
+      analyzedAt:      new Date().toISOString(),
     });
   } catch (err: any) {
     console.error("AI X-ray analysis error:", err);

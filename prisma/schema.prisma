@@ -514,6 +514,10 @@ model PatientFile {
   takenAt     DateTime?
   createdAt   DateTime     @default(now())
 
+  // Notas clínicas del doctor sobre este archivo (independientes de las notas de upload y del análisis IA)
+  doctorNotes          String?   @db.Text
+  doctorNotesUpdatedAt DateTime?
+
   patient      Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
   clinic       Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   xrayAnalysis XrayAnalysis?

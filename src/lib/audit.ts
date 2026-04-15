@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 
-export type AuditAction = "create" | "update" | "delete" | "view" | "XRAY_NOTES_UPDATED";
-export type AuditEntityType = "patient" | "appointment" | "invoice" | "record" | "consent" | "inventory" | "treatment" | "xray-analysis";
+export type AuditAction = "create" | "update" | "delete" | "view" | "XRAY_NOTES_UPDATED" | "FILE_NOTES_UPDATED";
+export type AuditEntityType = "patient" | "appointment" | "invoice" | "record" | "consent" | "inventory" | "treatment" | "xray-analysis" | "patient-file";
 
 interface AuditOptions {
   clinicId:   string;

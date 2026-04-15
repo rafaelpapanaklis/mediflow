@@ -25,6 +25,8 @@ interface PatientFile {
   toothNumber: number | null;
   takenAt: string | null;
   createdAt: string;
+  doctorNotes: string | null;
+  doctorNotesUpdatedAt: string | null;
   patient: { id: string; firstName: string; lastName: string; patientNumber: string };
 }
 
@@ -372,6 +374,8 @@ export function XraysClient({ patients, recentFiles: initialFiles, clinicId, aiU
                   mimeType={previewFile.mimeType}
                   initialTokensRemaining={initialTokensRemaining}
                   tokensLimit={aiLimit}
+                  initialDoctorNotes={previewFile.doctorNotes ?? ""}
+                  initialDoctorNotesUpdatedAt={previewFile.doctorNotesUpdatedAt}
                 />
               </div>
             )}
