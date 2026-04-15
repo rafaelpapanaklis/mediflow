@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Sparkles, AlertTriangle, CheckCircle2, RefreshCw, Loader2, Info, Archive, Coins,
-  FileEdit, Save,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { formatDistanceToNow } from "date-fns";
@@ -176,15 +175,11 @@ interface Props {
   mimeType: string;
   initialTokensRemaining: number;
   tokensLimit: number;
-  /** Notas del doctor sobre este PatientFile — vienen del server component / API list */
-  initialDoctorNotes: string;
-  initialDoctorNotesUpdatedAt: string | null;
 }
 
 export function XrayAiPanel({
   fileId, fileUrl, fileName, mimeType,
   initialTokensRemaining, tokensLimit,
-  initialDoctorNotes, initialDoctorNotesUpdatedAt,
 }: Props) {
   const [open, setOpen]                       = useState(false);
   const [remaining, setRemaining]             = useState(initialTokensRemaining);
@@ -367,16 +362,6 @@ export function XrayAiPanel({
                 src={fileUrl}
                 alt={fileName}
                 className="max-h-[60vh] w-auto rounded-xl object-contain shadow-2xl shadow-black/40"
-              />
-            </div>
-
-            {/* Sección — Notas del doctor (entre imagen y análisis IA).
-                SIEMPRE habilitado, independiente del análisis. Vive en PatientFile. */}
-            <div className="px-5 pt-5">
-              <DoctorNotesSection
-                fileId={fileId}
-                initialNotes={initialDoctorNotes}
-                initialUpdatedAt={initialDoctorNotesUpdatedAt ? new Date(initialDoctorNotesUpdatedAt) : null}
               />
             </div>
 
@@ -659,6 +644,9 @@ function AnalysisSections({
           <Info className="mr-1 inline h-3 w-3" />
           Este análisis es orientativo y no reemplaza el criterio profesional del doctor.
         </p>
+        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground/80">
+          Las notas del doctor se editan en la vista principal, no aquí.
+        </p>
       </section>
 
       <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
@@ -681,160 +669,3 @@ function AnalysisSections({
   );
 }
 
-/* ──────────────────────────────────────────────────────────────── */
-/*  Sección de notas del doctor                                      */
-/* ──────────────────────────────────────────────────────────────── */
-
-const NOTES_MAX = 5000;
-const AUTO_SAVE_DELAY_MS = 3000;
-
-function DoctorNotesSection({
-  fileId, initialNotes, initialUpdatedAt,
-}: {
-  fileId: string;
-  initialNotes: string;
-  initialUpdatedAt: Date | null;
-}) {
-  const [draft, setDraft]               = useState(initialNotes);
-  const [saving, setSaving]             = useState(false);
-  const [lastSavedAt, setLastSavedAt]   = useState<Date | null>(initialUpdatedAt);
-  const [lastSavedValue, setLastSavedValue] = useState(initialNotes);
-  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Si cambia el fileId (archivo distinto), resetea el draft
-  useEffect(() => {
-    setDraft(initialNotes);
-    setLastSavedValue(initialNotes);
-    setLastSavedAt(initialUpdatedAt);
-    // Cancela cualquier auto-save pendiente al cambiar de archivo
-    if (autoSaveTimer.current) {
-      clearTimeout(autoSaveTimer.current);
-      autoSaveTimer.current = null;
-    }
-  }, [fileId, initialNotes, initialUpdatedAt]);
-
-  const isDirty = draft !== lastSavedValue;
-  const charsLeft = NOTES_MAX - draft.length;
-  const overLimit = draft.length > NOTES_MAX;
-
-  const save = useCallback(async (value: string) => {
-    if (value.length > NOTES_MAX) return;
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/xrays/${fileId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ doctorNotes: value }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "Error al guardar");
-      }
-      const data = await res.json() as { doctorNotes: string; doctorNotesUpdatedAt: string | null };
-      const updatedAt = data.doctorNotesUpdatedAt ? new Date(data.doctorNotesUpdatedAt) : null;
-      setLastSavedValue(data.doctorNotes);
-      setLastSavedAt(updatedAt);
-      toast.success("Notas guardadas");
-    } catch (err: any) {
-      toast.error(err?.message ?? "No se pudieron guardar las notas. Intenta de nuevo.");
-    } finally {
-      setSaving(false);
-    }
-  }, [fileId]);
-
-  // Auto-save con debounce
-  useEffect(() => {
-    if (!isDirty || overLimit) return;
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    autoSaveTimer.current = setTimeout(() => {
-      save(draft);
-    }, AUTO_SAVE_DELAY_MS);
-    return () => {
-      if (autoSaveTimer.current) {
-        clearTimeout(autoSaveTimer.current);
-        autoSaveTimer.current = null;
-      }
-    };
-  }, [draft, isDirty, overLimit, save]);
-
-  const handleManualSave = () => {
-    if (autoSaveTimer.current) {
-      clearTimeout(autoSaveTimer.current);
-      autoSaveTimer.current = null;
-    }
-    save(draft);
-  };
-
-  const relativeTime = lastSavedAt
-    ? formatDistanceToNow(lastSavedAt, { addSuffix: true, locale: es })
-    : null;
-
-  const charCounterClass = overLimit
-    ? "text-rose-400"
-    : charsLeft < 200
-      ? "text-amber-400"
-      : "text-muted-foreground";
-
-  return (
-    <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h4 className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
-          <FileEdit className="h-3 w-3" />
-          Mis notas
-        </h4>
-        {relativeTime && (
-          <span className="text-[11px] text-muted-foreground">
-            Última edición: {relativeTime}
-          </span>
-        )}
-      </div>
-
-      <label htmlFor={`xray-notes-${fileId}`} className="sr-only">
-        Mis notas sobre la radiografía
-      </label>
-      <textarea
-        id={`xray-notes-${fileId}`}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        placeholder="Anota aquí lo que observas en la radiografía antes o después de ver el análisis IA..."
-        rows={4}
-        maxLength={NOTES_MAX + 200}
-        aria-describedby={`xray-notes-counter-${fileId}`}
-        className={cn(
-          "w-full resize-y rounded-xl border bg-[#05070F] px-4 py-3 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/40",
-          overLimit ? "border-rose-500/40" : "border-white/10",
-        )}
-      />
-
-      <div className="mt-2 flex items-center justify-between gap-3">
-        <span
-          id={`xray-notes-counter-${fileId}`}
-          className={cn("text-[11px] font-medium", charCounterClass)}
-          aria-live="polite"
-        >
-          {formatNumber(draft.length)} / {formatNumber(NOTES_MAX)} caracteres
-        </span>
-        <Button
-          variant={isDirty ? "default" : "ghost"}
-          size="sm"
-          disabled={!isDirty || overLimit || saving}
-          onClick={handleManualSave}
-          className="gap-1.5"
-          aria-label="Guardar notas manualmente"
-        >
-          {saving ? (
-            <>
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Guardando...
-            </>
-          ) : (
-            <>
-              <Save className="h-3.5 w-3.5" />
-              Guardar notas
-            </>
-          )}
-        </Button>
-      </div>
-    </section>
-  );
-}

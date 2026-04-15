@@ -5,6 +5,7 @@ import { FileImage, Upload, Trash2, Search, Eye, Download, X } from "lucide-reac
 import toast from "react-hot-toast";
 import { cn } from "@/lib/utils";
 import { XrayAiPanel } from "@/components/xrays/xray-ai-panel";
+import { XrayNotesSection } from "@/components/xrays/xray-notes-section";
 
 interface Patient {
   id: string;
@@ -364,9 +365,19 @@ export function XraysClient({ patients, recentFiles: initialFiles, clinicId, aiU
               )}
             </div>
 
+            {/* Notas del doctor — visibles en la vista principal, no en el Dialog */}
+            <div className="border-t border-border/40 bg-[#0B0F1E] p-3 md:p-5">
+              <XrayNotesSection
+                key={previewFile.id}
+                fileId={previewFile.id}
+                initialDoctorNotes={previewFile.doctorNotes}
+                initialDoctorNotesUpdatedAt={previewFile.doctorNotesUpdatedAt}
+              />
+            </div>
+
             {/* Botón compacto de IA — solo para imágenes */}
             {previewFile.mimeType?.startsWith("image/") && (
-              <div className="flex justify-end border-t border-border/40 p-3 md:p-4">
+              <div className="flex justify-end border-t border-border/40 bg-[#0B0F1E] p-3 md:p-4">
                 <XrayAiPanel
                   fileId={previewFile.id}
                   fileUrl={previewFile.url}
@@ -374,8 +385,6 @@ export function XraysClient({ patients, recentFiles: initialFiles, clinicId, aiU
                   mimeType={previewFile.mimeType}
                   initialTokensRemaining={initialTokensRemaining}
                   tokensLimit={aiLimit}
-                  initialDoctorNotes={previewFile.doctorNotes ?? ""}
-                  initialDoctorNotesUpdatedAt={previewFile.doctorNotesUpdatedAt}
                 />
               </div>
             )}
