@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import * as LucideIcons from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Header } from "@/components/public/landing/header";
@@ -91,12 +92,14 @@ export function SpecialtyPage({ content }: Props) {
               ))}
             </div>
           </div>
-          <div className="aspect-[4/5] w-full md:aspect-square">
+          <div className="relative aspect-[4/5] w-full overflow-hidden rounded-3xl md:aspect-square">
             {content.unsplashAmbient ? (
-              <img
+              <Image
                 src={content.unsplashAmbient}
                 alt={`Ambiente profesional de ${content.nombre.toLowerCase()}`}
-                className="h-full w-full rounded-3xl object-cover"
+                fill
+                sizes="(max-width: 768px) 100vw, 50vw"
+                className="object-cover"
                 loading="lazy"
               />
             ) : (

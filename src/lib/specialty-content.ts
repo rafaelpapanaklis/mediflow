@@ -30,9 +30,14 @@ export type Testimonial = {
   text: string;
 };
 
+export type SpecialtyColor =
+  | "blue" | "teal" | "emerald" | "violet" | "amber" | "lime" | "rose"
+  | "pink" | "purple" | "cyan" | "orange" | "indigo" | "green" | "fuchsia";
+
 export type SpecialtyContent = {
   slug: string;
   category: SpecialtyGroup;
+  color: SpecialtyColor;
   nombre: string;
 
   // SEO
@@ -114,6 +119,7 @@ export const SPECIALTIES: Record<string, SpecialtyContent> = {
   dental: {
     slug: "dental",
     category: "salud",
+    color: "blue",
     nombre: "Dental",
     seoTitle: "Software dental — Odontograma digital y CFDI",
     seoDescription: "Software para clínicas dentales en México: odontograma por superficie, periodontograma, planes por pieza, radiografías y CFDI 4.0. Prueba 14 días gratis.",
@@ -154,12 +160,13 @@ export const SPECIALTIES: Record<string, SpecialtyContent> = {
     // TODO: reemplazar con testimonio real
     testimonial: { author: "Dra. María González", role: "Odontóloga", clinic: "Dental Smile CDMX", text: "Pasé de hojas de cálculo y radiografías en USB a tener todo en un solo lugar. El odontograma por superficie es lo más cercano que he visto a cómo realmente trabajamos los dentistas." },
     relatedSlugs: ["medicina-general", "dermatologia", "podologia", "fisioterapia"],
-    unsplashAmbient: null,
+    unsplashAmbient: "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?w=1200&q=80&auto=format",
     unsplashCases: null,
   },
   "medicina-general": {
     slug: "medicina-general",
     category: "salud",
+    color: "teal",
     nombre: "Medicina General",
     seoTitle: "Software para consultorio médico — Expediente y CIE-10",
     seoDescription: "Software para médicos generales en México: expediente con signos vitales, diagnóstico CIE-10, prescripción digital, referidos y CFDI 4.0. Prueba 14 días gratis.",
@@ -200,12 +207,13 @@ export const SPECIALTIES: Record<string, SpecialtyContent> = {
     // TODO: reemplazar con testimonio real
     testimonial: { author: "Dr. Roberto Hernández", role: "Médico General", clinic: "Consultorio Roma Norte", text: "Pasé de tener un cuaderno por paciente a tener todo el historial buscable. Lo que más uso es el diagnóstico diferencial con probabilidades — me obliga a documentar bien el razonamiento." },
     relatedSlugs: ["dental", "nutricion", "psicologia", "dermatologia"],
-    unsplashAmbient: null,
+    unsplashAmbient: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=1200&q=80&auto=format",
     unsplashCases: null,
   },
   nutricion: {
     slug: "nutricion",
     category: "salud",
+    color: "emerald",
     nombre: "Nutrición",
     seoTitle: "Software para nutriólogos — IMC, TDEE y plan alimenticio",
     seoDescription: "Software para nutriólogos en México: cálculo automático IMC, TMB, TDEE, plan alimenticio, frecuencia de alimentos y metas SMART. Prueba 14 días gratis.",
@@ -246,12 +254,13 @@ export const SPECIALTIES: Record<string, SpecialtyContent> = {
     // TODO: reemplazar con testimonio real
     testimonial: { author: "L.N. Andrea Vázquez", role: "Nutrióloga clínica", clinic: "NutriBalance Guadalajara", text: "Cambié de Excel a MediFlow y lo que más cambió fue el seguimiento entre consultas. El paciente ve su progreso, yo veo si está cumpliendo las metas, y ya no llego a la cita preguntando '¿cómo te fue?' a ciegas." },
     relatedSlugs: ["medicina-general", "psicologia", "fisioterapia", "medicina-alternativa"],
-    unsplashAmbient: null,
+    unsplashAmbient: "https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=1200&q=80&auto=format",
     unsplashCases: null,
   },
   psicologia: {
     slug: "psicologia",
     category: "salud",
+    color: "violet",
     nombre: "Psicología",
     seoTitle: "Software para psicólogos — PHQ-9, GAD-7 y notas SOAP/BIRP",
     seoDescription: "Software para psicólogos en México: escalas PHQ-9 y GAD-7, notas SOAP/BIRP/DAP, plan de seguridad, metas terapéuticas y agenda con WhatsApp. Prueba gratis.",
@@ -292,12 +301,13 @@ export const SPECIALTIES: Record<string, SpecialtyContent> = {
     // TODO: reemplazar con testimonio real
     testimonial: { author: "Mtro. Diego Salinas", role: "Psicólogo clínico", clinic: "Espacio Mental CDMX", text: "Lo que me convenció fue el plan de seguridad estructurado para casos de riesgo. Antes lo tenía como nota suelta, ahora es una plantilla que no se me olvida llenar y queda en el expediente." },
     relatedSlugs: ["medicina-general", "nutricion", "medicina-alternativa", "fisioterapia"],
-    unsplashAmbient: null,
+    unsplashAmbient: "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=1200&q=80&auto=format",
     unsplashCases: null,
   },
   dermatologia: {
     slug: "dermatologia",
     category: "salud",
+    color: "amber",
     nombre: "Dermatología",
     seoTitle: "Software dermatológico — Fitzpatrick, SCORAD y fotos clínicas",
     seoDescription: "Software para clínicas de dermatología: tipos Fitzpatrick I-VI, escala SCORAD, mapeo corporal de lesiones, fotos antes/después y CFDI 4.0. Prueba 14 días gratis.",
@@ -338,12 +348,13 @@ export const SPECIALTIES: Record<string, SpecialtyContent> = {
     // TODO: reemplazar con testimonio real
     testimonial: { author: "Dra. Patricia Mendoza", role: "Dermatóloga", clinic: "Piel Clínica Polanco", text: "El protocolo fotográfico estandarizado fue lo que me hizo cambiar. Ahora cada foto es comparable y los pacientes ven su evolución real, no impresiones subjetivas." },
     relatedSlugs: ["medicina-estetica", "medicina-general", "centros-estetica", "depilacion-laser"],
-    unsplashAmbient: null,
+    unsplashAmbient: "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=1200&q=80&auto=format",
     unsplashCases: null,
   },
   fisioterapia: {
     slug: "fisioterapia",
     category: "salud",
+    color: "lime",
     nombre: "Fisioterapia",
     seoTitle: "Software para fisioterapia — VAS, ROM, DASH y HEP",
     seoDescription: "Software para clínicas de fisioterapia: escala VAS, mediciones ROM, pruebas ortopédicas, DASH/KOOS/Oswestry y programa HEP. Prueba 14 días gratis.",
@@ -384,12 +395,13 @@ export const SPECIALTIES: Record<string, SpecialtyContent> = {
     // TODO: reemplazar con testimonio real
     testimonial: { author: "L.F.T. Carlos Rivera", role: "Fisioterapeuta", clinic: "Reactiva Centro de Rehabilitación", text: "El HEP por WhatsApp cambió la adherencia de mis pacientes — ahora sí hacen los ejercicios en casa porque les llega el recordatorio. Y los outcome measures me dejan demostrar la mejoría con datos, no con sensaciones." },
     relatedSlugs: ["podologia", "medicina-general", "medicina-alternativa", "masajes"],
-    unsplashAmbient: null,
+    unsplashAmbient: "https://images.unsplash.com/photo-1599493758267-c6c884c7071f?w=1200&q=80&auto=format",
     unsplashCases: null,
   },
   podologia: {
     slug: "podologia",
     category: "salud",
+    color: "rose",
     nombre: "Podología",
     seoTitle: "Software para podología — IWGDF, mapeo plantar y ortesis",
     seoDescription: "Software para clínicas de podología: clasificación IWGDF de pie diabético, mapeo plantar, ITB, monofilamento, pipeline de ortesis y CFDI 4.0. Prueba gratis.",
@@ -430,12 +442,13 @@ export const SPECIALTIES: Record<string, SpecialtyContent> = {
     // TODO: reemplazar con testimonio real
     testimonial: { author: "Lic. Sandra Ortiz", role: "Podóloga", clinic: "PiePro Querétaro", text: "El IWGDF integrado me cambió la vida. Antes calculaba el riesgo en una hojita, ahora MediFlow lo hace en automático y me dice el seguimiento sugerido — y queda en el expediente para auditoría." },
     relatedSlugs: ["fisioterapia", "medicina-general", "dental", "dermatologia"],
-    unsplashAmbient: null,
+    unsplashAmbient: "https://images.unsplash.com/photo-1519415510236-718bdfcd89c8?w=1200&q=80&auto=format",
     unsplashCases: null,
   },
   "medicina-estetica": {
     slug: "medicina-estetica",
     category: "salud",
+    color: "pink",
     nombre: "Medicina Estética",
     seoTitle: "Software para medicina estética — GAIS, mapeo facial y trazabilidad",
     seoDescription: "Software para clínicas de medicina estética: escala GAIS, mapeo facial por zonas, trazabilidad de lotes, fotos antes/después y paquetes de sesiones. Prueba gratis.",
@@ -476,12 +489,13 @@ export const SPECIALTIES: Record<string, SpecialtyContent> = {
     // TODO: reemplazar con testimonio real
     testimonial: { author: "Dra. Fernanda Ríos", role: "Médica Estética", clinic: "Estética Roma", text: "Lo de la trazabilidad de lotes me da tranquilidad. Si una marca tiene retiro de producto, en 30 segundos sé qué pacientes recibieron ese lote y los puedo contactar." },
     relatedSlugs: ["dermatologia", "clinicas-capilares", "centros-estetica", "depilacion-laser"],
-    unsplashAmbient: null,
+    unsplashAmbient: "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=1200&q=80&auto=format",
     unsplashCases: null,
   },
   "clinicas-capilares": {
     slug: "clinicas-capilares",
     category: "salud",
+    color: "purple",
     nombre: "Clínicas Capilares",
     seoTitle: "Software para clínicas capilares — Norwood, conteo de grafts y supervivencia",
     seoDescription: "Software para clínicas de restauración capilar: clasificación Norwood/Ludwig, conteo de grafts, seguimiento de supervivencia y técnicas FUE/FUT/PRP. Prueba gratis.",
@@ -522,12 +536,13 @@ export const SPECIALTIES: Record<string, SpecialtyContent> = {
     // TODO: reemplazar con testimonio real
     testimonial: { author: "Dr. Alejandro Castro", role: "Cirujano capilar", clinic: "Capilar México", text: "El conteo automático de supervivencia por zona me permite mostrar resultados reales a pacientes nuevos. Antes era 'créeme', ahora es 'mira la gráfica'." },
     relatedSlugs: ["medicina-estetica", "dermatologia", "centros-estetica", "peluquerias"],
-    unsplashAmbient: null,
+    unsplashAmbient: "https://images.unsplash.com/photo-1560066984-138dadb4c035?w=1200&q=80&auto=format",
     unsplashCases: null,
   },
   "centros-estetica": {
     slug: "centros-estetica",
     category: "estetica",
+    color: "rose",
     nombre: "Centros de Estética",
     seoTitle: "Software para centro de estética — Baumann, paquetes y antes/después",
     seoDescription: "Software para centros de estética en México: tipo de piel Baumann, parámetros de equipos, paquetes de tratamiento, fotos antes/después y CFDI 4.0. Prueba gratis.",
@@ -568,12 +583,13 @@ export const SPECIALTIES: Record<string, SpecialtyContent> = {
     // TODO: reemplazar con testimonio real
     testimonial: { author: "Mariana López", role: "Directora", clinic: "Glow Estética León", text: "Antes perdíamos clientes porque vencían los paquetes y no nos enterábamos. Ahora MediFlow avisa cuando le quedan 2 sesiones y agendamos la siguiente desde el mismo mensaje." },
     relatedSlugs: ["medicina-estetica", "depilacion-laser", "spas", "cejas-pestanas"],
-    unsplashAmbient: null,
+    unsplashAmbient: "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=1200&q=80&auto=format",
     unsplashCases: null,
   },
   "cejas-pestanas": {
     slug: "cejas-pestanas",
     category: "belleza",
+    color: "cyan",
     nombre: "Cejas y Pestañas",
     seoTitle: "Software para estudio de cejas y pestañas — Mapa, fórmula y patch test",
     seoDescription: "Software para estudios de cejas y pestañas en México: mapa de pestañas, fórmulas de color, patch test, retención y citas con WhatsApp. Prueba 14 días gratis.",
@@ -614,12 +630,13 @@ export const SPECIALTIES: Record<string, SpecialtyContent> = {
     // TODO: reemplazar con testimonio real
     testimonial: { author: "Karla Pérez", role: "Lashista certificada", clinic: "Lash Lab Monterrey", text: "El mapa de pestañas guardado por cliente fue mi salvación. Antes anotaba en un cuaderno, ahora cada cliente tiene su mapa exacto y reproduzco el look idéntico cada relleno." },
     relatedSlugs: ["centros-estetica", "unas", "peluquerias", "depilacion-laser"],
-    unsplashAmbient: null,
+    unsplashAmbient: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=1200&q=80&auto=format",
     unsplashCases: null,
   },
   masajes: {
     slug: "masajes",
     category: "belleza",
+    color: "amber",
     nombre: "Masajes",
     seoTitle: "Software para estudio de masajes — Mapeo de dolor y VAS pre/post",
     seoDescription: "Software para estudios de masajes terapéuticos en México: mapeo corporal de dolor, puntos gatillo, VAS pre/post, contraindicaciones y agenda con WhatsApp. Prueba gratis.",
@@ -660,12 +677,13 @@ export const SPECIALTIES: Record<string, SpecialtyContent> = {
     // TODO: reemplazar con testimonio real
     testimonial: { author: "Tania Ramos", role: "Masoterapeuta", clinic: "Manos del Sol Cancún", text: "El VAS pre/post fue lo que cambió mi negocio. Ahora les muestro a mis clientes que entraron con un 8 de dolor y salieron con un 3 — y agendan la siguiente sin pensarlo." },
     relatedSlugs: ["fisioterapia", "spas", "medicina-alternativa", "centros-estetica"],
-    unsplashAmbient: null,
+    unsplashAmbient: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=1200&q=80&auto=format",
     unsplashCases: null,
   },
   "depilacion-laser": {
     slug: "depilacion-laser",
     category: "estetica",
+    color: "orange",
     nombre: "Depilación Láser",
     seoTitle: "Software para depilación láser — Fitzpatrick, parámetros y reducción",
     seoDescription: "Software para centros de depilación láser: tipos Fitzpatrick, parámetros por equipo, test spot, paquetes por zona y porcentaje de reducción. Prueba 14 días gratis.",
@@ -706,12 +724,13 @@ export const SPECIALTIES: Record<string, SpecialtyContent> = {
     // TODO: reemplazar con testimonio real
     testimonial: { author: "Lic. Daniela Ortega", role: "Cosmiatra", clinic: "Suave Láser Querétaro", text: "La alerta de Fitzpatrick me ha salvado de quemaduras en pieles oscuras. Antes confiaba en mi memoria, ahora el sistema me bloquea fluencias peligrosas." },
     relatedSlugs: ["centros-estetica", "medicina-estetica", "dermatologia", "spas"],
-    unsplashAmbient: null,
+    unsplashAmbient: "https://images.unsplash.com/photo-1616394584738-fc6e612e71b9?w=1200&q=80&auto=format",
     unsplashCases: null,
   },
   peluquerias: {
     slug: "peluquerias",
     category: "belleza",
+    color: "indigo",
     nombre: "Peluquerías",
     seoTitle: "Software para salón de peluquería — Fórmulas de color y agenda",
     seoDescription: "Software para salones de peluquería en México: fórmulas de color por cliente, diagnóstico capilar, comisiones por estilista, agenda online y CFDI. Prueba 14 días gratis.",
@@ -752,12 +771,13 @@ export const SPECIALTIES: Record<string, SpecialtyContent> = {
     // TODO: reemplazar con testimonio real
     testimonial: { author: "Eduardo Soto", role: "Estilista master", clinic: "Salón Loft Polanco", text: "Antes pegaba la fórmula con cinta en el folder de cada clienta. Ahora abro su expediente en el iPad y reproduzco el color en 5 segundos." },
     relatedSlugs: ["cejas-pestanas", "unas", "centros-estetica", "spas"],
-    unsplashAmbient: null,
+    unsplashAmbient: "https://images.unsplash.com/photo-1560066984-138dadb4c035?w=1200&q=80&auto=format",
     unsplashCases: null,
   },
   "medicina-alternativa": {
     slug: "medicina-alternativa",
     category: "salud",
+    color: "green",
     nombre: "Medicina Alternativa",
     seoTitle: "Software para medicina alternativa — Acupuntura, MTC y herbolaria",
     seoDescription: "Software para acupuntura, medicina tradicional china, herbolaria y homeopatía: puntos meridianos, pulso, lengua, fórmulas herbales e interacciones. Prueba gratis.",
@@ -798,12 +818,13 @@ export const SPECIALTIES: Record<string, SpecialtyContent> = {
     // TODO: reemplazar con testimonio real
     testimonial: { author: "Lic. Hiroshi Tanaka", role: "Acupunturista", clinic: "Ki Center Tulum", text: "El detector de interacciones herbales me da paz mental. Cuando un paciente me cuenta qué medicamentos toma, MediFlow me alerta antes de que prescriba algo que no debería." },
     relatedSlugs: ["fisioterapia", "psicologia", "medicina-general", "nutricion"],
-    unsplashAmbient: null,
+    unsplashAmbient: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=1200&q=80&auto=format",
     unsplashCases: null,
   },
   unas: {
     slug: "unas",
     category: "belleza",
+    color: "fuchsia",
     nombre: "Estudios de Uñas",
     seoTitle: "Software para estudio de uñas — Mapa de salud y servicios",
     seoDescription: "Software para estudios de manicura y nail art en México: mapa de salud por uña, alergias a metacrilatos, fotos antes/después y agenda con WhatsApp. Prueba gratis.",
@@ -844,12 +865,13 @@ export const SPECIALTIES: Record<string, SpecialtyContent> = {
     // TODO: reemplazar con testimonio real
     testimonial: { author: "Brenda Aguirre", role: "Nail technician", clinic: "Polish Studio Mérida", text: "El mapa de salud por uña me hace ver cosas que antes pasaba por alto. Detecté un caso de hongo en un dedo que la clienta no había notado y la mandé al podólogo a tiempo." },
     relatedSlugs: ["cejas-pestanas", "centros-estetica", "peluquerias", "spas"],
-    unsplashAmbient: null,
+    unsplashAmbient: "https://images.unsplash.com/photo-1604654894610-df63bc536371?w=1200&q=80&auto=format",
     unsplashCases: null,
   },
   spas: {
     slug: "spas",
     category: "belleza",
+    color: "teal",
     nombre: "Spas",
     seoTitle: "Software para spa — Cuestionario, circuito termal y paquetes",
     seoDescription: "Software para spas y centros de bienestar en México: cuestionario de salud, circuito termal personalizable, escala de estrés y paquetes con redenciones. Prueba gratis.",
@@ -890,7 +912,7 @@ export const SPECIALTIES: Record<string, SpecialtyContent> = {
     // TODO: reemplazar con testimonio real
     testimonial: { author: "Adriana Beltrán", role: "Gerente de spa", clinic: "Aqua Spa Cancún", text: "El cuestionario de salud nos cambió la operación. Antes preguntábamos verbalmente y a veces se olvidaba algo importante. Ahora cada cliente lo llena desde su celular antes de llegar." },
     relatedSlugs: ["masajes", "centros-estetica", "medicina-alternativa", "depilacion-laser"],
-    unsplashAmbient: null,
+    unsplashAmbient: "https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=1200&q=80&auto=format",
     unsplashCases: null,
   },
 };
