@@ -36,6 +36,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Datos incompletos" }, { status: 400 });
   }
 
+  // Multi-tenant verification: ensure patient belongs to this clinic
+  const patient = await prisma.patient.findFirst({
+    where:  { id: patientId, clinicId: ctx.clinicId },
+    select: { id: true },
+  });
+  if (!patient) {
+    return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
+  }
+
+  if (invoiceId) {
+    const invoice = await prisma.invoice.findFirst({
+      where:  { id: invoiceId, clinicId: ctx.clinicId },
+      select: { id: true },
+    });
+    if (!invoice) {
+      return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
+    }
+  }
+
   // Create the plan
   const plan = await prisma.paymentPlan.create({
     data: {
@@ -55,17 +74,17 @@ export async function POST(req: NextRequest) {
 
   // Generate installments
   const remaining    = totalAmount - (downPayment ?? 0);
-  const perInstall   = Math.round((remaining / installments) * 100) / 100;
+  const baseInstall  = Math.round((remaining / installments) * 100) / 100;
   const freqDays     = frequency === "WEEKLY" ? 7 : frequency === "BIWEEKLY" ? 14 : 30;
   const start        = startDate ? new Date(startDate) : new Date();
 
   const installmentData = Array.from({ length: installments }, (_, i) => {
     const dueDate = new Date(start);
     dueDate.setDate(dueDate.getDate() + freqDays * (i + 1));
-    // Last installment gets the residual to avoid rounding errors
+    // Last installment covers the exact residual to avoid rounding drift
     const amount = i === installments - 1
-      ? Math.round((remaining - perInstall * (installments - 1)) * 100) / 100
-      : perInstall;
+      ? Math.round((remaining - baseInstall * (installments - 1)) * 100) / 100
+      : baseInstall;
     return {
       planId:      plan.id,
       installment: i + 1,
