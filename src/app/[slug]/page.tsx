@@ -2,6 +2,18 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ClinicLandingClient } from "./landing-client";
 import type { Metadata } from "next";
+import {
+  getSpecialty,
+  isHealthSpecialty,
+  SPECIALTY_SLUGS,
+} from "@/lib/specialty-content";
+import { SpecialtyPage } from "@/components/public/specialty/specialty-page";
+import {
+  buildMetadata,
+  softwareApplicationLd,
+  medicalBusinessLd,
+  SITE_URL,
+} from "@/lib/seo";
 
 const CATEGORY_HIGHLIGHTS: Record<string, string[]> = {
   DENTAL: ["Odontograma digital", "Radiografías", "Plan de tratamiento por pieza", "Evaluación periodontal"],
@@ -24,20 +36,36 @@ const CATEGORY_HIGHLIGHTS: Record<string, string[]> = {
   OTHER: ["Expediente clínico digital", "Agenda inteligente", "Facturación integrada"],
 };
 
-const RESERVED = [
+/**
+ * Slugs reservados que NO son ni especialidades ni clínicas — son rutas
+ * top-level u operacionales que [slug] nunca debe intentar resolver.
+ * Las especialidades viven en SPECIALTY_SLUGS (separado).
+ */
+const NON_SPECIALTY_RESERVED = [
   "dashboard","admin","api","auth","login","register",
   "pricing","features","contact","consentimiento","portal",
-  "dental","medicina-general","nutricion","psicologia",
-  "dermatologia","fisioterapia","podologia",
-  "medicina-estetica","clinicas-capilares",
-  "centros-estetica","cejas-pestanas","masajes",
-  "depilacion-laser","peluquerias","medicina-alternativa",
-  "unas","spas",
+  "reservar","pago","consent","clinicas","teleconsulta",
 ];
 
 interface Props { params: { slug: string } }
 
+export function generateStaticParams() {
+  return SPECIALTY_SLUGS.map((slug) => ({ slug }));
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  // 1) Especialidad
+  const specialty = getSpecialty(params.slug);
+  if (specialty) {
+    return buildMetadata({
+      title: specialty.seoTitle,
+      description: specialty.seoDescription,
+      path: `/${specialty.slug}`,
+      ogImage: `/og/${specialty.slug}.png`, // TODO: generar imágenes OG
+    });
+  }
+
+  // 2) Clínica (lógica original intacta)
   const clinic = await prisma.clinic.findUnique({
     where: { slug: params.slug },
     select: { name: true, description: true, logoUrl: true },
@@ -51,8 +79,45 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function ClinicLandingPage({ params }: Props) {
-  if (RESERVED.includes(params.slug)) notFound();
+  // 1) Slug reservado fuera de especialidades → 404
+  if (NON_SPECIALTY_RESERVED.includes(params.slug)) notFound();
 
+  // 2) Página de especialidad
+  const specialty = getSpecialty(params.slug);
+  if (specialty) {
+    const url = `${SITE_URL}/${specialty.slug}`;
+    const ldBlocks: object[] = [
+      softwareApplicationLd({
+        name: `MediFlow para ${specialty.nombre}`,
+        description: specialty.seoDescription,
+        url,
+        category: "BusinessApplication",
+      }),
+    ];
+    if (isHealthSpecialty(specialty.slug)) {
+      ldBlocks.push(
+        medicalBusinessLd({
+          name: `MediFlow — software para ${specialty.nombre.toLowerCase()}`,
+          description: specialty.seoDescription,
+          url,
+        }),
+      );
+    }
+    return (
+      <>
+        {ldBlocks.map((ld, i) => (
+          <script
+            key={i}
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
+          />
+        ))}
+        <SpecialtyPage content={specialty} />
+      </>
+    );
+  }
+
+  // 3) Landing pública de clínica (lógica original intacta)
   const clinic = await prisma.clinic.findUnique({
     where:   { slug: params.slug },
     include: {
