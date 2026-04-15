@@ -540,6 +540,10 @@ model XrayAnalysis {
   severity        String   // max de findings: alta | media | baja | informativo
   confidence      Float    // avg de findings, 0-100
 
+  // Notas manuales del doctor (independientes del análisis IA)
+  doctorNotes          String?   @db.Text
+  doctorNotesUpdatedAt DateTime?
+
   // Metadata
   tokensUsed      Int      @default(0)
   modelUsed       String   @default("claude-sonnet-4-6")

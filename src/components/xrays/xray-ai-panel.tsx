@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Sparkles, AlertTriangle, CheckCircle2, RefreshCw, Loader2, Info, Archive, Coins,
+  FileEdit, Save,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { formatDistanceToNow } from "date-fns";
@@ -15,17 +16,21 @@ import { cn } from "@/lib/utils";
 /*  Tipos                                                            */
 /* ──────────────────────────────────────────────────────────────── */
 
-type Severity = "alta" | "media" | "baja" | "informativo";
+type SeverityCanonical = "low" | "medium" | "high" | "critical" | "informational";
+
+/** Unión que acepta severity en inglés (nuevo, tool use) o español (viejo, pre-tool) */
+type Severity =
+  | SeverityCanonical
+  | "alta" | "media" | "baja" | "informativo";
 
 interface Finding {
-  id: number;
+  id: string | number;
   title: string;
   description: string;
-  tooth?: string;
+  tooth?: string | null;
   severity: Severity;
-  confidence: number;
-  /** Nuevo opcional — retrocompat con análisis viejos */
-  confidenceRationale?: string;
+  confidence: number;            // 0-1 (nuevo) o 0-100 (viejo) — normalizado al renderizar
+  confidenceRationale?: string | null;
 }
 
 interface AnalysisResult {
@@ -45,32 +50,112 @@ interface AnalyzeResponse {
   cached: boolean;
   analyzedAt: string;
   modelUsed?: string;
+  doctorNotes?: string;
+  doctorNotesUpdatedAt?: string | null;
 }
 
 /* ──────────────────────────────────────────────────────────────── */
 /*  Mapas estáticos (Tailwind JIT)                                   */
 /* ──────────────────────────────────────────────────────────────── */
 
-const severityStyle: Record<Severity, { bg: string; text: string; border: string; label: string }> = {
-  alta:         { bg: "bg-rose-500/15",    text: "text-rose-400",    border: "border-rose-500/30",    label: "Severidad alta"   },
-  media:        { bg: "bg-amber-500/15",   text: "text-amber-400",   border: "border-amber-500/30",   label: "Severidad media"  },
-  baja:         { bg: "bg-emerald-500/15", text: "text-emerald-400", border: "border-emerald-500/30", label: "Severidad baja"   },
-  informativo:  { bg: "bg-slate-500/15",   text: "text-slate-300",   border: "border-slate-500/30",   label: "Informativo"       },
+const severityStyle: Record<SeverityCanonical, { bg: string; text: string; border: string; icon: string; label: string }> = {
+  low:           { bg: "bg-emerald-500/15", text: "text-emerald-400", border: "border-emerald-500/30", icon: "text-emerald-400", label: "Leve"       },
+  medium:        { bg: "bg-yellow-500/15",  text: "text-yellow-400",  border: "border-yellow-500/30",  icon: "text-yellow-400",  label: "Moderada"   },
+  high:          { bg: "bg-orange-500/15",  text: "text-orange-400",  border: "border-orange-500/30",  icon: "text-orange-400",  label: "Alta"       },
+  critical:      { bg: "bg-red-500/15",     text: "text-red-400",     border: "border-red-500/30",     icon: "text-red-400",     label: "Crítica"    },
+  informational: { bg: "bg-blue-500/15",    text: "text-blue-400",    border: "border-blue-500/30",    icon: "text-blue-400",    label: "Informativo" },
 };
 
-function pickMaxSeverity(findings: Finding[]): Severity {
-  const order: Severity[] = ["alta", "media", "baja", "informativo"];
-  for (const s of order) if (findings.some((f) => f.severity === s)) return s;
-  return "informativo";
+/* ──────────────────────────────────────────────────────────────── */
+/*  Normalizadores (tolerantes a formato viejo/nuevo)                */
+/* ──────────────────────────────────────────────────────────────── */
+
+function normalizeSeverity(s: Severity | string | undefined | null): SeverityCanonical {
+  const lc = String(s ?? "").toLowerCase().trim();
+  if (lc === "critical")                               return "critical";
+  if (lc === "high"    || lc === "alta")               return "high";
+  if (lc === "medium"  || lc === "media")              return "medium";
+  if (lc === "low"     || lc === "baja")               return "low";
+  if (lc === "informational" || lc === "informativo") return "informational";
+  return "informational";
+}
+
+/** Devuelve siempre decimal 0-1 aunque el input sea 0-100 (records viejos) */
+function normalizeConfidence(c: number | undefined | null): number {
+  if (typeof c !== "number" || Number.isNaN(c)) return 0;
+  if (c > 1) return Math.max(0, Math.min(1, c / 100));
+  return Math.max(0, Math.min(1, c));
+}
+
+function confidencePercent(c: number | undefined | null): number {
+  return Math.round(normalizeConfidence(c) * 100);
+}
+
+function pickMaxSeverity(findings: Finding[]): SeverityCanonical {
+  const order: SeverityCanonical[] = ["critical", "high", "medium", "low", "informational"];
+  const canonicals = findings.map((f) => normalizeSeverity(f.severity));
+  for (const s of order) if (canonicals.includes(s)) return s;
+  return "informational";
+}
+
+/* ──────────────────────────────────────────────────────────────── */
+/*  Parser defensivo — recupera records viejos con JSON crudo en    */
+/*  el campo summary. Solo se usa al leer del GET, no al guardar.   */
+/* ──────────────────────────────────────────────────────────────── */
+
+function looksLikeCrudeJson(text: string): boolean {
+  if (!text) return false;
+  const trimmed = text.trim();
+  if (trimmed.startsWith("{")) return true;
+  if (trimmed.startsWith("```")) return true;
+  if (/["']?(summary|findings|recommendations)["']?\s*:/.test(trimmed)) return true;
+  return false;
+}
+
+function tryReparseBrokenAnalysis(input: AnalysisResult): {
+  fixed: AnalysisResult;
+  wasBroken: boolean;
+  couldFix: boolean;
+} {
+  if (!looksLikeCrudeJson(input.summary)) {
+    return { fixed: input, wasBroken: false, couldFix: true };
+  }
+
+  try {
+    // Strip markdown fences
+    let cleaned = input.summary
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```\s*$/i, "")
+      .trim();
+    // Strip JS comments
+    cleaned = cleaned.replace(/\/\/[^\n]*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+    // Strip trailing commas antes de ] o }
+    cleaned = cleaned.replace(/,(\s*[}\]])/g, "$1");
+    // Extract outer object
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error("No JSON object found");
+
+    const parsed = JSON.parse(match[0]);
+    if (typeof parsed.summary !== "string") {
+      throw new Error("Parsed object has no summary string");
+    }
+
+    return {
+      fixed: {
+        summary:         parsed.summary,
+        findings:        Array.isArray(parsed.findings) ? parsed.findings : [],
+        recommendations: parsed.recommendations ?? "",
+      },
+      wasBroken: true,
+      couldFix: true,
+    };
+  } catch {
+    return { fixed: input, wasBroken: true, couldFix: false };
+  }
 }
 
 function formatNumber(n: number): string {
   return n.toLocaleString("es-MX");
-}
-
-function balancePct(remaining: number, limit: number): number {
-  if (limit <= 0) return 0;
-  return Math.min(100, Math.max(0, (remaining / limit) * 100));
 }
 
 function balanceColorClasses(remaining: number, limit: number): { text: string; tooltip: string | null } {
@@ -83,7 +168,7 @@ function balanceColorClasses(remaining: number, limit: number): { text: string; 
 }
 
 /* ──────────────────────────────────────────────────────────────── */
-/*  Componente                                                       */
+/*  Componente principal                                             */
 /* ──────────────────────────────────────────────────────────────── */
 
 interface Props {
@@ -99,21 +184,26 @@ export function XrayAiPanel({
   fileId, fileUrl, fileName, mimeType,
   initialTokensRemaining, tokensLimit,
 }: Props) {
-  const [open, setOpen]             = useState(false);
-  const [remaining, setRemaining]   = useState(initialTokensRemaining);
-  const [loadingInitial, setLoadingInitial] = useState(true);
+  const [open, setOpen]                       = useState(false);
+  const [remaining, setRemaining]             = useState(initialTokensRemaining);
+  const [loadingInitial, setLoadingInitial]   = useState(true);
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
-  const [result, setResult]         = useState<AnalysisResult | null>(null);
-  const [analyzedAt, setAnalyzedAt] = useState<Date | null>(null);
-  const [cached, setCached]         = useState(false);
+  const [result, setResult]                   = useState<AnalysisResult | null>(null);
+  const [analyzedAt, setAnalyzedAt]           = useState<Date | null>(null);
+  const [cached, setCached]                   = useState(false);
   const [originalTokens, setOriginalTokens]   = useState<number | null>(null);
   const [currentSpent, setCurrentSpent]       = useState<number | null>(null);
+  const [brokenLegacy, setBrokenLegacy]       = useState(false); // record viejo con formato irrecuperable
+  // Notas del doctor
+  const [savedNotes, setSavedNotes]           = useState("");
+  const [notesUpdatedAt, setNotesUpdatedAt]   = useState<Date | null>(null);
+  const [hasAnalysisRecord, setHasAnalysisRecord] = useState(false); // solo se pueden guardar notas si hay record
 
-  const isImage   = mimeType.startsWith("image/");
+  const isImage    = mimeType.startsWith("image/");
   const outOfCreds = remaining <= 0;
-  const cls       = balanceColorClasses(remaining, tokensLimit);
+  const cls        = balanceColorClasses(remaining, tokensLimit);
 
-  /* Carga inicial: GET cache cuando cambia fileId */
+  /* Carga inicial: GET cache al montar / cambiar fileId */
   useEffect(() => {
     let cancelled = false;
     setLoadingInitial(true);
@@ -122,6 +212,10 @@ export function XrayAiPanel({
     setCached(false);
     setOriginalTokens(null);
     setCurrentSpent(null);
+    setBrokenLegacy(false);
+    setSavedNotes("");
+    setNotesUpdatedAt(null);
+    setHasAnalysisRecord(false);
     setRemaining(initialTokensRemaining);
 
     if (!isImage) {
@@ -133,16 +227,22 @@ export function XrayAiPanel({
       try {
         const res = await fetch(`/api/xrays/${fileId}/analyze`, { method: "GET" });
         if (cancelled) return;
-        if (!res.ok) return; // 404 → no cache, normal
+        if (!res.ok) return;
         const data = (await res.json()) as AnalyzeResponse;
         if (cancelled) return;
-        setResult(data.analysis);
+
+        const { fixed, wasBroken, couldFix } = tryReparseBrokenAnalysis(data.analysis);
+        setResult(fixed);
+        setBrokenLegacy(wasBroken && !couldFix);
         setAnalyzedAt(new Date(data.analyzedAt));
         setCached(true);
         setOriginalTokens(data.tokensUsed);
         setRemaining(data.tokensRemaining);
+        setSavedNotes(data.doctorNotes ?? "");
+        setNotesUpdatedAt(data.doctorNotesUpdatedAt ? new Date(data.doctorNotesUpdatedAt) : null);
+        setHasAnalysisRecord(true);
       } catch {
-        /* silencioso */
+        /* silencioso — el usuario puede intentar con el botón */
       } finally {
         if (!cancelled) setLoadingInitial(false);
       }
@@ -182,12 +282,21 @@ export function XrayAiPanel({
       }
 
       const payload = data as AnalyzeResponse;
-      setResult(payload.analysis);
+      const { fixed, wasBroken, couldFix } = tryReparseBrokenAnalysis(payload.analysis);
+
+      setResult(fixed);
+      setBrokenLegacy(wasBroken && !couldFix);
       setRemaining(payload.tokensRemaining);
       setAnalyzedAt(new Date(payload.analyzedAt));
       setCached(payload.cached);
       setOriginalTokens(payload.cached ? (payload.originalTokensUsed ?? payload.tokensUsed) : payload.tokensUsed);
       setCurrentSpent(payload.cached ? 0 : payload.tokensUsed);
+      // Notas preservadas en refresh — payload puede traerlas
+      if (typeof payload.doctorNotes === "string") setSavedNotes(payload.doctorNotes);
+      if (payload.doctorNotesUpdatedAt !== undefined) {
+        setNotesUpdatedAt(payload.doctorNotesUpdatedAt ? new Date(payload.doctorNotesUpdatedAt) : null);
+      }
+      setHasAnalysisRecord(true);
 
       if (payload.cached) {
         toast.success("Análisis cargado desde caché · 0 tokens");
@@ -201,7 +310,6 @@ export function XrayAiPanel({
     }
   }, [fileId, isImage]);
 
-  /* Click del botón principal */
   function handleButtonClick() {
     setOpen(true);
     if (!result && !loadingAnalysis && isImage && !outOfCreds) {
@@ -259,6 +367,7 @@ export function XrayAiPanel({
             analyzedAt={analyzedAt}
             cached={cached}
             loading={loadingAnalysis && !result}
+            brokenLegacy={brokenLegacy}
           />
 
           {/* Scrollable body */}
@@ -273,6 +382,20 @@ export function XrayAiPanel({
               />
             </div>
 
+            {/* Sección — Notas del doctor (entre imagen y análisis IA) */}
+            <div className="px-5 pt-5">
+              <DoctorNotesSection
+                fileId={fileId}
+                initialNotes={savedNotes}
+                initialUpdatedAt={notesUpdatedAt}
+                enabled={hasAnalysisRecord}
+                onSaved={(notes, updatedAt) => {
+                  setSavedNotes(notes);
+                  setNotesUpdatedAt(updatedAt);
+                }}
+              />
+            </div>
+
             {loadingAnalysis && !result ? (
               <LoadingSection />
             ) : result ? (
@@ -283,6 +406,7 @@ export function XrayAiPanel({
                 currentSpent={currentSpent}
                 remaining={remaining}
                 tokensLimit={tokensLimit}
+                brokenLegacy={brokenLegacy}
                 onRefresh={() => runAnalysis(true)}
                 onClose={() => setOpen(false)}
                 refreshing={loadingAnalysis}
@@ -299,18 +423,19 @@ export function XrayAiPanel({
 }
 
 /* ──────────────────────────────────────────────────────────────── */
-/*  Subcomponentes del Dialog                                        */
+/*  Subcomponentes                                                   */
 /* ──────────────────────────────────────────────────────────────── */
 
 function DialogHeaderBar({
-  result, analyzedAt, cached, loading,
+  result, analyzedAt, cached, loading, brokenLegacy,
 }: {
   result: AnalysisResult | null;
   analyzedAt: Date | null;
   cached: boolean;
   loading: boolean;
+  brokenLegacy: boolean;
 }) {
-  const maxSev = result ? pickMaxSeverity(result.findings) : null;
+  const maxSev   = result && !brokenLegacy ? pickMaxSeverity(result.findings) : null;
   const severSty = maxSev ? severityStyle[maxSev] : null;
   const relativeTime = analyzedAt
     ? formatDistanceToNow(analyzedAt, { addSuffix: true, locale: es })
@@ -333,10 +458,10 @@ function DialogHeaderBar({
           {severSty && (
             <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold", severSty.bg, severSty.text, severSty.border)}>
               <AlertTriangle className="h-3 w-3" />
-              {severSty.label}
+              Severidad {severSty.label.toLowerCase()}
             </span>
           )}
-          {result && result.findings.length > 0 && (
+          {result && !brokenLegacy && result.findings.length > 0 && (
             <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-300">
               {result.findings.length} hallazgo{result.findings.length === 1 ? "" : "s"}
             </span>
@@ -395,7 +520,7 @@ function EmptyState({ onAnalyze, disabled }: { onAnalyze: () => void; disabled: 
 
 function AnalysisSections({
   result, cached, originalTokens, currentSpent, remaining, tokensLimit,
-  onRefresh, onClose, refreshing, disabled,
+  brokenLegacy, onRefresh, onClose, refreshing, disabled,
 }: {
   result: AnalysisResult;
   cached: boolean;
@@ -403,6 +528,7 @@ function AnalysisSections({
   currentSpent: number | null;
   remaining: number;
   tokensLimit: number;
+  brokenLegacy: boolean;
   onRefresh: () => void;
   onClose: () => void;
   refreshing: boolean;
@@ -416,81 +542,113 @@ function AnalysisSections({
         : [];
 
   return (
-    <div className="space-y-6 p-5">
-      {/* Sección 2 — Resumen general */}
-      {result.summary && (
-        <section>
-          <h4 className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Resumen</h4>
+    <div className="space-y-5 p-5">
+      {/* Banner de formato antiguo */}
+      {brokenLegacy && (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-amber-200">Formato antiguo detectado</p>
+              <p className="mt-1 text-xs text-amber-200/80">
+                Este análisis se generó con una versión anterior del sistema y no pudo reconstruirse
+                correctamente. Haz click en <strong>Re-analizar</strong> para obtener una versión mejorada
+                con hallazgos y confianza calibrada.
+              </p>
+            </div>
+            <Button size="sm" onClick={onRefresh} disabled={disabled || refreshing} className="gap-1.5">
+              {refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              Re-analizar
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Sección — RESUMEN */}
+      {result.summary && !brokenLegacy && (
+        <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+          <h4 className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">Resumen</h4>
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">{result.summary}</p>
         </section>
       )}
 
-      {/* Sección 3 — Hallazgos */}
-      {result.findings.length > 0 && (
-        <section>
-          <h4 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Hallazgos</h4>
-          <ul className="space-y-2">
-            {result.findings.map((f) => {
-              const s = severityStyle[f.severity] ?? severityStyle.informativo;
-              return (
-                <li key={f.id} className={cn("flex gap-3 rounded-xl border p-3 bg-white/[0.02]", s.border)}>
-                  <AlertTriangle className={cn("h-4 w-4 shrink-0 translate-y-0.5", s.text)} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold text-foreground">{f.title}</p>
+      {/* Sección — HALLAZGOS */}
+      {!brokenLegacy && (
+        <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+          <h4 className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">Hallazgos</h4>
+          {result.findings.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin hallazgos significativos.</p>
+          ) : (
+            <ul className="space-y-3">
+              {result.findings.map((f) => {
+                const canonical = normalizeSeverity(f.severity);
+                const s = severityStyle[canonical];
+                const confPct = confidencePercent(f.confidence);
+                return (
+                  <li key={String(f.id)} className={cn("flex gap-3 rounded-xl border p-4 bg-white/[0.02]", s.border)}>
+                    <span className={cn("mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", s.bg)}>
+                      <AlertTriangle className={cn("h-4 w-4", s.icon)} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <p className="text-sm font-semibold text-foreground">{f.title}</p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", s.bg, s.text)}>
+                            {s.label}
+                          </span>
+                          <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
+                            Confianza {confPct}%
+                          </span>
+                        </div>
+                      </div>
+                      {f.description && (
+                        <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{f.description}</p>
+                      )}
                       {f.tooth && (
-                        <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium text-slate-300">
-                          {f.tooth}
+                        <span className="mt-2 inline-flex items-center rounded-full border border-white/15 bg-white/[0.03] px-2 py-0.5 text-[10px] font-medium text-slate-300">
+                          Diente: {f.tooth}
                         </span>
                       )}
-                      <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", s.bg, s.text)}>
-                        {f.severity}
-                      </span>
-                      <span
-                        className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-slate-300"
-                        title={f.confidenceRationale ?? undefined}
-                      >
-                        Confianza {f.confidence}%
-                      </span>
+                      {f.confidenceRationale && (
+                        <p className="mt-2 flex gap-1.5 text-[11px] italic leading-relaxed text-slate-400">
+                          <Info className="mt-[2px] h-3 w-3 shrink-0" />
+                          {f.confidenceRationale}
+                        </p>
+                      )}
                     </div>
-                    {f.description && (
-                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{f.description}</p>
-                    )}
-                    {f.confidenceRationale && (
-                      <p className="mt-1.5 flex gap-1.5 text-[11px] italic leading-relaxed text-slate-400">
-                        <Info className="h-3 w-3 shrink-0 translate-y-[2px]" />
-                        {f.confidenceRationale}
-                      </p>
-                    )}
-                  </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {/* Sección — RECOMENDACIONES */}
+      {!brokenLegacy && (
+        <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+          <h4 className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">Recomendaciones</h4>
+          {recsArray.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin recomendaciones adicionales.</p>
+          ) : (
+            <ul className="space-y-2">
+              {recsArray.map((r, i) => (
+                <li key={i} className="flex gap-2.5 text-sm text-foreground/90">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 translate-y-0.5 text-emerald-400" />
+                  <span className="whitespace-pre-wrap leading-relaxed">{r}</span>
                 </li>
-              );
-            })}
-          </ul>
+              ))}
+            </ul>
+          )}
         </section>
       )}
 
-      {/* Sección 4 — Recomendaciones */}
-      {recsArray.length > 0 && (
-        <section>
-          <h4 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Recomendaciones</h4>
-          <ul className="space-y-1.5">
-            {recsArray.map((r, i) => (
-              <li key={i} className="flex gap-2 text-sm text-foreground/90">
-                <CheckCircle2 className="h-4 w-4 shrink-0 translate-y-0.5 text-emerald-400" />
-                <span className="whitespace-pre-wrap leading-relaxed">{r}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {/* Sección 5 — Tokens gastados */}
-      <section className="rounded-xl border border-violet-500/20 bg-violet-500/[0.07] p-4">
+      {/* Sección — TOKENS GASTADOS */}
+      <section className="rounded-2xl border border-violet-500/20 bg-violet-500/[0.07] p-5">
         <div className="flex items-start gap-3">
           <Coins className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" />
           <div className="min-w-0 flex-1">
-            <h4 className="text-[10px] font-bold uppercase tracking-wider text-violet-300">Tokens utilizados</h4>
+            <h4 className="text-[10px] font-bold uppercase tracking-[0.18em] text-violet-300">Tokens utilizados</h4>
             {cached ? (
               <p className="mt-1 text-sm text-foreground/90">
                 Análisis cacheado — se gastaron{" "}
@@ -511,7 +669,7 @@ function AnalysisSections({
         </div>
       </section>
 
-      {/* Sección 6 — Disclaimer + acciones */}
+      {/* Sección — Disclaimer + acciones */}
       <section className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
         <p className="text-[11px] leading-relaxed text-muted-foreground">
           <Info className="mr-1 inline h-3 w-3" />
@@ -536,5 +694,171 @@ function AnalysisSections({
         </Button>
       </div>
     </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────── */
+/*  Sección de notas del doctor                                      */
+/* ──────────────────────────────────────────────────────────────── */
+
+const NOTES_MAX = 5000;
+const AUTO_SAVE_DELAY_MS = 3000;
+
+function DoctorNotesSection({
+  fileId, initialNotes, initialUpdatedAt, enabled, onSaved,
+}: {
+  fileId: string;
+  initialNotes: string;
+  initialUpdatedAt: Date | null;
+  enabled: boolean;
+  onSaved: (notes: string, updatedAt: Date | null) => void;
+}) {
+  const [draft, setDraft]               = useState(initialNotes);
+  const [saving, setSaving]             = useState(false);
+  const [lastSavedAt, setLastSavedAt]   = useState<Date | null>(initialUpdatedAt);
+  const [lastSavedValue, setLastSavedValue] = useState(initialNotes);
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Si cambia el fileId (archivo distinto), resetea el draft
+  useEffect(() => {
+    setDraft(initialNotes);
+    setLastSavedValue(initialNotes);
+    setLastSavedAt(initialUpdatedAt);
+    // Cancela cualquier auto-save pendiente al cambiar de archivo
+    if (autoSaveTimer.current) {
+      clearTimeout(autoSaveTimer.current);
+      autoSaveTimer.current = null;
+    }
+  }, [fileId, initialNotes, initialUpdatedAt]);
+
+  const isDirty = draft !== lastSavedValue;
+  const charsLeft = NOTES_MAX - draft.length;
+  const overLimit = draft.length > NOTES_MAX;
+
+  const save = useCallback(async (value: string) => {
+    if (!enabled) return;
+    if (value.length > NOTES_MAX) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/xrays/${fileId}/analyze/notes`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ doctorNotes: value }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Error al guardar");
+      }
+      const data = await res.json() as { doctorNotes: string; doctorNotesUpdatedAt: string | null };
+      const updatedAt = data.doctorNotesUpdatedAt ? new Date(data.doctorNotesUpdatedAt) : null;
+      setLastSavedValue(data.doctorNotes);
+      setLastSavedAt(updatedAt);
+      onSaved(data.doctorNotes, updatedAt);
+      toast.success("Notas guardadas");
+    } catch (err: any) {
+      toast.error(err?.message ?? "No se pudieron guardar las notas. Intenta de nuevo.");
+    } finally {
+      setSaving(false);
+    }
+  }, [fileId, enabled, onSaved]);
+
+  // Auto-save con debounce
+  useEffect(() => {
+    if (!enabled || !isDirty || overLimit) return;
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      save(draft);
+    }, AUTO_SAVE_DELAY_MS);
+    return () => {
+      if (autoSaveTimer.current) {
+        clearTimeout(autoSaveTimer.current);
+        autoSaveTimer.current = null;
+      }
+    };
+  }, [draft, isDirty, overLimit, enabled, save]);
+
+  const handleManualSave = () => {
+    if (autoSaveTimer.current) {
+      clearTimeout(autoSaveTimer.current);
+      autoSaveTimer.current = null;
+    }
+    save(draft);
+  };
+
+  const relativeTime = lastSavedAt
+    ? formatDistanceToNow(lastSavedAt, { addSuffix: true, locale: es })
+    : null;
+
+  const charCounterClass = overLimit
+    ? "text-rose-400"
+    : charsLeft < 200
+      ? "text-amber-400"
+      : "text-muted-foreground";
+
+  return (
+    <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h4 className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+          <FileEdit className="h-3 w-3" />
+          Mis notas
+        </h4>
+        {relativeTime && (
+          <span className="text-[11px] text-muted-foreground">
+            Última edición: {relativeTime}
+          </span>
+        )}
+      </div>
+
+      <label htmlFor={`xray-notes-${fileId}`} className="sr-only">
+        Mis notas sobre la radiografía
+      </label>
+      <textarea
+        id={`xray-notes-${fileId}`}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        placeholder={enabled
+          ? "Anota aquí lo que observas en la radiografía antes o después de ver el análisis IA..."
+          : "Genera primero un análisis IA para poder guardar tus notas."}
+        disabled={!enabled}
+        rows={4}
+        maxLength={NOTES_MAX + 200}
+        aria-describedby={`xray-notes-counter-${fileId}`}
+        className={cn(
+          "w-full resize-y rounded-xl border bg-[#05070F] px-4 py-3 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/40",
+          overLimit ? "border-rose-500/40" : "border-white/10",
+          !enabled && "cursor-not-allowed opacity-60",
+        )}
+      />
+
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <span
+          id={`xray-notes-counter-${fileId}`}
+          className={cn("text-[11px] font-medium", charCounterClass)}
+          aria-live="polite"
+        >
+          {formatNumber(draft.length)} / {formatNumber(NOTES_MAX)} caracteres
+        </span>
+        <Button
+          variant={isDirty ? "default" : "ghost"}
+          size="sm"
+          disabled={!enabled || !isDirty || overLimit || saving}
+          onClick={handleManualSave}
+          className="gap-1.5"
+          aria-label="Guardar notas manualmente"
+        >
+          {saving ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Guardando...
+            </>
+          ) : (
+            <>
+              <Save className="h-3.5 w-3.5" />
+              Guardar notas
+            </>
+          )}
+        </Button>
+      </div>
+    </section>
   );
 }

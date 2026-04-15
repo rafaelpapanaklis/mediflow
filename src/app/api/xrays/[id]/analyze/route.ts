@@ -1,67 +1,119 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdmin } from "@supabase/supabase-js";
+import { logAudit } from "@/lib/audit";
 
-const ANALYSIS_SYSTEM_PROMPT = `Actúas como un asistente de análisis radiográfico dental. Tu rol es identificar hallazgos visibles en la imagen y reportarlos con confianza calibrada a lo que realmente se ve. NO eres el diagnóstico final — el doctor revisa tu análisis y decide. Por eso no necesitas ser excesivamente conservador: reporta con confianza lo que ves claramente.
+const ANALYSIS_SYSTEM_PROMPT = `Actúas como un asistente de análisis radiográfico dental. Tu rol es identificar hallazgos visibles en la imagen y reportarlos con confianza calibrada a lo que realmente se ve. NO eres el diagnóstico final — el doctor revisa tu análisis y decide.
+
+Usa la herramienta "report_radiograph_analysis" para reportar tu análisis estructurado. NO respondas con texto libre — siempre usa la herramienta.
 
 INSTRUCCIONES:
 - Analiza la imagen dental proporcionada
 - Identifica hallazgos clínicamente relevantes: caries, lesiones periapicales, pérdida ósea, restauraciones existentes, fracturas, dientes impactados, cálculo, reabsorción radicular, etc.
-- Para cada hallazgo indica: diente/zona afectada, descripción, severidad (alta/media/baja/informativo), nivel de confianza (entero 0-100) y una breve justificación de ese nivel de confianza
-- Usa nomenclatura dental estándar (numeración FDI/universal)
+- Para cada hallazgo indica: diente/zona afectada (notación FDI), descripción, severidad, nivel de confianza (decimal 0.0-1.0) y una breve justificación de ese nivel de confianza
 - Responde SIEMPRE en español clínico
-- Sé específico pero conciso
 - Máximo 6 hallazgos, priorizando los más relevantes clínicamente
 
-ESCALA DE CONFIANZA (aplica al campo "confidence", entero 0-100):
-- 90-100: Hallazgo visualmente inequívoco, claramente visible en la imagen, sin ambigüedad
-- 75-89:  Hallazgo probable con señales radiográficas claras y consistentes
-- 60-74:  Hallazgo sospechoso pero con ambigüedad (puede tener múltiples causas)
-- 40-59:  Hallazgo posible pero poco claro, se recomienda proyección adicional
-- 0-39:   Muy ambiguo, casi descartable
+ESCALA DE CONFIANZA (decimal 0.0 a 1.0):
+- 0.90-1.00: Hallazgo visualmente inequívoco, claramente visible, sin ambigüedad
+- 0.75-0.89: Hallazgo probable con señales radiográficas claras y consistentes
+- 0.60-0.74: Hallazgo sospechoso pero con ambigüedad (puede tener múltiples causas)
+- 0.40-0.59: Hallazgo posible pero poco claro, se recomienda proyección adicional
+- 0.00-0.39: Muy ambiguo, casi descartable
 
-IMPORTANTE SOBRE CONFIANZA: Sé confiado cuando el hallazgo es visualmente claro. NO bajes la confianza por "precaución diagnóstica general" — la baja confianza se reserva para imágenes con ruido, recorte pobre, o hallazgos verdaderamente ambiguos. Un hallazgo claro y visible debe tener confianza 85 o superior, aunque luego el doctor lo confirme con su criterio clínico.
+IMPORTANTE SOBRE CONFIANZA: Sé confiado cuando el hallazgo es visualmente claro. NO bajes la confianza por "precaución diagnóstica general" — la baja confianza se reserva para imágenes con ruido, recorte pobre, o hallazgos verdaderamente ambiguos. Un hallazgo claro y visible debe tener confianza 0.85 o superior.
 
 EJEMPLOS DE CALIBRACIÓN CORRECTA:
-- "Caries visible en molar inferior derecho con pérdida de esmalte clara" → confidence 92
-- "Zona radiolúcida periapical sugestiva de lesión, con contornos definidos" → confidence 85
-- "Posible reabsorción radicular, aunque la imagen tiene algo de ruido" → confidence 65
-- "Sombra ambigua que podría ser artefacto o lesión temprana" → confidence 45
+- "Caries visible en molar inferior derecho con pérdida de esmalte clara" → 0.92
+- "Zona radiolúcida periapical sugestiva de lesión, con contornos definidos" → 0.85
+- "Posible reabsorción radicular, aunque la imagen tiene algo de ruido" → 0.65
+- "Sombra ambigua que podría ser artefacto o lesión temprana" → 0.45
 
-NOTA FINAL: Esto es una herramienta de APOYO al doctor. La nota de "los hallazgos deben ser confirmados clínicamente" va en el campo "recommendations", NO afecta tu calibración de confianza.
+SEVERIDAD:
+- "critical": emergencia dental (absceso activo, fractura expuesta con dolor agudo)
+- "high":     patología significativa que requiere atención pronta
+- "medium":   hallazgo moderado que requiere tratamiento planeado
+- "low":      hallazgo menor o preventivo
+- "informational" (solo findings individuales): observación anatómica normal
 
-Responde EXCLUSIVAMENTE en este formato JSON (sin markdown, sin backticks):
-{
-  "summary": "Resumen general en 2-3 líneas",
-  "findings": [
-    {
-      "id": 1,
-      "title": "Nombre del hallazgo",
-      "description": "Descripción detallada",
-      "tooth": "Pieza #XX (Nombre del diente)",
-      "severity": "alta|media|baja|informativo",
-      "confidence": 85,
-      "confidenceRationale": "Breve razón del nivel de confianza (opcional)"
-    }
-  ],
-  "recommendations": "Recomendaciones generales en 1-2 líneas"
-}`;
+La severidad top-level debe reflejar el peor hallazgo encontrado. Las recomendaciones van en "recommendations" como array de strings individuales (una recomendación por string).
 
-type Severity = "alta" | "media" | "baja" | "informativo";
+NOTA: Esto es una herramienta de APOYO al doctor. La nota de "los hallazgos deben confirmarse clínicamente" va dentro del summary o como una recommendation más, NO afecta tu calibración de confianza.`;
+
+/* Tool definition — obliga a Claude a devolver estructurado.
+   Las descriptions guían brevedad SIN imponer cortes duros (no maxItems, no maxLength). */
+const ANALYSIS_TOOL = {
+  name: "report_radiograph_analysis",
+  description: "Reporta el análisis estructurado de una radiografía dental. Claude DEBE usar esta herramienta para reportar hallazgos, no debe responder con texto libre.",
+  input_schema: {
+    type: "object",
+    required: ["summary", "severity", "confidence", "findings", "recommendations"],
+    properties: {
+      summary: {
+        type: "string",
+        description: "Resumen general del análisis, 2-3 oraciones concisas.",
+      },
+      severity: {
+        type: "string",
+        enum: ["low", "medium", "high", "critical"],
+        description: "Severidad general del caso, reflejando el peor hallazgo encontrado.",
+      },
+      confidence: {
+        type: "number",
+        minimum: 0,
+        maximum: 1,
+        description: "Confianza general del análisis, escala decimal 0.0 a 1.0.",
+      },
+      findings: {
+        type: "array",
+        description: "Hallazgos clínicamente relevantes, priorizados por severidad.",
+        items: {
+          type: "object",
+          required: ["id", "title", "description", "severity", "confidence"],
+          properties: {
+            id:          { type: "string", description: "Identificador secuencial del hallazgo, ej '1', '2'." },
+            title:       { type: "string", description: "Nombre corto del hallazgo en español clínico, una frase." },
+            description: { type: "string", description: "Descripción clínica del hallazgo, 1-3 oraciones." },
+            tooth:       { type: ["string", "null"], description: "Diente/zona afectada en notación FDI (ej '36'). Null si no aplica." },
+            severity:    { type: "string", enum: ["low", "medium", "high", "critical", "informational"] },
+            confidence:  { type: "number", minimum: 0, maximum: 1, description: "Confianza calibrada del hallazgo, decimal 0.0-1.0." },
+            confidenceRationale: { type: ["string", "null"], description: "Opcional. Incluir solo si confidence < 0.85. Una frase corta explicando por qué esa confianza." },
+          },
+        },
+      },
+      recommendations: {
+        type: "array",
+        description: "Recomendaciones clínicas accionables.",
+        items: { type: "string", description: "Una recomendación accionable en una oración." },
+      },
+    },
+  },
+} as const;
+
+/**
+ * Severidad aceptada por el backend — unión de los valores nuevos (inglés, del tool)
+ * y los viejos (español, de respuestas pre-tool-use). El frontend normaliza al mostrar.
+ */
+type SeverityLegacy = "alta" | "media" | "baja" | "informativo";
+type SeverityNew    = "low" | "medium" | "high" | "critical" | "informational";
+type Severity       = SeverityLegacy | SeverityNew;
 
 interface Finding {
-  id: number;
+  id: string | number;
   title: string;
   description: string;
-  tooth?: string;
+  tooth?: string | null;
   severity: Severity;
   confidence: number;
-  confidenceRationale?: string;
+  confidenceRationale?: string | null;
 }
 
 interface Analysis {
   summary: string;
+  severity?: Severity;          // nuevo top-level (tool use)
+  confidence?: number;          // nuevo top-level (tool use, 0-1)
   findings: Finding[];
   recommendations: string | string[];
 }
@@ -74,11 +126,22 @@ function getAdminSupabase() {
   );
 }
 
-/** Max severity encontrada en findings (alta > media > baja > informativo) */
+/**
+ * Max severity encontrada en findings — acepta aliases ES/EN.
+ * Orden: critical > high/alta > medium/media > low/baja > informational/informativo.
+ */
 function topSeverity(findings: Finding[]): Severity {
-  const order: Severity[] = ["alta", "media", "baja", "informativo"];
-  for (const s of order) if (findings.some((f) => f.severity === s)) return s;
-  return "informativo";
+  const groups: Array<{ canonical: Severity; aliases: string[] }> = [
+    { canonical: "critical",      aliases: ["critical"] },
+    { canonical: "high",          aliases: ["high", "alta"] },
+    { canonical: "medium",        aliases: ["medium", "media"] },
+    { canonical: "low",           aliases: ["low", "baja"] },
+    { canonical: "informational", aliases: ["informational", "informativo"] },
+  ];
+  for (const g of groups) {
+    if (findings.some((f) => g.aliases.includes(String(f.severity)))) return g.canonical;
+  }
+  return "informational";
 }
 
 /** Avg confidence en findings, clamp 0-100 */
@@ -126,14 +189,86 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       findings:        existing.findings,
       recommendations: existing.recommendations,
     },
-    severity:        existing.severity,
-    confidence:      existing.confidence,
-    tokensUsed:      existing.tokensUsed,
-    tokensRemaining: remaining,
-    tokensLimit:     limit,
-    modelUsed:       existing.modelUsed,
-    cached:          true,
-    analyzedAt:      existing.createdAt.toISOString(),
+    severity:             existing.severity,
+    confidence:           existing.confidence,
+    tokensUsed:           existing.tokensUsed,
+    tokensRemaining:      remaining,
+    tokensLimit:          limit,
+    modelUsed:            existing.modelUsed,
+    doctorNotes:          existing.doctorNotes ?? "",
+    doctorNotesUpdatedAt: existing.doctorNotesUpdatedAt?.toISOString() ?? null,
+    cached:               true,
+    analyzedAt:           existing.createdAt.toISOString(),
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/*  PATCH — actualiza las notas manuales del doctor                    */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+const UpdateNotesSchema = z.object({
+  doctorNotes: z.string().max(5000, "Las notas no pueden exceder 5000 caracteres"),
+});
+
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const ctx = await getAuthContext();
+  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Parse + validate body
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
+  }
+  const parsed = UpdateNotesSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.errors[0]?.message ?? "Body inválido" }, { status: 400 });
+  }
+
+  // Multi-tenant guard: el análisis debe existir Y pertenecer a la clínica del ctx
+  const existing = await prisma.xrayAnalysis.findUnique({
+    where:  { fileId: params.id },
+    select: { id: true, clinicId: true, doctorNotes: true },
+  });
+  if (!existing) {
+    return NextResponse.json({ error: "Análisis no encontrado" }, { status: 404 });
+  }
+  if (existing.clinicId !== ctx.clinicId) {
+    return NextResponse.json({ error: "No tienes permiso para editar estas notas" }, { status: 403 });
+  }
+
+  // Update
+  const updated = await prisma.xrayAnalysis.update({
+    where: { id: existing.id },
+    data:  {
+      doctorNotes:          parsed.data.doctorNotes,
+      doctorNotesUpdatedAt: new Date(),
+    },
+    select: {
+      doctorNotes:          true,
+      doctorNotesUpdatedAt: true,
+    },
+  });
+
+  // Audit log
+  await logAudit({
+    clinicId:   ctx.clinicId,
+    userId:     ctx.userId,
+    entityType: "xray-analysis",
+    entityId:   existing.id,
+    action:     "XRAY_NOTES_UPDATED",
+    changes: {
+      doctorNotes: {
+        before: existing.doctorNotes ?? "",
+        after:  parsed.data.doctorNotes,
+      },
+    },
+  });
+
+  return NextResponse.json({
+    doctorNotes:          updated.doctorNotes ?? "",
+    doctorNotesUpdatedAt: updated.doctorNotesUpdatedAt?.toISOString() ?? null,
   });
 }
 
@@ -176,15 +311,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           findings:        existing.findings,
           recommendations: existing.recommendations,
         },
-        severity:        existing.severity,
-        confidence:      existing.confidence,
-        tokensUsed:      0,                     // no gastamos nada ahora
-        originalTokensUsed: existing.tokensUsed, // para mostrar en UI
-        tokensRemaining: remaining,
-        tokensLimit:     limit,
-        modelUsed:       existing.modelUsed,
-        cached:          true,
-        analyzedAt:      existing.createdAt.toISOString(),
+        severity:             existing.severity,
+        confidence:           existing.confidence,
+        tokensUsed:           0,                     // no gastamos nada ahora
+        originalTokensUsed:   existing.tokensUsed,   // para mostrar en UI
+        tokensRemaining:      remaining,
+        tokensLimit:          limit,
+        modelUsed:            existing.modelUsed,
+        doctorNotes:          existing.doctorNotes ?? "",
+        doctorNotesUpdatedAt: existing.doctorNotesUpdatedAt?.toISOString() ?? null,
+        cached:               true,
+        analyzedAt:           existing.createdAt.toISOString(),
       });
     }
   }
@@ -295,12 +432,28 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model:      MODEL,
-        max_tokens: 1500,
-        system:     ANALYSIS_SYSTEM_PROMPT,
+        model:       MODEL,
+        max_tokens:  1500,
+        // System como array con cache_control para habilitar prompt caching
+        system: [
+          {
+            type: "text",
+            text: ANALYSIS_SYSTEM_PROMPT,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+        // Tools con cache_control en el último — cachea system + tools como un bloque
+        tools: [
+          {
+            ...ANALYSIS_TOOL,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+        tool_choice: { type: "tool", name: ANALYSIS_TOOL.name },
         messages: [{
           role: "user",
           content: [
+            // Imagen y contexto clínico NO se cachean (varían por paciente)
             { type: "image", source: { type: "base64", media_type: mediaType, data: imageBase64 } },
             { type: "text", text: userMessage },
           ],
@@ -314,35 +467,82 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       throw new Error(data.error?.message ?? "Error de API");
     }
 
-    const inputTokens  = data.usage?.input_tokens  ?? 0;
-    const outputTokens = data.usage?.output_tokens ?? 0;
-    const totalTokens  = inputTokens + outputTokens;
+    const inputTokens    = data.usage?.input_tokens    ?? 0;
+    const outputTokens   = data.usage?.output_tokens   ?? 0;
+    const cacheCreation  = data.usage?.cache_creation_input_tokens ?? 0;
+    const cacheRead      = data.usage?.cache_read_input_tokens     ?? 0;
+    const totalTokens    = inputTokens + outputTokens + cacheCreation + cacheRead;
 
-    // Update token usage
+    console.log("[xray-analyze] tokens:", {
+      cache_creation: cacheCreation,
+      cache_read:     cacheRead,
+      input:          inputTokens,
+      output:         outputTokens,
+      cached_hit:     cacheRead > 0,
+    });
+
+    // Update token usage (incluye tokens de cache creation/read que también se cobran)
     await prisma.clinic.update({
       where: { id: ctx.clinicId },
       data:  { aiTokensUsed: { increment: totalTokens } },
     });
 
-    const rawText = data.content?.[0]?.text ?? "";
+    /* ─── Extract tool_use (happy path) o fallback a texto ─── */
+    const contentBlocks: any[] = Array.isArray(data.content) ? data.content : [];
+    const toolUseBlock = contentBlocks.find(
+      (b) => b?.type === "tool_use" && b?.name === ANALYSIS_TOOL.name,
+    );
 
-    // Parse JSON response
     let analysis: Analysis;
-    try {
-      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-      analysis = jsonMatch
-        ? JSON.parse(jsonMatch[0])
-        : { summary: rawText, findings: [], recommendations: "" };
-    } catch {
-      analysis = { summary: rawText, findings: [], recommendations: "" };
+
+    if (toolUseBlock && toolUseBlock.input && typeof toolUseBlock.input === "object") {
+      // HAPPY PATH: Claude usó el tool, el input ya viene parseado como objeto
+      analysis = toolUseBlock.input as Analysis;
+    } else {
+      // FALLBACK: Claude no usó el tool (edge case). Intenta parseo defensivo del texto.
+      const textBlock = contentBlocks.find((b) => b?.type === "text");
+      const rawText: string = textBlock?.text ?? "";
+      console.warn("Claude no usó tool_use — intentando parseo defensivo");
+
+      try {
+        // Strip markdown fences (```json ... ``` o ``` ... ```)
+        let cleaned = rawText
+          .replace(/^```(?:json)?\s*/i, "")
+          .replace(/\s*```\s*$/i, "")
+          .trim();
+        // Strip JS-style comments inline
+        cleaned = cleaned.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+        // Strip trailing commas antes de } o ]
+        cleaned = cleaned.replace(/,(\s*[}\]])/g, "$1");
+        // Try to match the outer object
+        const match = cleaned.match(/\{[\s\S]*\}/);
+        if (match) {
+          analysis = JSON.parse(match[0]) as Analysis;
+        } else {
+          throw new Error("No JSON object found");
+        }
+      } catch (parseErr) {
+        console.error("Parse defensivo falló:", parseErr);
+        analysis = {
+          summary: "Claude respondió en formato no estructurado. Haz click en Re-analizar para obtener una versión mejorada.",
+          findings: [],
+          recommendations: [],
+          severity: "medium",
+          confidence: 0.5,
+        };
+      }
     }
 
     const findings       = Array.isArray(analysis.findings) ? analysis.findings : [];
-    const topSev         = topSeverity(findings);
-    const avgConf        = avgConfidence(findings);
+    // Top-level severity/confidence: del tool si existen, si no se derivan de findings
+    const topSev         = (analysis.severity as Severity | undefined) ?? topSeverity(findings);
+    const avgConf        = typeof analysis.confidence === "number"
+      ? analysis.confidence
+      : avgConfidence(findings);
 
     // Upsert en DB — create o sobreescribe si ya existe (refresh=true)
-    await prisma.xrayAnalysis.upsert({
+    // NOTA: update NO toca doctorNotes/doctorNotesUpdatedAt — se preservan en refresh
+    const saved = await prisma.xrayAnalysis.upsert({
       where:  { fileId: params.id },
       create: {
         fileId:          params.id,
@@ -368,6 +568,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         createdAt:       new Date(),   // bump timestamp en refresh
         createdBy:       ctx.userId ?? null,
       },
+      select: {
+        doctorNotes:          true,
+        doctorNotesUpdatedAt: true,
+      },
     });
 
     const tokensRemaining = Math.max(0, clinic.aiTokensLimit - currentTokensUsed - totalTokens);
@@ -378,14 +582,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         findings,
         recommendations: analysis.recommendations ?? "",
       },
-      severity:        topSev,
-      confidence:      avgConf,
-      tokensUsed:      totalTokens,
+      severity:             topSev,
+      confidence:           avgConf,
+      tokensUsed:           totalTokens,
       tokensRemaining,
-      tokensLimit:     clinic.aiTokensLimit,
-      modelUsed:       MODEL,
-      cached:          false,
-      analyzedAt:      new Date().toISOString(),
+      tokensLimit:          clinic.aiTokensLimit,
+      modelUsed:            MODEL,
+      doctorNotes:          saved.doctorNotes ?? "",
+      doctorNotesUpdatedAt: saved.doctorNotesUpdatedAt?.toISOString() ?? null,
+      cached:               false,
+      analyzedAt:           new Date().toISOString(),
     });
   } catch (err: any) {
     console.error("AI X-ray analysis error:", err);
