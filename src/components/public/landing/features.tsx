@@ -5,10 +5,16 @@ import {
   Calendar, FileText, Receipt, Users, Camera, Package, Shield, BarChart3,
   type LucideIcon,
 } from "lucide-react";
-import { features, iconColors, type FeatureIconKey } from "@/lib/landing-data";
+import { features, iconColors, type FeatureIconKey, type FeatureSpan } from "@/lib/landing-data";
 
 const FEATURE_ICONS: Record<FeatureIconKey, LucideIcon> = {
   Calendar, FileText, Receipt, Users, Camera, Package, Shield, BarChart3,
+};
+
+const SPAN_CLASSES: Record<FeatureSpan, string> = {
+  3: "md:col-span-3",
+  4: "md:col-span-4",
+  6: "md:col-span-6",
 };
 
 export function Features() {
@@ -45,7 +51,7 @@ export function Features() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: i * 0.05 }}
-                className={`bento-dark p-8 ${feature.span}`}
+                className={`bento-dark p-8 ${SPAN_CLASSES[feature.span]}`}
               >
                 <div className={`w-14 h-14 ${color.bg} rounded-2xl flex items-center justify-center mb-6`}>
                   <Icon className={`w-7 h-7 ${color.text}`} />

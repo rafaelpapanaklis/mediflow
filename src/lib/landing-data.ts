@@ -63,23 +63,25 @@ export type FeatureIconKey =
   | "Calendar" | "FileText" | "Receipt" | "Users"
   | "Camera" | "Package" | "Shield" | "BarChart3";
 
+export type FeatureSpan = 3 | 4 | 6;
+
 export type Feature = {
   name: string;
   desc: string;
   iconKey: FeatureIconKey;
   colorKey: keyof typeof iconColors;
-  span: string;
+  span: FeatureSpan;
 };
 
 export const features: Feature[] = [
-  { name: "Agenda inteligente",    desc: "Confirmación automática por WhatsApp. Cero dobles reservaciones.", iconKey: "Calendar", colorKey: "blue",   span: "md:col-span-6" },
-  { name: "Expediente clínico",    desc: "Formularios especializados por categoría con notas SOAP.",        iconKey: "FileText", colorKey: "purple", span: "md:col-span-6" },
-  { name: "Facturación CFDI 4.0",  desc: "Timbrado automático, pagos a plazos y reportes fiscales.",        iconKey: "Receipt",  colorKey: "amber",  span: "md:col-span-4" },
-  { name: "Portal del paciente",   desc: "Citas, historial y pagos — acceso seguro por link.",              iconKey: "Users",    colorKey: "teal",   span: "md:col-span-4" },
-  { name: "Fotos antes/después",   desc: "Comparación visual por ángulo para documentar progreso.",         iconKey: "Camera",   colorKey: "pink",   span: "md:col-span-4" },
-  { name: "Paquetes y bonos",      desc: "Sesiones prepagadas con control de redención automático.",        iconKey: "Package",  colorKey: "green",  span: "md:col-span-6" },
-  { name: "Inventario",            desc: "Stock en tiempo real con alertas de mínimo y trazabilidad.",      iconKey: "Shield",   colorKey: "orange", span: "md:col-span-3" },
-  { name: "Reportes y analytics",  desc: "KPIs, revenue, churn y ocupación para decidir con datos.",        iconKey: "BarChart3", colorKey: "indigo", span: "md:col-span-3" },
+  { name: "Agenda inteligente",    desc: "Confirmación automática por WhatsApp. Cero dobles reservaciones.", iconKey: "Calendar", colorKey: "blue",   span: 6 },
+  { name: "Expediente clínico",    desc: "Formularios especializados por categoría con notas SOAP.",        iconKey: "FileText", colorKey: "purple", span: 6 },
+  { name: "Facturación CFDI 4.0",  desc: "Timbrado automático, pagos a plazos y reportes fiscales.",        iconKey: "Receipt",  colorKey: "amber",  span: 4 },
+  { name: "Portal del paciente",   desc: "Citas, historial y pagos — acceso seguro por link.",              iconKey: "Users",    colorKey: "teal",   span: 4 },
+  { name: "Fotos antes/después",   desc: "Comparación visual por ángulo para documentar progreso.",         iconKey: "Camera",   colorKey: "pink",   span: 4 },
+  { name: "Paquetes y bonos",      desc: "Sesiones prepagadas con control de redención automático.",        iconKey: "Package",  colorKey: "green",  span: 6 },
+  { name: "Inventario",            desc: "Stock en tiempo real con alertas de mínimo y trazabilidad.",      iconKey: "Shield",   colorKey: "orange", span: 3 },
+  { name: "Reportes y analytics",  desc: "KPIs, revenue, churn y ocupación para decidir con datos.",        iconKey: "BarChart3", colorKey: "indigo", span: 3 },
 ];
 
 export type PricingPlan = {
