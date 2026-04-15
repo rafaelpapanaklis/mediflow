@@ -4,23 +4,65 @@
 
 @layer base {
   :root {
-    --background:        0 0% 96%;
-    --foreground:        222 47% 11%;
-    --muted:             210 40% 93%;
-    --muted-foreground:  215 16% 47%;
-    --border:            214 32% 88%;
-    --card:              0 0% 100%;
+    /* MediFlow core (light) */
+    --background:        210 40% 98%;  /* #f8fafc */
+    --foreground:        222 47% 11%;  /* #0f172a */
+    --card:              0 0% 100%;    /* #ffffff */
     --card-foreground:   222 47% 11%;
+    --muted:             210 40% 96%;  /* #f1f5f9 */
+    --muted-foreground:  215 19% 47%;  /* #64748b */
+    --border:            214 32% 91%;  /* #e2e8f0 */
+    --primary:           262 83% 58%;  /* #7C3AED violet */
+    --primary-foreground: 0 0% 100%;
+    --accent:            239 84% 67%;  /* #6366F1 indigo */
+    --accent-foreground: 0 0% 100%;
+    --destructive:         0 84% 60%;  /* #ef4444 */
+    --destructive-foreground: 0 0% 100%;
+
+    /* Sidebar (light) */
+    --sidebar:              0 0% 100%;
+    --sidebar-foreground:   222 47% 11%;
+    --sidebar-border:       214 32% 91%;
+    --sidebar-accent:       210 40% 96%;
+    --sidebar-accent-foreground: 222 47% 11%;
+
+    /* Brand accents */
+    --violet:            262 83% 58%;
+    --indigo:            239 84% 67%;
+    --teal:              173 80% 40%;
+    --surface:           0 0% 100%;
+    --surface-elevated:  210 40% 98%;
   }
 
   .dark {
-    --background:        222 47% 8%;
-    --foreground:        210 40% 94%;
-    --muted:             217 33% 15%;
-    --muted-foreground:  215 20% 60%;
-    --border:            217 33% 22%;
-    --card:              222 47% 11%;
-    --card-foreground:   210 40% 94%;
+    /* MediFlow core (dark — v0) */
+    --background:        225 52% 8%;    /* #0B0F1E */
+    --foreground:        210 40% 98%;   /* #f8fafc */
+    --card:              229 48% 13%;   /* #111631 */
+    --card-foreground:   210 40% 98%;
+    --muted:             226 38% 19%;   /* #1e2642 */
+    --muted-foreground:  215 20% 65%;   /* #94A3B8 */
+    --border:            229 40% 20%;
+    --primary:           262 83% 58%;
+    --primary-foreground: 0 0% 100%;
+    --accent:            239 84% 67%;
+    --accent-foreground: 0 0% 100%;
+    --destructive:         0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Sidebar (dark) */
+    --sidebar:              229 48% 13%;   /* #111631 */
+    --sidebar-foreground:   210 40% 98%;
+    --sidebar-border:       229 40% 20%;
+    --sidebar-accent:       262 40% 20%;   /* dim violet for hover */
+    --sidebar-accent-foreground: 210 40% 98%;
+
+    /* Brand accents */
+    --violet:            262 83% 58%;
+    --indigo:            239 84% 67%;
+    --teal:              173 80% 40%;
+    --surface:           229 48% 13%;
+    --surface-elevated:  226 38% 19%;
   }
 
   * { border-color: hsl(var(--border)); }
@@ -70,6 +112,16 @@
   .dark .shadow-card    { box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
   .dark .shadow-card-md { box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
   .animate-fade-up { animation: fadeUp 0.2s ease-out; }
+
+  .scrollbar-thin::-webkit-scrollbar       { width: 6px; height: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.4);
+    border-radius: 3px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.7);
+  }
 }
 
 @keyframes fadeUp {
