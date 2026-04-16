@@ -16,7 +16,7 @@ const STATUS_CONFIG: Record<string, { label: string; dot: string; bg: string; te
   PENDING:     { label:"Pendiente",  dot:"bg-amber-400",   bg:"bg-amber-50 dark:bg-amber-900/20",   text:"text-amber-700 dark:text-amber-300"   },
   CONFIRMED:   { label:"Confirmada", dot:"bg-emerald-400", bg:"bg-emerald-50 dark:bg-emerald-900/20",text:"text-emerald-700 dark:text-emerald-300"},
   IN_PROGRESS: { label:"En curso",   dot:"bg-blue-400",    bg:"bg-blue-50 dark:bg-blue-900/20",     text:"text-blue-700 dark:text-blue-300"     },
-  COMPLETED:   { label:"Completada", dot:"bg-slate-400",   bg:"bg-slate-100 dark:bg-slate-800",     text:"text-slate-500 dark:text-slate-400"   },
+  COMPLETED:   { label:"Completada", dot:"bg-muted",   bg:"bg-muted",     text:"text-muted-foreground"   },
   CANCELLED:   { label:"Cancelada",  dot:"bg-rose-400",    bg:"bg-rose-50 dark:bg-rose-900/20",     text:"text-rose-700 dark:text-rose-300"     },
   NO_SHOW:     { label:"No asistió", dot:"bg-orange-400",  bg:"bg-orange-50 dark:bg-orange-900/20", text:"text-orange-700 dark:text-orange-300" },
 };
@@ -48,7 +48,7 @@ export function TodayStrip({ initialAppts }: { initialAppts: Appt[] }) {
   const timeStr = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
 
   return (
-    <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl shadow-card overflow-hidden">
+    <div className="bg-card border border-border rounded-2xl shadow-card overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-border">
         <div className="flex items-center gap-2.5">

@@ -64,7 +64,7 @@ export function PatientsClient({ patients, total, page, totalPages, search: init
         <Input className="pl-9" placeholder="Buscar por nombre, teléfono o expediente…" value={search} onChange={e => handleSearch(e.target.value)} />
       </div>
 
-      <div className="rounded-xl border border-border bg-white dark:bg-slate-900 shadow-card overflow-hidden">
+      <div className="rounded-xl border border-border bg-card shadow-card overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
@@ -150,7 +150,7 @@ export function PatientsClient({ patients, total, page, totalPages, search: init
                     className={`w-8 h-8 rounded-lg text-sm font-semibold transition-colors ${
                       pageNum === page
                         ? "bg-brand-600 text-white"
-                        : "bg-white dark:bg-slate-900 border border-border hover:bg-muted text-foreground"
+                        : "bg-card border border-border hover:bg-muted text-foreground"
                     }`}
                   >
                     {pageNum}

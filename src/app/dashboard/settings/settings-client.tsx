@@ -188,7 +188,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       </div>
 
       {/* Tabs */}
-      <div className="flex flex-wrap gap-1 bg-white dark:bg-slate-900 border border-border rounded-xl p-1 w-fit mb-6 shadow-card">
+      <div className="flex flex-wrap gap-1 bg-card border border-border rounded-xl p-1 w-fit mb-6 shadow-card">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all
@@ -201,7 +201,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
 
       {/* ── CLÍNICA ── */}
       {tab === "clinica" && (
-        <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl p-6 shadow-card max-w-lg space-y-4">
+        <div className="bg-card border border-border rounded-2xl p-6 shadow-card max-w-lg space-y-4">
           <h2 className="text-base font-bold">Datos de la clínica</h2>
           <div className="space-y-1.5">
             <Label>Nombre de la clínica</Label>
@@ -209,7 +209,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           </div>
           <div className="space-y-1.5">
             <Label>Categoría</Label>
-            <select className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
+            <select className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
               value={clinic.category ?? "OTHER"} onChange={e => setClinic((c: any) => ({ ...c, category: e.target.value }))}>
               {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
             </select>
@@ -223,7 +223,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           <div className="space-y-1.5">
             <Label>Descripción corta (visible en el directorio)</Label>
             <textarea
-              className="flex w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 py-3 text-sm focus:outline-none resize-none"
+              className="flex w-full rounded-xl border border-border bg-card px-4 py-3 text-sm focus:outline-none resize-none"
               rows={2}
               placeholder="Ej: Clínica dental especializada en ortodoncia e implantes en Mérida"
               value={clinic.description ?? ""}
@@ -245,12 +245,12 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             <button type="button" onClick={() => setIsPublic((p: boolean) => !p)}
               className="relative flex-shrink-0 w-11 h-6 rounded-full transition-colors ml-4"
               style={{ background: isPublic ? "#2563eb" : "#cbd5e1" }}>
-              <div className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-all"
+              <div className="absolute top-0.5 w-5 h-5 rounded-full bg-card shadow-sm transition-all"
                 style={{ left: isPublic ? "22px" : "2px" }} />
             </button>
           </div>
           <div className="pt-2 flex items-center justify-between">
-            <span className={`text-sm font-bold px-3 py-1 rounded-full border ${clinic.plan==="CLINIC"?"bg-violet-50 text-violet-700 border-violet-200":clinic.plan==="PRO"?"bg-brand-50 text-brand-700 border-brand-200":"bg-slate-100 text-slate-600 border-slate-200"}`}>
+            <span className={`text-sm font-bold px-3 py-1 rounded-full border ${clinic.plan==="CLINIC"?"bg-violet-50 text-violet-700 border-violet-200":clinic.plan==="PRO"?"bg-brand-50 text-brand-700 border-brand-200":"bg-muted text-muted-foreground border-border"}`}>
               Plan {clinic.plan}
             </span>
             <Button onClick={saveClinic} disabled={saving}>{saving ? "Guardando…" : "Guardar cambios"}</Button>
@@ -261,7 +261,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       {/* ── SERVICIOS POR DOCTOR ── */}
       {tab === "servicios" && (
         <div className="space-y-5 max-w-2xl">
-          <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl p-6 shadow-card">
+          <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
             <h2 className="text-base font-bold mb-1">Servicios por profesional</h2>
             <p className="text-sm text-muted-foreground mb-5">
               Asigna los servicios que ofrece cada profesional. Estos aparecerán en la página de reservas para que los pacientes elijan.
@@ -300,7 +300,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                     {/* Add service */}
                     <div className="flex gap-2">
                       <input
-                        className="flex-1 h-9 rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                        className="flex-1 h-9 rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                         placeholder="Ej: Consulta general, Ortodoncia, Limpieza…"
                         onKeyDown={e => {
                           if (e.key === "Enter") {
@@ -330,7 +330,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
 
       {/* ── PERFIL ── */}
       {tab === "perfil" && (
-        <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl p-6 shadow-card max-w-lg space-y-4">
+        <div className="bg-card border border-border rounded-2xl p-6 shadow-card max-w-lg space-y-4">
           <h2 className="text-base font-bold">Tu perfil profesional</h2>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5"><Label>Nombre</Label><Input value={user.firstName ?? ""} onChange={e => setUser((u: any) => ({ ...u, firstName: e.target.value }))} /></div>
@@ -347,7 +347,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       {/* ── FACTURACIÓN CFDI ── */}
       {tab === "facturacion" && (
         <div className="space-y-5 max-w-lg">
-          <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl p-6 shadow-card space-y-5">
+          <div className="bg-card border border-border rounded-2xl p-6 shadow-card space-y-5">
             <div className="flex items-start justify-between">
               <div>
                 <h2 className="text-base font-bold">Facturación CFDI 4.0</h2>
@@ -390,7 +390,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
 
               <div className="space-y-1.5">
                 <Label className="text-base font-semibold">Régimen fiscal *</Label>
-                <select className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
+                <select className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
                   value={cfdiForm.regimenFiscal} onChange={e => setCfdiForm(f => ({ ...f, regimenFiscal: e.target.value }))}>
                   {REGIMENES.map(r => <option key={r.clave} value={r.clave}>{r.clave} — {r.desc}</option>)}
                 </select>
@@ -428,7 +428,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       {/* ── ASISTENTE IA ── */}
       {tab === "ia" && (
         <div className="space-y-5 max-w-lg">
-          <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl p-6 shadow-card">
+          <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
             <div className="flex items-center gap-3 mb-5">
               <div className="w-11 h-11 rounded-2xl bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center">
                 <Bot className="w-6 h-6 text-violet-600" />
@@ -482,7 +482,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       {tab === "integraciones" && (
         <div className="space-y-5 max-w-lg">
           {/* Google Calendar */}
-          <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl p-6 shadow-card">
+          <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
                 <div className="w-11 h-11 rounded-2xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-2xl">📅</div>
@@ -493,7 +493,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               </div>
               {gcalConnected
                 ? <span className="text-sm font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 px-3 py-1 rounded-full">✅ Conectado</span>
-                : <span className="text-sm font-bold bg-slate-100 text-slate-600 px-3 py-1 rounded-full">No conectado</span>}
+                : <span className="text-sm font-bold bg-muted text-muted-foreground px-3 py-1 rounded-full">No conectado</span>}
             </div>
 
             {gcalConnected ? (
@@ -514,7 +514,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">Conecta tu Google Calendar para que cada cita agendada para ti aparezca automáticamente con recordatorios.</p>
                 <a href="/api/google"
-                  className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-800 border-2 border-border rounded-xl font-semibold text-base hover:border-blue-400 transition-colors w-fit">
+                  className="flex items-center gap-2 px-4 py-2.5 bg-card border-2 border-border rounded-xl font-semibold text-base hover:border-blue-400 transition-colors w-fit">
                   <span className="text-xl">G</span> Conectar con Google
                 </a>
               </div>
@@ -523,7 +523,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
 
           {/* WhatsApp (admin only) */}
           {(initUser.role === "ADMIN" || initUser.role === "SUPER_ADMIN") && (
-            <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl p-6 shadow-card">
+            <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-11 h-11 rounded-2xl bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-2xl">💬</div>
                 <div>
@@ -542,7 +542,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
 
       {/* ── HORARIOS ── */}
       {tab === "horarios" && (
-        <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl p-6 shadow-card max-w-lg">
+        <div className="bg-card border border-border rounded-2xl p-6 shadow-card max-w-lg">
           <h2 className="text-base font-bold mb-4">Horario de atención</h2>
           <div className="space-y-3">
             {DAYS.map((day, i) => {
@@ -557,11 +557,11 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                     <>
                       <input type="time" value={s.open}
                         onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...sc[i], open:e.target.value } }))}
-                        className="h-9 w-26 rounded-xl border border-border bg-white dark:bg-slate-800 px-3 text-sm font-mono focus:outline-none" />
+                        className="h-9 w-26 rounded-xl border border-border bg-card px-3 text-sm font-mono focus:outline-none" />
                       <span className="text-muted-foreground text-sm">a</span>
                       <input type="time" value={s.close}
                         onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...sc[i], close:e.target.value } }))}
-                        className="h-9 w-26 rounded-xl border border-border bg-white dark:bg-slate-800 px-3 text-sm font-mono focus:outline-none" />
+                        className="h-9 w-26 rounded-xl border border-border bg-card px-3 text-sm font-mono focus:outline-none" />
                     </>
                   ) : (
                     <span className="text-sm text-muted-foreground">Cerrado</span>
@@ -579,7 +579,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       {/* ── SEGURIDAD ── */}
       {tab === "seguridad" && (
         <div className="space-y-5 max-w-lg">
-          <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl p-6 shadow-card space-y-4">
+          <div className="bg-card border border-border rounded-2xl p-6 shadow-card space-y-4">
             <h2 className="text-base font-bold">Cambiar contraseña</h2>
             <div className="space-y-1.5"><Label>Nueva contraseña</Label>
               <Input type="password" placeholder="Mínimo 8 caracteres" value={pwForm.next} onChange={e => setPwForm(f => ({ ...f, next:e.target.value }))} />
@@ -589,7 +589,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             </div>
             <Button onClick={changePassword} disabled={saving || !pwForm.next}>{saving ? "Actualizando…" : "Cambiar contraseña"}</Button>
           </div>
-          <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl p-6 shadow-card">
+          <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
             <h2 className="text-base font-bold mb-4">Información de tu cuenta</h2>
             <div className="space-y-2 text-sm">
               {[

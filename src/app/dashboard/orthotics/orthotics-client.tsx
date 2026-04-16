@@ -32,7 +32,7 @@ const STAGE_COLORS: Record<string, string> = {
   molde:       "border-blue-400 bg-blue-50 dark:bg-blue-950/30",
   laboratorio: "border-purple-400 bg-purple-50 dark:bg-purple-950/30",
   listo:       "border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30",
-  entregado:   "border-slate-400 bg-slate-50 dark:bg-slate-800/50",
+  entregado:   "border-slate-400 bg-muted/50",
   ajuste:      "border-rose-400 bg-rose-50 dark:bg-rose-950/30",
 };
 
@@ -133,7 +133,7 @@ export function OrthoticsClient({ initialItems }: { initialItems: PipelineItem[]
             <div key={stage.key} className="min-h-[200px]">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-sm font-bold">{stage.label}</h3>
-                <span className="text-xs font-bold bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded-full">{stageItems.length}</span>
+                <span className="text-xs font-bold bg-muted px-2 py-0.5 rounded-full">{stageItems.length}</span>
               </div>
               <div className="space-y-2">
                 {stageItems.map(item => {
@@ -185,7 +185,7 @@ export function OrthoticsClient({ initialItems }: { initialItems: PipelineItem[]
       {/* Add Modal */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl shadow-xl w-full max-w-md">
+          <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
               <h2 className="text-lg font-bold">Nueva orden ortopédica</h2>
               <button onClick={() => setShowAdd(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
@@ -193,19 +193,19 @@ export function OrthoticsClient({ initialItems }: { initialItems: PipelineItem[]
             <div className="px-6 py-5 space-y-4">
               <div className="space-y-1.5">
                 <Label className="text-sm">Nombre del paciente *</Label>
-                <input className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   placeholder="Nombre completo"
                   value={form.patientName} onChange={e => setForm(f => ({ ...f, patientName: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm">Tipo de ortopédico *</Label>
-                <input className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   placeholder="Ej: Plantilla, Férula, Órtesis"
                   value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm">Notas</Label>
-                <textarea className="flex min-h-[70px] w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+                <textarea className="flex min-h-[70px] w-full rounded-xl border border-border bg-card px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
                   placeholder="Observaciones adicionales"
                   value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
               </div>

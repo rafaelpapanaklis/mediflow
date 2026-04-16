@@ -81,12 +81,12 @@ function ItemIcon({ iconId, category, size = 44 }: { iconId: string; category: s
     return (
       <img src={icon.src} alt={icon.label} onError={() => setErr(true)}
         style={{ width: size, height: size }}
-        className="rounded-xl object-contain flex-shrink-0 bg-white dark:bg-slate-800 p-1 border border-border" />
+        className="rounded-xl object-contain flex-shrink-0 bg-card p-1 border border-border" />
     );
   }
   return (
     <div style={{ width: size, height: size }}
-      className="rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0 border border-border text-2xl">
+      className="rounded-xl bg-muted flex items-center justify-center flex-shrink-0 border border-border text-2xl">
       {CATEGORY_EMOJI[category] ?? "📦"}
     </div>
   );
@@ -97,12 +97,12 @@ function IconPicker({ selected, onSelect }: { selected: string; onSelect: (id: s
   return (
     <div>
       <Label className="text-sm mb-2 block">Ícono del artículo</Label>
-      <div className="grid grid-cols-8 gap-2 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-border">
+      <div className="grid grid-cols-8 gap-2 p-3 bg-muted rounded-xl border border-border">
         {DENTAL_ICONS.map(icon => (
           <button key={icon.id} type="button"
             onClick={() => onSelect(icon.id)}
             title={icon.label}
-            className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all border-2 bg-white dark:bg-slate-700 hover:scale-110 ${selected === icon.id ? "border-brand-500 ring-2 ring-brand-300" : "border-transparent"}`}>
+            className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all border-2 bg-card hover:scale-110 ${selected === icon.id ? "border-brand-500 ring-2 ring-brand-300" : "border-transparent"}`}>
             <img src={icon.src} alt={icon.label}
               className="w-9 h-9 object-contain"
               onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
@@ -235,7 +235,7 @@ export function InventoryClient({ initialItems, specialty }: { initialItems: Ite
       <div className="grid grid-cols-5 gap-3 mb-6">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`rounded-2xl border-2 p-4 text-left transition-all ${tab === t.id ? t.activeClass : "bg-white dark:bg-slate-900 border-border hover:border-slate-400"}`}>
+            className={`rounded-2xl border-2 p-4 text-left transition-all ${tab === t.id ? t.activeClass : "bg-card border-border hover:border-slate-400"}`}>
             <div className={`text-3xl font-extrabold leading-none mb-1 ${tab !== t.id ? "text-foreground" : ""}`}>{counts[t.id]}</div>
             <div className={`text-sm font-bold ${tab !== t.id ? "text-muted-foreground" : ""}`}>{t.label}</div>
           </button>
@@ -246,7 +246,7 @@ export function InventoryClient({ initialItems, specialty }: { initialItems: Ite
       <div className="relative mb-5">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
         <input
-          className="flex h-12 w-full rounded-xl border border-border bg-white dark:bg-slate-900 pl-11 pr-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          className="flex h-12 w-full rounded-xl border border-border bg-card pl-11 pr-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
           placeholder="Buscar artículo o categoría…"
           value={search} onChange={e => setSearch(e.target.value)} />
       </div>
@@ -266,7 +266,7 @@ export function InventoryClient({ initialItems, specialty }: { initialItems: Ite
 
       {/* Items list */}
       {filtered.length > 0 && (
-        <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl overflow-hidden shadow-card">
+        <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-card">
           {filtered.map((item, idx) => {
             const isLoad    = loadingIds.has(item.id);
             const isEditing = editQty[item.id] !== undefined;
@@ -302,7 +302,7 @@ export function InventoryClient({ initialItems, specialty }: { initialItems: Ite
                   {isEditing ? (
                     <div className="flex items-center gap-1.5">
                       <input type="number" min="0" autoFocus
-                        className="w-20 h-11 text-center text-lg font-bold border-2 border-brand-500 rounded-xl bg-white dark:bg-slate-800 focus:outline-none"
+                        className="w-20 h-11 text-center text-lg font-bold border-2 border-brand-500 rounded-xl bg-card focus:outline-none"
                         value={editQty[item.id]}
                         onChange={e => setEditQty(prev => ({ ...prev, [item.id]: e.target.value }))}
                         onKeyDown={e => {
@@ -319,13 +319,13 @@ export function InventoryClient({ initialItems, specialty }: { initialItems: Ite
                       className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border-2 transition-colors hover:border-brand-400 group/qty ${
                         status === "sin"      ? "border-rose-300 bg-rose-50 dark:bg-rose-950/30" :
                         status === "poco"     ? "border-amber-300 bg-amber-50 dark:bg-amber-950/30" :
-                        status === "inactivo" ? "border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800" :
+                        status === "inactivo" ? "border-border bg-muted" :
                         "border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30"
                       }`}>
                       <span className={`text-2xl font-extrabold leading-none ${
                         status === "sin"      ? "text-rose-600" :
                         status === "poco"     ? "text-amber-600" :
-                        status === "inactivo" ? "text-slate-400" :
+                        status === "inactivo" ? "text-muted-foreground" :
                         "text-emerald-600"
                       }`}>{item.quantity}</span>
                       <span className="text-sm text-muted-foreground">{item.unit}</span>
@@ -355,8 +355,8 @@ export function InventoryClient({ initialItems, specialty }: { initialItems: Ite
       {/* Add Item Modal */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-white dark:bg-slate-900">
+          <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-card">
               <h2 className="text-lg font-bold">Agregar artículo</h2>
               <button onClick={() => setShowAdd(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
             </div>
@@ -369,21 +369,21 @@ export function InventoryClient({ initialItems, specialty }: { initialItems: Ite
 
               <div className="space-y-1.5">
                 <Label className="text-sm">Nombre del artículo *</Label>
-                <input className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   placeholder="Ej: Resina compuesta A2"
                   value={newItem.name} onChange={e => setNewItem(n => ({ ...n, name: e.target.value }))} />
               </div>
 
               <div className="space-y-1.5">
                 <Label className="text-sm">Para qué sirve</Label>
-                <textarea className="flex min-h-[70px] w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 py-3 text-base placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+                <textarea className="flex min-h-[70px] w-full rounded-xl border border-border bg-card px-4 py-3 text-base placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
                   placeholder="Ej: Para restauraciones del sector anterior, color más utilizado"
                   value={newItem.description} onChange={e => setNewItem(n => ({ ...n, description: e.target.value }))} />
               </div>
 
               <div className="space-y-1.5">
                 <Label className="text-sm">Categoría</Label>
-                <select className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
+                <select className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
                   value={newItem.category}
                   onChange={e => {
                     setNewItem(n => ({ ...n, category: e.target.value }));
@@ -401,7 +401,7 @@ export function InventoryClient({ initialItems, specialty }: { initialItems: Ite
                 {/* Custom category input when Otro is selected */}
                 {newItem.category === "Otro" && (
                   <input
-                    className="flex h-11 w-full rounded-xl border border-brand-400 bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20 mt-2"
+                    className="flex h-11 w-full rounded-xl border border-brand-400 bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20 mt-2"
                     placeholder="Escribe el nombre de la categoría (o deja en blanco para usar 'Otro')"
                     value={newItem.customCategory}
                     onChange={e => setNewItem(n => ({ ...n, customCategory: e.target.value }))} />
@@ -412,18 +412,18 @@ export function InventoryClient({ initialItems, specialty }: { initialItems: Ite
                 <div className="space-y-1.5">
                   <Label className="text-sm">Cantidad inicial</Label>
                   <input type="number" min="0"
-                    className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
+                    className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
                     value={newItem.quantity} onChange={e => setNewItem(n => ({ ...n, quantity: parseInt(e.target.value) || 0 }))} />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-sm">Alerta si baja de</Label>
                   <input type="number" min="0"
-                    className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
+                    className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
                     value={newItem.minQuantity} onChange={e => setNewItem(n => ({ ...n, minQuantity: parseInt(e.target.value) || 0 }))} />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-sm">Unidad</Label>
-                  <select className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
+                  <select className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
                     value={newItem.unit} onChange={e => setNewItem(n => ({ ...n, unit: e.target.value }))}>
                     {["pza","cja","frasco","rollo","par","paquete","kit","ml","mg","uni"].map(u => <option key={u}>{u}</option>)}
                   </select>

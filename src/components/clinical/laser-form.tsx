@@ -180,10 +180,10 @@ export function LaserForm({ patientId, onSaved }: Props) {
   }
 
   const inputCls =
-    "flex h-9 w-full rounded-lg border border-border bg-white dark:bg-gray-900 dark:text-gray-100 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20";
+    "flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20";
   const selectCls = inputCls;
   const textareaCls =
-    "flex min-h-[70px] w-full rounded-lg border border-border bg-white dark:bg-gray-900 dark:text-gray-100 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none";
+    "flex min-h-[70px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none";
 
   return (
     <div className="space-y-6">
@@ -210,7 +210,7 @@ export function LaserForm({ patientId, onSaved }: Props) {
               className={`flex items-center gap-2 text-sm px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
                 form.checklistPreSesion.includes(item)
                   ? "bg-emerald-50 border-emerald-400 text-emerald-700 dark:bg-emerald-900/30 dark:border-emerald-500 dark:text-emerald-300"
-                  : "border-border bg-white hover:bg-slate-50 dark:bg-gray-900 dark:hover:bg-gray-800"
+                  : "border-border bg-card hover:bg-muted dark:hover:bg-card"
               }`}
             >
               <input
@@ -442,7 +442,7 @@ export function LaserForm({ patientId, onSaved }: Props) {
                 />
                 <span className="text-xs text-muted-foreground">% reducción estimada</span>
               </div>
-              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+              <div className="w-full bg-muted rounded-full h-3">
                 <div
                   className="h-3 rounded-full transition-all duration-300"
                   style={{
@@ -476,7 +476,7 @@ export function LaserForm({ patientId, onSaved }: Props) {
                   ? r === "Ninguna"
                     ? "bg-emerald-50 border-emerald-400 text-emerald-700"
                     : "bg-amber-50 border-amber-400 text-amber-700"
-                  : "border-border hover:bg-slate-50"
+                  : "border-border hover:bg-muted"
               }`}
             >
               <input

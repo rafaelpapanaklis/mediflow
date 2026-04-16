@@ -97,7 +97,7 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
               updateLocal("landingActive", newVal);
               await save({ landingActive: newVal });
             }} className={`w-10 h-5 rounded-full relative transition-colors ${clinic.landingActive ? "bg-emerald-500" : "bg-muted"}`}>
-              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${clinic.landingActive ? "left-[22px]" : "left-0.5"}`} />
+              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-card shadow transition-all ${clinic.landingActive ? "left-[22px]" : "left-0.5"}`} />
             </button>
           </div>
           {/* View link */}

@@ -91,7 +91,7 @@ export function ResourcesClient({ initialBookings }: { initialBookings: Booking[
           {grouped.map(([resourceKey, items]) => (
             <div key={resourceKey}>
               <h2 className="text-base font-bold mb-2">{resourceKey}</h2>
-              <div className="bg-white dark:bg-slate-900 border border-border rounded-xl overflow-hidden">
+              <div className="bg-card border border-border rounded-xl overflow-hidden">
                 {items.map((booking, idx) => (
                   <div
                     key={booking.id}
@@ -127,7 +127,7 @@ export function ResourcesClient({ initialBookings }: { initialBookings: Booking[
       {/* Add Modal */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl shadow-xl w-full max-w-md">
+          <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
               <h2 className="text-lg font-bold">Nueva reserva</h2>
               <button onClick={() => setShowAdd(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
@@ -135,13 +135,13 @@ export function ResourcesClient({ initialBookings }: { initialBookings: Booking[
             <div className="px-6 py-5 space-y-4">
               <div className="space-y-1.5">
                 <Label className="text-sm">Tipo de recurso *</Label>
-                <input className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   placeholder="Ej: Consultorio, Equipo, Sala"
                   value={form.resourceType} onChange={e => setForm(f => ({ ...f, resourceType: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm">Nombre del recurso *</Label>
-                <input className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   placeholder="Ej: Consultorio 1, Láser CO2"
                   value={form.resourceName} onChange={e => setForm(f => ({ ...f, resourceName: e.target.value }))} />
               </div>
@@ -149,13 +149,13 @@ export function ResourcesClient({ initialBookings }: { initialBookings: Booking[
                 <div className="space-y-1.5">
                   <Label className="text-sm">Hora inicio *</Label>
                   <input type="time"
-                    className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
+                    className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
                     value={form.startTime} onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))} />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-sm">Hora fin *</Label>
                   <input type="time"
-                    className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
+                    className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
                     value={form.endTime} onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))} />
                 </div>
               </div>

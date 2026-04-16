@@ -140,18 +140,18 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label>Motivo de consulta / HEA</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="¿Por qué viene el paciente hoy?" value={form.subjective} onChange={e => set("subjective", e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <Label>Exploración física / Observaciones</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Estado actual de la piel, zonas a tratar…" value={form.objective} onChange={e => set("objective", e.target.value)} />
         </div>
       </div>
 
       {/* CHECKLIST DE CONTRAINDICACIONES */}
-      <div className="rounded-xl border border-red-300 dark:border-red-700 bg-white dark:bg-slate-800 p-4">
+      <div className="rounded-xl border border-red-300 dark:border-red-700 bg-card p-4">
         <h3 className="text-sm font-bold mb-3 text-red-700 dark:text-red-400">🚫 Checklist de contraindicaciones</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {CONTRAINDICATIONS.map(c => (
@@ -179,7 +179,7 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="space-y-1">
             <Label className="text-xs">Fototipo Fitzpatrick</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.fototipo} onChange={e => set("fototipo", e.target.value)}>
               <option value="">Seleccionar…</option>
               {FITZPATRICK.map(f => <option key={f} value={f}>Tipo {f}</option>)}
@@ -187,7 +187,7 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Procedimiento</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.procedimiento} onChange={e => set("procedimiento", e.target.value)}>
               <option value="">Seleccionar…</option>
               {PROCEDURES.map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
@@ -195,7 +195,7 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Unidades/ml aplicados</Label>
-            <input type="number" className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <input type="number" className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               placeholder="Ej. 20" value={form.unidades} onChange={e => set("unidades", e.target.value)} />
           </div>
         </div>
@@ -221,33 +221,33 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label className="text-xs">Producto usado</Label>
-            <input className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               placeholder="Ej. Botox Allergan" value={form.producto} onChange={e => set("producto", e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Número de lote</Label>
-            <input className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               placeholder="Ej. LOT-2026-0412" value={form.lote} onChange={e => set("lote", e.target.value)} />
           </div>
         </div>
       </div>
 
       {/* MAPA FACIAL CON UNIDADES/ZONA */}
-      <div className="rounded-xl border border-border bg-white dark:bg-slate-800 p-4">
+      <div className="rounded-xl border border-border bg-card p-4">
         <h3 className="text-sm font-bold mb-3">💉 Registro de aplicación por zona</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {ZONE_MAP.map(z => (
             <div key={z.key} className="flex items-center gap-2">
               <span className="text-sm font-medium w-40 shrink-0">{z.label}</span>
               <input
-                className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-700 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                 placeholder="Producto"
                 value={zoneMap[z.key]?.product ?? ""}
                 onChange={e => setZoneField(z.key, "product", e.target.value)}
               />
               <input
                 type="number"
-                className="flex h-9 w-24 shrink-0 rounded-lg border border-border bg-white dark:bg-slate-700 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                className="flex h-9 w-24 shrink-0 rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                 placeholder="U/ml"
                 value={zoneMap[z.key]?.units ?? ""}
                 onChange={e => setZoneField(z.key, "units", e.target.value)}
@@ -264,24 +264,24 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label>Notas post-procedimiento</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Cuidados posteriores, reacciones observadas…" value={form.notasPost} onChange={e => set("notasPost", e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <Label>Diagnóstico / Evaluación</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Diagnóstico estético, hallazgos…" value={form.assessment} onChange={e => set("assessment", e.target.value)} />
         </div>
       </div>
 
       <div className="space-y-1.5">
         <Label>Plan siguiente sesión</Label>
-        <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+        <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
           placeholder="Plan de tratamiento para próxima visita…" value={form.planSiguiente} onChange={e => set("planSiguiente", e.target.value)} />
       </div>
 
       {/* ESCALA GAIS */}
-      <div className="rounded-xl border border-border bg-white dark:bg-slate-800 p-4">
+      <div className="rounded-xl border border-border bg-card p-4">
         <h3 className="text-sm font-bold mb-3">📊 Escala GAIS (Global Aesthetic Improvement Scale)</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Pre-procedimiento */}
@@ -329,7 +329,7 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
               gaisDelta > 0
                 ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400"
                 : gaisDelta === 0
-                  ? "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+                  ? "bg-muted text-muted-foreground"
                   : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400"
             }`}>
               {gaisDelta > 0 ? "+" : ""}{gaisDelta}

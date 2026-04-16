@@ -98,7 +98,7 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
       {/* SUBJETIVO */}
       <div className="space-y-1.5">
         <Label>Motivo de consulta / Historia de la enfermedad actual (HEA)</Label>
-        <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+        <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
           placeholder="Paciente de X años que acude por… Inicio: … Evolución: … Síntomas acompañantes: …" value={form.subjective} onChange={e => set("subjective", e.target.value)} />
       </div>
 
@@ -120,7 +120,7 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
         {/* Quirúrgicos */}
         <div className="mb-4 space-y-1">
           <Label className="text-xs">Antecedentes quirúrgicos</Label>
-          <textarea className="flex min-h-[60px] w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[60px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Apendicectomía 2015, colecistectomía 2020…" value={surgicalHistory} onChange={e => setSurgicalHistory(e.target.value)} />
         </div>
 
@@ -158,7 +158,7 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
           {/* Tabaquismo */}
           <div className="space-y-1">
             <Label className="text-xs">Tabaquismo</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={smoking} onChange={e => setSmoking(e.target.value)}>
               {["No fuma","Exfumador","< 10 cigarros/día","10-20/día","> 20/día"].map(o => <option key={o} value={o}>{o}</option>)}
             </select>
@@ -168,7 +168,7 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
           {isSmoker && (
             <div className="space-y-1">
               <Label className="text-xs">Paquetes/año</Label>
-              <input type="number" min="0" className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              <input type="number" min="0" className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                 placeholder="Ej: 10" value={packsYear} onChange={e => setPacksYear(e.target.value)} />
             </div>
           )}
@@ -176,7 +176,7 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
           {/* Actividad física */}
           <div className="space-y-1">
             <Label className="text-xs">Actividad física</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={physicalActivity} onChange={e => setPhysicalActivity(e.target.value)}>
               <option value="">Seleccionar…</option>
               {["Sedentario","Ligera (1-2x/sem)","Moderada (3-4x/sem)","Intensa (5+/sem)"].map(o => <option key={o} value={o}>{o}</option>)}
@@ -185,12 +185,12 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
         </div>
 
         {/* AUDIT-C */}
-        <div className="mb-4 p-3 rounded-lg bg-slate-50 dark:bg-slate-700/30 space-y-3">
+        <div className="mb-4 p-3 rounded-lg bg-muted/30 space-y-3">
           <p className="text-xs font-semibold">Alcohol (AUDIT-C simplificado)</p>
 
           <div className="space-y-1">
             <Label className="text-xs">¿Con qué frecuencia toma bebidas alcohólicas?</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={auditC[0]} onChange={e => setAuditC(a => [Number(e.target.value), a[1], a[2]])}>
               <option value={0}>Nunca</option>
               <option value={1}>Mensual o menos</option>
@@ -202,7 +202,7 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
 
           <div className="space-y-1">
             <Label className="text-xs">¿Cuántas bebidas en un día normal?</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={auditC[1]} onChange={e => setAuditC(a => [a[0], Number(e.target.value), a[2]])}>
               <option value={0}>1-2</option>
               <option value={1}>3-4</option>
@@ -214,7 +214,7 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
 
           <div className="space-y-1">
             <Label className="text-xs">¿Con qué frecuencia toma 6+ bebidas en una ocasión?</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={auditC[2]} onChange={e => setAuditC(a => [a[0], a[1], Number(e.target.value)])}>
               <option value={0}>Nunca</option>
               <option value={1}>Menos que mensual</option>
@@ -233,7 +233,7 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
         {/* Drogas */}
         <div className="space-y-1">
           <Label className="text-xs">Drogas / Otras sustancias</Label>
-          <textarea className="flex min-h-[50px] w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[50px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Marihuana, cocaína, benzodiacepinas sin Rx…" value={drugs} onChange={e => setDrugs(e.target.value)} />
         </div>
       </div>
@@ -251,9 +251,9 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
         <div className="space-y-2">
           {diffDiagnoses.map((dd, i) => (
             <div key={i} className="flex items-center gap-2">
-              <input className="flex h-9 flex-1 rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              <input className="flex h-9 flex-1 rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                 placeholder="Ej: Neumonía adquirida en comunidad" value={dd.diagnosis} onChange={e => updateDiffDiag(i, "diagnosis", e.target.value)} />
-              <select className="flex h-9 w-32 rounded-lg border border-border bg-white dark:bg-slate-800 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              <select className="flex h-9 w-32 rounded-lg border border-border bg-card px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                 value={dd.probability} onChange={e => updateDiffDiag(i, "probability", e.target.value)}>
                 <option value="Alta">Alta</option>
                 <option value="Media">Media</option>
@@ -281,7 +281,7 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
           ].map(f => (
             <div key={f.key} className="space-y-1">
               <Label className="text-xs">{f.label}</Label>
-              <input className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                 placeholder={f.ph} value={(form.vitals as any)[f.key]} onChange={e => setV(f.key, e.target.value)} />
             </div>
           ))}
@@ -292,18 +292,18 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label>Exploración física / Laboratorios</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="BH: Hb 13.5, Leuco 7,500…&#10;EGO: Normal&#10;Tórax: sin alteraciones…" value={form.objective} onChange={e => set("objective", e.target.value)} />
         </div>
         <div className="space-y-3">
           <div className="space-y-1.5">
             <Label>Estudios solicitados</Label>
-            <input className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               placeholder="BH, QS, RX tórax…" value={form.studies} onChange={e => set("studies", e.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label>Diagnóstico CIE-10</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.diagnosis} onChange={e => set("diagnosis", e.target.value)}>
               <option value="">Seleccionar diagnóstico…</option>
               {DIAGNOSES_CIE10.map(d => <option key={d} value={d}>{d}</option>)}
@@ -311,7 +311,7 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
           </div>
           <div className="space-y-1.5">
             <Label>Diagnóstico libre / Complementario</Label>
-            <input className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               placeholder="Describe el diagnóstico…" value={form.assessment} onChange={e => set("assessment", e.target.value)} />
           </div>
         </div>
@@ -328,19 +328,19 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
             <div key={i} className="grid grid-cols-6 gap-2 items-end">
               <div className="col-span-2 space-y-1">
                 <Label className="text-xs">Medicamento</Label>
-                <input className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none"
+                <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
                   placeholder="Amoxicilina 500mg" value={med.drug}
                   onChange={e => { const m=[...form.medications]; m[i].drug=e.target.value; set("medications",m); }} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Dosis</Label>
-                <input className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none"
+                <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
                   placeholder="500mg" value={med.dose}
                   onChange={e => { const m=[...form.medications]; m[i].dose=e.target.value; set("medications",m); }} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Frecuencia</Label>
-                <select className="flex h-9 w-full rounded-lg border border-border bg-white px-2 text-sm focus:outline-none"
+                <select className="flex h-9 w-full rounded-lg border border-border bg-card px-2 text-sm focus:outline-none"
                   value={med.frequency} onChange={e => { const m=[...form.medications]; m[i].frequency=e.target.value; set("medications",m); }}>
                   <option value="">…</option>
                   {["c/4h","c/6h","c/8h","c/12h","c/24h","c/48h","Semanal","Según necesidad"].map(f=><option key={f}>{f}</option>)}
@@ -348,7 +348,7 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Duración</Label>
-                <input className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none"
+                <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
                   placeholder="7 días" value={med.duration}
                   onChange={e => { const m=[...form.medications]; m[i].duration=e.target.value; set("medications",m); }} />
               </div>
@@ -372,7 +372,7 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Especialidad</Label>
-              <select className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none"
+              <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
                 value={form.referral.specialty} onChange={e => set("referral", { ...form.referral, specialty: e.target.value })}>
                 <option value="">Seleccionar…</option>
                 {SPECIALTIES.map(s=><option key={s}>{s}</option>)}
@@ -380,7 +380,7 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Motivo del referido</Label>
-              <input className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none"
+              <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
                 placeholder="Evaluación por…" value={form.referral.reason} onChange={e => set("referral", { ...form.referral, reason: e.target.value })} />
             </div>
           </div>
@@ -391,13 +391,13 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label>Plan / Indicaciones al paciente</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Reposo relativo 3 días, hidratación abundante, dieta blanda…&#10;Regresar si: fiebre >38.5°C, dificultad respiratoria…" value={form.plan} onChange={e => set("plan", e.target.value)} />
         </div>
         <div className="space-y-3">
           <div className="space-y-1.5">
             <Label>Próxima cita / Control</Label>
-            <input type="date" className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <input type="date" className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.returnDate} onChange={e => set("returnDate", e.target.value)} />
           </div>
           <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
@@ -407,7 +407,7 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
             </div>
             {form.sicLeave.granted && (
               <div className="flex items-center gap-2">
-                <input type="number" min="1" max="180" placeholder="3" className="w-16 h-8 rounded-lg border border-amber-300 bg-white px-2 text-sm font-bold text-center focus:outline-none"
+                <input type="number" min="1" max="180" placeholder="3" className="w-16 h-8 rounded-lg border border-amber-300 bg-card px-2 text-sm font-bold text-center focus:outline-none"
                   value={form.sicLeave.days} onChange={e => set("sicLeave", { ...form.sicLeave, days: e.target.value })} />
                 <span className="text-sm text-amber-700 font-medium">días de incapacidad</span>
               </div>

@@ -149,7 +149,7 @@ export function XraysClient({ patients, recentFiles: initialFiles, clinicId, aiU
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Patient list */}
-        <div className="lg:col-span-1 bg-white dark:bg-slate-900 border border-border rounded-2xl shadow-card overflow-hidden">
+        <div className="lg:col-span-1 bg-card border border-border rounded-2xl shadow-card overflow-hidden">
           <div className="p-4 border-b border-border">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -190,7 +190,7 @@ export function XraysClient({ patients, recentFiles: initialFiles, clinicId, aiU
           {selectedPatient ? (
             <>
               {/* Upload section */}
-              <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl shadow-card p-6">
+              <div className="bg-card border border-border rounded-2xl shadow-card p-6">
                 <h2 className="text-lg font-bold mb-4">
                   Subir archivo — {selectedPatient.firstName} {selectedPatient.lastName}
                 </h2>
@@ -238,7 +238,7 @@ export function XraysClient({ patients, recentFiles: initialFiles, clinicId, aiU
               </div>
 
               {/* Patient files */}
-              <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl shadow-card overflow-hidden">
+              <div className="bg-card border border-border rounded-2xl shadow-card overflow-hidden">
                 <div className="p-4 border-b border-border">
                   <h2 className="font-bold">Archivos de {selectedPatient.firstName} ({patientFiles.length})</h2>
                 </div>
@@ -294,7 +294,7 @@ export function XraysClient({ patients, recentFiles: initialFiles, clinicId, aiU
             </>
           ) : (
             /* Recent files from all patients */
-            <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl shadow-card overflow-hidden">
+            <div className="bg-card border border-border rounded-2xl shadow-card overflow-hidden">
               <div className="p-4 border-b border-border">
                 <h2 className="font-bold">Archivos recientes</h2>
                 <p className="text-xs text-muted-foreground">Selecciona un paciente para ver sus archivos o subir nuevos</p>
@@ -340,7 +340,7 @@ export function XraysClient({ patients, recentFiles: initialFiles, clinicId, aiU
           onClick={() => setPreviewFile(null)}
         >
           <div
-            className="relative my-8 w-full max-w-4xl rounded-2xl bg-white shadow-2xl dark:bg-slate-900"
+            className="relative my-8 w-full max-w-4xl rounded-2xl bg-card shadow-2xl"
             onClick={e => e.stopPropagation()}
           >
             {/* Close button */}

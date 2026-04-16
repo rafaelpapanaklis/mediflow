@@ -198,7 +198,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
         <div className="space-y-1.5">
           <Label>Motivo de consulta</Label>
           <textarea
-            className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Síntomas, dolencia principal…"
             value={form.subjective}
             onChange={(e) => set("subjective", e.target.value)}
@@ -207,7 +207,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
         <div className="space-y-1.5">
           <Label>Exploración física</Label>
           <textarea
-            className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Hallazgos de la exploración…"
             value={form.objective}
             onChange={(e) => set("objective", e.target.value)}
@@ -221,7 +221,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
         <div className="space-y-1.5">
           <Label>Modalidad</Label>
           <select
-            className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
             value={form.modalidad}
             onChange={(e) => set("modalidad", e.target.value)}
           >
@@ -243,7 +243,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
             <div className="space-y-1.5">
               <Label>Puntos aplicados</Label>
               <textarea
-                className="flex min-h-[60px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+                className="flex min-h-[60px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
                 placeholder="Ej. LI4, ST36, SP6, LR3…"
                 value={form.puntosAplicados}
                 onChange={(e) => set("puntosAplicados", e.target.value)}
@@ -253,7 +253,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
               <div className="space-y-1.5">
                 <Label>Profundidad</Label>
                 <select
-                  className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                  className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   value={form.profundidad}
                   onChange={(e) => set("profundidad", e.target.value)}
                 >
@@ -269,7 +269,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
                 <Label>Tiempo de retención (minutos)</Label>
                 <input
                   type="number"
-                  className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                  className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   placeholder="Ej. 20"
                   value={form.tiempoRetencion}
                   onChange={(e) => set("tiempoRetencion", e.target.value)}
@@ -287,7 +287,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
           <div className="space-y-1.5">
             <Label>Fórmula herbal</Label>
             <textarea
-              className="flex min-h-[100px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+              className="flex min-h-[100px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
               placeholder="Ingredientes con dosis: ej. Astragalus 15g, Ginseng 10g…"
               value={form.formulaHerbal}
               onChange={(e) => set("formulaHerbal", e.target.value)}
@@ -303,7 +303,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
           <div className="space-y-1.5">
             <Label>Observación de lengua</Label>
             <textarea
-              className="flex min-h-[60px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+              className="flex min-h-[60px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
               placeholder="Color, capa, forma, marcas dentales…"
               value={form.observacionLengua}
               onChange={(e) => set("observacionLengua", e.target.value)}
@@ -313,7 +313,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
             <div className="space-y-1.5">
               <Label>Tipo de pulso</Label>
               <select
-                className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                 value={form.tipoPulso}
                 onChange={(e) => set("tipoPulso", e.target.value)}
               >
@@ -328,7 +328,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
             <div className="space-y-1.5">
               <Label>Tipo constitucional</Label>
               <input
-                className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                 placeholder="Dosha o patrón TCM (ej. Vata, Qi deficiente)"
                 value={form.tipoConstitucional}
                 onChange={(e) => set("tipoConstitucional", e.target.value)}
@@ -339,13 +339,13 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
       </div>
 
       {/* EVALUACIÓN CONSTITUCIONAL TCM */}
-      <div className="rounded-xl border border-border dark:border-gray-700 p-4">
-        <h3 className="text-sm font-bold mb-3 dark:text-white">☯ Evaluación constitucional</h3>
+      <div className="rounded-xl border border-border dark:border-border p-4">
+        <h3 className="text-sm font-bold mb-3">☯ Evaluación constitucional</h3>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label>Constitución predominante</Label>
             <select
-              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="flex h-10 w-full rounded-lg border border-border bg-card dark:border-border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.constitucionPredominante}
               onChange={(e) => set("constitucionPredominante", e.target.value)}
             >
@@ -360,7 +360,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
           <div className="space-y-1.5">
             <Label>Exceso/Deficiencia</Label>
             <select
-              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="flex h-10 w-full rounded-lg border border-border bg-card dark:border-border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.excesoDeficiencia}
               onChange={(e) => set("excesoDeficiencia", e.target.value)}
             >
@@ -373,7 +373,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
           <div className="space-y-1.5">
             <Label>Frío/Calor</Label>
             <select
-              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="flex h-10 w-full rounded-lg border border-border bg-card dark:border-border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.frioCalor}
               onChange={(e) => set("frioCalor", e.target.value)}
             >
@@ -386,7 +386,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
           <div className="space-y-1.5">
             <Label>Humedad</Label>
             <select
-              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="flex h-10 w-full rounded-lg border border-border bg-card dark:border-border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.humedad}
               onChange={(e) => set("humedad", e.target.value)}
             >
@@ -399,7 +399,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
           <div className="space-y-1.5">
             <Label>Estancamiento de Qi</Label>
             <select
-              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="flex h-10 w-full rounded-lg border border-border bg-card dark:border-border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.estancamientoQi}
               onChange={(e) => set("estancamientoQi", e.target.value)}
             >
@@ -415,12 +415,12 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
 
       {/* MAPA DE PUNTOS DE ACUPUNTURA */}
       {isAcupuntura && (
-        <div className="rounded-xl border border-border dark:border-gray-700 p-4">
+        <div className="rounded-xl border border-border dark:border-border p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold dark:text-white">📍 Registro de puntos de acupuntura</h3>
+            <h3 className="text-sm font-bold">📍 Registro de puntos de acupuntura</h3>
             <div className="flex items-center gap-3">
-              <span className="text-xs text-muted-foreground dark:text-gray-400">
-                Total de agujas: <span className="font-bold text-foreground dark:text-white">{form.puntosDetallados.filter((p: any) => p.punto).length}</span>
+              <span className="text-xs text-muted-foreground">
+                Total de agujas: <span className="font-bold text-foreground">{form.puntosDetallados.filter((p: any) => p.punto).length}</span>
               </span>
               <button
                 type="button"
@@ -437,7 +437,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
                 <div className="space-y-1">
                   <Label className="text-xs">Punto</Label>
                   <input
-                    className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                    className="flex h-9 w-full rounded-lg border border-border bg-card dark:border-border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                     placeholder="Ej. LI4 Hegu"
                     value={p.punto}
                     onChange={(e) => updatePuntoDetallado(i, "punto", e.target.value)}
@@ -446,7 +446,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
                 <div className="space-y-1">
                   <Label className="text-xs">Meridiano</Label>
                   <select
-                    className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                    className="flex h-9 w-full rounded-lg border border-border bg-card dark:border-border px-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                     value={p.meridiano}
                     onChange={(e) => updatePuntoDetallado(i, "meridiano", e.target.value)}
                   >
@@ -459,7 +459,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
                 <div className="space-y-1">
                   <Label className="text-xs">Lateralidad</Label>
                   <select
-                    className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                    className="flex h-9 w-full rounded-lg border border-border bg-card dark:border-border px-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                     value={p.lateralidad}
                     onChange={(e) => updatePuntoDetallado(i, "lateralidad", e.target.value)}
                   >
@@ -472,7 +472,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
                 <div className="space-y-1">
                   <Label className="text-xs">Técnica</Label>
                   <select
-                    className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                    className="flex h-9 w-full rounded-lg border border-border bg-card dark:border-border px-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                     value={p.tecnica}
                     onChange={(e) => updatePuntoDetallado(i, "tecnica", e.target.value)}
                   >
@@ -502,7 +502,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
         <div className="space-y-1.5">
           <Label>Notas de sesión</Label>
           <textarea
-            className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Respuesta del paciente, reacciones, evolución…"
             value={form.notasSesion}
             onChange={(e) => set("notasSesion", e.target.value)}
@@ -511,7 +511,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
         <div className="space-y-1.5">
           <Label>Plan de tratamiento</Label>
           <textarea
-            className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Frecuencia de sesiones, recomendaciones dietéticas…"
             value={form.planTratamiento}
             onChange={(e) => set("planTratamiento", e.target.value)}
@@ -523,7 +523,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
       <div className="space-y-1.5">
         <Label>Diagnóstico / Evaluación</Label>
         <textarea
-          className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
           placeholder="Diagnóstico energético, patrón identificado…"
           value={form.assessment}
           onChange={(e) => set("assessment", e.target.value)}
@@ -532,12 +532,12 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
 
       {/* INTERACCIONES HIERBA-MEDICAMENTO */}
       <div className="rounded-xl border border-amber-400 dark:border-amber-600 p-4">
-        <h3 className="text-sm font-bold mb-3 dark:text-white">⚠️ Alerta de interacciones</h3>
+        <h3 className="text-sm font-bold mb-3">⚠️ Alerta de interacciones</h3>
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label>Medicamentos convencionales del paciente</Label>
             <textarea
-              className="flex min-h-[60px] w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+              className="flex min-h-[60px] w-full rounded-lg border border-border bg-card dark:border-border px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
               placeholder="Listar medicamentos convencionales que toma el paciente…"
               value={form.medicamentosConvencionales}
               onChange={(e) => set("medicamentosConvencionales", e.target.value)}
@@ -546,7 +546,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
           <div className="space-y-1.5">
             <Label>Fórmula herbal prescrita</Label>
             <textarea
-              className="flex min-h-[60px] w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+              className="flex min-h-[60px] w-full rounded-lg border border-border bg-card dark:border-border px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
               placeholder="Fórmula herbal prescrita en esta sesión…"
               value={form.formulaHerbalPrescrita || form.formulaHerbal}
               onChange={(e) => set("formulaHerbalPrescrita", e.target.value)}
@@ -563,7 +563,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
                     checked={form.interaccionesConocidas.includes(interaccion)}
                     onChange={() => toggleInteraccion(interaccion)}
                   />
-                  <span className="text-sm dark:text-gray-300">{interaccion}</span>
+                  <span className="text-sm">{interaccion}</span>
                 </label>
               ))}
             </div>
@@ -571,7 +571,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
           <div className="space-y-1.5">
             <Label>Notas de seguridad</Label>
             <textarea
-              className="flex min-h-[60px] w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+              className="flex min-h-[60px] w-full rounded-lg border border-border bg-card dark:border-border px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
               placeholder="Precauciones adicionales, contraindicaciones observadas…"
               value={form.notasSeguridad}
               onChange={(e) => set("notasSeguridad", e.target.value)}

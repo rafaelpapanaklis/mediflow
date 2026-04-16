@@ -12,7 +12,7 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
   PAID:      { label: "Pagado",    cls: "text-emerald-700 bg-emerald-50 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300"  },
   OVERDUE:   { label: "Vencido",   cls: "text-rose-700 bg-rose-50 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300"           },
   DRAFT:     { label: "📝 Borrador",cls: "text-violet-700 bg-violet-50 border-violet-300 dark:bg-violet-900/30 dark:text-violet-300"       },
-  CANCELLED: { label: "Cancelado", cls: "text-slate-500 bg-slate-50 border-slate-200 dark:bg-slate-800 dark:text-slate-400"        },
+  CANCELLED: { label: "Cancelado", cls: "text-muted-foreground bg-muted border-border"        },
 };
 
 interface Props {
@@ -147,7 +147,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
           { icon: <Clock className="w-4 h-4 text-amber-600" />,       label: "Por cobrar",     val: formatCurrency(totalPending), bg: "bg-amber-50"   },
           { icon: <CreditCard className="w-4 h-4 text-brand-600" />,  label: "Total facturas", val: String(invoices.length),      bg: "bg-brand-50"   },
         ].map(k => (
-          <div key={k.label} className="rounded-xl border border-border bg-white dark:bg-slate-900 p-4 shadow-card">
+          <div key={k.label} className="rounded-xl border border-border bg-card p-4 shadow-card">
             <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-3 ${k.bg}`}>{k.icon}</div>
             <div className="text-xl font-extrabold">{k.val}</div>
             <div className="text-xs text-muted-foreground">{k.label}</div>
@@ -161,22 +161,22 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
           <form onSubmit={createInvoice} className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="col-span-2 space-y-1">
               <label className="text-xs font-bold text-muted-foreground">Paciente *</label>
-              <select className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none" value={form.patientId} onChange={e => set("patientId", e.target.value)}>
+              <select className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none" value={form.patientId} onChange={e => set("patientId", e.target.value)}>
                 <option value="">Seleccionar…</option>
                 {patients.map(p => <option key={p.id} value={p.id}>#{p.patientNumber} — {p.firstName} {p.lastName}</option>)}
               </select>
             </div>
             <div className="col-span-2 space-y-1">
               <label className="text-xs font-bold text-muted-foreground">Descripción *</label>
-              <input className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none" placeholder="Consulta dental…" value={form.description} onChange={e => set("description", e.target.value)} />
+              <input className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none" placeholder="Consulta dental…" value={form.description} onChange={e => set("description", e.target.value)} />
             </div>
             <div className="space-y-1">
               <label className="text-xs font-bold text-muted-foreground">Cantidad</label>
-              <input type="number" min="1" className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none" value={form.quantity} onChange={e => set("quantity", e.target.value)} />
+              <input type="number" min="1" className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none" value={form.quantity} onChange={e => set("quantity", e.target.value)} />
             </div>
             <div className="space-y-1">
               <label className="text-xs font-bold text-muted-foreground">Precio unitario *</label>
-              <input type="number" min="0" className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none" placeholder="500" value={form.unitPrice} onChange={e => set("unitPrice", e.target.value)} />
+              <input type="number" min="0" className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none" placeholder="500" value={form.unitPrice} onChange={e => set("unitPrice", e.target.value)} />
             </div>
             <div className="space-y-1">
               <label className="text-xs font-bold text-muted-foreground">Total</label>
@@ -186,7 +186,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
             </div>
             <div className="space-y-1">
               <label className="text-xs font-bold text-muted-foreground">Notas</label>
-              <input className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none" placeholder="Opcional" value={form.notes} onChange={e => set("notes", e.target.value)} />
+              <input className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none" placeholder="Opcional" value={form.notes} onChange={e => set("notes", e.target.value)} />
             </div>
             <div className="col-span-2 lg:col-span-4 flex gap-2">
               <Button type="submit" disabled={loading} size="sm">{loading ? "Guardando…" : "Crear factura"}</Button>
@@ -196,7 +196,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
         </div>
       )}
 
-      <div className="rounded-xl border border-border bg-white dark:bg-slate-900 shadow-card overflow-hidden">
+      <div className="rounded-xl border border-border bg-card shadow-card overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
@@ -255,8 +255,8 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                       <td colSpan={8} className="px-5 py-3">
                         <div className="flex items-center gap-3 flex-wrap">
                           <span className="text-xs font-bold text-brand-700">Saldo: {formatCurrency(inv.balance)}</span>
-                          <input type="number" placeholder="Monto" className="h-8 w-28 rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
-                          <select className="h-8 rounded-lg border border-border bg-white dark:bg-slate-800 px-2 text-sm" value={payMethod} onChange={e => setPayMethod(e.target.value)}>
+                          <input type="number" placeholder="Monto" className="h-8 w-28 rounded-lg border border-border bg-card px-3 text-sm" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
+                          <select className="h-8 rounded-lg border border-border bg-card px-2 text-sm" value={payMethod} onChange={e => setPayMethod(e.target.value)}>
                             <option value="CASH">Efectivo</option><option value="CARD">Tarjeta</option><option value="TRANSFER">Transferencia</option>
                           </select>
                           <Button size="sm" onClick={() => registerPayment(inv.id)}>Registrar</Button>
@@ -275,28 +275,28 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                             <div className="space-y-1">
                               <label className="text-xs font-bold text-muted-foreground">RFC receptor *</label>
-                              <input className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none uppercase"
+                              <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none uppercase"
                                 placeholder="XAXX010101000"
                                 value={cfdiForm.rfc}
                                 onChange={e => setCfdiForm(f => ({ ...f, rfc: e.target.value.toUpperCase() }))} />
                             </div>
                             <div className="space-y-1 lg:col-span-2">
                               <label className="text-xs font-bold text-muted-foreground">Nombre / Razón social *</label>
-                              <input className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none uppercase"
+                              <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none uppercase"
                                 placeholder="JUAN PÉREZ GARCÍA"
                                 value={cfdiForm.nombre}
                                 onChange={e => setCfdiForm(f => ({ ...f, nombre: e.target.value }))} />
                             </div>
                             <div className="space-y-1">
                               <label className="text-xs font-bold text-muted-foreground">C.P. receptor *</label>
-                              <input className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none"
+                              <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
                                 placeholder="97000" maxLength={5}
                                 value={cfdiForm.cp}
                                 onChange={e => setCfdiForm(f => ({ ...f, cp: e.target.value }))} />
                             </div>
                             <div className="space-y-1">
                               <label className="text-xs font-bold text-muted-foreground">Régimen fiscal</label>
-                              <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-2 text-sm focus:outline-none"
+                              <select className="flex h-9 w-full rounded-lg border border-border bg-card px-2 text-sm focus:outline-none"
                                 value={cfdiForm.regimenFiscal}
                                 onChange={e => setCfdiForm(f => ({ ...f, regimenFiscal: e.target.value }))}>
                                 <option value="616">616 — Sin obligaciones fiscales</option>
@@ -307,7 +307,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                             </div>
                             <div className="space-y-1">
                               <label className="text-xs font-bold text-muted-foreground">Uso CFDI</label>
-                              <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-2 text-sm focus:outline-none"
+                              <select className="flex h-9 w-full rounded-lg border border-border bg-card px-2 text-sm focus:outline-none"
                                 value={cfdiForm.usoCfdi}
                                 onChange={e => setCfdiForm(f => ({ ...f, usoCfdi: e.target.value }))}>
                                 <option value="D01">D01 — Honorarios médicos</option>
@@ -318,7 +318,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                             </div>
                             <div className="space-y-1">
                               <label className="text-xs font-bold text-muted-foreground">Forma de pago</label>
-                              <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-2 text-sm focus:outline-none"
+                              <select className="flex h-9 w-full rounded-lg border border-border bg-card px-2 text-sm focus:outline-none"
                                 value={cfdiForm.formaPago}
                                 onChange={e => setCfdiForm(f => ({ ...f, formaPago: e.target.value }))}>
                                 <option value="01">01 — Efectivo</option>

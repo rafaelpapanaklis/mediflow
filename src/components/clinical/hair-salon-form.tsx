@@ -171,7 +171,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
         <div className="space-y-1.5">
           <Label>Motivo de visita</Label>
           <textarea
-            className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="¿Qué busca el cliente hoy?"
             value={form.subjective}
             onChange={(e) => set("subjective", e.target.value)}
@@ -180,7 +180,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
         <div className="space-y-1.5">
           <Label>Observaciones del cabello</Label>
           <textarea
-            className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Estado actual del cabello, daño, raíces…"
             value={form.objective}
             onChange={(e) => set("objective", e.target.value)}
@@ -195,7 +195,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
           <div className="space-y-1.5">
             <Label>Servicio</Label>
             <select
-              className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.servicio}
               onChange={(e) => set("servicio", e.target.value)}
             >
@@ -210,7 +210,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
           <div className="space-y-1.5">
             <Label>Tipo de cabello</Label>
             <select
-              className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.tipoCabello}
               onChange={(e) => set("tipoCabello", e.target.value)}
             >
@@ -243,7 +243,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
                 <div className="space-y-1">
                   <Label className="text-xs">Marca</Label>
                   <input
-                    className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                    className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                     placeholder="Ej. Wella"
                     value={c.marca}
                     onChange={(e) => updateColor(i, "marca", e.target.value)}
@@ -252,7 +252,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
                 <div className="space-y-1">
                   <Label className="text-xs">Tono</Label>
                   <input
-                    className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                    className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                     placeholder="Ej. 7/1"
                     value={c.tono}
                     onChange={(e) => updateColor(i, "tono", e.target.value)}
@@ -261,7 +261,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
                 <div className="space-y-1">
                   <Label className="text-xs">Proporción</Label>
                   <input
-                    className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                    className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                     placeholder="Ej. 1:1.5"
                     value={c.proporcion}
                     onChange={(e) =>
@@ -272,7 +272,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
                 <div className="space-y-1">
                   <Label className="text-xs">Revelador volumen</Label>
                   <select
-                    className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                    className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                     value={c.reveladorVolumen}
                     onChange={(e) =>
                       updateColor(i, "reveladorVolumen", e.target.value)
@@ -292,7 +292,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
             <Label className="text-xs">Tiempo de procesamiento (minutos)</Label>
             <input
               type="number"
-              className="flex h-9 w-32 rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="flex h-9 w-32 rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               placeholder="Ej. 35"
               value={form.processingTime}
               onChange={(e) => set("processingTime", e.target.value)}
@@ -308,7 +308,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
           <div className="space-y-1.5">
             <Label>Productos aplicados</Label>
             <textarea
-              className="flex min-h-[60px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+              className="flex min-h-[60px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
               placeholder="Shampoo, acondicionador, tratamiento, protector térmico…"
               value={form.productosAplicados}
               onChange={(e) => set("productosAplicados", e.target.value)}
@@ -318,7 +318,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
             <div className="space-y-1.5">
               <Label>Estilista</Label>
               <input
-                className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                 placeholder="Nombre del estilista"
                 value={form.estilista}
                 onChange={(e) => set("estilista", e.target.value)}
@@ -329,13 +329,13 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
       </div>
 
       {/* DIAGNÓSTICO CAPILAR */}
-      <div className="rounded-xl border border-border dark:border-gray-700 p-4">
-        <h3 className="text-sm font-bold mb-3 dark:text-white">🔍 Diagnóstico capilar</h3>
+      <div className="rounded-xl border border-border dark:border-border p-4">
+        <h3 className="text-sm font-bold mb-3">🔍 Diagnóstico capilar</h3>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label>Porosidad</Label>
             <select
-              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="flex h-10 w-full rounded-lg border border-border bg-card dark:border-border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.porosidad}
               onChange={(e) => set("porosidad", e.target.value)}
             >
@@ -348,7 +348,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
           <div className="space-y-1.5">
             <Label>Tipo de cuero cabelludo</Label>
             <select
-              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="flex h-10 w-full rounded-lg border border-border bg-card dark:border-border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.tipoCueroCabelludo}
               onChange={(e) => set("tipoCueroCabelludo", e.target.value)}
             >
@@ -361,7 +361,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
           <div className="space-y-1.5">
             <Label>Elasticidad</Label>
             <select
-              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="flex h-10 w-full rounded-lg border border-border bg-card dark:border-border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.elasticidad}
               onChange={(e) => set("elasticidad", e.target.value)}
             >
@@ -374,7 +374,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
           <div className="space-y-1.5">
             <Label>Grosor del cabello</Label>
             <select
-              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="flex h-10 w-full rounded-lg border border-border bg-card dark:border-border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.grosorCabello}
               onChange={(e) => set("grosorCabello", e.target.value)}
             >
@@ -403,7 +403,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
                   className={`h-10 w-10 rounded-lg text-sm font-bold text-white transition-all ${
                     form.nivelDano === n
                       ? colors[n - 1] + " ring-2 ring-offset-2 ring-brand-600 dark:ring-offset-gray-900"
-                      : "bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:opacity-80"
+                      : "bg-muted text-muted-foreground hover:opacity-80"
                   }`}
                   onClick={() => set("nivelDano", n)}
                 >
@@ -416,13 +416,13 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
       </div>
 
       {/* PREFERENCIAS DEL CLIENTE */}
-      <div className="rounded-xl border border-border dark:border-gray-700 p-4">
-        <h3 className="text-sm font-bold mb-3 dark:text-white">💇 Preferencias del cliente</h3>
+      <div className="rounded-xl border border-border dark:border-border p-4">
+        <h3 className="text-sm font-bold mb-3">💇 Preferencias del cliente</h3>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label>Estilo preferido</Label>
             <input
-              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="flex h-10 w-full rounded-lg border border-border bg-card dark:border-border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               placeholder="Ej. Bob asimétrico, degradado…"
               value={form.estiloPreferido}
               onChange={(e) => set("estiloPreferido", e.target.value)}
@@ -431,7 +431,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
           <div className="space-y-1.5">
             <Label>Largo ideal</Label>
             <select
-              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="flex h-10 w-full rounded-lg border border-border bg-card dark:border-border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.largoIdeal}
               onChange={(e) => set("largoIdeal", e.target.value)}
             >
@@ -446,7 +446,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
           <div className="space-y-1.5">
             <Label>Frecuencia de visita</Label>
             <select
-              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="flex h-10 w-full rounded-lg border border-border bg-card dark:border-border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.frecuenciaVisita}
               onChange={(e) => set("frecuenciaVisita", e.target.value)}
             >
@@ -461,7 +461,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
           <div className="space-y-1.5">
             <Label>Productos favoritos</Label>
             <input
-              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="flex h-10 w-full rounded-lg border border-border bg-card dark:border-border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               placeholder="Marcas o productos que usa el cliente"
               value={form.productosFavoritos}
               onChange={(e) => set("productosFavoritos", e.target.value)}
@@ -471,7 +471,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
         <div className="mt-4 space-y-1.5">
           <Label>Alergias a tintes/productos</Label>
           <textarea
-            className="flex min-h-[60px] w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            className="flex min-h-[60px] w-full rounded-lg border border-border bg-card dark:border-border px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Reacciones conocidas a tintes, químicos, ingredientes…"
             value={form.alergias}
             onChange={(e) => set("alergias", e.target.value)}
@@ -480,13 +480,13 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
       </div>
 
       {/* RECOMENDACIONES PARA CASA */}
-      <div className="rounded-xl border border-border dark:border-gray-700 p-4">
-        <h3 className="text-sm font-bold mb-3 dark:text-white">🏠 Recomendaciones para casa</h3>
+      <div className="rounded-xl border border-border dark:border-border p-4">
+        <h3 className="text-sm font-bold mb-3">🏠 Recomendaciones para casa</h3>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label>Champú recomendado</Label>
             <input
-              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="flex h-10 w-full rounded-lg border border-border bg-card dark:border-border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               placeholder="Marca y tipo de champú"
               value={form.champuRecomendado}
               onChange={(e) => set("champuRecomendado", e.target.value)}
@@ -495,7 +495,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
           <div className="space-y-1.5">
             <Label>Acondicionador</Label>
             <input
-              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="flex h-10 w-full rounded-lg border border-border bg-card dark:border-border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               placeholder="Marca y tipo de acondicionador"
               value={form.acondicionador}
               onChange={(e) => set("acondicionador", e.target.value)}
@@ -504,7 +504,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
           <div className="space-y-1.5">
             <Label>Tratamiento/mascarilla</Label>
             <input
-              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="flex h-10 w-full rounded-lg border border-border bg-card dark:border-border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               placeholder="Tratamiento o mascarilla recomendada"
               value={form.tratamientoMascarilla}
               onChange={(e) => set("tratamientoMascarilla", e.target.value)}
@@ -513,7 +513,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
           <div className="space-y-1.5">
             <Label>Frecuencia de lavado</Label>
             <select
-              className="flex h-10 w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="flex h-10 w-full rounded-lg border border-border bg-card dark:border-border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.frecuenciaLavado}
               onChange={(e) => set("frecuenciaLavado", e.target.value)}
             >
@@ -529,7 +529,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
         <div className="mt-4 space-y-1.5">
           <Label>Notas adicionales de cuidado</Label>
           <textarea
-            className="flex min-h-[60px] w-full rounded-lg border border-border bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            className="flex min-h-[60px] w-full rounded-lg border border-border bg-card dark:border-border px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Evitar plancha, usar protector térmico, no lavar en 48h…"
             value={form.notasCuidado}
             onChange={(e) => set("notasCuidado", e.target.value)}
@@ -542,7 +542,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
         <div className="space-y-1.5">
           <Label>Resultado / Observaciones</Label>
           <textarea
-            className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Resultado del servicio, satisfacción del cliente…"
             value={form.assessment}
             onChange={(e) => set("assessment", e.target.value)}
@@ -551,7 +551,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
         <div className="space-y-1.5">
           <Label>Notas para próxima visita</Label>
           <textarea
-            className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Retocar raíz en 4 semanas, cambiar tono…"
             value={form.notasProximaVisita}
             onChange={(e) => set("notasProximaVisita", e.target.value)}

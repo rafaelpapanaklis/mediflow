@@ -99,7 +99,7 @@ export default function AIAssistantPage() {
 
       {/* Token usage bar */}
       {usage && (
-        <div className="bg-white dark:bg-slate-900 border border-border rounded-xl px-4 py-3 mb-4 flex-shrink-0">
+        <div className="bg-card border border-border rounded-xl px-4 py-3 mb-4 flex-shrink-0">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-semibold text-muted-foreground flex items-center gap-1.5">
               <Zap className="w-4 h-4 text-violet-500" /> Uso mensual de IA
@@ -126,7 +126,7 @@ export default function AIAssistantPage() {
           <div className="flex flex-wrap gap-2">
             {QUICK_PROMPTS.map(p => (
               <button key={p.label} onClick={() => setInput(p.text)}
-                className="text-sm bg-white dark:bg-slate-900 border border-border rounded-xl px-3 py-2 hover:border-violet-400 hover:text-violet-600 transition-colors font-semibold">
+                className="text-sm bg-card border border-border rounded-xl px-3 py-2 hover:border-violet-400 hover:text-violet-600 transition-colors font-semibold">
                 {p.label}
               </button>
             ))}
@@ -135,7 +135,7 @@ export default function AIAssistantPage() {
       )}
 
       {/* Chat messages */}
-      <div className="flex-1 overflow-y-auto bg-white dark:bg-slate-900 border border-border rounded-2xl p-4 space-y-4 mb-4">
+      <div className="flex-1 overflow-y-auto bg-card border border-border rounded-2xl p-4 space-y-4 mb-4">
         {messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center text-muted-foreground py-8">
             <Bot className="w-16 h-16 mb-3 opacity-20" />
@@ -182,7 +182,7 @@ export default function AIAssistantPage() {
       {/* Input */}
       <div className="flex-shrink-0 flex gap-3">
         <textarea
-          className="flex-1 rounded-xl border border-border bg-white dark:bg-slate-900 px-4 py-3 text-base placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-600/20 resize-none"
+          className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-base placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-600/20 resize-none"
           placeholder={limitHit ? "Límite mensual alcanzado" : "Escribe tu consulta clínica…"}
           rows={2}
           value={input}

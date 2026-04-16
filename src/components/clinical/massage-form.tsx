@@ -146,10 +146,10 @@ export function MassageForm({ patientId, onSaved }: Props) {
   }
 
   const inputCls =
-    "flex h-9 w-full rounded-lg border border-border bg-white dark:bg-gray-900 dark:text-gray-100 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20";
+    "flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20";
   const selectCls = inputCls;
   const textareaCls =
-    "flex min-h-[70px] w-full rounded-lg border border-border bg-white dark:bg-gray-900 dark:text-gray-100 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none";
+    "flex min-h-[70px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none";
 
   const PRESION_LABELS = ["1 - Suave", "2 - Ligera", "3 - Media", "4 - Profunda", "5 - Firme"];
 
@@ -204,7 +204,7 @@ export function MassageForm({ patientId, onSaved }: Props) {
               className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ${
                 form.zonasEnfoque.includes(z)
                   ? "bg-brand-600/10 border-brand-600 text-brand-600"
-                  : "border-border hover:bg-slate-50 dark:hover:bg-slate-800"
+                  : "border-border hover:bg-muted"
               }`}
             >
               <input
@@ -229,7 +229,7 @@ export function MassageForm({ patientId, onSaved }: Props) {
               className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ${
                 form.triggerPoints.includes(tp)
                   ? "bg-purple-50 border-purple-400 text-purple-700 dark:bg-purple-900/30 dark:border-purple-500 dark:text-purple-300"
-                  : "border-border hover:bg-slate-50 dark:hover:bg-slate-800"
+                  : "border-border hover:bg-muted"
               }`}
             >
               <input
@@ -276,7 +276,7 @@ export function MassageForm({ patientId, onSaved }: Props) {
               className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ${
                 form.evaluacionPostural.includes(ep)
                   ? "bg-sky-50 border-sky-400 text-sky-700 dark:bg-sky-900/30 dark:border-sky-500 dark:text-sky-300"
-                  : "border-border hover:bg-slate-50 dark:hover:bg-slate-800"
+                  : "border-border hover:bg-muted"
               }`}
             >
               <input
@@ -310,7 +310,7 @@ export function MassageForm({ patientId, onSaved }: Props) {
               className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ${
                 form.zonasDolor.includes(z)
                   ? "bg-red-50 border-red-400 text-red-600"
-                  : "border-border hover:bg-slate-50"
+                  : "border-border hover:bg-muted"
               }`}
             >
               <input
@@ -346,7 +346,7 @@ export function MassageForm({ patientId, onSaved }: Props) {
               className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ${
                 form.contraindicaciones.includes(c)
                   ? "bg-amber-50 border-amber-400 text-amber-700"
-                  : "border-border hover:bg-slate-50"
+                  : "border-border hover:bg-muted"
               }`}
             >
               <input
@@ -424,7 +424,7 @@ export function MassageForm({ patientId, onSaved }: Props) {
               form.dolorAntes > form.dolorDespues
                 ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
                 : form.dolorAntes === form.dolorDespues
-                  ? "bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                  ? "bg-muted text-muted-foreground"
                   : "bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-300"
             }`}>
               {form.dolorAntes > form.dolorDespues

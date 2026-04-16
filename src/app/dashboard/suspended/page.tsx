@@ -20,19 +20,19 @@ export default function SuspendedPage() {
         <div className="text-center mb-8">
           <div className="w-16 h-16 rounded-2xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-3xl mx-auto mb-4">⏰</div>
           <h1 className="text-2xl font-extrabold text-white mb-2">Tu suscripción ha vencido</h1>
-          <p className="text-slate-400">Tu acceso está temporalmente suspendido. Renueva tu plan para continuar usando MediFlow.</p>
+          <p className="text-muted-foreground">Tu acceso está temporalmente suspendido. Renueva tu plan para continuar usando MediFlow.</p>
         </div>
 
         {/* Plans */}
         <div className="grid grid-cols-3 gap-3 mb-6">
           {PLANS.map(plan => (
-            <div key={plan.id} className={`rounded-xl border p-4 ${plan.id === "PRO" ? "border-brand-500 bg-brand-950/50" : "border-slate-700 bg-slate-900"}`}>
+            <div key={plan.id} className={`rounded-xl border p-4 ${plan.id === "PRO" ? "border-brand-500 bg-brand-950/50" : "border-slate-700 bg-card"}`}>
               {plan.id === "PRO" && <div className="text-[10px] font-bold text-brand-400 mb-2">⭐ MÁS POPULAR</div>}
               <div className="font-bold text-white mb-0.5">{plan.name}</div>
               <div className="text-lg font-extrabold text-brand-400 mb-3">{plan.price}</div>
               <ul className="space-y-1">
                 {plan.features.map(f => (
-                  <li key={f} className="text-xs text-slate-400 flex items-center gap-1.5">
+                  <li key={f} className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <span className="text-emerald-400">✓</span>{f}
                   </li>
                 ))}
@@ -42,19 +42,19 @@ export default function SuspendedPage() {
         </div>
 
         {/* Payment info */}
-        <div className="bg-slate-900 border border-brand-700 rounded-xl p-5 mb-4">
+        <div className="bg-card border border-brand-700 rounded-xl p-5 mb-4">
           <div className="text-xs font-bold text-brand-400 uppercase tracking-wide mb-4">💳 Realiza tu pago por transferencia SPEI</div>
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <div className="text-xs text-slate-400 mb-1">Nombre del beneficiario</div>
+              <div className="text-xs text-muted-foreground mb-1">Nombre del beneficiario</div>
               <div className="font-semibold text-white text-sm">{BANK_INFO.nombre}</div>
             </div>
             <div>
-              <div className="text-xs text-slate-400 mb-1">CLABE interbancaria</div>
+              <div className="text-xs text-muted-foreground mb-1">CLABE interbancaria</div>
               <div className="font-mono font-extrabold text-brand-400 text-xl tracking-wider">{BANK_INFO.clabe}</div>
             </div>
             <div>
-              <div className="text-xs text-slate-400 mb-1">Banco</div>
+              <div className="text-xs text-muted-foreground mb-1">Banco</div>
               <div className="font-semibold text-white text-sm">{BANK_INFO.banco}</div>
             </div>
           </div>
@@ -64,14 +64,14 @@ export default function SuspendedPage() {
         </div>
 
         {/* Contact */}
-        <div className="text-center text-sm text-slate-500">
+        <div className="text-center text-sm text-muted-foreground">
           ¿Ya realizaste el pago? Escríbenos a{" "}
           <a href="mailto:soporte@mediflow.app" className="text-brand-400 hover:underline">soporte@mediflow.app</a>
           {" "}o por WhatsApp para activar tu cuenta de inmediato.
         </div>
 
         <div className="mt-6 text-center">
-          <Link href="/login" className="text-xs text-slate-600 hover:text-slate-400 transition-colors">← Volver al login</Link>
+          <Link href="/login" className="text-xs text-muted-foreground hover:text-muted-foreground transition-colors">← Volver al login</Link>
         </div>
       </div>
     </div>

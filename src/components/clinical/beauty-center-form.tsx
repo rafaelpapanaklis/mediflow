@@ -109,12 +109,12 @@ export function BeautyCenterForm({ patientId, onSaved }: Props) {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label>Motivo de consulta / HEA</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="¿Por qué viene el paciente hoy?" value={form.subjective} onChange={e => set("subjective", e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <Label>Exploración física / Observaciones</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Estado actual de la piel, condiciones observadas…" value={form.objective} onChange={e => set("objective", e.target.value)} />
         </div>
       </div>
@@ -122,7 +122,7 @@ export function BeautyCenterForm({ patientId, onSaved }: Props) {
       {/* TIPO DE PIEL */}
       <div className="space-y-1.5">
         <Label>Tipo de piel / condición</Label>
-        <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+        <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
           placeholder="Ej. Piel mixta, deshidratada, con manchas solares…" value={form.tipoPiel} onChange={e => set("tipoPiel", e.target.value)} />
       </div>
 
@@ -132,7 +132,7 @@ export function BeautyCenterForm({ patientId, onSaved }: Props) {
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label className="text-xs">Tratamiento</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.tratamiento} onChange={e => set("tratamiento", e.target.value)}>
               <option value="">Seleccionar…</option>
               {TREATMENTS.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
@@ -140,7 +140,7 @@ export function BeautyCenterForm({ patientId, onSaved }: Props) {
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Zona tratada</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.zonaTratada} onChange={e => set("zonaTratada", e.target.value)}>
               <option value="">Seleccionar…</option>
               {BODY_ZONES.map(z => <option key={z} value={z}>{z.charAt(0).toUpperCase() + z.slice(1)}</option>)}
@@ -152,7 +152,7 @@ export function BeautyCenterForm({ patientId, onSaved }: Props) {
       {/* PRODUCTOS */}
       <div className="space-y-1.5">
         <Label>Productos utilizados</Label>
-        <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+        <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
           placeholder="Productos, marcas y cantidades aplicadas…" value={form.productos} onChange={e => set("productos", e.target.value)} />
       </div>
 
@@ -174,12 +174,12 @@ export function BeautyCenterForm({ patientId, onSaved }: Props) {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label>Diagnóstico / Evaluación</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Diagnóstico, hallazgos…" value={form.assessment} onChange={e => set("assessment", e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <Label>Observaciones</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Observaciones adicionales del tratamiento…" value={form.observaciones} onChange={e => set("observaciones", e.target.value)} />
         </div>
       </div>
@@ -190,7 +190,7 @@ export function BeautyCenterForm({ patientId, onSaved }: Props) {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="space-y-1">
             <Label className="text-xs">Hidratación</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <select className="flex h-9 w-full rounded-lg border border-border bg-card dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.baumannHidratacion} onChange={e => set("baumannHidratacion", e.target.value)}>
               <option value="">Seleccionar…</option>
               <option value="O">Oleosa (O)</option>
@@ -199,7 +199,7 @@ export function BeautyCenterForm({ patientId, onSaved }: Props) {
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Sensibilidad</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <select className="flex h-9 w-full rounded-lg border border-border bg-card dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.baumannSensibilidad} onChange={e => set("baumannSensibilidad", e.target.value)}>
               <option value="">Seleccionar…</option>
               <option value="S">Sensible (S)</option>
@@ -208,7 +208,7 @@ export function BeautyCenterForm({ patientId, onSaved }: Props) {
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Pigmentación</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <select className="flex h-9 w-full rounded-lg border border-border bg-card dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.baumannPigmentacion} onChange={e => set("baumannPigmentacion", e.target.value)}>
               <option value="">Seleccionar…</option>
               <option value="P">Pigmentada (P)</option>
@@ -217,7 +217,7 @@ export function BeautyCenterForm({ patientId, onSaved }: Props) {
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Arrugas</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <select className="flex h-9 w-full rounded-lg border border-border bg-card dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.baumannArrugas} onChange={e => set("baumannArrugas", e.target.value)}>
               <option value="">Seleccionar…</option>
               <option value="W">Con arrugas (W)</option>
@@ -241,32 +241,32 @@ export function BeautyCenterForm({ patientId, onSaved }: Props) {
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <div className="space-y-1">
             <Label className="text-xs">Equipo utilizado</Label>
-            <input className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <input className="flex h-9 w-full rounded-lg border border-border bg-card dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               placeholder="Nombre del equipo" value={form.equipoUtilizado} onChange={e => set("equipoUtilizado", e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Energía (J/cm²)</Label>
-            <input type="number" min={0} step="0.1" className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <input type="number" min={0} step="0.1" className="flex h-9 w-full rounded-lg border border-border bg-card dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               placeholder="0" value={form.energia} onChange={e => set("energia", e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Frecuencia (Hz)</Label>
-            <input type="number" min={0} step="0.1" className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <input type="number" min={0} step="0.1" className="flex h-9 w-full rounded-lg border border-border bg-card dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               placeholder="0" value={form.frecuencia} onChange={e => set("frecuencia", e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Profundidad (mm)</Label>
-            <input type="number" min={0} step="0.1" className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <input type="number" min={0} step="0.1" className="flex h-9 w-full rounded-lg border border-border bg-card dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               placeholder="0" value={form.profundidad} onChange={e => set("profundidad", e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Tiempo de exposición (seg)</Label>
-            <input type="number" min={0} step="1" className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <input type="number" min={0} step="1" className="flex h-9 w-full rounded-lg border border-border bg-card dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               placeholder="0" value={form.tiempoExposicion} onChange={e => set("tiempoExposicion", e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Modo/Programa</Label>
-            <input className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <input className="flex h-9 w-full rounded-lg border border-border bg-card dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               placeholder="Modo o programa utilizado" value={form.modoPrograma} onChange={e => set("modoPrograma", e.target.value)} />
           </div>
         </div>
@@ -284,7 +284,7 @@ export function BeautyCenterForm({ patientId, onSaved }: Props) {
           ] as const).map(item => (
             <div key={item.key} className="space-y-1">
               <Label className="text-xs">{item.label}</Label>
-              <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              <select className="flex h-9 w-full rounded-lg border border-border bg-card dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                 value={(form as any)[item.key]} onChange={e => set(item.key, Number(e.target.value))}>
                 <option value={0}>0 - Ninguna</option>
                 <option value={1}>1 - Leve</option>
@@ -296,7 +296,7 @@ export function BeautyCenterForm({ patientId, onSaved }: Props) {
         </div>
         <div className="space-y-1">
           <Label className="text-xs">Tiempo de resolución estimado</Label>
-          <select className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 max-w-xs"
+          <select className="flex h-9 w-full rounded-lg border border-border bg-card dark:bg-neutral-900 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 max-w-xs"
             value={form.tiempoResolucion} onChange={e => set("tiempoResolucion", e.target.value)}>
             <option value="">Seleccionar…</option>
             <option value="Inmediata">Inmediata</option>
@@ -312,7 +312,7 @@ export function BeautyCenterForm({ patientId, onSaved }: Props) {
       {/* PLAN SIGUIENTE SESIÓN */}
       <div className="space-y-1.5">
         <Label>Plan siguiente sesión</Label>
-        <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+        <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
           placeholder="Plan de tratamiento para próxima visita…" value={form.planSiguiente} onChange={e => set("planSiguiente", e.target.value)} />
       </div>
 

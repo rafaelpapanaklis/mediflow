@@ -156,9 +156,9 @@ function formatNumber(n: number): string {
 }
 
 function balanceColorClasses(remaining: number, limit: number): { text: string; tooltip: string | null } {
-  if (limit <= 0) return { text: "text-slate-400", tooltip: null };
+  if (limit <= 0) return { text: "text-muted-foreground", tooltip: null };
   const pct = remaining / limit;
-  if (pct <= 0)   return { text: "text-slate-500", tooltip: "Sin créditos — contacta a tu administrador" };
+  if (pct <= 0)   return { text: "text-muted-foreground", tooltip: "Sin créditos — contacta a tu administrador" };
   if (pct < 0.05) return { text: "text-rose-400",  tooltip: "Saldo crítico — contacta a tu administrador para recargar" };
   if (pct < 0.20) return { text: "text-amber-400", tooltip: null };
   return { text: "text-emerald-400", tooltip: null };
@@ -431,7 +431,7 @@ function DialogHeaderBar({
             </span>
           )}
           {result && !brokenLegacy && result.findings.length > 0 && (
-            <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-300">
+            <span className="inline-flex items-center rounded-full border border-white/10 bg-card/5 px-2.5 py-1 text-[11px] font-semibold text-slate-300">
               {result.findings.length} hallazgo{result.findings.length === 1 ? "" : "s"}
             </span>
           )}
@@ -450,7 +450,7 @@ function DialogHeaderBar({
       </div>
 
       <DialogClose
-        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-card/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
         aria-label="Cerrar análisis"
       >
         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -535,7 +535,7 @@ function AnalysisSections({
 
       {/* Sección — RESUMEN */}
       {result.summary && !brokenLegacy && (
-        <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+        <section className="rounded-2xl border border-white/10 bg-card/[0.02] p-6">
           <h4 className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">Resumen</h4>
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">{result.summary}</p>
         </section>
@@ -543,7 +543,7 @@ function AnalysisSections({
 
       {/* Sección — HALLAZGOS */}
       {!brokenLegacy && (
-        <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+        <section className="rounded-2xl border border-white/10 bg-card/[0.02] p-6">
           <h4 className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">Hallazgos</h4>
           {result.findings.length === 0 ? (
             <p className="text-sm text-muted-foreground">Sin hallazgos significativos.</p>
@@ -554,7 +554,7 @@ function AnalysisSections({
                 const s = severityStyle[canonical];
                 const confPct = confidencePercent(f.confidence);
                 return (
-                  <li key={String(f.id)} className={cn("flex gap-3 rounded-xl border p-4 bg-white/[0.02]", s.border)}>
+                  <li key={String(f.id)} className={cn("flex gap-3 rounded-xl border p-4 bg-card/[0.02]", s.border)}>
                     <span className={cn("mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", s.bg)}>
                       <AlertTriangle className={cn("h-4 w-4", s.icon)} />
                     </span>
@@ -565,7 +565,7 @@ function AnalysisSections({
                           <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", s.bg, s.text)}>
                             {s.label}
                           </span>
-                          <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
+                          <span className="rounded-full border border-white/10 bg-card/5 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
                             Confianza {confPct}%
                           </span>
                         </div>
@@ -574,12 +574,12 @@ function AnalysisSections({
                         <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{f.description}</p>
                       )}
                       {f.tooth && (
-                        <span className="mt-2 inline-flex items-center rounded-full border border-white/15 bg-white/[0.03] px-2 py-0.5 text-[10px] font-medium text-slate-300">
+                        <span className="mt-2 inline-flex items-center rounded-full border border-white/15 bg-card/[0.03] px-2 py-0.5 text-[10px] font-medium text-slate-300">
                           Diente: {f.tooth}
                         </span>
                       )}
                       {f.confidenceRationale && (
-                        <p className="mt-2 flex gap-1.5 text-[11px] italic leading-relaxed text-slate-400">
+                        <p className="mt-2 flex gap-1.5 text-[11px] italic leading-relaxed text-muted-foreground">
                           <Info className="mt-[2px] h-3 w-3 shrink-0" />
                           {f.confidenceRationale}
                         </p>
@@ -595,7 +595,7 @@ function AnalysisSections({
 
       {/* Sección — RECOMENDACIONES */}
       {!brokenLegacy && (
-        <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+        <section className="rounded-2xl border border-white/10 bg-card/[0.02] p-6">
           <h4 className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">Recomendaciones</h4>
           {recsArray.length === 0 ? (
             <p className="text-sm text-muted-foreground">Sin recomendaciones adicionales.</p>
@@ -639,7 +639,7 @@ function AnalysisSections({
       </section>
 
       {/* Sección — Disclaimer + acciones */}
-      <section className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
+      <section className="rounded-lg border border-white/10 bg-card/[0.02] px-3 py-2">
         <p className="text-[11px] leading-relaxed text-muted-foreground">
           <Info className="mr-1 inline h-3 w-3" />
           Este análisis es orientativo y no reemplaza el criterio profesional del doctor.

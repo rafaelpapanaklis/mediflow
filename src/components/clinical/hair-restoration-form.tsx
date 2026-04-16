@@ -88,12 +88,12 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label>Motivo de consulta / HEA</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="¿Por qué viene el paciente hoy?" value={form.subjective} onChange={e => set("subjective", e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <Label>Exploración física / Observaciones</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Estado del cuero cabelludo, densidad visual…" value={form.objective} onChange={e => set("objective", e.target.value)} />
         </div>
       </div>
@@ -104,7 +104,7 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label className="text-xs">Clasificación</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.clasificacion} onChange={e => set("clasificacion", e.target.value)}>
               <option value="">Seleccionar…</option>
               <optgroup label="Hombres (Norwood)">
@@ -117,7 +117,7 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Técnica</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.tecnica} onChange={e => set("tecnica", e.target.value)}>
               <option value="">Seleccionar…</option>
               {TECHNIQUES.map(t => <option key={t} value={t}>{t}</option>)}
@@ -139,13 +139,13 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
                 <span className="text-xs font-semibold">{zone}</span>
                 <div className="space-y-1">
                   <Label className="text-xs">Antes</Label>
-                  <input type="number" min={0} className="flex h-8 w-full rounded-lg border border-border bg-white dark:bg-zinc-900 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                  <input type="number" min={0} className="flex h-8 w-full rounded-lg border border-border bg-card dark:bg-zinc-900 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                     placeholder="0" value={form.densidadZonas[zone]?.antes ?? ""}
                     onChange={e => setForm(f => ({ ...f, densidadZonas: { ...f.densidadZonas, [zone]: { ...f.densidadZonas[zone], antes: e.target.value } } }))} />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Después</Label>
-                  <input type="number" min={0} className="flex h-8 w-full rounded-lg border border-border bg-white dark:bg-zinc-900 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                  <input type="number" min={0} className="flex h-8 w-full rounded-lg border border-border bg-card dark:bg-zinc-900 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                     placeholder="0" value={form.densidadZonas[zone]?.despues ?? ""}
                     onChange={e => setForm(f => ({ ...f, densidadZonas: { ...f.densidadZonas, [zone]: { ...f.densidadZonas[zone], despues: e.target.value } } }))} />
                 </div>
@@ -166,17 +166,17 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
         <div className="grid grid-cols-3 gap-3">
           <div className="space-y-1">
             <Label className="text-xs">Densidad zona donante (folículos/cm²)</Label>
-            <input type="number" className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <input type="number" className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               placeholder="Ej. 80" value={form.densidadDonante} onChange={e => set("densidadDonante", e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Grafts cosechados</Label>
-            <input type="number" className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <input type="number" className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               placeholder="Ej. 2500" value={form.graftsCosechados} onChange={e => set("graftsCosechados", e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Grafts implantados</Label>
-            <input type="number" className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <input type="number" className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               placeholder="Ej. 2400" value={form.graftsImplantados} onChange={e => set("graftsImplantados", e.target.value)} />
           </div>
         </div>
@@ -199,7 +199,7 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
       {/* DISEÑO LÍNEA CAPILAR */}
       <div className="space-y-1.5">
         <Label>Diseño de línea capilar</Label>
-        <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+        <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
           placeholder="Descripción del diseño de la línea capilar…" value={form.disenoLinea} onChange={e => set("disenoLinea", e.target.value)} />
       </div>
 
@@ -209,7 +209,7 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label className="text-xs">Seguimiento (meses)</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               value={form.seguimientoMeses} onChange={e => set("seguimientoMeses", e.target.value)}>
               <option value="">Seleccionar…</option>
               {FOLLOWUP_MONTHS.map(m => <option key={m} value={m}>{m} meses</option>)}
@@ -217,7 +217,7 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
           </div>
           <div className="space-y-1">
             <Label className="text-xs">% supervivencia grafts</Label>
-            <input type="number" className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <input type="number" className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               placeholder="Ej. 92" value={form.supervivencia} onChange={e => set("supervivencia", e.target.value)} />
           </div>
         </div>
@@ -245,7 +245,7 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
                   <span className="text-sm font-medium">{milestone}</span>
                 </label>
                 {isChecked && (
-                  <textarea className="flex min-h-[60px] w-full rounded-lg border border-border bg-white dark:bg-zinc-900 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none ml-6"
+                  <textarea className="flex min-h-[60px] w-full rounded-lg border border-border bg-card dark:bg-zinc-900 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none ml-6"
                     placeholder={`Observaciones a los ${milestone}…`}
                     value={entry?.observaciones ?? ""}
                     onChange={e => setForm(f => ({
@@ -267,12 +267,12 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label>Diagnóstico / Evaluación</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Diagnóstico, hallazgos clínicos…" value={form.assessment} onChange={e => set("assessment", e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <Label>Plan de tratamiento</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Plan de tratamiento futuro…" value={form.plan} onChange={e => set("plan", e.target.value)} />
         </div>
       </div>
@@ -280,7 +280,7 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
       {/* NOTAS QUIRÚRGICAS */}
       <div className="space-y-1.5">
         <Label>Notas quirúrgicas</Label>
-        <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+        <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
           placeholder="Detalles del procedimiento quirúrgico, complicaciones…" value={form.notasQuirurgicas} onChange={e => set("notasQuirurgicas", e.target.value)} />
       </div>
 
@@ -293,13 +293,13 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
               <span className="text-xs font-semibold">{zone}</span>
               <div className="space-y-1">
                 <Label className="text-xs">Injertos implantados</Label>
-                <input type="number" min={0} className="flex h-8 w-full rounded-lg border border-border bg-white dark:bg-zinc-900 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                <input type="number" min={0} className="flex h-8 w-full rounded-lg border border-border bg-card dark:bg-zinc-900 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   placeholder="0" value={form.supervivenciaInjertos[zone]?.implantados ?? ""}
                   onChange={e => setForm(f => ({ ...f, supervivenciaInjertos: { ...f.supervivenciaInjertos, [zone]: { ...f.supervivenciaInjertos[zone], implantados: e.target.value } } }))} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Supervivencia estimada %</Label>
-                <input type="number" min={0} max={100} className="flex h-8 w-full rounded-lg border border-border bg-white dark:bg-zinc-900 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                <input type="number" min={0} max={100} className="flex h-8 w-full rounded-lg border border-border bg-card dark:bg-zinc-900 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   placeholder="0" value={form.supervivenciaInjertos[zone]?.supervivencia ?? ""}
                   onChange={e => setForm(f => ({ ...f, supervivenciaInjertos: { ...f.supervivenciaInjertos, [zone]: { ...f.supervivenciaInjertos[zone], supervivencia: e.target.value } } }))} />
               </div>

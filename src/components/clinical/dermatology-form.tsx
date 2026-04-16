@@ -155,9 +155,9 @@ export function DermatologyForm({ patientId, onSaved }: Props) {
     } catch (err: any) { toast.error(err.message ?? "Error"); } finally { setSaving(false); }
   }
 
-  const inputClass = "flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20";
+  const inputClass = "flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20";
   const selectClass = inputClass;
-  const textareaClass = "flex min-h-[80px] w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none";
+  const textareaClass = "flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none";
 
   return (
     <div className="space-y-6">
@@ -244,7 +244,7 @@ export function DermatologyForm({ patientId, onSaved }: Props) {
         <h3 className="text-sm font-bold mb-3">📊 SCORAD (Scoring Atopic Dermatitis)</h3>
 
         {/* A — Extensión */}
-        <div className="mb-4 p-3 rounded-lg bg-slate-50 dark:bg-slate-700/30">
+        <div className="mb-4 p-3 rounded-lg bg-muted/30">
           <p className="text-xs font-semibold mb-2">Extensión (A) — Regla de los 9</p>
           <div className="grid grid-cols-4 gap-3">
             {SCORAD_AREAS.map(area => (
@@ -260,7 +260,7 @@ export function DermatologyForm({ patientId, onSaved }: Props) {
         </div>
 
         {/* B — Intensidad */}
-        <div className="mb-4 p-3 rounded-lg bg-slate-50 dark:bg-slate-700/30">
+        <div className="mb-4 p-3 rounded-lg bg-muted/30">
           <p className="text-xs font-semibold mb-2">Intensidad (B) — 6 ítems (0-3 cada uno)</p>
           <div className="grid grid-cols-3 gap-3">
             {SCORAD_INTENSITY_ITEMS.map((item, i) => (
@@ -280,7 +280,7 @@ export function DermatologyForm({ patientId, onSaved }: Props) {
         </div>
 
         {/* C — Síntomas subjetivos */}
-        <div className="mb-4 p-3 rounded-lg bg-slate-50 dark:bg-slate-700/30">
+        <div className="mb-4 p-3 rounded-lg bg-muted/30">
           <p className="text-xs font-semibold mb-2">Síntomas subjetivos (C)</p>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
@@ -302,7 +302,7 @@ export function DermatologyForm({ patientId, onSaved }: Props) {
         </div>
 
         {/* SCORAD Total */}
-        <div className="flex items-center gap-3 p-3 rounded-lg bg-white dark:bg-slate-800 border border-border">
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-card border border-border">
           <span className="text-sm font-bold">SCORAD total = A/5 + 7B/2 + C =</span>
           <span className={`text-lg font-extrabold ${scoradColor}`}>{scoradTotal.toFixed(2)}</span>
           <span className={`text-sm font-bold px-2 py-0.5 rounded-full ${
@@ -348,7 +348,7 @@ export function DermatologyForm({ patientId, onSaved }: Props) {
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Notas fotográficas</Label>
-            <textarea className="flex min-h-[60px] w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            <textarea className="flex min-h-[60px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
               placeholder="Observaciones sobre la documentación fotográfica…"
               value={photoNotes} onChange={e => setPhotoNotes(e.target.value)} />
           </div>

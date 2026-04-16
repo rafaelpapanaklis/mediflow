@@ -82,7 +82,7 @@ export function ExercisesClient({ initialExercises }: { initialExercises: Exerci
       <div className="relative mb-5 max-w-md">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
         <input
-          className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-900 pl-11 pr-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          className="flex h-11 w-full rounded-xl border border-border bg-card pl-11 pr-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
           placeholder="Buscar ejercicio o grupo muscular..."
           value={search} onChange={e => setSearch(e.target.value)}
         />
@@ -92,7 +92,7 @@ export function ExercisesClient({ initialExercises }: { initialExercises: Exerci
       {filtered.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map(exercise => (
-            <div key={exercise.id} className="bg-white dark:bg-slate-900 border border-border rounded-xl p-5 group">
+            <div key={exercise.id} className="bg-card border border-border rounded-xl p-5 group">
               <div className="flex items-start justify-between">
                 <h3 className="text-base font-bold">{exercise.name}</h3>
                 <button onClick={() => handleDelete(exercise.id)} className="text-muted-foreground hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -123,7 +123,7 @@ export function ExercisesClient({ initialExercises }: { initialExercises: Exerci
       {/* Add Modal */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl shadow-xl w-full max-w-lg">
+          <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
               <h2 className="text-lg font-bold">Agregar ejercicio</h2>
               <button onClick={() => setShowAdd(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
@@ -131,19 +131,19 @@ export function ExercisesClient({ initialExercises }: { initialExercises: Exerci
             <div className="px-6 py-5 space-y-4">
               <div className="space-y-1.5">
                 <Label className="text-sm">Nombre del ejercicio *</Label>
-                <input className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   placeholder="Ej: Sentadilla búlgara"
                   value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm">Descripción</Label>
-                <textarea className="flex min-h-[70px] w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+                <textarea className="flex min-h-[70px] w-full rounded-xl border border-border bg-card px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
                   placeholder="Instrucciones o notas"
                   value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm">Grupo muscular</Label>
-                <input className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   placeholder="Ej: Piernas, Espalda, Core"
                   value={form.muscleGroup} onChange={e => setForm(f => ({ ...f, muscleGroup: e.target.value }))} />
               </div>
@@ -151,13 +151,13 @@ export function ExercisesClient({ initialExercises }: { initialExercises: Exerci
                 <div className="space-y-1.5">
                   <Label className="text-sm">Series</Label>
                   <input type="number" min="1"
-                    className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
+                    className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
                     value={form.sets} onChange={e => setForm(f => ({ ...f, sets: parseInt(e.target.value) || 1 }))} />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-sm">Repeticiones</Label>
                   <input type="number" min="1"
-                    className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
+                    className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
                     value={form.reps} onChange={e => setForm(f => ({ ...f, reps: parseInt(e.target.value) || 1 }))} />
                 </div>
               </div>

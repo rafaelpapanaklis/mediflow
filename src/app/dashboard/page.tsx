@@ -12,7 +12,7 @@ const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
   PENDING:     { label:"Pendiente",  cls:"text-amber-700 bg-amber-50 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300" },
   CONFIRMED:   { label:"Confirmada", cls:"text-emerald-700 bg-emerald-50 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300" },
   IN_PROGRESS: { label:"En curso",   cls:"text-brand-700 bg-brand-50 border-brand-200" },
-  COMPLETED:   { label:"Completada", cls:"text-slate-600 bg-slate-100 border-slate-200" },
+  COMPLETED:   { label:"Completada", cls:"text-muted-foreground bg-muted border-border" },
   CANCELLED:   { label:"Cancelada",  cls:"text-rose-700 bg-rose-50 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300" },
 };
 

@@ -39,7 +39,7 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; d
   PENDING:     { label:"Pendiente",  bg:"bg-amber-100 dark:bg-amber-900/30",    text:"text-amber-700 dark:text-amber-300",    dot:"bg-amber-500",   border:"border-amber-300"   },
   CONFIRMED:   { label:"Confirmada", bg:"bg-emerald-100 dark:bg-emerald-900/30",text:"text-emerald-700 dark:text-emerald-300",dot:"bg-emerald-500", border:"border-emerald-300" },
   IN_PROGRESS: { label:"En curso",   bg:"bg-blue-100 dark:bg-blue-900/30",      text:"text-blue-700 dark:text-blue-300",      dot:"bg-blue-500",    border:"border-blue-300"    },
-  COMPLETED:   { label:"Completada", bg:"bg-slate-100 dark:bg-slate-800",       text:"text-slate-600 dark:text-slate-400",    dot:"bg-slate-400",   border:"border-slate-300"   },
+  COMPLETED:   { label:"Completada", bg:"bg-muted",       text:"text-muted-foreground",    dot:"bg-muted",   border:"border-border"   },
   CANCELLED:   { label:"Cancelada",  bg:"bg-rose-100 dark:bg-rose-900/30",      text:"text-rose-700 dark:text-rose-300",      dot:"bg-rose-500",    border:"border-rose-300"    },
   NO_SHOW:     { label:"No asistió", bg:"bg-orange-100 dark:bg-orange-900/30",  text:"text-orange-700 dark:text-orange-300",  dot:"bg-orange-500",  border:"border-orange-300"  },
 };
@@ -85,7 +85,7 @@ function PatientSearch({ patients, value, onChange }: { patients: Patient[]; val
   const selected = patients.find(p => p.id === value);
   return (
     <div className="relative">
-      <div className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 items-center gap-2 cursor-pointer"
+      <div className="flex h-11 w-full rounded-xl border border-border bg-card px-4 items-center gap-2 cursor-pointer"
         onClick={() => setOpen(true)}>
         <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />
         {selected
@@ -100,7 +100,7 @@ function PatientSearch({ patients, value, onChange }: { patients: Patient[]; val
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute z-20 top-12 left-0 right-0 bg-white dark:bg-slate-800 border border-border rounded-xl shadow-lg overflow-hidden">
+          <div className="absolute z-20 top-12 left-0 right-0 bg-card border border-border rounded-xl shadow-lg overflow-hidden">
             <div className="p-2 border-b border-border">
               <input autoFocus className="w-full px-3 py-2 text-base bg-transparent focus:outline-none placeholder:text-muted-foreground"
                 placeholder="Nombre o número…" value={query} onChange={e => setQuery(e.target.value)} />
@@ -150,14 +150,14 @@ function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCance
       </div>
       <div className="space-y-1.5">
         <Label className="text-base font-semibold">Doctor *</Label>
-        <select className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+        <select className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
           value={form.doctorId} onChange={e => setF("doctorId", e.target.value)}>
           {doctors.map(d => <option key={d.id} value={d.id}>Dr/a. {d.firstName} {d.lastName}</option>)}
         </select>
       </div>
       <div className="space-y-1.5">
         <Label className="text-base font-semibold">Tipo de cita</Label>
-        <select className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+        <select className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
           value={form.type} onChange={e => setF("type", e.target.value)}>
           {APPT_TYPES.map(t => <option key={t}>{t}</option>)}
         </select>
@@ -178,17 +178,17 @@ function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCance
       <div className="grid grid-cols-3 gap-3">
         <div className="col-span-3 space-y-1.5">
           <Label className="text-base font-semibold">Fecha</Label>
-          <input type="date" className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          <input type="date" className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
             value={form.date} onChange={e => setF("date", e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <Label className="text-base font-semibold">Hora inicio</Label>
-          <input type="time" className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          <input type="time" className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
             value={form.startTime} onChange={e => setF("startTime", e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <Label className="text-base font-semibold">Duración</Label>
-          <select className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
+          <select className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
             value={form.durationMins} onChange={e => setF("durationMins", parseInt(e.target.value))}>
             {DURATIONS.map(d => <option key={d} value={d}>{d} min</option>)}
           </select>
@@ -201,7 +201,7 @@ function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCance
       </div>
       <div className="space-y-1.5">
         <Label className="text-base font-semibold">Notas</Label>
-        <textarea className="flex min-h-[80px] w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 py-3 text-base placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+        <textarea className="flex min-h-[80px] w-full rounded-xl border border-border bg-card px-4 py-3 text-base placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
           placeholder="Motivo de consulta, indicaciones especiales…"
           value={form.notes} onChange={e => setF("notes", e.target.value)} />
       </div>
@@ -566,14 +566,14 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <select value={filterDoc} onChange={e => setFilterDoc(e.target.value)}
-              className="h-11 rounded-xl border border-border bg-white dark:bg-slate-900 px-3 text-base focus:outline-none">
+              className="h-11 rounded-xl border border-border bg-card px-3 text-base focus:outline-none">
               <option value="all">Todos los doctores</option>
               {doctors.map(d => <option key={d.id} value={d.id}>Dr/a. {d.firstName} {d.lastName}</option>)}
             </select>
             <div className="flex bg-muted rounded-xl p-1 gap-0.5">
               {([["month","Mes",<Calendar key="c" className="w-4 h-4"/>],["week","Sem",<CalendarDays key="cd" className="w-4 h-4"/>],["day","Día",<List key="l" className="w-4 h-4"/>]] as const).map(([v, lbl, icon]) => (
                 <button key={v} onClick={() => { setView(v as ViewMode); if (v!=="month") setCurrentDate(today); }}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold transition-colors ${view===v?"bg-white dark:bg-slate-800 shadow-sm":"text-muted-foreground hover:text-foreground"}`}>
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold transition-colors ${view===v?"bg-card shadow-sm":"text-muted-foreground hover:text-foreground"}`}>
                   {icon} {lbl}
                 </button>
               ))}
@@ -592,14 +592,14 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
             { label:"Pendientes",  val:pendingCount,                                   color:"text-amber-600"   },
             { label:"Completadas", val:appts.filter(a=>a.status==="COMPLETED").length, color:"text-emerald-600" },
           ].map(s => (
-            <div key={s.label} className="bg-white dark:bg-slate-900 border border-border rounded-2xl px-4 py-3 shadow-card">
+            <div key={s.label} className="bg-card border border-border rounded-2xl px-4 py-3 shadow-card">
               <div className={`text-3xl font-extrabold ${s.color}`}>{s.val}</div>
               <div className="text-base text-muted-foreground mt-0.5">{s.label}</div>
             </div>
           ))}
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl shadow-card overflow-hidden">
+        <div className="bg-card border border-border rounded-2xl shadow-card overflow-hidden">
           {view==="month" && <MonthView />}
           {view==="week"  && <WeekView  />}
           {view==="day"   && <DayView   />}
@@ -608,7 +608,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
 
       {/* Side panel */}
       <div className="w-72 flex-shrink-0">
-        <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl shadow-card overflow-hidden">
+        <div className="bg-card border border-border rounded-2xl shadow-card overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <div>
               <div className="text-base font-bold">{DAYS_ES[(selDate.getDay()+6)%7]} {selDate.getDate()} {MONTHS_ES[selDate.getMonth()]}</div>
@@ -653,8 +653,8 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
       {/* New appointment modal */}
       {showNew && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl shadow-xl w-full max-w-lg max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-white dark:bg-slate-900 z-10">
+          <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-card z-10">
               <h2 className="text-xl font-bold">Nueva cita</h2>
               <button onClick={() => setShowNew(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
             </div>
@@ -666,8 +666,8 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
       {/* Edit modal */}
       {showEdit && showDetail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl shadow-xl w-full max-w-lg max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-white dark:bg-slate-900 z-10">
+          <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-card z-10">
               <h2 className="text-xl font-bold">Editar cita</h2>
               <button onClick={() => setShowEdit(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
             </div>
@@ -683,7 +683,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
         const color = docColorMap[appt.doctorId]??DOC_COLORS[0];
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-            <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl shadow-xl w-full max-w-md max-h-[92vh] overflow-y-auto">
+            <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md max-h-[92vh] overflow-y-auto">
               <div className="flex items-center justify-between px-6 py-4 border-b border-border" style={{ borderLeftWidth:4, borderLeftColor:color.border }}>
                 <div className="flex items-center gap-2">
                   <div className={`w-3 h-3 rounded-full ${cfg.dot}`} />

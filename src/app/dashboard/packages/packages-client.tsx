@@ -101,13 +101,13 @@ export function PackagesClient({ initialPackages, initialRedemptions }: { initia
       <div className="flex gap-2 mb-6">
         <button
           onClick={() => setTab("paquetes")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${tab === "paquetes" ? "bg-brand-600 text-white border-brand-600" : "bg-white dark:bg-slate-900 border-border hover:border-slate-400"}`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${tab === "paquetes" ? "bg-brand-600 text-white border-brand-600" : "bg-card border-border hover:border-slate-400"}`}
         >
           <Package className="w-4 h-4" /> Paquetes
         </button>
         <button
           onClick={() => setTab("clientes")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${tab === "clientes" ? "bg-brand-600 text-white border-brand-600" : "bg-white dark:bg-slate-900 border-border hover:border-slate-400"}`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${tab === "clientes" ? "bg-brand-600 text-white border-brand-600" : "bg-card border-border hover:border-slate-400"}`}
         >
           <Users className="w-4 h-4" /> Clientes
         </button>
@@ -117,7 +117,7 @@ export function PackagesClient({ initialPackages, initialRedemptions }: { initia
       {tab === "paquetes" && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {packages.map(pkg => (
-            <div key={pkg.id} className="bg-white dark:bg-slate-900 border border-border rounded-xl p-5">
+            <div key={pkg.id} className="bg-card border border-border rounded-xl p-5">
               <div className="flex items-start justify-between">
                 <h3 className="text-base font-bold">{pkg.name}</h3>
                 <button onClick={() => handleDeletePackage(pkg.id)} className="text-muted-foreground hover:text-rose-500">
@@ -149,7 +149,7 @@ export function PackagesClient({ initialPackages, initialRedemptions }: { initia
           {redemptions.map(r => {
             const pct = r.totalSessions > 0 ? (r.sessionsUsed / r.totalSessions) * 100 : 0;
             return (
-              <div key={r.id} className="bg-white dark:bg-slate-900 border border-border rounded-xl p-5">
+              <div key={r.id} className="bg-card border border-border rounded-xl p-5">
                 <div className="flex items-center justify-between mb-2">
                   <div>
                     <p className="text-base font-bold">{r.patient.firstName} {r.patient.lastName}</p>
@@ -164,7 +164,7 @@ export function PackagesClient({ initialPackages, initialRedemptions }: { initia
                   </Button>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-full h-3 overflow-hidden">
+                  <div className="flex-1 bg-muted rounded-full h-3 overflow-hidden">
                     <div
                       className="h-full bg-brand-600 rounded-full transition-all"
                       style={{ width: `${Math.min(pct, 100)}%` }}
@@ -190,7 +190,7 @@ export function PackagesClient({ initialPackages, initialRedemptions }: { initia
       {/* Add Package Modal */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl shadow-xl w-full max-w-lg">
+          <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
               <h2 className="text-lg font-bold">Nuevo paquete</h2>
               <button onClick={() => setShowAdd(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
@@ -198,13 +198,13 @@ export function PackagesClient({ initialPackages, initialRedemptions }: { initia
             <div className="px-6 py-5 space-y-4">
               <div className="space-y-1.5">
                 <Label className="text-sm">Nombre *</Label>
-                <input className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   placeholder="Ej: Paquete 10 sesiones láser"
                   value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm">Descripción</Label>
-                <input className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   placeholder="Opcional"
                   value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
               </div>
@@ -212,25 +212,25 @@ export function PackagesClient({ initialPackages, initialRedemptions }: { initia
                 <div className="space-y-1.5">
                   <Label className="text-sm">Sesiones</Label>
                   <input type="number" min="1"
-                    className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
+                    className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
                     value={form.totalSessions} onChange={e => setForm(f => ({ ...f, totalSessions: parseInt(e.target.value) || 1 }))} />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-sm">Precio</Label>
                   <input type="number" min="0"
-                    className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
+                    className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
                     value={form.price} onChange={e => setForm(f => ({ ...f, price: parseFloat(e.target.value) || 0 }))} />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-sm">Validez (días)</Label>
                   <input type="number" min="1"
-                    className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
+                    className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
                     value={form.validDays} onChange={e => setForm(f => ({ ...f, validDays: parseInt(e.target.value) || 365 }))} />
                 </div>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm">Zona del cuerpo</Label>
-                <input className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   placeholder="Ej: Piernas, Axilas, Rostro"
                   value={form.bodyZone} onChange={e => setForm(f => ({ ...f, bodyZone: e.target.value }))} />
               </div>

@@ -113,7 +113,7 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
           ))}
         </div>
         {/* Bleeding indicator */}
-        <div className={`w-2 h-2 rounded-full ${hasBleed ? "bg-red-500" : "bg-gray-200 dark:bg-gray-700"}`} />
+        <div className={`w-2 h-2 rounded-full ${hasBleed ? "bg-red-500" : "bg-muted"}`} />
         {t.furcation > 0 && <div className="text-[8px] text-amber-500 font-bold">F{t.furcation}</div>}
       </button>
     );
@@ -184,7 +184,7 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
                       className="w-12 text-center text-sm border border-border rounded-lg py-1 bg-background font-mono"
                       style={{ color: getPocketColor(v) }} />
                     <button onClick={() => toggleBleeding(selected, i)}
-                      className={`w-5 h-5 rounded-full border-2 ${sel.bleeding[i] ? "bg-red-500 border-red-500" : "border-gray-300 dark:border-gray-600"}`} />
+                      className={`w-5 h-5 rounded-full border-2 ${sel.bleeding[i] ? "bg-red-500 border-red-500" : "border-border"}`} />
                   </div>
                 ))}
               </div>
@@ -200,7 +200,7 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
                       className="w-12 text-center text-sm border border-border rounded-lg py-1 bg-background font-mono"
                       style={{ color: getPocketColor(v) }} />
                     <button onClick={() => toggleBleeding(selected, i+3)}
-                      className={`w-5 h-5 rounded-full border-2 ${sel.bleeding[i+3] ? "bg-red-500 border-red-500" : "border-gray-300 dark:border-gray-600"}`} />
+                      className={`w-5 h-5 rounded-full border-2 ${sel.bleeding[i+3] ? "bg-red-500 border-red-500" : "border-border"}`} />
                   </div>
                 ))}
               </div>

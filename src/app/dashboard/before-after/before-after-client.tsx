@@ -78,7 +78,7 @@ export function BeforeAfterClient({ patients }: { patients: Patient[] }) {
       <div className="mb-6 space-y-1.5">
         <Label className="text-sm">Paciente</Label>
         <select
-          className="flex h-11 w-full max-w-md rounded-xl border border-border bg-white dark:bg-slate-900 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          className="flex h-11 w-full max-w-md rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
           value={selectedPatient}
           onChange={e => setSelectedPatient(e.target.value)}
         >
@@ -107,7 +107,7 @@ export function BeforeAfterClient({ patients }: { patients: Patient[] }) {
             <h2 className="text-lg font-bold mb-3">Antes</h2>
             <div className="space-y-3">
               {beforePhotos.map(photo => (
-                <div key={photo.id} className="bg-white dark:bg-slate-900 border border-border rounded-xl overflow-hidden">
+                <div key={photo.id} className="bg-card border border-border rounded-xl overflow-hidden">
                   <img src={photo.url} alt="Antes" className="w-full h-48 object-cover" />
                   <div className="p-3">
                     <p className="text-sm font-medium">{photo.angle}</p>
@@ -123,7 +123,7 @@ export function BeforeAfterClient({ patients }: { patients: Patient[] }) {
             <h2 className="text-lg font-bold mb-3">Después</h2>
             <div className="space-y-3">
               {afterPhotos.map(photo => (
-                <div key={photo.id} className="bg-white dark:bg-slate-900 border border-border rounded-xl overflow-hidden">
+                <div key={photo.id} className="bg-card border border-border rounded-xl overflow-hidden">
                   <img src={photo.url} alt="Después" className="w-full h-48 object-cover" />
                   <div className="p-3">
                     <p className="text-sm font-medium">{photo.angle}</p>
@@ -141,7 +141,7 @@ export function BeforeAfterClient({ patients }: { patients: Patient[] }) {
       {/* Add Photo Modal */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl shadow-xl w-full max-w-lg">
+          <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
               <h2 className="text-lg font-bold">Agregar foto</h2>
               <button onClick={() => setShowAdd(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
@@ -149,7 +149,7 @@ export function BeforeAfterClient({ patients }: { patients: Patient[] }) {
             <div className="px-6 py-5 space-y-4">
               <div className="space-y-1.5">
                 <Label className="text-sm">Categoría</Label>
-                <select className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
+                <select className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
                   value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
                   <option value="before">Antes</option>
                   <option value="after">Después</option>
@@ -157,7 +157,7 @@ export function BeforeAfterClient({ patients }: { patients: Patient[] }) {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm">Ángulo</Label>
-                <select className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
+                <select className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
                   value={form.angle} onChange={e => setForm(f => ({ ...f, angle: e.target.value }))}>
                   <option value="front">Frontal</option>
                   <option value="left">Izquierda</option>
@@ -167,13 +167,13 @@ export function BeforeAfterClient({ patients }: { patients: Patient[] }) {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm">URL de la imagen *</Label>
-                <input className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   placeholder="https://ejemplo.com/foto.jpg"
                   value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm">Notas</Label>
-                <input className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   placeholder="Opcional"
                   value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
               </div>

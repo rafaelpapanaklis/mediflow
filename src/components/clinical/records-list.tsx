@@ -57,7 +57,7 @@ function DentalRecordDetail({ data, record }: { data: any; record: any }) {
                 if (typeof state === "string") {
                   // OLD format: { "26": "caries" }
                   return (
-                    <span key={num} className="text-[10px] font-semibold bg-white dark:bg-slate-800 border border-border rounded-lg px-2 py-1">
+                    <span key={num} className="text-[10px] font-semibold bg-card border border-border rounded-lg px-2 py-1">
                       <span className="text-muted-foreground">D{num}:</span> {conditionLabels[state] ?? state}
                     </span>
                   );
@@ -69,7 +69,7 @@ function DentalRecordDetail({ data, record }: { data: any; record: any }) {
                   .join(", ");
                 if (!surfaces) return null;
                 return (
-                  <span key={num} className="text-[10px] font-semibold bg-white dark:bg-slate-800 border border-border rounded-lg px-2 py-1">
+                  <span key={num} className="text-[10px] font-semibold bg-card border border-border rounded-lg px-2 py-1">
                     <span className="text-muted-foreground">D{num}:</span> {surfaces}
                   </span>
                 );
@@ -312,7 +312,7 @@ export function ClinicalRecordsList({ records }: Props) {
         const isOpen    = expandedId === record.id;
 
         return (
-          <div key={record.id} className="rounded-xl border border-border bg-white shadow-card overflow-hidden">
+          <div key={record.id} className="rounded-xl border border-border bg-card shadow-card overflow-hidden">
             {/* Header - always visible, clickable */}
             <button
               onClick={() => setExpandedId(isOpen ? null : record.id)}

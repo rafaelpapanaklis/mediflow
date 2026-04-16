@@ -196,9 +196,9 @@ export function PhysiotherapyForm({ patientId, onSaved }: Props) {
     } catch (err: any) { toast.error(err.message ?? "Error al guardar"); } finally { setSaving(false); }
   }
 
-  const inputCls = "flex h-9 w-full rounded-lg border border-border bg-white dark:bg-zinc-900 dark:text-zinc-100 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20";
+  const inputCls = "flex h-9 w-full rounded-lg border border-border bg-card dark:bg-zinc-900 dark:text-zinc-100 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20";
   const selectCls = inputCls;
-  const textareaCls = "flex min-h-[80px] w-full rounded-lg border border-border bg-white dark:bg-zinc-900 dark:text-zinc-100 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none";
+  const textareaCls = "flex min-h-[80px] w-full rounded-lg border border-border bg-card dark:bg-zinc-900 dark:text-zinc-100 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none";
 
   return (
     <div className="space-y-6">
@@ -297,7 +297,7 @@ export function PhysiotherapyForm({ patientId, onSaved }: Props) {
                             Negativo -
                           </button>
                         </div>
-                        <select className="h-8 rounded-lg border border-border bg-white dark:bg-zinc-900 dark:text-zinc-100 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                        <select className="h-8 rounded-lg border border-border bg-card dark:bg-zinc-900 dark:text-zinc-100 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                           value={orthoTests[t].lateralidad} onChange={e => setOrthoField(t, "lateralidad", e.target.value)}>
                           <option value="Izq">Izq</option>
                           <option value="Der">Der</option>

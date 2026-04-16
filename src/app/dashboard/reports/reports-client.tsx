@@ -34,7 +34,7 @@ export function ReportsClient({ monthlyData, topTypes, byStatus }: Props) {
           { label: "Total citas",       value: String(totalAppts),               icon: "📅", color: "text-violet-600"  },
           { label: "Tasa de atención",  value: `${completionRate}%`,             icon: "✅", color: "text-amber-600"   },
         ].map(k => (
-          <div key={k.label} className="bg-white dark:bg-slate-900 border border-border rounded-xl p-5 shadow-card">
+          <div key={k.label} className="bg-card border border-border rounded-xl p-5 shadow-card">
             <div className="text-2xl mb-2">{k.icon}</div>
             <div className={`text-2xl font-extrabold ${k.color}`}>{k.value}</div>
             <div className="text-xs text-muted-foreground mt-0.5">{k.label}</div>
@@ -43,7 +43,7 @@ export function ReportsClient({ monthlyData, topTypes, byStatus }: Props) {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-5">
-        <div className="bg-white dark:bg-slate-900 border border-border rounded-xl p-5 shadow-card">
+        <div className="bg-card border border-border rounded-xl p-5 shadow-card">
           <h2 className="text-sm font-bold mb-4">Ingresos mensuales</h2>
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
@@ -59,7 +59,7 @@ export function ReportsClient({ monthlyData, topTypes, byStatus }: Props) {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-border rounded-xl p-5 shadow-card">
+        <div className="bg-card border border-border rounded-xl p-5 shadow-card">
           <h2 className="text-sm font-bold mb-4">Pacientes y citas</h2>
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
@@ -75,7 +75,7 @@ export function ReportsClient({ monthlyData, topTypes, byStatus }: Props) {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-border rounded-xl p-5 shadow-card">
+        <div className="bg-card border border-border rounded-xl p-5 shadow-card">
           <h2 className="text-sm font-bold mb-4">Tipos de consulta más frecuentes</h2>
           {topTypes.length === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">Sin datos aún</p>
@@ -100,7 +100,7 @@ export function ReportsClient({ monthlyData, topTypes, byStatus }: Props) {
           )}
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-border rounded-xl p-5 shadow-card">
+        <div className="bg-card border border-border rounded-xl p-5 shadow-card">
           <h2 className="text-sm font-bold mb-4">Estado de citas</h2>
           {pieData.length === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">Sin datos aún</p>
@@ -120,7 +120,7 @@ export function ReportsClient({ monthlyData, topTypes, byStatus }: Props) {
         </div>
       </div>
 
-      <div className="bg-white border border-border rounded-xl p-5 shadow-card">
+      <div className="bg-card border border-border rounded-xl p-5 shadow-card">
         <h2 className="text-sm font-bold mb-4">Resumen mensual</h2>
         <table className="w-full text-sm">
           <thead>

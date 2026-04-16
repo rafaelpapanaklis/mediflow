@@ -53,7 +53,7 @@ function CommandPalette({ onClose, clinicId }: { onClose: () => void; clinicId: 
     <div className="fixed inset-0 z-[100] flex items-start justify-center pt-16 px-4"
       style={{ background:"rgba(0,0,0,0.6)" }}
       onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-xl border border-border overflow-hidden"
+      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-xl border border-border overflow-hidden"
         onKeyDown={e => e.key === "Escape" && onClose()}>
 
         {/* Search input */}
@@ -92,7 +92,7 @@ function CommandPalette({ onClose, clinicId }: { onClose: () => void; clinicId: 
                       { label:"Cita",       path:`/dashboard/appointments?new=1&patientId=${p.id}` },
                     ].map(a => (
                       <button key={a.label} onClick={() => go(a.path)}
-                        className="text-xs font-semibold px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-border rounded-lg hover:border-brand-400 hover:text-brand-600 transition-colors">
+                        className="text-xs font-semibold px-2.5 py-1.5 bg-card border border-border rounded-lg hover:border-brand-400 hover:text-brand-600 transition-colors">
                         {a.label}
                       </button>
                     ))}
@@ -201,7 +201,7 @@ export function QuickActionsBar({ currentUserId, clinicId, isAdmin }: QuickActio
 
   return (
     <>
-      <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-border rounded-2xl px-3 py-2.5 shadow-card flex-wrap">
+      <div className="flex items-center gap-2 bg-card border border-border rounded-2xl px-3 py-2.5 shadow-card flex-wrap">
         {ACTIONS.map((action, i) => {
           const active = isActive((action as any).path);
           return (
@@ -219,7 +219,7 @@ export function QuickActionsBar({ currentUserId, clinicId, isAdmin }: QuickActio
               {action.icon}
               <span className="hidden sm:inline">{action.label}</span>
               {action.shortcut && (
-                <kbd className="hidden lg:inline text-xs px-1.5 py-0.5 bg-black/10 dark:bg-white/10 rounded font-mono">{action.shortcut}</kbd>
+                <kbd className="hidden lg:inline text-xs px-1.5 py-0.5 bg-black/10/10 rounded font-mono">{action.shortcut}</kbd>
               )}
             </button>
           );

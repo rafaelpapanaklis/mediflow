@@ -104,7 +104,7 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
           <span className="text-foreground leading-tight">{item}</span>
           {[0,1,2,3].map(v => (
             <button key={v} onClick={() => onChange(i, v)}
-              className={`h-7 rounded-lg border text-xs font-bold transition-all ${values[i] === v ? "bg-brand-600 text-white border-brand-600" : "bg-white border-border hover:border-brand-300"}`}>
+              className={`h-7 rounded-lg border text-xs font-bold transition-all ${values[i] === v ? "bg-brand-600 text-white border-brand-600" : "bg-card border-border hover:border-brand-300"}`}>
               {v}
             </button>
           ))}
@@ -123,14 +123,14 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
         </div>
         <div className="space-y-1.5">
           <Label>Tipo de sesión</Label>
-          <select className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          <select className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
             value={form.sessionType} onChange={e => set("sessionType", e.target.value)}>
             {SESSION_TYPES.map(t => <option key={t}>{t}</option>)}
           </select>
         </div>
         <div className="space-y-1.5">
           <Label>Enfoque terapéutico</Label>
-          <select className="flex h-10 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          <select className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
             value={form.approach} onChange={e => set("approach", e.target.value)}>
             {APPROACHES.map(a => <option key={a}>{a}</option>)}
           </select>
@@ -141,7 +141,7 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
       <div className="flex gap-1 bg-muted rounded-xl p-1 w-fit">
         {NOTE_TYPES.map(t => (
           <button key={t} onClick={() => setNoteType(t)}
-            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${noteType === t ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${noteType === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
             Nota {t}
           </button>
         ))}
@@ -158,7 +158,7 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
           ].map(f => (
             <div key={f.key} className="space-y-1.5">
               <Label className="text-xs">{f.label}</Label>
-              <textarea className="flex min-h-[90px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+              <textarea className="flex min-h-[90px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
                 placeholder={f.ph} value={(form as any)[f.key]} onChange={e => set(f.key, e.target.value)} />
             </div>
           ))}
@@ -176,7 +176,7 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
           ].map(f => (
             <div key={f.key} className="space-y-1.5">
               <Label className="text-xs">{f.label}</Label>
-              <textarea className="flex min-h-[90px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+              <textarea className="flex min-h-[90px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
                 placeholder={f.ph} value={(form as any)[f.key]} onChange={e => set(f.key, e.target.value)} />
             </div>
           ))}
@@ -193,7 +193,7 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
           ].map(f => (
             <div key={f.key} className="space-y-1.5">
               <Label className="text-xs">{f.label}</Label>
-              <textarea className="flex min-h-[100px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+              <textarea className="flex min-h-[100px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
                 placeholder={f.ph} value={(form as any)[f.key]} onChange={e => set(f.key, e.target.value)} />
             </div>
           ))}
@@ -214,7 +214,7 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
           ].map(f => (
             <div key={f.key} className="space-y-1">
               <Label className="text-xs">{f.label}</Label>
-              <select className={`flex h-9 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 ${f.key === "suicidalIdeation" && form.mentalStatus.suicidalIdeation !== "no" ? "border-rose-400 bg-rose-50" : "border-border bg-white"}`}
+              <select className={`flex h-9 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 ${f.key === "suicidalIdeation" && form.mentalStatus.suicidalIdeation !== "no" ? "border-rose-400 bg-rose-50" : "border-border bg-card"}`}
                 value={(form.mentalStatus as any)[f.key]} onChange={e => setMS(f.key, e.target.value)}>
                 {f.opts.map(o => <option key={o} value={o}>{o}</option>)}
               </select>
@@ -230,7 +230,7 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
 
       {/* Plan de seguridad — solo si ideación suicida */}
       {form.mentalStatus.suicidalIdeation !== "no" && (
-        <div className="rounded-xl border-2 border-rose-400 dark:border-rose-600 p-4 bg-white dark:bg-card">
+        <div className="rounded-xl border-2 border-rose-400 dark:border-rose-600 p-4 bg-card">
           <h3 className="text-sm font-bold mb-3 text-rose-700 dark:text-rose-300">🚨 Plan de seguridad</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {[
@@ -244,7 +244,7 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
               <div key={f.key} className="space-y-1">
                 <Label className="text-xs">{f.label}</Label>
                 <textarea
-                  className="flex min-h-[70px] w-full rounded-lg border border-border dark:border-border bg-white dark:bg-muted px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-rose-500/20 resize-none"
+                  className="flex min-h-[70px] w-full rounded-lg border border-border dark:border-border bg-card dark:bg-muted px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-rose-500/20 resize-none"
                   placeholder={f.ph}
                   value={(safetyPlan as any)[f.key]}
                   onChange={e => setSafetyPlan(prev => ({ ...prev, [f.key]: e.target.value }))}
@@ -256,7 +256,7 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
       )}
 
       {/* Alianza terapéutica (WAI-SR simplificada) */}
-      <div className="rounded-xl border border-border p-4 bg-white dark:bg-card">
+      <div className="rounded-xl border border-border p-4 bg-card">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-bold">🤝 Alianza terapéutica</h3>
           {waisrRated.length > 0 && (
@@ -280,7 +280,7 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
               <span className="text-foreground leading-tight">{item}</span>
               {[1,2,3,4,5].map(v => (
                 <button key={v} onClick={() => { const n = [...waisr]; n[i] = v; setWaisr(n); }}
-                  className={`h-7 rounded-lg border text-xs font-bold transition-all ${waisr[i] === v ? "bg-brand-600 text-white border-brand-600 dark:bg-brand-500 dark:border-brand-500" : "bg-white dark:bg-muted border-border hover:border-brand-300 dark:hover:border-brand-400"}`}>
+                  className={`h-7 rounded-lg border text-xs font-bold transition-all ${waisr[i] === v ? "bg-brand-600 text-white border-brand-600 dark:bg-brand-500 dark:border-brand-500" : "bg-card dark:bg-muted border-border hover:border-brand-300 dark:hover:border-brand-400"}`}>
                   {v}
                 </button>
               ))}
@@ -325,7 +325,7 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
       </div>
 
       {/* Screening de sustancias */}
-      <div className="rounded-xl border border-border p-4 bg-white dark:bg-card">
+      <div className="rounded-xl border border-border p-4 bg-card">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-bold">🍷 Screening de sustancias</h3>
           <div className="text-right">
@@ -344,7 +344,7 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
             <div key={i} className="space-y-1">
               <Label className="text-xs">{q.label}</Label>
               <select
-                className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-muted px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                className="flex h-9 w-full rounded-lg border border-border bg-card dark:bg-muted px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                 value={auditC[i]}
                 onChange={e => { const n = [...auditC]; n[i] = Number(e.target.value); setAuditC(n); }}>
                 {q.opts.map((o, v) => <option key={v} value={v}>{o}</option>)}
@@ -363,7 +363,7 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
             <div className="space-y-1">
               <Label className="text-xs">Detalle de sustancias y frecuencia</Label>
               <textarea
-                className="flex min-h-[70px] w-full rounded-lg border border-border dark:border-border bg-white dark:bg-muted px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+                className="flex min-h-[70px] w-full rounded-lg border border-border dark:border-border bg-card dark:bg-muted px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
                 placeholder="Ej: Cannabis 3 veces/semana, cocaína uso esporádico..."
                 value={dastDetail}
                 onChange={e => setDastDetail(e.target.value)}
@@ -382,10 +382,10 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
         <div className="space-y-2">
           {form.treatmentGoals.map((g, i) => (
             <div key={i} className="flex gap-2">
-              <input className="flex-1 h-9 rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              <input className="flex-1 h-9 rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                 placeholder={`Meta ${i+1}: Reducir ansiedad ante situaciones sociales…`}
                 value={g.goal} onChange={e => { const goals = [...form.treatmentGoals]; goals[i].goal = e.target.value; set("treatmentGoals", goals); }} />
-              <select className="h-9 rounded-lg border border-border bg-white px-2 text-xs focus:outline-none"
+              <select className="h-9 rounded-lg border border-border bg-card px-2 text-xs focus:outline-none"
                 value={g.status} onChange={e => { const goals = [...form.treatmentGoals]; goals[i].status = e.target.value; set("treatmentGoals", goals); }}>
                 {["En progreso","Logrado","Abandonado","Nuevo"].map(s => <option key={s}>{s}</option>)}
               </select>
@@ -394,12 +394,12 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
         </div>
         <div className="mt-3 space-y-2">
           <div className="space-y-1"><Label className="text-xs">Tarea para casa / Actividades entre sesiones</Label>
-            <input className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               placeholder="Registro de pensamientos automáticos, técnica de respiración diafragmática…"
               value={form.homework} onChange={e => set("homework", e.target.value)} />
           </div>
           <div className="space-y-1"><Label className="text-xs">Objetivo para próxima sesión</Label>
-            <input className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
               placeholder="Trabajar técnica de exposición gradual…"
               value={form.nextGoal} onChange={e => set("nextGoal", e.target.value)} />
           </div>

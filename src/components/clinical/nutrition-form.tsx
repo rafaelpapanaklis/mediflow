@@ -93,7 +93,7 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
     <div className="space-y-6">
       <div className="space-y-1.5">
         <Label>Motivo de consulta</Label>
-        <textarea className="flex min-h-[70px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+        <textarea className="flex min-h-[70px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
           placeholder="¿Por qué viene hoy?" value={form.subjective} onChange={e => set("subjective", e.target.value)} />
       </div>
 
@@ -111,7 +111,7 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
             <div key={f.key} className="space-y-1">
               <Label className="text-xs">{f.label}</Label>
               <input type="number" step="0.1" placeholder={f.ph}
-                className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                 value={(form as any)[f.key]} onChange={e => set(f.key, e.target.value)} />
             </div>
           ))}
@@ -125,7 +125,7 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
               { label:"ICC", val: waistHipRatio || "—", sub:"Cintura/Cadera", color:"text-foreground" },
               { label:"Peso ideal", val: h > 0 ? `${Math.round(h - 100 - (h-150)*0.25)} kg` : "—", sub:"Lorentz", color:"text-foreground" },
             ].map(k => (
-              <div key={k.label} className="bg-slate-50 rounded-xl p-3 text-center">
+              <div key={k.label} className="bg-muted rounded-xl p-3 text-center">
                 <div className={`text-xl font-extrabold ${k.color}`}>{k.val}</div>
                 <div className="text-[10px] text-muted-foreground font-semibold">{k.label}</div>
                 {k.sub && <div className={`text-[10px] ${k.color} font-bold`}>{k.sub}</div>}
@@ -148,7 +148,7 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
             { label:"Cintura", val: form.waist ? `${form.waist} cm` : "—" },
             { label:"Cadera", val: form.hip ? `${form.hip} cm` : "—" },
           ].map(m => (
-            <div key={m.label} className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3 text-center">
+            <div key={m.label} className="bg-muted rounded-xl p-3 text-center">
               <div className="text-lg font-extrabold text-foreground">{m.val}</div>
               <div className="text-[10px] text-muted-foreground font-semibold">{m.label}</div>
             </div>
@@ -162,52 +162,52 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="space-y-1">
             <Label className="text-xs">Nivel de actividad</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none"
+            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
               value={form.activityLevel} onChange={e => set("activityLevel", e.target.value)}>
               {ACTIVITY_LEVELS.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
             </select>
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Dieta actual</Label>
-            <input className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none"
+            <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
               placeholder="Mixta, vegetariana…" value={form.diet} onChange={e => set("diet", e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Agua (L/día)</Label>
-            <input type="number" step="0.5" className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none"
+            <input type="number" step="0.5" className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
               placeholder="1.5" value={form.waterIntake} onChange={e => set("waterIntake", e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Horas de sueño</Label>
-            <input type="number" className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none"
+            <input type="number" className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
               placeholder="7" value={form.sleepHours} onChange={e => set("sleepHours", e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Comidas al día</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none"
+            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
               value={form.mealsPerDay} onChange={e => set("mealsPerDay", e.target.value)}>
               {["1","2","3","4","5","6+"].map(n => <option key={n}>{n}</option>)}
             </select>
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Alergias alimentarias</Label>
-            <input className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none"
+            <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
               placeholder="Gluten, lactosa…" value={form.allergies} onChange={e => set("allergies", e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Intolerancias</Label>
-            <input className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none"
+            <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
               placeholder="Lactosa, fructosa…" value={form.intolerances} onChange={e => set("intolerances", e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Suplementos</Label>
-            <input className="flex h-9 w-full rounded-lg border border-border bg-white px-3 text-sm focus:outline-none"
+            <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
               placeholder="Proteína, vitaminas…" value={form.supplements} onChange={e => set("supplements", e.target.value)} />
           </div>
         </div>
         <div className="mt-3 space-y-1">
           <Label className="text-xs">Laboratorios recientes</Label>
-          <textarea className="flex min-h-[60px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[60px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Glucosa: 95 mg/dL…" value={form.labResults} onChange={e => set("labResults", e.target.value)} />
         </div>
       </div>
@@ -233,7 +233,7 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
             <div key={f.key} className="space-y-1">
               <Label className="text-xs">{f.label}</Label>
               <select
-                className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none"
+                className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
                 value={form.foodFrequency[f.key]} onChange={e => setFF(f.key, e.target.value)}>
                 <option value="">Seleccionar</option>
                 <option value="0">0</option>
@@ -260,7 +260,7 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
           ].map(meal => (
             <div key={meal.key} className="space-y-1">
               <Label className="text-xs">{meal.label}</Label>
-              <textarea className="flex min-h-[70px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+              <textarea className="flex min-h-[70px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
                 placeholder="Avena con fruta…" value={(form.mealPlan as any)[meal.key]} onChange={e => setMP(meal.key, e.target.value)} />
             </div>
           ))}
@@ -270,17 +270,17 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
       <div className="grid grid-cols-3 gap-4">
         <div className="space-y-1.5">
           <Label>Diagnóstico nutricional</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Sobrepeso grado I…" value={form.assessment} onChange={e => set("assessment", e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <Label>Objetivos</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Bajar 5kg en 2 meses…" value={form.goals} onChange={e => set("goals", e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <Label>Plan e indicaciones</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
             placeholder="Dieta hipocalórica…" value={form.plan} onChange={e => set("plan", e.target.value)} />
         </div>
       </div>
@@ -294,20 +294,20 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
               <div className="space-y-1 lg:col-span-1">
                 <Label className="text-xs">Objetivo</Label>
                 <input
-                  className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                  className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   placeholder="Bajar 2kg por mes"
                   value={goal.objetivo} onChange={e => updateSmartGoal(i, "objetivo", e.target.value)} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Fecha meta</Label>
                 <input type="date"
-                  className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                  className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   value={goal.fechaMeta} onChange={e => updateSmartGoal(i, "fechaMeta", e.target.value)} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Progreso</Label>
                 <select
-                  className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none"
+                  className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
                   value={goal.progreso} onChange={e => updateSmartGoal(i, "progreso", e.target.value)}>
                   {["0%","25%","50%","75%","100%"].map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
@@ -315,7 +315,7 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
               <div className="space-y-1">
                 <Label className="text-xs">Estado</Label>
                 <select
-                  className="flex h-9 w-full rounded-lg border border-border bg-white dark:bg-slate-800 px-3 text-sm focus:outline-none"
+                  className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
                   value={goal.estado} onChange={e => updateSmartGoal(i, "estado", e.target.value)}>
                   {["En progreso","Logrado","No logrado"].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>

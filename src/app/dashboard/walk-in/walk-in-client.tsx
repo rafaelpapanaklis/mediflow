@@ -31,7 +31,7 @@ const STATUS_COLORS: Record<string, string> = {
   ASSIGNED: "bg-blue-100 text-blue-700 border-blue-300",
   IN_PROGRESS: "bg-brand-100 text-brand-700 border-brand-300",
   COMPLETED: "bg-emerald-100 text-emerald-700 border-emerald-300",
-  CANCELLED: "bg-slate-100 text-slate-500 border-slate-300",
+  CANCELLED: "bg-muted text-muted-foreground border-border",
 };
 
 function ElapsedTimer({ since }: { since: string }) {
@@ -127,7 +127,7 @@ export function WalkInClient({ initialQueue }: { initialQueue: QueueItem[] }) {
       {/* Active queue */}
       <div className="space-y-3 mb-8">
         {activeQueue.map(item => (
-          <div key={item.id} className="bg-white dark:bg-slate-900 border border-border rounded-xl p-5">
+          <div key={item.id} className="bg-card border border-border rounded-xl p-5">
             <div className="flex items-center justify-between mb-2">
               <div>
                 <p className="text-base font-bold">{item.patientName}</p>
@@ -178,7 +178,7 @@ export function WalkInClient({ initialQueue }: { initialQueue: QueueItem[] }) {
           <h2 className="text-lg font-bold mb-3 text-muted-foreground">Atendidos hoy</h2>
           <div className="space-y-2">
             {doneQueue.map(item => (
-              <div key={item.id} className="bg-slate-50 dark:bg-slate-800/50 border border-border/50 rounded-xl p-4 flex items-center justify-between">
+              <div key={item.id} className="bg-muted/50 border border-border/50 rounded-xl p-4 flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium">{item.patientName}</p>
                   <p className="text-xs text-muted-foreground">{item.service}</p>
@@ -195,7 +195,7 @@ export function WalkInClient({ initialQueue }: { initialQueue: QueueItem[] }) {
       {/* Add Modal */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl shadow-xl w-full max-w-md">
+          <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
               <h2 className="text-lg font-bold">Agregar a la fila</h2>
               <button onClick={() => setShowAdd(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
@@ -203,13 +203,13 @@ export function WalkInClient({ initialQueue }: { initialQueue: QueueItem[] }) {
             <div className="px-6 py-5 space-y-4">
               <div className="space-y-1.5">
                 <Label className="text-sm">Nombre del paciente *</Label>
-                <input className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   placeholder="Nombre completo"
                   value={form.patientName} onChange={e => setForm(f => ({ ...f, patientName: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm">Servicio *</Label>
-                <input className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                   placeholder="Ej: Consulta general, Limpieza dental"
                   value={form.service} onChange={e => setForm(f => ({ ...f, service: e.target.value }))} />
               </div>

@@ -117,7 +117,7 @@ export function XrayNotesSection({
       : "text-muted-foreground";
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
+    <section className="rounded-2xl border border-white/10 bg-card/[0.02] p-5">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h4 className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
           <FileEdit className="h-3 w-3" />

@@ -62,7 +62,7 @@ export function NewPatientModal({ open, onClose, onCreated }: Props) {
             </div>
           </div>
           <div className="space-y-1.5"><Label>Género</Label>
-              <select className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20" value={form.gender} onChange={e => set("gender", e.target.value)}>
+              <select className="flex h-10 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20" value={form.gender} onChange={e => set("gender", e.target.value)}>
                 <option value="M">Masculino</option><option value="F">Femenino</option><option value="OTHER">Otro</option>
               </select>
             </div>
@@ -70,7 +70,7 @@ export function NewPatientModal({ open, onClose, onCreated }: Props) {
           <div className="space-y-1.5"><Label>Dirección</Label><Input placeholder="Calle, Col., Ciudad" value={form.address} onChange={e => set("address", e.target.value)} /></div>
           <div className="space-y-1.5"><Label>Alergias (separadas por comas)</Label><Input placeholder="Penicilina, Látex..." value={form.allergies} onChange={e => set("allergies", e.target.value)} /></div>
           <div className="space-y-1.5"><Label>Notas</Label>
-            <textarea className="flex min-h-[60px] w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            <textarea className="flex min-h-[60px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
               placeholder="Motivo de consulta, antecedentes…" value={form.notes} onChange={e => set("notes", e.target.value)} />
           </div>
         </form>

@@ -69,7 +69,7 @@ function MemberForm({
           <Label className="text-base font-semibold">Nombre *</Label>
           <input
             autoFocus
-            className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
             placeholder="Juan"
             value={form.firstName}
             onChange={e => set("firstName", e.target.value)}
@@ -78,7 +78,7 @@ function MemberForm({
         <div className="space-y-1.5">
           <Label className="text-base font-semibold">Apellido *</Label>
           <input
-            className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
             placeholder="García"
             value={form.lastName}
             onChange={e => set("lastName", e.target.value)}
@@ -91,7 +91,7 @@ function MemberForm({
         <Label className="text-base font-semibold">Email *</Label>
         <input
           type="email"
-          className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
           placeholder="doctor@clinica.com"
           value={form.email}
           onChange={e => set("email", e.target.value)}
@@ -124,7 +124,7 @@ function MemberForm({
         <div className="space-y-1.5">
           <Label className="text-base font-semibold">Especialidad</Label>
           <select
-            className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
+            className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
             value={form.specialty}
             onChange={e => set("specialty", e.target.value)}>
             <option value="">Sin especialidad</option>
@@ -134,7 +134,7 @@ function MemberForm({
         <div className="space-y-1.5">
           <Label className="text-base font-semibold">Teléfono</Label>
           <input
-            className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
+            className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
             placeholder="+52 999 000 0000"
             value={form.phone}
             onChange={e => set("phone", e.target.value)}
@@ -147,14 +147,14 @@ function MemberForm({
         <Label className="text-base font-semibold">Servicios / Tratamientos que realiza</Label>
         <div className="flex gap-2">
           <input
-            className="flex h-11 flex-1 rounded-xl border border-border bg-white dark:bg-slate-800 px-4 text-base focus:outline-none"
+            className="flex h-11 flex-1 rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
             placeholder="Ej: Ortodoncia, Implantes, Limpieza…"
             value={svcInput}
             onChange={e => setSvcInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addSvc(); } }}
           />
           <button type="button" onClick={addSvc}
-            className="h-11 px-4 rounded-xl border border-border bg-white dark:bg-slate-800 font-bold text-xl hover:bg-muted transition-colors">
+            className="h-11 px-4 rounded-xl border border-border bg-card font-bold text-xl hover:bg-muted transition-colors">
             +
           </button>
         </div>
@@ -376,7 +376,7 @@ export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Pro
           { label:"Administradores",  val:admins,  color:"text-violet-600",  icon:"🛡️" },
           { label:"Total activos",    val:active,  color:"text-emerald-600", icon:"👥" },
         ].map(s => (
-          <div key={s.label} className="bg-white dark:bg-slate-900 border border-border rounded-2xl px-5 py-4 shadow-card">
+          <div key={s.label} className="bg-card border border-border rounded-2xl px-5 py-4 shadow-card">
             <div className="text-xl mb-1">{s.icon}</div>
             <div className={`text-3xl font-extrabold ${s.color}`}>{s.val}</div>
             <div className="text-sm text-muted-foreground mt-0.5">{s.label}</div>
@@ -388,14 +388,14 @@ export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Pro
       <div className="flex gap-2 mb-4">
         {(["active","all","inactive"] as const).map(f => (
           <button key={f} onClick={() => setFilter(f)}
-            className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${filter === f ? "bg-brand-600 text-white" : "bg-white dark:bg-slate-900 border border-border hover:border-slate-400"}`}>
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${filter === f ? "bg-brand-600 text-white" : "bg-card border border-border hover:border-slate-400"}`}>
             {f === "active" ? "Activos" : f === "all" ? "Todos" : "Inactivos"}
           </button>
         ))}
       </div>
 
       {/* List */}
-      <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl shadow-card overflow-hidden">
+      <div className="bg-card border border-border rounded-2xl shadow-card overflow-hidden">
         {filtered.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground">
             <p className="text-base font-semibold">No hay miembros</p>
@@ -420,7 +420,7 @@ export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Pro
                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                   m.role === "ADMIN" ? "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300" :
                   m.role === "DOCTOR" ? "bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300" :
-                  "bg-slate-100 text-slate-600"
+                  "bg-muted text-muted-foreground"
                 }`}>
                   {ROLES.find(r => r.value === m.role)?.label ?? m.role}
                 </span>
@@ -468,8 +468,8 @@ export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Pro
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
           style={{ background:"rgba(0,0,0,0.5)" }}
           onClick={e => { if (e.target === e.currentTarget) setShowNew(false); }}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-white dark:bg-slate-900 z-10">
+          <div className="bg-card rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-card z-10">
               <h2 className="text-lg font-bold">Agregar doctor</h2>
               <button onClick={() => setShowNew(false)} className="p-1.5 rounded-xl hover:bg-muted">
                 <X className="w-5 h-5"/>
@@ -489,8 +489,8 @@ export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Pro
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
           style={{ background:"rgba(0,0,0,0.5)" }}
           onClick={e => { if (e.target === e.currentTarget) setEditMember(null); }}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-white dark:bg-slate-900 z-10">
+          <div className="bg-card rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-card z-10">
               <h2 className="text-lg font-bold">Editar — {editMember.firstName} {editMember.lastName}</h2>
               <button onClick={() => setEditMember(null)} className="p-1.5 rounded-xl hover:bg-muted">
                 <X className="w-5 h-5"/>

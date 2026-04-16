@@ -27,7 +27,7 @@ export default async function TeleconsultaPage() {
         </Link>
       </div>
 
-      <div className="bg-white dark:bg-slate-900 border border-border rounded-2xl shadow-card overflow-hidden">
+      <div className="bg-card border border-border rounded-2xl shadow-card overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
@@ -55,7 +55,7 @@ export default async function TeleconsultaPage() {
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${a.status === "COMPLETED" ? "bg-slate-100 text-slate-600" : "bg-brand-50 text-brand-700"}`}>
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${a.status === "COMPLETED" ? "bg-muted text-muted-foreground" : "bg-brand-50 text-brand-700"}`}>
                     {a.status === "COMPLETED" ? "Completada" : a.status}
                   </span>
                 </td>

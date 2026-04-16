@@ -21,7 +21,7 @@ interface Treatment {
 
 const STATUS_CFG: Record<string, { label: string; bg: string; text: string; dot: string }> = {
   ACTIVE:    { label:"Activo",     bg:"bg-emerald-50 dark:bg-emerald-900/20",  text:"text-emerald-700 dark:text-emerald-300",  dot:"bg-emerald-500" },
-  COMPLETED: { label:"Completado", bg:"bg-slate-100 dark:bg-slate-800",        text:"text-slate-500 dark:text-slate-400",       dot:"bg-slate-400"   },
+  COMPLETED: { label:"Completado", bg:"bg-muted",        text:"text-muted-foreground",       dot:"bg-muted"   },
   ABANDONED: { label:"Abandonado", bg:"bg-rose-50 dark:bg-rose-900/20",        text:"text-rose-700 dark:text-rose-300",         dot:"bg-rose-500"    },
   PAUSED:    { label:"Pausado",    bg:"bg-amber-50 dark:bg-amber-900/20",      text:"text-amber-700 dark:text-amber-300",       dot:"bg-amber-500"   },
 };
@@ -186,7 +186,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
           { label:"Con atraso", val:overdue,   icon:"⚠️", color:"text-amber-600"   },
           { label:"Completados",val:completed, icon:"✅", color:"text-emerald-600" },
         ].map(k => (
-          <div key={k.label} className="bg-white dark:bg-slate-900 border border-border rounded-2xl p-4 shadow-card text-center">
+          <div key={k.label} className="bg-card border border-border rounded-2xl p-4 shadow-card text-center">
             <div className="text-2xl mb-1">{k.icon}</div>
             <div className={`text-3xl font-extrabold ${k.color}`}>{k.val}</div>
             <div className="text-sm text-muted-foreground">{k.label}</div>
@@ -195,7 +195,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-1 bg-white dark:bg-slate-900 border border-border rounded-xl p-1 w-fit mb-5">
+      <div className="flex gap-1 bg-card border border-border rounded-xl p-1 w-fit mb-5">
         {[["ALL","Todos"],["ACTIVE","Activos"],["OVERDUE","En riesgo"],["COMPLETED","Completados"],["PAUSED","Pausados"]].map(([val,label]) => (
           <button key={val} onClick={() => setFilter(val)}
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${filter === val ? "bg-brand-600 text-white" : "text-muted-foreground hover:text-foreground"}`}>
@@ -206,7 +206,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
 
       {/* Treatment list */}
       {filtered.length === 0 ? (
-        <div className="text-center py-16 text-muted-foreground bg-white dark:bg-slate-900 border border-border rounded-2xl">
+        <div className="text-center py-16 text-muted-foreground bg-card border border-border rounded-2xl">
           <div className="text-4xl mb-3">💊</div>
           <div className="text-lg font-semibold mb-1">Sin planes de tratamiento</div>
           <div className="text-sm">Crea el primer plan para un paciente</div>
@@ -221,7 +221,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
 
             return (
               <div key={t.id}
-                className={`bg-white dark:bg-slate-900 border rounded-2xl shadow-card overflow-hidden cursor-pointer hover:border-brand-300 transition-all ${isLate ? "border-amber-300 dark:border-amber-700" : "border-border"}`}
+                className={`bg-card border rounded-2xl shadow-card overflow-hidden cursor-pointer hover:border-brand-300 transition-all ${isLate ? "border-amber-300 dark:border-amber-700" : "border-border"}`}
                 onClick={() => setSelected(t)}>
                 <div className="px-5 py-4 flex items-center gap-4">
                   {/* Doctor color bar */}
@@ -271,8 +271,8 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
           style={{ background:"rgba(0,0,0,0.5)" }}
           onClick={e => { if (e.target === e.currentTarget) setSelected(null); }}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-white dark:bg-slate-900 z-10">
+          <div className="bg-card rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-card z-10">
               <h2 className="text-lg font-bold">{selected.name}</h2>
               <button onClick={() => setSelected(null)} className="p-1.5 rounded-xl hover:bg-muted transition-colors">
                 <X className="w-5 h-5" />
@@ -436,7 +436,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
           style={{ background:"rgba(0,0,0,0.5)" }}
           onClick={e => { if (e.target === e.currentTarget) setShowNew(false); }}>
-          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-lg shadow-2xl">
+          <div className="bg-card rounded-2xl w-full max-w-lg shadow-2xl">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
               <h2 className="text-lg font-bold">Nuevo plan de tratamiento</h2>
               <button onClick={() => setShowNew(false)} className="p-1.5 rounded-xl hover:bg-muted"><X className="w-5 h-5" /></button>
@@ -548,11 +548,11 @@ function InventoryPicker({ clinicItems, selected, loading, onOpen, onAdd, onQtyC
               <div className="flex items-center gap-1">
                 <button type="button"
                   onClick={() => item.qty > 1 && onQtyChange(item.id, item.qty - 1)}
-                  className="w-6 h-6 rounded-lg bg-white dark:bg-slate-800 border border-border flex items-center justify-center text-sm font-bold hover:bg-muted">−</button>
+                  className="w-6 h-6 rounded-lg bg-card border border-border flex items-center justify-center text-sm font-bold hover:bg-muted">−</button>
                 <span className="text-sm font-bold w-8 text-center">{item.qty}</span>
                 <button type="button"
                   onClick={() => onQtyChange(item.id, item.qty + 1)}
-                  className="w-6 h-6 rounded-lg bg-white dark:bg-slate-800 border border-border flex items-center justify-center text-sm font-bold hover:bg-muted">+</button>
+                  className="w-6 h-6 rounded-lg bg-card border border-border flex items-center justify-center text-sm font-bold hover:bg-muted">+</button>
                 <span className="text-xs text-muted-foreground ml-1">{item.unit}</span>
               </div>
               <button type="button" onClick={() => onRemove(item.id)}
@@ -564,10 +564,10 @@ function InventoryPicker({ clinicItems, selected, loading, onOpen, onAdd, onQtyC
 
       {/* Item picker dropdown */}
       {open && (
-        <div className="border border-border rounded-xl bg-white dark:bg-slate-900 shadow-lg">
+        <div className="border border-border rounded-xl bg-card shadow-lg">
           <div className="p-2 border-b border-border">
             <input
-              className="w-full px-3 py-2 text-sm rounded-lg border border-border focus:outline-none bg-white dark:bg-slate-800"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-border focus:outline-none bg-card"
               placeholder="Buscar insumo…"
               value={search}
               onChange={e => setSearch(e.target.value)}

@@ -25,9 +25,9 @@ function detectSpecialty(raw: string) {
 const APPT_STATUS: Record<string, { label: string; cls: string }> = {
   PENDING:   { label: "Pendiente",  cls: "bg-amber-50 text-amber-700 border border-amber-200"      },
   CONFIRMED: { label: "Confirmada", cls: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
-  COMPLETED: { label: "Completada", cls: "bg-slate-100 text-slate-600 border border-slate-200"      },
+  COMPLETED: { label: "Completada", cls: "bg-muted text-muted-foreground border border-border"      },
   CANCELLED: { label: "Cancelada",  cls: "bg-rose-50 text-rose-700 border border-rose-200"          },
-  NO_SHOW:   { label: "No asistió", cls: "bg-slate-50 text-slate-500 border border-slate-200"       },
+  NO_SHOW:   { label: "No asistió", cls: "bg-muted text-muted-foreground border border-border"       },
 };
 
 const INV_STATUS: Record<string, { label: string; cls: string }> = {
@@ -207,7 +207,7 @@ export function PatientDetailClient({
   return (
     <div className="flex flex-col h-full -m-5 lg:-m-6">
       {/* Topbar */}
-      <div className="bg-white border-b border-border px-5 h-13 flex items-center gap-3 flex-shrink-0">
+      <div className="bg-card border-b border-border px-5 h-13 flex items-center gap-3 flex-shrink-0">
         <Link href="/dashboard/patients" className="p-1.5 rounded-lg hover:bg-muted transition-colors">
           <ArrowLeft className="w-4 h-4" />
         </Link>
@@ -218,7 +218,7 @@ export function PatientDetailClient({
         </div>
         <div className="flex items-center gap-1.5 ml-2 flex-wrap">
           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200">Activo</span>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-slate-50 text-slate-600 border-slate-200">#{patient.patientNumber}</span>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-muted text-muted-foreground border-border">#{patient.patientNumber}</span>
           {patient.allergies?.length > 0 && (
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-rose-50 text-rose-700 border-rose-200">
               🚨 Alergia: {patient.allergies[0]}
@@ -257,7 +257,7 @@ export function PatientDetailClient({
         <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
 
           {/* Patient header card */}
-          <div className="bg-white border border-border rounded-xl p-4 flex gap-4">
+          <div className="bg-card border border-border rounded-xl p-4 flex gap-4">
             <div className={`w-14 h-14 rounded-full ${color} flex items-center justify-center text-xl font-bold text-white flex-shrink-0`}>
               {initials}
             </div>
@@ -293,7 +293,7 @@ export function PatientDetailClient({
                   { label: "Total tratamiento", val: formatCurrency(totalPlan),                                 sub: `Pagado: ${formatCurrency(totalPaid)}` },
                   { label: "Visitas totales", val: String(appointments.filter(a => a.status === "COMPLETED").length), sub: `${appointments.length} total` },
                 ].map(s => (
-                  <div key={s.label} className="bg-slate-50 rounded-lg p-2">
+                  <div key={s.label} className="bg-muted rounded-lg p-2">
                     <div className="text-[10px] text-muted-foreground font-medium">{s.label}</div>
                     <div className={`text-sm font-extrabold mt-0.5 ${s.highlight ? "text-brand-700" : "text-foreground"}`}>{s.val}</div>
                     <div className="text-[10px] text-muted-foreground">{s.sub}</div>
@@ -304,7 +304,7 @@ export function PatientDetailClient({
           </div>
 
           {/* Tabs */}
-          <div className="flex bg-white border border-border rounded-xl p-1 gap-0.5 overflow-x-auto flex-shrink-0">
+          <div className="flex bg-card border border-border rounded-xl p-1 gap-0.5 overflow-x-auto flex-shrink-0">
             {TABS.map(t => (
               <button key={t.id} onClick={() => setTab(t.id)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${tab === t.id ? "bg-brand-600 text-white" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"}`}>
@@ -316,7 +316,7 @@ export function PatientDetailClient({
           {/* ===== TAB: RESUMEN ===== */}
           {tab === "resumen" && (
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white border border-border rounded-xl p-4">
+              <div className="bg-card border border-border rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-2 h-2 rounded-full bg-brand-500" />
                   <span className="text-xs font-bold">Resumen clínico</span>
@@ -349,7 +349,7 @@ export function PatientDetailClient({
                 )}
               </div>
 
-              <div className="bg-white border border-border rounded-xl p-4">
+              <div className="bg-card border border-border rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-2 h-2 rounded-full bg-emerald-500" />
                   <span className="text-xs font-bold">Historia clínica</span>
@@ -373,7 +373,7 @@ export function PatientDetailClient({
 
               {/* Próxima cita */}
               {nextAppt && (
-                <div className="bg-white border border-border rounded-xl p-4">
+                <div className="bg-card border border-border rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <div className="w-2 h-2 rounded-full bg-brand-500" />
                     <span className="text-xs font-bold">Próxima cita</span>
@@ -387,7 +387,7 @@ export function PatientDetailClient({
               )}
 
               {/* Finanzas resumen */}
-              <div className="bg-white border border-border rounded-xl p-4">
+              <div className="bg-card border border-border rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-2 h-2 rounded-full bg-amber-500" />
                   <span className="text-xs font-bold">Finanzas</span>
@@ -416,7 +416,7 @@ export function PatientDetailClient({
 
           {/* ===== TAB: HISTORIA CLINICA ===== */}
           {tab === "historia" && (
-            <div className="bg-white border border-border rounded-xl p-5">
+            <div className="bg-card border border-border rounded-xl p-5">
               <h2 className="text-sm font-bold mb-4">Historia clínica completa</h2>
               <div className="grid grid-cols-2 gap-6 text-sm">
                 <div>
@@ -484,7 +484,7 @@ export function PatientDetailClient({
 
           {/* ===== TAB: NUEVA CONSULTA (specialty form) ===== */}
           {tab === "expediente" && (
-            <div className="bg-white border border-border rounded-xl p-5">
+            <div className="bg-card border border-border rounded-xl p-5">
               <h2 className="text-sm font-bold mb-4">
                 {detectedSpecialty === "dental"     ? "🦷 Nueva consulta dental" :
                  detectedSpecialty === "nutrition"  ? "🥗 Nueva consulta nutricional" :
@@ -500,7 +500,7 @@ export function PatientDetailClient({
 
           {/* ===== TAB: EVOLUCION ===== */}
           {tab === "evolucion" && (
-            <div className="bg-white border border-border rounded-xl overflow-hidden">
+            <div className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="flex items-center justify-between px-5 py-4 border-b border-border">
                 <h2 className="text-sm font-bold">Evolución clínica — {records.length} consulta{records.length !== 1 ? "s" : ""}</h2>
                 <button onClick={() => setTab("expediente")} className="text-xs font-semibold text-brand-600 hover:underline">+ Nueva nota SOAP</button>
@@ -521,7 +521,7 @@ export function PatientDetailClient({
                           </div>
                           {idx < records.length - 1 && <div className="w-px flex-1 bg-border mt-1" />}
                         </div>
-                        <div className="flex-1 bg-slate-50 rounded-xl border border-border p-3 mb-1">
+                        <div className="flex-1 bg-muted rounded-xl border border-border p-3 mb-1">
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-[10px] text-muted-foreground">{formatDate(record.visitDate)}</span>
                             <span className="text-[10px] font-bold text-brand-600">Dr/a. {record.doctor?.firstName} {record.doctor?.lastName}</span>
@@ -545,8 +545,8 @@ export function PatientDetailClient({
                           )}
                           {record.specialtyData?.scales && (
                             <div className="flex gap-2 mt-2">
-                              <span className="text-[10px] bg-white border border-border rounded px-2 py-0.5">PHQ-9: {record.specialtyData.scales.phq9?.score}/27 ({record.specialtyData.scales.phq9?.severity})</span>
-                              <span className="text-[10px] bg-white border border-border rounded px-2 py-0.5">GAD-7: {record.specialtyData.scales.gad7?.score}/21 ({record.specialtyData.scales.gad7?.severity})</span>
+                              <span className="text-[10px] bg-card border border-border rounded px-2 py-0.5">PHQ-9: {record.specialtyData.scales.phq9?.score}/27 ({record.specialtyData.scales.phq9?.severity})</span>
+                              <span className="text-[10px] bg-card border border-border rounded px-2 py-0.5">GAD-7: {record.specialtyData.scales.gad7?.score}/21 ({record.specialtyData.scales.gad7?.severity})</span>
                             </div>
                           )}
                           {record.specialtyData?.anthropometrics && (
@@ -581,7 +581,7 @@ export function PatientDetailClient({
                 </a>
               </div>
               {treatments.length === 0 ? (
-                <div className="bg-white border border-border rounded-xl px-5 py-10 text-center text-muted-foreground">
+                <div className="bg-card border border-border rounded-xl px-5 py-10 text-center text-muted-foreground">
                   <div className="text-3xl mb-2">💊</div>
                   <div className="text-sm font-semibold">Sin planes de tratamiento</div>
                   <a href="/dashboard/treatments" className="text-xs text-brand-600 hover:underline mt-1 block">
@@ -592,13 +592,13 @@ export function PatientDetailClient({
                 const pct = t.totalSessions > 0 ? Math.round((t.sessions.length / t.totalSessions) * 100) : 0;
                 const STATUS_CFG: Record<string,{label:string;cls:string}> = {
                   ACTIVE:    { label:"Activo",     cls:"bg-emerald-50 text-emerald-700 border-emerald-200" },
-                  COMPLETED: { label:"Completado", cls:"bg-slate-100 text-slate-500 border-slate-200"      },
+                  COMPLETED: { label:"Completado", cls:"bg-muted text-muted-foreground border-border"      },
                   ABANDONED: { label:"Abandonado", cls:"bg-rose-50 text-rose-700 border-rose-200"          },
                   PAUSED:    { label:"Pausado",    cls:"bg-amber-50 text-amber-700 border-amber-200"       },
                 };
                 const cfg = STATUS_CFG[t.status] ?? STATUS_CFG.ACTIVE;
                 return (
-                  <div key={t.id} className="bg-white border border-border rounded-xl p-4">
+                  <div key={t.id} className="bg-card border border-border rounded-xl p-4">
                     <div className="flex items-start justify-between gap-3 mb-3">
                       <div>
                         <div className="font-bold text-sm">{t.name}</div>
@@ -633,7 +633,7 @@ export function PatientDetailClient({
 
           {/* ===== TAB: CITAS ===== */}
           {tab === "agenda" && (
-            <div className="bg-white border border-border rounded-xl overflow-hidden">
+            <div className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="flex items-center justify-between px-5 py-4 border-b border-border">
                 <h2 className="text-sm font-bold">Citas — {appointments.length} total</h2>
                 <button onClick={() => setShowNewAppt(true)} className="text-xs font-semibold text-brand-600 hover:underline">+ Agendar</button>
@@ -645,26 +645,26 @@ export function PatientDetailClient({
                   <form onSubmit={createAppointment} className="grid grid-cols-2 lg:grid-cols-4 gap-2">
                     <div>
                       <label className="text-[10px] font-bold text-muted-foreground">Doctor</label>
-                      <select className="flex h-8 w-full rounded-lg border border-border bg-white px-2 text-xs mt-0.5"
+                      <select className="flex h-8 w-full rounded-lg border border-border bg-card px-2 text-xs mt-0.5"
                         value={apptForm.doctorId} onChange={e => setApptForm(f => ({ ...f, doctorId: e.target.value }))}>
                         {doctors.map(d => <option key={d.id} value={d.id}>Dr/a. {d.firstName} {d.lastName}</option>)}
                       </select>
                     </div>
                     <div>
                       <label className="text-[10px] font-bold text-muted-foreground">Tipo</label>
-                      <select className="flex h-8 w-full rounded-lg border border-border bg-white px-2 text-xs mt-0.5"
+                      <select className="flex h-8 w-full rounded-lg border border-border bg-card px-2 text-xs mt-0.5"
                         value={apptForm.type} onChange={e => setApptForm(f => ({ ...f, type: e.target.value }))}>
                         {["Consulta general","Control","Urgencia","Primera vez","Cirugía","Seguimiento","Otro"].map(t => <option key={t}>{t}</option>)}
                       </select>
                     </div>
                     <div>
                       <label className="text-[10px] font-bold text-muted-foreground">Fecha</label>
-                      <input type="date" className="flex h-8 w-full rounded-lg border border-border bg-white px-2 text-xs mt-0.5"
+                      <input type="date" className="flex h-8 w-full rounded-lg border border-border bg-card px-2 text-xs mt-0.5"
                         value={apptForm.date} onChange={e => setApptForm(f => ({ ...f, date: e.target.value }))} />
                     </div>
                     <div>
                       <label className="text-[10px] font-bold text-muted-foreground">Hora inicio</label>
-                      <input type="time" className="flex h-8 w-full rounded-lg border border-border bg-white px-2 text-xs mt-0.5"
+                      <input type="time" className="flex h-8 w-full rounded-lg border border-border bg-card px-2 text-xs mt-0.5"
                         value={apptForm.startTime} onChange={e => setApptForm(f => ({ ...f, startTime: e.target.value }))} />
                     </div>
                     <div className="col-span-2 lg:col-span-4 flex gap-2 mt-1">
@@ -712,7 +712,7 @@ export function PatientDetailClient({
             return (
               <div className="space-y-4">
                 {/* Upload bar */}
-                <div className="bg-white border border-border rounded-xl p-4 flex items-center justify-between">
+                <div className="bg-card border border-border rounded-xl p-4 flex items-center justify-between">
                   <div>
                     <h2 className="text-sm font-bold">Radiografías y archivos</h2>
                     <p className="text-xs text-muted-foreground">{files.length} archivo{files.length !== 1 ? "s" : ""}</p>
@@ -725,7 +725,7 @@ export function PatientDetailClient({
                 </div>
 
                 {files.length === 0 && filesLoaded && (
-                  <div className="bg-white border border-border rounded-xl p-10 text-center">
+                  <div className="bg-card border border-border rounded-xl p-10 text-center">
                     <div className="text-3xl mb-2">🩻</div>
                     <p className="text-sm font-semibold text-muted-foreground">Sin radiografías</p>
                     <p className="text-xs text-muted-foreground mt-1">Sube la primera radiografía para poder analizarla con IA</p>
@@ -739,7 +739,7 @@ export function PatientDetailClient({
                   const isExp   = expandedFile === f.id;
 
                   return (
-                    <div key={f.id} className="bg-white border border-border rounded-xl overflow-hidden">
+                    <div key={f.id} className="bg-card border border-border rounded-xl overflow-hidden">
                       <div className="flex gap-4 p-4">
                         {/* Thumbnail */}
                         {isImage && (
@@ -751,7 +751,7 @@ export function PatientDetailClient({
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="text-sm font-bold truncate">{f.name}</span>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
                               {FILE_CAT_LABELS[f.category] ?? f.category}
                             </span>
                           </div>
@@ -797,7 +797,7 @@ export function PatientDetailClient({
 
                       {/* AI Analysis results (expanded) */}
                       {result && isExp && (
-                        <div className="border-t border-border bg-slate-50 p-4 space-y-3">
+                        <div className="border-t border-border bg-muted p-4 space-y-3">
                           {/* Summary */}
                           <div className="bg-violet-50 border border-violet-200 rounded-xl p-3">
                             <h4 className="text-xs font-bold text-violet-700 mb-1">Resumen del análisis IA</h4>
@@ -810,7 +810,7 @@ export function PatientDetailClient({
                             return (
                               <div key={i} className={`border rounded-xl p-3 ${sev.bg}`}>
                                 <div className="flex items-center gap-2 mb-1">
-                                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${sev.text} bg-white border`}>
+                                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${sev.text} bg-card border`}>
                                     {finding.id ?? i + 1}
                                   </span>
                                   <span className={`text-xs font-bold ${sev.text}`}>{finding.title}</span>
@@ -818,18 +818,18 @@ export function PatientDetailClient({
                                     {sev.label}
                                   </span>
                                 </div>
-                                <p className="text-xs text-slate-700 ml-7 leading-relaxed">{finding.description}</p>
+                                <p className="text-xs text-muted-foreground ml-7 leading-relaxed">{finding.description}</p>
                                 {finding.tooth && (
-                                  <p className="text-[10px] text-slate-500 ml-7 mt-1">{finding.tooth}</p>
+                                  <p className="text-[10px] text-muted-foreground ml-7 mt-1">{finding.tooth}</p>
                                 )}
                                 <div className="flex items-center gap-1.5 ml-7 mt-1.5">
-                                  <div className="w-14 h-1 bg-slate-200 rounded-full overflow-hidden">
+                                  <div className="w-14 h-1 bg-muted rounded-full overflow-hidden">
                                     <div className="h-full rounded-full" style={{
                                       width: `${finding.confidence}%`,
                                       backgroundColor: finding.confidence > 80 ? "#22c55e" : finding.confidence > 60 ? "#eab308" : "#ef4444",
                                     }} />
                                   </div>
-                                  <span className="text-[10px] text-slate-500">Confianza: {finding.confidence}%</span>
+                                  <span className="text-[10px] text-muted-foreground">Confianza: {finding.confidence}%</span>
                                 </div>
                               </div>
                             );
@@ -865,7 +865,7 @@ export function PatientDetailClient({
           })()}
 
           {tab === "facturacion" && (
-            <div className="bg-white border border-border rounded-xl overflow-hidden">
+            <div className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="px-5 py-4 border-b border-border">
                 <h2 className="text-sm font-bold">Facturación</h2>
               </div>
@@ -901,7 +901,7 @@ export function PatientDetailClient({
         </div>
 
         {/* Right panel - Quick actions */}
-        <div className="w-52 flex-shrink-0 bg-white border-l border-border overflow-y-auto p-4 flex flex-col gap-3">
+        <div className="w-52 flex-shrink-0 bg-card border-l border-border overflow-y-auto p-4 flex flex-col gap-3">
           <div>
             <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2">Acciones rápidas</div>
             <div className="space-y-1.5">
@@ -914,7 +914,7 @@ export function PatientDetailClient({
                 { icon: "💳", label: "Ver facturación",      action: () => setTab("facturacion") },
               ].map(btn => (
                 <button key={btn.label} onClick={btn.action}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold border border-border bg-white hover:bg-muted/50 transition-colors text-left">
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold border border-border bg-card hover:bg-muted/50 transition-colors text-left">
                   <span>{btn.icon}</span>
                   {btn.label}
                 </button>

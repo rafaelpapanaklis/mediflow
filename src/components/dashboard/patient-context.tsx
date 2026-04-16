@@ -25,7 +25,7 @@ export function PatientContextPanel({ patient }: PatientContextProps) {
   }
 
   return (
-    <div className={`bg-white dark:bg-slate-900 border rounded-2xl shadow-card overflow-hidden mb-5 transition-all
+    <div className={`bg-card border rounded-2xl shadow-card overflow-hidden mb-5 transition-all
       ${hasAlerts ? "border-amber-300 dark:border-amber-700" : "border-border"}`}>
 
       {/* Header */}

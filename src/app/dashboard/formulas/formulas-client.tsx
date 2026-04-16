@@ -53,7 +53,7 @@ export function FormulasClient({ patients }: { patients: Patient[] }) {
 
   function renderFormula(formula: Record<string, unknown>) {
     return (
-      <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-3 mt-2">
+      <div className="bg-muted rounded-lg p-3 mt-2">
         {Object.entries(formula).map(([key, value]) => (
           <div key={key} className="flex justify-between text-sm py-0.5">
             <span className="font-medium text-muted-foreground">{key}:</span>
@@ -77,7 +77,7 @@ export function FormulasClient({ patients }: { patients: Patient[] }) {
         <div className="relative max-w-md">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
           <input
-            className="flex h-11 w-full rounded-xl border border-border bg-white dark:bg-slate-900 pl-11 pr-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            className="flex h-11 w-full rounded-xl border border-border bg-card pl-11 pr-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
             placeholder="Nombre del paciente..."
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -87,7 +87,7 @@ export function FormulasClient({ patients }: { patients: Patient[] }) {
 
       {/* Patient list */}
       {!selectedPatient && (
-        <div className="bg-white dark:bg-slate-900 border border-border rounded-xl overflow-hidden">
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
           {filteredPatients.slice(0, 20).map((p, idx) => (
             <button
               key={p.id}
@@ -125,7 +125,7 @@ export function FormulasClient({ patients }: { patients: Patient[] }) {
       {selectedPatient && !loading && (
         <div className="space-y-3">
           {records.map(record => (
-            <div key={record.id} className="bg-white dark:bg-slate-900 border border-border rounded-xl p-5">
+            <div key={record.id} className="bg-card border border-border rounded-xl p-5">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-bold">{TYPE_LABELS[record.type] || record.type}</span>
                 <span className="text-xs text-muted-foreground">{new Date(record.appliedAt).toLocaleDateString("es-MX")}</span>
