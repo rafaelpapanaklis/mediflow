@@ -230,21 +230,19 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               onChange={e => setClinic((c: any) => ({ ...c, description: e.target.value }))}
             />
           </div>
-          <div className="flex items-center justify-between p-4 rounded-2xl border-2 transition-colors"
-            style={{ borderColor: isPublic ? "#2563eb" : "#e2e8f0", background: isPublic ? "#eff6ff" : "transparent" }}>
+          <div className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-colors ${isPublic ? "border-blue-500 bg-blue-600/10" : "border-border bg-transparent"}`}>
             <div>
-              <div className="text-sm font-bold" style={{ color: isPublic ? "#1d4ed8" : "#0f172a" }}>
+              <div className={`text-sm font-bold ${isPublic ? "text-blue-700 dark:text-blue-300" : "text-foreground"}`}>
                 {isPublic ? "🌐 Clínica pública" : "🔒 Clínica privada"}
               </div>
-              <div className="text-xs mt-0.5" style={{ color: isPublic ? "#3b82f6" : "#64748b" }}>
+              <div className={`text-xs mt-0.5 ${isPublic ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground"}`}>
                 {isPublic
                   ? "Apareces en el directorio /clinicas y recibes reservas en línea"
                   : "Solo tu equipo accede. No apareces en el directorio público."}
               </div>
             </div>
             <button type="button" onClick={() => setIsPublic((p: boolean) => !p)}
-              className="relative flex-shrink-0 w-11 h-6 rounded-full transition-colors ml-4"
-              style={{ background: isPublic ? "#2563eb" : "#cbd5e1" }}>
+              className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors ml-4 ${isPublic ? "bg-blue-600" : "bg-muted-foreground/30"}`}>
               <div className="absolute top-0.5 w-5 h-5 rounded-full bg-card shadow-sm transition-all"
                 style={{ left: isPublic ? "22px" : "2px" }} />
             </button>
