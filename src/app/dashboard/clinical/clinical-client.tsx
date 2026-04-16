@@ -150,7 +150,7 @@ export function ClinicalClient({
               <button
                 key={p.id}
                 onClick={() => selectPatient(p.id)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-muted/30 transition-colors border-b border-border/50 last:border-0 ${currentPatientId === p.id ? "bg-brand-50" : ""}`}
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-muted/30 transition-colors border-b border-border/50 last:border-0 ${currentPatientId === p.id ? "bg-brand-600/15 text-foreground" : ""}`}
               >
                 <div className={`w-8 h-8 rounded-full ${avatarColor(p.id)} flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0`}>
                   {getInitials(p.firstName, p.lastName)}
