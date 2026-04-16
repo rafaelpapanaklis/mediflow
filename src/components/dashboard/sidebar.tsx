@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   LayoutDashboard, Calendar, Users, CreditCard,
   BarChart2, Settings, LogOut, Menu, X, Stethoscope,
@@ -65,13 +65,13 @@ interface SidebarProps {
 }
 
 function useDarkMode() {
-  const [dark, setDark] = useState(() => {
-    if (typeof window === "undefined") return false;
+  const [dark, setDark] = useState(false);
+  useLayoutEffect(() => {
     const saved = localStorage.getItem("theme");
     const isDark = saved === "dark";
+    setDark(isDark);
     document.documentElement.classList.toggle("dark", isDark);
-    return isDark;
-  });
+  }, []);
   function toggle() {
     const next = !dark;
     setDark(next);
