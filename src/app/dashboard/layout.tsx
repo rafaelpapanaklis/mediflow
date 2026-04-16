@@ -60,7 +60,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }));
 
   return (
-    <div className="flex min-h-screen bg-background font-sans">
+    <div className="dashboard-shell flex min-h-screen bg-background font-sans">
       <Sidebar
         user={{
           firstName: user.firstName,

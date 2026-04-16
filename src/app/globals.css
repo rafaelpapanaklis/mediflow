@@ -65,6 +65,35 @@
     --surface-elevated:  226 38% 19%;
   }
 
+  /* ─── Dashboard light-mode: eye-friendly soft gray ───
+     Based on ergonomic research (Buchner & Baumgartner 2007): pure white
+     (#fff) causes eye strain in long sessions due to excessive luminance
+     contrast with text. We drop background to ~94% L (similar to macOS
+     Finder / Linear) and keep cards at near-white so they float subtly.
+     Scoped to .dashboard-shell so the public landing is unaffected. */
+  .dashboard-shell:not(.dark) {
+    --background:        220 14% 94%;  /* #edeff3 — soft cool gray */
+    --card:              0 0% 99%;     /* #fcfcfc — near white, gentle pop */
+    --card-foreground:   222 47% 11%;
+    --muted:             220 14% 90%;  /* #e2e5ea */
+    --muted-foreground:  215 16% 42%;  /* slightly darker for AA contrast */
+    --border:            220 13% 86%;  /* #d6d9df */
+    --sidebar:              0 0% 99%;
+    --sidebar-foreground:   222 47% 11%;
+    --sidebar-border:       220 13% 86%;
+    --sidebar-accent:       220 14% 92%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --surface:           0 0% 99%;
+    --surface-elevated:  220 14% 96%;
+  }
+  /* Neutralize hardcoded bg-white inside dashboard so cards blend with the
+     softer palette instead of popping as pure #fff. */
+  .dashboard-shell:not(.dark) .bg-white { background-color: hsl(var(--card)); }
+  .dashboard-shell:not(.dark) .bg-slate-50 { background-color: hsl(220 14% 96%); }
+  .dashboard-shell:not(.dark) .bg-slate-100 { background-color: hsl(220 14% 92%); }
+  .dashboard-shell:not(.dark) .bg-gray-50 { background-color: hsl(220 14% 96%); }
+  .dashboard-shell:not(.dark) .bg-gray-100 { background-color: hsl(220 14% 92%); }
+
   * { border-color: hsl(var(--border)); }
 
   html { font-size: 17px; } /* ← Bigger base font */
