@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdmin } from "@supabase/supabase-js";
+import { toPublicFileUrl } from "@/lib/storage";
 
 function getAdminSupabase() {
   return createAdmin(
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
     orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json(files);
+  return NextResponse.json(files.map(f => ({ ...f, url: toPublicFileUrl(f.url) })));
 }
 
 // POST /api/xrays — multipart form upload
@@ -73,11 +74,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Error al subir archivo" }, { status: 500 });
   }
 
-  const { data: signedData, error: signedError } = await supabase.storage
+  const { data: publicData } = supabase.storage
     .from("patient-files")
-    .createSignedUrl(path, 3600);
+    .getPublicUrl(path);
 
-  if (signedError || !signedData?.signedUrl) {
+  if (!publicData?.publicUrl) {
     return NextResponse.json({ error: "Error generando URL" }, { status: 500 });
   }
 
@@ -87,7 +88,7 @@ export async function POST(req: NextRequest) {
       clinicId:   ctx.clinicId,
       uploadedBy: ctx.userId,
       name:       file.name,
-      url:        signedData.signedUrl,
+      url:        publicData.publicUrl,
       size:       file.size,
       mimeType:   file.type,
       category:   category as any,
