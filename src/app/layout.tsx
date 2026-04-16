@@ -52,7 +52,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className={`${sora.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
+    <html lang="es" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: `
           (function() {
@@ -65,7 +65,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           })();
         `}} />
       </head>
-      <body className="antialiased font-sans bg-background text-foreground">
+      <body className={`${sora.variable} ${jetbrainsMono.variable} antialiased font-sans bg-background text-foreground`}>
         <Toaster position="top-right" toastOptions={{ className: "text-sm font-medium" }} />
         {children}
       </body>
