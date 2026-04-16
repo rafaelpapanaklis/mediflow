@@ -44,15 +44,18 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
     setLoading(true);
     try {
       const qty = Number(form.quantity) || 1; const price = Number(form.unitPrice) || 0;
+      const total = Math.round(qty * price * 100) / 100;
       const res = await fetch("/api/invoices", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patientId: form.patientId, notes: form.notes, items: [{ description: form.description, quantity: qty, unitPrice: price, total: qty * price }] }) });
+        body: JSON.stringify({ patientId: form.patientId, notes: form.notes, items: [{ description: form.description, quantity: qty, unitPrice: price, total }] }) });
       if (!res.ok) throw new Error((await res.json()).error);
       const inv = await res.json();
       setInvoices(prev => [inv, ...prev]);
       toast.success(`Factura ${inv.invoiceNumber} creada`);
       setShowNew(false);
       setForm({ patientId: "", description: "", quantity: "1", unitPrice: "", notes: "" });
-    } catch (err: any) { toast.error(err.message ?? "Error"); } finally { setLoading(false); }
+    } catch (err: any) {
+      toast.error(err.message ?? "Error al crear factura");
+    } finally { setLoading(false); }
   }
 
   async function registerPayment(invoiceId: string) {
@@ -145,7 +148,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
         {[
           { icon: <TrendingUp className="w-4 h-4 text-emerald-600" />, label: "Total cobrado",  val: formatCurrency(totalPaid),    bg: "bg-emerald-50" },
           { icon: <Clock className="w-4 h-4 text-amber-600" />,       label: "Por cobrar",     val: formatCurrency(totalPending), bg: "bg-amber-50"   },
-          { icon: <CreditCard className="w-4 h-4 text-brand-600" />,  label: "Total facturas", val: String(invoices.length),      bg: "bg-brand-50"   },
+          { icon: <CreditCard className="w-4 h-4 text-brand-600" />,  label: "Total facturas", val: String(invoices.length),      bg: "bg-brand-600/15"   },
         ].map(k => (
           <div key={k.label} className="rounded-xl border border-border bg-card p-4 shadow-card">
             <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-3 ${k.bg}`}>{k.icon}</div>
@@ -156,7 +159,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
       </div>
 
       {showNew && (
-        <div className="rounded-xl border border-brand-200 bg-brand-50 p-5 mb-5 animate-fade-up">
+        <div className="rounded-xl border border-brand-200 bg-brand-600/15 p-5 mb-5 animate-fade-up">
           <h2 className="text-sm font-bold mb-4 text-brand-700">💰 Nueva factura</h2>
           <form onSubmit={createInvoice} className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="col-span-2 space-y-1">
@@ -251,7 +254,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                     </td>
                   </tr>
                   {paying === inv.id && (
-                    <tr key={`pay-${inv.id}`} className="bg-brand-50 dark:bg-brand-950/20">
+                    <tr key={`pay-${inv.id}`} className="bg-brand-600/15">
                       <td colSpan={8} className="px-5 py-3">
                         <div className="flex items-center gap-3 flex-wrap">
                           <span className="text-xs font-bold text-brand-700">Saldo: {formatCurrency(inv.balance)}</span>

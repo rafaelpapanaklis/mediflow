@@ -110,7 +110,7 @@ function MemberForm({
         <div className="grid grid-cols-3 gap-2">
           {ROLES.map(r => (
             <button key={r.value} type="button" onClick={() => set("role", r.value)}
-              className={`flex flex-col items-center p-3 rounded-xl border-2 text-center transition-all ${form.role === r.value ? "border-brand-500 bg-brand-50 dark:bg-brand-950/30" : "border-border hover:border-slate-400"}`}>
+              className={`flex flex-col items-center p-3 rounded-xl border-2 text-center transition-all ${form.role === r.value ? "border-brand-500 bg-brand-600/15" : "border-border hover:border-slate-400"}`}>
               <span className="text-xl mb-1">{r.icon}</span>
               <span className="text-sm font-bold">{r.label}</span>
               <span className="text-xs text-muted-foreground mt-0.5 leading-tight">{r.desc}</span>
@@ -162,7 +162,7 @@ function MemberForm({
         {form.services.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-1">
             {form.services.map(s => (
-              <span key={s} className="flex items-center gap-1.5 text-sm font-semibold bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 px-3 py-1 rounded-full">
+              <span key={s} className="flex items-center gap-1.5 text-sm font-semibold bg-brand-500/15 text-brand-700 dark:text-brand-300 px-3 py-1 rounded-full">
                 {s}
                 <button type="button" onClick={() => set("services", form.services.filter(x => x !== s))}
                   className="text-brand-500 hover:text-brand-900 font-bold leading-none ml-0.5">×</button>
@@ -415,11 +415,11 @@ export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Pro
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-bold text-base">{m.firstName} {m.lastName}</span>
                 {m.id === currentUserId && (
-                  <span className="text-xs font-bold bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full">Tú</span>
+                  <span className="text-xs font-bold bg-brand-500/15 text-brand-700 px-2 py-0.5 rounded-full">Tú</span>
                 )}
                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                   m.role === "ADMIN" ? "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300" :
-                  m.role === "DOCTOR" ? "bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300" :
+                  m.role === "DOCTOR" ? "bg-brand-500/15 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300" :
                   "bg-muted text-muted-foreground"
                 }`}>
                   {ROLES.find(r => r.value === m.role)?.label ?? m.role}

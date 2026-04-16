@@ -241,7 +241,7 @@ export function ProceduresClient({ initialProcedures }: Props) {
       </div>
 
       {/* Info banner */}
-      <div className="flex gap-3 p-4 bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800/40 rounded-2xl">
+      <div className="flex gap-3 p-4 bg-brand-600/15 border border-brand-200 dark:border-brand-800/40 rounded-2xl">
         <Info className="w-5 h-5 text-brand-600 dark:text-brand-400 flex-shrink-0 mt-0.5" />
         <p className="text-sm text-brand-900 dark:text-brand-100 leading-relaxed">
           Estos procedimientos aparecen como opciones en el expediente dental.
@@ -349,7 +349,7 @@ export function ProceduresClient({ initialProcedures }: Props) {
                             <button
                               onClick={() => openEdit(p)}
                               title="Editar"
-                              className="p-1.5 rounded-lg text-muted-foreground hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-colors"
+                              className="p-1.5 rounded-lg text-muted-foreground hover:text-brand-600 hover:bg-brand-600/15 dark:hover:bg-brand-900/20 transition-colors"
                             >
                               <Pencil className="w-4 h-4" />
                             </button>

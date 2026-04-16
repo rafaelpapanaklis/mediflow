@@ -470,7 +470,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                 <div className="flex flex-wrap gap-1.5 mt-1">
                   {COMMON_TREATMENTS.slice(0,5).map(t => (
                     <button key={t} onClick={() => setForm(f=>({...f,name:t}))}
-                      className="text-xs px-2.5 py-1 bg-muted rounded-full hover:bg-brand-100 hover:text-brand-700 transition-colors">
+                      className="text-xs px-2.5 py-1 bg-muted rounded-full hover:bg-brand-500/15 hover:text-brand-700 transition-colors">
                       {t}
                     </button>
                   ))}

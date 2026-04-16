@@ -83,7 +83,7 @@ function DentalRecordDetail({ data, record }: { data: any; record: any }) {
           <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-2">Procedimientos realizados</div>
           <div className="flex flex-wrap gap-1.5">
             {data.procedures.map((p: string) => (
-              <span key={p} className="text-xs font-semibold px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 border border-brand-200">{p}</span>
+              <span key={p} className="text-xs font-semibold px-2.5 py-1 rounded-full bg-brand-600/15 text-brand-700 border border-brand-200">{p}</span>
             ))}
           </div>
         </div>
@@ -318,7 +318,7 @@ export function ClinicalRecordsList({ records }: Props) {
               onClick={() => setExpandedId(isOpen ? null : record.id)}
               className="w-full flex items-center gap-3 p-4 hover:bg-muted/20 transition-colors text-left"
             >
-              <div className="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center text-xs font-bold text-brand-700 flex-shrink-0">
+              <div className="w-8 h-8 rounded-full bg-brand-500/15 flex items-center justify-center text-xs font-bold text-brand-700 flex-shrink-0">
                 {records.length - idx}
               </div>
               <span className="text-lg flex-shrink-0">{icon}</span>

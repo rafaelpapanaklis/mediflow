@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { SettingsClient } from "./settings-client";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 export const metadata: Metadata = { title: "Configuración — MediFlow" };
 
@@ -26,12 +27,14 @@ export default async function SettingsPage({ searchParams }: Props) {
   });
 
   return (
-    <SettingsClient
-      user={user as any}
-      clinic={clinic as any}
-      initialTab={searchParams.tab}
-      gcalStatus={searchParams.gcal}
-      teamMembers={teamMembers as any}
-    />
+    <ErrorBoundary fallbackTitle="Error al cargar configuración">
+      <SettingsClient
+        user={user as any}
+        clinic={clinic as any}
+        initialTab={searchParams.tab}
+        gcalStatus={searchParams.gcal}
+        teamMembers={teamMembers as any}
+      />
+    </ErrorBoundary>
   );
 }

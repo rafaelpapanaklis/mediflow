@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { AppointmentsClient } from "./appointments-client";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 export const metadata: Metadata = { title: "Agenda — MediFlow" };
 
@@ -41,13 +42,15 @@ export default async function AppointmentsPage() {
   }));
 
   return (
-    <AppointmentsClient
-      appointments={serializedAppts as any}
-      patients={patients}
-      doctors={doctors}
-      currentUserId={user.id}
-      clinicId={user.clinicId}
-      waConnected={user.clinic.waConnected ?? false}
-    />
+    <ErrorBoundary fallbackTitle="Error al cargar la agenda">
+      <AppointmentsClient
+        appointments={serializedAppts as any}
+        patients={patients}
+        doctors={doctors}
+        currentUserId={user.id}
+        clinicId={user.clinicId}
+        waConnected={user.clinic.waConnected ?? false}
+      />
+    </ErrorBoundary>
   );
 }

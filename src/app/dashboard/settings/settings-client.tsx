@@ -250,7 +250,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             </button>
           </div>
           <div className="pt-2 flex items-center justify-between">
-            <span className={`text-sm font-bold px-3 py-1 rounded-full border ${clinic.plan==="CLINIC"?"bg-violet-50 text-violet-700 border-violet-200":clinic.plan==="PRO"?"bg-brand-50 text-brand-700 border-brand-200":"bg-muted text-muted-foreground border-border"}`}>
+            <span className={`text-sm font-bold px-3 py-1 rounded-full border ${clinic.plan==="CLINIC"?"bg-violet-50 text-violet-700 border-violet-200":clinic.plan==="PRO"?"bg-brand-600/15 text-brand-700 border-brand-200":"bg-muted text-muted-foreground border-border"}`}>
               Plan {clinic.plan}
             </span>
             <Button onClick={saveClinic} disabled={saving}>{saving ? "Guardando…" : "Guardar cambios"}</Button>
@@ -289,7 +289,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                         <span className="text-xs text-muted-foreground italic">Sin servicios asignados — agrega al menos uno</span>
                       )}
                       {member.services.map(svc => (
-                        <span key={svc} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-brand-50 dark:bg-brand-950/30 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
+                        <span key={svc} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-brand-600/15 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
                           {svc}
                           <button onClick={() => removeServiceFromMember(member.id, svc)}
                             className="ml-0.5 text-brand-400 hover:text-rose-500 transition-colors" title="Quitar">×</button>
@@ -548,7 +548,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             {DAYS.map((day, i) => {
               const s = schedule[i] ?? { enabled:false, open:"09:00", close:"18:00" };
               return (
-                <div key={day} className={`flex items-center gap-4 p-3.5 rounded-xl border transition-colors ${s.enabled ? "bg-brand-50 dark:bg-brand-950/20 border-brand-200" : "bg-muted/30 border-border"}`}>
+                <div key={day} className={`flex items-center gap-4 p-3.5 rounded-xl border transition-colors ${s.enabled ? "bg-brand-600/15 border-brand-200" : "bg-muted/30 border-border"}`}>
                   <input type="checkbox" checked={s.enabled}
                     onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...sc[i], enabled:e.target.checked } }))}
                     className="w-4 h-4 rounded accent-brand-600 flex-shrink-0" />

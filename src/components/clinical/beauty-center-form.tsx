@@ -228,7 +228,7 @@ export function BeautyCenterForm({ patientId, onSaved }: Props) {
         {(form.baumannHidratacion || form.baumannSensibilidad || form.baumannPigmentacion || form.baumannArrugas) && (
           <div className="mt-3 flex items-center gap-2">
             <span className="text-xs text-muted-foreground">Tipo Baumann:</span>
-            <span className="inline-flex items-center rounded-full bg-brand-100 dark:bg-brand-900/30 px-3 py-0.5 text-sm font-bold text-brand-700 dark:text-brand-300">
+            <span className="inline-flex items-center rounded-full bg-brand-500/15 px-3 py-0.5 text-sm font-bold text-brand-700 dark:text-brand-300">
               {form.baumannHidratacion || "–"}{form.baumannSensibilidad || "–"}{form.baumannPigmentacion || "–"}{form.baumannArrugas || "–"}
             </span>
           </div>

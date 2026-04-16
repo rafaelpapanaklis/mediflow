@@ -575,7 +575,7 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
                   </tr>
                 ))}
               </tbody>
-              <tfoot className="bg-brand-50 dark:bg-brand-950/30">
+              <tfoot className="bg-brand-600/15">
                 <tr>
                   <td colSpan={3} className="px-3 py-2 text-right font-bold">TOTAL</td>
                   <td className="px-3 py-2 text-right font-mono font-extrabold text-brand-700 dark:text-brand-400">{formatCurrency(proceduresTotal)}</td>

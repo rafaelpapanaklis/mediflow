@@ -640,7 +640,7 @@ export function PatientDetailClient({
               </div>
 
               {showNewAppt && (
-                <div className="border-b border-border p-4 bg-brand-50">
+                <div className="border-b border-border p-4 bg-brand-600/15">
                   <h3 className="text-xs font-bold text-brand-700 mb-3">Nueva cita para {patient.firstName} {patient.lastName}</h3>
                   <form onSubmit={createAppointment} className="grid grid-cols-2 lg:grid-cols-4 gap-2">
                     <div>

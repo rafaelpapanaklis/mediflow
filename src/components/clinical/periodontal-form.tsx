@@ -103,7 +103,7 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
     const hasBleed   = t.bleeding.some(Boolean);
     return (
       <button key={num} onClick={() => setSelected(isSelected ? null : num)}
-        className={`flex flex-col items-center gap-0.5 p-1 rounded-lg transition-all ${isSelected ? "bg-brand-100 dark:bg-brand-900/40 ring-2 ring-brand-500" : "hover:bg-muted/50"}`}
+        className={`flex flex-col items-center gap-0.5 p-1 rounded-lg transition-all ${isSelected ? "bg-brand-500/15 ring-2 ring-brand-500" : "hover:bg-muted/50"}`}
         style={{ minWidth: 32 }}>
         <div className="text-[9px] font-bold text-muted-foreground">{num}</div>
         {/* Pocket depth bars */}
@@ -169,7 +169,7 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
 
       {/* Selected tooth editor */}
       {selected && sel && (
-        <div className="border border-brand-200 dark:border-brand-800 bg-brand-50/50 dark:bg-brand-900/20 rounded-xl p-4 space-y-4">
+        <div className="border border-brand-200 dark:border-brand-800 bg-brand-600/10 rounded-xl p-4 space-y-4">
           <div className="font-bold text-sm">Diente {selected}</div>
 
           <div className="grid grid-cols-2 gap-4">

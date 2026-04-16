@@ -55,7 +55,7 @@ export default async function TeleconsultaPage() {
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${a.status === "COMPLETED" ? "bg-muted text-muted-foreground" : "bg-brand-50 text-brand-700"}`}>
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${a.status === "COMPLETED" ? "bg-muted text-muted-foreground" : "bg-brand-600/15 text-brand-700"}`}>
                     {a.status === "COMPLETED" ? "Completada" : a.status}
                   </span>
                 </td>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Play, CheckCircle, Clock } from "lucide-react";
 import toast from "react-hot-toast";
@@ -21,8 +21,18 @@ const STATUS_CONFIG: Record<string, { label: string; dot: string; bg: string; te
   NO_SHOW:     { label:"No asistió", dot:"bg-orange-400",  bg:"bg-orange-50 dark:bg-orange-900/20", text:"text-orange-700 dark:text-orange-300" },
 };
 
+function formatTime(d: Date) {
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 export function TodayStrip({ initialAppts }: { initialAppts: Appt[] }) {
   const [appts, setAppts] = useState<Appt[]>(initialAppts);
+  const [timeStr, setTimeStr] = useState(() => formatTime(new Date()));
+
+  useEffect(() => {
+    const id = setInterval(() => setTimeStr(formatTime(new Date())), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   async function changeStatus(id: string, status: string) {
     try {
@@ -45,7 +55,6 @@ export function TodayStrip({ initialAppts }: { initialAppts: Appt[] }) {
   const done     = appts.filter(a => ["COMPLETED","CANCELLED","NO_SHOW"].includes(a.status));
 
   const now = new Date();
-  const timeStr = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
 
   return (
     <div className="bg-card border border-border rounded-2xl shadow-card overflow-hidden">

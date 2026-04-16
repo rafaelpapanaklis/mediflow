@@ -219,7 +219,7 @@ export function QuickActionsBar({ currentUserId, clinicId, isAdmin }: QuickActio
               {action.icon}
               <span className="hidden sm:inline">{action.label}</span>
               {action.shortcut && (
-                <kbd className="hidden lg:inline text-xs px-1.5 py-0.5 bg-black/10/10 rounded font-mono">{action.shortcut}</kbd>
+                <kbd className="hidden lg:inline text-xs px-1.5 py-0.5 bg-black/10 rounded font-mono">{action.shortcut}</kbd>
               )}
             </button>
           );

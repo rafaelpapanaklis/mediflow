@@ -29,7 +29,7 @@ const STATUS_LABELS: Record<string, string> = {
 const STATUS_COLORS: Record<string, string> = {
   WAITING: "bg-amber-100 text-amber-700 border-amber-300",
   ASSIGNED: "bg-blue-100 text-blue-700 border-blue-300",
-  IN_PROGRESS: "bg-brand-100 text-brand-700 border-brand-300",
+  IN_PROGRESS: "bg-brand-500/15 text-brand-700 border-brand-300",
   COMPLETED: "bg-emerald-100 text-emerald-700 border-emerald-300",
   CANCELLED: "bg-muted text-muted-foreground border-border",
 };

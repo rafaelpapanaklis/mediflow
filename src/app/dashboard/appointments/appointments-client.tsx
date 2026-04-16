@@ -166,7 +166,7 @@ function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCance
         <Label className="text-base font-semibold">Modo</Label>
         <div className="flex gap-2">
           <button type="button" onClick={() => setF("mode", "IN_PERSON")}
-            className={`flex-1 flex items-center justify-center gap-2 h-11 rounded-xl border text-sm font-semibold transition-all ${form.mode !== "TELECONSULTATION" ? "border-brand-500 bg-brand-50 dark:bg-brand-950/30 text-brand-700" : "border-border hover:border-brand-300"}`}>
+            className={`flex-1 flex items-center justify-center gap-2 h-11 rounded-xl border text-sm font-semibold transition-all ${form.mode !== "TELECONSULTATION" ? "border-brand-500 bg-brand-600/15 text-brand-700" : "border-border hover:border-brand-300"}`}>
             🏥 Presencial
           </button>
           <button type="button" onClick={() => setF("mode", "TELECONSULTATION")}
@@ -437,7 +437,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
           return (
             <div key={idx} onClick={() => setSelectedDay(ds)}
               className={`border-r border-b border-border min-h-[100px] p-1.5 cursor-pointer transition-colors
-                ${isSel && !isToday ? "bg-brand-50 dark:bg-brand-950/20" : "hover:bg-muted/20"}`}>
+                ${isSel && !isToday ? "bg-brand-600/15" : "hover:bg-muted/20"}`}>
               <div className="flex items-center justify-between mb-1.5">
                 <span className={`w-8 h-8 flex items-center justify-center rounded-full text-sm font-bold
                   ${isToday ? "bg-brand-600 text-white" : "text-foreground"}`}>
@@ -469,7 +469,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
           {weekDays.map((d, i) => {
             const ds = toDateStr(d); const isToday = ds === todayStr; const cnt = (apptsByDate[ds]??[]).length;
             return (
-              <div key={i} className={`py-3 text-center border-r border-border ${isToday?"bg-brand-50 dark:bg-brand-950/20":""}`}>
+              <div key={i} className={`py-3 text-center border-r border-border ${isToday?"bg-brand-600/15":""}`}>
                 <div className="text-xs font-bold text-muted-foreground uppercase">{DAYS_ES[i]}</div>
                 <div className={`text-xl font-bold ${isToday?"text-brand-600":""}`}>{d.getDate()}</div>
                 {cnt > 0 && <div className="text-xs text-muted-foreground">{cnt} cita{cnt>1?"s":""}</div>}
@@ -728,7 +728,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                 {/* Improvement 4: Google Calendar badge in detail */}
                 <div className="flex gap-2 flex-wrap">
                   {appt.googleCalendarEventId && (
-                    <div className="flex items-center gap-1.5 text-sm font-semibold text-brand-600 bg-brand-50 dark:bg-brand-950/30 border border-brand-200 px-3 py-1.5 rounded-full">
+                    <div className="flex items-center gap-1.5 text-sm font-semibold text-brand-600 bg-brand-600/15 border border-brand-200 px-3 py-1.5 rounded-full">
                       <CalendarCheck className="w-4 h-4"/> Sincronizado con Google Calendar
                     </div>
                   )}

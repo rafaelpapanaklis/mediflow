@@ -169,7 +169,7 @@ export function XraysClient({ patients, recentFiles: initialFiles, clinicId, aiU
                 onClick={() => selectPatient(p)}
                 className={cn(
                   "w-full text-left px-4 py-3 hover:bg-muted/30 transition-colors",
-                  selectedPatient?.id === p.id && "bg-brand-50 dark:bg-brand-900/20 border-l-4 border-brand-500"
+                  selectedPatient?.id === p.id && "bg-brand-600/15 border-l-4 border-brand-500"
                 )}
               >
                 <div className="font-medium text-sm">{p.firstName} {p.lastName}</div>
@@ -201,7 +201,7 @@ export function XraysClient({ patients, recentFiles: initialFiles, clinicId, aiU
                       ref={fileRef}
                       type="file"
                       accept="image/*,application/pdf"
-                      className="w-full text-sm file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-brand-50 file:text-brand-700 file:font-medium file:cursor-pointer hover:file:bg-brand-100"
+                      className="w-full text-sm file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-brand-600/15 file:text-brand-700 file:font-medium file:cursor-pointer hover:file:bg-brand-500/15"
                     />
                   </div>
                   <div>
@@ -251,7 +251,7 @@ export function XraysClient({ patients, recentFiles: initialFiles, clinicId, aiU
                   <div className="divide-y divide-border">
                     {patientFiles.map(f => (
                       <div key={f.id} className="flex items-center gap-4 px-4 py-3 hover:bg-muted/20">
-                        <div className="w-10 h-10 rounded-lg bg-brand-50 dark:bg-brand-900/20 flex items-center justify-center flex-shrink-0">
+                        <div className="w-10 h-10 rounded-lg bg-brand-600/15 flex items-center justify-center flex-shrink-0">
                           <FileImage className="w-5 h-5 text-brand-600" />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -315,7 +315,7 @@ export function XraysClient({ patients, recentFiles: initialFiles, clinicId, aiU
                       }}
                       className="w-full flex items-center gap-4 px-4 py-3 hover:bg-muted/20 text-left"
                     >
-                      <div className="w-10 h-10 rounded-lg bg-brand-50 dark:bg-brand-900/20 flex items-center justify-center flex-shrink-0">
+                      <div className="w-10 h-10 rounded-lg bg-brand-600/15 flex items-center justify-center flex-shrink-0">
                         <FileImage className="w-5 h-5 text-brand-600" />
                       </div>
                       <div className="flex-1 min-w-0">

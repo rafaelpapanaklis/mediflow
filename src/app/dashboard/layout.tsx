@@ -14,15 +14,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const todayEnd   = new Date(); todayEnd.setHours(23, 59, 59, 999);
   const isDoctor   = user.role === "DOCTOR";
 
-  const [
-    todayAppts,
-    doctorCount,
-    patientCount,
-    apptCount,
-    recordCount,
-    invoiceCount,
-    scheduleCount,
-  ] = await Promise.all([
+  const [todayAppts, counts] = await Promise.all([
     prisma.appointment.findMany({
       where: {
         clinicId: clinic.id,
@@ -36,13 +28,24 @@ export default async function DashboardLayout({ children }: { children: React.Re
       },
       orderBy: { startTime: "asc" },
     }),
-    prisma.user.count({ where: { clinicId: clinic.id, role: "DOCTOR" } }),
-    prisma.patient.count({ where: { clinicId: clinic.id } }),
-    prisma.appointment.count({ where: { clinicId: clinic.id } }),
-    prisma.medicalRecord.count({ where: { clinicId: clinic.id } }),
-    prisma.invoice.count({ where: { clinicId: clinic.id } }),
-    prisma.clinicSchedule.count({ where: { clinicId: clinic.id } }),
+    prisma.$queryRaw<[{ doctors: bigint; patients: bigint; appts: bigint; records: bigint; invoices: bigint; schedules: bigint }]>`
+      SELECT
+        (SELECT COUNT(*) FROM users WHERE "clinicId" = ${clinic.id} AND role = 'DOCTOR') AS doctors,
+        (SELECT COUNT(*) FROM patients WHERE "clinicId" = ${clinic.id}) AS patients,
+        (SELECT COUNT(*) FROM appointments WHERE "clinicId" = ${clinic.id}) AS appts,
+        (SELECT COUNT(*) FROM medical_records WHERE "clinicId" = ${clinic.id}) AS records,
+        (SELECT COUNT(*) FROM invoices WHERE "clinicId" = ${clinic.id}) AS invoices,
+        (SELECT COUNT(*) FROM clinic_schedules WHERE "clinicId" = ${clinic.id}) AS schedules
+    `,
   ]);
+
+  const c = counts[0];
+  const doctorCount   = Number(c.doctors);
+  const patientCount  = Number(c.patients);
+  const apptCount     = Number(c.appts);
+  const recordCount   = Number(c.records);
+  const invoiceCount  = Number(c.invoices);
+  const scheduleCount = Number(c.schedules);
 
   const onboardingCompleted: string[] = [];
   if (doctorCount   > 0) onboardingCompleted.push("doctor");

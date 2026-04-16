@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   LayoutDashboard, Calendar, Users, CreditCard,
   BarChart2, Settings, LogOut, Menu, X, Stethoscope,
@@ -432,22 +432,67 @@ export function Sidebar({
         <span className="ml-auto max-w-[140px] truncate text-sm text-muted-foreground">{clinicName}</span>
       </div>
 
-      {/* Mobile drawer */}
+      {/* Mobile drawer with focus trap */}
       {open && (
-        <div className="fixed inset-0 z-50 flex lg:hidden">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
-          <aside className="relative flex h-full w-[280px] flex-col border-r border-sidebar-border">
-            <button
-              className="absolute right-3 top-3 z-10 rounded-lg p-1.5 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              onClick={() => setOpen(false)}
-              aria-label="Cerrar menú"
-            >
-              <X className="h-4 w-4" />
-            </button>
-            <SidebarContent isCollapsed={false} />
-          </aside>
-        </div>
+        <MobileDrawer onClose={() => setOpen(false)}>
+          <SidebarContent isCollapsed={false} />
+        </MobileDrawer>
       )}
     </>
+  );
+}
+
+function MobileDrawer({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+  const drawerRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const drawer = drawerRef.current;
+    if (!drawer) return;
+
+    // Focus first interactive element
+    const firstFocusable = drawer.querySelector<HTMLElement>(
+      'a[href], button, input, textarea, select, [tabindex]:not([tabindex="-1"])'
+    );
+    firstFocusable?.focus();
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") { onClose(); return; }
+      if (e.key !== "Tab") return;
+
+      const focusable = drawer.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input, textarea, select, [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last  = focusable[focusable.length - 1];
+
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex lg:hidden" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <aside ref={drawerRef} className="relative flex h-full w-[280px] flex-col border-r border-sidebar-border">
+        <button
+          className="absolute right-3 top-3 z-10 rounded-lg p-1.5 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          onClick={onClose}
+          aria-label="Cerrar menú"
+        >
+          <X className="h-4 w-4" />
+        </button>
+        {children}
+      </aside>
+    </div>
   );
 }

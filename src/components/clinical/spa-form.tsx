@@ -354,7 +354,7 @@ export function SpaForm({ patientId, onSaved }: Props) {
           <div key={idx} className="grid grid-cols-[auto_1fr_auto_auto_1fr_auto] gap-2 mb-2 items-end">
             <div className="flex flex-col items-center gap-1">
               {idx === 0 && <Label className="text-xs">Paso</Label>}
-              <span className="h-9 w-9 flex items-center justify-center rounded-lg bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 text-sm font-bold">{idx + 1}</span>
+              <span className="h-9 w-9 flex items-center justify-center rounded-lg bg-brand-600/15 text-brand-700 dark:text-brand-300 text-sm font-bold">{idx + 1}</span>
             </div>
             <div className="space-y-1">
               {idx === 0 && <Label className="text-xs">Servicio</Label>}

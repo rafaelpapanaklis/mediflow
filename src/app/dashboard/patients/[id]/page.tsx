@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { PatientDetailClient } from "./patient-detail-client";
 import { PatientContextPanel } from "@/components/dashboard/patient-context";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 export default async function PatientDetailPage({ params }: { params: { id: string } }) {
   const user = await getCurrentUser();
@@ -100,20 +101,22 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
         visitCount,
       }} />
 
-      <PatientDetailClient
-        patient={patient as any}
-        records={serializedRecords as any}
-        appointments={serializedAppts as any}
-        invoices={patient.invoices as any}
-        treatments={serializedTreatments as any}
-        doctors={doctors}
-        currentUser={{ id: user.id, firstName: user.firstName, lastName: user.lastName }}
-        specialty={user.clinic.specialty}
-        totalPaid={totalPaid}
-        totalBalance={totalBalance}
-        totalPlan={totalPlan}
-        portalUrl={portalUrl}
-      />
+      <ErrorBoundary fallbackTitle="Error al cargar detalle del paciente">
+        <PatientDetailClient
+          patient={patient as any}
+          records={serializedRecords as any}
+          appointments={serializedAppts as any}
+          invoices={patient.invoices as any}
+          treatments={serializedTreatments as any}
+          doctors={doctors}
+          currentUser={{ id: user.id, firstName: user.firstName, lastName: user.lastName }}
+          specialty={user.clinic.specialty}
+          totalPaid={totalPaid}
+          totalBalance={totalBalance}
+          totalPlan={totalPlan}
+          portalUrl={portalUrl}
+        />
+      </ErrorBoundary>
     </div>
   );
 }

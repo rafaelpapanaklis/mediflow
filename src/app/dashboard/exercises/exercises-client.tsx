@@ -101,7 +101,7 @@ export function ExercisesClient({ initialExercises }: { initialExercises: Exerci
               </div>
               {exercise.description && <p className="text-sm text-muted-foreground mt-1">{exercise.description}</p>}
               <div className="mt-3 flex items-center gap-3">
-                <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-brand-100 text-brand-700 border border-brand-300">
+                <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-brand-500/15 text-brand-700 border border-brand-300">
                   {exercise.unit}
                 </span>
                 <span className="text-sm text-muted-foreground">
