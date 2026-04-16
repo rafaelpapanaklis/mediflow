@@ -52,21 +52,16 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className={`dark ${sora.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
+    <html lang="es" className={`${sora.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: `
           (function() {
             try {
               var saved = localStorage.getItem('theme');
-              if (saved === 'light') {
-                document.documentElement.classList.remove('dark');
-              } else {
+              if (saved === 'dark') {
                 document.documentElement.classList.add('dark');
-                if (!saved) localStorage.setItem('theme', 'dark');
               }
-            } catch(e) {
-              document.documentElement.classList.add('dark');
-            }
+            } catch(e) {}
           })();
         `}} />
       </head>

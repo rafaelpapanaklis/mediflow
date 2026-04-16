@@ -66,9 +66,9 @@ interface SidebarProps {
 
 function useDarkMode() {
   const [dark, setDark] = useState(() => {
-    if (typeof window === "undefined") return true;
+    if (typeof window === "undefined") return false;
     const saved = localStorage.getItem("theme");
-    const isDark = saved !== "light";
+    const isDark = saved === "dark";
     document.documentElement.classList.toggle("dark", isDark);
     return isDark;
   });
