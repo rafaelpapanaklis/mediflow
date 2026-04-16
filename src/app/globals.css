@@ -71,7 +71,7 @@
      contrast with text. We drop background to ~94% L (similar to macOS
      Finder / Linear) and keep cards at near-white so they float subtly.
      Scoped to .dashboard-shell so the public landing is unaffected. */
-  .dashboard-shell:not(.dark) {
+  :root:not(.dark) .dashboard-shell {
     --background:        220 14% 94%;  /* #edeff3 — soft cool gray */
     --card:              0 0% 99%;     /* #fcfcfc — near white, gentle pop */
     --card-foreground:   222 47% 11%;
@@ -88,11 +88,11 @@
   }
   /* Neutralize hardcoded bg-white inside dashboard so cards blend with the
      softer palette instead of popping as pure #fff. */
-  .dashboard-shell:not(.dark) .bg-white { background-color: hsl(var(--card)); }
-  .dashboard-shell:not(.dark) .bg-slate-50 { background-color: hsl(220 14% 96%); }
-  .dashboard-shell:not(.dark) .bg-slate-100 { background-color: hsl(220 14% 92%); }
-  .dashboard-shell:not(.dark) .bg-gray-50 { background-color: hsl(220 14% 96%); }
-  .dashboard-shell:not(.dark) .bg-gray-100 { background-color: hsl(220 14% 92%); }
+  :root:not(.dark) .dashboard-shell .bg-white { background-color: hsl(var(--card)); }
+  :root:not(.dark) .dashboard-shell .bg-slate-50 { background-color: hsl(220 14% 96%); }
+  :root:not(.dark) .dashboard-shell .bg-slate-100 { background-color: hsl(220 14% 92%); }
+  :root:not(.dark) .dashboard-shell .bg-gray-50 { background-color: hsl(220 14% 96%); }
+  :root:not(.dark) .dashboard-shell .bg-gray-100 { background-color: hsl(220 14% 92%); }
 
   * { border-color: hsl(var(--border)); }
 
