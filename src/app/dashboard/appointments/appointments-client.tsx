@@ -501,12 +501,17 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
   const DayView = () => {
     const ds = toDateStr(currentDate);
     const dayAppts = (apptsByDate[ds]??[]).sort((a,b) => a.startTime.localeCompare(b.startTime));
+    const nowHour = String(new Date().getHours()).padStart(2, "0");
     return (
-      <div className="overflow-y-auto" style={{ maxHeight: 560 }}>
+      <div className="overflow-y-auto" style={{ maxHeight: 560 }} ref={el => {
+        if (!el) return;
+        const target = el.querySelector(`[data-hour="${nowHour}"]`);
+        if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
+      }}>
         {HOURS.map(hour => {
           const slotAppts = dayAppts.filter(a => a.startTime.startsWith(hour.slice(0,2)));
           return (
-            <div key={hour} className="flex border-b border-border/40" style={{ minHeight: 72 }}>
+            <div key={hour} data-hour={hour.slice(0,2)} className="flex border-b border-border/40" style={{ minHeight: 72 }}>
               <div className="w-20 flex-shrink-0 px-3 py-3 border-r border-border">
                 <span className="text-base text-muted-foreground font-mono">{hour}</span>
               </div>

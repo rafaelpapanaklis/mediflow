@@ -198,12 +198,18 @@ export function XraysClient({ patients, recentFiles: initialFiles, clinicId, aiU
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium mb-1">Archivo</label>
-                    <input
-                      ref={fileRef}
-                      type="file"
-                      accept="image/*,application/pdf"
-                      className="w-full text-sm file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-brand-600/15 file:text-brand-700 file:font-medium file:cursor-pointer hover:file:bg-brand-500/15"
-                    />
+                    <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden" />
+                    <button
+                      type="button"
+                      onClick={() => fileRef.current?.click()}
+                      className="w-full border-2 border-dashed border-border rounded-xl p-6 text-center cursor-pointer hover:border-brand-500 hover:bg-brand-600/5 transition-colors"
+                    >
+                      <Upload className="w-6 h-6 mx-auto mb-2 text-muted-foreground" />
+                      <span className="text-sm font-medium text-muted-foreground">
+                        {fileRef.current?.files?.[0]?.name ?? "Haz click para seleccionar archivo"}
+                      </span>
+                      <p className="text-xs text-muted-foreground/60 mt-1">Imágenes y PDF, máx 50MB</p>
+                    </button>
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">Categoría</label>

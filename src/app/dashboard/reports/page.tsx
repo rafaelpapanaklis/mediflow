@@ -21,7 +21,7 @@ export default async function ReportsPage() {
   // FIX: run all 18 queries in parallel instead of 6 sequential loops
   const [revenueResults, patientCounts, apptCounts, topTypes, byStatus] = await Promise.all([
     Promise.all(ranges.map(r =>
-      prisma.invoice.aggregate({ where: { clinicId, paidAt: { gte: r.start, lte: r.end } }, _sum: { paid: true } })
+      prisma.payment.aggregate({ where: { invoice: { clinicId }, paidAt: { gte: r.start, lte: r.end } }, _sum: { amount: true } })
     )),
     Promise.all(ranges.map(r =>
       prisma.patient.count({ where: { clinicId, createdAt: { gte: r.start, lte: r.end } } })
@@ -41,7 +41,7 @@ export default async function ReportsPage() {
 
   const monthlyData = ranges.map((r, i) => ({
     label:        r.label,
-    revenue:      revenueResults[i]._sum.paid ?? 0,
+    revenue:      revenueResults[i]._sum.amount ?? 0,
     patients:     patientCounts[i],
     appointments: apptCounts[i],
   }));

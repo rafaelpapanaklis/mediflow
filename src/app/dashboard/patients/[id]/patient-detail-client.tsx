@@ -10,6 +10,10 @@ import { NutritionForm }       from "@/components/clinical/nutrition-form";
 import { PsychologyForm }      from "@/components/clinical/psychology-form";
 import { GeneralMedicineForm } from "@/components/clinical/medicine-form";
 import toast from "react-hot-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const SPECIALTY_MAP: Record<string, string> = {
   dental: "dental", odontologia: "dental", odontología: "dental",
@@ -83,6 +87,14 @@ export function PatientDetailClient({
   const router = useRouter();
   const [tab, setTab]         = useState("resumen");
   const [records, setRecords] = useState(initialRecords);
+  const [showEdit, setShowEdit] = useState(false);
+  const [editForm, setEditForm] = useState({
+    firstName: patient.firstName, lastName: patient.lastName,
+    email: patient.email ?? "", phone: patient.phone ?? "",
+    gender: patient.gender ?? "OTHER", dob: patient.dob ? new Date(patient.dob).toISOString().split("T")[0] : "",
+    address: patient.address ?? "", allergies: (patient.allergies ?? []).join(", "), notes: patient.notes ?? "",
+  });
+  const [editSaving, setEditSaving] = useState(false);
   const [showNewAppt, setShowNewAppt] = useState(false);
   const [apptForm, setApptForm] = useState({
     doctorId: currentUser.id, type: "Consulta general",
@@ -265,7 +277,7 @@ export function PatientDetailClient({
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-lg font-extrabold">{patient.firstName} {patient.lastName}</span>
                 <button
-                  onClick={() => toast("Edición de paciente próximamente", { icon: "✏️" })}
+                  onClick={() => setShowEdit(true)}
                   className="text-xs text-muted-foreground border border-border rounded-lg px-2 py-0.5 hover:bg-muted transition-colors flex items-center gap-1"
                 >
                   <Edit className="w-3 h-3" /> Editar
@@ -970,6 +982,53 @@ export function PatientDetailClient({
           </div>
         </div>
       </div>
+      {/* Edit patient modal */}
+      <Dialog open={showEdit} onOpenChange={setShowEdit}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="text-foreground font-bold">Editar paciente</DialogTitle></DialogHeader>
+          <div className="px-6 py-4 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5"><Label>Nombre *</Label><Input value={editForm.firstName} onChange={e => setEditForm(f => ({ ...f, firstName: e.target.value }))} /></div>
+              <div className="space-y-1.5"><Label>Apellido *</Label><Input value={editForm.lastName} onChange={e => setEditForm(f => ({ ...f, lastName: e.target.value }))} /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5"><Label>Email</Label><Input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} /></div>
+              <div className="space-y-1.5"><Label>Teléfono</Label><Input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5"><Label>Fecha de nacimiento</Label><Input type="date" value={editForm.dob} onChange={e => setEditForm(f => ({ ...f, dob: e.target.value }))} /></div>
+              <div className="space-y-1.5"><Label>Género</Label>
+                <select className="flex h-10 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm" value={editForm.gender} onChange={e => setEditForm(f => ({ ...f, gender: e.target.value }))}>
+                  <option value="M">Masculino</option><option value="F">Femenino</option><option value="OTHER">Otro</option>
+                </select>
+              </div>
+            </div>
+            <div className="space-y-1.5"><Label>Dirección</Label><Input value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} /></div>
+            <div className="space-y-1.5"><Label>Alergias (separadas por comas)</Label><Input value={editForm.allergies} onChange={e => setEditForm(f => ({ ...f, allergies: e.target.value }))} /></div>
+            <div className="space-y-1.5"><Label>Notas</Label>
+              <textarea className="flex min-h-[60px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground resize-none"
+                value={editForm.notes} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEdit(false)}>Cancelar</Button>
+            <Button disabled={editSaving || !editForm.firstName || !editForm.lastName} onClick={async () => {
+              setEditSaving(true);
+              try {
+                const res = await fetch(`/api/patients/${patient.id}`, {
+                  method: "PUT", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ ...editForm, allergies: editForm.allergies ? editForm.allergies.split(",").map((s: string) => s.trim()).filter(Boolean) : [] }),
+                });
+                if (!res.ok) throw new Error((await res.json()).error);
+                toast.success("Paciente actualizado");
+                setShowEdit(false);
+                router.refresh();
+              } catch (err: any) { toast.error(err.message ?? "Error al guardar"); }
+              finally { setEditSaving(false); }
+            }}>{editSaving ? "Guardando…" : "Guardar cambios"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
