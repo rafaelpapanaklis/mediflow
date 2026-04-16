@@ -80,7 +80,8 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
   }
 
   async function createPlan() {
-    if (!form.patientId || !form.name.trim()) { toast.error("Selecciona paciente y nombre"); return; }
+    if (!form.patientId) { toast.error("Selecciona un paciente"); return; }
+    if (!form.name.trim()) { toast.error("Ingresa un nombre para el plan"); return; }
     setSaving(true);
     try {
       const res = await fetch("/api/treatments", {
@@ -498,10 +499,16 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                   className="w-full h-11 rounded-xl border border-border px-3 text-base focus:outline-none"
                   placeholder="$0.00 MXN" value={form.totalCost} onChange={e => setForm(f=>({...f,totalCost:e.target.value}))} />
               </div>
-              <button onClick={createPlan} disabled={saving || !form.patientId || !form.name.trim()}
-                className="w-full py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-base transition-colors disabled:opacity-50">
-                {saving ? "Creando…" : "Crear plan de tratamiento"}
-              </button>
+              <div className="flex gap-3">
+                <button onClick={() => setShowNew(false)}
+                  className="flex-1 py-3 border border-border bg-card text-foreground rounded-xl font-semibold text-base transition-colors hover:bg-muted">
+                  Cancelar
+                </button>
+                <button onClick={createPlan} disabled={saving || !form.patientId || !form.name.trim()}
+                  className="flex-1 py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-base transition-colors disabled:opacity-50">
+                  {saving ? "Creando…" : "Crear plan de tratamiento"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -125,8 +125,11 @@ export function WhatsAppClient({ connected: initConnected, phoneNumberId: initPh
 
           <div className="space-y-1.5">
             <Label>Phone Number ID</Label>
-            <Input placeholder="Ej: 123456789012345"
-              value={form.phoneNumberId} onChange={e => setForm(f => ({ ...f, phoneNumberId: e.target.value }))} />
+            <Input placeholder="Ej: 123456789012345" pattern="[0-9]*" inputMode="numeric"
+              value={form.phoneNumberId} onChange={e => {
+                const v = e.target.value.replace(/\D/g, "");
+                setForm(f => ({ ...f, phoneNumberId: v }));
+              }} />
             <p className="text-xs text-muted-foreground">Meta for Developers → Tu app → WhatsApp → Configuration → Phone Number ID</p>
           </div>
 

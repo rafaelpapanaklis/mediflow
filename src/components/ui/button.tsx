@@ -6,7 +6,7 @@ const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
   { variants: { variant: {
     default: "bg-brand-600 text-white shadow-sm hover:bg-brand-700 active:scale-[0.98]",
-    outline: "border border-border bg-white text-foreground hover:bg-muted",
+    outline: "border border-border bg-card text-foreground hover:bg-muted",
     ghost:   "text-foreground hover:bg-muted",
     danger:  "bg-rose-600 text-white hover:bg-rose-700",
     secondary: "bg-muted text-foreground hover:bg-muted/80",

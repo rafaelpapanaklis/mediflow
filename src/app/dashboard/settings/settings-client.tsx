@@ -580,10 +580,10 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           <div className="bg-card border border-border rounded-2xl p-6 shadow-card space-y-4">
             <h2 className="text-base font-bold">Cambiar contraseña</h2>
             <div className="space-y-1.5"><Label>Nueva contraseña</Label>
-              <Input type="password" placeholder="Mínimo 8 caracteres" value={pwForm.next} onChange={e => setPwForm(f => ({ ...f, next:e.target.value }))} />
+              <Input type="password" autoComplete="new-password" placeholder="Mínimo 8 caracteres" value={pwForm.next} onChange={e => setPwForm(f => ({ ...f, next:e.target.value }))} />
             </div>
             <div className="space-y-1.5"><Label>Confirmar contraseña</Label>
-              <Input type="password" placeholder="Repite la nueva contraseña" value={pwForm.confirm} onChange={e => setPwForm(f => ({ ...f, confirm:e.target.value }))} />
+              <Input type="password" autoComplete="new-password" placeholder="Repite la nueva contraseña" value={pwForm.confirm} onChange={e => setPwForm(f => ({ ...f, confirm:e.target.value }))} />
             </div>
             <Button onClick={changePassword} disabled={saving || !pwForm.next}>{saving ? "Actualizando…" : "Cambiar contraseña"}</Button>
           </div>

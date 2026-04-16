@@ -83,7 +83,8 @@ export function XraysClient({ patients, recentFiles: initialFiles, clinicId, aiU
 
   async function handleUpload() {
     const file = fileRef.current?.files?.[0];
-    if (!file || !selectedPatient) return;
+    if (!file) { toast.error("Selecciona un archivo primero"); return; }
+    if (!selectedPatient) { toast.error("Selecciona un paciente primero"); return; }
 
     setUploading(true);
     try {

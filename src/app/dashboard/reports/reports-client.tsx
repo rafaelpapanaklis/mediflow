@@ -48,8 +48,8 @@ export function ReportsClient({ monthlyData, topTypes, byStatus }: Props) {
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyData} barSize={28} margin={{ left: -20 }}>
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} tickFormatter={v => v === 0 ? "" : `$${(v/1000).toFixed(0)}k`} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, className: "fill-muted-foreground" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, className: "fill-muted-foreground" }} axisLine={false} tickLine={false} tickFormatter={(v: number) => v === 0 ? "" : v < 1000 ? `$${v}` : `$${Math.round(v/1000)}k`} />
                 <Tooltip formatter={(v: number) => [formatCurrency(v), "Ingresos"]} contentStyle={{ borderRadius: 10, fontSize: 12 }} />
                 <Bar dataKey="revenue" radius={[6,6,0,0]}>
                   {monthlyData.map((_, i) => <Cell key={i} fill={i === monthlyData.length - 1 ? "#2563eb" : "#bfdbfe"} />)}
@@ -64,8 +64,8 @@ export function ReportsClient({ monthlyData, topTypes, byStatus }: Props) {
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={monthlyData} margin={{ left: -20 }}>
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, className: "fill-muted-foreground" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, className: "fill-muted-foreground" }} axisLine={false} tickLine={false} />
                 <Tooltip contentStyle={{ borderRadius: 10, fontSize: 12 }} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Line type="monotone" dataKey="patients" name="Pacientes nuevos" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />

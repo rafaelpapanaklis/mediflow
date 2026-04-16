@@ -177,7 +177,7 @@ export default async function DashboardPage() {
             <span className="text-xl">📅</span>
           </div>
           <div className="text-2xl font-bold">{monthAppts}</div>
-          <div className="text-xs text-muted-foreground">Ocupación: {occupancy}%</div>
+          <div className="text-xs text-muted-foreground" title="Citas completadas / slots disponibles según horario de la clínica">Ocupación: {occupancy}%</div>
           <TrendBadge value={apptChange} />
         </div>
         <div className="bg-card border border-border rounded-2xl p-4 space-y-1.5">

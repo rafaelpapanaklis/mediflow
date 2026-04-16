@@ -230,7 +230,7 @@ export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Pro
 
   const active  = team.filter(m => m.isActive).length;
   const doctors = team.filter(m => m.role === "DOCTOR" && m.isActive).length;
-  const admins  = team.filter(m => m.role === "ADMIN"  && m.isActive).length;
+  const admins  = team.filter(m => (m.role === "ADMIN" || m.role === "SUPER_ADMIN") && m.isActive).length;
 
   async function createDoctor() {
     // Read current form state directly — no stale closure issue

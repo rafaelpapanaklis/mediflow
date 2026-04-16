@@ -18,6 +18,14 @@ export function NewPatientModal({ open, onClose, onCreated }: Props) {
     if (!form.firstName || !form.lastName) { toast.error("Nombre y apellido requeridos"); return; }
     setLoading(true);
     try {
+      const dupeCheck = await fetch(`/api/patients?search=${encodeURIComponent(form.firstName + " " + form.lastName)}`);
+      if (dupeCheck.ok) {
+        const existing = await dupeCheck.json();
+        if (Array.isArray(existing) && existing.length > 0) {
+          const confirmed = window.confirm(`Ya existe un paciente con nombre "${form.firstName} ${form.lastName}". ¿Deseas crear otro de todos modos?`);
+          if (!confirmed) { setLoading(false); return; }
+        }
+      }
       const res = await fetch("/api/patients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -36,7 +44,7 @@ export function NewPatientModal({ open, onClose, onCreated }: Props) {
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Nuevo paciente</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle className="text-foreground font-bold">Nuevo paciente</DialogTitle></DialogHeader>
         <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5"><Label>Nombre *</Label><Input placeholder="Ana" value={form.firstName} onChange={e => set("firstName", e.target.value)} /></div>
@@ -52,11 +60,11 @@ export function NewPatientModal({ open, onClose, onCreated }: Props) {
             <Label>Tipo de paciente</Label>
             <div className="flex gap-2">
               <button type="button" onClick={() => setForm(f => ({ ...f, isChild: false }))}
-                className={`flex-1 py-2 text-sm font-semibold rounded-xl border transition-colors ${!form.isChild ? "bg-brand-600 text-white border-brand-600" : "border-border hover:bg-muted"}`}>
+                className={`flex-1 py-2 text-sm font-semibold rounded-xl border transition-colors ${!form.isChild ? "bg-brand-600 text-white border-brand-600" : "border-border text-foreground hover:bg-muted"}`}>
                 🦷 Adulto
               </button>
               <button type="button" onClick={() => setForm(f => ({ ...f, isChild: true }))}
-                className={`flex-1 py-2 text-sm font-semibold rounded-xl border transition-colors ${form.isChild ? "bg-amber-500 text-white border-amber-500" : "border-border hover:bg-muted"}`}>
+                className={`flex-1 py-2 text-sm font-semibold rounded-xl border transition-colors ${form.isChild ? "bg-amber-500 text-white border-amber-500" : "border-border text-foreground hover:bg-muted"}`}>
                 🧒 Niño (dentición temporal)
               </button>
             </div>

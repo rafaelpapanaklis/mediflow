@@ -27,9 +27,10 @@ function formatTime(d: Date) {
 
 export function TodayStrip({ initialAppts }: { initialAppts: Appt[] }) {
   const [appts, setAppts] = useState<Appt[]>(initialAppts);
-  const [timeStr, setTimeStr] = useState(() => formatTime(new Date()));
+  const [timeStr, setTimeStr] = useState("--:--");
 
   useEffect(() => {
+    setTimeStr(formatTime(new Date()));
     const id = setInterval(() => setTimeStr(formatTime(new Date())), 60_000);
     return () => clearInterval(id);
   }, []);
