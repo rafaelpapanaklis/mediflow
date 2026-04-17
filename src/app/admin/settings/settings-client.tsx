@@ -16,7 +16,26 @@ const PLANS_CONFIG = [
   { id: "CLINIC", name: "Clínica",       price: 249, features: "Todo ilimitado · Multi-sucursal · API · Manager de cuenta" },
 ];
 
-export function AdminSettingsClient() {
+interface EnvStatus {
+  ADMIN_PASSWORD: boolean;
+  ADMIN_SECRET_TOKEN: boolean;
+  ADMIN_TOTP_SECRET: boolean;
+  SUPABASE_URL: boolean;
+  SUPABASE_ANON_KEY: boolean;
+  DATABASE_URL: boolean;
+  DIRECT_URL: boolean;
+  STRIPE_SECRET_KEY: boolean;
+  STRIPE_WEBHOOK_SECRET: boolean;
+  RESEND_API_KEY: boolean;
+  WHATSAPP_TOKEN: boolean;
+  WHATSAPP_PHONE_ID: boolean;
+}
+
+function envLabel(configured: boolean) {
+  return configured ? "✅ Configurada" : "⚠️ Pendiente";
+}
+
+export function AdminSettingsClient({ envStatus }: { envStatus: EnvStatus }) {
   const [tab, setTab]   = useState("empresa");
   const [saving, setSaving] = useState(false);
 
@@ -151,15 +170,19 @@ export function AdminSettingsClient() {
               <p className="text-xs text-slate-400 mb-4">Estas variables se configuran en Vercel → Settings → Environment Variables. No se pueden cambiar desde aquí por seguridad.</p>
               <div className="space-y-3">
                 {[
-                  { key: "ADMIN_PASSWORD",     desc: "Contraseña maestra para entrar al panel admin",   status: "✅ Configurada" },
-                  { key: "ADMIN_SECRET_TOKEN", desc: "Token de sesión del admin (cookie)",              status: "✅ Configurada" },
-                  { key: "ADMIN_TOTP_SECRET",  desc: "Secret de Google Authenticator para 2FA",         status: "✅ Configurada" },
-                  { key: "NEXT_PUBLIC_SUPABASE_URL",      desc: "URL de tu proyecto Supabase",          status: "✅ Configurada" },
-                  { key: "NEXT_PUBLIC_SUPABASE_ANON_KEY", desc: "Clave pública de Supabase",            status: "✅ Configurada" },
-                  { key: "DATABASE_URL",       desc: "URL de conexión PostgreSQL (pooler)",             status: "✅ Configurada" },
-                  { key: "DIRECT_URL",         desc: "URL directa PostgreSQL (para migraciones)",       status: "✅ Configurada" },
-                  { key: "STRIPE_SECRET_KEY",  desc: "Clave secreta de Stripe (cuando la actives)",     status: "⚠️ Pendiente" },
-                  { key: "STRIPE_WEBHOOK_SECRET", desc: "Secret del webhook de Stripe",                 status: "⚠️ Pendiente" },
+                  { key: "ADMIN_PASSWORD",     desc: "Contraseña maestra para entrar al panel admin",   status: envLabel(envStatus.ADMIN_PASSWORD) },
+                  { key: "ADMIN_SECRET_TOKEN", desc: "Token de sesión del admin (cookie)",              status: envLabel(envStatus.ADMIN_SECRET_TOKEN) },
+                  { key: "ADMIN_TOTP_SECRET",  desc: "Secret de Google Authenticator para 2FA",         status: envLabel(envStatus.ADMIN_TOTP_SECRET) },
+                  { key: "NEXT_PUBLIC_SUPABASE_URL",      desc: "URL de tu proyecto Supabase",          status: envLabel(envStatus.SUPABASE_URL) },
+                  { key: "NEXT_PUBLIC_SUPABASE_ANON_KEY", desc: "Clave pública de Supabase",            status: envLabel(envStatus.SUPABASE_ANON_KEY) },
+                  { key: "DATABASE_URL",       desc: "URL de conexión PostgreSQL (pooler)",             status: envLabel(envStatus.DATABASE_URL) },
+                  { key: "DIRECT_URL",         desc: "URL directa PostgreSQL (para migraciones)",       status: envLabel(envStatus.DIRECT_URL) },
+                  { key: "STRIPE_SECRET_KEY",  desc: "Clave secreta de Stripe",                         status: envLabel(envStatus.STRIPE_SECRET_KEY) },
+                  { key: "STRIPE_WEBHOOK_SECRET", desc: "Secret del webhook de Stripe",                 status: envLabel(envStatus.STRIPE_WEBHOOK_SECRET) },
+                  { key: "STRIPE_PRICE_ID_BASIC/PRO/CLINIC", desc: "IDs de precio por plan en Stripe",  status: envLabel(Boolean(envStatus.STRIPE_SECRET_KEY)) },
+                  { key: "RESEND_API_KEY",     desc: "API key de Resend para emails admin",             status: envLabel(envStatus.RESEND_API_KEY) },
+                  { key: "MEDIFLOW_WHATSAPP_TOKEN", desc: "Token WhatsApp Business (envíos admin)",     status: envLabel(envStatus.WHATSAPP_TOKEN) },
+                  { key: "MEDIFLOW_WHATSAPP_PHONE_ID", desc: "Phone Number ID de Meta WhatsApp",        status: envLabel(envStatus.WHATSAPP_PHONE_ID) },
                 ].map(v => (
                   <div key={v.key} className="flex items-start justify-between bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5">
                     <div>

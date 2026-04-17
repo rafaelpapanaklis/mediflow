@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import { formatCurrency } from "@/lib/utils";
 import toast from "react-hot-toast";
 
@@ -697,7 +698,12 @@ export function PaymentsClient({
                       <td className="px-5 py-3 text-slate-600 dark:text-slate-400">{methodBadge(inv.method)}</td>
                       <td className="px-5 py-3">{statusBadge(inv.status)}</td>
                       <td className="px-5 py-3 text-slate-500 dark:text-slate-400 text-xs font-mono">{inv.reference || "—"}</td>
-                      <td className="px-5 py-3 text-slate-500 dark:text-slate-400 text-xs">{fmtDate(inv.createdAt)}</td>
+                      <td className="px-5 py-3 text-slate-500 dark:text-slate-400 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span>{fmtDate(inv.createdAt)}</span>
+                          <Link href={`/admin/payments/${inv.id}/cfdi`} className="text-brand-500 hover:underline font-bold">CFDI</Link>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Eye, Edit, Shield, Clock, Users, FileText, CreditCard, Activity, Trash2, BarChart3, MessageCircle, Mail } from "lucide-react";
+import { ArrowLeft, Eye, Edit, Shield, Clock, Users, FileText, CreditCard, Activity, Trash2, BarChart3, MessageCircle, Mail, Download } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { ClinicActivityTab } from "@/components/admin/clinic-activity-tab";
 import { ClinicUsageTab } from "@/components/admin/clinic-usage-tab";
+import { ClinicStripeTab } from "@/components/admin/clinic-stripe-tab";
 import { SendMessageModal } from "@/components/admin/send-message-modal";
 import type { TemplateChannel } from "@/lib/admin-templates";
 
@@ -21,13 +22,15 @@ const PLAN_PRICES: Record<string, number> = { BASIC: 49, PRO: 99, CLINIC: 249 };
 const BANK_INFO = { nombre: "Efthymios Rafail Papanaklis", clabe: "012910015008025244", banco: "BBVA" };
 
 interface Props {
-  clinic:         any;
-  recentActivity: any[];
-  totalRevenue:   number;
-  totalInvoices:  number;
+  clinic:             any;
+  recentActivity:     any[];
+  totalRevenue:       number;
+  totalInvoices:      number;
+  stripeConfigured:   boolean;
+  stripeInstructions: string;
 }
 
-export function AdminClinicDetailClient({ clinic, recentActivity, totalRevenue, totalInvoices }: Props) {
+export function AdminClinicDetailClient({ clinic, recentActivity, totalRevenue, totalInvoices, stripeConfigured, stripeInstructions }: Props) {
   const [saving, setSaving]   = useState(false);
   const [note, setNote]       = useState("");
   const [notes, setNotes]     = useState<AdminNote[]>([]);
@@ -161,6 +164,7 @@ export function AdminClinicDetailClient({ clinic, recentActivity, totalRevenue, 
     { id: "overview",  label: "Resumen",       icon: Activity },
     { id: "account",   label: "Cuenta",         icon: Users    },
     { id: "billing",   label: "Facturación",    icon: CreditCard },
+    { id: "stripe",    label: "Stripe",         icon: CreditCard },
     { id: "activity",  label: "Actividad",      icon: Clock    },
     { id: "usage",     label: "Uso",            icon: BarChart3 },
     { id: "notes",     label: "Notas internas", icon: FileText },
@@ -198,6 +202,15 @@ export function AdminClinicDetailClient({ clinic, recentActivity, totalRevenue, 
             <Mail className="w-4 h-4" />
             Email
           </button>
+          <a
+            href={`/api/admin/clinics/${clinic.id}/export`}
+            target="_blank"
+            className="flex items-center gap-2 px-3 py-2 bg-slate-800 border border-slate-700 text-white text-xs font-bold rounded-xl hover:bg-slate-700 transition-colors"
+            title="Descargar ZIP con CSVs + manifest"
+          >
+            <Download className="w-4 h-4" />
+            Exportar
+          </a>
           <a
             href={`/api/admin/impersonate?clinicId=${clinic.id}`}
             target="_blank"
@@ -371,6 +384,20 @@ export function AdminClinicDetailClient({ clinic, recentActivity, totalRevenue, 
 
         {/* TAB: USAGE */}
         {tab === "usage" && <ClinicUsageTab clinicId={clinic.id} />}
+
+        {/* TAB: STRIPE */}
+        {tab === "stripe" && (
+          <ClinicStripeTab
+            clinicId={clinic.id}
+            clinicName={clinic.name}
+            plan={clinic.plan}
+            stripeCustomerId={clinic.stripeCustomerId ?? null}
+            stripeSubscriptionId={clinic.stripeSubscriptionId ?? null}
+            subscriptionStatus={clinic.subscriptionStatus ?? null}
+            stripeConfigured={stripeConfigured}
+            instructions={stripeInstructions}
+          />
+        )}
 
         {/* TAB: NOTES */}
         {tab === "notes" && (

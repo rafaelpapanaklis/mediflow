@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { href: "/admin/onboarding",   label: "Onboarding" },
   { href: "/admin/payments",     label: "Facturación" },
   { href: "/admin/coupons",      label: "Cupones"   },
+  { href: "/admin/reports",      label: "Reportes"  },
   { href: "/admin/churn",        label: "Churn"     },
   { href: "/admin/announcements", label: "Anuncios" },
   { href: "/admin/settings",     label: "Config"    },

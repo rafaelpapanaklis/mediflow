@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { isStripeConfigured, STRIPE_SETUP_INSTRUCTIONS } from "@/lib/stripe";
 import { AdminClinicDetailClient } from "./clinic-detail-client";
 
 export const metadata: Metadata = { title: "Detalle Clínica — Admin MediFlow" };
@@ -37,6 +38,8 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
       recentActivity={recentActivity as any}
       totalRevenue={revenueStats._sum.paid ?? 0}
       totalInvoices={revenueStats._count.id}
+      stripeConfigured={isStripeConfigured()}
+      stripeInstructions={STRIPE_SETUP_INSTRUCTIONS}
     />
   );
 }
