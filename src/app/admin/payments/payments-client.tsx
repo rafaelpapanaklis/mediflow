@@ -104,6 +104,11 @@ export function PaymentsClient({
     paypalRecurring: false,
   });
 
+  // Coupon
+  const [couponCode, setCouponCode]   = useState("");
+  const [couponApplied, setCouponApplied] = useState<{ code: string; discount: number; finalAmount: number } | null>(null);
+  const [validatingCoupon, setValidatingCoupon] = useState(false);
+
   function setF(k: string, v: string | boolean) {
     setForm(f => ({ ...f, [k]: v }));
   }
@@ -193,6 +198,45 @@ export function PaymentsClient({
     }
   }
 
+  async function applyCoupon() {
+    if (!couponCode.trim()) { toast.error("Escribe un código"); return; }
+    if (!form.amount) { toast.error("Selecciona clínica y monto primero"); return; }
+    setValidatingCoupon(true);
+    try {
+      const clinic = clinics.find((c: any) => c.id === form.clinicId);
+      const res = await fetch("/api/admin/coupons/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: couponCode.trim(),
+          amount: parseFloat(form.amount),
+          plan: clinic?.plan,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "Cupón inválido");
+      }
+      const data = await res.json();
+      setCouponApplied({
+        code: data.code,
+        discount: data.discount,
+        finalAmount: data.finalAmount,
+      });
+      toast.success(`Cupón aplicado: -$${data.discount.toFixed(2)}`);
+    } catch (e: any) {
+      toast.error(e.message);
+      setCouponApplied(null);
+    } finally {
+      setValidatingCoupon(false);
+    }
+  }
+
+  function removeCoupon() {
+    setCouponApplied(null);
+    setCouponCode("");
+  }
+
   async function createPayment() {
     if (!form.clinicId || !form.amount || !form.periodStart || !form.periodEnd) {
       toast.error("Completa todos los campos obligatorios");
@@ -200,17 +244,21 @@ export function PaymentsClient({
     }
     setLoading("new");
     try {
+      const finalAmount = couponApplied ? couponApplied.finalAmount : parseFloat(form.amount);
+      const notesWithCoupon = couponApplied
+        ? `${form.notes ? form.notes + " · " : ""}Cupón ${couponApplied.code} -$${couponApplied.discount.toFixed(2)}`.trim()
+        : form.notes;
       const res = await fetch("/api/admin/subscriptions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clinicId: form.clinicId,
-          amount: parseFloat(form.amount),
+          amount: finalAmount,
           method: form.method,
           reference: form.reference,
           periodStart: form.periodStart,
           periodEnd: form.periodEnd,
-          notes: form.notes,
+          notes: notesWithCoupon,
           status: "paid",
         }),
       });
@@ -219,6 +267,8 @@ export function PaymentsClient({
       setPayments(prev => [inv, ...prev]);
       setShowNewPayment(false);
       setForm({ clinicId: "", amount: "", method: "transfer", reference: "", periodStart: "", periodEnd: "", notes: "", paypalEmail: "", paypalRecurring: false });
+      setCouponApplied(null);
+      setCouponCode("");
       toast.success("Pago registrado correctamente");
     } catch (e: any) {
       toast.error(e.message);
@@ -389,6 +439,44 @@ export function PaymentsClient({
             <div className="md:col-span-2 lg:col-span-3">
               <label className={labelCls}>Notas</label>
               <input value={form.notes} onChange={e => setF("notes", e.target.value)} placeholder="Observaciones opcionales" className={inputCls} />
+            </div>
+
+            {/* Coupon */}
+            <div className="md:col-span-2 lg:col-span-3 bg-slate-50 dark:bg-slate-800/50 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-3 space-y-2">
+              <label className={labelCls}>Cupón de descuento (opcional)</label>
+              {couponApplied ? (
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 text-sm">
+                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{couponApplied.code}</span>
+                    <span className="text-slate-500 dark:text-slate-400 ml-2">−${couponApplied.discount.toFixed(2)} MXN</span>
+                    <span className="text-slate-500 dark:text-slate-400 ml-2">
+                      → total: <span className="font-bold">${couponApplied.finalAmount.toFixed(2)}</span>
+                    </span>
+                  </div>
+                  <button
+                    onClick={removeCoupon}
+                    className="text-xs font-bold text-rose-600 hover:text-rose-700 underline"
+                  >
+                    Quitar
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    value={couponCode}
+                    onChange={e => setCouponCode(e.target.value.toUpperCase())}
+                    placeholder="Ej: LANZAMIENTO20"
+                    className={`${inputCls} font-mono uppercase`}
+                  />
+                  <button
+                    onClick={applyCoupon}
+                    disabled={validatingCoupon || !couponCode.trim()}
+                    className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold px-4 rounded-lg disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {validatingCoupon ? "…" : "Aplicar"}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
           <div className="flex gap-3 pt-2">

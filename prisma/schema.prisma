@@ -926,3 +926,20 @@ model AdminAnnouncement {
 
   @@map("admin_announcements")
 }
+
+// ── Discount coupons applied to subscription payments ─────────────────
+model Coupon {
+  id         String    @id @default(cuid())
+  code       String    @unique
+  type       String    // percentage | fixed
+  value      Float
+  validFrom  DateTime  @default(now())
+  validUntil DateTime?
+  maxUses    Int?
+  usedCount  Int       @default(0)
+  appliesTo  String    @default("all") // all | BASIC | PRO | CLINIC
+  active     Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+
+  @@map("coupons")
+}

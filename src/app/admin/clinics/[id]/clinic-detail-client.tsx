@@ -2,9 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Eye, Edit, Shield, Clock, Users, FileText, CreditCard, Activity, Trash2 } from "lucide-react";
+import { ArrowLeft, Eye, Edit, Shield, Clock, Users, FileText, CreditCard, Activity, Trash2, BarChart3, MessageCircle, Mail } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import toast from "react-hot-toast";
+import { ClinicActivityTab } from "@/components/admin/clinic-activity-tab";
+import { ClinicUsageTab } from "@/components/admin/clinic-usage-tab";
+import { SendMessageModal } from "@/components/admin/send-message-modal";
+import type { TemplateChannel } from "@/lib/admin-templates";
 
 interface AdminNote {
   id: string;
@@ -31,6 +35,7 @@ export function AdminClinicDetailClient({ clinic, recentActivity, totalRevenue, 
   const [savingNote, setSavingNote]   = useState(false);
   const [editPlan, setEditPlan] = useState(clinic.plan);
   const [tab, setTab]         = useState("overview");
+  const [modalChannel, setModalChannel] = useState<TemplateChannel | null>(null);
 
   // Cargar notas al entrar al tab (la primera vez)
   useEffect(() => {
@@ -157,6 +162,7 @@ export function AdminClinicDetailClient({ clinic, recentActivity, totalRevenue, 
     { id: "account",   label: "Cuenta",         icon: Users    },
     { id: "billing",   label: "Facturación",    icon: CreditCard },
     { id: "activity",  label: "Actividad",      icon: Clock    },
+    { id: "usage",     label: "Uso",            icon: BarChart3 },
     { id: "notes",     label: "Notas internas", icon: FileText },
   ];
 
@@ -177,7 +183,21 @@ export function AdminClinicDetailClient({ clinic, recentActivity, totalRevenue, 
             </div>
             <p className="text-slate-400 text-sm">{clinic.specialty} · {clinic.city}, {clinic.country} · {clinic.slug}.mediflow.app</p>
           </div>
-          {/* View as clinic button */}
+          {/* Action buttons */}
+          <button
+            onClick={() => setModalChannel("whatsapp")}
+            className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-colors"
+          >
+            <MessageCircle className="w-4 h-4" />
+            WhatsApp
+          </button>
+          <button
+            onClick={() => setModalChannel("email")}
+            className="flex items-center gap-2 px-3 py-2 bg-sky-600 text-white text-xs font-bold rounded-xl hover:bg-sky-700 transition-colors"
+          >
+            <Mail className="w-4 h-4" />
+            Email
+          </button>
           <a
             href={`/api/admin/impersonate?clinicId=${clinic.id}`}
             target="_blank"
@@ -347,41 +367,10 @@ export function AdminClinicDetailClient({ clinic, recentActivity, totalRevenue, 
         )}
 
         {/* TAB: ACTIVITY */}
-        {tab === "activity" && (
-          <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-700">
-              <h2 className="text-sm font-bold">Actividad reciente</h2>
-              <p className="text-xs text-slate-400">Últimos expedientes clínicos creados</p>
-            </div>
-            {recentActivity.length === 0 ? (
-              <div className="px-5 py-10 text-center text-slate-500 text-sm">Sin actividad reciente</div>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-700">
-                    {["Fecha","Doctor","Tipo","Notas"].map(h => (
-                      <th key={h} className="text-left px-4 py-2.5 text-[11px] font-bold text-slate-400 uppercase tracking-wide">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentActivity.map((r: any) => (
-                    <tr key={r.id} className="border-b border-slate-800 hover:bg-slate-800/40">
-                      <td className="px-4 py-3 text-slate-300 text-xs">{new Date(r.createdAt).toLocaleDateString("es-MX")}</td>
-                      <td className="px-4 py-3 text-slate-300">Dr/a. {r.doctor?.firstName} {r.doctor?.lastName}</td>
-                      <td className="px-4 py-3">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-900/50 text-brand-400 border border-brand-700">
-                          {r.specialtyData?.type ?? "Consulta"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-400 text-xs">{r.subjective?.slice(0, 50) ?? "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        )}
+        {tab === "activity" && <ClinicActivityTab clinicId={clinic.id} />}
+
+        {/* TAB: USAGE */}
+        {tab === "usage" && <ClinicUsageTab clinicId={clinic.id} />}
 
         {/* TAB: NOTES */}
         {tab === "notes" && (
@@ -440,6 +429,15 @@ export function AdminClinicDetailClient({ clinic, recentActivity, totalRevenue, 
               </div>
             )}
           </div>
+        )}
+
+        {modalChannel && (
+          <SendMessageModal
+            clinicId={clinic.id}
+            clinicName={clinic.name}
+            channel={modalChannel}
+            onClose={() => setModalChannel(null)}
+          />
         )}
       </div>
   );
