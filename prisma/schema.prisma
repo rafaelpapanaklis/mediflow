@@ -119,6 +119,7 @@ model Clinic {
   resourceBookings     ResourceBooking[]
   procedureCatalog     ProcedureCatalog[]
   xrayAnalyses         XrayAnalysis[]
+  adminNotes           AdminClinicNote[]
 
   @@map("clinics")
 }
@@ -186,6 +187,7 @@ model User {
   treatments          TreatmentPlan[]
   periodontalRecords  PeriodontalRecord[]
   auditLogs           AuditLog[]
+  adminNotesAuthored  AdminClinicNote[]
 
   @@unique([supabaseId, clinicId])
   @@index([supabaseId])
@@ -895,4 +897,32 @@ model ProcedureCatalog {
   clinic       Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   @@index([clinicId, isActive])
   @@map("procedure_catalog")
+}
+
+// ── Super-admin internal notes per clinic ─────────────────────────────
+model AdminClinicNote {
+  id        String   @id @default(cuid())
+  clinicId  String
+  authorId  String?   // null = super admin (sin User record)
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+
+  clinic    Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  author    User?    @relation(fields: [authorId], references: [id])
+
+  @@index([clinicId])
+  @@map("admin_clinic_notes")
+}
+
+// ── Global announcements shown inside the dashboard ───────────────────
+model AdminAnnouncement {
+  id        String    @id @default(cuid())
+  message   String    @db.Text
+  type      String    @default("info") // info | warning | success | maintenance
+  active    Boolean   @default(true)
+  startsAt  DateTime  @default(now())
+  endsAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@map("admin_announcements")
 }

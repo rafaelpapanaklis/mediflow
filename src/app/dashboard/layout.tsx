@@ -2,6 +2,7 @@ import { getCurrentUser, getUserClinics } from "@/lib/auth";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { QuickActionsBar } from "@/components/dashboard/quick-actions";
 import { TodayStrip } from "@/components/dashboard/today-strip";
+import { GlobalAnnouncementBanner } from "@/components/dashboard/global-announcement-banner";
 import { prisma } from "@/lib/prisma";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -86,6 +87,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <a href="/dashboard/suspended" className="underline hover:no-underline">Ver opciones de pago →</a>
           </div>
         )}
+        <GlobalAnnouncementBanner />
         <div className="border-b border-border bg-card pt-16 lg:pt-0">
           <div className="px-4 pt-3 lg:px-6 lg:pt-4">
             <QuickActionsBar

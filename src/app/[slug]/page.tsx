@@ -44,7 +44,7 @@ const CATEGORY_HIGHLIGHTS: Record<string, string[]> = {
 const NON_SPECIALTY_RESERVED = [
   "dashboard","admin","api","auth","login","register",
   "pricing","features","contact","consentimiento","portal",
-  "reservar","pago","consent","clinicas","teleconsulta",
+  "reservar","pago","consent","clinicas","teleconsulta","roadmap",
 ];
 
 interface Props { params: { slug: string } }

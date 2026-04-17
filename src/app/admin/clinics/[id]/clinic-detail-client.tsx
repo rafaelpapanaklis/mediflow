@@ -1,10 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Eye, Edit, Shield, Clock, Users, FileText, CreditCard, Activity } from "lucide-react";
+import { ArrowLeft, Eye, Edit, Shield, Clock, Users, FileText, CreditCard, Activity, Trash2 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import toast from "react-hot-toast";
+
+interface AdminNote {
+  id: string;
+  content: string;
+  createdAt: string;
+  author?: { firstName: string; lastName: string; email: string } | null;
+}
 
 const PLAN_PRICES: Record<string, number> = { BASIC: 49, PRO: 99, CLINIC: 249 };
 const BANK_INFO = { nombre: "Efthymios Rafail Papanaklis", clabe: "012910015008025244", banco: "BBVA" };
@@ -19,9 +26,28 @@ interface Props {
 export function AdminClinicDetailClient({ clinic, recentActivity, totalRevenue, totalInvoices }: Props) {
   const [saving, setSaving]   = useState(false);
   const [note, setNote]       = useState("");
-  const [notes, setNotes]     = useState<string[]>([]);
+  const [notes, setNotes]     = useState<AdminNote[]>([]);
+  const [notesLoaded, setNotesLoaded] = useState(false);
+  const [savingNote, setSavingNote]   = useState(false);
   const [editPlan, setEditPlan] = useState(clinic.plan);
   const [tab, setTab]         = useState("overview");
+
+  // Cargar notas al entrar al tab (la primera vez)
+  useEffect(() => {
+    if (tab !== "notes" || notesLoaded) return;
+    (async () => {
+      try {
+        const res = await fetch(`/api/admin/clinics/${clinic.id}/notes`);
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        setNotes(data);
+      } catch {
+        toast.error("Error al cargar notas");
+      } finally {
+        setNotesLoaded(true);
+      }
+    })();
+  }, [tab, notesLoaded, clinic.id]);
 
   const expired   = clinic.trialEndsAt && new Date(clinic.trialEndsAt) < new Date();
   const daysLeft  = clinic.trialEndsAt ? Math.ceil((new Date(clinic.trialEndsAt).getTime() - Date.now()) / 86400000) : null;
@@ -80,11 +106,50 @@ export function AdminClinicDetailClient({ clinic, recentActivity, totalRevenue, 
     }
   }
 
-  function addNote() {
-    if (!note.trim()) return;
-    setNotes(prev => [`${new Date().toLocaleString("es-MX")} — ${note}`, ...prev]);
-    setNote("");
-    toast.success("Nota agregada");
+  async function addNote() {
+    const content = note.trim();
+    if (!content) return;
+    setSavingNote(true);
+    try {
+      const res = await fetch(`/api/admin/clinics/${clinic.id}/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Error");
+      const created = await res.json();
+      setNotes(prev => [created, ...prev]);
+      setNote("");
+      toast.success("Nota agregada");
+    } catch (e: any) {
+      toast.error(e.message ?? "Error");
+    } finally {
+      setSavingNote(false);
+    }
+  }
+
+  async function deleteNote(noteId: string) {
+    if (!confirm("¿Eliminar esta nota?")) return;
+    try {
+      const res = await fetch(`/api/admin/clinics/${clinic.id}/notes/${noteId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      setNotes(prev => prev.filter(n => n.id !== noteId));
+      toast.success("Nota eliminada");
+    } catch {
+      toast.error("Error al eliminar");
+    }
+  }
+
+  function relativeTime(iso: string): string {
+    const diff = Date.now() - new Date(iso).getTime();
+    const min = Math.floor(diff / 60000);
+    if (min < 1)    return "justo ahora";
+    if (min < 60)   return `hace ${min} min`;
+    const hrs = Math.floor(min / 60);
+    if (hrs < 24)   return `hace ${hrs} h`;
+    const days = Math.floor(hrs / 24);
+    if (days < 30)  return `hace ${days} d`;
+    return new Date(iso).toLocaleDateString("es-MX");
   }
 
   const TABS = [
@@ -322,29 +387,56 @@ export function AdminClinicDetailClient({ clinic, recentActivity, totalRevenue, 
         {tab === "notes" && (
           <div className="bg-slate-900 border border-slate-700 rounded-xl p-5">
             <h2 className="text-sm font-bold mb-4 text-slate-200">Notas internas</h2>
-            <p className="text-xs text-slate-500 mb-4">Solo visible para ti como administrador. No se guarda en la DB en esta versión — usa esto para notas temporales de sesión.</p>
-            <div className="flex gap-2 mb-4">
-              <input
-                className="flex-1 bg-slate-800 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-600/50 placeholder:text-slate-500"
+            <p className="text-xs text-slate-500 mb-4">Solo visibles para el super admin. Se persisten en la DB por clínica.</p>
+            <div className="flex flex-col gap-2 mb-4">
+              <textarea
+                rows={3}
+                className="w-full bg-slate-800 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-600/50 placeholder:text-slate-500"
                 placeholder="Ej: Cliente pagó el 15/03, activar PRO por 1 año…"
                 value={note}
                 onChange={e => setNote(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && addNote()}
+                onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) addNote(); }}
               />
-              <button onClick={addNote} className="px-4 py-2 bg-brand-600 text-white text-sm font-bold rounded-lg hover:bg-brand-700 transition-colors">
-                Agregar
+              <button
+                onClick={addNote}
+                disabled={savingNote || !note.trim()}
+                className="self-end px-4 py-2 bg-brand-600 text-white text-sm font-bold rounded-lg hover:bg-brand-700 disabled:opacity-50 transition-colors"
+              >
+                {savingNote ? "Guardando…" : "Agregar nota"}
               </button>
             </div>
-            {notes.length === 0 ? (
+            {!notesLoaded ? (
+              <p className="text-sm text-slate-500 text-center py-6">Cargando…</p>
+            ) : notes.length === 0 ? (
               <p className="text-sm text-slate-500 text-center py-6">Sin notas aún</p>
             ) : (
               <div className="space-y-2">
-                {notes.map((n, i) => (
-                  <div key={i} className="flex items-start gap-2 bg-slate-800 rounded-lg px-3 py-2.5">
-                    <span className="text-brand-400 text-xs mt-0.5">📝</span>
-                    <span className="text-xs text-slate-300">{n}</span>
-                  </div>
-                ))}
+                {notes.map(n => {
+                  const authorLabel = n.author
+                    ? `${n.author.firstName} ${n.author.lastName}`
+                    : "Super admin";
+                  return (
+                    <div key={n.id} className="flex items-start gap-2 bg-slate-800 rounded-lg px-3 py-2.5 group">
+                      <span className="text-brand-400 text-xs mt-0.5">📝</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-slate-300 whitespace-pre-wrap break-words">{n.content}</p>
+                        <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500">
+                          <span className="font-semibold text-slate-400">{authorLabel}</span>
+                          <span>·</span>
+                          <span>{relativeTime(n.createdAt)}</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => deleteNote(n.id)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-rose-900/40 text-slate-400 hover:text-rose-400 flex-shrink-0"
+                        aria-label="Eliminar nota"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

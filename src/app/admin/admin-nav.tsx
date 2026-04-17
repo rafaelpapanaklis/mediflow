@@ -4,11 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
-  { href: "/admin",          label: "Dashboard" },
-  { href: "/admin/clinics",  label: "Clinicas"  },
-  { href: "/admin/payments", label: "Facturación" },
-  { href: "/admin/churn",    label: "Churn"     },
-  { href: "/admin/settings", label: "Config"    },
+  { href: "/admin",              label: "Dashboard" },
+  { href: "/admin/clinics",      label: "Clinicas"  },
+  { href: "/admin/onboarding",   label: "Onboarding" },
+  { href: "/admin/payments",     label: "Facturación" },
+  { href: "/admin/churn",        label: "Churn"     },
+  { href: "/admin/announcements", label: "Anuncios" },
+  { href: "/admin/settings",     label: "Config"    },
 ];
 
 export function AdminNav() {
