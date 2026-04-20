@@ -58,8 +58,10 @@ function getKpiData(clinicId: string) {
         }),
         prisma.user.count({ where: { clinicId, isActive: true, role: { in: ["DOCTOR", "ADMIN", "SUPER_ADMIN"] } } }),
         prisma.invoice.count({ where: { clinicId, status: { in: ["PAID", "PARTIAL"] }, updatedAt: { gte: firstMonth } } }),
-        // 6 meses de ingresos agrupados por mes (date_trunc PG)
-        prisma.$queryRaw<Array<{ month: Date; total: number | null }>>`
+        // 6 meses de ingresos agrupados por mes (date_trunc PG).
+        // month puede venir como Date (Node driver) o como string ISO cuando
+        // la función se serializa por el cache de Next.js → toleramos ambos.
+        prisma.$queryRaw<Array<{ month: Date | string; total: number | string | null }>>`
           SELECT date_trunc('month', "updatedAt") AS month, COALESCE(SUM(paid), 0)::float AS total
           FROM invoices
           WHERE "clinicId" = ${clinicId}
@@ -67,7 +69,7 @@ function getKpiData(clinicId: string) {
             AND "updatedAt" >= ${sixMonthsAgo}
           GROUP BY month
           ORDER BY month ASC
-        `.catch(() => [] as Array<{ month: Date; total: number | null }>),
+        `.catch(() => [] as Array<{ month: Date | string; total: number | string | null }>),
       ]);
 
       const doctorIds = doctorStats.map(d => d.doctorId);
@@ -139,10 +141,14 @@ export default async function DashboardPage() {
   const pendingBalance = pendingInvoices._sum.balance ?? 0;
   const pendingCount   = typeof pendingInvoices._count === "number" ? pendingInvoices._count : 0;
 
-  // Serie mensual para el chart — rellenamos 6 meses siempre (0 si no hay datos)
+  // Serie mensual para el chart — rellenamos 6 meses siempre (0 si no hay datos).
+  // row.month puede ser Date o string ISO (depende del path de serialización
+  // del cache), normalizamos a Date antes de leerlo.
   const revenueByMonth = new Map<string, number>();
   for (const row of monthlyRevRaw) {
-    const key = `${row.month.getFullYear()}-${row.month.getMonth()}`;
+    const monthDate = row.month instanceof Date ? row.month : new Date(row.month);
+    if (isNaN(monthDate.getTime())) continue;
+    const key = `${monthDate.getFullYear()}-${monthDate.getMonth()}`;
     revenueByMonth.set(key, Number(row.total ?? 0));
   }
   const chartData: Array<{ label: string; value: number }> = [];
