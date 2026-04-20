@@ -35,6 +35,7 @@ export function ReportsClient() {
   const [to, setTo]     = useState(today.toISOString().slice(0, 10));
   const [data, setData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { load(); }, [from, to]);
 
@@ -53,13 +54,26 @@ export function ReportsClient() {
 
   async function load() {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`/api/admin/reports?from=${from}&to=${to}`);
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? `HTTP ${res.status}`);
+      }
       setData(await res.json());
-    } catch { toast.error("Error al cargar reporte"); }
-    finally { setLoading(false); }
+    } catch (e: any) {
+      const msg = e?.message ?? "Error al cargar reporte";
+      setError(msg);
+      toast.error(msg);
+    } finally { setLoading(false); }
   }
+
+  const hasData = data && (
+    data.summary.totalClinics > 0 ||
+    data.summary.periodPayments > 0 ||
+    data.monthlySeries.some(m => m.paid > 0 || m.newClinics > 0 || m.churned > 0)
+  );
 
   function downloadXlsx() {
     window.open(`/api/admin/reports?from=${from}&to=${to}&format=xlsx`, "_blank");
@@ -109,8 +123,22 @@ export function ReportsClient() {
         <input type="date" value={to}   onChange={e => { setPreset("custom"); setTo(e.target.value); }}   className="bg-slate-800 border border-slate-600 text-white text-sm rounded-lg px-3 py-1.5" />
       </div>
 
-      {loading || !data ? (
+      {loading ? (
         <div className="bg-slate-900 border border-slate-700 rounded-2xl p-10 text-center text-slate-500 text-sm">Cargando…</div>
+      ) : error ? (
+        <div className="bg-rose-950/40 border border-rose-700 rounded-2xl p-6 space-y-3">
+          <h3 className="text-sm font-bold text-rose-300">No se pudo cargar el reporte</h3>
+          <p className="text-xs text-rose-200 font-mono break-all">{error}</p>
+          <button onClick={load} className="text-xs font-bold text-brand-400 hover:underline">Reintentar</button>
+        </div>
+      ) : !data || !hasData ? (
+        <div className="bg-slate-900 border border-slate-700 rounded-2xl p-10 text-center space-y-2">
+          <div className="text-4xl">📊</div>
+          <h3 className="text-sm font-bold text-white">Sin datos todavía</h3>
+          <p className="text-xs text-slate-400 max-w-md mx-auto">
+            Aún no hay clínicas pagando o registros en este periodo. En cuanto registres pagos de suscripción desde /admin/payments, aparecerán aquí las métricas.
+          </p>
+        </div>
       ) : (
         <>
           {/* KPIs */}

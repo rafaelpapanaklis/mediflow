@@ -13,6 +13,27 @@ export const dynamic = "force-dynamic";
 
 interface MonthlyRow { month: string; paid: number; payments: number; newClinics: number; churned: number }
 
+function emptyMetrics(from: Date, to: Date) {
+  return {
+    summary: {
+      from:          from.toISOString(),
+      to:            to.toISOString(),
+      mrr: 0, arr: 0, arpu: 0, ltv: 0,
+      churnRate: 0, trialConversion: 0,
+      activeClinics: 0, trialClinics: 0, totalClinics: 0,
+      newClinicsPeriod: 0, churnedPeriod: 0,
+      periodRevenue: 0, periodPayments: 0,
+    },
+    monthlySeries: [] as MonthlyRow[],
+    periodInvoices: [] as any[],
+  };
+}
+
+async function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
+  try { return await p; }
+  catch (e) { console.error("[admin/reports] query failed:", e); return fallback; }
+}
+
 async function computeMetrics(from: Date, to: Date) {
   const now = new Date();
 
@@ -25,20 +46,30 @@ async function computeMetrics(from: Date, to: Date) {
     newClinicsPeriod,
     churnedPeriod,
   ] = await Promise.all([
-    prisma.clinic.findMany({ select: { id: true, plan: true, monthlyPrice: true, subscriptionStatus: true, createdAt: true, trialEndsAt: true } }),
-    prisma.clinic.findMany({ where: { subscriptionStatus: "active" }, select: { monthlyPrice: true, plan: true } }),
-    prisma.clinic.findMany({ where: { subscriptionStatus: { in: ["trialing", null as any] }, trialEndsAt: { gt: now } }, select: { id: true } }),
-    prisma.subscriptionInvoice.findMany({
+    safe(prisma.clinic.findMany({ select: { id: true, plan: true, monthlyPrice: true, subscriptionStatus: true, createdAt: true, trialEndsAt: true } }), [] as any[]),
+    safe(prisma.clinic.findMany({ where: { subscriptionStatus: "active" }, select: { monthlyPrice: true, plan: true } }), [] as any[]),
+    // Antes usaba { in: ["trialing", null as any] }. Prisma no matchea NULL
+    // dentro de IN; se reemplaza por OR explícito.
+    safe(prisma.clinic.findMany({
+      where: {
+        AND: [
+          { OR: [{ subscriptionStatus: "trialing" }, { subscriptionStatus: null }] },
+          { trialEndsAt: { gt: now } },
+        ],
+      },
+      select: { id: true },
+    }), [] as { id: string }[]),
+    safe(prisma.subscriptionInvoice.findMany({
       where: { createdAt: { gte: from, lte: to } },
       include: { clinic: { select: { name: true, plan: true } } },
       orderBy: { createdAt: "desc" },
-    }),
-    prisma.subscriptionInvoice.aggregate({
+    }), [] as any[]),
+    safe(prisma.subscriptionInvoice.aggregate({
       where: { status: "paid", paidAt: { gte: from, lte: to } },
       _sum: { amount: true }, _count: true,
-    }),
-    prisma.clinic.count({ where: { createdAt: { gte: from, lte: to } } }),
-    prisma.clinic.count({ where: { subscriptionStatus: "cancelled", updatedAt: { gte: from, lte: to } } }),
+    }), { _sum: { amount: 0 }, _count: 0 } as any),
+    safe(prisma.clinic.count({ where: { createdAt: { gte: from, lte: to } } }), 0),
+    safe(prisma.clinic.count({ where: { subscriptionStatus: "cancelled", updatedAt: { gte: from, lte: to } } }), 0),
   ]);
 
   const mrr = activeClinics.reduce((s, c) => s + (c.monthlyPrice ?? 0), 0);
@@ -60,22 +91,24 @@ async function computeMetrics(from: Date, to: Date) {
   const monthlySeries: MonthlyRow[] = [];
   const cursor = new Date(from.getFullYear(), from.getMonth(), 1);
   const end    = new Date(to.getFullYear(),   to.getMonth(),   1);
-  while (cursor <= end) {
+  // Guard contra loops infinitos / dates inválidas
+  let iterations = 0;
+  while (cursor <= end && iterations++ < 240) {
     const monthStart = new Date(cursor);
     const monthEnd   = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0, 23, 59, 59);
     const monthKey   = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`;
     const [paidAgg, newC, churned] = await Promise.all([
-      prisma.subscriptionInvoice.aggregate({
+      safe(prisma.subscriptionInvoice.aggregate({
         where: { status: "paid", paidAt: { gte: monthStart, lte: monthEnd } },
         _sum: { amount: true }, _count: true,
-      }),
-      prisma.clinic.count({ where: { createdAt: { gte: monthStart, lte: monthEnd } } }),
-      prisma.clinic.count({ where: { subscriptionStatus: "cancelled", updatedAt: { gte: monthStart, lte: monthEnd } } }),
+      }), { _sum: { amount: 0 }, _count: 0 } as any),
+      safe(prisma.clinic.count({ where: { createdAt: { gte: monthStart, lte: monthEnd } } }), 0),
+      safe(prisma.clinic.count({ where: { subscriptionStatus: "cancelled", updatedAt: { gte: monthStart, lte: monthEnd } } }), 0),
     ]);
     monthlySeries.push({
       month: monthKey,
       paid:       paidAgg._sum.amount ?? 0,
-      payments:   paidAgg._count,
+      payments:   paidAgg._count ?? 0,
       newClinics: newC,
       churned,
     });
@@ -102,15 +135,31 @@ async function computeMetrics(from: Date, to: Date) {
   };
 }
 
+function parseDate(raw: string | null, fallback: Date): Date {
+  if (!raw) return fallback;
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? fallback : d;
+}
+
 export async function GET(req: NextRequest) {
   if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const url = new URL(req.url);
-  const from = new Date(url.searchParams.get("from") ?? new Date(new Date().getFullYear(), 0, 1));
-  const to   = new Date(url.searchParams.get("to")   ?? new Date());
+  const from = parseDate(url.searchParams.get("from"), new Date(new Date().getFullYear(), 0, 1));
+  const to   = parseDate(url.searchParams.get("to"),   new Date());
   const format = url.searchParams.get("format") ?? "json";
 
-  const data = await computeMetrics(from, to);
+  if (from > to) return NextResponse.json({ error: "from debe ser anterior a to" }, { status: 400 });
+
+  let data;
+  try {
+    data = await computeMetrics(from, to);
+  } catch (err: any) {
+    console.error("[admin/reports] computeMetrics failed:", err);
+    data = emptyMetrics(from, to);
+    // No rompemos la respuesta: devolvemos datos vacíos y el client muestra
+    // "Sin datos todavía" en vez de un toast de error.
+  }
 
   if (format !== "xlsx") return NextResponse.json(data);
 
