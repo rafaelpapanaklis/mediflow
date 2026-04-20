@@ -9,6 +9,7 @@ import { ClinicActivityTab } from "@/components/admin/clinic-activity-tab";
 import { ClinicUsageTab } from "@/components/admin/clinic-usage-tab";
 import { ClinicStripeTab } from "@/components/admin/clinic-stripe-tab";
 import { SendMessageModal } from "@/components/admin/send-message-modal";
+import { DeleteClinicModal } from "@/components/admin/delete-clinic-modal";
 import type { TemplateChannel } from "@/lib/admin-templates";
 
 interface AdminNote {
@@ -22,15 +23,24 @@ const PLAN_PRICES: Record<string, number> = { BASIC: 49, PRO: 99, CLINIC: 249 };
 const BANK_INFO = { nombre: "Efthymios Rafail Papanaklis", clabe: "012910015008025244", banco: "BBVA" };
 
 interface Props {
-  clinic:             any;
-  recentActivity:     any[];
-  totalRevenue:       number;
-  totalInvoices:      number;
-  stripeConfigured:   boolean;
-  stripeInstructions: string;
+  clinic:               any;
+  recentActivity:       any[];
+  totalRevenue:         number;
+  totalInvoices:        number;
+  stripeConfigured:     boolean;
+  stripeInstructions:   string;
+  totalClinicsInSystem: number;
 }
 
-export function AdminClinicDetailClient({ clinic, recentActivity, totalRevenue, totalInvoices, stripeConfigured, stripeInstructions }: Props) {
+export function AdminClinicDetailClient({
+  clinic,
+  recentActivity,
+  totalRevenue,
+  totalInvoices,
+  stripeConfigured,
+  stripeInstructions,
+  totalClinicsInSystem,
+}: Props) {
   const [saving, setSaving]   = useState(false);
   const [note, setNote]       = useState("");
   const [notes, setNotes]     = useState<AdminNote[]>([]);
@@ -39,6 +49,7 @@ export function AdminClinicDetailClient({ clinic, recentActivity, totalRevenue, 
   const [editPlan, setEditPlan] = useState(clinic.plan);
   const [tab, setTab]         = useState("overview");
   const [modalChannel, setModalChannel] = useState<TemplateChannel | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Cargar notas al entrar al tab (la primera vez)
   useEffect(() => {
@@ -250,6 +261,7 @@ export function AdminClinicDetailClient({ clinic, recentActivity, totalRevenue, 
 
         {/* TAB: OVERVIEW */}
         {tab === "overview" && (
+          <div className="space-y-5">
           <div className="grid grid-cols-2 gap-5">
             {/* Clinic info */}
             <div className="bg-slate-900 border border-slate-700 rounded-xl p-5">
@@ -313,6 +325,26 @@ export function AdminClinicDetailClient({ clinic, recentActivity, totalRevenue, 
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Zona de peligro */}
+          <div className="rounded-2xl border-2 border-red-700/60 bg-red-950/30 p-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <Shield className="w-4 h-4 text-red-400" />
+              <h2 className="text-sm font-extrabold text-red-300 uppercase tracking-wide">Zona de peligro</h2>
+            </div>
+            <p className="text-xs text-red-200/80 leading-relaxed">
+              Eliminar una clínica borra de forma permanente todos sus datos (pacientes, citas, expedientes,
+              facturas, usuarios, archivos, etc.) y sus archivos en Supabase Storage. Esta acción no se puede deshacer.
+            </p>
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold px-4 py-2 rounded-xl transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              Eliminar clínica
+            </button>
+          </div>
           </div>
         )}
 
@@ -464,6 +496,24 @@ export function AdminClinicDetailClient({ clinic, recentActivity, totalRevenue, 
             clinicName={clinic.name}
             channel={modalChannel}
             onClose={() => setModalChannel(null)}
+          />
+        )}
+
+        {showDeleteModal && (
+          <DeleteClinicModal
+            clinicId={clinic.id}
+            clinicName={clinic.name}
+            counts={{
+              users:        clinic._count?.users        ?? clinic.users?.length ?? 0,
+              patients:     clinic._count?.patients     ?? 0,
+              appointments: clinic._count?.appointments ?? 0,
+              records:      clinic._count?.records      ?? 0,
+              invoices:     clinic._count?.invoices     ?? 0,
+              files:        clinic._count?.files        ?? 0,
+            }}
+            canDelete={totalClinicsInSystem > 1}
+            reason={totalClinicsInSystem <= 1 ? "Es la única clínica del sistema. El admin no permite borrar la última para no dejar la app vacía (útil durante QA/testing)." : undefined}
+            onClose={() => setShowDeleteModal(false)}
           />
         )}
       </div>

@@ -12,12 +12,15 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
     where: { id: params.id },
     include: {
       users:        { select: { id: true, firstName: true, lastName: true, email: true, phone: true, role: true, createdAt: true, isActive: true } },
-      _count:       { select: { patients: true, appointments: true, invoices: true, records: true } },
+      _count:       { select: { patients: true, appointments: true, invoices: true, records: true, users: true, files: true } },
       schedules:    true,
     },
   });
 
   if (!clinic) notFound();
+
+  // Para la modal de eliminar — total de clínicas para decidir si está permitido.
+  const totalClinics = await prisma.clinic.count();
 
   const recentActivity = await prisma.medicalRecord.findMany({
     where:   { clinicId: params.id },
@@ -40,6 +43,7 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
       totalInvoices={revenueStats._count.id}
       stripeConfigured={isStripeConfigured()}
       stripeInstructions={STRIPE_SETUP_INSTRUCTIONS}
+      totalClinicsInSystem={totalClinics}
     />
   );
 }
