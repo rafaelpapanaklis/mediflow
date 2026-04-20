@@ -1,4 +1,7 @@
-"use client";
+// Server-safe: no hooks ni event handlers → no "use client".
+// Pasar un LucideIcon como prop desde un Server Component fallaba con el error
+// "Functions cannot be passed directly to Client Components" cuando este
+// archivo estaba marcado como "use client".
 
 import type { LucideIcon } from "lucide-react";
 
