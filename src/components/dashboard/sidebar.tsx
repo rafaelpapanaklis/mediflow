@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ComponentType } from "react";
 import {
   LayoutDashboard, Calendar, Users, CreditCard,
   BarChart2, Settings, LogOut, Menu, X, Stethoscope,
@@ -22,8 +22,18 @@ import {
 import {
   Tooltip, TooltipContent, TooltipTrigger, TooltipProvider,
 } from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
 import { OnboardingMini } from "./onboarding-mini";
+
+type NavSection = "work" | "admin";
+
+type NavItem = {
+  key:       string;
+  href:      string;
+  icon:      ComponentType<{ size?: number | string; className?: string }>;
+  label:     string;
+  adminOnly: boolean;
+  section:   NavSection;
+};
 
 const CATEGORY_FEATURES: Record<string, string[]> = {
   DENTAL: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","xrays","whatsapp","team","reports","settings","procedures","landing","ai-assistant","teleconsulta"],
@@ -65,10 +75,10 @@ interface SidebarProps {
 }
 
 function useDarkMode() {
-  const [dark, setDark] = useState(false);
+  const [dark, setDark] = useState(true); // default dark (Claude Design)
   useLayoutEffect(() => {
     const saved = localStorage.getItem("theme");
-    const isDark = saved === "dark";
+    const isDark = saved !== "light";
     setDark(isDark);
     document.documentElement.classList.toggle("dark", isDark);
   }, []);
@@ -103,8 +113,8 @@ export function Sidebar({
   allClinics = [],
   onboardingCompleted,
 }: SidebarProps) {
-  const pathname   = usePathname();
-  const router     = useRouter();
+  const pathname = usePathname();
+  const router   = useRouter();
   const [open, setOpen] = useState(false);
   const { dark, toggle: toggleDark } = useDarkMode();
   const { collapsed, toggle: toggleCollapsed } = useCollapsed();
@@ -130,49 +140,51 @@ export function Sidebar({
   }
 
   const CATEGORY_LABELS: Record<string, string> = {
-    DENTAL:"Odontología", MEDICINE:"Medicina", NUTRITION:"Nutrición", PSYCHOLOGY:"Psicología",
-    DERMATOLOGY:"Dermatología", AESTHETIC_MEDICINE:"Med. Estética", HAIR_RESTORATION:"Capilar",
-    BEAUTY_CENTER:"Estética", BROW_LASH:"Cejas/Pestañas", MASSAGE:"Masajes",
-    LASER_HAIR_REMOVAL:"Láser", HAIR_SALON:"Peluquería", ALTERNATIVE_MEDICINE:"Med. Alternativa",
-    NAIL_SALON:"Uñas", SPA:"Spa", PHYSIOTHERAPY:"Fisioterapia", PODIATRY:"Podología", OTHER:"Otra",
+    DENTAL: "Odontología", MEDICINE: "Medicina", NUTRITION: "Nutrición", PSYCHOLOGY: "Psicología",
+    DERMATOLOGY: "Dermatología", AESTHETIC_MEDICINE: "Med. Estética", HAIR_RESTORATION: "Capilar",
+    BEAUTY_CENTER: "Estética", BROW_LASH: "Cejas/Pestañas", MASSAGE: "Masajes",
+    LASER_HAIR_REMOVAL: "Láser", HAIR_SALON: "Peluquería", ALTERNATIVE_MEDICINE: "Med. Alternativa",
+    NAIL_SALON: "Uñas", SPA: "Spa", PHYSIOTHERAPY: "Fisioterapia", PODIATRY: "Podología", OTHER: "Otra",
   };
 
-  const isAdmin  = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
-  const isDoctor = user.role === "DOCTOR";
-
+  const isAdmin = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
   const features = CATEGORY_FEATURES[clinicCategory] ?? CATEGORY_FEATURES.OTHER;
 
-  const ALL_NAV = [
-    { key:"dashboard",     href:"/dashboard",              icon:LayoutDashboard, label:"Dashboard",       adminOnly: false },
-    { key:"appointments",  href:"/dashboard/appointments", icon:Calendar,        label:"Agenda",          adminOnly: false },
-    { key:"patients",      href:"/dashboard/patients",     icon:Users,           label:"Pacientes",       adminOnly: false },
-    { key:"clinical",      href:"/dashboard/clinical",     icon:Stethoscope,     label:"Expedientes",     adminOnly: false },
-    { key:"treatments",    href:"/dashboard/treatments",   icon:Activity,        label:"Tratamientos",    adminOnly: false },
-    { key:"before-after",  href:"/dashboard/before-after", icon:Camera,          label:"Antes/Después",   adminOnly: false },
-    { key:"packages",      href:"/dashboard/packages",     icon:Gift,            label:"Paquetes",        adminOnly: true  },
-    { key:"formulas",      href:"/dashboard/formulas",     icon:FlaskConical,    label:"Fórmulas",        adminOnly: false },
-    { key:"walk-in",       href:"/dashboard/walk-in",      icon:Clock,           label:"Lista de espera", adminOnly: false },
-    { key:"exercises",     href:"/dashboard/exercises",    icon:Dumbbell,        label:"Ejercicios",      adminOnly: false },
-    { key:"orthotics",     href:"/dashboard/orthotics",    icon:Footprints,      label:"Ortesis",         adminOnly: false },
-    { key:"resources",     href:"/dashboard/resources",    icon:DoorOpen,        label:"Recursos/Salas",  adminOnly: true  },
-    { key:"billing",       href:"/dashboard/billing",      icon:CreditCard,      label:"Facturación",     adminOnly: true  },
-    { key:"inventory",     href:"/dashboard/inventory",    icon:Package,         label:"Inventario",      adminOnly: true  },
-    { key:"xrays",         href:"/dashboard/xrays",        icon:FileImage,       label:"Radiografías",    adminOnly: false },
-    { key:"whatsapp",      href:"/dashboard/whatsapp",     icon:MessageCircle,   label:"WhatsApp",        adminOnly: true  },
-    { key:"team",          href:"/dashboard/team",         icon:UserCog,         label:"Equipo",          adminOnly: true  },
-    { key:"reports",       href:"/dashboard/reports",      icon:BarChart2,       label:"Reportes",        adminOnly: true  },
-    { key:"settings",      href:"/dashboard/settings",     icon:Settings,        label:"Configuración",   adminOnly: false },
-    { key:"procedures",    href:"/dashboard/procedures",   icon:ClipboardList,   label:"Procedimientos",  adminOnly: true  },
-    { key:"landing",       href:"/dashboard/landing",      icon:Globe,           label:"Página web",      adminOnly: true  },
-    { key:"ai-assistant",  href:"/dashboard/ai-assistant", icon:Sparkles,        label:"IA Asistente",    adminOnly: false },
-    { key:"teleconsulta",  href:"/dashboard/teleconsulta", icon:Video,           label:"Teleconsulta",    adminOnly: false },
+  const ALL_NAV: NavItem[] = [
+    { key: "dashboard",    href: "/dashboard",              icon: LayoutDashboard, label: "Dashboard",       adminOnly: false, section: "work"  },
+    { key: "appointments", href: "/dashboard/appointments", icon: Calendar,        label: "Agenda",          adminOnly: false, section: "work"  },
+    { key: "patients",     href: "/dashboard/patients",     icon: Users,           label: "Pacientes",       adminOnly: false, section: "work"  },
+    { key: "clinical",     href: "/dashboard/clinical",     icon: Stethoscope,     label: "Expedientes",     adminOnly: false, section: "work"  },
+    { key: "treatments",   href: "/dashboard/treatments",   icon: Activity,        label: "Tratamientos",    adminOnly: false, section: "work"  },
+    { key: "before-after", href: "/dashboard/before-after", icon: Camera,          label: "Antes/Después",   adminOnly: false, section: "work"  },
+    { key: "formulas",     href: "/dashboard/formulas",     icon: FlaskConical,    label: "Fórmulas",        adminOnly: false, section: "work"  },
+    { key: "walk-in",      href: "/dashboard/walk-in",      icon: Clock,           label: "Lista de espera", adminOnly: false, section: "work"  },
+    { key: "exercises",    href: "/dashboard/exercises",    icon: Dumbbell,        label: "Ejercicios",      adminOnly: false, section: "work"  },
+    { key: "orthotics",    href: "/dashboard/orthotics",    icon: Footprints,      label: "Ortesis",         adminOnly: false, section: "work"  },
+    { key: "xrays",        href: "/dashboard/xrays",        icon: FileImage,       label: "Radiografías",    adminOnly: false, section: "work"  },
+    { key: "ai-assistant", href: "/dashboard/ai-assistant", icon: Sparkles,        label: "IA Asistente",    adminOnly: false, section: "work"  },
+    { key: "teleconsulta", href: "/dashboard/teleconsulta", icon: Video,           label: "Teleconsulta",    adminOnly: false, section: "work"  },
+
+    { key: "packages",     href: "/dashboard/packages",     icon: Gift,            label: "Paquetes",        adminOnly: true,  section: "admin" },
+    { key: "resources",    href: "/dashboard/resources",    icon: DoorOpen,        label: "Recursos/Salas",  adminOnly: true,  section: "admin" },
+    { key: "billing",      href: "/dashboard/billing",      icon: CreditCard,      label: "Facturación",     adminOnly: true,  section: "admin" },
+    { key: "inventory",    href: "/dashboard/inventory",    icon: Package,         label: "Inventario",      adminOnly: true,  section: "admin" },
+    { key: "whatsapp",     href: "/dashboard/whatsapp",     icon: MessageCircle,   label: "WhatsApp",        adminOnly: true,  section: "admin" },
+    { key: "team",         href: "/dashboard/team",         icon: UserCog,         label: "Equipo",          adminOnly: true,  section: "admin" },
+    { key: "reports",      href: "/dashboard/reports",      icon: BarChart2,       label: "Reportes",        adminOnly: true,  section: "admin" },
+    { key: "procedures",   href: "/dashboard/procedures",   icon: ClipboardList,   label: "Procedimientos",  adminOnly: true,  section: "admin" },
+    { key: "landing",      href: "/dashboard/landing",      icon: Globe,           label: "Página web",      adminOnly: true,  section: "admin" },
+    { key: "settings",     href: "/dashboard/settings",     icon: Settings,        label: "Configuración",   adminOnly: false, section: "admin" },
   ];
 
-  const NAV = ALL_NAV.filter((n) => {
+  const NAV = ALL_NAV.filter(n => {
     if (!features.includes(n.key)) return false;
     if (n.adminOnly && !isAdmin) return false;
     return true;
   });
+
+  const navWork  = NAV.filter(n => n.section === "work");
+  const navAdmin = NAV.filter(n => n.section === "admin");
 
   async function logout() {
     const supabase = createClient();
@@ -183,47 +195,87 @@ export function Sidebar({
 
   const initials = `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase();
   const roleLabel: Record<string, string> = {
-    ADMIN:"Admin", DOCTOR:"Doctor", RECEPTIONIST:"Recep.",
-    SUPER_ADMIN:"Admin", READONLY:"Solo lectura",
+    ADMIN: "Admin", DOCTOR: "Doctor", RECEPTIONIST: "Recep.",
+    SUPER_ADMIN: "Admin", READONLY: "Solo lectura",
   };
-  void isDoctor;
+
+  // Helper: un nav item con el estilo .nav-item-new
+  const renderNavItem = (item: NavItem, isCollapsed: boolean) => {
+    const active = item.href === "/dashboard"
+      ? pathname === "/dashboard"
+      : pathname.startsWith(item.href);
+    const Icon = item.icon;
+    const isWa = item.key === "whatsapp";
+
+    const link = (
+      <Link
+        href={item.href}
+        prefetch
+        onClick={() => setOpen(false)}
+        aria-current={active ? "page" : undefined}
+        className={cn(
+          "nav-item-new",
+          active && "nav-item-new--active",
+          isCollapsed && "justify-center"
+        )}
+        style={isCollapsed ? { padding: "7px 0" } : undefined}
+      >
+        <Icon size={16} />
+        {!isCollapsed && (
+          <>
+            <span className="truncate">{item.label}</span>
+            {isWa && !active && <span className="nav-item-new__dot" />}
+          </>
+        )}
+      </Link>
+    );
+
+    if (isCollapsed) {
+      return (
+        <li key={item.href} style={{ listStyle: "none" }}>
+          <Tooltip>
+            <TooltipTrigger asChild>{link}</TooltipTrigger>
+            <TooltipContent side="right">{item.label}</TooltipContent>
+          </Tooltip>
+        </li>
+      );
+    }
+    return <li key={item.href} style={{ listStyle: "none" }}>{link}</li>;
+  };
 
   const SidebarContent = ({ isCollapsed }: { isCollapsed: boolean }) => (
     <TooltipProvider delayDuration={0}>
-      <div className="flex h-full flex-col bg-sidebar">
-        {/* Header */}
-        <div className="flex flex-col gap-2 p-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet to-indigo shadow-lg shadow-violet/20">
-              <span className="text-sm font-bold text-white">M</span>
-            </div>
-            {!isCollapsed && (
-              <div className="flex min-w-0 flex-col">
-                <span className="truncate text-base font-semibold text-sidebar-foreground">MediFlow</span>
-                <span className="truncate text-xs text-muted-foreground">{plan}</span>
-              </div>
-            )}
+      <div
+        className={cn("sidebar-new", isCollapsed && "sidebar-new--collapsed")}
+        style={{ width: isCollapsed ? 72 : 232 }}
+      >
+        {/* Brand */}
+        <div className="sidebar-new__brand">
+          <div className="sidebar-new__logo">
+            <span style={{ fontSize: 14 }}>M</span>
           </div>
-
-          {/* Clinic switcher */}
+          {!isCollapsed && (
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="sidebar-new__brandname">MediFlow</div>
+              <div className="sidebar-new__brandsub">{plan}</div>
+            </div>
+          )}
           {!isCollapsed && hasMultipleClinics && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className="mt-2 h-auto w-full justify-between rounded-lg border border-sidebar-border bg-sidebar-accent/40 px-3 py-2 text-sm hover:bg-sidebar-accent/70"
+                <button
+                  type="button"
+                  className="icon-btn-new"
+                  style={{ width: 24, height: 24 }}
+                  aria-label="Cambiar clínica"
                 >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    <span className="truncate text-sidebar-foreground">{clinicName}</span>
-                  </div>
-                  <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-                </Button>
+                  <ChevronsUpDown size={12} />
+                </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-[240px]">
+              <DropdownMenuContent align="end" className="w-[240px]">
                 <DropdownMenuLabel>Cambiar clínica</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {allClinics.map((c) => (
+                {allClinics.map(c => (
                   <DropdownMenuItem
                     key={c.clinicId}
                     disabled={switching}
@@ -241,84 +293,52 @@ export function Sidebar({
                       </span>
                     </div>
                     {c.clinicId === clinicId && (
-                      <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-violet" />
+                      <span className="ml-auto h-2 w-2 shrink-0 rounded-full" style={{ background: "var(--brand)" }} />
                     )}
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-          {!isCollapsed && !hasMultipleClinics && (
-            <div className="mt-1 truncate pl-12 text-xs text-muted-foreground">{clinicName}</div>
-          )}
         </div>
 
-        {/* Nav */}
-        <nav className="scrollbar-thin flex-1 overflow-y-auto px-3 py-2">
-          <ul className="flex flex-col gap-1">
-            {NAV.map((item) => {
-              const active = item.href === "/dashboard"
-                ? pathname === "/dashboard"
-                : pathname.startsWith(item.href);
-              const Icon = item.icon;
-              const isWa = item.key === "whatsapp";
+        {/* Clínica actual (sólo una) */}
+        {!isCollapsed && !hasMultipleClinics && (
+          <div
+            style={{
+              padding: "0 10px 8px",
+              fontSize: 11,
+              color: "var(--text-3)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {clinicName}
+          </div>
+        )}
 
-              const link = (
-                <Link
-                  href={item.href}
-                  prefetch
-                  onClick={() => setOpen(false)}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar",
-                    active
-                      ? "bg-gradient-to-r from-violet/20 to-indigo/10 text-sidebar-foreground"
-                      : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                    isCollapsed && "justify-center px-2"
-                  )}
-                >
-                  {active && (
-                    <span className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r-full bg-violet" />
-                  )}
-                  <Icon
-                    className={cn(
-                      "h-5 w-5 shrink-0 transition-colors",
-                      active ? "text-violet" : "text-muted-foreground group-hover:text-sidebar-accent-foreground"
-                    )}
-                    aria-hidden
-                  />
-                  {!isCollapsed && (
-                    <>
-                      <span className="truncate">{item.label}</span>
-                      {isWa && !active && (
-                        <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
-                      )}
-                    </>
-                  )}
-                </Link>
-              );
-
-              if (isCollapsed) {
-                return (
-                  <li key={item.href}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>{link}</TooltipTrigger>
-                      <TooltipContent side="right">{item.label}</TooltipContent>
-                    </Tooltip>
-                  </li>
-                );
-              }
-              return <li key={item.href}>{link}</li>;
-            })}
+        {/* Nav scroll area */}
+        <nav className="scrollbar-thin" style={{ flex: 1, overflowY: "auto", marginRight: -4, paddingRight: 4 }}>
+          {!isCollapsed && <div className="nav-section-new">Principal</div>}
+          <ul style={{ margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+            {navWork.map(item => renderNavItem(item, isCollapsed))}
           </ul>
+
+          {navAdmin.length > 0 && (
+            <>
+              {!isCollapsed && <div className="nav-section-new">Administración</div>}
+              <ul style={{ margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+                {navAdmin.map(item => renderNavItem(item, isCollapsed))}
+              </ul>
+            </>
+          )}
         </nav>
 
         {/* Footer */}
-        <div className="mt-auto border-t border-sidebar-border p-3">
-          {/* Onboarding mini */}
+        <div style={{ marginTop: "auto", paddingTop: 12, borderTop: "1px solid var(--border-soft)", display: "flex", flexDirection: "column", gap: 8 }}>
           {!isCollapsed && onboardingCompleted && (
-            <div className="mb-3">
+            <div style={{ padding: "0 2px" }}>
               <OnboardingMini completed={onboardingCompleted} />
             </div>
           )}
@@ -326,46 +346,44 @@ export function Sidebar({
           {/* Theme toggle */}
           <button
             onClick={toggleDark}
-            className={cn(
-              "mb-1 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-              isCollapsed && "justify-center px-2"
-            )}
+            type="button"
+            className={cn("nav-item-new", isCollapsed && "justify-center")}
+            style={isCollapsed ? { padding: "7px 0" } : undefined}
             aria-label="Cambiar tema"
           >
-            {dark ? <Moon className="h-4 w-4 shrink-0" /> : <Sun className="h-4 w-4 shrink-0" />}
+            {dark ? <Moon size={14} /> : <Sun size={14} />}
             {!isCollapsed && <span>{dark ? "Modo oscuro" : "Modo claro"}</span>}
           </button>
 
-          {/* User dropdown */}
+          {/* User chip + dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                className={cn(
-                  "h-auto w-full justify-start gap-3 rounded-lg p-2 hover:bg-sidebar-accent",
-                  isCollapsed && "justify-center"
-                )}
-              >
+              <button type="button" className="user-chip-new" style={{ justifyContent: isCollapsed ? "center" : "flex-start" }}>
                 <div
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-                  style={{ background: user.color ?? "#7c3aed" }}
+                  className="avatar-new"
+                  style={{
+                    background: `linear-gradient(135deg, ${user.color ?? "#a78bfa"}, #7c3aed)`,
+                    width: 28,
+                    height: 28,
+                    fontSize: 10,
+                  }}
                 >
                   {initials}
                 </div>
                 {!isCollapsed && (
                   <>
-                    <div className="flex min-w-0 flex-1 flex-col items-start text-left">
-                      <span className="truncate text-sm font-medium text-sidebar-foreground">
+                    <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+                      <div className="user-chip-new__name truncate">
                         {user.firstName} {user.lastName}
-                      </span>
-                      <span className="truncate text-xs text-muted-foreground">
+                      </div>
+                      <div className="user-chip-new__role">
                         {roleLabel[user.role] ?? user.role}
-                      </span>
+                      </div>
                     </div>
-                    <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <ChevronDown size={14} style={{ color: "var(--text-3)" }} />
                   </>
                 )}
-              </Button>
+              </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align={isCollapsed ? "center" : "end"} side="top" className="w-56">
               <DropdownMenuLabel>
@@ -392,10 +410,12 @@ export function Sidebar({
           {/* Collapse toggle (desktop only) */}
           <button
             onClick={toggleCollapsed}
-            className="mt-2 hidden w-full items-center justify-center gap-2 rounded-lg px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground lg:flex"
+            type="button"
+            className={cn("nav-item-new hidden lg:flex", isCollapsed && "justify-center")}
+            style={isCollapsed ? { padding: "7px 0" } : undefined}
             aria-label={isCollapsed ? "Expandir barra lateral" : "Colapsar barra lateral"}
           >
-            {isCollapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            {isCollapsed ? <PanelLeft size={14} /> : <PanelLeftClose size={14} />}
             {!isCollapsed && <span>Colapsar</span>}
           </button>
         </div>
@@ -406,30 +426,37 @@ export function Sidebar({
   return (
     <>
       {/* Desktop sidebar */}
-      <aside
-        className={cn(
-          "sticky top-0 hidden h-screen shrink-0 flex-col border-r border-sidebar-border lg:flex",
-          "transition-[width] duration-300",
-          collapsed ? "w-[72px]" : "w-[260px]"
-        )}
-      >
+      <div className="hidden lg:block">
         <SidebarContent isCollapsed={collapsed} />
-      </aside>
+      </div>
 
       {/* Mobile top bar */}
-      <div className="fixed left-0 right-0 top-0 z-40 flex h-14 items-center gap-3 border-b border-sidebar-border bg-sidebar px-4 lg:hidden">
+      <div
+        className="fixed left-0 right-0 top-0 z-40 flex h-14 items-center gap-3 border-b lg:hidden"
+        style={{
+          borderColor: "var(--border-soft)",
+          background: "rgba(10,10,15,0.9)",
+          backdropFilter: "blur(8px)",
+          padding: "0 16px",
+        }}
+      >
         <button
           onClick={() => setOpen(true)}
-          className="rounded-lg p-1.5 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          type="button"
+          className="icon-btn-new"
           aria-label="Abrir menú"
         >
-          <Menu className="h-5 w-5" />
+          <Menu size={14} />
         </button>
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet to-indigo">
-          <span className="text-sm font-bold text-white">M</span>
+        <div className="sidebar-new__logo" style={{ width: 28, height: 28 }}>
+          <span style={{ fontSize: 14 }}>M</span>
         </div>
-        <span className="text-base font-semibold text-sidebar-foreground">MediFlow</span>
-        <span className="ml-auto max-w-[140px] truncate text-sm text-muted-foreground">{clinicName}</span>
+        <span className="sidebar-new__brandname">MediFlow</span>
+        <span
+          style={{ marginLeft: "auto", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12, color: "var(--text-3)" }}
+        >
+          {clinicName}
+        </span>
       </div>
 
       {/* Mobile drawer with focus trap */}
@@ -449,7 +476,6 @@ function MobileDrawer({ onClose, children }: { onClose: () => void; children: Re
     const drawer = drawerRef.current;
     if (!drawer) return;
 
-    // Focus first interactive element
     const firstFocusable = drawer.querySelector<HTMLElement>(
       'a[href], button, input, textarea, select, [tabindex]:not([tabindex="-1"])'
     );
@@ -459,7 +485,7 @@ function MobileDrawer({ onClose, children }: { onClose: () => void; children: Re
       if (e.key === "Escape") { onClose(); return; }
       if (e.key !== "Tab") return;
 
-      const focusable = drawer.querySelectorAll<HTMLElement>(
+      const focusable = drawer!.querySelectorAll<HTMLElement>(
         'a[href], button:not([disabled]), input, textarea, select, [tabindex]:not([tabindex="-1"])'
       );
       if (focusable.length === 0) return;
@@ -482,14 +508,16 @@ function MobileDrawer({ onClose, children }: { onClose: () => void; children: Re
 
   return (
     <div className="fixed inset-0 z-50 flex lg:hidden" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <aside ref={drawerRef} className="relative flex h-full w-[280px] flex-col border-r border-sidebar-border">
+      <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.7)" }} onClick={onClose} />
+      <aside ref={drawerRef} className="relative flex h-full w-[280px] flex-col">
         <button
-          className="absolute right-3 top-3 z-10 rounded-lg p-1.5 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          type="button"
+          className="icon-btn-new"
+          style={{ position: "absolute", right: 12, top: 12, zIndex: 10 }}
           onClick={onClose}
           aria-label="Cerrar menú"
         >
-          <X className="h-4 w-4" />
+          <X size={14} />
         </button>
         {children}
       </aside>

@@ -1,5 +1,6 @@
 import { getCurrentUser, getUserClinics } from "@/lib/auth";
 import { Sidebar } from "@/components/dashboard/sidebar";
+import { Topbar } from "@/components/dashboard/topbar";
 import { QuickActionsBar } from "@/components/dashboard/quick-actions";
 import { TodayStrip } from "@/components/dashboard/today-strip";
 import { GlobalAnnouncementBanner } from "@/components/dashboard/global-announcement-banner";
@@ -88,6 +89,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           </div>
         )}
         <GlobalAnnouncementBanner />
+        <Topbar crumbs={[clinic.name, "Dashboard"]} hasNotifications />
         <div className="border-b border-border bg-card pt-16 lg:pt-0">
           <div className="px-4 pt-3 lg:px-6 lg:pt-4">
             <QuickActionsBar
