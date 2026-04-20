@@ -10,6 +10,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { KpiCard }   from "@/components/ui/design-system/kpi-card";
+import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import toast from "react-hot-toast";
 
 interface Patient { id: string; firstName: string; lastName: string; patientNumber: string; phone?: string | null }
@@ -553,75 +556,97 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
   // Shared form for new and edit
   // ApptForm moved outside — see standalone function below
 
+  const completedCount = appts.filter(a => a.status === "COMPLETED").length;
+  const periodTitle =
+    view === "month" ? `${MONTHS_ES[currentDate.getMonth()]} ${currentDate.getFullYear()}` :
+    view === "week"  ? `Semana del ${currentDate.getDate()} de ${MONTHS_ES[currentDate.getMonth()]}` :
+                       `${currentDate.getDate()} de ${MONTHS_ES[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
+
   return (
-    <div className="flex gap-5 h-full">
-      <div className="flex-1 min-w-0">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-          <div className="flex items-center gap-2">
-            <button onClick={prevPeriod} className="p-2.5 rounded-xl hover:bg-muted transition-colors"><ChevronLeft className="w-5 h-5" /></button>
-            <button onClick={nextPeriod} className="p-2.5 rounded-xl hover:bg-muted transition-colors"><ChevronRight className="w-5 h-5" /></button>
-            <h1 className="text-xl font-extrabold ml-1">
-              {view==="month" ? `${MONTHS_ES[currentDate.getMonth()]} ${currentDate.getFullYear()}`
-               : view==="week" ? `Semana del ${currentDate.getDate()} de ${MONTHS_ES[currentDate.getMonth()]}`
-               : `${currentDate.getDate()} de ${MONTHS_ES[currentDate.getMonth()]} ${currentDate.getFullYear()}`}
-            </h1>
-            <button onClick={() => { setCurrentDate(new Date(today.getFullYear(), today.getMonth(), 1)); setSelectedDay(todayStr); }}
-              className="text-sm font-bold text-brand-600 hover:underline ml-1">Hoy</button>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <select value={filterDoc} onChange={e => setFilterDoc(e.target.value)}
-              className="h-11 rounded-xl border border-border bg-card px-3 text-base focus:outline-none">
-              <option value="all">Todos los doctores</option>
-              {doctors.map(d => <option key={d.id} value={d.id}>Dr/a. {d.firstName} {d.lastName}</option>)}
-            </select>
-            <div className="flex bg-muted rounded-xl p-1 gap-0.5">
-              {([["month","Mes",<Calendar key="c" className="w-4 h-4"/>],["week","Sem",<CalendarDays key="cd" className="w-4 h-4"/>],["day","Día",<List key="l" className="w-4 h-4"/>]] as const).map(([v, lbl, icon]) => (
-                <button key={v} onClick={() => { setView(v as ViewMode); if (v!=="month") setCurrentDate(today); }}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold transition-colors ${view===v?"bg-card shadow-sm":"text-muted-foreground hover:text-foreground"}`}>
-                  {icon} {lbl}
-                </button>
-              ))}
-            </div>
-            <Button onClick={() => openNew(selectedDay)}>
-              <Plus className="w-5 h-5 mr-1.5" /> Nueva cita
-            </Button>
+    <div style={{ padding: "24px 28px", maxWidth: 1400, margin: "0 auto" }}>
+      {/* Header: title + period nav + actions */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
+        <div>
+          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>Agenda</h1>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+            <button onClick={prevPeriod} className="icon-btn-new" type="button" aria-label="Periodo anterior">
+              <ChevronLeft size={14} />
+            </button>
+            <button onClick={nextPeriod} className="icon-btn-new" type="button" aria-label="Siguiente periodo">
+              <ChevronRight size={14} />
+            </button>
+            <p style={{ color: "var(--text-3)", fontSize: 13, margin: 0, textTransform: "capitalize" }}>{periodTitle}</p>
+            <button
+              onClick={() => { setCurrentDate(new Date(today.getFullYear(), today.getMonth(), 1)); setSelectedDay(todayStr); }}
+              className="btn-new btn-new--ghost btn-new--sm"
+              type="button"
+            >
+              Hoy
+            </button>
           </div>
         </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-4 gap-3 mb-4">
-          {[
-            { label:"Citas hoy",   val:todayAppts.length,                              color:"text-brand-600"   },
-            { label:"Este mes",    val:monthAppts.length,                              color:"text-foreground"  },
-            { label:"Pendientes",  val:pendingCount,                                   color:"text-amber-600"   },
-            { label:"Completadas", val:appts.filter(a=>a.status==="COMPLETED").length, color:"text-emerald-600" },
-          ].map(s => (
-            <div key={s.label} className="bg-card border border-border rounded-2xl px-4 py-3 shadow-card">
-              <div className={`text-3xl font-extrabold ${s.color}`}>{s.val}</div>
-              <div className="text-base text-muted-foreground mt-0.5">{s.label}</div>
-            </div>
-          ))}
-        </div>
-
-        <div className="bg-card border border-border rounded-2xl shadow-card overflow-hidden">
-          {view==="month" && <MonthView />}
-          {view==="week"  && <WeekView  />}
-          {view==="day"   && <DayView   />}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <select
+            value={filterDoc}
+            onChange={e => setFilterDoc(e.target.value)}
+            className="input-new"
+            style={{ width: "auto", minWidth: 180 }}
+          >
+            <option value="all">Todos los doctores</option>
+            {doctors.map(d => <option key={d.id} value={d.id}>Dr/a. {d.firstName} {d.lastName}</option>)}
+          </select>
+          <div className="segment-new">
+            {([["month", "Mes", Calendar], ["week", "Sem", CalendarDays], ["day", "Día", List]] as const).map(([v, lbl, Icon]) => (
+              <button
+                key={v}
+                onClick={() => { setView(v as ViewMode); if (v !== "month") setCurrentDate(today); }}
+                type="button"
+                className={`segment-new__btn ${view === v ? "segment-new__btn--active" : ""}`}
+              >
+                <Icon size={11} style={{ marginRight: 4, display: "inline", verticalAlign: -2 }} />
+                {lbl}
+              </button>
+            ))}
+          </div>
+          <ButtonNew variant="primary" icon={<Plus size={14} />} onClick={() => openNew(selectedDay)}>
+            Nueva cita
+          </ButtonNew>
         </div>
       </div>
 
+      {/* Stats */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginBottom: 20 }}>
+        <KpiCard label="Citas hoy"   value={String(todayAppts.length)} icon={Calendar} />
+        <KpiCard label="Este mes"    value={String(monthAppts.length)} icon={CalendarDays} />
+        <KpiCard label="Pendientes"  value={String(pendingCount)} icon={List} />
+        <KpiCard label="Completadas" value={String(completedCount)} icon={CalendarCheck} />
+      </div>
+
+      {/* Main layout — calendar + side panel */}
+      <div className="flex gap-5" style={{ alignItems: "flex-start" }}>
+        <div className="flex-1 min-w-0">
+          <div className="card" style={{ overflow: "hidden" }}>
+            {view === "month" && <MonthView />}
+            {view === "week"  && <WeekView  />}
+            {view === "day"   && <DayView   />}
+          </div>
+        </div>
+
       {/* Side panel */}
       <div className="w-72 flex-shrink-0">
-        <div className="bg-card border border-border rounded-2xl shadow-card overflow-hidden">
-          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+        <div className="card" style={{ overflow: "hidden" }}>
+          <div className="card__header">
             <div>
-              <div className="text-base font-bold">{DAYS_ES[(selDate.getDay()+6)%7]} {selDate.getDate()} {MONTHS_ES[selDate.getMonth()]}</div>
-              <div className="text-sm text-muted-foreground">{selAppts.length} cita{selAppts.length!==1?"s":""}</div>
+              <div className="card__title">{DAYS_ES[(selDate.getDay()+6)%7]} {selDate.getDate()} {MONTHS_ES[selDate.getMonth()]}</div>
+              <div className="card__sub">{selAppts.length} cita{selAppts.length!==1?"s":""}</div>
             </div>
-            <button onClick={() => openNew(selectedDay)}
-              className="w-9 h-9 rounded-xl bg-brand-600 text-white flex items-center justify-center hover:bg-brand-700 transition-colors">
-              <Plus className="w-5 h-5" />
+            <button
+              onClick={() => openNew(selectedDay)}
+              type="button"
+              className="icon-btn-new"
+              aria-label="Nueva cita"
+            >
+              <Plus size={14} />
             </button>
           </div>
           <div className="divide-y divide-border/50 max-h-[calc(100vh-260px)] overflow-y-auto">
@@ -657,11 +682,13 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
 
       {/* New appointment modal */}
       {showNew && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-card z-10">
-              <h2 className="text-xl font-bold">Nueva cita</h2>
-              <button onClick={() => setShowNew(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
+        <div className="modal-overlay" onClick={() => setShowNew(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal__header">
+              <div className="modal__title">Nueva cita</div>
+              <button onClick={() => setShowNew(false)} type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label="Cerrar">
+                <X size={14} />
+              </button>
             </div>
             <ApptForm form={form} setForm={setForm} doctors={doctors} patients={patients} loading={loading} onSubmit={createAppt} onCancel={() => { setShowNew(false); setShowEdit(false); }} label="✅ Agendar cita" />
           </div>
@@ -670,11 +697,13 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
 
       {/* Edit modal */}
       {showEdit && showDetail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-card z-10">
-              <h2 className="text-xl font-bold">Editar cita</h2>
-              <button onClick={() => setShowEdit(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
+        <div className="modal-overlay" onClick={() => setShowEdit(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal__header">
+              <div className="modal__title">Editar cita</div>
+              <button onClick={() => setShowEdit(false)} type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label="Cerrar">
+                <X size={14} />
+              </button>
             </div>
             <ApptForm form={form} setForm={setForm} doctors={doctors} patients={patients} loading={loading} onSubmit={saveEdit} onCancel={() => { setShowNew(false); setShowEdit(false); }} label="💾 Guardar cambios" />
           </div>
@@ -687,24 +716,25 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
         const cfg   = STATUS_CONFIG[appt.status]??STATUS_CONFIG.PENDING;
         const color = docColorMap[appt.doctorId]??DOC_COLORS[0];
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-            <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md max-h-[92vh] overflow-y-auto">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-border" style={{ borderLeftWidth:4, borderLeftColor:color.border }}>
+          <div className="modal-overlay" onClick={() => setShowDetail(null)}>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ borderLeftWidth: 4, borderLeftColor: color.border }}>
+              <div className="modal__header">
                 <div className="flex items-center gap-2">
                   <div className={`w-3 h-3 rounded-full ${cfg.dot}`} />
-                  <h2 className="text-xl font-bold">{appt.type}</h2>
+                  <div className="modal__title">{appt.type}</div>
                 </div>
                 <div className="flex items-center gap-1">
-                  {/* Improvement 5: Edit button in detail */}
                   <button onClick={() => {
                     setForm({ patientId:appt.patientId, doctorId:appt.doctorId, type:appt.type,
                       date:appt.date.split("T")[0], startTime:appt.startTime, durationMins:appt.durationMins, notes:appt.notes??"", mode:appt.mode??"IN_PERSON"
                     });
                     setShowEdit(true);
-                  }} className="p-2 rounded-lg hover:bg-muted text-muted-foreground" title="Editar cita">
-                    <Edit className="w-5 h-5" />
+                  }} type="button" className="btn-new btn-new--ghost btn-new--sm" title="Editar cita">
+                    <Edit size={14} />
                   </button>
-                  <button onClick={() => setShowDetail(null)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
+                  <button onClick={() => setShowDetail(null)} type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label="Cerrar">
+                    <X size={14} />
+                  </button>
                 </div>
               </div>
               <div className="px-6 py-5 space-y-4">
@@ -808,6 +838,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
           </div>
         );
       })()}
+      </div>
     </div>
   );
 }
