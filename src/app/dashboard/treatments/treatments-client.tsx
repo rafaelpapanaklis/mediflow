@@ -4,7 +4,21 @@ import { useState } from "react";
 import Link from "next/link";
 import { Plus, ChevronRight, AlertTriangle, CheckCircle, Clock, X, Activity } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { KpiCard }   from "@/components/ui/design-system/kpi-card";
+import { BadgeNew }  from "@/components/ui/design-system/badge-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { AvatarNew } from "@/components/ui/design-system/avatar-new";
+import { CardNew }   from "@/components/ui/design-system/card-new";
+import { fmtMXN, formatRelativeDate } from "@/lib/format";
 import toast from "react-hot-toast";
+
+type StatusTone = "success" | "warning" | "danger" | "neutral" | "info" | "brand";
+const STATUS_TONE: Record<string, { tone: StatusTone; label: string }> = {
+  ACTIVE:    { tone: "success", label: "Activo" },
+  COMPLETED: { tone: "neutral", label: "Completado" },
+  ABANDONED: { tone: "danger",  label: "Abandonado" },
+  PAUSED:    { tone: "warning", label: "Pausado" },
+};
 
 interface Session { id: string; sessionNumber: number; completedAt: string | null; notes: string | null }
 interface InvItem  { id: string; name: string; category: string; emoji: string; quantity: number; unit: string }
@@ -167,101 +181,127 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-5">
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
         <div>
-          <h1 className="text-2xl font-extrabold flex items-center gap-2">
-            <Activity className="w-7 h-7 text-brand-600" /> Tratamientos
+          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+            Tratamientos
           </h1>
-          <p className="text-base text-muted-foreground mt-0.5">Seguimiento de planes de tratamiento activos</p>
+          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
+            Seguimiento de planes de tratamiento activos
+          </p>
         </div>
-        <button onClick={() => setShowNew(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-semibold text-base transition-colors">
-          <Plus className="w-5 h-5" /> Nuevo plan
-        </button>
+        <ButtonNew variant="primary" icon={<Plus size={14} />} onClick={() => setShowNew(true)}>
+          Nuevo plan
+        </ButtonNew>
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-3 gap-4 mb-5">
-        {[
-          { label:"Activos",    val:active,    icon:"💊", color:"text-brand-600"   },
-          { label:"Con atraso", val:overdue,   icon:"⚠️", color:"text-amber-600"   },
-          { label:"Completados",val:completed, icon:"✅", color:"text-emerald-600" },
-        ].map(k => (
-          <div key={k.label} className="bg-card border border-border rounded-2xl p-4 shadow-card text-center">
-            <div className="text-2xl mb-1">{k.icon}</div>
-            <div className={`text-3xl font-extrabold ${k.color}`}>{k.val}</div>
-            <div className="text-sm text-muted-foreground">{k.label}</div>
-          </div>
-        ))}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginBottom: 20 }}>
+        <KpiCard label="Planes activos"   value={String(active)}    icon={Activity} />
+        <KpiCard label="Con atraso"       value={String(overdue)}   icon={AlertTriangle} />
+        <KpiCard label="Completados"      value={String(completed)} icon={CheckCircle} />
+        <KpiCard label="Total pacientes"  value={String(new Set(treatments.map(t => t.patient.id)).size)} icon={Clock} />
       </div>
 
-      {/* Filter tabs */}
-      <div className="flex gap-1 bg-card border border-border rounded-xl p-1 w-fit mb-5">
-        {[["ALL","Todos"],["ACTIVE","Activos"],["OVERDUE","En riesgo"],["COMPLETED","Completados"],["PAUSED","Pausados"]].map(([val,label]) => (
-          <button key={val} onClick={() => setFilter(val)}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${filter === val ? "bg-brand-600 text-white" : "text-muted-foreground hover:text-foreground"}`}>
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* Treatment list */}
-      {filtered.length === 0 ? (
-        <div className="text-center py-16 text-muted-foreground bg-card border border-border rounded-2xl">
-          <div className="text-4xl mb-3">💊</div>
-          <div className="text-lg font-semibold mb-1">Sin planes de tratamiento</div>
-          <div className="text-sm">Crea el primer plan para un paciente</div>
+      {/* Filters */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+        <div className="segment-new">
+          {[["ALL","Todos"],["ACTIVE","Activos"],["OVERDUE","En riesgo"],["COMPLETED","Completados"],["PAUSED","Pausados"]].map(([val, label]) => (
+            <button
+              key={val}
+              type="button"
+              onClick={() => setFilter(val as string)}
+              className={`segment-new__btn ${filter === val ? "segment-new__btn--active" : ""}`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
+      </div>
+
+      {/* List */}
+      {filtered.length === 0 ? (
+        <CardNew>
+          <div style={{ padding: 48, textAlign: "center", color: "var(--text-3)" }}>
+            <Activity size={32} style={{ color: "var(--text-4)", margin: "0 auto 12px" }} />
+            <div style={{ color: "var(--text-2)", fontSize: 14, fontWeight: 500, marginBottom: 4 }}>
+              Sin planes de tratamiento
+            </div>
+            <div style={{ fontSize: 12 }}>Crea el primer plan para un paciente</div>
+          </div>
+        </CardNew>
       ) : (
-        <div className="space-y-3">
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {filtered.map(t => {
             const pct     = progressPct(t);
             const od      = daysOverdue(t);
             const isLate  = t.status === "ACTIVE" && od > 0;
-            const cfg     = STATUS_CFG[t.status] ?? STATUS_CFG.ACTIVE;
+            const cfg     = STATUS_TONE[t.status] ?? STATUS_TONE.ACTIVE;
+            const patientName = `${t.patient.firstName} ${t.patient.lastName}`;
 
             return (
-              <div key={t.id}
-                className={`bg-card border rounded-2xl shadow-card overflow-hidden cursor-pointer hover:border-brand-300 transition-all ${isLate ? "border-amber-300 dark:border-amber-700" : "border-border"}`}
-                onClick={() => setSelected(t)}>
-                <div className="px-5 py-4 flex items-center gap-4">
-                  {/* Doctor color bar */}
-                  <div className="w-1 h-14 rounded-full flex-shrink-0" style={{ background:t.doctor.color }} />
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setSelected(t)}
+                className="card"
+                style={{
+                  textAlign: "left",
+                  cursor: "pointer",
+                  padding: "14px 18px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 14,
+                  border: isLate ? "1px solid rgba(245,158,11,0.3)" : "1px solid var(--border-soft)",
+                  background: "var(--bg-elev)",
+                  color: "inherit",
+                  transition: "border-color .15s",
+                }}
+              >
+                <div style={{ width: 3, height: 40, borderRadius: 2, background: t.doctor.color, flexShrink: 0 }} />
 
-                  {/* Main info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-base font-bold">{t.name}</span>
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.text}`}>
-                        <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${cfg.dot}`} />
-                        {cfg.label}
-                      </span>
-                      {isLate && (
-                        <span className="flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full">
-                          <AlertTriangle className="w-3.5 h-3.5" /> {od}d sin venir
-                        </span>
-                      )}
-                    </div>
-                    <Link href={`/dashboard/patients/${t.patient.id}`}
+                <AvatarNew name={patientName} size="sm" />
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{t.name}</span>
+                    <BadgeNew tone={cfg.tone} dot>{cfg.label}</BadgeNew>
+                    {isLate && <BadgeNew tone="warning" dot>{od}d sin venir</BadgeNew>}
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-3)" }}>
+                    <Link
+                      href={`/dashboard/patients/${t.patient.id}`}
                       onClick={e => e.stopPropagation()}
-                      className="text-sm text-brand-600 hover:underline font-semibold">
-                      {t.patient.firstName} {t.patient.lastName}
+                      style={{ color: "#c4b5fd", fontWeight: 500, textDecoration: "none" }}
+                    >
+                      {patientName}
                     </Link>
-                    <div className="text-sm text-muted-foreground">Dr/a. {t.doctor.firstName} {t.doctor.lastName}</div>
+                    <span style={{ margin: "0 6px" }}>·</span>
+                    Dr/a. {t.doctor.firstName} {t.doctor.lastName}
+                    {t.nextExpectedDate && (
+                      <>
+                        <span style={{ margin: "0 6px" }}>·</span>
+                        Próxima: {formatRelativeDate(t.nextExpectedDate)}
+                      </>
+                    )}
                   </div>
-
-                  {/* Progress */}
-                  <div className="text-right flex-shrink-0 min-w-[80px]">
-                    <div className="text-base font-bold">{t.sessions.length}/{t.totalSessions}</div>
-                    <div className="text-xs text-muted-foreground">sesiones</div>
-                    <div className="mt-1.5 w-20 h-2 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-brand-500 rounded-full" style={{ width:`${pct}%` }} />
-                    </div>
-                  </div>
-
-                  <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                 </div>
-              </div>
+
+                <div style={{ textAlign: "right", flexShrink: 0, minWidth: 120 }}>
+                  <div className="mono" style={{ fontSize: 13, color: "var(--text-1)", fontWeight: 600 }}>
+                    {t.sessions.length}/{t.totalSessions} sesiones
+                  </div>
+                  <div style={{ width: 100, height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2, marginTop: 6, marginLeft: "auto", overflow: "hidden" }}>
+                    <div style={{ width: `${pct}%`, height: "100%", background: "var(--brand)", borderRadius: 2 }} />
+                  </div>
+                  <div className="mono" style={{ fontSize: 10, color: "var(--text-3)", marginTop: 4 }}>
+                    {fmtMXN(t.totalCost)}
+                  </div>
+                </div>
+
+                <ChevronRight size={14} style={{ color: "var(--text-3)", flexShrink: 0 }} />
+              </button>
             );
           })}
         </div>

@@ -199,18 +199,21 @@ export function ClinicalClient({
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-1 mb-5 bg-muted rounded-xl p-1 w-fit">
+            <div className="tabs-new" style={{ marginBottom: 18 }}>
               <button
+                type="button"
                 onClick={() => setTab("new")}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${tab === "new" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                className={`tab-new ${tab === "new" ? "tab-new--active" : ""}`}
               >
-                + Nueva consulta
+                Nueva consulta
               </button>
               <button
+                type="button"
                 onClick={() => setTab("history")}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${tab === "history" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                className={`tab-new ${tab === "history" ? "tab-new--active" : ""}`}
               >
-                Historial ({records.length})
+                Historial
+                <span className="tab__count">{records.length}</span>
               </button>
             </div>
 

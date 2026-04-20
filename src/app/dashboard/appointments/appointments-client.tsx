@@ -146,73 +146,109 @@ interface ApptFormProps {
 function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCancel, label }: ApptFormProps) {
   function setF(k: string, v: any) { setForm((f: any) => ({ ...f, [k]: v })); }
   return (
-    <div className="px-6 py-5 space-y-4">
-      <div className="space-y-1.5">
-        <Label className="text-base font-semibold">Paciente *</Label>
-        <PatientSearch patients={patients} value={form.patientId} onChange={id => setF("patientId", id)} />
-      </div>
-      <div className="space-y-1.5">
-        <Label className="text-base font-semibold">Doctor *</Label>
-        <select className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-          value={form.doctorId} onChange={e => setF("doctorId", e.target.value)}>
-          {doctors.map(d => <option key={d.id} value={d.id}>Dr/a. {d.firstName} {d.lastName}</option>)}
-        </select>
-      </div>
-      <div className="space-y-1.5">
-        <Label className="text-base font-semibold">Tipo de cita</Label>
-        <select className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-          value={form.type} onChange={e => setF("type", e.target.value)}>
-          {APPT_TYPES.map(t => <option key={t}>{t}</option>)}
-        </select>
-      </div>
-      <div className="space-y-1.5">
-        <Label className="text-base font-semibold">Modo</Label>
-        <div className="flex gap-2">
-          <button type="button" onClick={() => setF("mode", "IN_PERSON")}
-            className={`flex-1 flex items-center justify-center gap-2 h-11 rounded-xl border text-sm font-semibold transition-all ${form.mode !== "TELECONSULTATION" ? "border-brand-500 bg-brand-600/15 text-brand-700" : "border-border hover:border-brand-300"}`}>
-            🏥 Presencial
-          </button>
-          <button type="button" onClick={() => setF("mode", "TELECONSULTATION")}
-            className={`flex-1 flex items-center justify-center gap-2 h-11 rounded-xl border text-sm font-semibold transition-all ${form.mode === "TELECONSULTATION" ? "border-violet-500 bg-violet-50 dark:bg-violet-950/30 text-violet-700" : "border-border hover:border-violet-300"}`}>
-            📹 Teleconsulta
-          </button>
+    <>
+      <div className="modal__body">
+        {/* Paciente y cita */}
+        <div style={{ marginBottom: 22 }}>
+          <div className="form-section__title">
+            Paciente y tipo
+            <span className="form-section__rule" />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "12px 14px" }}>
+            <div className="field-new">
+              <label className="field-new__label">Paciente <span className="req">*</span></label>
+              <PatientSearch patients={patients} value={form.patientId} onChange={id => setF("patientId", id)} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
+              <div className="field-new">
+                <label className="field-new__label">Doctor <span className="req">*</span></label>
+                <select className="input-new" value={form.doctorId} onChange={e => setF("doctorId", e.target.value)}>
+                  {doctors.map(d => <option key={d.id} value={d.id}>Dr/a. {d.firstName} {d.lastName}</option>)}
+                </select>
+              </div>
+              <div className="field-new">
+                <label className="field-new__label">Tipo de cita</label>
+                <select className="input-new" value={form.type} onChange={e => setF("type", e.target.value)}>
+                  {APPT_TYPES.map(t => <option key={t}>{t}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="field-new">
+              <label className="field-new__label">Modo</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => setF("mode", "IN_PERSON")}
+                  className={`btn-new ${form.mode !== "TELECONSULTATION" ? "btn-new--primary" : "btn-new--secondary"}`}
+                  style={{ flex: 1, justifyContent: "center" }}
+                >
+                  Presencial
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setF("mode", "TELECONSULTATION")}
+                  className={`btn-new ${form.mode === "TELECONSULTATION" ? "btn-new--primary" : "btn-new--secondary"}`}
+                  style={{ flex: 1, justifyContent: "center" }}
+                >
+                  Teleconsulta
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Fecha y hora */}
+        <div style={{ marginBottom: 22 }}>
+          <div className="form-section__title">
+            Fecha y hora
+            <span className="form-section__rule" />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
+            <div className="field-new" style={{ gridColumn: "1 / -1" }}>
+              <label className="field-new__label">Fecha <span className="req">*</span></label>
+              <input type="date" className="input-new" value={form.date} onChange={e => setF("date", e.target.value)} />
+            </div>
+            <div className="field-new">
+              <label className="field-new__label">Hora inicio</label>
+              <input type="time" className="input-new mono" value={form.startTime} onChange={e => setF("startTime", e.target.value)} />
+            </div>
+            <div className="field-new">
+              <label className="field-new__label">Duración</label>
+              <select className="input-new mono" value={form.durationMins} onChange={e => setF("durationMins", parseInt(e.target.value))}>
+                {DURATIONS.map(d => <option key={d} value={d}>{d} min</option>)}
+              </select>
+            </div>
+            <div className="field-new" style={{ gridColumn: "1 / -1" }}>
+              <label className="field-new__label">Hora fin</label>
+              <input
+                readOnly
+                className="input-new mono"
+                style={{ color: "var(--text-3)", background: "var(--bg-elev-2)" }}
+                value={addTime(form.startTime, form.durationMins)}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="field-new">
+          <label className="field-new__label">Notas</label>
+          <textarea
+            className="input-new"
+            style={{ height: 70, paddingTop: 8, resize: "vertical" }}
+            placeholder="Motivo de consulta, indicaciones especiales…"
+            value={form.notes}
+            onChange={e => setF("notes", e.target.value)}
+          />
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-3">
-        <div className="col-span-3 space-y-1.5">
-          <Label className="text-base font-semibold">Fecha</Label>
-          <input type="date" className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-            value={form.date} onChange={e => setF("date", e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-base font-semibold">Hora inicio</Label>
-          <input type="time" className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-            value={form.startTime} onChange={e => setF("startTime", e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-base font-semibold">Duración</Label>
-          <select className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
-            value={form.durationMins} onChange={e => setF("durationMins", parseInt(e.target.value))}>
-            {DURATIONS.map(d => <option key={d} value={d}>{d} min</option>)}
-          </select>
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-base font-semibold">Hora fin</Label>
-          <input readOnly className="flex h-11 w-full rounded-xl border border-border bg-muted px-4 text-base text-muted-foreground"
-            value={addTime(form.startTime, form.durationMins)} />
-        </div>
+
+      <div className="modal__footer">
+        <ButtonNew variant="ghost" onClick={onCancel} type="button">Cancelar</ButtonNew>
+        <ButtonNew variant="primary" onClick={onSubmit} disabled={loading} type="button">
+          {loading ? "Guardando…" : label}
+        </ButtonNew>
       </div>
-      <div className="space-y-1.5">
-        <Label className="text-base font-semibold">Notas</Label>
-        <textarea className="flex min-h-[80px] w-full rounded-xl border border-border bg-card px-4 py-3 text-base placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-          placeholder="Motivo de consulta, indicaciones especiales…"
-          value={form.notes} onChange={e => setF("notes", e.target.value)} />
-      </div>
-      <div className="flex gap-3 pt-1">
-        <Button variant="outline" onClick={onCancel} className="flex-1 h-12 text-base">Cancelar</Button>
-        <Button onClick={onSubmit} disabled={loading} className="flex-1 h-12 text-base">{loading ? "Guardando…" : label}</Button>
-      </div>
-    </div>
+    </>
   );
 }
 

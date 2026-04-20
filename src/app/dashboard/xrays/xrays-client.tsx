@@ -4,6 +4,11 @@ import { useState, useRef } from "react";
 import { FileImage, Upload, Trash2, Search, Eye, Download, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { cn } from "@/lib/utils";
+import { CardNew }   from "@/components/ui/design-system/card-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { AvatarNew } from "@/components/ui/design-system/avatar-new";
+import { BadgeNew }  from "@/components/ui/design-system/badge-new";
+import { formatRelativeDate } from "@/lib/format";
 import { XrayAiPanel } from "@/components/xrays/xray-ai-panel";
 import { XrayNotesSection } from "@/components/xrays/xray-notes-section";
 
@@ -139,241 +144,301 @@ export function XraysClient({ patients, recentFiles: initialFiles, clinicId, aiU
   const catLabel = (id: string) => CATEGORIES.find(c => c.id === id)?.label ?? id;
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div style={{ padding: "24px 28px", maxWidth: 1400, margin: "0 auto" }}>
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Radiografías y Archivos</h1>
-          <p className="text-sm text-muted-foreground">Gestiona imágenes y documentos de tus pacientes</p>
-        </div>
+      <div style={{ marginBottom: 22 }}>
+        <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+          Radiografías y archivos
+        </h1>
+        <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
+          Gestiona imágenes y documentos de tus pacientes
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, 1fr) 2fr", gap: 14 }}>
         {/* Patient list */}
-        <div className="lg:col-span-1 bg-card border border-border rounded-2xl shadow-card overflow-hidden">
-          <div className="p-4 border-b border-border">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <CardNew noPad>
+          <div style={{ padding: 12, borderBottom: "1px solid var(--border-soft)" }}>
+            <div className="search-field" style={{ width: "100%" }}>
+              <Search size={14} />
               <input
                 type="text"
-                placeholder="Buscar paciente..."
+                placeholder="Buscar paciente…"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-muted/30 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
             </div>
           </div>
-          <div className="max-h-[500px] overflow-y-auto divide-y divide-border">
-            {filtered.map(p => (
-              <button
-                key={p.id}
-                onClick={() => selectPatient(p)}
-                className={cn(
-                  "w-full text-left px-4 py-3 hover:bg-muted/30 transition-colors",
-                  selectedPatient?.id === p.id && "bg-brand-600/15 border-l-4 border-brand-500"
-                )}
-              >
-                <div className="font-medium text-sm">{p.firstName} {p.lastName}</div>
-                <div className="text-xs text-muted-foreground flex justify-between">
-                  <span>{p.patientNumber}</span>
-                  <span>{p._count.files} archivos</span>
-                </div>
-              </button>
-            ))}
-            {filtered.length === 0 && (
-              <div className="p-6 text-center text-sm text-muted-foreground">No se encontraron pacientes</div>
-            )}
+          <div style={{ maxHeight: 540, overflowY: "auto" }}>
+            {filtered.length === 0 ? (
+              <div style={{ padding: "32px 16px", textAlign: "center", color: "var(--text-3)", fontSize: 12 }}>
+                No se encontraron pacientes
+              </div>
+            ) : filtered.map(p => {
+              const isActive = selectedPatient?.id === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => selectPatient(p)}
+                  className="list-row"
+                  style={{
+                    width: "100%",
+                    textAlign: "left",
+                    cursor: "pointer",
+                    background: isActive ? "var(--brand-soft)" : "transparent",
+                    borderLeft: isActive ? "3px solid var(--brand)" : "3px solid transparent",
+                    color: "inherit",
+                  }}
+                >
+                  <AvatarNew name={`${p.firstName} ${p.lastName}`} size="sm" />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-1)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {p.firstName} {p.lastName}
+                    </div>
+                    <div className="mono" style={{ fontSize: 10, color: "var(--text-3)" }}>#{p.patientNumber}</div>
+                  </div>
+                  <span className="mono" style={{ fontSize: 10, color: "var(--text-3)" }}>
+                    {p._count.files}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-        </div>
+        </CardNew>
 
         {/* Main content */}
-        <div className="lg:col-span-2 space-y-6">
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {selectedPatient ? (
             <>
-              {/* Upload section */}
-              <div className="bg-card border border-border rounded-2xl shadow-card p-6">
-                <h2 className="text-lg font-bold mb-4">
-                  Subir archivo — {selectedPatient.firstName} {selectedPatient.lastName}
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Archivo</label>
-                    <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden" />
+              {/* Upload */}
+              <CardNew
+                title={`Subir archivo — ${selectedPatient.firstName} ${selectedPatient.lastName}`}
+                sub="Imágenes y PDF, máx 50MB"
+              >
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px", marginBottom: 14 }}>
+                  <div className="field-new" style={{ gridColumn: "1 / -1" }}>
+                    <label className="field-new__label">Archivo</label>
+                    <input
+                      ref={fileRef}
+                      type="file"
+                      accept="image/*,application/pdf"
+                      style={{ position: "absolute", left: "-9999px" }}
+                      onChange={() => { /* fuerza re-render si se desea */ }}
+                    />
                     <button
                       type="button"
                       onClick={() => fileRef.current?.click()}
-                      className="w-full border-2 border-dashed border-border rounded-xl p-6 text-center cursor-pointer hover:border-brand-500 hover:bg-brand-600/5 transition-colors"
+                      style={{
+                        width: "100%",
+                        border: "2px dashed var(--border-soft)",
+                        borderRadius: "var(--radius-lg)",
+                        padding: 24,
+                        textAlign: "center",
+                        cursor: "pointer",
+                        background: "transparent",
+                        color: "var(--text-2)",
+                        transition: "all .15s",
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.borderColor = "var(--border-brand)";
+                        e.currentTarget.style.background = "var(--brand-softer)";
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.borderColor = "var(--border-soft)";
+                        e.currentTarget.style.background = "transparent";
+                      }}
                     >
-                      <Upload className="w-6 h-6 mx-auto mb-2 text-muted-foreground" />
-                      <span className="text-sm font-medium text-muted-foreground">
-                        {fileRef.current?.files?.[0]?.name ?? "Haz click para seleccionar archivo"}
-                      </span>
-                      <p className="text-xs text-muted-foreground/60 mt-1">Imágenes y PDF, máx 50MB</p>
+                      <Upload size={24} style={{ margin: "0 auto 8px", color: "var(--text-3)" }} />
+                      <div style={{ fontSize: 13, color: "var(--text-2)", fontWeight: 500 }}>
+                        {fileRef.current?.files?.[0]?.name ?? "Arrastra o haz click para subir"}
+                      </div>
+                      <div style={{ fontSize: 10, color: "var(--text-4)", marginTop: 4 }}>
+                        PNG, JPG, PDF hasta 50MB
+                      </div>
                     </button>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Categoría</label>
-                    <select
-                      value={category}
-                      onChange={e => setCategory(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm"
-                    >
-                      {CATEGORIES.map(c => (
-                        <option key={c.id} value={c.id}>{c.label}</option>
-                      ))}
+                  <div className="field-new">
+                    <label className="field-new__label">Categoría</label>
+                    <select className="input-new" value={category} onChange={e => setCategory(e.target.value)}>
+                      {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                     </select>
                   </div>
-                  <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium mb-1">Notas (opcional)</label>
+                  <div className="field-new">
+                    <label className="field-new__label">Notas (opcional)</label>
                     <input
-                      type="text"
+                      className="input-new"
+                      placeholder="Ej: control post-tratamiento"
                       value={notes}
                       onChange={e => setNotes(e.target.value)}
-                      placeholder="Ej: Radiografía de control post-tratamiento"
-                      className="w-full px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm"
                     />
                   </div>
                 </div>
-                <button
-                  onClick={handleUpload}
-                  disabled={uploading}
-                  className="mt-4 flex items-center gap-2 px-4 py-2.5 bg-brand-600 text-white rounded-xl font-semibold text-sm hover:bg-brand-700 transition-colors disabled:opacity-50"
-                >
-                  <Upload className="w-4 h-4" />
-                  {uploading ? "Subiendo..." : "Subir archivo"}
-                </button>
-              </div>
+                <ButtonNew variant="primary" icon={<Upload size={14} />} onClick={handleUpload} disabled={uploading}>
+                  {uploading ? "Subiendo…" : "Subir archivo"}
+                </ButtonNew>
+              </CardNew>
 
               {/* Patient files */}
-              <div className="bg-card border border-border rounded-2xl shadow-card overflow-hidden">
-                <div className="p-4 border-b border-border">
-                  <h2 className="font-bold">Archivos de {selectedPatient.firstName} ({patientFiles.length})</h2>
-                </div>
+              <CardNew
+                title={`Archivos de ${selectedPatient.firstName}`}
+                sub={`${patientFiles.length} archivos`}
+                noPad
+              >
                 {patientFiles.length === 0 ? (
-                  <div className="p-8 text-center text-sm text-muted-foreground">
-                    <FileImage className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                  <div style={{ padding: 32, textAlign: "center", color: "var(--text-3)", fontSize: 12 }}>
+                    <FileImage size={32} style={{ color: "var(--text-4)", margin: "0 auto 8px" }} />
                     Sin archivos aún
                   </div>
                 ) : (
-                  <div className="divide-y divide-border">
+                  <div>
                     {patientFiles.map(f => (
-                      <div key={f.id} className="flex items-center gap-4 px-4 py-3 hover:bg-muted/20">
-                        <div className="w-10 h-10 rounded-lg bg-brand-600/15 flex items-center justify-center flex-shrink-0">
-                          <FileImage className="w-5 h-5 text-brand-600" />
+                      <div key={f.id} className="list-row">
+                        <div style={{
+                          width: 40, height: 40, borderRadius: 8,
+                          background: "var(--brand-soft)",
+                          display: "grid", placeItems: "center", flexShrink: 0,
+                          border: "1px solid rgba(124,58,237,0.2)",
+                        }}>
+                          <FileImage size={16} style={{ color: "#c4b5fd" }} />
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{f.name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {catLabel(f.category)} · {formatSize(f.size)} · {formatDate(f.createdAt)}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-1)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {f.name}
                           </div>
-                          {f.notes && <div className="text-xs text-muted-foreground italic mt-0.5">{f.notes}</div>}
+                          <div style={{ fontSize: 10, color: "var(--text-3)" }}>
+                            <BadgeNew tone="neutral">{catLabel(f.category)}</BadgeNew>
+                            <span className="mono" style={{ marginLeft: 6 }}>{formatSize(f.size)}</span>
+                            <span style={{ marginLeft: 6 }}>· {formatDate(f.createdAt)}</span>
+                          </div>
+                          {f.notes && (
+                            <div style={{ fontSize: 10, color: "var(--text-3)", fontStyle: "italic", marginTop: 2 }}>
+                              {f.notes}
+                            </div>
+                          )}
                         </div>
-                        <div className="flex items-center gap-1">
+                        <div style={{ display: "flex", gap: 4 }}>
                           <button
                             onClick={() => setPreviewFile(f)}
-                            className="p-2 rounded-lg hover:bg-muted/40 text-muted-foreground hover:text-foreground transition-colors"
+                            type="button"
+                            className="btn-new btn-new--ghost btn-new--sm"
+                            style={{ padding: 0, width: 28 }}
                             title="Ver"
                           >
-                            <Eye className="w-4 h-4" />
+                            <Eye size={12} />
                           </button>
                           <a
                             href={f.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="p-2 rounded-lg hover:bg-muted/40 text-muted-foreground hover:text-foreground transition-colors"
+                            className="btn-new btn-new--ghost btn-new--sm"
+                            style={{ padding: 0, width: 28, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
                             title="Descargar"
                           >
-                            <Download className="w-4 h-4" />
+                            <Download size={12} />
                           </a>
                           <button
                             onClick={() => handleDelete(f.id)}
-                            className="p-2 rounded-lg hover:bg-rose-50 text-muted-foreground hover:text-rose-600 transition-colors"
+                            type="button"
+                            className="btn-new btn-new--ghost btn-new--sm"
+                            style={{ padding: 0, width: 28 }}
                             title="Eliminar"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 size={12} />
                           </button>
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
-              </div>
+              </CardNew>
             </>
           ) : (
-            /* Recent files from all patients */
-            <div className="bg-card border border-border rounded-2xl shadow-card overflow-hidden">
-              <div className="p-4 border-b border-border">
-                <h2 className="font-bold">Archivos recientes</h2>
-                <p className="text-xs text-muted-foreground">Selecciona un paciente para ver sus archivos o subir nuevos</p>
-              </div>
+            <CardNew
+              title="Archivos recientes"
+              sub="Selecciona un paciente para ver sus archivos o subir nuevos"
+              noPad
+            >
               {allFiles.length === 0 ? (
-                <div className="p-8 text-center text-sm text-muted-foreground">
-                  <FileImage className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                <div style={{ padding: 32, textAlign: "center", color: "var(--text-3)", fontSize: 12 }}>
+                  <FileImage size={32} style={{ color: "var(--text-4)", margin: "0 auto 8px" }} />
                   Sin archivos aún
                 </div>
               ) : (
-                <div className="divide-y divide-border">
+                <div>
                   {allFiles.map(f => (
                     <button
                       key={f.id}
+                      type="button"
                       onClick={() => {
                         const p = patients.find(pt => pt.id === f.patient.id);
                         if (p) selectPatient(p);
                       }}
-                      className="w-full flex items-center gap-4 px-4 py-3 hover:bg-muted/20 text-left"
+                      className="list-row"
+                      style={{ width: "100%", textAlign: "left", cursor: "pointer", background: "transparent", color: "inherit" }}
                     >
-                      <div className="w-10 h-10 rounded-lg bg-brand-600/15 flex items-center justify-center flex-shrink-0">
-                        <FileImage className="w-5 h-5 text-brand-600" />
+                      <div style={{
+                        width: 40, height: 40, borderRadius: 8,
+                        background: "var(--brand-soft)",
+                        display: "grid", placeItems: "center", flexShrink: 0,
+                        border: "1px solid rgba(124,58,237,0.2)",
+                      }}>
+                        <FileImage size={16} style={{ color: "#c4b5fd" }} />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">{f.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {f.patient.firstName} {f.patient.lastName} · {catLabel(f.category)} · {formatDate(f.createdAt)}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-1)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {f.name}
+                        </div>
+                        <div style={{ fontSize: 10, color: "var(--text-3)" }}>
+                          {f.patient.firstName} {f.patient.lastName} · {catLabel(f.category)} · {formatRelativeDate(f.createdAt)}
                         </div>
                       </div>
                     </button>
                   ))}
                 </div>
               )}
-            </div>
+            </CardNew>
           )}
         </div>
       </div>
 
       {/* Preview modal con panel de IA */}
       {previewFile && (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 md:items-center"
-          onClick={() => setPreviewFile(null)}
-        >
+        <div className="modal-overlay" onClick={() => setPreviewFile(null)}>
           <div
-            className="relative my-8 w-full max-w-4xl rounded-2xl bg-card shadow-2xl"
+            className="modal modal--wide"
             onClick={e => e.stopPropagation()}
+            style={{ maxWidth: 880, padding: 0 }}
           >
-            {/* Close button */}
-            <button
-              onClick={() => setPreviewFile(null)}
-              className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur transition-colors hover:bg-black/60"
-              aria-label="Cerrar preview"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="modal__header">
+              <div className="modal__title" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {previewFile.name}
+              </div>
+              <button
+                onClick={() => setPreviewFile(null)}
+                type="button"
+                className="btn-new btn-new--ghost btn-new--sm"
+                aria-label="Cerrar preview"
+              >
+                <X size={14} />
+              </button>
+            </div>
 
             {/* Image / PDF preview */}
-            <div className="flex items-center justify-center bg-slate-950 p-2">
+            <div style={{ background: "#000", display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
               {previewFile.url.includes(".pdf") || previewFile.mimeType === "application/pdf" ? (
-                <iframe src={previewFile.url} className="h-[60vh] w-full rounded-xl" />
+                <iframe src={previewFile.url} style={{ height: "60vh", width: "100%", borderRadius: 8, background: "#fff" }} />
               ) : (
                 <img
                   src={previewFile.url}
                   alt={previewFile.name}
-                  className="max-h-[60vh] w-auto rounded-xl object-contain"
+                  style={{ maxHeight: "60vh", width: "auto", objectFit: "contain", borderRadius: 8 }}
                 />
               )}
             </div>
 
-            {/* Notas del doctor — visibles en la vista principal, no en el Dialog */}
-            <div className="border-t border-border/40 bg-[#0B0F1E] p-3 md:p-5">
+            {/* Notas del doctor */}
+            <div style={{ borderTop: "1px solid var(--border-soft)", padding: 16 }}>
               <XrayNotesSection
                 key={previewFile.id}
                 fileId={previewFile.id}
@@ -384,7 +449,7 @@ export function XraysClient({ patients, recentFiles: initialFiles, clinicId, aiU
 
             {/* Botón compacto de IA — solo para imágenes */}
             {previewFile.mimeType?.startsWith("image/") && (
-              <div className="flex justify-end border-t border-border/40 bg-[#0B0F1E] p-3 md:p-4">
+              <div style={{ display: "flex", justifyContent: "flex-end", borderTop: "1px solid var(--border-soft)", padding: 14, background: "rgba(0,0,0,0.2)" }}>
                 <XrayAiPanel
                   fileId={previewFile.id}
                   fileUrl={previewFile.url}
