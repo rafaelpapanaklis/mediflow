@@ -28,7 +28,14 @@ export default async function BillingPage() {
   ]);
 
   const totalPaid    = invoices.filter(i => i.status === "PAID").reduce((s, i) => s + i.paid, 0);
-  const totalPending = invoices.filter(i => ["PENDING","PARTIAL"].includes(i.status)).reduce((s, i) => s + i.balance, 0);
+  const totalPending = invoices.filter(i => ["PENDING", "PARTIAL"].includes(i.status)).reduce((s, i) => s + i.balance, 0);
+  const totalOverdue = invoices.filter(i => i.status === "OVERDUE").reduce((s, i) => s + i.balance, 0);
+
+  // Count facturas creadas este mes
+  const firstOfMonth = new Date();
+  firstOfMonth.setDate(1);
+  firstOfMonth.setHours(0, 0, 0, 0);
+  const monthInvoices = invoices.filter(i => new Date(i.createdAt) >= firstOfMonth).length;
 
   return (
     <BillingClient
@@ -36,6 +43,8 @@ export default async function BillingPage() {
       patients={patients}
       totalPaid={totalPaid}
       totalPending={totalPending}
+      totalOverdue={totalOverdue}
+      monthInvoices={monthInvoices}
       clinic={{ facturApiEnabled: clinic?.facturApiEnabled ?? false, rfcEmisor: clinic?.rfcEmisor ?? null }}
     />
   );

@@ -603,6 +603,83 @@
   box-shadow: 0 0 6px var(--brand);
 }
 
+/* Search field --------------------------------------------------- */
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 0 10px;
+  height: 34px;
+  width: 260px;
+  transition: all .15s;
+}
+.search-field:focus-within {
+  border-color: rgba(124,58,237,0.5);
+  box-shadow: 0 0 0 3px rgba(124,58,237,0.15);
+}
+.search-field svg { color: var(--text-3); flex-shrink: 0; }
+.search-field input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-1);
+  font-size: 12px;
+}
+.search-field input::placeholder { color: var(--text-4); }
+
+/* Pagination ----------------------------------------------------- */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border-soft);
+}
+.pagination__info { font-size: 11px; color: var(--text-3); }
+.pagination__pages { display: flex; gap: 4px; align-items: center; }
+.pagination__btn {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-2);
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-jetbrains-mono, monospace);
+}
+.pagination__btn:hover:not(:disabled) { background: var(--bg-elev-2); color: var(--text-1); }
+.pagination__btn--active {
+  background: var(--brand-soft);
+  color: #fff;
+  border-color: rgba(124,58,237,0.3);
+}
+.pagination__btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Tab count suffix (para .tab-new) -------------------------------- */
+.tab__count {
+  margin-left: 6px;
+  padding: 1px 6px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: var(--font-jetbrains-mono, monospace);
+  color: var(--text-3);
+  font-weight: 500;
+}
+.tab-new--active .tab__count { color: var(--text-2); }
+
+/* mono utility ---------------------------------------------------- */
+.mono { font-family: var(--font-jetbrains-mono, monospace); }
+
 /* Modal ----------------------------------------------------------- */
 .modal-overlay {
   position: fixed;

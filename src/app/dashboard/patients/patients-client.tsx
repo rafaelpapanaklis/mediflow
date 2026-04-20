@@ -1,176 +1,245 @@
 "use client";
-import { useState, useEffect, useRef, useCallback } from "react";
+
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Plus, Phone, Mail, Users, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { getInitials, avatarColor, formatDate } from "@/lib/utils";
+import { Search, Plus, Download, ChevronLeft, ChevronRight, Users } from "lucide-react";
+import { AvatarNew } from "@/components/ui/design-system/avatar-new";
+import { BadgeNew }  from "@/components/ui/design-system/badge-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { CardNew }   from "@/components/ui/design-system/card-new";
 import { NewPatientModal } from "@/components/dashboard/new-patient-modal";
-import toast from "react-hot-toast";
+import { formatRelativeDate, ageFromDob } from "@/lib/format";
 
-const STATUS_COLORS: Record<string, string> = {
-  ACTIVE:   "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700",
-  INACTIVE: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700",
-};
+interface Props {
+  patients:     any[];
+  total:        number;
+  activeCount:  number;
+  page:         number;
+  totalPages:   number;
+  search:       string;
+  statusFilter: string;
+}
 
-export function PatientsClient({ patients, total, page, totalPages, search: initialSearch }: {
-  patients: any[]; total: number; page: number; totalPages: number; search: string;
-}) {
-  const [showNew, setShowNew] = useState(false);
-  const [search, setSearch]   = useState(initialSearch);
+const STATUS_FILTERS = [
+  { value: "all",      label: "Todos" },
+  { value: "active",   label: "Activos" },
+  { value: "inactive", label: "Inactivos" },
+  { value: "archived", label: "Archivados" },
+];
+
+function patientStatusTone(status: string): "success" | "warning" | "neutral" {
+  if (status === "ACTIVE")   return "success";
+  if (status === "INACTIVE") return "warning";
+  return "neutral";
+}
+
+function patientStatusLabel(status: string): string {
+  if (status === "ACTIVE")   return "Activo";
+  if (status === "INACTIVE") return "Inactivo";
+  if (status === "ARCHIVED") return "Archivado";
+  return status;
+}
+
+export function PatientsClient({ patients, total, activeCount, page, totalPages, search: initialSearch, statusFilter }: Props) {
   const router = useRouter();
+  const [search, setSearch]   = useState(initialSearch);
+  const [showNew, setShowNew] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout>();
 
-  const filtered = patients; // Server-side filtered
-
-  function navigateSearch(value: string) {
-    const params = new URLSearchParams();
-    if (value) params.set("search", value);
-    params.set("page", "1");
-    router.push(`/dashboard/patients?${params.toString()}`);
+  function navigate(params: Record<string, string | undefined>) {
+    const q = new URLSearchParams();
+    const merged: Record<string, string | undefined> = {
+      search, status: statusFilter, page: "1", ...params,
+    };
+    for (const [k, v] of Object.entries(merged)) {
+      if (v && v !== "all" && v !== "") q.set(k, v);
+    }
+    router.push(`/dashboard/patients${q.toString() ? `?${q}` : ""}`);
   }
 
-  function handleSearch(value: string) {
-    setSearch(value);
+  function handleSearch(v: string) {
+    setSearch(v);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => navigateSearch(value), 350);
+    debounceRef.current = setTimeout(() => navigate({ search: v || undefined, page: "1" }), 350);
   }
 
-  function goToPage(p: number) {
-    const params = new URLSearchParams();
-    if (search) params.set("search", search);
-    params.set("page", String(p));
-    router.push(`/dashboard/patients?${params.toString()}`);
-  }
-
-  function handleCreated(patient: any) {
-    router.refresh();
-    setShowNew(false);
-  }
+  function goToPage(p: number) { navigate({ page: String(p) }); }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+    <div style={{ padding: "24px 28px", maxWidth: 1400, margin: "0 auto" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
         <div>
-          <h1 className="text-xl font-extrabold">Pacientes</h1>
-          <p className="text-sm text-muted-foreground">{total} pacientes registrados</p>
+          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>Pacientes</h1>
+          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
+            {total.toLocaleString("es-MX")} pacientes · {activeCount.toLocaleString("es-MX")} activos
+          </p>
         </div>
-        <Button onClick={() => setShowNew(true)}><Plus className="w-4 h-4" />Nuevo paciente</Button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <a href="/api/patients/export" target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
+            <ButtonNew variant="secondary" icon={<Download size={14} />}>Exportar</ButtonNew>
+          </a>
+          <ButtonNew variant="primary" icon={<Plus size={14} />} onClick={() => setShowNew(true)}>
+            Nuevo paciente
+          </ButtonNew>
+        </div>
       </div>
 
-      <div className="relative mb-5">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input className="pl-9" placeholder="Buscar por nombre, teléfono o expediente…" value={search} onChange={e => handleSearch(e.target.value)} />
+      {/* Filters */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap", alignItems: "center" }}>
+        <div className="search-field">
+          <Search size={14} />
+          <input
+            value={search}
+            onChange={e => handleSearch(e.target.value)}
+            placeholder="Buscar por nombre, teléfono, expediente…"
+          />
+        </div>
+        <div className="segment-new">
+          {STATUS_FILTERS.map(f => (
+            <button
+              key={f.value}
+              type="button"
+              onClick={() => navigate({ status: f.value, page: "1" })}
+              className={`segment-new__btn ${statusFilter === f.value ? "segment-new__btn--active" : ""}`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="rounded-xl border border-border bg-card shadow-card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted/30">
-              {["Paciente","Contacto","Expediente","Citas","Última visita","Estado",""].map(h => (
-                <th key={h} className="text-left px-4 py-3 text-xs font-bold text-muted-foreground uppercase tracking-wide first:pl-5">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr><td colSpan={7} className="px-5 py-16 text-center">
-                <Users className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-                <p className="text-muted-foreground text-sm">{search ? "Sin resultados" : "No hay pacientes aún"}</p>
-                {!search && <Button size="sm" className="mt-3" onClick={() => setShowNew(true)}>Agregar primer paciente</Button>}
-              </td></tr>
-            ) : filtered.map(p => (
-              <tr key={p.id} className="border-b border-border/60 hover:bg-muted/20 transition-colors">
-                <td className="px-5 py-3">
-                  <Link href={`/dashboard/patients/${p.id}`} className="flex items-center gap-3">
-                    <div className={`w-9 h-9 rounded-full ${avatarColor(p.id)} flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0`}>
-                      {getInitials(p.firstName, p.lastName)}
-                    </div>
-                    <div>
-                      <div className="font-semibold hover:text-brand-600 transition-colors">{p.firstName} {p.lastName}</div>
-                      <div className="text-xs text-muted-foreground">{p.gender === "M" ? "Masculino" : p.gender === "F" ? "Femenino" : "Otro"}{p.dob ? ` · ${new Date().getFullYear() - new Date(p.dob).getFullYear()} años` : ""}</div>
-                    </div>
-                  </Link>
-                </td>
-                <td className="px-4 py-3 hidden sm:table-cell">
-                  <div className="flex flex-col gap-0.5">
-                    {p.phone && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Phone className="w-3 h-3" />{p.phone}</span>}
-                    {p.email && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Mail className="w-3 h-3" />{p.email}</span>}
-                  </div>
-                </td>
-                <td className="px-4 py-3 font-mono text-xs text-muted-foreground">#{p.patientNumber}</td>
-                <td className="px-4 py-3 text-center font-bold">{p._count?.appointments ?? 0}</td>
-                <td className="px-4 py-3 text-xs text-muted-foreground">{p.appointments?.[0] ? formatDate(p.appointments[0].date) : "Nunca"}</td>
-                <td className="px-4 py-3">
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${STATUS_COLORS[p.status] ?? STATUS_COLORS.ACTIVE}`}>
-                    {p.status === "ACTIVE" ? "Activo" : "Inactivo"}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <Link href={`/dashboard/patients/${p.id}`} className="text-xs font-semibold text-brand-600 hover:underline">Ver →</Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-4 px-1">
-          <span className="text-sm text-muted-foreground">
-            Página {page} de {totalPages} · {total} pacientes
-          </span>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page <= 1}
-              onClick={() => goToPage(page - 1)}
-            >
-              <ChevronLeft className="w-4 h-4 mr-1" /> Anterior
-            </Button>
-            {/* Page number pills */}
-            <div className="flex gap-1">
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum: number;
-                if (totalPages <= 5) {
-                  pageNum = i + 1;
-                } else if (page <= 3) {
-                  pageNum = i + 1;
-                } else if (page >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i;
-                } else {
-                  pageNum = page - 2 + i;
-                }
-                return (
-                  <button
-                    key={pageNum}
-                    onClick={() => goToPage(pageNum)}
-                    className={`w-8 h-8 rounded-lg text-sm font-semibold transition-colors ${
-                      pageNum === page
-                        ? "bg-brand-600 text-white"
-                        : "bg-card border border-border hover:bg-muted text-foreground"
-                    }`}
-                  >
-                    {pageNum}
-                  </button>
-                );
-              })}
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page >= totalPages}
-              onClick={() => goToPage(page + 1)}
-            >
-              Siguiente <ChevronRight className="w-4 h-4 ml-1" />
-            </Button>
+      {/* Table */}
+      <CardNew noPad>
+        {patients.length === 0 ? (
+          <div style={{ padding: "48px 24px", textAlign: "center" }}>
+            <Users size={32} style={{ color: "var(--text-4)", margin: "0 auto 12px" }} />
+            <p style={{ color: "var(--text-3)", fontSize: 13 }}>
+              {search ? "Sin resultados" : "No hay pacientes todavía"}
+            </p>
+            {!search && (
+              <div style={{ marginTop: 12 }}>
+                <ButtonNew variant="primary" size="sm" icon={<Plus size={14} />} onClick={() => setShowNew(true)}>
+                  Agregar primer paciente
+                </ButtonNew>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        ) : (
+          <>
+            <table className="table-new">
+              <thead>
+                <tr>
+                  <th>Paciente</th>
+                  <th>Contacto</th>
+                  <th>Expedientes</th>
+                  <th>Última visita</th>
+                  <th>Estado</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {patients.map(p => {
+                  const lastVisit = p.appointments?.[0]?.date;
+                  const age = ageFromDob(p.dob);
+                  const fullName = `${p.firstName} ${p.lastName}`;
+                  return (
+                    <tr key={p.id}>
+                      <td>
+                        <Link
+                          href={`/dashboard/patients/${p.id}`}
+                          style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", color: "inherit" }}
+                        >
+                          <AvatarNew name={fullName} size="sm" />
+                          <div>
+                            <div style={{ fontWeight: 500, color: "var(--text-1)" }}>{fullName}</div>
+                            <div className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>
+                              #{p.patientNumber}
+                              {age !== null ? ` · ${age}a` : ""}
+                              {p.gender === "M" ? " · M" : p.gender === "F" ? " · F" : ""}
+                            </div>
+                          </div>
+                        </Link>
+                      </td>
+                      <td>
+                        <div style={{ color: "var(--text-1)" }}>{p.phone || "—"}</div>
+                        <div style={{ fontSize: 11, color: "var(--text-3)" }}>{p.email || "—"}</div>
+                      </td>
+                      <td className="mono" style={{ color: "var(--text-2)" }}>
+                        {p._count?.records ?? 0}
+                      </td>
+                      <td style={{ color: "var(--text-2)" }}>
+                        {formatRelativeDate(lastVisit)}
+                      </td>
+                      <td>
+                        <BadgeNew tone={patientStatusTone(p.status)} dot>
+                          {patientStatusLabel(p.status)}
+                        </BadgeNew>
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <Link
+                          href={`/dashboard/patients/${p.id}`}
+                          style={{ textDecoration: "none", color: "var(--brand)", fontSize: 11, fontWeight: 600 }}
+                        >
+                          Ver →
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
 
-      <NewPatientModal open={showNew} onClose={() => setShowNew(false)} onCreated={handleCreated} />
+            {totalPages > 1 && (
+              <div className="pagination">
+                <div className="pagination__info">
+                  Página <strong style={{ color: "var(--text-2)" }}>{page}</strong> de {totalPages} · {total} pacientes
+                </div>
+                <div className="pagination__pages">
+                  <button
+                    type="button"
+                    className="pagination__btn"
+                    disabled={page <= 1}
+                    onClick={() => goToPage(page - 1)}
+                    aria-label="Página anterior"
+                  >
+                    <ChevronLeft size={12} />
+                  </button>
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum: number;
+                    if (totalPages <= 5)         pageNum = i + 1;
+                    else if (page <= 3)          pageNum = i + 1;
+                    else if (page >= totalPages - 2) pageNum = totalPages - 4 + i;
+                    else                         pageNum = page - 2 + i;
+                    return (
+                      <button
+                        key={pageNum}
+                        type="button"
+                        onClick={() => goToPage(pageNum)}
+                        className={`pagination__btn ${pageNum === page ? "pagination__btn--active" : ""}`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    className="pagination__btn"
+                    disabled={page >= totalPages}
+                    onClick={() => goToPage(page + 1)}
+                    aria-label="Página siguiente"
+                  >
+                    <ChevronRight size={12} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </CardNew>
+
+      <NewPatientModal open={showNew} onClose={() => setShowNew(false)} onCreated={() => { router.refresh(); setShowNew(false); }} />
     </div>
   );
 }

@@ -1,52 +1,108 @@
 "use client";
-import React, { useState } from "react";
-import { Plus, CreditCard, TrendingUp, Clock } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  Plus, CheckCircle2, Clock, AlertCircle, FileText, Search, X,
+} from "lucide-react";
 import toast from "react-hot-toast";
+import { KpiCard }   from "@/components/ui/design-system/kpi-card";
+import { CardNew }   from "@/components/ui/design-system/card-new";
+import { BadgeNew }  from "@/components/ui/design-system/badge-new";
+import { AvatarNew } from "@/components/ui/design-system/avatar-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { fmtMXN, fmtMXNdec, formatRelativeDate } from "@/lib/format";
 
-const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
-  PENDING:   { label: "Pendiente", cls: "text-amber-700 bg-amber-50 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300"       },
-  PARTIAL:   { label: "Parcial",   cls: "text-blue-700 bg-blue-50 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300"          },
-  PAID:      { label: "Pagado",    cls: "text-emerald-700 bg-emerald-50 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300"  },
-  OVERDUE:   { label: "Vencido",   cls: "text-rose-700 bg-rose-50 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300"           },
-  DRAFT:     { label: "📝 Borrador",cls: "text-violet-700 bg-violet-50 border-violet-300 dark:bg-violet-900/30 dark:text-violet-300"       },
-  CANCELLED: { label: "Cancelado", cls: "text-muted-foreground bg-muted border-border"        },
+type Tone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
+const STATUS_BADGE: Record<string, { tone: Tone; label: string }> = {
+  PENDING:   { tone: "warning", label: "Pendiente" },
+  PARTIAL:   { tone: "info",    label: "Parcial"   },
+  PAID:      { tone: "success", label: "Pagado"    },
+  OVERDUE:   { tone: "danger",  label: "Vencido"   },
+  DRAFT:     { tone: "brand",   label: "Borrador"  },
+  CANCELLED: { tone: "neutral", label: "Cancelado" },
 };
 
+const STATUS_FILTERS = [
+  { value: "all",      label: "Todas" },
+  { value: "pending",  label: "Pendientes" },
+  { value: "paid",     label: "Pagadas" },
+  { value: "overdue",  label: "Vencidas" },
+  { value: "draft",    label: "Borradores" },
+];
+
 interface Props {
-  invoices: any[]; patients: any[];
-  totalPaid: number; totalPending: number;
-  clinic: { facturApiEnabled: boolean; rfcEmisor: string | null };
+  invoices:      any[];
+  patients:      any[];
+  totalPaid:     number;
+  totalPending:  number;
+  totalOverdue:  number;
+  monthInvoices: number;
+  clinic:        { facturApiEnabled: boolean; rfcEmisor: string | null };
 }
 
-export function BillingClient({ invoices: initial, patients, totalPaid, totalPending, clinic }: Props) {
+export function BillingClient({ invoices: initial, patients, totalPaid, totalPending, totalOverdue, monthInvoices, clinic }: Props) {
   const router = useRouter();
   const [invoices, setInvoices] = useState(initial);
-  const [showNew, setShowNew]   = useState(false);
-  const [loading, setLoading]   = useState(false);
-  const [paying, setPaying]     = useState<string | null>(null);
+  const [search, setSearch]     = useState("");
+  const [status, setStatus]     = useState<string>("all");
+
+  // Modals
+  const [showNew, setShowNew]     = useState(false);
+  const [payFor, setPayFor]       = useState<any | null>(null);
+  const [cfdiFor, setCfdiFor]     = useState<any | null>(null);
+
+  // New invoice form
+  const [form, setForm] = useState({ patientId: "", description: "", quantity: "1", unitPrice: "", notes: "" });
+  const setF = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+  const [loadingNew, setLoadingNew] = useState(false);
+
+  // Payment form
   const [payAmount, setPayAmount] = useState("");
   const [payMethod, setPayMethod] = useState("CASH");
-  const [form, setForm] = useState({ patientId: "", description: "", quantity: "1", unitPrice: "", notes: "" });
-  // CFDI state
-  const [cfdiInv,    setCfdiInv]    = useState<string | null>(null); // invoiceId being timbrado
-  const [cfdiLoading,setCfdiLoading]= useState(false);
-  const [cfdiForm,   setCfdiForm]   = useState({
+
+  // CFDI form
+  const [cfdiLoading, setCfdiLoading] = useState(false);
+  const [cfdiForm, setCfdiForm] = useState({
     rfc: "", nombre: "", regimenFiscal: "616", cp: "", usoCfdi: "D01", formaPago: "01",
   });
-  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+  const setCfdiF = (k: string, v: string) => setCfdiForm(f => ({ ...f, [k]: v }));
 
-  async function createInvoice(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.patientId || !form.description || !form.unitPrice) { toast.error("Completa los campos requeridos"); return; }
-    setLoading(true);
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return invoices.filter(inv => {
+      if (status !== "all") {
+        const match =
+          status === "pending" ? ["PENDING", "PARTIAL"].includes(inv.status) :
+          status === "paid"    ? inv.status === "PAID" :
+          status === "overdue" ? inv.status === "OVERDUE" :
+          status === "draft"   ? inv.status === "DRAFT" : true;
+        if (!match) return false;
+      }
+      if (!q) return true;
+      const name = `${inv.patient?.firstName ?? ""} ${inv.patient?.lastName ?? ""}`.toLowerCase();
+      return name.includes(q) || (inv.invoiceNumber ?? "").toLowerCase().includes(q);
+    });
+  }, [invoices, search, status]);
+
+  async function createInvoice() {
+    if (!form.patientId || !form.description || !form.unitPrice) {
+      toast.error("Completa los campos requeridos");
+      return;
+    }
+    setLoadingNew(true);
     try {
-      const qty = Number(form.quantity) || 1; const price = Number(form.unitPrice) || 0;
+      const qty = Number(form.quantity) || 1;
+      const price = Number(form.unitPrice) || 0;
       const total = Math.round(qty * price * 100) / 100;
-      const res = await fetch("/api/invoices", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patientId: form.patientId, notes: form.notes, items: [{ description: form.description, quantity: qty, unitPrice: price, total }] }) });
+      const res = await fetch("/api/invoices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patientId: form.patientId,
+          notes: form.notes,
+          items: [{ description: form.description, quantity: qty, unitPrice: price, total }],
+        }),
+      });
       if (!res.ok) throw new Error((await res.json()).error);
       const inv = await res.json();
       setInvoices(prev => [inv, ...prev]);
@@ -55,19 +111,29 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
       setForm({ patientId: "", description: "", quantity: "1", unitPrice: "", notes: "" });
     } catch (err: any) {
       toast.error(err.message ?? "Error al crear factura");
-    } finally { setLoading(false); }
+    } finally {
+      setLoadingNew(false);
+    }
   }
 
-  async function registerPayment(invoiceId: string) {
+  async function registerPayment() {
+    if (!payFor) return;
     const amount = Number(payAmount);
     if (!amount || amount <= 0) { toast.error("Monto inválido"); return; }
     try {
-      const res = await fetch(`/api/invoices/${invoiceId}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount, method: payMethod }) });
+      const res = await fetch(`/api/invoices/${payFor.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount, method: payMethod }),
+      });
       if (!res.ok) throw new Error((await res.json()).error);
       toast.success("Pago registrado");
-      setPaying(null); setPayAmount("");
+      setPayFor(null);
+      setPayAmount("");
       router.refresh();
-    } catch (err: any) { toast.error(err.message ?? "Error"); }
+    } catch (err: any) {
+      toast.error(err.message ?? "Error");
+    }
   }
 
   async function confirmDraft(invoiceId: string) {
@@ -79,7 +145,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
       });
       if (!res.ok) throw new Error((await res.json()).error);
       setInvoices(prev => prev.map(i => i.id === invoiceId ? { ...i, status: "PENDING" } : i));
-      toast.success("✅ Factura confirmada — ya puedes registrar pagos");
+      toast.success("Factura confirmada — ya puedes registrar pagos");
     } catch (err: any) {
       toast.error(err.message ?? "Error al confirmar factura");
     }
@@ -97,35 +163,36 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
     }
   }
 
-  async function timbraCfdi(invoiceId: string) {
+  async function timbraCfdi() {
+    if (!cfdiFor) return;
     if (!cfdiForm.rfc.trim() || !cfdiForm.nombre.trim() || !cfdiForm.cp.trim()) {
-      toast.error("RFC, nombre y código postal del paciente son requeridos");
+      toast.error("RFC, nombre y CP del paciente son requeridos");
       return;
     }
     setCfdiLoading(true);
     try {
       const res = await fetch("/api/cfdi", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          invoiceId,
+          invoiceId: cfdiFor.id,
           receptor: {
-            rfc:           cfdiForm.rfc.trim().toUpperCase(),
-            nombre:        cfdiForm.nombre.trim().toUpperCase(),
+            rfc: cfdiForm.rfc.trim().toUpperCase(),
+            nombre: cfdiForm.nombre.trim().toUpperCase(),
             regimenFiscal: cfdiForm.regimenFiscal,
-            cp:            cfdiForm.cp.trim(),
+            cp: cfdiForm.cp.trim(),
           },
-          usoCfdi:     cfdiForm.usoCfdi,
+          usoCfdi: cfdiForm.usoCfdi,
           paymentForm: cfdiForm.formaPago,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setInvoices(prev => prev.map(inv =>
-        inv.id === invoiceId ? { ...inv, cfdiUuid: data.uuid } : inv
+        inv.id === cfdiFor.id ? { ...inv, cfdiUuid: data.uuid } : inv,
       ));
-      setCfdiInv(null);
-      toast.success("✅ CFDI timbrado correctamente ante el SAT");
-      // Open PDF in new tab if available
+      setCfdiFor(null);
+      toast.success("CFDI timbrado correctamente ante el SAT");
       if (data.pdfUrl) window.open(data.pdfUrl, "_blank");
     } catch (err: any) {
       toast.error(err.message ?? "Error al timbrar");
@@ -134,224 +201,345 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
     }
   }
 
+  const newFormTotal = (Number(form.quantity) || 1) * (Number(form.unitPrice) || 0);
+
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+    <div style={{ padding: "24px 28px", maxWidth: 1400, margin: "0 auto" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
         <div>
-          <h1 className="text-xl font-extrabold">Facturación</h1>
-          <p className="text-sm text-muted-foreground">{invoices.length} facturas</p>
+          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>Facturación</h1>
+          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
+            Gestión de facturas y pagos · {invoices.length} facturas
+          </p>
         </div>
-        <Button onClick={() => setShowNew(true)}><Plus className="w-4 h-4" />Nueva factura</Button>
+        <ButtonNew variant="primary" icon={<Plus size={14} />} onClick={() => setShowNew(true)}>
+          Nueva factura
+        </ButtonNew>
       </div>
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        {[
-          { icon: <TrendingUp className="w-4 h-4 text-emerald-600" />, label: "Total cobrado",  val: formatCurrency(totalPaid),    bg: "bg-emerald-50" },
-          { icon: <Clock className="w-4 h-4 text-amber-600" />,       label: "Por cobrar",     val: formatCurrency(totalPending), bg: "bg-amber-50"   },
-          { icon: <CreditCard className="w-4 h-4 text-brand-600" />,  label: "Total facturas", val: String(invoices.length),      bg: "bg-brand-600/15"   },
-        ].map(k => (
-          <div key={k.label} className="rounded-xl border border-border bg-card p-4 shadow-card">
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-3 ${k.bg}`}>{k.icon}</div>
-            <div className="text-xl font-extrabold">{k.val}</div>
-            <div className="text-xs text-muted-foreground">{k.label}</div>
+      {/* KPIs */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginBottom: 20 }}>
+        <KpiCard label="Total cobrado" value={fmtMXN(totalPaid)}       icon={CheckCircle2} />
+        <KpiCard label="Por cobrar"    value={fmtMXN(totalPending)}    icon={Clock} />
+        <KpiCard label="Vencido"       value={fmtMXN(totalOverdue)}    icon={AlertCircle} />
+        <KpiCard label="Este mes"      value={String(monthInvoices)}   icon={FileText} />
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap", alignItems: "center" }}>
+        <div className="search-field">
+          <Search size={14} />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar por paciente o folio…"
+          />
+        </div>
+        <div className="segment-new">
+          {STATUS_FILTERS.map(f => (
+            <button
+              key={f.value}
+              type="button"
+              onClick={() => setStatus(f.value)}
+              className={`segment-new__btn ${status === f.value ? "segment-new__btn--active" : ""}`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Table */}
+      <CardNew noPad>
+        {filtered.length === 0 ? (
+          <div style={{ padding: "48px 24px", textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
+            {invoices.length === 0 ? "No hay facturas todavía" : "Sin resultados para los filtros aplicados"}
           </div>
-        ))}
-      </div>
-
-      {showNew && (
-        <div className="rounded-xl border border-brand-200 bg-brand-600/15 p-5 mb-5 animate-fade-up">
-          <h2 className="text-sm font-bold mb-4 text-brand-700">💰 Nueva factura</h2>
-          <form onSubmit={createInvoice} className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="col-span-2 space-y-1">
-              <label className="text-xs font-bold text-muted-foreground">Paciente *</label>
-              <select className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none" value={form.patientId} onChange={e => set("patientId", e.target.value)}>
-                <option value="">Seleccionar…</option>
-                {patients.map(p => <option key={p.id} value={p.id}>#{p.patientNumber} — {p.firstName} {p.lastName}</option>)}
-              </select>
-            </div>
-            <div className="col-span-2 space-y-1">
-              <label className="text-xs font-bold text-muted-foreground">Descripción *</label>
-              <input className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none" placeholder="Consulta dental…" value={form.description} onChange={e => set("description", e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-muted-foreground">Cantidad</label>
-              <input type="number" min="1" className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none" value={form.quantity} onChange={e => set("quantity", e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-muted-foreground">Precio unitario *</label>
-              <input type="number" min="0" className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none" placeholder="500" value={form.unitPrice} onChange={e => set("unitPrice", e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-muted-foreground">Total</label>
-              <div className="h-10 flex items-center px-3 rounded-lg bg-muted border border-border text-sm font-bold">
-                {formatCurrency((Number(form.quantity)||1) * (Number(form.unitPrice)||0))}
-              </div>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-muted-foreground">Notas</label>
-              <input className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none" placeholder="Opcional" value={form.notes} onChange={e => set("notes", e.target.value)} />
-            </div>
-            <div className="col-span-2 lg:col-span-4 flex gap-2">
-              <Button type="submit" disabled={loading} size="sm">{loading ? "Guardando…" : "Crear factura"}</Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => setShowNew(false)}>Cancelar</Button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      <div className="rounded-xl border border-border bg-card shadow-card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted/30">
-              {["Factura","Paciente","Monto","Pagado","Saldo","Estado","CFDI",""].map(h => (
-                <th key={h} className="text-left px-4 py-3 text-xs font-bold text-muted-foreground uppercase tracking-wide first:pl-5">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {invoices.length === 0 ? (
-              <tr><td colSpan={8} className="px-5 py-16 text-center text-muted-foreground text-sm">
-                No hay facturas. <button onClick={() => setShowNew(true)} className="text-brand-600 hover:underline">Crear primera →</button>
-              </td></tr>
-            ) : invoices.map(inv => {
-              const s = STATUS_CONFIG[inv.status] ?? STATUS_CONFIG.PENDING;
-              const isDraft = inv.status === "DRAFT";
-              return (
-                <React.Fragment key={inv.id}>
-                  <tr className={`border-b border-border/60 hover:bg-muted/20 transition-colors ${isDraft ? "bg-violet-50/50 dark:bg-violet-950/10" : ""}`}>
-                    <td className="px-5 py-3 font-mono text-xs font-bold">
-                      {isDraft && <span className="mr-1">📝</span>}{inv.invoiceNumber}
+        ) : (
+          <table className="table-new">
+            <thead>
+              <tr>
+                <th>Folio</th>
+                <th>Paciente</th>
+                <th>Fecha</th>
+                <th style={{ textAlign: "right" }}>Total</th>
+                <th style={{ textAlign: "right" }}>Pagado</th>
+                <th style={{ textAlign: "right" }}>Saldo</th>
+                <th>Estado</th>
+                <th>CFDI</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(inv => {
+                const badge = STATUS_BADGE[inv.status] ?? STATUS_BADGE.PENDING;
+                const fullName = `${inv.patient?.firstName ?? ""} ${inv.patient?.lastName ?? "—"}`;
+                const isDraft = inv.status === "DRAFT";
+                const canPay  = !["PAID", "CANCELLED"].includes(inv.status) && !isDraft;
+                return (
+                  <tr key={inv.id}>
+                    <td className="mono" style={{ color: "var(--text-2)" }}>
+                      {isDraft && "📝 "}{inv.invoiceNumber}
                     </td>
-                    <td className="px-4 py-3 font-medium">{inv.patient?.firstName} {inv.patient?.lastName}</td>
-                    <td className="px-4 py-3 font-mono font-bold">{formatCurrency(inv.total)}</td>
-                    <td className="px-4 py-3 text-emerald-600 font-mono">{formatCurrency(inv.paid)}</td>
-                    <td className="px-4 py-3 font-mono font-bold text-rose-600">{formatCurrency(inv.balance)}</td>
-                    <td className="px-4 py-3"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${s.cls}`}>{s.label}</span></td>
-                    <td className="px-4 py-3">
+                    <td>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <AvatarNew name={fullName} size="sm" />
+                        <span style={{ color: "var(--text-1)" }}>{fullName}</span>
+                      </div>
+                    </td>
+                    <td style={{ color: "var(--text-2)" }}>
+                      {formatRelativeDate(inv.createdAt)}
+                    </td>
+                    <td className="mono" style={{ textAlign: "right", color: "var(--text-1)" }}>
+                      {fmtMXNdec(inv.total)}
+                    </td>
+                    <td className="mono" style={{ textAlign: "right", color: "var(--success)" }}>
+                      {fmtMXNdec(inv.paid)}
+                    </td>
+                    <td className="mono" style={{ textAlign: "right", color: inv.balance > 0 ? "var(--warning)" : "var(--text-3)" }}>
+                      {fmtMXNdec(inv.balance)}
+                    </td>
+                    <td>
+                      <BadgeNew tone={badge.tone} dot>{badge.label}</BadgeNew>
+                    </td>
+                    <td>
                       {inv.cfdiUuid ? (
-                        <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                          ✅ Timbrado
-                        </span>
+                        <BadgeNew tone="success">Timbrado</BadgeNew>
                       ) : clinic.facturApiEnabled ? (
                         <button
-                          onClick={() => { setCfdiInv(cfdiInv === inv.id ? null : inv.id); }}
-                          className="text-xs font-semibold text-violet-600 hover:underline">
-                          🏛 Timbrar CFDI
+                          type="button"
+                          onClick={() => { setCfdiFor(inv); setCfdiForm(f => ({ ...f, rfc: "", nombre: "", cp: "" })); }}
+                          className="btn-new btn-new--ghost btn-new--sm"
+                        >
+                          Timbrar
                         </button>
                       ) : (
-                        <span className="text-[10px] text-muted-foreground">SAT no configurado</span>
+                        <span style={{ fontSize: 10, color: "var(--text-4)" }}>SAT no configurado</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                       {isDraft ? (
-                        <div className="flex gap-2">
-                          <button onClick={() => confirmDraft(inv.id)} className="text-xs font-bold text-emerald-600 hover:underline">✅ Confirmar</button>
-                          <button onClick={() => deleteDraft(inv.id)} className="text-xs font-semibold text-rose-500 hover:underline">Eliminar</button>
-                        </div>
-                      ) : !["PAID","CANCELLED"].includes(inv.status) ? (
-                        <button onClick={() => setPaying(paying === inv.id ? null : inv.id)} className="text-xs font-semibold text-brand-600 hover:underline">Registrar pago</button>
+                        <span style={{ display: "inline-flex", gap: 6 }}>
+                          <button type="button" onClick={() => confirmDraft(inv.id)} className="btn-new btn-new--ghost btn-new--sm" style={{ color: "var(--success)" }}>
+                            Confirmar
+                          </button>
+                          <button type="button" onClick={() => deleteDraft(inv.id)} className="btn-new btn-new--ghost btn-new--sm" style={{ color: "var(--danger)" }}>
+                            Eliminar
+                          </button>
+                        </span>
+                      ) : canPay ? (
+                        <button
+                          type="button"
+                          onClick={() => { setPayFor(inv); setPayAmount(String(inv.balance)); }}
+                          className="btn-new btn-new--ghost btn-new--sm"
+                        >
+                          Registrar pago
+                        </button>
                       ) : null}
                     </td>
                   </tr>
-                  {paying === inv.id && (
-                    <tr key={`pay-${inv.id}`} className="bg-brand-600/15">
-                      <td colSpan={8} className="px-5 py-3">
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <span className="text-xs font-bold text-brand-700">Saldo: {formatCurrency(inv.balance)}</span>
-                          <input type="number" placeholder="Monto" className="h-8 w-28 rounded-lg border border-border bg-card px-3 text-sm" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
-                          <select className="h-8 rounded-lg border border-border bg-card px-2 text-sm" value={payMethod} onChange={e => setPayMethod(e.target.value)}>
-                            <option value="CASH">Efectivo</option><option value="CARD">Tarjeta</option><option value="TRANSFER">Transferencia</option>
-                          </select>
-                          <Button size="sm" onClick={() => registerPayment(inv.id)}>Registrar</Button>
-                          <button className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setPaying(null)}>Cancelar</button>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                  {cfdiInv === inv.id && !inv.cfdiUuid && (
-                    <tr key={`cfdi-${inv.id}`} className="bg-violet-50 dark:bg-violet-950/20">
-                      <td colSpan={8} className="px-5 py-4">
-                        <div className="space-y-3">
-                          <div className="text-xs font-bold text-violet-700 dark:text-violet-300 mb-2">
-                            🏛 Datos del receptor para CFDI — Factura {inv.invoiceNumber} · {formatCurrency(inv.total)}
-                          </div>
-                          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                            <div className="space-y-1">
-                              <label className="text-xs font-bold text-muted-foreground">RFC receptor *</label>
-                              <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none uppercase"
-                                placeholder="XAXX010101000"
-                                value={cfdiForm.rfc}
-                                onChange={e => setCfdiForm(f => ({ ...f, rfc: e.target.value.toUpperCase() }))} />
-                            </div>
-                            <div className="space-y-1 lg:col-span-2">
-                              <label className="text-xs font-bold text-muted-foreground">Nombre / Razón social *</label>
-                              <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none uppercase"
-                                placeholder="JUAN PÉREZ GARCÍA"
-                                value={cfdiForm.nombre}
-                                onChange={e => setCfdiForm(f => ({ ...f, nombre: e.target.value }))} />
-                            </div>
-                            <div className="space-y-1">
-                              <label className="text-xs font-bold text-muted-foreground">C.P. receptor *</label>
-                              <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
-                                placeholder="97000" maxLength={5}
-                                value={cfdiForm.cp}
-                                onChange={e => setCfdiForm(f => ({ ...f, cp: e.target.value }))} />
-                            </div>
-                            <div className="space-y-1">
-                              <label className="text-xs font-bold text-muted-foreground">Régimen fiscal</label>
-                              <select className="flex h-9 w-full rounded-lg border border-border bg-card px-2 text-sm focus:outline-none"
-                                value={cfdiForm.regimenFiscal}
-                                onChange={e => setCfdiForm(f => ({ ...f, regimenFiscal: e.target.value }))}>
-                                <option value="616">616 — Sin obligaciones fiscales</option>
-                                <option value="605">605 — Sueldos y salarios</option>
-                                <option value="612">612 — Personas físicas con actividad</option>
-                                <option value="626">626 — Régimen simplificado de confianza</option>
-                              </select>
-                            </div>
-                            <div className="space-y-1">
-                              <label className="text-xs font-bold text-muted-foreground">Uso CFDI</label>
-                              <select className="flex h-9 w-full rounded-lg border border-border bg-card px-2 text-sm focus:outline-none"
-                                value={cfdiForm.usoCfdi}
-                                onChange={e => setCfdiForm(f => ({ ...f, usoCfdi: e.target.value }))}>
-                                <option value="D01">D01 — Honorarios médicos</option>
-                                <option value="D07">D07 — Primas seguros</option>
-                                <option value="G03">G03 — Gastos en general</option>
-                                <option value="S01">S01 — Sin efectos fiscales</option>
-                              </select>
-                            </div>
-                            <div className="space-y-1">
-                              <label className="text-xs font-bold text-muted-foreground">Forma de pago</label>
-                              <select className="flex h-9 w-full rounded-lg border border-border bg-card px-2 text-sm focus:outline-none"
-                                value={cfdiForm.formaPago}
-                                onChange={e => setCfdiForm(f => ({ ...f, formaPago: e.target.value }))}>
-                                <option value="01">01 — Efectivo</option>
-                                <option value="02">02 — Cheque</option>
-                                <option value="03">03 — Transferencia</option>
-                                <option value="04">04 — Tarjeta de crédito</option>
-                                <option value="28">28 — Tarjeta de débito</option>
-                              </select>
-                            </div>
-                          </div>
-                          <div className="flex gap-2 pt-1">
-                            <Button size="sm" onClick={() => timbraCfdi(inv.id)} disabled={cfdiLoading}
-                              className="bg-violet-600 hover:bg-violet-700">
-                              {cfdiLoading ? "Timbrando…" : "🏛 Timbrar CFDI ante SAT"}
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={() => setCfdiInv(null)}>Cancelar</Button>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            El CFDI se timbra vía Facturapi. El paciente podrá descargar XML y PDF.
-                          </p>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </CardNew>
+
+      {/* Modal: Nueva factura */}
+      {showNew && (
+        <div className="modal-overlay" onClick={() => setShowNew(false)}>
+          <div className="modal modal--wide" onClick={e => e.stopPropagation()}>
+            <div className="modal__header">
+              <div className="modal__title">Nueva factura</div>
+              <button onClick={() => setShowNew(false)} type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label="Cerrar">
+                <X size={14} />
+              </button>
+            </div>
+            <form onSubmit={e => { e.preventDefault(); createInvoice(); }}>
+              <div className="modal__body">
+                <div style={{ marginBottom: 22 }}>
+                  <div className="form-section__title">Paciente y detalle<span className="form-section__rule" /></div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
+                    <div className="field-new" style={{ gridColumn: "1 / -1" }}>
+                      <label className="field-new__label">Paciente <span className="req">*</span></label>
+                      <select className="input-new" value={form.patientId} onChange={e => setF("patientId", e.target.value)}>
+                        <option value="">Seleccionar…</option>
+                        {patients.map(p => (
+                          <option key={p.id} value={p.id}>#{p.patientNumber} — {p.firstName} {p.lastName}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="field-new" style={{ gridColumn: "1 / -1" }}>
+                      <label className="field-new__label">Descripción <span className="req">*</span></label>
+                      <input className="input-new" placeholder="Consulta dental…" value={form.description} onChange={e => setF("description", e.target.value)} />
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: 22 }}>
+                  <div className="form-section__title">Conceptos y totales<span className="form-section__rule" /></div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px 14px" }}>
+                    <div className="field-new">
+                      <label className="field-new__label">Cantidad</label>
+                      <input type="number" min={1} className="input-new" value={form.quantity} onChange={e => setF("quantity", e.target.value)} />
+                    </div>
+                    <div className="field-new">
+                      <label className="field-new__label">Precio unitario <span className="req">*</span></label>
+                      <input type="number" min={0} className="input-new" placeholder="500" value={form.unitPrice} onChange={e => setF("unitPrice", e.target.value)} />
+                    </div>
+                    <div className="field-new">
+                      <label className="field-new__label">Total</label>
+                      <div className="input-new mono" style={{ display: "flex", alignItems: "center", color: "var(--text-1)", fontWeight: 600 }}>
+                        {fmtMXNdec(newFormTotal)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="field-new">
+                  <label className="field-new__label">Notas</label>
+                  <input className="input-new" placeholder="Opcional" value={form.notes} onChange={e => setF("notes", e.target.value)} />
+                </div>
+              </div>
+              <div className="modal__footer">
+                <ButtonNew variant="ghost" type="button" onClick={() => setShowNew(false)}>Cancelar</ButtonNew>
+                <ButtonNew variant="primary" type="submit" disabled={loadingNew}>
+                  {loadingNew ? "Guardando…" : "Crear factura"}
+                </ButtonNew>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Registrar pago */}
+      {payFor && (
+        <div className="modal-overlay" onClick={() => setPayFor(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal__header">
+              <div className="modal__title">Registrar pago — {payFor.invoiceNumber}</div>
+              <button onClick={() => setPayFor(null)} type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label="Cerrar">
+                <X size={14} />
+              </button>
+            </div>
+            <div className="modal__body">
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 18 }}>
+                <div>
+                  <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Total factura</div>
+                  <div className="mono" style={{ color: "var(--text-1)", fontWeight: 600 }}>{fmtMXNdec(payFor.total)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Saldo pendiente</div>
+                  <div className="mono" style={{ color: "var(--warning)", fontWeight: 600 }}>{fmtMXNdec(payFor.balance)}</div>
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
+                <div className="field-new">
+                  <label className="field-new__label">Monto <span className="req">*</span></label>
+                  <input type="number" min={0} className="input-new" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
+                </div>
+                <div className="field-new">
+                  <label className="field-new__label">Método</label>
+                  <select className="input-new" value={payMethod} onChange={e => setPayMethod(e.target.value)}>
+                    <option value="CASH">Efectivo</option>
+                    <option value="CARD">Tarjeta</option>
+                    <option value="TRANSFER">Transferencia</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div className="modal__footer">
+              <ButtonNew variant="ghost" type="button" onClick={() => setPayFor(null)}>Cancelar</ButtonNew>
+              <ButtonNew variant="primary" onClick={registerPayment}>Registrar pago</ButtonNew>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Timbrar CFDI */}
+      {cfdiFor && !cfdiFor.cfdiUuid && (
+        <div className="modal-overlay" onClick={() => setCfdiFor(null)}>
+          <div className="modal modal--wide" onClick={e => e.stopPropagation()}>
+            <div className="modal__header">
+              <div className="modal__title">Timbrar CFDI — {cfdiFor.invoiceNumber}</div>
+              <button onClick={() => setCfdiFor(null)} type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label="Cerrar">
+                <X size={14} />
+              </button>
+            </div>
+            <div className="modal__body">
+              <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 18 }}>
+                Factura por <strong className="mono" style={{ color: "var(--text-1)" }}>{fmtMXNdec(cfdiFor.total)}</strong>.
+                Emisor: {clinic.rfcEmisor ?? "—"}.
+              </div>
+
+              <div style={{ marginBottom: 22 }}>
+                <div className="form-section__title">Datos del receptor<span className="form-section__rule" /></div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr 1fr", gap: "12px 14px" }}>
+                  <div className="field-new">
+                    <label className="field-new__label">RFC <span className="req">*</span></label>
+                    <input className="input-new mono" style={{ textTransform: "uppercase" }}
+                      placeholder="XAXX010101000" value={cfdiForm.rfc}
+                      onChange={e => setCfdiF("rfc", e.target.value.toUpperCase())} />
+                  </div>
+                  <div className="field-new">
+                    <label className="field-new__label">Nombre / Razón social <span className="req">*</span></label>
+                    <input className="input-new" style={{ textTransform: "uppercase" }}
+                      placeholder="JUAN PÉREZ GARCÍA" value={cfdiForm.nombre}
+                      onChange={e => setCfdiF("nombre", e.target.value)} />
+                  </div>
+                  <div className="field-new">
+                    <label className="field-new__label">CP <span className="req">*</span></label>
+                    <input className="input-new mono" maxLength={5} placeholder="97000"
+                      value={cfdiForm.cp} onChange={e => setCfdiF("cp", e.target.value)} />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="form-section__title">Régimen, uso y forma de pago<span className="form-section__rule" /></div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px 14px" }}>
+                  <div className="field-new">
+                    <label className="field-new__label">Régimen fiscal</label>
+                    <select className="input-new" value={cfdiForm.regimenFiscal} onChange={e => setCfdiF("regimenFiscal", e.target.value)}>
+                      <option value="616">616 — Sin obligaciones fiscales</option>
+                      <option value="605">605 — Sueldos y salarios</option>
+                      <option value="612">612 — Personas físicas con actividad</option>
+                      <option value="626">626 — Régimen simplificado de confianza</option>
+                    </select>
+                  </div>
+                  <div className="field-new">
+                    <label className="field-new__label">Uso CFDI</label>
+                    <select className="input-new" value={cfdiForm.usoCfdi} onChange={e => setCfdiF("usoCfdi", e.target.value)}>
+                      <option value="D01">D01 — Honorarios médicos</option>
+                      <option value="D07">D07 — Primas seguros</option>
+                      <option value="G03">G03 — Gastos en general</option>
+                      <option value="S01">S01 — Sin efectos fiscales</option>
+                    </select>
+                  </div>
+                  <div className="field-new">
+                    <label className="field-new__label">Forma de pago</label>
+                    <select className="input-new" value={cfdiForm.formaPago} onChange={e => setCfdiF("formaPago", e.target.value)}>
+                      <option value="01">01 — Efectivo</option>
+                      <option value="02">02 — Cheque</option>
+                      <option value="03">03 — Transferencia</option>
+                      <option value="04">04 — Tarjeta de crédito</option>
+                      <option value="28">28 — Tarjeta de débito</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="modal__footer">
+              <ButtonNew variant="ghost" type="button" onClick={() => setCfdiFor(null)}>Cancelar</ButtonNew>
+              <ButtonNew variant="primary" onClick={timbraCfdi} disabled={cfdiLoading}>
+                {cfdiLoading ? "Timbrando…" : "Timbrar ante SAT"}
+              </ButtonNew>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

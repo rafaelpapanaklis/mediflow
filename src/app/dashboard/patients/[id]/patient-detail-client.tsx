@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Plus, Printer, Edit } from "lucide-react";
 import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
+import { ageFromDob, fmtMXN } from "@/lib/format";
 import { DentalForm }          from "@/components/clinical/dental-form";
 import { NutritionForm }       from "@/components/clinical/nutrition-form";
 import { PsychologyForm }      from "@/components/clinical/psychology-form";
@@ -14,6 +15,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AvatarNew } from "@/components/ui/design-system/avatar-new";
+import { BadgeNew }  from "@/components/ui/design-system/badge-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
 
 const SPECIALTY_MAP: Record<string, string> = {
   dental: "dental", odontologia: "dental", odontología: "dental",
@@ -216,117 +220,141 @@ export function PatientDetailClient({
     }
   }
 
+  const fullName = `${patient.firstName} ${patient.lastName}`;
+  const ageNum = ageFromDob(patient.dob);
+  const genderLabel = patient.gender === "M" ? "Masculino" : patient.gender === "F" ? "Femenino" : "Otro";
+  const completedCount = appointments.filter(a => a.status === "COMPLETED").length;
+
+  const tabCounts: Record<string, number | undefined> = {
+    historia: records.length,
+    agenda: appointments.length,
+    facturacion: invoices.length,
+  };
+
   return (
-    <div className="flex flex-col h-full -m-5 lg:-m-6">
-      {/* Topbar */}
-      <div className="bg-card border-b border-border px-5 h-13 flex items-center gap-3 flex-shrink-0">
-        <Link href="/dashboard/patients" className="p-1.5 rounded-lg hover:bg-muted transition-colors">
-          <ArrowLeft className="w-4 h-4" />
+    <div style={{ padding: "24px 28px", maxWidth: 1400, margin: "0 auto" }}>
+      {/* Breadcrumbs + quick actions */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
+        <Link href="/dashboard/patients" className="btn-new btn-new--ghost btn-new--sm">
+          <ArrowLeft size={14} />
+          Pacientes
         </Link>
-        <div className="text-xs text-muted-foreground flex items-center gap-1.5">
-          <Link href="/dashboard/patients" className="text-brand-600 hover:underline">Pacientes</Link>
-          <span>/</span>
-          <span className="font-semibold text-foreground">{patient.firstName} {patient.lastName}</span>
-        </div>
-        <div className="flex items-center gap-1.5 ml-2 flex-wrap">
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200">Activo</span>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-muted text-muted-foreground border-border">#{patient.patientNumber}</span>
-          {patient.allergies?.length > 0 && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-rose-50 text-rose-700 border-rose-200">
-              🚨 Alergia: {patient.allergies[0]}
-            </span>
-          )}
-          {totalBalance > 0 && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-blue-50 text-blue-700 border-blue-200">
-              Saldo: {formatCurrency(totalBalance)}
-            </span>
-          )}
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <button onClick={() => setTab("expediente")} className="flex items-center gap-1.5 text-xs font-semibold bg-muted border border-border px-3 py-1.5 rounded-lg hover:bg-muted/80 transition-colors">
-            📝 Nueva nota
-          </button>
+        <span style={{ color: "var(--text-4)" }}>/</span>
+        <span style={{ color: "var(--text-1)", fontWeight: 500, fontSize: 13 }}>{fullName}</span>
+
+        {patient.allergies?.length > 0 && (
+          <BadgeNew tone="danger" dot>Alergia: {patient.allergies[0]}</BadgeNew>
+        )}
+        {totalBalance > 0 && (
+          <BadgeNew tone="info" dot>Saldo: {formatCurrency(totalBalance)}</BadgeNew>
+        )}
+
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+          <ButtonNew variant="ghost" size="sm" onClick={() => setTab("expediente")}>
+            Nueva nota
+          </ButtonNew>
           {portalLink ? (
-            <button onClick={() => { navigator.clipboard.writeText(portalLink); toast.success("Link copiado"); }}
-              className="flex items-center gap-1.5 text-xs font-semibold bg-emerald-600 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-700 transition-colors">
-              🔗 Copiar portal
-            </button>
+            <ButtonNew
+              variant="secondary"
+              size="sm"
+              onClick={() => { navigator.clipboard.writeText(portalLink); toast.success("Link copiado"); }}
+            >
+              Copiar portal
+            </ButtonNew>
           ) : (
-            <button onClick={generatePortalLink} disabled={generatingPortal}
-              className="flex items-center gap-1.5 text-xs font-semibold bg-muted border border-border px-3 py-1.5 rounded-lg hover:bg-muted/80 transition-colors disabled:opacity-50">
-              {generatingPortal ? "Generando…" : "🏥 Portal paciente"}
-            </button>
+            <ButtonNew variant="secondary" size="sm" onClick={generatePortalLink} disabled={generatingPortal}>
+              {generatingPortal ? "Generando…" : "Portal paciente"}
+            </ButtonNew>
           )}
-          <button onClick={() => setShowNewAppt(true)} className="flex items-center gap-1.5 text-xs font-semibold bg-brand-600 text-white px-3 py-1.5 rounded-lg hover:bg-brand-700 transition-colors">
-            <Plus className="w-3.5 h-3.5" />
+          <ButtonNew variant="primary" size="sm" icon={<Plus size={12} />} onClick={() => setShowNewAppt(true)}>
             Agendar cita
-          </button>
+          </ButtonNew>
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Main content */}
-        <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
-
-          {/* Patient header card */}
-          <div className="bg-card border border-border rounded-xl p-4 flex gap-4">
-            <div className={`w-14 h-14 rounded-full ${color} flex items-center justify-center text-xl font-bold text-white flex-shrink-0`}>
-              {initials}
+      {/* Patient header card */}
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div style={{ padding: 24, display: "flex", alignItems: "flex-start", gap: 20 }}>
+          <AvatarNew name={fullName} size="xl" />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
+              <h1 style={{ fontSize: 20, color: "var(--text-1)", fontWeight: 600, margin: 0, letterSpacing: "-0.02em" }}>{fullName}</h1>
+              <BadgeNew tone={patient.status === "ACTIVE" ? "success" : "neutral"} dot>
+                {patient.status === "ACTIVE" ? "Activo" : patient.status === "INACTIVE" ? "Inactivo" : "Archivado"}
+              </BadgeNew>
+              <span className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>#{patient.patientNumber}</span>
+              <button
+                onClick={() => setShowEdit(true)}
+                className="btn-new btn-new--ghost btn-new--sm"
+                type="button"
+                style={{ marginLeft: 4 }}
+              >
+                <Edit size={12} /> Editar
+              </button>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-lg font-extrabold">{patient.firstName} {patient.lastName}</span>
-                <button
-                  onClick={() => setShowEdit(true)}
-                  className="text-xs text-muted-foreground border border-border rounded-lg px-2 py-0.5 hover:bg-muted transition-colors flex items-center gap-1"
-                >
-                  <Edit className="w-3 h-3" /> Editar
-                </button>
-              </div>
-              <div className="flex gap-4 mt-1 flex-wrap">
-                {age && <span className="text-xs text-muted-foreground flex items-center gap-1">👤 <strong className="text-foreground">{age} años</strong></span>}
-                <span className="text-xs text-muted-foreground">♀♂ <strong className="text-foreground">{patient.gender === "M" ? "Masculino" : patient.gender === "F" ? "Femenino" : "Otro"}</strong></span>
-                {patient.dob && <span className="text-xs text-muted-foreground">📅 <strong className="text-foreground">{formatDate(patient.dob)}</strong></span>}
-                {patient.phone && <span className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="w-3 h-3" /> <strong className="text-foreground">{patient.phone}</strong></span>}
-                {patient.email && <span className="text-xs text-muted-foreground flex items-center gap-1"><Mail className="w-3 h-3" /> <strong className="text-foreground">{patient.email}</strong></span>}
-              </div>
-              <div className="flex gap-1.5 mt-2 flex-wrap">
+
+            <div style={{ display: "flex", gap: 16, fontSize: 12, color: "var(--text-2)", flexWrap: "wrap", marginBottom: 10 }}>
+              {ageNum !== null && <span>{ageNum} años</span>}
+              <span>{genderLabel}</span>
+              {patient.phone && <span><Phone size={11} style={{ display: "inline", verticalAlign: -1, marginRight: 4 }} />{patient.phone}</span>}
+              {patient.email && <span><Mail size={11} style={{ display: "inline", verticalAlign: -1, marginRight: 4 }} />{patient.email}</span>}
+              {patient.bloodType && <span>Tipo: <strong className="mono" style={{ color: "var(--text-1)" }}>{patient.bloodType}</strong></span>}
+            </div>
+
+            {(patient.allergies?.length > 0 || patient.chronicConditions?.length > 0 || patient.currentMedications?.length > 0 || patient.tags?.length > 0) && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {patient.allergies?.map((a: string) => (
-                  <span key={a} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700">🚨 Alergia: {a}</span>
+                  <span key={`a-${a}`} className="tag-new" style={{ color: "#fca5a5", borderColor: "rgba(239,68,68,0.2)", background: "var(--danger-soft)" }}>🚨 {a}</span>
                 ))}
                 {patient.chronicConditions?.map((c: string) => (
-                  <span key={c} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">⚕ {c}</span>
+                  <span key={`c-${c}`} className="tag-new" style={{ color: "#fcd34d", borderColor: "rgba(245,158,11,0.2)", background: "var(--warning-soft)" }}>{c}</span>
                 ))}
                 {patient.currentMedications?.map((m: string) => (
-                  <span key={m} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700">💊 {m}</span>
+                  <span key={`m-${m}`} className="tag-new" style={{ color: "#c4b5fd", borderColor: "rgba(124,58,237,0.2)", background: "var(--brand-soft)" }}>💊 {m}</span>
+                ))}
+                {patient.tags?.map((t: string) => (
+                  <span key={`t-${t}`} className="tag-new">{t}</span>
                 ))}
               </div>
-              <div className="grid grid-cols-4 gap-2 mt-3">
-                {[
-                  { label: "Última visita",   val: lastAppt ? formatDate(lastAppt.date) : "Sin visitas",       sub: lastAppt?.type ?? "" },
-                  { label: "Próxima cita",    val: nextAppt ? formatDate(nextAppt.date) : "Sin agendar",       sub: nextAppt?.type ?? "", highlight: !!nextAppt },
-                  { label: "Total tratamiento", val: formatCurrency(totalPlan),                                 sub: `Pagado: ${formatCurrency(totalPaid)}` },
-                  { label: "Visitas totales", val: String(appointments.filter(a => a.status === "COMPLETED").length), sub: `${appointments.length} total` },
-                ].map(s => (
-                  <div key={s.label} className="bg-muted rounded-lg p-2">
-                    <div className="text-[10px] text-muted-foreground font-medium">{s.label}</div>
-                    <div className={`text-sm font-extrabold mt-0.5 ${s.highlight ? "text-brand-700" : "text-foreground"}`}>{s.val}</div>
-                    <div className="text-[10px] text-muted-foreground">{s.sub}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            )}
           </div>
+        </div>
 
-          {/* Tabs */}
-          <div className="flex bg-card border border-border rounded-xl p-1 gap-0.5 overflow-x-auto flex-shrink-0">
-            {TABS.map(t => (
-              <button key={t.id} onClick={() => setTab(t.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${tab === t.id ? "bg-brand-600 text-white" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"}`}>
-                {t.label}
-              </button>
-            ))}
-          </div>
+        {/* Meta info grid */}
+        <div style={{ borderTop: "1px solid var(--border-soft)", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", padding: 18, gap: 20 }}>
+          {[
+            { label: "Última visita",      val: lastAppt ? formatDate(lastAppt.date) : "—",        sub: lastAppt?.type ?? "" },
+            { label: "Próxima cita",       val: nextAppt ? formatDate(nextAppt.date) : "—",        sub: nextAppt?.type ?? "", highlight: !!nextAppt },
+            { label: "Total tratamiento",  val: fmtMXN(totalPlan),                                 sub: `Pagado: ${fmtMXN(totalPaid)}` },
+            { label: "Visitas completadas", val: String(completedCount),                           sub: `${appointments.length} totales` },
+          ].map(s => (
+            <div key={s.label}>
+              <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>{s.label}</div>
+              <div style={{ color: s.highlight ? "#c4b5fd" : "var(--text-1)", fontSize: 14, fontWeight: 600 }}>{s.val}</div>
+              {s.sub && <div style={{ fontSize: 10, color: "var(--text-3)", marginTop: 2 }}>{s.sub}</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="tabs-new" style={{ marginBottom: 16, overflowX: "auto" }}>
+        {TABS.map(t => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={`tab-new ${tab === t.id ? "tab-new--active" : ""}`}
+          >
+            {t.label}
+            {tabCounts[t.id] !== undefined && (
+              <span className="tab__count">{tabCounts[t.id]}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
           {/* ===== TAB: RESUMEN ===== */}
           {tab === "resumen" && (
@@ -981,7 +1009,6 @@ export function PatientDetailClient({
             )}
           </div>
         </div>
-      </div>
       {/* Edit patient modal */}
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
