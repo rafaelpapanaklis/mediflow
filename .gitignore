@@ -15,4 +15,5 @@ next-env.d.ts
 /backup/
 /design-reference/
 /design-reference-landing/
+/design-reference-auth/
 /.claude/
