@@ -267,13 +267,53 @@ export function AdminClinicsClient({ clinics: initial }: Props) {
                     </div>
                   </td>
                   <td>
-                    {expired ? (
-                      <BadgeNew tone="danger" dot>Expirado</BadgeNew>
-                    ) : trialDays !== null && trialDays > 0 ? (
-                      <BadgeNew tone="warning" dot>{trialDays}d restantes</BadgeNew>
-                    ) : (
-                      <BadgeNew tone="success" dot>Activa</BadgeNew>
+                    {(() => {
+                      const subActive =
+                        (clinic as any).subscriptionStatus === "active" ||
+                        (clinic as any).subscriptionStatus === "paid";
+                      if (subActive) {
+                        return <BadgeNew tone="success" dot>Activa · mensual</BadgeNew>;
+                      }
+                      if (expired) {
+                        return <BadgeNew tone="danger" dot>Trial expirado</BadgeNew>;
+                      }
+                      if (trialDays !== null && trialDays === 0) {
+                        return <BadgeNew tone="danger" dot>Trial · expira hoy</BadgeNew>;
+                      }
+                      if (trialDays !== null && trialDays > 0) {
+                        const tone = trialDays <= 3 ? "danger" : "warning";
+                        return <BadgeNew tone={tone} dot>Trial · {trialDays}d restantes</BadgeNew>;
+                      }
+                      return <BadgeNew tone="neutral" dot>Sin trial</BadgeNew>;
+                    })()}
+
+                    {/* Cancelación solicitada */}
+                    {(clinic as any).cancelRequested && (
+                      <div style={{
+                        marginTop: 4,
+                        fontSize: 10,
+                        color: "#fca5a5",
+                        fontWeight: 500,
+                      }}>
+                        ⚠ Cancelación solicitada
+                      </div>
                     )}
+
+                    {/* Método de pago */}
+                    {(clinic as any).paymentMethodCollected && (
+                      <div style={{
+                        marginTop: 4,
+                        fontSize: 11,
+                        color: "var(--text-3)",
+                      }}>
+                        {(clinic as any).paymentMethodType === "card"
+                          ? `💳 •••• ${(clinic as any).paymentMethodLast4 ?? "••••"}`
+                          : (clinic as any).paymentMethodType === "paypal"
+                            ? "💠 PayPal"
+                            : "🏦 Transferencia"}
+                      </div>
+                    )}
+
                     <div className="mono" style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4 }}>
                       {formatRelativeDate(clinic.createdAt)}
                     </div>

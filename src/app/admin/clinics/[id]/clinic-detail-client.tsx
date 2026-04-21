@@ -482,6 +482,75 @@ export function AdminClinicDetailClient({
             <KpiCard label="Total facturas"   value={String(totalInvoices)} icon={FileText}  />
           </div>
 
+          {/* Método de pago del signup */}
+          <CardNew>
+            <div className="form-section__title">
+              Método de pago del signup <span className="form-section__rule" />
+            </div>
+            {(clinic as any).paymentMethodCollected ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, background: "var(--bg-elev)", border: "1px solid var(--border-soft)", borderRadius: 10 }}>
+                <div style={{
+                  width: 48, height: 32, borderRadius: 4,
+                  background: (clinic as any).paymentMethodType === "paypal" ? "#003087"
+                    : (clinic as any).paymentMethodType === "card" ? "linear-gradient(135deg, #1a1f3a, #0d1026)"
+                      : "rgba(251,191,36,0.2)",
+                  display: "grid", placeItems: "center",
+                  fontSize: 10, fontWeight: 700,
+                  color: (clinic as any).paymentMethodType === "card" ? "#a78bfa"
+                    : (clinic as any).paymentMethodType === "paypal" ? "#fff"
+                      : "#fbbf24",
+                  flexShrink: 0,
+                }}>
+                  {(clinic as any).paymentMethodType === "card" ? "CARD"
+                    : (clinic as any).paymentMethodType === "paypal" ? "PayPal"
+                      : "SPEI"}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, color: "var(--text-1)", fontWeight: 500 }}>
+                    {(clinic as any).paymentMethodType === "card"
+                      ? `Tarjeta •••• ${(clinic as any).paymentMethodLast4 ?? "••••"}`
+                      : (clinic as any).paymentMethodType === "paypal"
+                        ? "PayPal (pendiente de vinculación)"
+                        : "Transferencia bancaria"}
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
+                    Capturado al registro · paymentMethodCollected = true
+                  </div>
+                </div>
+                <BadgeNew tone="success" dot>Capturado</BadgeNew>
+              </div>
+            ) : (
+              <div style={{ padding: 14, background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.25)", borderRadius: 10, fontSize: 13, color: "#fcd34d" }}>
+                Esta clínica no capturó un método de pago al registrarse.
+              </div>
+            )}
+
+            {(clinic as any).cancelRequested && (
+              <div style={{
+                marginTop: 12,
+                padding: 12,
+                background: "rgba(239,68,68,0.08)",
+                border: "1px solid rgba(239,68,68,0.3)",
+                borderRadius: 10,
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+              }}>
+                <span style={{ fontSize: 16 }}>⚠</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#fca5a5" }}>
+                    Cancelación solicitada
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
+                    El cliente solicitó cancelar el {(clinic as any).cancelRequestedAt
+                      ? new Date((clinic as any).cancelRequestedAt).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
+                      : "—"}. No cobrar al terminar el trial.
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardNew>
+
           <CardNew>
             <div className="form-section__title">
               Datos para recibir pago <span className="form-section__rule" />

@@ -716,6 +716,7 @@ export function PatientDetailClient({
                 )}
               </div>
             </div>
+            </>
           )}
 
           {/* ===== TAB: PLAN DE TRATAMIENTO ===== */}
