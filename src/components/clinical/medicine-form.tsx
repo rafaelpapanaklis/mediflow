@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
+import { CardNew }   from "@/components/ui/design-system/card-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 
 const DIAGNOSES_CIE10 = ["J00 - Resfriado común","J06 - IRA superior","J18 - Neumonía","K29 - Gastritis","K57 - Diverticulosis","K92 - Hemorragia GI","E11 - Diabetes tipo 2","E14 - Diabetes NE","I10 - Hipertensión esencial","I50 - Insuficiencia cardíaca","J45 - Asma","F32 - Depresión","F41 - Ansiedad","M54 - Dorsalgia","N39 - ITU","Otro"];
 const SPECIALTIES = ["Cardiología","Neurología","Dermatología","Gastroenterología","Ortopedia","Ginecología","Urología","Psiquiatría","Oftalmología","ORL","Endocrinología","Reumatología","Oncología"];
@@ -22,7 +23,6 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
     returnDate: "",
   });
 
-  /* ── Antecedentes personales y familiares ── */
   const PERSONAL_CONDITIONS = ["Diabetes","Hipertensión","Asma/EPOC","Cardiopatía","Cáncer","Enfermedad renal","Hipotiroidismo","Depresión/Ansiedad","VIH","Hepatitis"] as const;
   const FAMILY_CONDITIONS = ["Diabetes","HTA","Cáncer","Cardiopatía","Enf. mental"] as const;
   const FAMILY_MEMBERS = ["Padre","Madre","Hermanos"] as const;
@@ -34,19 +34,16 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
   const toggleFamily = (cond: string, member: string) =>
     setFamilyHistory(f => ({ ...f, [cond]: { ...f[cond], [member]: !f[cond]?.[member] } }));
 
-  /* ── Hábitos y factores de riesgo ── */
   const [smoking, setSmoking] = useState("No fuma");
   const [packsYear, setPacksYear] = useState("");
   const [auditC, setAuditC] = useState([0, 0, 0]);
   const auditCScore = auditC[0] + auditC[1] + auditC[2];
   const auditCSeverity = auditCScore >= 8 ? "alto riesgo" : auditCScore >= 4 ? "riesgo moderado" : "bajo riesgo";
-  const auditCColor = auditCScore >= 8 ? "text-red-600" : auditCScore >= 4 ? "text-amber-600" : "text-green-600";
+  const auditCTone: "success" | "warning" | "danger" = auditCScore >= 8 ? "danger" : auditCScore >= 4 ? "warning" : "success";
   const [physicalActivity, setPhysicalActivity] = useState("");
   const [drugs, setDrugs] = useState("");
-
   const isSmoker = smoking !== "No fuma" && smoking !== "";
 
-  /* ── Diagnóstico diferencial ── */
   const [diffDiagnoses, setDiffDiagnoses] = useState<{ diagnosis: string; probability: string }[]>([]);
   const addDiffDiag = () => setDiffDiagnoses(d => [...d, { diagnosis: "", probability: "Media" }]);
   const removeDiffDiag = (i: number) => setDiffDiagnoses(d => d.filter((_, j) => j !== i));
@@ -94,53 +91,59 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
   }
 
   return (
-    <div className="space-y-6">
-      {/* SUBJETIVO */}
-      <div className="space-y-1.5">
-        <Label>Motivo de consulta / Historia de la enfermedad actual (HEA)</Label>
-        <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-          placeholder="Paciente de X años que acude por… Inicio: … Evolución: … Síntomas acompañantes: …" value={form.subjective} onChange={e => set("subjective", e.target.value)} />
-      </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Motivo de consulta */}
+      <CardNew title="Motivo de consulta / HEA">
+        <textarea
+          className="input-new"
+          style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
+          placeholder="Paciente de X años que acude por… Inicio: … Evolución: … Síntomas acompañantes: …"
+          value={form.subjective}
+          onChange={e => set("subjective", e.target.value)}
+        />
+      </CardNew>
 
-      {/* ANTECEDENTES PERSONALES Y FAMILIARES */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">📋 Antecedentes personales y familiares</h3>
-
-        {/* Antecedentes personales */}
-        <p className="text-xs font-semibold mb-2">Antecedentes personales patológicos</p>
-        <div className="grid grid-cols-5 gap-2 mb-4">
-          {PERSONAL_CONDITIONS.map(c => (
-            <label key={c} className="flex items-center gap-1.5 text-xs cursor-pointer">
-              <input type="checkbox" checked={!!personalHistory[c]} onChange={() => togglePersonal(c)} className="w-3.5 h-3.5 accent-brand-600" />
-              {c}
-            </label>
-          ))}
+      {/* Antecedentes personales y familiares */}
+      <CardNew title="Antecedentes personales y familiares">
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, marginBottom: 8 }}>Antecedentes personales patológicos</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+            {PERSONAL_CONDITIONS.map(c => (
+              <label key={c} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-2)", cursor: "pointer" }}>
+                <input type="checkbox" checked={!!personalHistory[c]} onChange={() => togglePersonal(c)} />
+                {c}
+              </label>
+            ))}
+          </div>
         </div>
 
-        {/* Quirúrgicos */}
-        <div className="mb-4 space-y-1">
-          <Label className="text-xs">Antecedentes quirúrgicos</Label>
-          <textarea className="flex min-h-[60px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-            placeholder="Apendicectomía 2015, colecistectomía 2020…" value={surgicalHistory} onChange={e => setSurgicalHistory(e.target.value)} />
+        <div className="field-new" style={{ marginBottom: 16 }}>
+          <label className="field-new__label">Antecedentes quirúrgicos</label>
+          <textarea
+            className="input-new"
+            style={{ minHeight: 60, padding: "8px 12px", height: "auto", resize: "vertical" }}
+            placeholder="Apendicectomía 2015, colecistectomía 2020…"
+            value={surgicalHistory}
+            onChange={e => setSurgicalHistory(e.target.value)}
+          />
         </div>
 
-        {/* Antecedentes familiares */}
-        <p className="text-xs font-semibold mb-2">Antecedentes familiares</p>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+        <div>
+          <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, marginBottom: 8 }}>Antecedentes familiares</div>
+          <table className="table-new">
             <thead>
-              <tr className="border-b border-border">
-                <th className="text-left py-1 pr-4 font-semibold">Condición</th>
-                {FAMILY_MEMBERS.map(m => <th key={m} className="text-center py-1 px-2 font-semibold">{m}</th>)}
+              <tr>
+                <th>Condición</th>
+                {FAMILY_MEMBERS.map(m => <th key={m} style={{ textAlign: "center" }}>{m}</th>)}
               </tr>
             </thead>
             <tbody>
               {FAMILY_CONDITIONS.map(cond => (
-                <tr key={cond} className="border-b border-border/50">
-                  <td className="py-1.5 pr-4">{cond}</td>
+                <tr key={cond}>
+                  <td>{cond}</td>
                   {FAMILY_MEMBERS.map(member => (
-                    <td key={member} className="text-center py-1.5">
-                      <input type="checkbox" checked={!!familyHistory[cond]?.[member]} onChange={() => toggleFamily(cond, member)} className="w-3.5 h-3.5 accent-brand-600" />
+                    <td key={member} style={{ textAlign: "center" }}>
+                      <input type="checkbox" checked={!!familyHistory[cond]?.[member]} onChange={() => toggleFamily(cond, member)} />
                     </td>
                   ))}
                 </tr>
@@ -148,36 +151,26 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
             </tbody>
           </table>
         </div>
-      </div>
+      </CardNew>
 
-      {/* HÁBITOS Y FACTORES DE RIESGO */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">🚬 Hábitos y factores de riesgo</h3>
-
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          {/* Tabaquismo */}
-          <div className="space-y-1">
-            <Label className="text-xs">Tabaquismo</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-              value={smoking} onChange={e => setSmoking(e.target.value)}>
+      {/* Hábitos y factores de riesgo */}
+      <CardNew title="Hábitos y factores de riesgo">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px", marginBottom: 16 }}>
+          <div className="field-new">
+            <label className="field-new__label">Tabaquismo</label>
+            <select className="input-new" value={smoking} onChange={e => setSmoking(e.target.value)}>
               {["No fuma","Exfumador","< 10 cigarros/día","10-20/día","> 20/día"].map(o => <option key={o} value={o}>{o}</option>)}
             </select>
           </div>
-
-          {/* Paquetes/año - solo si fuma */}
           {isSmoker && (
-            <div className="space-y-1">
-              <Label className="text-xs">Paquetes/año</Label>
-              <input type="number" min="0" className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-                placeholder="Ej: 10" value={packsYear} onChange={e => setPacksYear(e.target.value)} />
+            <div className="field-new">
+              <label className="field-new__label">Paquetes/año</label>
+              <input type="number" min="0" className="input-new mono" placeholder="10" value={packsYear} onChange={e => setPacksYear(e.target.value)} />
             </div>
           )}
-
-          {/* Actividad física */}
-          <div className="space-y-1">
-            <Label className="text-xs">Actividad física</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-              value={physicalActivity} onChange={e => setPhysicalActivity(e.target.value)}>
+          <div className="field-new">
+            <label className="field-new__label">Actividad física</label>
+            <select className="input-new" value={physicalActivity} onChange={e => setPhysicalActivity(e.target.value)}>
               <option value="">Seleccionar…</option>
               {["Sedentario","Ligera (1-2x/sem)","Moderada (3-4x/sem)","Intensa (5+/sem)"].map(o => <option key={o} value={o}>{o}</option>)}
             </select>
@@ -185,241 +178,314 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
         </div>
 
         {/* AUDIT-C */}
-        <div className="mb-4 p-3 rounded-lg bg-muted/30 space-y-3">
-          <p className="text-xs font-semibold">Alcohol (AUDIT-C simplificado)</p>
-
-          <div className="space-y-1">
-            <Label className="text-xs">¿Con qué frecuencia toma bebidas alcohólicas?</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-              value={auditC[0]} onChange={e => setAuditC(a => [Number(e.target.value), a[1], a[2]])}>
-              <option value={0}>Nunca</option>
-              <option value={1}>Mensual o menos</option>
-              <option value={2}>2-4 veces/mes</option>
-              <option value={3}>2-3 veces/semana</option>
-              <option value={4}>4+ veces/semana</option>
-            </select>
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs">¿Cuántas bebidas en un día normal?</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-              value={auditC[1]} onChange={e => setAuditC(a => [a[0], Number(e.target.value), a[2]])}>
-              <option value={0}>1-2</option>
-              <option value={1}>3-4</option>
-              <option value={2}>5-6</option>
-              <option value={3}>7-9</option>
-              <option value={4}>10+</option>
-            </select>
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs">¿Con qué frecuencia toma 6+ bebidas en una ocasión?</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-              value={auditC[2]} onChange={e => setAuditC(a => [a[0], a[1], Number(e.target.value)])}>
-              <option value={0}>Nunca</option>
-              <option value={1}>Menos que mensual</option>
-              <option value={2}>Mensual</option>
-              <option value={3}>Semanal</option>
-              <option value={4}>Diario o casi diario</option>
-            </select>
-          </div>
-
-          <div className="flex items-center gap-2 pt-1">
-            <span className="text-xs font-semibold">Puntaje AUDIT-C:</span>
-            <span className={`text-sm font-bold ${auditCColor}`}>{auditCScore}/12 — {auditCSeverity}</span>
-          </div>
-        </div>
-
-        {/* Drogas */}
-        <div className="space-y-1">
-          <Label className="text-xs">Drogas / Otras sustancias</Label>
-          <textarea className="flex min-h-[50px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-            placeholder="Marihuana, cocaína, benzodiacepinas sin Rx…" value={drugs} onChange={e => setDrugs(e.target.value)} />
-        </div>
-      </div>
-
-      {/* DIAGNÓSTICO DIFERENCIAL */}
-      <div className="rounded-xl border border-border p-4">
-        <div className="flex items-center justify-between mb-1">
-          <h3 className="text-sm font-bold">🔍 Diagnóstico diferencial</h3>
-          <button onClick={addDiffDiag} className="text-xs font-semibold text-brand-600 hover:underline">+ Agregar diagnóstico</button>
-        </div>
-        <p className="text-xs text-muted-foreground mb-3">Lista de posibles diagnósticos antes de confirmar el definitivo</p>
-        {diffDiagnoses.length === 0 && (
-          <p className="text-xs text-muted-foreground italic">Sin diagnósticos diferenciales. Haz clic en &quot;+ Agregar diagnóstico&quot; para añadir.</p>
-        )}
-        <div className="space-y-2">
-          {diffDiagnoses.map((dd, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <input className="flex h-9 flex-1 rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-                placeholder="Ej: Neumonía adquirida en comunidad" value={dd.diagnosis} onChange={e => updateDiffDiag(i, "diagnosis", e.target.value)} />
-              <select className="flex h-9 w-32 rounded-lg border border-border bg-card px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-                value={dd.probability} onChange={e => updateDiffDiag(i, "probability", e.target.value)}>
-                <option value="Alta">Alta</option>
-                <option value="Media">Media</option>
-                <option value="Baja">Baja</option>
+        <div style={{ padding: 14, borderRadius: 10, background: "var(--bg-elev-2)", border: "1px solid var(--border-soft)", marginBottom: 16 }}>
+          <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, marginBottom: 10 }}>Alcohol (AUDIT-C simplificado)</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div className="field-new">
+              <label className="field-new__label">¿Con qué frecuencia toma bebidas alcohólicas?</label>
+              <select className="input-new" value={auditC[0]} onChange={e => setAuditC(a => [Number(e.target.value), a[1], a[2]])}>
+                <option value={0}>Nunca</option>
+                <option value={1}>Mensual o menos</option>
+                <option value={2}>2-4 veces/mes</option>
+                <option value={3}>2-3 veces/semana</option>
+                <option value={4}>4+ veces/semana</option>
               </select>
-              <button onClick={() => removeDiffDiag(i)} className="h-9 px-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors text-lg">×</button>
             </div>
-          ))}
+            <div className="field-new">
+              <label className="field-new__label">¿Cuántas bebidas en un día normal?</label>
+              <select className="input-new" value={auditC[1]} onChange={e => setAuditC(a => [a[0], Number(e.target.value), a[2]])}>
+                <option value={0}>1-2</option><option value={1}>3-4</option><option value={2}>5-6</option><option value={3}>7-9</option><option value={4}>10+</option>
+              </select>
+            </div>
+            <div className="field-new">
+              <label className="field-new__label">¿Con qué frecuencia toma 6+ bebidas en una ocasión?</label>
+              <select className="input-new" value={auditC[2]} onChange={e => setAuditC(a => [a[0], a[1], Number(e.target.value)])}>
+                <option value={0}>Nunca</option><option value={1}>Menos que mensual</option><option value={2}>Mensual</option><option value={3}>Semanal</option><option value={4}>Diario o casi diario</option>
+              </select>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 4 }}>
+              <span style={{ fontSize: 11, color: "var(--text-2)", fontWeight: 600 }}>Puntaje AUDIT-C:</span>
+              <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{auditCScore}/12</span>
+              <BadgeNew tone={auditCTone} dot>{auditCSeverity}</BadgeNew>
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* SIGNOS VITALES */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">🩺 Signos vitales</h3>
-        <div className="grid grid-cols-4 gap-3">
+        <div className="field-new">
+          <label className="field-new__label">Drogas / Otras sustancias</label>
+          <textarea
+            className="input-new"
+            style={{ minHeight: 50, padding: "8px 12px", height: "auto", resize: "vertical" }}
+            placeholder="Marihuana, cocaína, benzodiacepinas sin Rx…"
+            value={drugs}
+            onChange={e => setDrugs(e.target.value)}
+          />
+        </div>
+      </CardNew>
+
+      {/* Diagnóstico diferencial */}
+      <CardNew
+        title="Diagnóstico diferencial"
+        sub="Lista de posibles diagnósticos antes de confirmar el definitivo"
+        action={<ButtonNew size="sm" variant="ghost" onClick={addDiffDiag}>+ Agregar</ButtonNew>}
+      >
+        {diffDiagnoses.length === 0 ? (
+          <div style={{ fontSize: 12, color: "var(--text-3)", fontStyle: "italic" }}>
+            Sin diagnósticos diferenciales. Haz clic en &quot;+ Agregar&quot; para añadir.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {diffDiagnoses.map((dd, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  className="input-new"
+                  placeholder="Ej: Neumonía adquirida en comunidad"
+                  value={dd.diagnosis}
+                  onChange={e => updateDiffDiag(i, "diagnosis", e.target.value)}
+                />
+                <select
+                  className="input-new"
+                  style={{ width: 120 }}
+                  value={dd.probability}
+                  onChange={e => updateDiffDiag(i, "probability", e.target.value)}
+                >
+                  <option value="Alta">Alta</option>
+                  <option value="Media">Media</option>
+                  <option value="Baja">Baja</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => removeDiffDiag(i)}
+                  className="btn-new btn-new--ghost btn-new--sm"
+                  style={{ padding: 0, width: 28, color: "var(--danger)" }}
+                  aria-label="Eliminar"
+                >×</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardNew>
+
+      {/* Signos vitales */}
+      <CardNew title="Signos vitales">
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px 14px" }}>
           {[
             { key:"bloodPressure", label:"T/A (mmHg)",      ph:"120/80" },
             { key:"heartRate",     label:"FC (lpm)",         ph:"72"     },
             { key:"temperature",   label:"Temp (°C)",        ph:"36.5"   },
             { key:"respiratoryRate",label:"FR (rpm)",        ph:"16"     },
-            { key:"oxygenSat",     label:"Sat O₂ (%)",      ph:"98"     },
+            { key:"oxygenSat",     label:"Sat O₂ (%)",       ph:"98"     },
             { key:"bloodGlucose",  label:"Glucemia (mg/dL)", ph:"100"    },
             { key:"weight",        label:"Peso (kg)",        ph:"70"     },
             { key:"height",        label:"Talla (cm)",       ph:"170"    },
           ].map(f => (
-            <div key={f.key} className="space-y-1">
-              <Label className="text-xs">{f.label}</Label>
-              <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-                placeholder={f.ph} value={(form.vitals as any)[f.key]} onChange={e => setV(f.key, e.target.value)} />
+            <div key={f.key} className="field-new">
+              <label className="field-new__label">{f.label}</label>
+              <input
+                className="input-new mono"
+                placeholder={f.ph}
+                value={(form.vitals as any)[f.key]}
+                onChange={e => setV(f.key, e.target.value)}
+              />
             </div>
           ))}
         </div>
-      </div>
+      </CardNew>
 
-      {/* EXPLORACIÓN Y LAB */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label>Exploración física / Laboratorios</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-            placeholder="BH: Hb 13.5, Leuco 7,500…&#10;EGO: Normal&#10;Tórax: sin alteraciones…" value={form.objective} onChange={e => set("objective", e.target.value)} />
-        </div>
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label>Estudios solicitados</Label>
-            <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-              placeholder="BH, QS, RX tórax…" value={form.studies} onChange={e => set("studies", e.target.value)} />
+      {/* Exploración física y lab */}
+      <CardNew title="Exploración física y laboratorios">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
+          <div className="field-new">
+            <label className="field-new__label">Exploración física / Laboratorios</label>
+            <textarea
+              className="input-new"
+              style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
+              placeholder="BH: Hb 13.5, Leuco 7,500…&#10;EGO: Normal&#10;Tórax: sin alteraciones…"
+              value={form.objective}
+              onChange={e => set("objective", e.target.value)}
+            />
           </div>
-          <div className="space-y-1.5">
-            <Label>Diagnóstico CIE-10</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-              value={form.diagnosis} onChange={e => set("diagnosis", e.target.value)}>
-              <option value="">Seleccionar diagnóstico…</option>
-              {DIAGNOSES_CIE10.map(d => <option key={d} value={d}>{d}</option>)}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Diagnóstico libre / Complementario</Label>
-            <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-              placeholder="Describe el diagnóstico…" value={form.assessment} onChange={e => set("assessment", e.target.value)} />
-          </div>
-        </div>
-      </div>
-
-      {/* PRESCRIPCIÓN */}
-      <div className="rounded-xl border border-border p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold">💊 Prescripción médica</h3>
-          <button onClick={addMed} className="text-xs font-semibold text-brand-600 hover:underline">+ Agregar medicamento</button>
-        </div>
-        <div className="space-y-3">
-          {form.medications.map((med, i) => (
-            <div key={i} className="grid grid-cols-6 gap-2 items-end">
-              <div className="col-span-2 space-y-1">
-                <Label className="text-xs">Medicamento</Label>
-                <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
-                  placeholder="Amoxicilina 500mg" value={med.drug}
-                  onChange={e => { const m=[...form.medications]; m[i].drug=e.target.value; set("medications",m); }} />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Dosis</Label>
-                <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
-                  placeholder="500mg" value={med.dose}
-                  onChange={e => { const m=[...form.medications]; m[i].dose=e.target.value; set("medications",m); }} />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Frecuencia</Label>
-                <select className="flex h-9 w-full rounded-lg border border-border bg-card px-2 text-sm focus:outline-none"
-                  value={med.frequency} onChange={e => { const m=[...form.medications]; m[i].frequency=e.target.value; set("medications",m); }}>
-                  <option value="">…</option>
-                  {["c/4h","c/6h","c/8h","c/12h","c/24h","c/48h","Semanal","Según necesidad"].map(f=><option key={f}>{f}</option>)}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Duración</Label>
-                <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
-                  placeholder="7 días" value={med.duration}
-                  onChange={e => { const m=[...form.medications]; m[i].duration=e.target.value; set("medications",m); }} />
-              </div>
-              <div className="flex items-end">
-                {form.medications.length > 1 && (
-                  <button onClick={() => removeMed(i)} className="h-9 px-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors text-lg">×</button>
-                )}
-              </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div className="field-new">
+              <label className="field-new__label">Estudios solicitados</label>
+              <input
+                className="input-new"
+                placeholder="BH, QS, RX tórax…"
+                value={form.studies}
+                onChange={e => set("studies", e.target.value)}
+              />
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* REFERIDO */}
-      <div className="rounded-xl border border-border p-4">
-        <div className="flex items-center gap-3 mb-3">
-          <input type="checkbox" id="referral" checked={form.referral.needed} onChange={e => set("referral", { ...form.referral, needed: e.target.checked })} className="w-4 h-4 accent-brand-600" />
-          <label htmlFor="referral" className="text-sm font-bold">Referir a especialidad</label>
-        </div>
-        {form.referral.needed && (
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs">Especialidad</Label>
-              <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
-                value={form.referral.specialty} onChange={e => set("referral", { ...form.referral, specialty: e.target.value })}>
+            <div className="field-new">
+              <label className="field-new__label">Diagnóstico CIE-10</label>
+              <select className="input-new" value={form.diagnosis} onChange={e => set("diagnosis", e.target.value)}>
                 <option value="">Seleccionar…</option>
-                {SPECIALTIES.map(s=><option key={s}>{s}</option>)}
+                {DIAGNOSES_CIE10.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Motivo del referido</Label>
-              <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none"
-                placeholder="Evaluación por…" value={form.referral.reason} onChange={e => set("referral", { ...form.referral, reason: e.target.value })} />
+            <div className="field-new">
+              <label className="field-new__label">Diagnóstico libre / Complementario</label>
+              <input
+                className="input-new"
+                placeholder="Describe el diagnóstico…"
+                value={form.assessment}
+                onChange={e => set("assessment", e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+      </CardNew>
+
+      {/* Prescripción */}
+      <CardNew
+        title="Prescripción médica"
+        action={<ButtonNew size="sm" variant="ghost" onClick={addMed}>+ Agregar medicamento</ButtonNew>}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {form.medications.map((med, i) => (
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr auto", gap: 8, alignItems: "flex-end" }}>
+              <div className="field-new">
+                <label className="field-new__label">Medicamento</label>
+                <input
+                  className="input-new"
+                  placeholder="Amoxicilina 500mg"
+                  value={med.drug}
+                  onChange={e => { const m=[...form.medications]; m[i].drug=e.target.value; set("medications",m); }}
+                />
+              </div>
+              <div className="field-new">
+                <label className="field-new__label">Dosis</label>
+                <input
+                  className="input-new mono"
+                  placeholder="500mg"
+                  value={med.dose}
+                  onChange={e => { const m=[...form.medications]; m[i].dose=e.target.value; set("medications",m); }}
+                />
+              </div>
+              <div className="field-new">
+                <label className="field-new__label">Frecuencia</label>
+                <select
+                  className="input-new"
+                  value={med.frequency}
+                  onChange={e => { const m=[...form.medications]; m[i].frequency=e.target.value; set("medications",m); }}
+                >
+                  <option value="">…</option>
+                  {["c/4h","c/6h","c/8h","c/12h","c/24h","c/48h","Semanal","Según necesidad"].map(f => <option key={f}>{f}</option>)}
+                </select>
+              </div>
+              <div className="field-new">
+                <label className="field-new__label">Duración</label>
+                <input
+                  className="input-new"
+                  placeholder="7 días"
+                  value={med.duration}
+                  onChange={e => { const m=[...form.medications]; m[i].duration=e.target.value; set("medications",m); }}
+                />
+              </div>
+              {form.medications.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeMed(i)}
+                  className="btn-new btn-new--ghost btn-new--sm"
+                  style={{ padding: 0, width: 28, color: "var(--danger)", alignSelf: "flex-end" }}
+                  aria-label="Eliminar"
+                >×</button>
+              )}
+            </div>
+          ))}
+        </div>
+      </CardNew>
+
+      {/* Referido */}
+      <CardNew title="Referir a especialidad">
+        <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={form.referral.needed}
+            onChange={e => set("referral", { ...form.referral, needed: e.target.checked })}
+          />
+          <span style={{ fontSize: 13, color: "var(--text-1)" }}>Referir a otra especialidad</span>
+        </label>
+        {form.referral.needed && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
+            <div className="field-new">
+              <label className="field-new__label">Especialidad</label>
+              <select
+                className="input-new"
+                value={form.referral.specialty}
+                onChange={e => set("referral", { ...form.referral, specialty: e.target.value })}
+              >
+                <option value="">Seleccionar…</option>
+                {SPECIALTIES.map(s => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+            <div className="field-new">
+              <label className="field-new__label">Motivo del referido</label>
+              <input
+                className="input-new"
+                placeholder="Evaluación por…"
+                value={form.referral.reason}
+                onChange={e => set("referral", { ...form.referral, reason: e.target.value })}
+              />
             </div>
           </div>
         )}
-      </div>
+      </CardNew>
 
-      {/* PLAN E INCAPACIDAD */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label>Plan / Indicaciones al paciente</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-            placeholder="Reposo relativo 3 días, hidratación abundante, dieta blanda…&#10;Regresar si: fiebre >38.5°C, dificultad respiratoria…" value={form.plan} onChange={e => set("plan", e.target.value)} />
-        </div>
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label>Próxima cita / Control</Label>
-            <input type="date" className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-              value={form.returnDate} onChange={e => set("returnDate", e.target.value)} />
+      {/* Plan e incapacidad */}
+      <CardNew title="Plan e indicaciones">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
+          <div className="field-new">
+            <label className="field-new__label">Plan / Indicaciones al paciente</label>
+            <textarea
+              className="input-new"
+              style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
+              placeholder="Reposo relativo 3 días, hidratación abundante…&#10;Regresar si: fiebre >38.5°C…"
+              value={form.plan}
+              onChange={e => set("plan", e.target.value)}
+            />
           </div>
-          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
-            <div className="flex items-center gap-2 mb-2">
-              <input type="checkbox" id="sicleave" checked={form.sicLeave.granted} onChange={e => set("sicLeave", { ...form.sicLeave, granted: e.target.checked })} className="w-4 h-4 accent-amber-600" />
-              <label htmlFor="sicleave" className="text-sm font-bold text-amber-700">Incapacidad médica</label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div className="field-new">
+              <label className="field-new__label">Próxima cita / Control</label>
+              <input
+                type="date"
+                className="input-new"
+                value={form.returnDate}
+                onChange={e => set("returnDate", e.target.value)}
+              />
             </div>
-            {form.sicLeave.granted && (
-              <div className="flex items-center gap-2">
-                <input type="number" min="1" max="180" placeholder="3" className="w-16 h-8 rounded-lg border border-amber-300 bg-card px-2 text-sm font-bold text-center focus:outline-none"
-                  value={form.sicLeave.days} onChange={e => set("sicLeave", { ...form.sicLeave, days: e.target.value })} />
-                <span className="text-sm text-amber-700 font-medium">días de incapacidad</span>
-              </div>
-            )}
+            <div style={{ padding: 12, borderRadius: 10, background: "var(--warning-soft)", border: "1px solid rgba(245,158,11,0.2)" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginBottom: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={form.sicLeave.granted}
+                  onChange={e => set("sicLeave", { ...form.sicLeave, granted: e.target.checked })}
+                />
+                <span style={{ fontSize: 12, color: "#fcd34d", fontWeight: 600 }}>Incapacidad médica</span>
+              </label>
+              {form.sicLeave.granted && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="number" min="1" max="180"
+                    placeholder="3"
+                    className="input-new mono"
+                    style={{ width: 64 }}
+                    value={form.sicLeave.days}
+                    onChange={e => set("sicLeave", { ...form.sicLeave, days: e.target.value })}
+                  />
+                  <span style={{ fontSize: 12, color: "#fcd34d" }}>días de incapacidad</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      </CardNew>
 
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={saving} size="lg">
-          {saving ? "Guardando…" : "💾 Guardar consulta médica"}
-        </Button>
+      {/* Save */}
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <ButtonNew variant="primary" onClick={handleSave} disabled={saving}>
+          {saving ? "Guardando…" : "Guardar consulta médica"}
+        </ButtonNew>
       </div>
     </div>
   );
