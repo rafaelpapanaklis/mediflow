@@ -1198,3 +1198,104 @@
   background: var(--bg-hover);
   color: var(--text-1);
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   LANDING THEME — tokens aislados para landing pública (NO dashboard)
+   Scope: cualquier elemento descendiente de .landing-theme
+   ═══════════════════════════════════════════════════════════════════ */
+
+.landing-theme {
+  /* Dark por default */
+  --ld-bg: #0a0a0f;
+  --ld-bg-2: #0f0f16;
+  --ld-fg: #f5f5f7;
+  --ld-fg-muted: rgba(245,245,247,0.65);
+  --ld-brand: #7c3aed;
+  --ld-brand-light: #a78bfa;
+  --ld-border: rgba(255,255,255,0.08);
+  --ld-app-bg: #0c0c12;
+  --ld-app-sidebar: #0a0a10;
+  --ld-app-card: rgba(255,255,255,0.02);
+  --ld-app-border: rgba(255,255,255,0.06);
+  --ld-app-active: rgba(124,58,237,0.15);
+
+  --ld-accent-dental: #a78bfa;
+  --ld-accent-medical: #34d399;
+  --ld-accent-mental: #38bdf8;
+  --ld-accent-wellness: #fbbf24;
+
+  --ld-success: #34d399;
+  --ld-warning: #fbbf24;
+  --ld-danger: #ef4444;
+  --ld-info: #38bdf8;
+
+  /* Aliases que los componentes del design ref usan (shared.jsx, etc.) */
+  --bg: var(--ld-bg);
+  --fg: var(--ld-fg);
+  --fg-muted: var(--ld-fg-muted);
+  --brand: var(--ld-brand);
+  --brand-light: var(--ld-brand-light);
+  --border: var(--ld-border);
+  --app-bg: var(--ld-app-bg);
+  --app-sidebar: var(--ld-app-sidebar);
+  --app-card: var(--ld-app-card);
+  --app-border: var(--ld-app-border);
+  --app-active: var(--ld-app-active);
+
+  background: var(--ld-bg);
+  color: var(--ld-fg);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+.landing-theme[data-mode="light"] {
+  --ld-bg: #fafafa;
+  --ld-bg-2: #ffffff;
+  --ld-fg: #0a0a0f;
+  --ld-fg-muted: rgba(10,10,15,0.6);
+  --ld-border: rgba(10,10,15,0.08);
+  --ld-app-bg: #ffffff;
+  --ld-app-sidebar: #fafafa;
+  --ld-app-card: rgba(10,10,15,0.015);
+  --ld-app-border: rgba(10,10,15,0.06);
+  --ld-app-active: rgba(124,58,237,0.1);
+}
+
+/* Evitar que .landing-theme herede los overrides globales de dark mode del dashboard */
+.landing-theme input,
+.landing-theme textarea,
+.landing-theme select {
+  background-color: transparent !important;
+  color: inherit !important;
+  border-color: var(--ld-border) !important;
+}
+
+.landing-theme *::selection {
+  background: rgba(124,58,237,0.4);
+  color: #fff;
+}
+
+/* Animación de pulse para detectores IA en mockups */
+@keyframes landing-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+.landing-theme .ld-pulse {
+  animation: landing-pulse 2s ease-in-out infinite;
+}
+
+/* Float up animation para hero cards */
+@keyframes landing-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+.landing-theme .ld-float {
+  animation: landing-float 6s ease-in-out infinite;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .landing-theme .ld-pulse,
+  .landing-theme .ld-float {
+    animation: none;
+  }
+}
