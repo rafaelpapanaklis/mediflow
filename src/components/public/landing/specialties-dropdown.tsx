@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getSpecialtiesByCategory, type SpecialtyCategory } from "@/lib/specialty-data";
 import { SpecIcon } from "./primitives/spec-icon";
 
@@ -14,6 +14,8 @@ const GROUP_COLOR: Record<SpecialtyCategory, string> = {
 
 const GROUP_ORDER: SpecialtyCategory[] = ["Dental", "Médicas", "Salud mental", "Bienestar"];
 
+const CLOSE_DELAY_MS = 150;
+
 interface SpecialtiesDropdownProps {
   /** Slug activo si estamos dentro de una página de especialidad. */
   currentSlug?: string;
@@ -24,9 +26,27 @@ interface SpecialtiesDropdownProps {
 export function SpecialtiesDropdown({ currentSlug, triggerColor }: SpecialtiesDropdownProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const closeTimerRef = useRef<number | null>(null);
   const groups = getSpecialtiesByCategory();
 
-  // Cerrar al click fuera
+  const cancelClose = useCallback(() => {
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleClose = useCallback(() => {
+    cancelClose();
+    closeTimerRef.current = window.setTimeout(() => setOpen(false), CLOSE_DELAY_MS);
+  }, [cancelClose]);
+
+  const openNow = useCallback(() => {
+    cancelClose();
+    setOpen(true);
+  }, [cancelClose]);
+
+  // Cerrar al click fuera / tecla Escape
   useEffect(() => {
     if (!open) return;
     function handleClick(e: MouseEvent) {
@@ -45,10 +65,18 @@ export function SpecialtiesDropdown({ currentSlug, triggerColor }: SpecialtiesDr
     };
   }, [open]);
 
+  // Limpieza del timer al desmontar
+  useEffect(() => () => cancelClose(), [cancelClose]);
+
   const activeColor = triggerColor ?? "var(--ld-brand-light, #a78bfa)";
 
   return (
-    <div ref={rootRef} style={{ position: "relative", display: "inline-block" }}>
+    <div
+      ref={rootRef}
+      onMouseEnter={openNow}
+      onMouseLeave={scheduleClose}
+      style={{ position: "relative", display: "inline-block" }}
+    >
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
@@ -84,12 +112,22 @@ export function SpecialtiesDropdown({ currentSlug, triggerColor }: SpecialtiesDr
 
       {open && (
         <div
-          role="menu"
+          /* Outer wrapper: sin estilos visuales, solo crea el bridge invisible
+             de 14px para que el mouse no "caiga" entre el trigger y el panel
+             y dispare onMouseLeave del root. */
+          onMouseEnter={cancelClose}
           style={{
             position: "absolute",
-            top: "calc(100% + 14px)",
+            top: "100%",
             left: "50%",
             transform: "translateX(-50%)",
+            paddingTop: 14,
+            zIndex: 200,
+          }}
+        >
+        <div
+          role="menu"
+          style={{
             width: 880,
             padding: 24,
             borderRadius: 16,
@@ -101,7 +139,6 @@ export function SpecialtiesDropdown({ currentSlug, triggerColor }: SpecialtiesDr
             display: "grid",
             gridTemplateColumns: "repeat(4, 1fr)",
             gap: 24,
-            zIndex: 200,
           }}
         >
           {GROUP_ORDER.map(cat => {
@@ -180,6 +217,7 @@ export function SpecialtiesDropdown({ currentSlug, triggerColor }: SpecialtiesDr
               </div>
             );
           })}
+        </div>
         </div>
       )}
     </div>
