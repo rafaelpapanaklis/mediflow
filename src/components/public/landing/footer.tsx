@@ -1,75 +1,235 @@
 import Link from "next/link";
-import { Mail, Phone, MapPin } from "lucide-react";
+import { Logo } from "./primitives/logo";
+
+interface FooterColumn {
+  title: string;
+  links: { label: string; href: string }[];
+}
+
+const COLUMNS: FooterColumn[] = [
+  {
+    title: "Producto",
+    links: [
+      { label: "Features", href: "#features" },
+      { label: "Precios", href: "#pricing" },
+      { label: "Especialidades", href: "#specialties" },
+      { label: "Integrations", href: "/integrations" },
+    ],
+  },
+  {
+    title: "Empresa",
+    links: [
+      { label: "Sobre", href: "/about" },
+      { label: "Blog", href: "/blog" },
+      { label: "Contacto", href: "/contact" },
+    ],
+  },
+  {
+    title: "Legal",
+    links: [
+      { label: "Términos", href: "/legal/terms" },
+      { label: "Privacidad", href: "/legal/privacy" },
+      { label: "CFDI", href: "/legal/cfdi" },
+      { label: "NOM-024", href: "/legal/nom-024" },
+    ],
+  },
+  {
+    title: "Soporte",
+    links: [
+      { label: "Docs", href: "/docs" },
+      { label: "Estado", href: "/status" },
+      { label: "Contacto", href: "/support" },
+    ],
+  },
+  {
+    title: "Redes",
+    links: [
+      { label: "Twitter", href: "https://twitter.com/mediflow" },
+      { label: "LinkedIn", href: "https://linkedin.com/company/mediflow" },
+      { label: "Instagram", href: "https://instagram.com/mediflow" },
+    ],
+  },
+];
+
+const SOCIALS = [
+  { label: "Twitter", href: "https://twitter.com/mediflow" },
+  { label: "LinkedIn", href: "https://linkedin.com/company/mediflow" },
+  { label: "Instagram", href: "https://instagram.com/mediflow" },
+];
 
 export function Footer() {
   return (
-    <footer className="bg-[#080b16] text-white pt-16 pb-8 border-t border-[rgba(99,102,241,0.08)]">
-      <div className="max-w-7xl mx-auto px-6 md:px-12">
-        <div className="grid md:grid-cols-5 gap-10 mb-12">
-          <div className="md:col-span-2">
-            <Link href="/" className="flex items-center gap-2.5 mb-4">
-              <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-xl flex items-center justify-center">
-                <span className="text-white font-black text-lg">M</span>
-              </div>
-              <span className="font-bold text-xl">MediFlow</span>
-            </Link>
-            <p className="text-slate-500 text-sm leading-relaxed max-w-xs">
-              Software de gestión para clínicas de salud, estética y belleza en México.
-            </p>
-          </div>
-
-          <div>
-            <h4 className="font-semibold mb-4 text-sm text-slate-300">Especialidades</h4>
-            <ul className="space-y-2 text-slate-500 text-sm">
-              <li><Link href="/dental" className="hover:text-white transition-colors">Dental</Link></li>
-              <li><Link href="/medicina-general" className="hover:text-white transition-colors">Medicina General</Link></li>
-              <li><Link href="/nutricion" className="hover:text-white transition-colors">Nutrición</Link></li>
-              <li><Link href="/psicologia" className="hover:text-white transition-colors">Psicología</Link></li>
-              <li><Link href="/medicina-estetica" className="hover:text-white transition-colors">Medicina Estética</Link></li>
-              <li><Link href="/fisioterapia" className="hover:text-white transition-colors">Fisioterapia</Link></li>
-            </ul>
-          </div>
-
-          <div>
-            <h4 className="font-semibold mb-4 text-sm text-slate-300">Producto</h4>
-            <ul className="space-y-2 text-slate-500 text-sm">
-              <li><a href="#funciones" className="hover:text-white transition-colors">Funciones</a></li>
-              <li><a href="#precios" className="hover:text-white transition-colors">Precios</a></li>
-              <li><a href="#especialidades" className="hover:text-white transition-colors">Especialidades</a></li>
-            </ul>
-          </div>
-
-          <div>
-            <h4 className="font-semibold mb-4 text-sm text-slate-300">Contacto</h4>
-            <ul className="space-y-3 text-slate-500 text-sm">
-              <li className="flex items-center gap-2">
-                <Mail className="w-4 h-4 text-slate-600" />
-                <a href="mailto:hola@mediflow.app" className="hover:text-white transition-colors">hola@mediflow.app</a>
-              </li>
-              <li className="flex items-center gap-2">
-                <Phone className="w-4 h-4 text-slate-600" />
-                <a href="tel:+525512345678" className="hover:text-white transition-colors">+52 55 1234 5678</a>
-              </li>
-              <li className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-slate-600" />
-                <span>Ciudad de México</span>
-              </li>
-            </ul>
-          </div>
+    <footer
+      style={{
+        borderTop: "1px solid var(--ld-border, var(--border))",
+        background: "rgba(0,0,0,0.3)",
+        padding: "80px 48px 40px",
+      }}
+    >
+      <div style={{ maxWidth: 1280, margin: "0 auto" }}>
+        <div className="ld-footer-grid">
+          {COLUMNS.map((col) => (
+            <div key={col.title}>
+              <h4
+                style={{
+                  fontFamily:
+                    "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.15em",
+                  color: "var(--ld-fg, var(--fg))",
+                  margin: 0,
+                  marginBottom: 16,
+                }}
+              >
+                {col.title}
+              </h4>
+              <ul
+                style={{
+                  listStyle: "none",
+                  padding: 0,
+                  margin: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                }}
+              >
+                {col.links.map((l) => {
+                  const isExternal = l.href.startsWith("http");
+                  const linkStyle = {
+                    fontSize: 13,
+                    color: "var(--ld-fg-muted, var(--fg-muted))",
+                    textDecoration: "none",
+                    transition: "color 0.2s",
+                  } as const;
+                  return (
+                    <li key={l.label}>
+                      {isExternal ? (
+                        <a
+                          href={l.href}
+                          className="ld-footer-link"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={linkStyle}
+                        >
+                          {l.label}
+                        </a>
+                      ) : (
+                        <Link
+                          href={l.href}
+                          className="ld-footer-link"
+                          style={linkStyle}
+                        >
+                          {l.label}
+                        </Link>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
         </div>
 
-        <div className="divider-glow mb-6" />
+        {/* HR */}
+        <div
+          style={{
+            height: 1,
+            background: "var(--ld-border, var(--border))",
+            margin: "48px 0 24px",
+          }}
+        />
 
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-slate-600 text-sm">
-            © 2026 MediFlow. Todos los derechos reservados.
-          </p>
-          <div className="flex gap-6 text-slate-600 text-sm">
-            <a href="#" className="hover:text-white transition-colors">Privacidad</a>
-            <a href="#" className="hover:text-white transition-colors">Términos</a>
+        {/* Bottom row */}
+        <div
+          className="ld-footer-bottom"
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 20,
+            flexWrap: "wrap",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 16,
+              flexWrap: "wrap",
+            }}
+          >
+            <Logo size={20} color="var(--ld-brand-light, var(--brand-light))" />
+            <span
+              style={{
+                fontSize: 12,
+                color: "var(--ld-fg-muted, var(--fg-muted))",
+                fontFamily:
+                  "var(--font-jetbrains-mono, ui-monospace, monospace)",
+              }}
+            >
+              © 2026 MediFlow · Hecho en México 🇲🇽
+            </span>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              gap: 18,
+              flexWrap: "wrap",
+            }}
+          >
+            {SOCIALS.map((s) => (
+              <a
+                key={s.label}
+                href={s.href}
+                className="ld-footer-link"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  fontSize: 12,
+                  color: "var(--ld-fg-muted, var(--fg-muted))",
+                  textDecoration: "none",
+                  fontFamily:
+                    "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                  letterSpacing: "0.04em",
+                  transition: "color 0.2s",
+                }}
+              >
+                {s.label}
+              </a>
+            ))}
           </div>
         </div>
       </div>
+
+      <style>{`
+        .ld-footer-grid {
+          display: grid;
+          grid-template-columns: repeat(5, 1fr);
+          gap: 40px;
+        }
+        .ld-footer-link:hover {
+          color: var(--ld-fg, var(--fg)) !important;
+        }
+        @media (max-width: 1024px) {
+          .ld-footer-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 32px 24px;
+          }
+        }
+        @media (max-width: 768px) {
+          .ld-footer-grid {
+            grid-template-columns: 1fr;
+            gap: 28px;
+          }
+          .ld-footer-bottom {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+        }
+      `}</style>
     </footer>
   );
 }

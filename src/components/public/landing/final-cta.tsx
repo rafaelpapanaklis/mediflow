@@ -1,33 +1,137 @@
-"use client";
-
-import { motion } from "framer-motion";
-import { ArrowRight } from "lucide-react";
+import Link from "next/link";
 
 export function FinalCTA() {
   return (
-    <section className="py-24 md:py-32 cta-gradient relative overflow-hidden">
-      <div className="orb orb-purple w-96 h-96 -top-48 right-0 opacity-30" />
-      <div className="max-w-4xl mx-auto px-6 md:px-12 text-center relative z-10">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
+    <section
+      style={{
+        position: "relative",
+        padding: "120px 48px",
+        overflow: "hidden",
+      }}
+    >
+      {/* Ambient backgrounds */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          inset: 0,
+          background:
+            "radial-gradient(ellipse at 50% 50%, rgba(124,58,237,0.18), transparent 55%), radial-gradient(ellipse at 80% 60%, rgba(52,211,153,0.10), transparent 55%)",
+          pointerEvents: "none",
+        }}
+      />
+
+      <div
+        style={{
+          position: "relative",
+          maxWidth: 900,
+          margin: "0 auto",
+          textAlign: "center",
+          padding: "80px 48px",
+          borderRadius: 24,
+          background:
+            "linear-gradient(135deg, rgba(124,58,237,0.15), rgba(52,211,153,0.08))",
+          border: "1px solid rgba(124,58,237,0.3)",
+          boxShadow: "0 0 80px rgba(124,58,237,0.2)",
+        }}
+      >
+        <h2
+          style={{
+            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontWeight: 700,
+            fontSize: "clamp(32px, 5vw, 48px)",
+            letterSpacing: "-0.035em",
+            lineHeight: 1.05,
+            margin: 0,
+            color: "var(--ld-fg, var(--fg))",
+          }}
         >
-          <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-white mb-6">
-            Empieza hoy — 14 días gratis
-          </h2>
-          <p className="text-xl text-white/70 mb-8">
-            Sin tarjeta de crédito. Configura tu clínica en 5 minutos.
-          </p>
-          <a
+          ¿Listo para ver MediFlow en tu clínica?
+        </h2>
+
+        <p
+          style={{
+            fontSize: 17,
+            color: "var(--ld-fg-muted, var(--fg-muted))",
+            maxWidth: 560,
+            margin: "24px auto 36px",
+            lineHeight: 1.55,
+          }}
+        >
+          Empieza gratis hoy. 30 días sin tarjeta. Cancela cuando quieras.
+        </p>
+
+        <div
+          className="ld-cta-buttons"
+          style={{
+            display: "flex",
+            gap: 12,
+            justifyContent: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <Link
             href="/register"
-            className="inline-flex items-center gap-2 bg-white hover:bg-slate-100 text-[#0B0F1E] px-8 py-4 rounded-full font-semibold text-lg transition-all shadow-lg shadow-black/20"
+            style={{
+              padding: "14px 24px",
+              borderRadius: 10,
+              background: "linear-gradient(180deg, #8b5cf6, #7c3aed)",
+              color: "white",
+              fontWeight: 500,
+              fontSize: 14,
+              textDecoration: "none",
+              boxShadow:
+                "0 10px 30px -8px rgba(124,58,237,0.6), inset 0 1px 0 rgba(255,255,255,0.2)",
+              transition: "all 0.2s",
+            }}
           >
-            Crear cuenta gratis
-            <ArrowRight className="w-5 h-5" />
-          </a>
-        </motion.div>
+            Empieza gratis →
+          </Link>
+          <Link
+            href="/demo"
+            style={{
+              padding: "14px 24px",
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.12)",
+              background: "rgba(255,255,255,0.03)",
+              color: "var(--ld-fg, var(--fg))",
+              fontSize: 14,
+              fontWeight: 500,
+              textDecoration: "none",
+              transition: "all 0.2s",
+            }}
+          >
+            Agendar demo
+          </Link>
+        </div>
+
+        <div
+          style={{
+            marginTop: 28,
+            display: "flex",
+            justifyContent: "center",
+            gap: 24,
+            flexWrap: "wrap",
+            fontSize: 12,
+            color: "var(--ld-fg-muted, var(--fg-muted))",
+            fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+            letterSpacing: "0.02em",
+          }}
+        >
+          <span>✓ Sin tarjeta</span>
+          <span>✓ Migración incluida</span>
+          <span>✓ Soporte en español</span>
+        </div>
       </div>
+
+      <style>{`
+        @media (max-width: 768px) {
+          .ld-cta-buttons > a {
+            width: 100%;
+            text-align: center;
+          }
+        }
+      `}</style>
     </section>
   );
 }
