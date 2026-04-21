@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Search } from "lucide-react";
 import { getInitials, avatarColor } from "@/lib/utils";
+import { CardNew }   from "@/components/ui/design-system/card-new";
+import { AvatarNew } from "@/components/ui/design-system/avatar-new";
+import { BadgeNew }  from "@/components/ui/design-system/badge-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { DentalForm }          from "@/components/clinical/dental-form";
 import { NutritionForm }       from "@/components/clinical/nutrition-form";
 import { PsychologyForm }      from "@/components/clinical/psychology-form";
@@ -127,74 +131,101 @@ export function ClinicalClient({
   }
 
   return (
-    <div className="flex gap-5 h-full">
+    <div style={{ display: "flex", gap: 20, padding: "24px 28px", maxWidth: 1400, margin: "0 auto" }}>
       {/* Patient list sidebar */}
-      <div className="w-64 flex-shrink-0">
-        <div className="rounded-xl border border-border bg-card shadow-card overflow-hidden">
-          <div className="p-3 border-b border-border">
-            <h2 className="text-sm font-bold mb-2">Pacientes</h2>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+      <div style={{ width: 260, flexShrink: 0 }}>
+        <CardNew noPad>
+          <div style={{ padding: 12, borderBottom: "1px solid var(--border-soft)" }}>
+            <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600, marginBottom: 8 }}>
+              Pacientes
+            </div>
+            <div className="search-field" style={{ width: "100%" }}>
+              <Search size={14} />
               <input
-                className="flex h-8 w-full rounded-lg border border-border bg-card pl-8 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                 placeholder="Buscar…"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
           </div>
-          <div className="overflow-y-auto max-h-[calc(100vh-200px)]">
+          <div style={{ overflowY: "auto", maxHeight: "calc(100vh - 240px)" }}>
             {filtered.length === 0 ? (
-              <div className="p-4 text-xs text-muted-foreground text-center">Sin resultados</div>
-            ) : filtered.map(p => (
-              <button
-                key={p.id}
-                onClick={() => selectPatient(p.id)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-muted/30 transition-colors border-b border-border/50 last:border-0 ${currentPatientId === p.id ? "bg-brand-600/15 text-foreground" : ""}`}
-              >
-                <div className={`w-8 h-8 rounded-full ${avatarColor(p.id)} flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0`}>
-                  {getInitials(p.firstName, p.lastName)}
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs font-semibold truncate">{p.firstName} {p.lastName}</div>
-                  <div className="text-[10px] text-muted-foreground">#{p.patientNumber}</div>
-                </div>
-              </button>
-            ))}
+              <div style={{ padding: 16, textAlign: "center", fontSize: 11, color: "var(--text-3)" }}>
+                Sin resultados
+              </div>
+            ) : filtered.map(p => {
+              const isSel = currentPatientId === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => selectPatient(p.id)}
+                  className="list-row"
+                  style={{
+                    width: "100%",
+                    textAlign: "left",
+                    cursor: "pointer",
+                    background: isSel ? "var(--brand-soft)" : "transparent",
+                    borderLeft: isSel ? "3px solid var(--brand)" : "3px solid transparent",
+                    color: "inherit",
+                  }}
+                >
+                  <AvatarNew name={`${p.firstName} ${p.lastName}`} size="sm" />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-1)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {p.firstName} {p.lastName}
+                    </div>
+                    <div className="mono" style={{ fontSize: 10, color: "var(--text-3)" }}>#{p.patientNumber}</div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
-        </div>
+        </CardNew>
       </div>
 
       {/* Main content */}
-      <div className="flex-1 min-w-0">
+      <div style={{ flex: 1, minWidth: 0 }}>
         {!selectedPatient ? (
-          <div className="rounded-xl border border-border bg-card shadow-card p-16 text-center">
-            <div className="text-4xl mb-4">
-              {{ dental:"🦷", nutrition:"🥗", psychology:"🧠", dermatology:"✨",
-                 aesthetic_medicine:"💉", hair_restoration:"💇", beauty_center:"⭐",
-                 brow_lash:"👁", massage:"💆", laser_hair_removal:"⚡", hair_salon:"✂️",
-                 alternative_medicine:"🌿", nail_salon:"💅", spa:"🧖", physiotherapy:"🏋️",
-                 podiatry:"🦶" }[detectedSpecialty] ?? "🩺"}
+          <CardNew>
+            <div style={{ padding: "80px 24px", textAlign: "center" }}>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>
+                {{ dental: "🦷", nutrition: "🥗", psychology: "🧠", dermatology: "✨",
+                   aesthetic_medicine: "💉", hair_restoration: "💇", beauty_center: "⭐",
+                   brow_lash: "👁", massage: "💆", laser_hair_removal: "⚡", hair_salon: "✂️",
+                   alternative_medicine: "🌿", nail_salon: "💅", spa: "🧖", physiotherapy: "🏋️",
+                   podiatry: "🦶" }[detectedSpecialty] ?? "🩺"}
+              </div>
+              <h2 style={{ fontSize: 16, color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+                Expediente Clínico
+              </h2>
+              <p style={{ fontSize: 12, color: "var(--text-3)", marginTop: 6 }}>
+                Selecciona un paciente de la lista para ver su expediente o registrar una nueva consulta.
+              </p>
             </div>
-            <h2 className="text-lg font-bold mb-2">Expediente Clínico</h2>
-            <p className="text-sm text-muted-foreground">
-              Selecciona un paciente de la lista para ver su expediente o registrar una nueva consulta.
-            </p>
-          </div>
+          </CardNew>
         ) : (
           <div>
             {/* Patient header */}
-            <div className="flex items-center gap-3 mb-5">
-              <div className={`w-12 h-12 rounded-full ${avatarColor(selectedPatient.id)} flex items-center justify-center text-sm font-bold text-white`}>
-                {getInitials(selectedPatient.firstName, selectedPatient.lastName)}
-              </div>
-              <div>
-                <h1 className="text-lg font-extrabold">
-                  {selectedPatient.firstName} {selectedPatient.lastName}
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  Expediente #{selectedPatient.patientNumber} · {records.length} consulta{records.length !== 1 ? "s" : ""} previas
+            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
+              <AvatarNew name={`${selectedPatient.firstName} ${selectedPatient.lastName}`} size="lg" />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <h1 style={{ fontSize: 18, color: "var(--text-1)", fontWeight: 600, margin: 0, letterSpacing: "-0.02em" }}>
+                    {selectedPatient.firstName} {selectedPatient.lastName}
+                  </h1>
+                  <BadgeNew tone="brand">{detectedSpecialty}</BadgeNew>
+                </div>
+                <p style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>
+                  <span className="mono">#{selectedPatient.patientNumber}</span>
+                  <span style={{ margin: "0 6px" }}>·</span>
+                  {records.length} consulta{records.length !== 1 ? "s" : ""} previas
                 </p>
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <a href={`/dashboard/patients/${selectedPatient.id}`} style={{ textDecoration: "none" }}>
+                  <ButtonNew variant="secondary" size="sm">Ver perfil</ButtonNew>
+                </a>
               </div>
             </div>
 

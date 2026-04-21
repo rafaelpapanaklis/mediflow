@@ -286,62 +286,149 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
   };
 
   return (
-    <div className="space-y-6">
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {/* ANAMNESIS */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label>Motivo de consulta / HEA</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-            placeholder="¿Por qué viene el paciente hoy?" value={form.subjective} onChange={e => set("subjective", e.target.value)} />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <div className="field-new">
+          <label className="field-new__label">Motivo de consulta / HEA</label>
+          <textarea
+            className="input-new"
+            style={{ height: 80, paddingTop: 8, resize: "vertical" }}
+            placeholder="¿Por qué viene el paciente hoy?"
+            value={form.subjective}
+            onChange={e => set("subjective", e.target.value)}
+          />
         </div>
-        <div className="space-y-1.5">
-          <Label>Antecedentes médicos relevantes</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-            placeholder="Diabetes, hipertensión, medicamentos actuales…" value={form.objective} onChange={e => set("objective", e.target.value)} />
+        <div className="field-new">
+          <label className="field-new__label">Antecedentes médicos relevantes</label>
+          <textarea
+            className="input-new"
+            style={{ height: 80, paddingTop: 8, resize: "vertical" }}
+            placeholder="Diabetes, hipertensión, medicamentos actuales…"
+            value={form.objective}
+            onChange={e => set("objective", e.target.value)}
+          />
         </div>
       </div>
 
       {/* ODONTOGRAMA */}
-      <div className="rounded-xl border border-border p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold">🦷 Odontograma</h3>
-          <span className="text-xs text-muted-foreground">{selectedTooth ? `Diente #${selectedTooth} seleccionado` : "Haz clic en una cara del diente (O=oclusal, M=mesial, D=distal, V=vestibular, L=lingual)"}</span>
+      <div style={{
+        background: "var(--bg-elev)",
+        border: "1px solid var(--border-soft)",
+        borderRadius: "var(--radius-lg)",
+        padding: 20,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <h3 style={{
+            fontSize: 13, fontWeight: 600, color: "var(--text-1)",
+            margin: 0, display: "flex", alignItems: "center", gap: 6,
+          }}>
+            🦷 Odontograma
+          </h3>
+          <span style={{ fontSize: 11, color: "var(--text-3)" }}>
+            {selectedTooth
+              ? `Diente #${selectedTooth} seleccionado`
+              : "Haz clic en una cara (O·M·D·V·L)"}
+          </span>
         </div>
 
         {/* Tool selector */}
-        <div className="flex flex-wrap gap-1.5 mb-4 pb-3 border-b border-border">
+        <div style={{
+          display: "flex", flexWrap: "wrap", gap: 6,
+          marginBottom: 16, paddingBottom: 12,
+          borderBottom: "1px solid var(--border-soft)",
+        }}>
           {Object.entries(TOOTH_CONDITIONS).map(([key, val]) => (
-            <button key={key} onClick={() => setActiveTool(key as keyof typeof TOOTH_CONDITIONS)}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${activeTool === key ? "ring-2 ring-brand-600 scale-105" : ""}`}
-              style={{ background: val.bg, borderColor: val.border, color: val.color }}>
+            <button
+              key={key}
+              type="button"
+              onClick={() => setActiveTool(key as keyof typeof TOOTH_CONDITIONS)}
+              style={{
+                padding: "4px 10px",
+                borderRadius: 6,
+                fontSize: 11,
+                fontWeight: 600,
+                border: `1px solid ${val.border}`,
+                background: activeTool === key ? val.bg : "transparent",
+                color: val.color,
+                cursor: "pointer",
+                transition: "all .12s",
+                boxShadow: activeTool === key ? `0 0 0 1px ${val.color}40` : "none",
+              }}
+            >
               {val.label}
             </button>
           ))}
-          <button onClick={() => { setOdontogram({}); setSelectedTooth(null); }} className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-border text-muted-foreground hover:bg-muted ml-auto">
+          <button
+            type="button"
+            onClick={() => { setOdontogram({}); setSelectedTooth(null); }}
+            className="btn-new btn-new--ghost btn-new--sm"
+            style={{ marginLeft: "auto" }}
+          >
             Limpiar todo
           </button>
         </div>
 
-        {/* Upper arch */}
-        <div className="text-[10px] text-center text-muted-foreground mb-2 font-bold uppercase tracking-wider">Arcada Superior</div>
-        <div className="flex justify-center gap-1.5 flex-wrap mb-2">{upperTeeth.map(renderTooth)}</div>
-        <div className="border-t-2 border-dashed border-muted/50 my-3 mx-8" />
-        <div className="flex justify-center gap-1.5 flex-wrap mb-2">{lowerTeeth.map(renderTooth)}</div>
-        <div className="text-[10px] text-center text-muted-foreground mt-2 font-bold uppercase tracking-wider">Arcada Inferior</div>
+        {/* Canvas */}
+        <div style={{
+          background: "var(--bg-elev-2)",
+          border: "1px solid var(--border-soft)",
+          borderRadius: "var(--radius)",
+          padding: 20,
+        }}>
+          <div style={{
+            fontSize: 10, textAlign: "center",
+            color: "var(--text-3)", marginBottom: 10,
+            textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600,
+          }}>
+            Maxilar superior
+          </div>
+          <div style={{ display: "flex", justifyContent: "center", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+            {upperTeeth.map(renderTooth)}
+          </div>
+          <div style={{
+            borderTop: "2px dashed var(--border-soft)",
+            margin: "14px 32px",
+          }} />
+          <div style={{ display: "flex", justifyContent: "center", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+            {lowerTeeth.map(renderTooth)}
+          </div>
+          <div style={{
+            fontSize: 10, textAlign: "center",
+            color: "var(--text-3)", marginTop: 10,
+            textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600,
+          }}>
+            Maxilar inferior
+          </div>
+        </div>
 
         {/* Selected tooth detail */}
         {selectedTooth && odontogram[selectedTooth] && Object.keys(odontogram[selectedTooth]!).length > 0 && (
-          <div className="mt-3 pt-3 border-t border-border">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-bold text-foreground">Diente #{selectedTooth}:</span>
+          <div style={{
+            marginTop: 12, paddingTop: 12,
+            borderTop: "1px solid var(--border-soft)",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--text-1)" }}>
+                Diente #{selectedTooth}:
+              </span>
               {SURFACES.map(s => {
                 const cond = odontogram[selectedTooth!]?.[s];
                 if (!cond) return null;
                 const style = TOOTH_CONDITIONS[cond];
-                const surfaceLabels: Record<Surface, string> = { O:"Oclusal", M:"Mesial", D:"Distal", V:"Vestibular", L:"Lingual" };
+                const surfaceLabels: Record<Surface, string> = {
+                  O: "Oclusal", M: "Mesial", D: "Distal", V: "Vestibular", L: "Lingual",
+                };
                 return (
-                  <span key={s} className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border"
-                    style={{ background: style.bg, borderColor: style.border, color: style.color }}>
+                  <span
+                    key={s}
+                    style={{
+                      fontSize: 10, fontWeight: 600,
+                      padding: "2px 8px", borderRadius: 12,
+                      background: style.bg, border: `1px solid ${style.border}`,
+                      color: style.color,
+                    }}
+                  >
                     {surfaceLabels[s]}: {style.label}
                   </span>
                 );
@@ -351,22 +438,34 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
         )}
 
         {/* Legend */}
-        <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-border">
+        <div style={{
+          display: "flex", flexWrap: "wrap", gap: 10,
+          marginTop: 12, paddingTop: 12,
+          borderTop: "1px solid var(--border-soft)",
+        }}>
           {Object.entries(TOOTH_CONDITIONS).map(([, val]) => (
-            <div key={val.label} className="flex items-center gap-1 text-[10px] text-muted-foreground">
-              <div className="w-3 h-3 rounded border" style={{ background: val.bg, borderColor: val.border }} />
+            <div key={val.label} style={{
+              display: "flex", alignItems: "center", gap: 4,
+              fontSize: 10, color: "var(--text-3)",
+            }}>
+              <div style={{
+                width: 10, height: 10, borderRadius: 3,
+                background: val.bg, border: `1px solid ${val.border}`,
+              }} />
               {val.label}
             </div>
           ))}
         </div>
-        <div className="flex flex-wrap gap-3 mt-2 text-[10px] text-muted-foreground">
-          <span className="font-semibold">Caras:</span>
+        <div style={{
+          display: "flex", flexWrap: "wrap", gap: 10,
+          marginTop: 8, fontSize: 10, color: "var(--text-4)",
+        }}>
+          <span className="mono" style={{ fontWeight: 600 }}>Caras:</span>
           <span>O = Oclusal</span>
           <span>M = Mesial</span>
           <span>D = Distal</span>
           <span>V = Vestibular</span>
           <span>L = Lingual/Palatino</span>
-          <span className="ml-2 italic">Ausente, Corona, Endodoncia, Implante y Extracción aplican al diente completo</span>
         </div>
       </div>
 
