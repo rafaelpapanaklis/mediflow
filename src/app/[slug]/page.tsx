@@ -3,14 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { ClinicLandingClient } from "./landing-client";
 import type { Metadata } from "next";
 import {
-  getSpecialty as getLegacySpecialty,
-  isHealthSpecialty,
-  SPECIALTY_SLUGS as LEGACY_SPECIALTY_SLUGS,
-} from "@/lib/specialty-content";
-import { SpecialtyPage as LegacySpecialtyPage } from "@/components/public/specialty/specialty-page";
-import {
-  getSpecialty as getNewSpecialty,
-  SPECIALTY_SLUGS as NEW_SPECIALTY_SLUGS,
+  getSpecialty,
+  SPECIALTY_SLUGS,
 } from "@/lib/specialty-data";
 import { SpecialtyPage } from "@/components/public/landing/specialty/specialty-page";
 import {
@@ -51,38 +45,23 @@ const NON_SPECIALTY_RESERVED = [
 interface Props { params: { slug: string } }
 
 export function generateStaticParams() {
-  const combined = new Set<string>([
-    ...NEW_SPECIALTY_SLUGS,
-    ...LEGACY_SPECIALTY_SLUGS,
-  ]);
-  return Array.from(combined).map((slug) => ({ slug }));
+  return SPECIALTY_SLUGS.map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  // 1) New specialty landing (Claude Design)
-  const newSpec = getNewSpecialty(params.slug);
-  if (newSpec) {
+  // 1) Specialty landing (Claude Design — 17 especialidades)
+  const specialty = getSpecialty(params.slug);
+  if (specialty) {
     return buildMetadata({
-      title: `${newSpec.name} · MediFlow`,
-      description: newSpec.heroSub,
-      path: `/${newSpec.slug}`,
-      ogImage: `/og/${newSpec.slug}.png`,
-      keywords: [newSpec.name, newSpec.category, "software clínica México", "CFDI", "expediente electrónico"],
+      title: `${specialty.name} · MediFlow`,
+      description: specialty.heroSub,
+      path: `/${specialty.slug}`,
+      ogImage: `/og/${specialty.slug}`,
+      keywords: [specialty.name, specialty.category, "software clínica México", "CFDI", "expediente electrónico"],
     });
   }
 
-  // 2) Legacy specialty landing
-  const legacySpec = getLegacySpecialty(params.slug);
-  if (legacySpec) {
-    return buildMetadata({
-      title: legacySpec.seoTitle,
-      description: legacySpec.seoDescription,
-      path: `/${legacySpec.slug}`,
-      ogImage: `/og/${legacySpec.slug}.png`,
-    });
-  }
-
-  // 3) Clínica (landing pública)
+  // 2) Clínica
   const clinic = await prisma.clinic.findUnique({
     where: { slug: params.slug },
     select: { name: true, description: true, logoUrl: true },
@@ -99,22 +78,22 @@ export default async function ClinicLandingPage({ params }: Props) {
   // 1) Reserved slugs
   if (NON_SPECIALTY_RESERVED.includes(params.slug)) notFound();
 
-  // 2) NEW specialty landing (Claude Design, 17 especialidades médicas)
-  const newSpec = getNewSpecialty(params.slug);
-  if (newSpec) {
-    const url = `${SITE_URL}/${newSpec.slug}`;
+  // 2) Specialty landing (Claude Design)
+  const specialty = getSpecialty(params.slug);
+  if (specialty) {
+    const url = `${SITE_URL}/${specialty.slug}`;
     const ldBlocks: object[] = [
       softwareApplicationLd({
-        name: `MediFlow para ${newSpec.name}`,
-        description: newSpec.heroSub,
+        name: `MediFlow para ${specialty.name}`,
+        description: specialty.heroSub,
         url,
         category: "HealthApplication",
       }),
       medicalBusinessLd({
-        name: `MediFlow — software para ${newSpec.name.toLowerCase()}`,
-        description: newSpec.heroSub,
+        name: `MediFlow — software para ${specialty.name.toLowerCase()}`,
+        description: specialty.heroSub,
         url,
-        medicalSpecialty: newSpec.category,
+        medicalSpecialty: specialty.category,
       }),
     ];
     return (
@@ -126,47 +105,12 @@ export default async function ClinicLandingPage({ params }: Props) {
             dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
           />
         ))}
-        <SpecialtyPage slug={newSpec.slug} />
+        <SpecialtyPage slug={specialty.slug} />
       </>
     );
   }
 
-  // 3) Legacy specialty landing
-  const legacySpec = getLegacySpecialty(params.slug);
-  if (legacySpec) {
-    const url = `${SITE_URL}/${legacySpec.slug}`;
-    const ldBlocks: object[] = [
-      softwareApplicationLd({
-        name: `MediFlow para ${legacySpec.nombre}`,
-        description: legacySpec.seoDescription,
-        url,
-        category: "BusinessApplication",
-      }),
-    ];
-    if (isHealthSpecialty(legacySpec.slug)) {
-      ldBlocks.push(
-        medicalBusinessLd({
-          name: `MediFlow — software para ${legacySpec.nombre.toLowerCase()}`,
-          description: legacySpec.seoDescription,
-          url,
-        }),
-      );
-    }
-    return (
-      <>
-        {ldBlocks.map((ld, i) => (
-          <script
-            key={i}
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
-          />
-        ))}
-        <LegacySpecialtyPage content={legacySpec} />
-      </>
-    );
-  }
-
-  // 4) Landing pública de clínica
+  // 3) Clínica (landing pública)
   const clinic = await prisma.clinic.findUnique({
     where:   { slug: params.slug },
     include: {

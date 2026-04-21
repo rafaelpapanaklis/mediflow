@@ -1,5 +1,5 @@
 import { ImageResponse } from "next/og";
-import { getSpecialty, SPECIALTY_SLUGS } from "@/lib/specialty-content";
+import { getSpecialty, SPECIALTY_SLUGS } from "@/lib/specialty-data";
 
 export const runtime = "edge";
 
@@ -9,9 +9,9 @@ export function generateStaticParams() {
 
 export async function GET(_req: Request, { params }: { params: { slug: string } }) {
   const specialty = getSpecialty(params.slug);
-  const title = specialty?.nombre ?? "MediFlow";
+  const title = specialty?.name ?? "MediFlow";
   const subtitle = specialty
-    ? `Software para ${specialty.nombre.toLowerCase()} en México`
+    ? `Software para ${specialty.name.toLowerCase()} en México`
     : "Software para clínicas en México";
 
   return new ImageResponse(
@@ -24,24 +24,17 @@ export async function GET(_req: Request, { params }: { params: { slug: string } 
           flexDirection: "column",
           justifyContent: "center",
           alignItems: "center",
-          background: "linear-gradient(135deg, #0B0F1E 0%, #111631 50%, #0B0F1E 100%)",
+          background: "linear-gradient(135deg, #0B0815 0%, #1a0b2e 50%, #0B0815 100%)",
           fontFamily: "system-ui, sans-serif",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "16px",
-            marginBottom: "32px",
-          }}
-        >
+        <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "32px" }}>
           <div
             style={{
               width: "64px",
               height: "64px",
               borderRadius: "16px",
-              background: "linear-gradient(135deg, #7C3AED, #6366F1)",
+              background: "linear-gradient(135deg, #7C3AED, #a78bfa)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -52,9 +45,7 @@ export async function GET(_req: Request, { params }: { params: { slug: string } 
           >
             M
           </div>
-          <span style={{ color: "white", fontSize: "36px", fontWeight: 700 }}>
-            MediFlow
-          </span>
+          <span style={{ color: "white", fontSize: "36px", fontWeight: 700 }}>MediFlow</span>
         </div>
         <div
           style={{
@@ -70,7 +61,7 @@ export async function GET(_req: Request, { params }: { params: { slug: string } 
         </div>
         <div
           style={{
-            color: "#94A3B8",
+            color: "#a78bfa",
             fontSize: "24px",
             marginTop: "16px",
             textAlign: "center",
