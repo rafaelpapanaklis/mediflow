@@ -1,9 +1,11 @@
 "use client";
 import { useState } from "react";
 import toast from "react-hot-toast";
+import { Calculator } from "lucide-react";
 import { CardNew }   from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
+import { CalculatorModal } from "@/components/clinical/calculators/calculator-modal";
 
 const DIAGNOSES_CIE10 = ["J00 - Resfriado común","J06 - IRA superior","J18 - Neumonía","K29 - Gastritis","K57 - Diverticulosis","K92 - Hemorragia GI","E11 - Diabetes tipo 2","E14 - Diabetes NE","I10 - Hipertensión esencial","I50 - Insuficiencia cardíaca","J45 - Asma","F32 - Depresión","F41 - Ansiedad","M54 - Dorsalgia","N39 - ITU","Otro"];
 const SPECIALTIES = ["Cardiología","Neurología","Dermatología","Gastroenterología","Ortopedia","Ginecología","Urología","Psiquiatría","Oftalmología","ORL","Endocrinología","Reumatología","Oncología"];
@@ -12,6 +14,7 @@ interface Props { patientId: string; onSaved: (record: any) => void }
 
 export function GeneralMedicineForm({ patientId, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
+  const [calcOpen, setCalcOpen] = useState(false);
   const [form, setForm] = useState({
     subjective: "", objective: "", assessment: "", plan: "",
     vitals: { bloodPressure:"", heartRate:"", temperature:"", respiratoryRate:"", oxygenSat:"", bloodGlucose:"", weight:"", height:"" },
@@ -92,6 +95,12 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <ButtonNew size="sm" variant="ghost" icon={<Calculator size={14} />} onClick={() => setCalcOpen(true)}>
+          Calculadoras clínicas
+        </ButtonNew>
+      </div>
+
       {/* Motivo de consulta */}
       <CardNew title="Motivo de consulta / HEA">
         <textarea
@@ -487,6 +496,8 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
           {saving ? "Guardando…" : "Guardar consulta médica"}
         </ButtonNew>
       </div>
+
+      <CalculatorModal isOpen={calcOpen} onClose={() => setCalcOpen(false)} />
     </div>
   );
 }

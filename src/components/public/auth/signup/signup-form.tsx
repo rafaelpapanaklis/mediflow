@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { Logo } from "../../landing/primitives/logo";
 import { SocialButtons } from "../social-buttons";
@@ -82,78 +82,116 @@ function slugifyClinic(name: string): string {
 
 export function SignupForm() {
   const router = useRouter();
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [form, setForm] = useState<SignupState>(INITIAL);
+  const searchParams = useSearchParams();
+
+  // OAuth flow detection
+  const isOAuthFlow = searchParams.get("source") === "oauth";
+  const initialEmail = searchParams.get("email") ?? "";
+  const initialStepParam = searchParams.get("step");
+  const initialStep: 1 | 2 | 3 =
+    initialStepParam === "2" ? 2 :
+    initialStepParam === "3" ? 3 :
+    isOAuthFlow ? 2 :
+    1;
+
+  const [step, setStep] = useState<1 | 2 | 3>(initialStep);
+  const [form, setForm] = useState<SignupState>(() => ({
+    ...INITIAL,
+    email: initialEmail,
+    // En OAuth flow el "nombre" se tomará del Supabase user en el backend
+    nombre: isOAuthFlow ? "(OAuth)" : "",
+    password: isOAuthFlow ? "oauth-no-password" : "",
+  }));
   const [loading, setLoading] = useState(false);
+
+  // Sync email from query param si cambia
+  useEffect(() => {
+    if (initialEmail && !form.email) setForm(prev => ({ ...prev, email: initialEmail }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialEmail]);
 
   const update = (patch: Partial<SignupState>) =>
     setForm(prev => ({ ...prev, ...patch }));
+
+  // Stepper muestra solo pasos relevantes: en OAuth saltamos paso 1
+  const effectiveSteps = useMemo<1 | 2 | 3>(() => step, [step]);
+  void effectiveSteps;
 
   async function handleSubmit() {
     if (loading) return;
     setLoading(true);
     try {
-      const trimmed = form.nombre.trim();
-      const [firstName, ...rest] = trimmed.split(/\s+/);
-      const lastName = rest.join(" ") || firstName;
       const slug = slugifyClinic(form.clinicName);
+      const paymentMethodLast4 =
+        form.payMethod === "card"
+          ? form.card.number.replace(/\s/g, "").slice(-4) || undefined
+          : undefined;
 
-      const res = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          firstName,
-          lastName,
-          email: form.email,
-          password: form.password,
-          clinicName: form.clinicName,
-          slug,
-          specialty: form.specialty,
-          category:
-            SPECIALTY_TO_CATEGORY[form.specialty] ?? "OTHER",
-          country: "México",
-          city: form.city || undefined,
-          state: form.state || undefined,
-          clinicSize: form.clinicSize || undefined,
-          plan: form.plan,
-          billing: form.billing,
-          paymentMethod: form.payMethod,
-          paymentMethodLast4:
-            form.payMethod === "card"
-              ? form.card.number.replace(/\s/g, "").slice(-4) || undefined
-              : undefined,
-        }),
-      });
+      const basePayload = {
+        clinicName: form.clinicName,
+        slug,
+        specialty: form.specialty,
+        category: SPECIALTY_TO_CATEGORY[form.specialty] ?? "OTHER",
+        country: "México",
+        city: form.city || undefined,
+        state: form.state || undefined,
+        clinicSize: form.clinicSize || undefined,
+        plan: form.plan,
+        billing: form.billing,
+        paymentMethod: form.payMethod,
+        paymentMethodLast4,
+      };
+
+      let res: Response;
+      if (isOAuthFlow) {
+        // Usuario ya autenticado via OAuth — solo crear Clinic + User en Prisma
+        res = await fetch("/api/auth/register-oauth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(basePayload),
+        });
+      } else {
+        const trimmed = form.nombre.trim();
+        const [firstName, ...rest] = trimmed.split(/\s+/);
+        const lastName = rest.join(" ") || firstName;
+        res = await fetch("/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            firstName,
+            lastName,
+            email: form.email,
+            password: form.password,
+            ...basePayload,
+          }),
+        });
+      }
 
       const data = (await res.json().catch(() => ({}))) as {
         success?: boolean;
         error?: string;
       };
+      if (!res.ok) throw new Error(data.error ?? "Error al crear cuenta");
 
-      if (!res.ok) {
-        throw new Error(data.error ?? "Error al crear cuenta");
-      }
-
-      // Auto sign-in so the user lands in their dashboard already authenticated.
-      try {
-        const { createClient } = await import("@/lib/supabase/client");
-        const supa = createClient();
-        await supa.auth.signInWithPassword({
-          email: form.email,
-          password: form.password,
-        });
-      } catch (signInErr) {
-        // If auto-login fails, user can still log in manually after confirming email.
-        // eslint-disable-next-line no-console
-        console.warn("Auto sign-in after signup failed:", signInErr);
+      // Auto-login sólo en flujo email/password (OAuth ya tiene sesión activa)
+      if (!isOAuthFlow) {
+        try {
+          const { createClient } = await import("@/lib/supabase/client");
+          const supa = createClient();
+          await supa.auth.signInWithPassword({
+            email: form.email,
+            password: form.password,
+          });
+        } catch (signInErr) {
+          console.warn("Auto sign-in after signup failed:", signInErr);
+        }
       }
 
       toast.success("¡Cuenta creada! Bienvenido a MediFlow 🎉");
       router.push("/dashboard");
       router.refresh();
     } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : "Error al crear cuenta";
+      const msg = err instanceof Error ? err.message : "Error al crear cuenta";
       toast.error(msg);
       setLoading(false);
     }
@@ -192,12 +230,32 @@ export function SignupForm() {
         </p>
       </div>
 
-      {/* Social buttons (only step 1) */}
-      {step === 1 && (
+      {/* Social buttons (only step 1, not in OAuth flow) */}
+      {step === 1 && !isOAuthFlow && (
         <>
           <SocialButtons redirectTo="/dashboard" />
           <Divider label="o con tu correo" />
         </>
+      )}
+
+      {/* OAuth banner (si vino de Google/Microsoft) */}
+      {isOAuthFlow && step === 2 && (
+        <div
+          style={{
+            padding: "10px 14px",
+            borderRadius: 10,
+            background: "rgba(52,211,153,0.1)",
+            border: "1px solid rgba(52,211,153,0.3)",
+            fontSize: 12,
+            color: "#6ee7b7",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <span aria-hidden="true">✓</span>
+          Cuenta verificada como <strong>{form.email || "usuario OAuth"}</strong>. Solo faltan los datos de tu clínica.
+        </div>
       )}
 
       {/* Stepper */}
@@ -227,7 +285,14 @@ export function SignupForm() {
           }}
           onChange={update}
           onContinue={() => setStep(3)}
-          onBack={() => setStep(1)}
+          onBack={() => {
+            if (isOAuthFlow) {
+              // Sin paso 1 disponible: volver al home
+              router.push("/");
+            } else {
+              setStep(1);
+            }
+          }}
         />
       )}
 
