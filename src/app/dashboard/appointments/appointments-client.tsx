@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
+import { getApptColors } from "@/lib/appointment-colors";
 import toast from "react-hot-toast";
 
 interface Patient { id: string; firstName: string; lastName: string; patientNumber: string; phone?: string | null }
@@ -439,21 +440,46 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
     } catch (err: any) { toast.error(err.message); }
   }
 
-  // Improvement 2+3: Pills with doctor color + notes visible
+  // Pill usada en MonthView y WeekView — colorea según status (DS tokens).
   const ApptPill = ({ appt, compact = false }: { appt: Appt; compact?: boolean }) => {
-    const cfg   = STATUS_CONFIG[appt.status] ?? STATUS_CONFIG.PENDING;
-    const color = docColorMap[appt.doctorId] ?? DOC_COLORS[0];
+    const c = getApptColors(appt.status);
     return (
-      <button onClick={e => { e.stopPropagation(); setShowDetail(appt); }}
-        className={`w-full text-left rounded-lg px-2 py-1 mb-0.5 hover:opacity-80 transition-opacity ${compact ? "text-[11px]" : "text-xs"}`}
-        style={{ background: color.bg, border: `1px solid ${color.border}` }}>
-        <div className="flex items-center gap-1.5">
-          <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
-          <span className="font-bold text-foreground truncate">{appt.startTime} {appt.patient.firstName}</span>
-          {appt.mode === "TELECONSULTATION" && <span className="flex-shrink-0" title="Teleconsulta">📹</span>}
+      <button
+        onClick={e => { e.stopPropagation(); setShowDetail(appt); }}
+        type="button"
+        style={{
+          width: "100%",
+          textAlign: "left",
+          background: c.bg,
+          border: `1px solid ${c.border}`,
+          borderLeft: `3px solid ${c.dot}`,
+          color: c.text,
+          padding: compact ? "3px 6px" : "5px 8px",
+          borderRadius: 4,
+          marginBottom: 3,
+          fontSize: compact ? 10 : 11,
+          display: "flex",
+          flexDirection: "column",
+          gap: 1,
+          cursor: "pointer",
+          transition: "transform .12s, box-shadow .12s",
+          overflow: "hidden",
+        }}
+        onMouseEnter={e => { e.currentTarget.style.boxShadow = `0 0 12px ${c.border}`; }}
+        onMouseLeave={e => { e.currentTarget.style.boxShadow = "none"; }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
+          <span style={{ width: 4, height: 4, borderRadius: "50%", background: c.dot, flexShrink: 0 }} />
+          <span className="mono" style={{ color: "var(--text-3)", fontSize: 9, flexShrink: 0 }}>{appt.startTime}</span>
+          <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {appt.patient.firstName}
+          </span>
+          {appt.mode === "TELECONSULTATION" && <span style={{ fontSize: 9, flexShrink: 0 }} title="Teleconsulta">📹</span>}
         </div>
         {!compact && appt.notes && (
-          <div className="text-muted-foreground truncate pl-3 mt-0.5">{appt.notes}</div>
+          <div style={{ fontSize: 9, color: "var(--text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {appt.notes}
+          </div>
         )}
       </button>
     );
@@ -461,35 +487,98 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
 
   const MonthView = () => (
     <div>
-      <div className="grid grid-cols-7 border-b border-border bg-muted/20">
+      {/* Header días */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(7, 1fr)",
+        background: "rgba(255,255,255,0.015)",
+        borderBottom: "1px solid var(--border-soft)",
+      }}>
         {DAYS_ES.map(d => (
-          <div key={d} className="py-3 text-center text-sm font-bold text-muted-foreground uppercase tracking-wider">{d}</div>
+          <div
+            key={d}
+            style={{
+              padding: "12px 14px",
+              textAlign: "center",
+              fontSize: 10,
+              color: "var(--text-3)",
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+              fontWeight: 600,
+            }}
+          >
+            {d}
+          </div>
         ))}
       </div>
-      <div className="grid grid-cols-7" style={{ minHeight: 500 }}>
+
+      {/* Grid de días */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
         {calDays.map((day, idx) => {
-          if (!day) return <div key={idx} className="border-r border-b border-border bg-muted/5 min-h-[100px]" />;
+          if (!day) return (
+            <div
+              key={idx}
+              style={{
+                minHeight: 110,
+                borderRight: "1px solid var(--border-soft)",
+                borderBottom: "1px solid var(--border-soft)",
+                background: "rgba(255,255,255,0.01)",
+              }}
+            />
+          );
           const ds       = toDateStr(day);
-          const dayAppts = (apptsByDate[ds] ?? []).sort((a,b) => a.startTime.localeCompare(b.startTime));
+          const dayAppts = (apptsByDate[ds] ?? []).sort((a, b) => a.startTime.localeCompare(b.startTime));
           const isToday  = ds === todayStr;
           const isSel    = ds === selectedDay;
           return (
-            <div key={idx} onClick={() => setSelectedDay(ds)}
-              className={`border-r border-b border-border min-h-[100px] p-1.5 cursor-pointer transition-colors
-                ${isSel && !isToday ? "bg-brand-600/15" : "hover:bg-muted/20"}`}>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className={`w-8 h-8 flex items-center justify-center rounded-full text-sm font-bold
-                  ${isToday ? "bg-brand-600 text-white" : "text-foreground"}`}>
-                  {day.getDate()}
-                </span>
+            <div
+              key={idx}
+              onClick={() => setSelectedDay(ds)}
+              style={{
+                minHeight: 110,
+                padding: "8px 10px",
+                borderRight: "1px solid var(--border-soft)",
+                borderBottom: "1px solid var(--border-soft)",
+                cursor: "pointer",
+                transition: "background .12s",
+                background: isToday ? "var(--brand-softer)" : isSel ? "var(--bg-hover)" : "transparent",
+                position: "relative",
+              }}
+              onMouseEnter={e => {
+                if (!isToday && !isSel) e.currentTarget.style.background = "var(--bg-hover)";
+              }}
+              onMouseLeave={e => {
+                if (!isToday && !isSel) e.currentTarget.style.background = "transparent";
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                {isToday ? (
+                  <span style={{
+                    width: 22, height: 22, borderRadius: "50%",
+                    background: "var(--brand)", color: "#fff",
+                    display: "grid", placeItems: "center",
+                    fontSize: 12, fontWeight: 600,
+                    boxShadow: "0 0 12px rgba(124,58,237,0.4)",
+                  }}>
+                    {day.getDate()}
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-2)" }}>
+                    {day.getDate()}
+                  </span>
+                )}
                 {dayAppts.length > 0 && (
-                  <span className="text-xs font-bold text-muted-foreground bg-muted rounded-full w-5 h-5 flex items-center justify-center">
+                  <span className="mono" style={{ fontSize: 9, color: "var(--text-4)" }}>
                     {dayAppts.length}
                   </span>
                 )}
               </div>
               {dayAppts.slice(0, 3).map(a => <ApptPill key={a.id} appt={a} compact />)}
-              {dayAppts.length > 3 && <div className="text-[11px] text-brand-600 font-semibold pl-1">+{dayAppts.length-3} más</div>}
+              {dayAppts.length > 3 && (
+                <div style={{ fontSize: 10, color: "var(--text-3)", marginTop: 2 }}>
+                  +{dayAppts.length - 3} más
+                </div>
+              )}
             </div>
           );
         })}
@@ -498,34 +587,95 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
   );
 
   const WeekView = () => {
-    const dow      = (currentDate.getDay() + 6) % 7;
-    const weekStart= new Date(currentDate.getTime() - dow * 86400000);
-    const weekDays = Array.from({ length: 7 }, (_, i) => new Date(weekStart.getTime() + i * 86400000));
+    const dow       = (currentDate.getDay() + 6) % 7;
+    const weekStart = new Date(currentDate.getTime() - dow * 86400000);
+    const weekDays  = Array.from({ length: 7 }, (_, i) => new Date(weekStart.getTime() + i * 86400000));
     return (
       <div>
-        <div className="grid grid-cols-8 border-b border-border bg-muted/20">
-          <div className="py-3 border-r border-border" />
+        {/* Header sticky */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "60px repeat(7, 1fr)",
+            borderBottom: "1px solid var(--border-soft)",
+            background: "rgba(10,10,15,0.8)",
+            backdropFilter: "blur(8px)",
+            position: "sticky",
+            top: 0,
+            zIndex: 1,
+          }}
+        >
+          <div style={{ borderRight: "1px solid var(--border-soft)" }} />
           {weekDays.map((d, i) => {
-            const ds = toDateStr(d); const isToday = ds === todayStr; const cnt = (apptsByDate[ds]??[]).length;
+            const ds = toDateStr(d);
+            const isToday = ds === todayStr;
+            const cnt = (apptsByDate[ds] ?? []).length;
             return (
-              <div key={i} className={`py-3 text-center border-r border-border ${isToday?"bg-brand-600/15":""}`}>
-                <div className="text-xs font-bold text-muted-foreground uppercase">{DAYS_ES[i]}</div>
-                <div className={`text-xl font-bold ${isToday?"text-brand-600":""}`}>{d.getDate()}</div>
-                {cnt > 0 && <div className="text-xs text-muted-foreground">{cnt} cita{cnt>1?"s":""}</div>}
+              <div
+                key={i}
+                style={{
+                  padding: "10px 12px",
+                  textAlign: "center",
+                  borderRight: "1px solid var(--border-soft)",
+                  background: isToday ? "var(--brand-softer)" : "transparent",
+                }}
+              >
+                <div style={{
+                  fontSize: 10, color: "var(--text-3)",
+                  textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600,
+                }}>
+                  {DAYS_ES[i]}
+                </div>
+                <div style={{
+                  fontSize: 16, fontWeight: 500, marginTop: 2,
+                  color: isToday ? "var(--brand)" : "var(--text-1)",
+                }}>
+                  {d.getDate()}
+                </div>
+                {cnt > 0 && (
+                  <div className="mono" style={{ fontSize: 10, color: "var(--text-4)", marginTop: 2 }}>
+                    {cnt}
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
-        <div className="overflow-y-auto" style={{ maxHeight: 520 }}>
+
+        {/* Hour rows */}
+        <div style={{ overflowY: "auto", maxHeight: 560 }}>
           {HOURS.map(hour => (
-            <div key={hour} className="grid grid-cols-8 border-b border-border/40" style={{ minHeight: 64 }}>
-              <div className="border-r border-border px-3 py-2"><span className="text-sm text-muted-foreground font-mono">{hour}</span></div>
+            <div
+              key={hour}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "60px repeat(7, 1fr)",
+                borderBottom: "1px solid var(--border-soft)",
+                minHeight: 60,
+              }}
+            >
+              <div style={{
+                borderRight: "1px solid var(--border-soft)",
+                padding: "4px 10px",
+              }}>
+                <span className="mono" style={{ fontSize: 10, color: "var(--text-4)" }}>{hour}</span>
+              </div>
               {weekDays.map((d, i) => {
                 const ds = toDateStr(d);
-                const slotAppts = (apptsByDate[ds]??[]).filter(a => a.startTime.startsWith(hour.slice(0,2)));
+                const slotAppts = (apptsByDate[ds] ?? []).filter(a => a.startTime.startsWith(hour.slice(0, 2)));
                 return (
-                  <div key={i} onClick={() => { setSelectedDay(ds); openNew(ds, hour); }}
-                    className="border-r border-border p-0.5 cursor-pointer hover:bg-muted/20 transition-colors">
+                  <div
+                    key={i}
+                    onClick={() => { setSelectedDay(ds); openNew(ds, hour); }}
+                    style={{
+                      borderRight: "1px solid var(--border-soft)",
+                      padding: 2,
+                      cursor: "pointer",
+                      transition: "background .12s",
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = "var(--bg-hover)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+                  >
                     {slotAppts.map(a => <ApptPill key={a.id} appt={a} />)}
                   </div>
                 );
@@ -539,42 +689,99 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
 
   const DayView = () => {
     const ds = toDateStr(currentDate);
-    const dayAppts = (apptsByDate[ds]??[]).sort((a,b) => a.startTime.localeCompare(b.startTime));
+    const dayAppts = (apptsByDate[ds] ?? []).sort((a, b) => a.startTime.localeCompare(b.startTime));
     const nowHour = String(new Date().getHours()).padStart(2, "0");
     return (
-      <div className="overflow-y-auto" style={{ maxHeight: 560 }} ref={el => {
-        if (!el) return;
-        const target = el.querySelector(`[data-hour="${nowHour}"]`);
-        if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
-      }}>
+      <div
+        style={{ overflowY: "auto", maxHeight: 580 }}
+        ref={el => {
+          if (!el) return;
+          const target = el.querySelector(`[data-hour="${nowHour}"]`);
+          if (target) (target as HTMLElement).scrollIntoView({ behavior: "smooth", block: "center" });
+        }}
+      >
         {HOURS.map(hour => {
-          const slotAppts = dayAppts.filter(a => a.startTime.startsWith(hour.slice(0,2)));
+          const slotAppts = dayAppts.filter(a => a.startTime.startsWith(hour.slice(0, 2)));
           return (
-            <div key={hour} data-hour={hour.slice(0,2)} className="flex border-b border-border/40" style={{ minHeight: 72 }}>
-              <div className="w-20 flex-shrink-0 px-3 py-3 border-r border-border">
-                <span className="text-base text-muted-foreground font-mono">{hour}</span>
+            <div
+              key={hour}
+              data-hour={hour.slice(0, 2)}
+              style={{
+                display: "flex",
+                borderBottom: "1px solid var(--border-soft)",
+                minHeight: 72,
+              }}
+            >
+              <div style={{
+                width: 80, flexShrink: 0,
+                padding: "10px 14px",
+                borderRight: "1px solid var(--border-soft)",
+              }}>
+                <span className="mono" style={{ fontSize: 11, color: "var(--text-4)" }}>{hour}</span>
               </div>
-              <div onClick={() => openNew(ds, hour)} className="flex-1 p-1.5 cursor-pointer hover:bg-muted/10 transition-colors">
+              <div
+                onClick={() => openNew(ds, hour)}
+                style={{
+                  flex: 1, padding: 4,
+                  cursor: "pointer",
+                  transition: "background .12s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = "var(--bg-hover)"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+              >
                 {slotAppts.map(a => {
-                  const cfg   = STATUS_CONFIG[a.status]??STATUS_CONFIG.PENDING;
-                  const color = docColorMap[a.doctorId]??DOC_COLORS[0];
+                  const c = getApptColors(a.status);
                   return (
-                    <button key={a.id} onClick={e => { e.stopPropagation(); setShowDetail(a); }}
-                      className="w-full text-left rounded-xl px-4 py-3 mb-1.5 hover:opacity-90 transition-all"
-                      style={{ background: color.bg, border: `1.5px solid ${color.border}` }}>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <div className={`w-2.5 h-2.5 rounded-full ${cfg.dot}`} />
-                        <span className="text-base font-bold">{a.startTime} – {a.endTime}</span>
-                        {a.mode === "TELECONSULTATION" && <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">📹 Teleconsulta</span>}
-                        <span className={`text-sm font-bold px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.text} ml-auto`}>{cfg.label}</span>
-                        {/* Improvement 4: Google Calendar indicator */}
-                        {a.googleCalendarEventId && <span title="Sincronizado con Google Calendar"><CalendarCheck className="w-4 h-4 text-brand-500" /></span>}
-                        {a.reminderSent && <span title="Recordatorio enviado"><MessageCircle className="w-4 h-4 text-emerald-500" /></span>}
+                    <button
+                      key={a.id}
+                      onClick={e => { e.stopPropagation(); setShowDetail(a); }}
+                      type="button"
+                      style={{
+                        width: "100%",
+                        textAlign: "left",
+                        background: c.bg,
+                        border: `1px solid ${c.border}`,
+                        borderLeft: `3px solid ${c.dot}`,
+                        color: c.text,
+                        borderRadius: 6,
+                        padding: "10px 14px",
+                        marginBottom: 4,
+                        cursor: "pointer",
+                        transition: "transform .12s, box-shadow .12s",
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.boxShadow = `0 4px 16px -4px ${c.border}`; }}
+                      onMouseLeave={e => { e.currentTarget.style.boxShadow = "none"; }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: c.dot }} />
+                        <span className="mono" style={{ fontSize: 12, fontWeight: 600 }}>{a.startTime} – {a.endTime}</span>
+                        <BadgeNew tone={
+                          a.status === "CONFIRMED"   ? "success" :
+                          a.status === "IN_PROGRESS" ? "brand" :
+                          a.status === "COMPLETED"   ? "info" :
+                          a.status === "CANCELLED" || a.status === "NO_SHOW" ? "danger" : "warning"
+                        }>{c.label}</BadgeNew>
+                        {a.mode === "TELECONSULTATION" && <BadgeNew tone="brand">Teleconsulta</BadgeNew>}
+                        <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                          {a.googleCalendarEventId && (
+                            <span title="Sincronizado con Google Calendar"><CalendarCheck size={14} style={{ color: "var(--brand)" }} /></span>
+                          )}
+                          {a.reminderSent && (
+                            <span title="Recordatorio enviado"><MessageCircle size={14} style={{ color: "var(--success)" }} /></span>
+                          )}
+                        </span>
                       </div>
-                      <div className="text-lg font-bold mt-1">{a.patient.firstName} {a.patient.lastName}</div>
-                      <div className="text-sm text-muted-foreground">{a.type} · Dr/a. {a.doctor.firstName} {a.doctor.lastName} · {a.durationMins} min</div>
-                      {/* Improvement 3: Notes visible in pill */}
-                      {a.notes && <div className="text-sm text-muted-foreground italic mt-0.5">📝 {a.notes}</div>}
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>
+                        {a.patient.firstName} {a.patient.lastName}
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
+                        {a.type} · Dr/a. {a.doctor.firstName} {a.doctor.lastName} · {a.durationMins} min
+                      </div>
+                      {a.notes && (
+                        <div style={{ fontSize: 11, color: "var(--text-3)", fontStyle: "italic", marginTop: 4 }}>
+                          📝 {a.notes}
+                        </div>
+                      )}
                     </button>
                   );
                 })}
