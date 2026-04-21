@@ -19,8 +19,17 @@ const schema = z.object({
   specialty: z.string().optional(), // @deprecated — backwards compat
   category: z.string().optional(),  // new: ClinicCategory enum value
   country: z.string().min(1), city: z.string().optional(),
+  state: z.string().optional(),           // MX state (signup step 2)
+  clinicSize: z.string().optional(),      // 1 | 2-5 | 6-15 | 16+
   phone: z.string().optional(), plan: z.enum(["BASIC","PRO","CLINIC"]).default("PRO"),
-  slug: z.string().optional(), paymentMethod: z.enum(["stripe","transfer"]).default("transfer"),
+  slug: z.string().optional(),
+  // Accept both legacy (stripe/transfer) and new signup wire-values (card/paypal).
+  // card → stripe, paypal → paypal, others pass through.
+  paymentMethod: z
+    .enum(["stripe", "transfer", "card", "paypal"])
+    .default("transfer")
+    .transform(v => (v === "card" ? "stripe" : v)),
+  billing: z.enum(["monthly", "annual"]).default("monthly"),
 });
 
 async function generateSlug(name: string) {
@@ -65,12 +74,36 @@ export async function POST(req: NextRequest) {
         : "OTHER";
     const specialtyLabel = data.specialty ?? data.category ?? "other";
 
+    // Embed state in address if provided (no dedicated state column in Clinic).
+    const addressFromState = data.state
+      ? [data.city, data.state].filter(Boolean).join(", ")
+      : undefined;
+
+    // Derive subscription status: if user picked card but Stripe is not wired,
+    // we still create the clinic but flag it so billing can finish later.
+    const hasStripe = !!process.env.STRIPE_SECRET_KEY;
+    const subscriptionStatus =
+      data.paymentMethod === "stripe" && !hasStripe
+        ? "pending_payment_setup"
+        : "trialing";
+
+    if (data.paymentMethod === "stripe" && !hasStripe) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[signup] STRIPE_SECRET_KEY missing — clinic "${slug}" created with status "pending_payment_setup".`,
+      );
+    }
+
     await prisma.clinic.create({
       data: {
         name: data.clinicName, slug, specialty: specialtyLabel,
         category: resolvedCategory as any,
-        country: data.country, city: data.city, phone: data.phone,
+        country: data.country, city: data.city,
+        address: addressFromState,
+        phone: data.phone,
         email: data.email, plan: data.plan as any, trialEndsAt,
+        preferredPaymentMethod: data.paymentMethod,
+        subscriptionStatus,
         users: { create: { supabaseId: authData.user.id, email: data.email, firstName: data.firstName, lastName: data.lastName, role: "SUPER_ADMIN", specialty: specialtyLabel } },
         schedules: { createMany: { data: [0,1,2,3,4].map(day => ({ dayOfWeek: day, enabled: true, openTime: "09:00", closeTime: "18:00" })) } },
       },

@@ -70,7 +70,7 @@ export function SpecNav({ currentSlug }: SpecNavProps) {
             Iniciar sesión
           </Link>
           <Link
-            href="/register"
+            href="/signup"
             style={{
               padding: "8px 14px",
               borderRadius: 8,

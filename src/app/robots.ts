@@ -15,7 +15,6 @@ export default function robots(): MetadataRoute.Robots {
           "/api",
           "/auth",
           "/login",
-          "/register",
           "/pago",
           "/consent",
           "/consentimiento",

@@ -4,7 +4,7 @@ export function CTAButtons() {
   return (
     <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
       <Link
-        href="/auth/register"
+        href="/signup"
         style={{
           display: "inline-flex",
           alignItems: "center",

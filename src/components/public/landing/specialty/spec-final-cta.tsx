@@ -60,7 +60,7 @@ export function SpecFinalCTA({ spec }: { spec: Specialty }) {
             lineHeight: 1.55,
           }}
         >
-          30 días completos de PRO. Sin tarjeta. Migramos tus datos gratis.
+          14 días completos de PRO. Sin tarjeta. Migramos tus datos gratis.
         </p>
         <div
           style={{
@@ -71,7 +71,7 @@ export function SpecFinalCTA({ spec }: { spec: Specialty }) {
           }}
         >
           <Link
-            href="/register"
+            href="/signup"
             style={{
               padding: "14px 24px",
               borderRadius: 10,
@@ -85,7 +85,7 @@ export function SpecFinalCTA({ spec }: { spec: Specialty }) {
               textDecoration: "none",
             }}
           >
-            Prueba gratis 30 días →
+            Prueba gratis 14 días →
           </Link>
           <Link
             href="/contact?intent=demo"

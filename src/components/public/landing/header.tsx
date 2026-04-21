@@ -73,11 +73,11 @@ export function Header() {
           >
             {mode === "dark" ? "🌙" : "☀"}
           </button>
-          <Link href="/auth/login" style={{ color: "var(--ld-fg-muted)", textDecoration: "none" }}>
+          <Link href="/login" style={{ color: "var(--ld-fg-muted)", textDecoration: "none" }}>
             Iniciar sesión
           </Link>
           <Link
-            href="/auth/register"
+            href="/signup"
             style={{
               padding: "8px 14px",
               borderRadius: 8,

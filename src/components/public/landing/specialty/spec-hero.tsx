@@ -118,7 +118,7 @@ export function SpecHero({ spec }: { spec: Specialty }) {
               }}
             >
               <Link
-                href="/register"
+                href="/signup"
                 style={{
                   padding: "14px 22px",
                   borderRadius: 10,
@@ -132,7 +132,7 @@ export function SpecHero({ spec }: { spec: Specialty }) {
                   textDecoration: "none",
                 }}
               >
-                Prueba gratis 30 días →
+                Prueba gratis 14 días →
               </Link>
               <Link
                 href="/#demo"

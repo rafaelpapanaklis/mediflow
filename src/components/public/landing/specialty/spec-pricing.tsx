@@ -24,7 +24,7 @@ export function SpecPricing({ spec }: { spec: Specialty }) {
       price: 49,
       tag:   "Para empezar",
       cta:   "Empezar gratis",
-      href:  "/register?plan=basic",
+      href:  "/signup?plan=basic",
       items: [
         "1 profesional · 1 sucursal",
         "Agenda + WhatsApp",
@@ -38,8 +38,8 @@ export function SpecPricing({ spec }: { spec: Specialty }) {
       price:   99,
       tag:     "Lo más elegido",
       popular: true,
-      cta:     "Prueba 30 días gratis",
-      href:    "/register?plan=pro",
+      cta:     "Prueba 14 días gratis",
+      href:    "/signup?plan=pro",
       items: [
         "Hasta 3 profesionales",
         "Pacientes ilimitados",

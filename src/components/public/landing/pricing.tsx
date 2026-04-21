@@ -28,7 +28,7 @@ const PLANS: Plan[] = [
       "Soporte por email",
     ],
     cta: "Empezar gratis",
-    ctaHref: "/register?plan=basic",
+    ctaHref: "/signup?plan=basic",
   },
   {
     id: "pro",
@@ -47,8 +47,8 @@ const PLANS: Plan[] = [
       "CFDI ilimitado",
       "Soporte prioritario",
     ],
-    cta: "Prueba 30 días gratis",
-    ctaHref: "/register?plan=pro",
+    cta: "Prueba 14 días gratis",
+    ctaHref: "/signup?plan=pro",
   },
   {
     id: "clinic",

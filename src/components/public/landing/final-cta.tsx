@@ -58,7 +58,7 @@ export function FinalCTA() {
             lineHeight: 1.55,
           }}
         >
-          Empieza gratis hoy. 30 días sin tarjeta. Cancela cuando quieras.
+          Empieza gratis hoy. 14 días sin cargo. Cancela cuando quieras.
         </p>
 
         <div
@@ -71,7 +71,7 @@ export function FinalCTA() {
           }}
         >
           <Link
-            href="/register"
+            href="/signup"
             style={{
               padding: "14px 24px",
               borderRadius: 10,

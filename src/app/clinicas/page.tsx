@@ -103,7 +103,7 @@ export default function ClinicasPage() {
           </Link>
           <div style={{ display:"flex", gap:12 }}>
             <Link href="/login"    style={{ color:"#94a3b8", fontSize:14, fontWeight:600, textDecoration:"none" }}>Iniciar sesión</Link>
-            <Link href="/register" style={{ background:"#2563eb", color:"#fff", fontSize:14, fontWeight:700, padding:"8px 18px", borderRadius:10, textDecoration:"none" }}>Registrar clínica</Link>
+            <Link href="/signup" style={{ background:"#2563eb", color:"#fff", fontSize:14, fontWeight:700, padding:"8px 18px", borderRadius:10, textDecoration:"none" }}>Registrar clínica</Link>
           </div>
         </div>
       </header>
@@ -330,7 +330,7 @@ export default function ClinicasPage() {
           <div style={{ fontSize:14, color:"#bfdbfe", marginBottom:18 }}>
             Regístrate en MediFlow y aparece en este directorio para recibir pacientes nuevos
           </div>
-          <Link href="/register"
+          <Link href="/signup"
             style={{ display:"inline-block", background:"#fff", color:"#1d4ed8", fontWeight:700, fontSize:14, padding:"12px 28px", borderRadius:12, textDecoration:"none" }}>
             Registrar mi clínica gratis →
           </Link>
