@@ -15,9 +15,11 @@ model Clinic {
   specialty   String // @deprecated — usar category en su lugar
   category    ClinicCategory @default(OTHER)
   country     String    @default("MX")
+  state       String?   // MX state (e.g., "Ciudad de México", "Jalisco")
   city        String?
   address     String?
   phone       String?
+  clinicSize  String?   // "1" | "2-5" | "6-15" | "16+" — captured at signup
   email       String?
   logoUrl     String?
   taxId       String?
@@ -65,6 +67,13 @@ model Clinic {
   paypalEmail            String?   // PayPal email for manual payments
   // Payment preferences
   preferredPaymentMethod String?   // stripe, paypal, transfer, oxxo
+  // Signup payment method capture (UI-only until Stripe wired)
+  paymentMethodCollected Boolean  @default(false)
+  paymentMethodType      String?  // "card" | "paypal" | "transfer"
+  paymentMethodLast4     String?  // last 4 digits (card only, for display)
+  // Cancellation request (user-initiated from settings)
+  cancelRequested        Boolean  @default(false)
+  cancelRequestedAt      DateTime?
   recallMonths         Int       @default(6)  // months before annual reminder
   recallActive         Boolean   @default(false)
   googlePlaceId        String?   // Google Maps Place ID for fetching reviews
@@ -120,6 +129,7 @@ model Clinic {
   procedureCatalog     ProcedureCatalog[]
   xrayAnalyses         XrayAnalysis[]
   adminNotes           AdminClinicNote[]
+  prescriptions        Prescription[]
 
   @@map("clinics")
 }
@@ -188,6 +198,7 @@ model User {
   periodontalRecords  PeriodontalRecord[]
   auditLogs           AuditLog[]
   adminNotesAuthored  AdminClinicNote[]
+  prescriptions       Prescription[]
 
   @@unique([supabaseId, clinicId])
   @@index([supabaseId])
@@ -263,6 +274,7 @@ model Patient {
   bodyMapAnnotations  BodyMapAnnotation[]
   packageRedemptions  PackageRedemption[]
   xrayAnalyses        XrayAnalysis[]
+  prescriptions       Prescription[]
 
   @@unique([clinicId, patientNumber])
   @@map("patients")
@@ -360,6 +372,7 @@ model MedicalRecord {
   clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
   doctor  User    @relation(fields: [doctorId], references: [id])
+  prescriptions Prescription[]
 
   @@map("medical_records")
 }
@@ -942,4 +955,31 @@ model Coupon {
   createdAt  DateTime  @default(now())
 
   @@map("coupons")
+}
+
+// ── Prescription (receta médica con QR verificable) ───────────────────
+model Prescription {
+  id               String    @id @default(cuid())
+  medicalRecordId  String
+  patientId        String
+  doctorId         String
+  clinicId         String
+  medications      Json
+  indications      String?   @db.Text
+  qrCode           String    @unique
+  verifyUrl        String
+  issuedAt         DateTime  @default(now())
+  expiresAt        DateTime?
+  cofeprisGroup    String?
+  cofeprisFolio    String?
+  digitalSignature String?
+
+  medicalRecord MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
+  patient       Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor        User          @relation(fields: [doctorId], references: [id])
+  clinic        Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@map("prescriptions")
 }
