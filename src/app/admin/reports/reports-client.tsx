@@ -2,9 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { Download, Calendar } from "lucide-react";
+import { Download, Calendar, TrendingUp, DollarSign, Users, Activity } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, Legend } from "recharts";
 import { formatCurrency } from "@/lib/utils";
+import { CardNew }   from "@/components/ui/design-system/card-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { KpiCard }   from "@/components/ui/design-system/kpi-card";
 
 interface ReportData {
   summary: {
@@ -27,6 +30,14 @@ function firstOfQuarter(d: Date) {
   const q = Math.floor(d.getMonth() / 3) * 3;
   return new Date(d.getFullYear(), q, 1);
 }
+
+const TOOLTIP_STYLE = {
+  background: "var(--bg-elev)",
+  border: "1px solid var(--border-soft)",
+  borderRadius: 8,
+  color: "var(--text-1)",
+  fontSize: 12,
+};
 
 export function ReportsClient() {
   const today = new Date();
@@ -81,119 +92,205 @@ export function ReportsClient() {
 
   const chartData = useMemo(() => data?.monthlySeries.map(m => ({ ...m, label: m.month.slice(2) })) ?? [], [data]);
 
+  const presets: { k: Preset; l: string }[] = [
+    { k: "month",   l: "Este mes" },
+    { k: "quarter", l: "Trimestre" },
+    { k: "year",    l: "Este año" },
+    { k: "custom",  l: "Custom" },
+  ];
+
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 22, flexWrap: "wrap" }}>
         <div>
-          <h1 className="text-2xl font-extrabold">Reportes financieros</h1>
-          <p className="text-slate-400 text-sm">MRR, ARR, LTV, churn, conversión. Exportable a Excel.</p>
+          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+            Reportes financieros
+          </h1>
+          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, margin: 0 }}>
+            MRR, ARR, LTV, churn, conversión. Exportable a Excel.
+          </p>
         </div>
-        <button
-          onClick={downloadXlsx}
-          className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-xl text-sm"
-        >
-          <Download className="w-4 h-4" />
+        <ButtonNew variant="primary" icon={<Download size={14} />} onClick={downloadXlsx}>
           Exportar a Excel
-        </button>
+        </ButtonNew>
       </div>
 
       {/* Periodo */}
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl p-4 flex flex-wrap items-center gap-3">
-        <Calendar className="w-4 h-4 text-slate-400" />
-        <div className="flex gap-1">
-          {([
-            { k: "month",   l: "Este mes" },
-            { k: "quarter", l: "Trimestre" },
-            { k: "year",    l: "Este año" },
-            { k: "custom",  l: "Custom" },
-          ] as { k: Preset; l: string }[]).map(p => (
-            <button
-              key={p.k}
-              onClick={() => applyPreset(p.k)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${
-                preset === p.k ? "bg-brand-600 text-white" : "bg-slate-800 text-slate-400 hover:text-white"
-              }`}
-            >
-              {p.l}
-            </button>
-          ))}
+      <CardNew className="mb-16">
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--text-3)", fontSize: 12 }}>
+            <Calendar size={14} />
+            <span>Periodo</span>
+          </div>
+          <div className="segment-new" style={{ display: "inline-flex", gap: 2 }}>
+            {presets.map(p => (
+              <button
+                key={p.k}
+                type="button"
+                onClick={() => applyPreset(p.k)}
+                className={`segment-new__btn ${preset === p.k ? "segment-new__btn--active" : ""}`}
+              >
+                {p.l}
+              </button>
+            ))}
+          </div>
+          <input
+            type="date"
+            value={from}
+            onChange={e => { setPreset("custom"); setFrom(e.target.value); }}
+            className="input-new"
+            style={{ width: 160 }}
+          />
+          <span style={{ color: "var(--text-3)", fontSize: 12 }}>→</span>
+          <input
+            type="date"
+            value={to}
+            onChange={e => { setPreset("custom"); setTo(e.target.value); }}
+            className="input-new"
+            style={{ width: 160 }}
+          />
         </div>
-        <input type="date" value={from} onChange={e => { setPreset("custom"); setFrom(e.target.value); }} className="bg-slate-800 border border-slate-600 text-white text-sm rounded-lg px-3 py-1.5" />
-        <span className="text-slate-500 text-xs">→</span>
-        <input type="date" value={to}   onChange={e => { setPreset("custom"); setTo(e.target.value); }}   className="bg-slate-800 border border-slate-600 text-white text-sm rounded-lg px-3 py-1.5" />
-      </div>
+      </CardNew>
+
+      <div style={{ marginTop: 16 }} />
 
       {loading ? (
-        <div className="bg-slate-900 border border-slate-700 rounded-2xl p-10 text-center text-slate-500 text-sm">Cargando…</div>
+        <CardNew>
+          <div style={{ padding: "40px 18px", textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
+            Cargando…
+          </div>
+        </CardNew>
       ) : error ? (
-        <div className="bg-rose-950/40 border border-rose-700 rounded-2xl p-6 space-y-3">
-          <h3 className="text-sm font-bold text-rose-300">No se pudo cargar el reporte</h3>
-          <p className="text-xs text-rose-200 font-mono break-all">{error}</p>
-          <button onClick={load} className="text-xs font-bold text-brand-400 hover:underline">Reintentar</button>
-        </div>
+        <CardNew>
+          <div
+            style={{
+              padding: "18px",
+              background: "rgba(239,68,68,0.08)",
+              border: "1px solid rgba(239,68,68,0.25)",
+              borderRadius: 10,
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+            }}
+          >
+            <h3 style={{ fontSize: 13, fontWeight: 600, color: "var(--danger)", margin: 0 }}>
+              No se pudo cargar el reporte
+            </h3>
+            <p className="mono" style={{ fontSize: 11, color: "var(--text-2)", wordBreak: "break-all", margin: 0 }}>{error}</p>
+            <div>
+              <ButtonNew size="sm" variant="secondary" onClick={load}>Reintentar</ButtonNew>
+            </div>
+          </div>
+        </CardNew>
       ) : !data || !hasData ? (
-        <div className="bg-slate-900 border border-slate-700 rounded-2xl p-10 text-center space-y-2">
-          <div className="text-4xl">📊</div>
-          <h3 className="text-sm font-bold text-white">Sin datos todavía</h3>
-          <p className="text-xs text-slate-400 max-w-md mx-auto">
-            Aún no hay clínicas pagando o registros en este periodo. En cuanto registres pagos de suscripción desde /admin/payments, aparecerán aquí las métricas.
-          </p>
-        </div>
+        <CardNew>
+          <div style={{ padding: "40px 18px", textAlign: "center", display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
+            <div style={{ fontSize: 32 }}>📊</div>
+            <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)", margin: 0 }}>
+              Sin datos todavía
+            </h3>
+            <p style={{ fontSize: 12, color: "var(--text-3)", maxWidth: 420, margin: 0 }}>
+              Aún no hay clínicas pagando o registros en este periodo. En cuanto registres pagos de suscripción desde /admin/payments, aparecerán aquí las métricas.
+            </p>
+          </div>
+        </CardNew>
       ) : (
-        <>
-          {/* KPIs */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { label: "MRR",             value: formatCurrency(data.summary.mrr),           color: "text-emerald-400" },
-              { label: "ARR",             value: formatCurrency(data.summary.arr),           color: "text-brand-400"   },
-              { label: "ARPU",            value: formatCurrency(data.summary.arpu),          color: "text-white"       },
-              { label: "LTV estimado",    value: formatCurrency(data.summary.ltv),           color: "text-violet-400"  },
-              { label: "Churn rate",      value: `${data.summary.churnRate}%`,               color: "text-rose-400"    },
-              { label: "Conversión trial", value: `${data.summary.trialConversion}%`,        color: "text-amber-400"   },
-              { label: "Ingresos periodo", value: formatCurrency(data.summary.periodRevenue), color: "text-emerald-400" },
-              { label: "# pagos periodo", value: data.summary.periodPayments,                color: "text-white"       },
-            ].map(k => (
-              <div key={k.label} className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
-                <div className="text-xs text-slate-400 font-semibold uppercase mb-2">{k.label}</div>
-                <div className={`text-2xl font-extrabold ${k.color}`}>{k.value}</div>
-              </div>
-            ))}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* KPI row 1 */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 14 }}>
+            <KpiCard label="MRR" value={formatCurrency(data.summary.mrr, "MXN")} icon={DollarSign}
+              delta={{ value: "Recurrente mensual", direction: "up" }} />
+            <KpiCard label="ARR" value={formatCurrency(data.summary.arr, "MXN")} icon={TrendingUp}
+              delta={{ value: "Anual proyectado", direction: "up" }} />
+            <KpiCard label="ARPU" value={formatCurrency(data.summary.arpu, "MXN")} icon={Users}
+              delta={{ value: "Por cliente activo", direction: "up" }} />
+            <KpiCard label="LTV estimado" value={formatCurrency(data.summary.ltv, "MXN")} icon={Activity}
+              delta={{ value: "Valor de vida", direction: "up" }} />
+          </div>
+
+          {/* KPI row 2 */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 14 }}>
+            <KpiCard label="Churn rate" value={`${data.summary.churnRate}%`}
+              delta={{ value: "Mensual", direction: data.summary.churnRate > 5 ? "down" : "up" }} />
+            <KpiCard label="Conversión trial" value={`${data.summary.trialConversion}%`}
+              delta={{ value: "Trial → pagado", direction: "up" }} />
+            <KpiCard label="Ingresos periodo" value={formatCurrency(data.summary.periodRevenue, "MXN")}
+              delta={{ value: `${data.summary.periodPayments} pagos`, direction: "up" }} />
+            <KpiCard label="# Pagos periodo" value={String(data.summary.periodPayments)}
+              delta={{ value: `${data.summary.newClinicsPeriod} nuevas`, direction: "up" }} />
           </div>
 
           {/* Chart: ingresos mensuales */}
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
-            <h3 className="text-sm font-bold mb-3">Ingresos mensuales</h3>
-            <div className="h-64">
+          <CardNew title="Ingresos mensuales" sub="Evolución del revenue cobrado por mes">
+            <div style={{ height: 260 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                  <XAxis dataKey="label" stroke="#64748b" tick={{ fontSize: 10 }} />
-                  <YAxis stroke="#64748b" tick={{ fontSize: 10 }} />
-                  <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, fontSize: 12 }} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
-                  <Bar dataKey="paid" fill="#10b981" radius={[4, 4, 0, 0]} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-soft)" />
+                  <XAxis dataKey="label" stroke="var(--text-3)" fontSize={11} />
+                  <YAxis stroke="var(--text-3)" fontSize={11} />
+                  <Tooltip
+                    contentStyle={TOOLTIP_STYLE}
+                    cursor={{ fill: "rgba(124,58,237,0.08)" }}
+                  />
+                  <Bar dataKey="paid" fill="var(--brand)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </div>
+          </CardNew>
 
           {/* Chart: clínicas nuevas vs churn */}
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
-            <h3 className="text-sm font-bold mb-3">Nuevas vs churn (mensual)</h3>
-            <div className="h-64">
+          <CardNew title="Nuevas vs churn (mensual)" sub="Crecimiento neto de clínicas">
+            <div style={{ height: 260 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                  <XAxis dataKey="label" stroke="#64748b" tick={{ fontSize: 10 }} />
-                  <YAxis stroke="#64748b" tick={{ fontSize: 10 }} allowDecimals={false} />
-                  <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, fontSize: 12 }} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Line type="monotone" dataKey="newClinics" name="Nuevas"  stroke="#6366f1" strokeWidth={2} />
-                  <Line type="monotone" dataKey="churned"    name="Churn"   stroke="#f43f5e" strokeWidth={2} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-soft)" />
+                  <XAxis dataKey="label" stroke="var(--text-3)" fontSize={11} />
+                  <YAxis stroke="var(--text-3)" fontSize={11} allowDecimals={false} />
+                  <Tooltip contentStyle={TOOLTIP_STYLE} />
+                  <Legend wrapperStyle={{ fontSize: 11, color: "var(--text-3)" }} />
+                  <Line type="monotone" dataKey="newClinics" name="Nuevas" stroke="var(--success)" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="churned"    name="Churn"  stroke="var(--danger)"  strokeWidth={2} dot={{ r: 3 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
-          </div>
-        </>
+          </CardNew>
+
+          {/* Evolution table */}
+          <CardNew noPad title="Evolución mensual">
+            <table className="table-new">
+              <thead>
+                <tr>
+                  <th>Mes</th>
+                  <th style={{ textAlign: "right" }}>Ingresos</th>
+                  <th style={{ textAlign: "right" }}># Pagos</th>
+                  <th style={{ textAlign: "right" }}>Nuevas</th>
+                  <th style={{ textAlign: "right" }}>Churn</th>
+                  <th style={{ textAlign: "right" }}>Neto</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.monthlySeries.map(m => {
+                  const net = (m.newClinics ?? 0) - (m.churned ?? 0);
+                  return (
+                    <tr key={m.month}>
+                      <td className="mono" style={{ color: "var(--text-2)" }}>{m.month}</td>
+                      <td className="mono" style={{ textAlign: "right", color: "var(--text-1)", fontWeight: 500 }}>
+                        {formatCurrency(m.paid, "MXN")}
+                      </td>
+                      <td className="mono" style={{ textAlign: "right", color: "var(--text-2)" }}>{m.payments}</td>
+                      <td className="mono" style={{ textAlign: "right", color: "var(--success)" }}>+{m.newClinics}</td>
+                      <td className="mono" style={{ textAlign: "right", color: "var(--danger)" }}>-{m.churned}</td>
+                      <td className="mono" style={{ textAlign: "right", color: net >= 0 ? "var(--success)" : "var(--danger)", fontWeight: 500 }}>
+                        {net >= 0 ? `+${net}` : net}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </CardNew>
+        </div>
       )}
     </div>
   );

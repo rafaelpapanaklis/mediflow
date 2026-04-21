@@ -1,6 +1,9 @@
 export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { CardNew }  from "@/components/ui/design-system/card-new";
+import { BadgeNew } from "@/components/ui/design-system/badge-new";
+import { formatRelativeDate } from "@/lib/format";
 
 export default async function ChurnPage() {
   const now   = new Date();
@@ -30,68 +33,130 @@ export default async function ChurnPage() {
     return isTrial && (!last || new Date(last) < prev7);
   });
 
-  function daysSince(date: Date | null | undefined) {
-    if (!date) return "Nunca";
-    const d = Math.floor((now.getTime()-new Date(date).getTime())/(1000*60*60*24));
-    return d === 0 ? "Hoy" : `Hace ${d}d`;
-  }
-
-  function Section({ title, color, clinics, emptyMsg }: { title:string; color:string; clinics:typeof allClinics; emptyMsg:string }) {
+  function Section({
+    title,
+    sub,
+    clinics,
+    emptyMsg,
+    tone,
+  }: {
+    title: string;
+    sub: string;
+    clinics: typeof allClinics;
+    emptyMsg: string;
+    tone: "danger" | "warning" | "neutral";
+  }) {
     return (
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden">
-        <div className={`px-5 py-4 border-b border-slate-700 font-bold ${color}`}>{title} ({clinics.length})</div>
+      <CardNew
+        title={title}
+        sub={sub}
+        action={<BadgeNew tone={tone}>{clinics.length}</BadgeNew>}
+        noPad
+      >
         {clinics.length === 0 ? (
-          <div className="py-8 text-center text-slate-500 text-sm">{emptyMsg}</div>
+          <div style={{ padding: "32px 22px", textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
+            {emptyMsg}
+          </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead><tr className="text-xs text-slate-400 border-b border-slate-700">
-              <th className="px-5 py-3 text-left">Clínica</th>
-              <th className="px-5 py-3 text-left">Admin</th>
-              <th className="px-5 py-3 text-left">Último login</th>
-              <th className="px-5 py-3 text-left">Pacientes</th>
-              <th className="px-5 py-3 text-left">Trial vence</th>
-              <th className="px-5 py-3 text-left">Acción</th>
-            </tr></thead>
+          <table className="table-new">
+            <thead>
+              <tr>
+                <th>Clínica</th>
+                <th>Email admin</th>
+                <th>Último login</th>
+                <th>Pacientes</th>
+                <th>Trial vence</th>
+                <th style={{ textAlign: "right" }}>Acciones</th>
+              </tr>
+            </thead>
             <tbody>
-              {clinics.map(c => (
-                <tr key={c.id} className="border-b border-slate-800 hover:bg-slate-800/50">
-                  <td className="px-5 py-3 font-semibold">
-                    <Link href={`/admin/clinics/${c.id}`} className="hover:text-brand-400">{c.name}</Link>
-                  </td>
-                  <td className="px-5 py-3 text-slate-400 text-xs">{c.users[0]?.email}</td>
-                  <td className="px-5 py-3">
-                    <span className={`text-xs font-semibold ${!c.users[0]?.lastLogin || new Date(c.users[0].lastLogin) < prev7 ? "text-red-400" : "text-slate-300"}`}>
-                      {daysSince(c.users[0]?.lastLogin)}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-slate-300">{c._count.patients}</td>
-                  <td className="px-5 py-3 text-slate-400 text-xs">
-                    {c.trialEndsAt ? new Date(c.trialEndsAt).toLocaleDateString("es-MX") : "—"}
-                  </td>
-                  <td className="px-5 py-3">
-                    <a href={`mailto:${c.users[0]?.email}?subject=Tu clínica en MediFlow&body=Hola ${c.users[0]?.firstName}, notamos que no has usado MediFlow recientemente. ¿Hay algo en que podamos ayudarte?`}
-                      className="text-xs bg-brand-600 text-white px-3 py-1 rounded-full hover:bg-brand-700 font-semibold">
-                      Contactar
-                    </a>
-                  </td>
-                </tr>
-              ))}
+              {clinics.map(c => {
+                const last = c.users[0]?.lastLogin;
+                const isStale = !last || new Date(last) < prev7;
+                return (
+                  <tr key={c.id}>
+                    <td>
+                      <Link
+                        href={`/admin/clinics/${c.id}`}
+                        style={{ color: "var(--text-1)", fontWeight: 500, textDecoration: "none" }}
+                      >
+                        {c.name}
+                      </Link>
+                    </td>
+                    <td style={{ color: "var(--text-3)", fontSize: 11 }}>
+                      {c.users[0]?.email ?? "—"}
+                    </td>
+                    <td>
+                      <span
+                        className="mono"
+                        style={{ fontSize: 11, color: isStale ? "var(--danger)" : "var(--text-2)", fontWeight: 500 }}
+                      >
+                        {formatRelativeDate(last)}
+                      </span>
+                    </td>
+                    <td className="mono" style={{ color: "var(--text-2)", fontSize: 12 }}>
+                      {c._count.patients}
+                    </td>
+                    <td className="mono" style={{ color: "var(--text-3)", fontSize: 11 }}>
+                      {c.trialEndsAt ? new Date(c.trialEndsAt).toLocaleDateString("es-MX") : "—"}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {c.users[0]?.email ? (
+                        <a
+                          href={`mailto:${c.users[0]?.email}?subject=Tu%20clínica%20en%20MediFlow&body=Hola%20${encodeURIComponent(c.users[0]?.firstName ?? "")},%20notamos%20que%20no%20has%20usado%20MediFlow%20recientemente.%20¿Hay%20algo%20en%20que%20podamos%20ayudarte?`}
+                          className="btn-new btn-new--secondary btn-new--sm"
+                          style={{ textDecoration: "none" }}
+                        >
+                          Contactar
+                        </a>
+                      ) : (
+                        <span style={{ color: "var(--text-3)", fontSize: 11 }}>—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
-      </div>
+      </CardNew>
     );
   }
 
   return (
-      <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
-        <h1 className="text-2xl font-extrabold">Control de Churn y Retención</h1>
-        <Section title="🔴 Riesgo de churn — activas sin login 7+ días" color="text-red-400"
-          clinics={churnRisk} emptyMsg="✅ No hay clínicas activas en riesgo de churn" />
-        <Section title="⚠️ Trial por vencer (próximos 3 días)" color="text-amber-400"
-          clinics={trialExpiring} emptyMsg="✅ No hay trials por vencer" />
-        <Section title="💤 Trial inactivo — nunca usaron la app" color="text-slate-400"
-          clinics={inactiveTrial} emptyMsg="✅ Todos los trials están activos" />
+    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
+      <div style={{ marginBottom: 22 }}>
+        <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+          Monitor de retención
+        </h1>
+        <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, margin: 0 }}>
+          Detecta clínicas en riesgo de churn, trials por vencer y cuentas inactivas.
+        </p>
       </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        <Section
+          title="⚠ Riesgo de churn"
+          sub="Activas sin login 7+ días"
+          tone="danger"
+          clinics={churnRisk}
+          emptyMsg="No hay clínicas activas en riesgo de churn"
+        />
+        <Section
+          title="⏳ Trial expirando"
+          sub="Vencen en los próximos 3 días"
+          tone="warning"
+          clinics={trialExpiring}
+          emptyMsg="No hay trials por vencer"
+        />
+        <Section
+          title="💤 Trial inactivo"
+          sub="Nunca han usado la app"
+          tone="neutral"
+          clinics={inactiveTrial}
+          emptyMsg="Todos los trials están activos"
+        />
+      </div>
+    </div>
   );
 }

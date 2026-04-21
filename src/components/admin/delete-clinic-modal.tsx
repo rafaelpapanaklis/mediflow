@@ -4,6 +4,7 @@ import { useState } from "react";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, X, Trash2 } from "lucide-react";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
 
 interface Counts {
   users:        number;
@@ -57,67 +58,121 @@ export function DeleteClinicModal({ clinicId, clinicName, counts, canDelete, rea
   const total =
     counts.users + counts.patients + counts.appointments + counts.records + counts.invoices + counts.files;
 
+  const countRows: Array<[string, number]> = [
+    ["Usuarios", counts.users],
+    ["Pacientes", counts.patients],
+    ["Citas", counts.appointments],
+    ["Expedientes", counts.records],
+    ["Facturas", counts.invoices],
+    ["Archivos (radiografías + fotos)", counts.files],
+  ];
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 overflow-y-auto"
-      onClick={() => (deleting ? null : onClose())}
-    >
+    <div className="modal-overlay" onClick={() => (deleting ? null : onClose())}>
       <div
-        className="relative my-8 w-full max-w-xl rounded-2xl bg-slate-900 border-2 border-red-500 shadow-2xl max-h-[90vh] overflow-y-auto"
+        className="modal"
         onClick={e => e.stopPropagation()}
+        style={{
+          borderColor: "rgba(239,68,68,0.3)",
+          boxShadow: "0 20px 50px -10px rgba(0,0,0,0.6), 0 0 20px rgba(239,68,68,0.15)",
+        }}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-red-500/40 bg-red-950/60 rounded-t-2xl">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-6 h-6 text-red-400" />
-            <h2 className="text-lg font-extrabold text-red-300">Eliminar clínica</h2>
+        <div className="modal__header" style={{ borderBottomColor: "rgba(239,68,68,0.2)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: 8,
+              background: "rgba(239,68,68,0.12)",
+              display: "grid", placeItems: "center",
+              color: "var(--danger)",
+            }}>
+              <AlertTriangle size={16} />
+            </div>
+            <div>
+              <div className="modal__title" style={{ color: "var(--danger)" }}>Eliminar clínica</div>
+              <div style={{ fontSize: 11, color: "var(--text-3)" }}>Esta acción es irreversible</div>
+            </div>
           </div>
           <button
-            disabled={deleting}
+            type="button"
             onClick={onClose}
-            className="p-1 text-red-300 hover:text-white disabled:opacity-40"
+            disabled={deleting}
+            className="btn-new btn-new--ghost btn-new--sm"
             aria-label="Cerrar"
           >
-            <X className="w-5 h-5" />
+            <X size={14} />
           </button>
         </div>
 
-        {/* Body */}
-        <div className="px-6 py-5 space-y-4">
+        <div className="modal__body">
           {!canDelete ? (
-            <div className="rounded-xl bg-amber-950/50 border border-amber-700 p-4 text-sm text-amber-200">
+            <div style={{
+              padding: 14,
+              background: "rgba(245,158,11,0.08)",
+              border: "1px solid rgba(245,158,11,0.3)",
+              borderRadius: 10,
+              fontSize: 13,
+              color: "var(--text-2)",
+            }}>
               {reason ?? "Esta clínica no se puede eliminar en este momento."}
             </div>
           ) : (
             <>
-              <div className="rounded-xl bg-red-950/60 border border-red-700/60 p-4 space-y-2">
-                <p className="text-sm font-bold text-red-200">
-                  Esta acción es IRREVERSIBLE.
-                </p>
-                <p className="text-sm text-red-100 leading-relaxed">
-                  Se eliminarán TODOS los datos de <span className="font-bold">{clinicName}</span>: pacientes,
-                  citas, expedientes, facturas, radiografías, usuarios, pagos de suscripción, cupones usados, notas,
-                  análisis IA y cualquier archivo subido al storage.
-                </p>
+              <div style={{
+                padding: 12,
+                background: "rgba(239,68,68,0.08)",
+                border: "1px solid rgba(239,68,68,0.2)",
+                borderRadius: 10,
+                marginBottom: 14,
+                fontSize: 12,
+                color: "var(--text-2)",
+                lineHeight: 1.6,
+              }}>
+                <strong style={{ color: "var(--danger)" }}>Se eliminarán permanentemente:</strong>{" "}
+                Todos los datos de <span style={{ fontWeight: 700, color: "var(--text-1)" }}>{clinicName}</span>:
+                pacientes, citas, expedientes, facturas, radiografías, usuarios, pagos de suscripción, cupones
+                usados, notas, análisis IA y cualquier archivo subido al storage.
               </div>
 
-              <div className="rounded-xl bg-slate-800/60 border border-slate-700 p-4">
-                <div className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">
+              <div style={{
+                padding: 12,
+                background: "var(--bg-elev-2)",
+                border: "1px solid var(--border-soft)",
+                borderRadius: 10,
+                marginBottom: 14,
+              }}>
+                <div style={{
+                  fontSize: 10,
+                  color: "var(--text-3)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  fontWeight: 700,
+                  marginBottom: 10,
+                }}>
                   Datos que se perderán ({total.toLocaleString()} registros + archivos de storage)
                 </div>
-                <ul className="grid grid-cols-2 gap-2 text-sm">
-                  <li className="flex justify-between"><span className="text-slate-400">Usuarios</span>       <span className="font-bold text-white">{counts.users}</span></li>
-                  <li className="flex justify-between"><span className="text-slate-400">Pacientes</span>      <span className="font-bold text-white">{counts.patients}</span></li>
-                  <li className="flex justify-between"><span className="text-slate-400">Citas</span>          <span className="font-bold text-white">{counts.appointments}</span></li>
-                  <li className="flex justify-between"><span className="text-slate-400">Expedientes</span>    <span className="font-bold text-white">{counts.records}</span></li>
-                  <li className="flex justify-between"><span className="text-slate-400">Facturas</span>       <span className="font-bold text-white">{counts.invoices}</span></li>
-                  <li className="flex justify-between"><span className="text-slate-400">Archivos (radiografías + fotos)</span> <span className="font-bold text-white">{counts.files}</span></li>
+                <ul style={{
+                  listStyle: "none",
+                  padding: 0,
+                  margin: 0,
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 8,
+                  fontSize: 13,
+                }}>
+                  {countRows.map(([label, value]) => (
+                    <li key={label} style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                      <span style={{ color: "var(--text-3)" }}>{label}</span>
+                      <span style={{ fontWeight: 700, color: "var(--text-1)" }}>{value}</span>
+                    </li>
+                  ))}
                 </ul>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-300">
-                  Escribe <code className="font-mono font-black text-red-400">{CONFIRM_WORD}</code> para confirmar
+              <div className="field-new">
+                <label className="field-new__label">
+                  Escribe{" "}
+                  <strong className="mono" style={{ color: "var(--danger)" }}>{CONFIRM_WORD}</strong>{" "}
+                  para confirmar
                 </label>
                 <input
                   type="text"
@@ -126,30 +181,25 @@ export function DeleteClinicModal({ clinicId, clinicName, counts, canDelete, rea
                   value={confirmText}
                   onChange={e => setConfirmText(e.target.value)}
                   placeholder={`Escribe ${CONFIRM_WORD} para confirmar`}
-                  className="w-full bg-slate-800 border-2 border-red-700/60 focus:border-red-500 text-white font-mono tracking-wider text-sm rounded-lg px-3 py-2.5 focus:outline-none disabled:opacity-40"
+                  className="input-new mono"
                 />
               </div>
             </>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="flex gap-3 px-6 py-4 border-t border-slate-800 bg-slate-950/40 rounded-b-2xl">
-          <button
-            disabled={deleting}
-            onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-bold disabled:opacity-40"
-          >
+        <div className="modal__footer">
+          <ButtonNew variant="ghost" onClick={onClose} disabled={deleting}>
             Cancelar
-          </button>
-          <button
+          </ButtonNew>
+          <ButtonNew
+            variant="danger"
             disabled={!canSubmit}
             onClick={handleDelete}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+            icon={<Trash2 size={14} />}
           >
-            <Trash2 className="w-4 h-4" />
             {deleting ? "Eliminando…" : "Confirmar eliminación"}
-          </button>
+          </ButtonNew>
         </div>
       </div>
     </div>

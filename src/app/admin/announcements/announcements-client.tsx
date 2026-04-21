@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import toast from "react-hot-toast";
-import { Trash2, Pencil, Check, X, Plus } from "lucide-react";
+import { Trash2, Pencil, Plus, X } from "lucide-react";
+import { CardNew }   from "@/components/ui/design-system/card-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { BadgeNew }  from "@/components/ui/design-system/badge-new";
+import { formatRelativeDate } from "@/lib/format";
 
 interface Announcement {
   id: string;
@@ -14,40 +18,86 @@ interface Announcement {
   createdAt: string;
 }
 
-const TYPE_STYLES: Record<string, { bg: string; border: string; text: string; label: string }> = {
-  info:        { bg: "bg-blue-900/40",    border: "border-blue-700",    text: "text-blue-300",    label: "Info" },
-  warning:     { bg: "bg-amber-900/40",   border: "border-amber-700",   text: "text-amber-300",   label: "Advertencia" },
-  success:     { bg: "bg-emerald-900/40", border: "border-emerald-700", text: "text-emerald-300", label: "Éxito" },
-  maintenance: { bg: "bg-rose-900/40",    border: "border-rose-700",    text: "text-rose-300",    label: "Mantenimiento" },
+const TYPE_LABELS: Record<string, string> = {
+  info:        "Info",
+  warning:     "Advertencia",
+  success:     "Éxito",
+  maintenance: "Mantenimiento",
 };
+
+type Tone = "info" | "warning" | "success" | "danger" | "brand" | "neutral";
+function typeTone(t: string): Tone {
+  if (t === "warning")     return "warning";
+  if (t === "success")     return "success";
+  if (t === "maintenance") return "danger";
+  return "info";
+}
 
 export function AnnouncementsClient({ initial }: { initial: Announcement[] }) {
   const [list, setList] = useState<Announcement[]>(initial);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ message: "", type: "info", endsAt: "" });
-  const [editing, setEditing] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState({ message: "", type: "info", active: true, endsAt: "" });
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState<Announcement | null>(null);
+  const [form, setForm] = useState({ message: "", type: "info", active: true, endsAt: "" });
 
-  async function create() {
+  function openCreate() {
+    setEditing(null);
+    setForm({ message: "", type: "info", active: true, endsAt: "" });
+    setShowModal(true);
+  }
+
+  function openEdit(a: Announcement) {
+    setEditing(a);
+    setForm({
+      message: a.message,
+      type: a.type,
+      active: a.active,
+      endsAt: a.endsAt ? a.endsAt.slice(0, 10) : "",
+    });
+    setShowModal(true);
+  }
+
+  async function submit() {
     if (!form.message.trim()) { toast.error("Mensaje requerido"); return; }
     setSaving(true);
     try {
-      const res = await fetch("/api/admin/announcements", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: form.message.trim(),
-          type: form.type,
-          endsAt: form.endsAt || null,
-        }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error ?? "Error");
-      const created = await res.json();
-      setList(prev => [created, ...prev]);
-      setForm({ message: "", type: "info", endsAt: "" });
-      toast.success("Anuncio creado");
-    } catch (e: any) { toast.error(e.message); }
-    finally { setSaving(false); }
+      if (editing) {
+        const res = await fetch(`/api/admin/announcements/${editing.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: form.message,
+            type: form.type,
+            active: form.active,
+            endsAt: form.endsAt || null,
+          }),
+        });
+        if (!res.ok) throw new Error();
+        const updated = await res.json();
+        setList(prev => prev.map(x => (x.id === editing.id ? updated : x)));
+        toast.success("Guardado");
+      } else {
+        const res = await fetch("/api/admin/announcements", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: form.message.trim(),
+            type: form.type,
+            endsAt: form.endsAt || null,
+          }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error ?? "Error");
+        const created = await res.json();
+        setList(prev => [created, ...prev]);
+        toast.success("Anuncio creado");
+      }
+      setShowModal(false);
+      setEditing(null);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Error al guardar");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function toggleActive(a: Announcement) {
@@ -73,191 +123,177 @@ export function AnnouncementsClient({ initial }: { initial: Announcement[] }) {
     } catch { toast.error("Error al eliminar"); }
   }
 
-  function startEdit(a: Announcement) {
-    setEditing(a.id);
-    setEditDraft({
-      message: a.message,
-      type: a.type,
-      active: a.active,
-      endsAt: a.endsAt ? a.endsAt.slice(0, 10) : "",
-    });
-  }
+  const active = list.filter(a => a.active);
+  const inactive = list.filter(a => !a.active);
 
-  async function saveEdit(id: string) {
-    try {
-      const res = await fetch(`/api/admin/announcements/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: editDraft.message,
-          type: editDraft.type,
-          active: editDraft.active,
-          endsAt: editDraft.endsAt || null,
-        }),
-      });
-      if (!res.ok) throw new Error();
-      const updated = await res.json();
-      setList(prev => prev.map(x => (x.id === id ? updated : x)));
-      setEditing(null);
-      toast.success("Guardado");
-    } catch { toast.error("Error al guardar"); }
+  function renderRow(a: Announcement, muted = false) {
+    return (
+      <div key={a.id} className="list-row" style={muted ? { opacity: 0.6 } : undefined}>
+        <BadgeNew tone={typeTone(a.type)} dot>
+          {TYPE_LABELS[a.type] ?? a.type}
+        </BadgeNew>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, color: "var(--text-1)", whiteSpace: "pre-wrap" }}>{a.message}</div>
+          <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
+            {formatRelativeDate(a.createdAt)}
+            {a.endsAt ? ` → ${new Date(a.endsAt).toLocaleDateString("es-MX")}` : " → Sin fin"}
+          </div>
+        </div>
+        <ButtonNew
+          size="sm"
+          variant="ghost"
+          icon={<Pencil size={13} />}
+          onClick={() => openEdit(a)}
+        >
+          Editar
+        </ButtonNew>
+        <ButtonNew
+          size="sm"
+          variant="ghost"
+          onClick={() => toggleActive(a)}
+        >
+          {a.active ? "Desactivar" : "Activar"}
+        </ButtonNew>
+        <ButtonNew
+          size="sm"
+          variant="ghost"
+          icon={<Trash2 size={13} />}
+          onClick={() => remove(a.id)}
+          style={{ color: "var(--danger)" }}
+          aria-label="Eliminar"
+        >
+          Eliminar
+        </ButtonNew>
+      </div>
+    );
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-extrabold">Anuncios globales</h1>
-        <p className="text-slate-400 text-sm">Se muestran a todas las clínicas dentro del dashboard. Pueden ser descartados por el usuario.</p>
+    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 22, flexWrap: "wrap" }}>
+        <div>
+          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+            Anuncios globales
+          </h1>
+          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, margin: 0 }}>
+            Se muestran a todas las clínicas dentro del dashboard. Pueden ser descartados por el usuario.
+          </p>
+        </div>
+        <ButtonNew variant="primary" icon={<Plus size={14} />} onClick={openCreate}>
+          Nuevo anuncio
+        </ButtonNew>
       </div>
 
-      {/* New announcement */}
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5 space-y-3">
-        <h2 className="text-sm font-bold">Nuevo anuncio</h2>
-        <textarea
-          rows={3}
-          value={form.message}
-          onChange={e => setForm(f => ({ ...f, message: e.target.value }))}
-          placeholder="Ej: El 25 de abril habrá mantenimiento programado de 2 a 4 AM."
-          className="w-full bg-slate-800 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-600/50"
-        />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <label className="text-xs text-slate-400 block mb-1">Tipo</label>
-            <select
-              value={form.type}
-              onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
-              className="w-full bg-slate-800 border border-slate-600 text-white text-sm rounded-lg px-3 py-2"
-            >
-              {Object.entries(TYPE_STYLES).map(([k, v]) => (
-                <option key={k} value={k}>{v.label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-slate-400 block mb-1">Termina (opcional)</label>
-            <input
-              type="date"
-              value={form.endsAt}
-              onChange={e => setForm(f => ({ ...f, endsAt: e.target.value }))}
-              className="w-full bg-slate-800 border border-slate-600 text-white text-sm rounded-lg px-3 py-2"
-            />
-          </div>
-          <div className="flex items-end">
-            <button
-              onClick={create}
-              disabled={saving}
-              className="w-full flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-bold py-2 rounded-lg text-sm disabled:opacity-50"
-            >
-              <Plus className="w-4 h-4" />
-              {saving ? "Creando…" : "Crear anuncio"}
-            </button>
-          </div>
-        </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <CardNew noPad title={`Anuncios activos (${active.length})`}>
+          {active.length === 0 ? (
+            <div style={{ padding: "40px 18px", textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
+              Sin anuncios activos
+            </div>
+          ) : (
+            <div>{active.map(a => renderRow(a, false))}</div>
+          )}
+        </CardNew>
+
+        <CardNew noPad title={`Anuncios inactivos (${inactive.length})`}>
+          {inactive.length === 0 ? (
+            <div style={{ padding: "40px 18px", textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
+              Sin anuncios inactivos
+            </div>
+          ) : (
+            <div>{inactive.map(a => renderRow(a, true))}</div>
+          )}
+        </CardNew>
       </div>
 
-      {/* List */}
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-700">
-          <h2 className="font-bold text-sm">Anuncios ({list.length})</h2>
-        </div>
-        {list.length === 0 ? (
-          <div className="py-10 text-center text-slate-500 text-sm">Sin anuncios</div>
-        ) : (
-          <div className="divide-y divide-slate-800">
-            {list.map(a => {
-              const s = TYPE_STYLES[a.type] ?? TYPE_STYLES.info;
-              const isEditing = editing === a.id;
-              return (
-                <div key={a.id} className="px-5 py-4">
-                  {isEditing ? (
-                    <div className="space-y-2">
+      {/* Create / Edit modal */}
+      {showModal && (
+        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal__header">
+              <div className="modal__title">
+                {editing ? "Editar anuncio" : "Nuevo anuncio"}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                className="btn-new btn-new--ghost btn-new--sm"
+                aria-label="Cerrar"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            <div className="modal__body">
+              <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                <div>
+                  <div className="form-section__title">
+                    Contenido
+                    <span className="form-section__rule" />
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div className="field-new">
+                      <label className="field-new__label">
+                        Mensaje <span className="req">*</span>
+                      </label>
                       <textarea
-                        rows={2}
-                        value={editDraft.message}
-                        onChange={e => setEditDraft(d => ({ ...d, message: e.target.value }))}
-                        className="w-full bg-slate-800 border border-slate-600 text-white text-sm rounded-lg px-3 py-2"
+                        rows={3}
+                        className="input-new"
+                        placeholder="Ej: El 25 de abril habrá mantenimiento programado de 2 a 4 AM."
+                        value={form.message}
+                        onChange={e => setForm(f => ({ ...f, message: e.target.value }))}
                       />
-                      <div className="flex gap-2 flex-wrap">
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      <div className="field-new">
+                        <label className="field-new__label">Tipo</label>
                         <select
-                          value={editDraft.type}
-                          onChange={e => setEditDraft(d => ({ ...d, type: e.target.value }))}
-                          className="bg-slate-800 border border-slate-600 text-white text-xs rounded-lg px-2 py-1"
+                          className="input-new"
+                          value={form.type}
+                          onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
                         >
-                          {Object.entries(TYPE_STYLES).map(([k, v]) => (
-                            <option key={k} value={k}>{v.label}</option>
+                          {Object.entries(TYPE_LABELS).map(([k, v]) => (
+                            <option key={k} value={k}>{v}</option>
                           ))}
                         </select>
+                      </div>
+                      <div className="field-new">
+                        <label className="field-new__label">Termina (opcional)</label>
                         <input
                           type="date"
-                          value={editDraft.endsAt}
-                          onChange={e => setEditDraft(d => ({ ...d, endsAt: e.target.value }))}
-                          className="bg-slate-800 border border-slate-600 text-white text-xs rounded-lg px-2 py-1"
+                          className="input-new"
+                          value={form.endsAt}
+                          onChange={e => setForm(f => ({ ...f, endsAt: e.target.value }))}
                         />
-                        <label className="flex items-center gap-1 text-xs text-slate-300">
-                          <input
-                            type="checkbox"
-                            checked={editDraft.active}
-                            onChange={e => setEditDraft(d => ({ ...d, active: e.target.checked }))}
-                          />
-                          Activo
-                        </label>
-                        <button
-                          onClick={() => saveEdit(a.id)}
-                          className="ml-auto flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1 rounded-lg"
-                        >
-                          <Check className="w-3 h-3" /> Guardar
-                        </button>
-                        <button
-                          onClick={() => setEditing(null)}
-                          className="flex items-center gap-1 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold px-3 py-1 rounded-lg"
-                        >
-                          <X className="w-3 h-3" /> Cancelar
-                        </button>
                       </div>
                     </div>
-                  ) : (
-                    <div className="flex items-start gap-4">
-                      <div className={`flex-1 ${s.bg} ${s.border} border rounded-lg px-3 py-2`}>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className={`text-[10px] font-bold uppercase ${s.text}`}>{s.label}</span>
-                          {!a.active && <span className="text-[10px] font-bold text-slate-500 uppercase">(pausado)</span>}
-                          <span className="text-[10px] text-slate-500">
-                            {new Date(a.createdAt).toLocaleDateString("es-MX")}
-                            {a.endsAt && ` → ${new Date(a.endsAt).toLocaleDateString("es-MX")}`}
-                          </span>
-                        </div>
-                        <p className="text-sm text-slate-200 whitespace-pre-wrap">{a.message}</p>
-                      </div>
-                      <div className="flex gap-1 flex-shrink-0">
-                        <button
-                          onClick={() => toggleActive(a)}
-                          className={`px-2 py-1 rounded-lg text-xs font-bold border ${a.active ? "bg-emerald-900/40 text-emerald-300 border-emerald-700" : "bg-slate-800 text-slate-400 border-slate-700"}`}
-                        >
-                          {a.active ? "Activo" : "Pausado"}
-                        </button>
-                        <button
-                          onClick={() => startEdit(a)}
-                          className="p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white"
-                          aria-label="Editar"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => remove(a.id)}
-                          className="p-2 rounded-lg hover:bg-rose-900/40 text-slate-400 hover:text-rose-400"
-                          aria-label="Eliminar"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                    {editing && (
+                      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-2)" }}>
+                        <input
+                          type="checkbox"
+                          checked={form.active}
+                          onChange={e => setForm(f => ({ ...f, active: e.target.checked }))}
+                        />
+                        Activo
+                      </label>
+                    )}
+                  </div>
                 </div>
-              );
-            })}
+              </div>
+            </div>
+
+            <div className="modal__footer">
+              <ButtonNew variant="ghost" onClick={() => setShowModal(false)}>
+                Cancelar
+              </ButtonNew>
+              <ButtonNew variant="primary" onClick={submit} disabled={saving}>
+                {saving ? "Guardando…" : editing ? "Guardar" : "Crear anuncio"}
+              </ButtonNew>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

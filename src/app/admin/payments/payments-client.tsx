@@ -2,8 +2,13 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { formatCurrency } from "@/lib/utils";
 import toast from "react-hot-toast";
+import { X, DollarSign, TrendingUp, AlertCircle, XCircle, CheckCircle2, Plus } from "lucide-react";
+import { CardNew }   from "@/components/ui/design-system/card-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { BadgeNew }  from "@/components/ui/design-system/badge-new";
+import { KpiCard }   from "@/components/ui/design-system/kpi-card";
+import { fmtMXN } from "@/lib/format";
 
 /* ── Constants ────────────────────────────────────────────────────────────── */
 
@@ -17,24 +22,16 @@ const PAYMENT_METHODS = [
   { value: "cash",     label: "Efectivo",       icon: "\uD83D\uDCB5" },
 ] as const;
 
-const STATUS_BADGES: Record<string, { bg: string; text: string; label: string }> = {
-  paid:    { bg: "bg-emerald-900/50", text: "text-emerald-400", label: "Pagado" },
-  pending: { bg: "bg-amber-900/50",   text: "text-amber-400",   label: "Pendiente" },
-  failed:  { bg: "bg-red-900/50",     text: "text-red-400",     label: "Fallido" },
-};
-
 function methodBadge(method: string | null | undefined) {
   const m = PAYMENT_METHODS.find(pm => pm.value === method);
   return m ? `${m.icon} ${m.label}` : method ?? "\u2014";
 }
 
 function statusBadge(status: string) {
-  const s = STATUS_BADGES[status] ?? STATUS_BADGES.pending;
-  return (
-    <span className={`text-xs font-bold px-2 py-1 rounded-full ${s.bg} ${s.text}`}>
-      {s.label}
-    </span>
-  );
+  if (status === "paid")    return <BadgeNew tone="success" dot>Pagado</BadgeNew>;
+  if (status === "pending") return <BadgeNew tone="warning" dot>Pendiente</BadgeNew>;
+  if (status === "failed")  return <BadgeNew tone="danger"  dot>Fallido</BadgeNew>;
+  return <BadgeNew tone="neutral" dot>{status}</BadgeNew>;
 }
 
 function fmtDate(d: string | Date) {
@@ -308,271 +305,353 @@ export function PaymentsClient({
 
   /* ── Render ───────────────────────────────────────────────────────────── */
 
-  const inputCls = "w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500";
-  const labelCls = "text-xs text-slate-500 dark:text-slate-400 block mb-1 font-medium";
+  const tabs = [
+    { key: "pending" as const, label: "Pendientes de verificar", count: pending.length },
+    { key: "all"     as const, label: "Todos los pagos",         count: payments.length },
+    { key: "overdue" as const, label: "Clínicas vencidas",       count: overdue.length },
+  ];
+
+  const statusFilters = [
+    { v: "all",     l: "Todos" },
+    { v: "paid",    l: "Pagados" },
+    { v: "pending", l: "Pendientes" },
+    { v: "failed",  l: "Fallidos" },
+  ];
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
+    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Pagos y Suscripciones</h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm">
-            Gestiona pagos, verifica transferencias y activa clinicas
+          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+            Pagos de suscripción
+          </h1>
+          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, margin: 0 }}>
+            Gestiona pagos, verifica transferencias y activa clínicas
           </p>
         </div>
-        <button
+        <ButtonNew
+          variant="primary"
           onClick={() => setShowNewPayment(!showNewPayment)}
-          className="bg-brand-600 hover:bg-brand-700 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition-colors shadow-md"
+          icon={<Plus size={14} />}
         >
-          + Registrar pago
-        </button>
+          Registrar pago
+        </ButtonNew>
       </div>
 
-      {/* ── Stats Cards ─────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm">
-          <div className="text-xs text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wide mb-2">MRR Actual</div>
-          <div className="text-3xl font-extrabold text-emerald-500 dark:text-emerald-400">{formatCurrency(metrics.currentMRR)}</div>
-          <div className="text-xs text-slate-400 mt-1">{metrics.activeClinics} clinicas activas</div>
-        </div>
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm">
-          <div className="text-xs text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wide mb-2">Ingresos este mes</div>
-          <div className="text-3xl font-extrabold text-blue-500 dark:text-blue-400">{formatCurrency(metrics.thisMonthRevenue)}</div>
-          <div className={`text-xs font-semibold mt-1 ${metrics.revenueChange >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-            {metrics.revenueChange >= 0 ? "\u2191" : "\u2193"} {Math.abs(metrics.revenueChange)}% vs mes anterior
-          </div>
-        </div>
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm">
-          <div className="text-xs text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wide mb-2">Pendientes de verificar</div>
-          <div className="text-3xl font-extrabold text-amber-500 dark:text-amber-400">{pending.length}</div>
-          <div className="text-xs text-slate-400 mt-1">
-            {formatCurrency(pending.reduce((s: number, p: any) => s + (p.amount || 0), 0))} en espera
-          </div>
-        </div>
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm">
-          <div className="text-xs text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wide mb-2">Clinicas vencidas</div>
-          <div className="text-3xl font-extrabold text-red-500 dark:text-red-400">{metrics.expiredClinics}</div>
-          <div className="text-xs text-slate-400 mt-1">{overdue.length} requieren accion</div>
-        </div>
+      {/* ── KPI row ─────────────────────────────────────────────────────── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 14, marginBottom: 20 }}>
+        <KpiCard
+          label="MRR actual"
+          value={fmtMXN(metrics.currentMRR)}
+          icon={DollarSign}
+          delta={{ value: `${metrics.activeClinics} clínicas activas`, direction: "up" }}
+        />
+        <KpiCard
+          label="Ingresos este mes"
+          value={fmtMXN(metrics.thisMonthRevenue)}
+          icon={TrendingUp}
+          delta={{
+            value: `${Math.abs(metrics.revenueChange)}% vs mes anterior`,
+            direction: metrics.revenueChange >= 0 ? "up" : "down",
+          }}
+        />
+        <KpiCard
+          label="Pendientes"
+          value={String(pending.length)}
+          icon={AlertCircle}
+          delta={{
+            value: `${fmtMXN(pending.reduce((s: number, p: any) => s + (p.amount || 0), 0))} en espera`,
+            direction: "up",
+          }}
+        />
+        <KpiCard
+          label="Clínicas vencidas"
+          value={String(metrics.expiredClinics)}
+          icon={XCircle}
+          delta={{ value: `${overdue.length} requieren acción`, direction: "down" }}
+        />
       </div>
 
       {/* ── New Payment Form ────────────────────────────────────────────── */}
       {showNewPayment && (
-        <div className="bg-white dark:bg-slate-900 border-2 border-brand-500/30 rounded-2xl p-6 space-y-5 shadow-lg">
-          <div className="flex items-center justify-between">
-            <h2 className="font-bold text-lg text-slate-900 dark:text-white">Registrar nuevo pago</h2>
-            <button onClick={() => setShowNewPayment(false)} className="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <label className={labelCls}>Clinica *</label>
-              <select value={form.clinicId} onChange={e => onClinicChange(e.target.value)} className={inputCls}>
-                <option value="">Selecciona clinica</option>
-                {clinics.map((c: any) => (
-                  <option key={c.id} value={c.id}>{c.name} ({c.plan})</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Monto (MXN) *</label>
-              <input type="number" value={form.amount} onChange={e => setF("amount", e.target.value)} placeholder="499" className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Metodo de pago *</label>
-              <select value={form.method} onChange={e => setF("method", e.target.value)} className={inputCls}>
-                {PAYMENT_METHODS.map(m => (
-                  <option key={m.value} value={m.value}>{m.icon} {m.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Referencia / Folio</label>
-              <input value={form.reference} onChange={e => setF("reference", e.target.value)} placeholder="Numero de transferencia, orden, etc." className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Periodo inicio *</label>
-              <input type="date" value={form.periodStart} onChange={e => setF("periodStart", e.target.value)} className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Periodo fin *</label>
-              <input type="date" value={form.periodEnd} onChange={e => setF("periodEnd", e.target.value)} className={inputCls} />
+        <div style={{ marginBottom: 20 }}>
+          <CardNew
+            title="Registrar nuevo pago"
+            sub="Completa los datos del pago. El monto se precarga según el plan de la clínica."
+            action={
+              <ButtonNew
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowNewPayment(false)}
+                icon={<X size={14} />}
+              >
+                Cerrar
+              </ButtonNew>
+            }
+          >
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
+              <div className="field-new">
+                <label className="field-new__label">Clínica <span className="req">*</span></label>
+                <select
+                  className="input-new"
+                  value={form.clinicId}
+                  onChange={e => onClinicChange(e.target.value)}
+                >
+                  <option value="">Selecciona clínica</option>
+                  {clinics.map((c: any) => (
+                    <option key={c.id} value={c.id}>{c.name} ({c.plan})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="field-new">
+                <label className="field-new__label">Monto (MXN) <span className="req">*</span></label>
+                <input
+                  className="input-new"
+                  type="number"
+                  value={form.amount}
+                  onChange={e => setF("amount", e.target.value)}
+                  placeholder="499"
+                />
+              </div>
+
+              <div className="field-new">
+                <label className="field-new__label">Método de pago <span className="req">*</span></label>
+                <select
+                  className="input-new"
+                  value={form.method}
+                  onChange={e => setF("method", e.target.value)}
+                >
+                  {PAYMENT_METHODS.map(m => (
+                    <option key={m.value} value={m.value}>{m.icon} {m.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="field-new">
+                <label className="field-new__label">Referencia / Folio</label>
+                <input
+                  className="input-new"
+                  value={form.reference}
+                  onChange={e => setF("reference", e.target.value)}
+                  placeholder="Número de transferencia, orden, etc."
+                />
+              </div>
+
+              <div className="field-new">
+                <label className="field-new__label">Periodo inicio <span className="req">*</span></label>
+                <input
+                  className="input-new"
+                  type="date"
+                  value={form.periodStart}
+                  onChange={e => setF("periodStart", e.target.value)}
+                />
+              </div>
+
+              <div className="field-new">
+                <label className="field-new__label">Periodo fin <span className="req">*</span></label>
+                <input
+                  className="input-new"
+                  type="date"
+                  value={form.periodEnd}
+                  onChange={e => setF("periodEnd", e.target.value)}
+                />
+              </div>
             </div>
 
             {/* Stripe section */}
             {form.method === "stripe" && (
-              <div className="md:col-span-2 lg:col-span-3">
-                <button
+              <div style={{ marginTop: 14 }}>
+                <ButtonNew
+                  variant="secondary"
                   onClick={generateStripeLink}
                   disabled={loading === "stripe"}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-2.5 rounded-xl text-sm disabled:opacity-50 transition-colors"
                 >
-                  {loading === "stripe" ? "Generando..." : "\uD83D\uDCB3 Generar link de pago Stripe"}
-                </button>
-                <p className="text-xs text-slate-400 mt-1">Se creara una suscripcion en Stripe y se copiara el link de pago</p>
+                  {loading === "stripe" ? "Generando…" : "💳 Generar link de pago Stripe"}
+                </ButtonNew>
+                <p style={{ fontSize: 11, color: "var(--text-3)", marginTop: 6 }}>
+                  Se creará una suscripción en Stripe y se copiará el link de pago
+                </p>
               </div>
             )}
 
             {/* PayPal section */}
             {form.method === "paypal" && (
-              <>
-                <div>
-                  <label className={labelCls}>Email PayPal</label>
-                  <input value={form.paypalEmail} onChange={e => setF("paypalEmail", e.target.value)} placeholder="correo@paypal.com" className={inputCls} />
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14, marginTop: 14 }}>
+                <div className="field-new">
+                  <label className="field-new__label">Email PayPal</label>
+                  <input
+                    className="input-new"
+                    value={form.paypalEmail}
+                    onChange={e => setF("paypalEmail", e.target.value)}
+                    placeholder="correo@paypal.com"
+                  />
                 </div>
-                <div className="flex items-center gap-3 pt-5">
-                  <label className="flex items-center gap-2 cursor-pointer">
+                <div style={{ display: "flex", alignItems: "center", gap: 10, paddingTop: 22 }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", color: "var(--text-2)", fontSize: 12 }}>
                     <input
                       type="checkbox"
                       checked={form.paypalRecurring}
                       onChange={e => setF("paypalRecurring", e.target.checked)}
-                      className="rounded border-slate-300 dark:border-slate-600"
                     />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Suscripcion recurrente</span>
+                    <span>Suscripción recurrente</span>
                   </label>
-                  {!form.paypalRecurring && (
-                    <span className="text-xs bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full font-medium">Pago unico</span>
-                  )}
+                  {!form.paypalRecurring && <BadgeNew tone="info">Pago único</BadgeNew>}
                 </div>
-              </>
+              </div>
             )}
 
-            <div className="md:col-span-2 lg:col-span-3">
-              <label className={labelCls}>Notas</label>
-              <input value={form.notes} onChange={e => setF("notes", e.target.value)} placeholder="Observaciones opcionales" className={inputCls} />
+            <div className="field-new" style={{ marginTop: 14 }}>
+              <label className="field-new__label">Notas</label>
+              <input
+                className="input-new"
+                value={form.notes}
+                onChange={e => setF("notes", e.target.value)}
+                placeholder="Observaciones opcionales"
+              />
             </div>
 
             {/* Coupon */}
-            <div className="md:col-span-2 lg:col-span-3 bg-slate-50 dark:bg-slate-800/50 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-3 space-y-2">
-              <label className={labelCls}>Cupón de descuento (opcional)</label>
+            <div
+              style={{
+                marginTop: 14,
+                padding: 14,
+                borderRadius: 10,
+                border: "1px dashed var(--border-soft)",
+                background: "var(--bg-elev)",
+              }}
+            >
+              <div className="field-new__label" style={{ marginBottom: 8 }}>Cupón de descuento (opcional)</div>
               {couponApplied ? (
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 text-sm">
-                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{couponApplied.code}</span>
-                    <span className="text-slate-500 dark:text-slate-400 ml-2">−${couponApplied.discount.toFixed(2)} MXN</span>
-                    <span className="text-slate-500 dark:text-slate-400 ml-2">
-                      → total: <span className="font-bold">${couponApplied.finalAmount.toFixed(2)}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ flex: 1, fontSize: 12 }}>
+                    <span className="mono" style={{ fontWeight: 600, color: "var(--success)" }}>{couponApplied.code}</span>
+                    <span style={{ color: "var(--text-3)", marginLeft: 8 }}>−${couponApplied.discount.toFixed(2)} MXN</span>
+                    <span style={{ color: "var(--text-3)", marginLeft: 8 }}>
+                      → total: <span style={{ fontWeight: 600, color: "var(--text-1)" }}>${couponApplied.finalAmount.toFixed(2)}</span>
                     </span>
                   </div>
-                  <button
-                    onClick={removeCoupon}
-                    className="text-xs font-bold text-rose-600 hover:text-rose-700 underline"
-                  >
-                    Quitar
-                  </button>
+                  <ButtonNew size="sm" variant="ghost" onClick={removeCoupon}>Quitar</ButtonNew>
                 </div>
               ) : (
-                <div className="flex gap-2">
+                <div style={{ display: "flex", gap: 8 }}>
                   <input
+                    className="input-new mono"
+                    style={{ textTransform: "uppercase", flex: 1 }}
                     value={couponCode}
                     onChange={e => setCouponCode(e.target.value.toUpperCase())}
                     placeholder="Ej: LANZAMIENTO20"
-                    className={`${inputCls} font-mono uppercase`}
                   />
-                  <button
+                  <ButtonNew
+                    variant="primary"
                     onClick={applyCoupon}
                     disabled={validatingCoupon || !couponCode.trim()}
-                    className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold px-4 rounded-lg disabled:opacity-50 whitespace-nowrap"
                   >
                     {validatingCoupon ? "…" : "Aplicar"}
-                  </button>
+                  </ButtonNew>
                 </div>
               )}
             </div>
-          </div>
-          <div className="flex gap-3 pt-2">
-            <button onClick={() => setShowNewPayment(false)} className="flex-1 border border-slate-200 dark:border-slate-700 rounded-xl py-2.5 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition-colors">
-              Cancelar
-            </button>
-            <button onClick={createPayment} disabled={loading === "new"} className="flex-1 bg-brand-600 hover:bg-brand-700 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-50 transition-colors">
-              {loading === "new" ? "Guardando..." : "Guardar pago"}
-            </button>
-          </div>
+
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 18 }}>
+              <ButtonNew variant="ghost" onClick={() => setShowNewPayment(false)}>
+                Cancelar
+              </ButtonNew>
+              <ButtonNew
+                variant="primary"
+                onClick={createPayment}
+                disabled={loading === "new"}
+              >
+                {loading === "new" ? "Guardando…" : "Guardar pago"}
+              </ButtonNew>
+            </div>
+          </CardNew>
         </div>
       )}
 
       {/* ── Tabs ────────────────────────────────────────────────────────── */}
-      <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700">
-        {([
-          { key: "pending", label: "Pendientes de verificar", count: pending.length },
-          { key: "all",     label: "Todos los pagos",         count: payments.length },
-          { key: "overdue", label: "Clinicas vencidas",       count: overdue.length },
-        ] as const).map(t => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${
-              tab === t.key
-                ? "border-brand-600 text-brand-600"
-                : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white"
-            }`}
-          >
-            {t.label}
-            {t.count > 0 && (
-              <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full font-bold ${
-                tab === t.key ? "bg-brand-100 dark:bg-brand-900/50 text-brand-600 dark:text-brand-400" : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
-              }`}>
-                {t.count}
-              </span>
-            )}
-          </button>
-        ))}
+      <div style={{ marginBottom: 18 }}>
+        <div className="segment-new" style={{ display: "inline-flex", gap: 2 }}>
+          {tabs.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`segment-new__btn ${tab === t.key ? "segment-new__btn--active" : ""}`}
+            >
+              {t.label}
+              <span style={{ marginLeft: 6, opacity: 0.6, fontSize: 11 }}>{t.count}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ── Tab: Pending Transfers ──────────────────────────────────────── */}
       {tab === "pending" && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm">
+        <CardNew noPad>
           {pending.length === 0 ? (
-            <div className="py-16 text-center">
-              <div className="text-4xl mb-3">&#9989;</div>
-              <div className="text-slate-500 dark:text-slate-400 font-medium">No hay pagos pendientes de verificar</div>
-              <div className="text-xs text-slate-400 mt-1">Todos los pagos estan al dia</div>
+            <div style={{ padding: "60px 0", textAlign: "center" }}>
+              <CheckCircle2 size={32} style={{ color: "var(--success)", margin: "0 auto 10px" }} />
+              <div style={{ color: "var(--text-2)", fontSize: 13, fontWeight: 500 }}>
+                No hay pagos pendientes de verificar
+              </div>
+              <div style={{ color: "var(--text-3)", fontSize: 11, marginTop: 4 }}>
+                Todos los pagos están al día
+              </div>
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <table className="table-new">
               <thead>
-                <tr className="text-xs text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-                  <th className="px-5 py-3 text-left font-semibold">Clinica</th>
-                  <th className="px-5 py-3 text-left font-semibold">Plan</th>
-                  <th className="px-5 py-3 text-left font-semibold">Monto</th>
-                  <th className="px-5 py-3 text-left font-semibold">Metodo</th>
-                  <th className="px-5 py-3 text-left font-semibold">Referencia</th>
-                  <th className="px-5 py-3 text-left font-semibold">Fecha</th>
-                  <th className="px-5 py-3 text-right font-semibold">Acciones</th>
+                <tr>
+                  <th>Clínica</th>
+                  <th>Plan</th>
+                  <th>Monto</th>
+                  <th>Método</th>
+                  <th>Referencia</th>
+                  <th>Fecha</th>
+                  <th style={{ textAlign: "right" }}>Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {pending.map((inv: any) => (
-                  <tr key={inv.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                    <td className="px-5 py-3">
-                      <div className="font-semibold text-slate-900 dark:text-white">{inv.clinic?.name ?? "—"}</div>
-                      <div className="text-xs text-slate-400">{inv.clinic?.email}</div>
+                  <tr key={inv.id}>
+                    <td>
+                      <div style={{ color: "var(--text-1)", fontWeight: 500 }}>{inv.clinic?.name ?? "—"}</div>
+                      <div style={{ fontSize: 11, color: "var(--text-3)" }}>{inv.clinic?.email}</div>
                     </td>
-                    <td className="px-5 py-3">
-                      <span className="text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                    <td>
+                      <BadgeNew tone={inv.clinic?.plan === "CLINIC" ? "brand" : inv.clinic?.plan === "PRO" ? "info" : "neutral"}>
                         {inv.clinic?.plan ?? "—"}
-                      </span>
+                      </BadgeNew>
                     </td>
-                    <td className="px-5 py-3 text-emerald-600 dark:text-emerald-400 font-bold">{formatCurrency(inv.amount)}</td>
-                    <td className="px-5 py-3 text-slate-600 dark:text-slate-400">{methodBadge(inv.method)}</td>
-                    <td className="px-5 py-3 text-slate-500 dark:text-slate-400 text-xs font-mono">{inv.reference || "—"}</td>
-                    <td className="px-5 py-3 text-slate-500 dark:text-slate-400 text-xs">{fmtDate(inv.createdAt)}</td>
-                    <td className="px-5 py-3 text-right">
-                      <div className="flex gap-2 justify-end">
-                        <button
+                    <td className="mono" style={{ color: "var(--success)", fontWeight: 600 }}>
+                      {fmtMXN(inv.amount)}
+                    </td>
+                    <td style={{ color: "var(--text-2)" }}>{methodBadge(inv.method)}</td>
+                    <td className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>
+                      {inv.reference || "—"}
+                    </td>
+                    <td className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>
+                      {fmtDate(inv.createdAt)}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      <div style={{ display: "inline-flex", gap: 6 }}>
+                        <ButtonNew
+                          size="sm"
+                          variant="primary"
                           onClick={() => verifyPayment(inv.id)}
                           disabled={loading === inv.id}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors"
                         >
-                          {loading === inv.id ? "..." : "\u2705 Verificar"}
-                        </button>
-                        <button
+                          {loading === inv.id ? "…" : "Verificar"}
+                        </ButtonNew>
+                        <ButtonNew
+                          size="sm"
+                          variant="danger"
                           onClick={() => setRejectId(inv.id)}
                           disabled={loading === inv.id}
-                          className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors"
                         >
-                          \u274C Rechazar
-                        </button>
+                          Rechazar
+                        </ButtonNew>
                       </div>
                     </td>
                   </tr>
@@ -583,75 +662,75 @@ export function PaymentsClient({
 
           {/* Reject modal */}
           {rejectId && (
-            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-md shadow-xl space-y-4">
-                <h3 className="font-bold text-lg text-slate-900 dark:text-white">Rechazar pago</h3>
-                <div>
-                  <label className={labelCls}>Razon del rechazo</label>
-                  <textarea
-                    value={rejectReason}
-                    onChange={e => setRejectReason(e.target.value)}
-                    rows={3}
-                    placeholder="Referencia no encontrada, monto incorrecto, etc."
-                    className={inputCls}
-                  />
-                </div>
-                <div className="flex gap-3">
-                  <button onClick={() => { setRejectId(null); setRejectReason(""); }} className="flex-1 border border-slate-200 dark:border-slate-700 rounded-xl py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">
-                    Cancelar
-                  </button>
+            <div className="modal-overlay" onClick={() => { setRejectId(null); setRejectReason(""); }}>
+              <div className="modal" onClick={e => e.stopPropagation()}>
+                <div className="modal__header">
+                  <div className="modal__title">Rechazar pago</div>
                   <button
+                    className="btn-new btn-new--ghost btn-new--sm"
+                    onClick={() => { setRejectId(null); setRejectReason(""); }}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+                <div className="modal__body">
+                  <div className="field-new">
+                    <label className="field-new__label">Razón del rechazo</label>
+                    <textarea
+                      className="input-new"
+                      value={rejectReason}
+                      onChange={e => setRejectReason(e.target.value)}
+                      rows={3}
+                      placeholder="Referencia no encontrada, monto incorrecto, etc."
+                    />
+                  </div>
+                </div>
+                <div className="modal__footer">
+                  <ButtonNew
+                    variant="ghost"
+                    onClick={() => { setRejectId(null); setRejectReason(""); }}
+                  >
+                    Cancelar
+                  </ButtonNew>
+                  <ButtonNew
+                    variant="danger"
                     onClick={() => rejectPayment(rejectId, rejectReason)}
                     disabled={!rejectReason.trim() || loading === rejectId}
-                    className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl py-2 text-sm font-bold disabled:opacity-50"
                   >
-                    {loading === rejectId ? "Rechazando..." : "Confirmar rechazo"}
-                  </button>
+                    {loading === rejectId ? "Rechazando…" : "Confirmar rechazo"}
+                  </ButtonNew>
                 </div>
               </div>
             </div>
           )}
-        </div>
+        </CardNew>
       )}
 
       {/* ── Tab: All Payments ───────────────────────────────────────────── */}
       {tab === "all" && (
-        <div className="space-y-4">
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {/* Filters */}
-          <div className="flex flex-wrap gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Estado:</span>
-              <div className="flex gap-1">
-                {[
-                  { v: "all", l: "Todos" },
-                  { v: "paid", l: "Pagados" },
-                  { v: "pending", l: "Pendientes" },
-                  { v: "failed", l: "Fallidos" },
-                ].map(f => (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 500 }}>Estado:</span>
+              <div className="segment-new" style={{ display: "inline-flex", gap: 2 }}>
+                {statusFilters.map(f => (
                   <button
                     key={f.v}
                     onClick={() => setFilterStatus(f.v)}
-                    className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
-                      filterStatus === f.v
-                        ? "bg-brand-600 border-brand-600 text-white"
-                        : "border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white"
-                    }`}
+                    className={`segment-new__btn ${filterStatus === f.v ? "segment-new__btn--active" : ""}`}
                   >
                     {f.l}
                   </button>
                 ))}
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Metodo:</span>
-              <div className="flex gap-1">
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 500 }}>Método:</span>
+              <div className="segment-new" style={{ display: "inline-flex", gap: 2 }}>
                 <button
                   onClick={() => setFilterMethod("all")}
-                  className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
-                    filterMethod === "all"
-                      ? "bg-brand-600 border-brand-600 text-white"
-                      : "border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white"
-                  }`}
+                  className={`segment-new__btn ${filterMethod === "all" ? "segment-new__btn--active" : ""}`}
                 >
                   Todos
                 </button>
@@ -659,11 +738,7 @@ export function PaymentsClient({
                   <button
                     key={m.value}
                     onClick={() => setFilterMethod(m.value)}
-                    className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
-                      filterMethod === m.value
-                        ? "bg-brand-600 border-brand-600 text-white"
-                        : "border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white"
-                    }`}
+                    className={`segment-new__btn ${filterMethod === m.value ? "segment-new__btn--active" : ""}`}
                   >
                     {m.icon} {m.label}
                   </button>
@@ -673,35 +748,48 @@ export function PaymentsClient({
           </div>
 
           {/* Table */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm">
+          <CardNew noPad>
             {filteredPayments.length === 0 ? (
-              <div className="py-16 text-center text-slate-500 dark:text-slate-400">Sin registros con esos filtros</div>
+              <div style={{ padding: "60px 0", textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
+                Sin registros con esos filtros
+              </div>
             ) : (
-              <table className="w-full text-sm">
+              <table className="table-new">
                 <thead>
-                  <tr className="text-xs text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-                    <th className="px-5 py-3 text-left font-semibold">Clinica</th>
-                    <th className="px-5 py-3 text-left font-semibold">Monto</th>
-                    <th className="px-5 py-3 text-left font-semibold">Metodo</th>
-                    <th className="px-5 py-3 text-left font-semibold">Estado</th>
-                    <th className="px-5 py-3 text-left font-semibold">Referencia</th>
-                    <th className="px-5 py-3 text-left font-semibold">Fecha</th>
+                  <tr>
+                    <th>Clínica</th>
+                    <th>Monto</th>
+                    <th>Método</th>
+                    <th>Estado</th>
+                    <th>Referencia</th>
+                    <th>Fecha</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredPayments.map((inv: any) => (
-                    <tr key={inv.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                      <td className="px-5 py-3">
-                        <div className="font-semibold text-slate-900 dark:text-white">{inv.clinic?.name ?? "—"}</div>
+                    <tr key={inv.id}>
+                      <td style={{ color: "var(--text-1)", fontWeight: 500 }}>
+                        {inv.clinic?.name ?? "—"}
                       </td>
-                      <td className="px-5 py-3 text-emerald-600 dark:text-emerald-400 font-bold">{formatCurrency(inv.amount)}</td>
-                      <td className="px-5 py-3 text-slate-600 dark:text-slate-400">{methodBadge(inv.method)}</td>
-                      <td className="px-5 py-3">{statusBadge(inv.status)}</td>
-                      <td className="px-5 py-3 text-slate-500 dark:text-slate-400 text-xs font-mono">{inv.reference || "—"}</td>
-                      <td className="px-5 py-3 text-slate-500 dark:text-slate-400 text-xs">
-                        <div className="flex items-center gap-2">
-                          <span>{fmtDate(inv.createdAt)}</span>
-                          <Link href={`/admin/payments/${inv.id}/cfdi`} className="text-brand-500 hover:underline font-bold">CFDI</Link>
+                      <td className="mono" style={{ color: "var(--success)", fontWeight: 600 }}>
+                        {fmtMXN(inv.amount)}
+                      </td>
+                      <td style={{ color: "var(--text-2)" }}>{methodBadge(inv.method)}</td>
+                      <td>{statusBadge(inv.status)}</td>
+                      <td className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>
+                        {inv.reference || "—"}
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>
+                            {fmtDate(inv.createdAt)}
+                          </span>
+                          <Link
+                            href={`/admin/payments/${inv.id}/cfdi`}
+                            style={{ fontSize: 11, fontWeight: 600, color: "#c4b5fd", textDecoration: "none" }}
+                          >
+                            CFDI
+                          </Link>
                         </div>
                       </td>
                     </tr>
@@ -709,104 +797,122 @@ export function PaymentsClient({
                 </tbody>
               </table>
             )}
-          </div>
+          </CardNew>
         </div>
       )}
 
       {/* ── Tab: Overdue Clinics ────────────────────────────────────────── */}
       {tab === "overdue" && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm">
+        <CardNew noPad>
           {overdue.length === 0 ? (
-            <div className="py-16 text-center">
-              <div className="text-4xl mb-3">&#127881;</div>
-              <div className="text-slate-500 dark:text-slate-400 font-medium">No hay clinicas vencidas</div>
-              <div className="text-xs text-slate-400 mt-1">Todas las clinicas tienen suscripcion activa o trial vigente</div>
+            <div style={{ padding: "60px 0", textAlign: "center" }}>
+              <CheckCircle2 size={32} style={{ color: "var(--success)", margin: "0 auto 10px" }} />
+              <div style={{ color: "var(--text-2)", fontSize: 13, fontWeight: 500 }}>
+                No hay clínicas vencidas
+              </div>
+              <div style={{ color: "var(--text-3)", fontSize: 11, marginTop: 4 }}>
+                Todas las clínicas tienen suscripción activa o trial vigente
+              </div>
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <table className="table-new">
               <thead>
-                <tr className="text-xs text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-                  <th className="px-5 py-3 text-left font-semibold">Clinica</th>
-                  <th className="px-5 py-3 text-left font-semibold">Plan</th>
-                  <th className="px-5 py-3 text-left font-semibold">Email</th>
-                  <th className="px-5 py-3 text-left font-semibold">Vencio</th>
-                  <th className="px-5 py-3 text-right font-semibold">Acciones</th>
+                <tr>
+                  <th>Clínica</th>
+                  <th>Plan</th>
+                  <th>Email</th>
+                  <th>Venció</th>
+                  <th style={{ textAlign: "right" }}>Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {overdue.map((clinic: any) => (
-                  <tr key={clinic.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                    <td className="px-5 py-3 font-semibold text-slate-900 dark:text-white">{clinic.name}</td>
-                    <td className="px-5 py-3">
-                      <span className="text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                  <tr key={clinic.id}>
+                    <td style={{ color: "var(--text-1)", fontWeight: 500 }}>{clinic.name}</td>
+                    <td>
+                      <BadgeNew tone={clinic.plan === "CLINIC" ? "brand" : clinic.plan === "PRO" ? "info" : "neutral"}>
                         {clinic.plan}
-                      </span>
+                      </BadgeNew>
                     </td>
-                    <td className="px-5 py-3 text-slate-500 dark:text-slate-400 text-xs">{clinic.email || "—"}</td>
-                    <td className="px-5 py-3 text-red-500 dark:text-red-400 text-xs font-medium">
+                    <td style={{ color: "var(--text-3)", fontSize: 11 }}>{clinic.email || "—"}</td>
+                    <td className="mono" style={{ color: "var(--danger)", fontSize: 11, fontWeight: 500 }}>
                       {clinic.trialEndsAt ? fmtDate(clinic.trialEndsAt) : "—"}
                     </td>
-                    <td className="px-5 py-3 text-right">
-                      <div className="flex gap-2 justify-end">
-                        {activateClinicId === clinic.id ? (
-                          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
-                            <select
-                              value={activatePlan}
-                              onChange={e => setActivatePlan(e.target.value)}
-                              className="bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-1 text-xs font-medium text-slate-900 dark:text-white"
-                            >
-                              <option value="BASIC">BASIC</option>
-                              <option value="PRO">PRO</option>
-                              <option value="CLINIC">CLINIC</option>
-                            </select>
-                            <select
-                              value={activateMonths}
-                              onChange={e => setActivateMonths(Number(e.target.value))}
-                              className="bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-1 text-xs font-medium text-slate-900 dark:text-white"
-                            >
-                              <option value={1}>1 mes</option>
-                              <option value={3}>3 meses</option>
-                              <option value={6}>6 meses</option>
-                              <option value={12}>12 meses</option>
-                            </select>
-                            <button
-                              onClick={() => activateClinic(clinic.id)}
-                              disabled={loading === clinic.id}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors"
-                            >
-                              {loading === clinic.id ? "..." : "Activar"}
-                            </button>
-                            <button
-                              onClick={() => setActivateClinicId(null)}
-                              className="text-slate-400 hover:text-slate-600 text-xs"
-                            >
-                              &times;
-                            </button>
-                          </div>
-                        ) : (
-                          <>
-                            <button
-                              onClick={() => { setActivateClinicId(clinic.id); setActivatePlan(clinic.plan || "PRO"); }}
-                              className="bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors"
-                            >
-                              Activar manualmente
-                            </button>
-                            <button
-                              onClick={() => toast.success("Funcion de recordatorio en desarrollo")}
-                              className="border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                            >
-                              Enviar recordatorio
-                            </button>
-                          </>
-                        )}
-                      </div>
+                    <td style={{ textAlign: "right" }}>
+                      {activateClinicId === clinic.id ? (
+                        <div
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                            padding: 8,
+                            background: "var(--bg-elev)",
+                            border: "1px solid var(--border-soft)",
+                            borderRadius: 8,
+                          }}
+                        >
+                          <select
+                            className="input-new"
+                            style={{ fontSize: 11, padding: "4px 6px", height: "auto", width: "auto" }}
+                            value={activatePlan}
+                            onChange={e => setActivatePlan(e.target.value)}
+                          >
+                            <option value="BASIC">BASIC</option>
+                            <option value="PRO">PRO</option>
+                            <option value="CLINIC">CLINIC</option>
+                          </select>
+                          <select
+                            className="input-new"
+                            style={{ fontSize: 11, padding: "4px 6px", height: "auto", width: "auto" }}
+                            value={activateMonths}
+                            onChange={e => setActivateMonths(Number(e.target.value))}
+                          >
+                            <option value={1}>1 mes</option>
+                            <option value={3}>3 meses</option>
+                            <option value={6}>6 meses</option>
+                            <option value={12}>12 meses</option>
+                          </select>
+                          <ButtonNew
+                            size="sm"
+                            variant="primary"
+                            onClick={() => activateClinic(clinic.id)}
+                            disabled={loading === clinic.id}
+                          >
+                            {loading === clinic.id ? "…" : "Activar"}
+                          </ButtonNew>
+                          <ButtonNew
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setActivateClinicId(null)}
+                          >
+                            <X size={12} />
+                          </ButtonNew>
+                        </div>
+                      ) : (
+                        <div style={{ display: "inline-flex", gap: 6 }}>
+                          <ButtonNew
+                            size="sm"
+                            variant="primary"
+                            onClick={() => { setActivateClinicId(clinic.id); setActivatePlan(clinic.plan || "PRO"); }}
+                          >
+                            Activar manualmente
+                          </ButtonNew>
+                          <ButtonNew
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => toast.success("Función de recordatorio en desarrollo")}
+                          >
+                            Enviar recordatorio
+                          </ButtonNew>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
-        </div>
+        </CardNew>
       )}
     </div>
   );

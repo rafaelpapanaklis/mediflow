@@ -20,22 +20,51 @@ export default async function PaymentsPage() {
   } catch (err: any) {
     console.error("[admin/payments] render failed:", err);
     return (
-      <div className="max-w-3xl mx-auto px-6 py-12">
-        <div className="bg-red-950/50 border border-red-800 rounded-2xl p-6">
-          <h1 className="text-xl font-bold text-red-400 mb-3">Error al cargar /admin/payments</h1>
-          <p className="text-sm text-red-300 mb-4">{err?.message ?? "Error desconocido"}</p>
+      <div style={{ maxWidth: 720, margin: "0 auto", padding: "48px 24px" }}>
+        <div
+          style={{
+            background: "rgba(239,68,68,0.08)",
+            border: "1px solid rgba(239,68,68,0.35)",
+            borderRadius: 12,
+            padding: 22,
+          }}
+        >
+          <h1 style={{ fontSize: 18, fontWeight: 600, color: "var(--danger)", margin: 0, marginBottom: 10 }}>
+            Error al cargar /admin/payments
+          </h1>
+          <p style={{ fontSize: 13, color: "var(--text-2)", marginBottom: 14 }}>
+            {err?.message ?? "Error desconocido"}
+          </p>
           {String(err?.message ?? "").match(/column|relation|does not exist/i) && (
-            <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 text-sm text-slate-300 space-y-2">
-              <p className="font-bold">La base de datos necesita migraciones pendientes.</p>
-              <p className="text-slate-400">Aplica estos SQL en Supabase → SQL Editor (en orden):</p>
-              <ul className="list-disc list-inside text-xs font-mono text-brand-400">
+            <div
+              style={{
+                background: "var(--bg-elev)",
+                border: "1px solid var(--border-soft)",
+                borderRadius: 10,
+                padding: 14,
+                fontSize: 12,
+                color: "var(--text-2)",
+              }}
+            >
+              <p style={{ fontWeight: 600, margin: 0, marginBottom: 6 }}>
+                La base de datos necesita migraciones pendientes.
+              </p>
+              <p style={{ color: "var(--text-3)", margin: 0, marginBottom: 8 }}>
+                Aplica estos SQL en Supabase → SQL Editor (en orden):
+              </p>
+              <ul className="mono" style={{ fontSize: 11, color: "#c4b5fd", paddingLeft: 18, margin: 0 }}>
                 <li>sql/admin-notes.sql</li>
                 <li>sql/admin-announcements.sql</li>
                 <li>sql/coupons.sql</li>
               </ul>
             </div>
           )}
-          <Link href="/admin" className="inline-block mt-4 text-xs font-bold text-brand-400 hover:underline">← Volver al dashboard</Link>
+          <Link
+            href="/admin"
+            style={{ display: "inline-block", marginTop: 14, fontSize: 12, fontWeight: 600, color: "#c4b5fd", textDecoration: "none" }}
+          >
+            ← Volver al dashboard
+          </Link>
         </div>
       </div>
     );

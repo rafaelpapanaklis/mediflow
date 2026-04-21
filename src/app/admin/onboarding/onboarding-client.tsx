@@ -2,6 +2,13 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { Search, Users, CheckCircle, Clock, XCircle } from "lucide-react";
+import { CardNew }   from "@/components/ui/design-system/card-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { BadgeNew }  from "@/components/ui/design-system/badge-new";
+import { AvatarNew } from "@/components/ui/design-system/avatar-new";
+import { KpiCard }   from "@/components/ui/design-system/kpi-card";
+import { formatRelativeDate } from "@/lib/format";
 
 interface Row {
   id: string;
@@ -17,6 +24,12 @@ interface Row {
 interface Step { id: string; label: string }
 
 type Filter = "all" | "completed" | "in_progress" | "not_started";
+
+function toneFromProgress(completed: number, total: number): "success" | "warning" | "danger" | "neutral" {
+  if (completed === total) return "success";
+  if (completed === 0)     return "danger";
+  return "warning";
+}
 
 export function OnboardingClient({ rows, steps }: { rows: Row[]; steps: Step[] }) {
   const [filter, setFilter] = useState<Filter>("all");
@@ -42,120 +55,146 @@ export function OnboardingClient({ rows, steps }: { rows: Row[]; steps: Step[] }
     return { completed, inProgress, notStarted };
   }, [rows]);
 
+  const filters: { k: Filter; l: string; count: number }[] = [
+    { k: "all",         l: "Todos",        count: rows.length },
+    { k: "completed",   l: "Completados",  count: stats.completed },
+    { k: "in_progress", l: "En progreso",  count: stats.inProgress },
+    { k: "not_started", l: "Sin empezar",  count: stats.notStarted },
+  ];
+
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-extrabold">Onboarding</h1>
-        <p className="text-slate-400 text-sm">Progreso de configuración inicial por clínica. Detecta dónde se atoran los nuevos usuarios.</p>
+    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
+      {/* Header */}
+      <div style={{ marginBottom: 22 }}>
+        <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+          Dashboard de onboarding
+        </h1>
+        <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, margin: 0 }}>
+          Progreso de configuración inicial por clínica. Detecta dónde se atoran los nuevos usuarios.
+        </p>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
-          <div className="text-xs text-slate-400 font-semibold uppercase mb-2">Total clínicas</div>
-          <div className="text-3xl font-extrabold">{rows.length}</div>
-        </div>
-        <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
-          <div className="text-xs text-slate-400 font-semibold uppercase mb-2">Completaron</div>
-          <div className="text-3xl font-extrabold text-emerald-400">{stats.completed}</div>
-        </div>
-        <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
-          <div className="text-xs text-slate-400 font-semibold uppercase mb-2">En progreso</div>
-          <div className="text-3xl font-extrabold text-amber-400">{stats.inProgress}</div>
-        </div>
-        <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
-          <div className="text-xs text-slate-400 font-semibold uppercase mb-2">Sin empezar</div>
-          <div className="text-3xl font-extrabold text-rose-400">{stats.notStarted}</div>
-        </div>
+      {/* KPI row */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 14, marginBottom: 20 }}>
+        <KpiCard label="Total clínicas"  value={String(rows.length)}       icon={Users} />
+        <KpiCard label="Completadas"     value={String(stats.completed)}   icon={CheckCircle}
+          delta={{ value: `${rows.length ? Math.round((stats.completed / rows.length) * 100) : 0}% del total`, direction: "up" }} />
+        <KpiCard label="En progreso"     value={String(stats.inProgress)}  icon={Clock} />
+        <KpiCard label="Sin empezar"     value={String(stats.notStarted)}  icon={XCircle}
+          delta={{ value: "Abandonadas", direction: "down" }} />
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex gap-1 bg-slate-900 border border-slate-700 rounded-xl p-1">
-          {([
-            { k: "all",          l: "Todos" },
-            { k: "completed",    l: "Completados" },
-            { k: "in_progress",  l: "En progreso" },
-            { k: "not_started",  l: "Sin empezar" },
-          ] as { k: Filter; l: string }[]).map(f => (
+      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+        <div className="search-field" style={{ position: "relative", flex: "1 1 280px", maxWidth: 360 }}>
+          <Search
+            size={14}
+            style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-3)", pointerEvents: "none" }}
+          />
+          <input
+            className="input-new"
+            style={{ paddingLeft: 34 }}
+            placeholder="Buscar clínica…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="segment-new" style={{ display: "inline-flex", gap: 2 }}>
+          {filters.map(f => (
             <button
               key={f.k}
               onClick={() => setFilter(f.k)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                filter === f.k ? "bg-brand-600 text-white" : "text-slate-400 hover:text-white"
-              }`}
+              className={`segment-new__btn ${filter === f.k ? "segment-new__btn--active" : ""}`}
             >
               {f.l}
+              <span style={{ marginLeft: 6, opacity: 0.6, fontSize: 11 }}>{f.count}</span>
             </button>
           ))}
         </div>
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar clínica…"
-          className="bg-slate-900 border border-slate-700 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-600/50"
-        />
       </div>
 
-      {/* Table */}
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden">
-        {filtered.length === 0 ? (
-          <div className="py-10 text-center text-slate-500 text-sm">Sin resultados</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-700 text-xs text-slate-400">
-                <th className="px-5 py-3 text-left font-bold uppercase tracking-wide">Clínica</th>
-                <th className="px-5 py-3 text-left font-bold uppercase tracking-wide">Progreso</th>
-                <th className="px-5 py-3 text-left font-bold uppercase tracking-wide">Atorado en</th>
-                <th className="px-5 py-3 text-left font-bold uppercase tracking-wide">Días desde registro</th>
-                <th className="px-5 py-3 text-right font-bold uppercase tracking-wide">Ver</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(r => {
-                const pct = Math.round((r.completedSteps / r.totalSteps) * 100);
-                const isStale = r.daysSinceSignup > 7 && r.completedSteps < r.totalSteps;
-                return (
-                  <tr key={r.id} className="border-b border-slate-800 hover:bg-slate-800/40">
-                    <td className="px-5 py-3">
-                      <div className="font-semibold text-white">{r.name}</div>
-                      {r.email && <div className="text-xs text-slate-500">{r.email}</div>}
-                    </td>
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-32 h-2 bg-slate-800 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full ${pct === 100 ? "bg-emerald-500" : pct === 0 ? "bg-rose-500" : "bg-amber-500"}`}
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                        <span className="text-xs font-bold text-slate-300">{r.completedSteps}/{r.totalSteps}</span>
+      {/* Grid of clinic cards */}
+      {filtered.length === 0 ? (
+        <CardNew>
+          <div style={{ padding: "40px 0", textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
+            Sin resultados
+          </div>
+        </CardNew>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
+          {filtered.map(r => {
+            const pct     = Math.round((r.completedSteps / r.totalSteps) * 100);
+            const tone    = toneFromProgress(r.completedSteps, r.totalSteps);
+            const isStale = r.daysSinceSignup > 7 && r.completedSteps < r.totalSteps;
+            const barColor =
+              pct === 100 ? "var(--success)" :
+              pct === 0   ? "var(--danger)"  : "var(--warning)";
+
+            return (
+              <CardNew key={r.id}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                  <AvatarNew name={r.name} size="sm" />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <Link
+                      href={`/admin/clinics/${r.id}`}
+                      style={{ fontSize: 13, fontWeight: 600, color: "#c4b5fd", textDecoration: "none", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                    >
+                      {r.name}
+                    </Link>
+                    {r.email && (
+                      <div style={{ fontSize: 11, color: "var(--text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {r.email}
                       </div>
-                    </td>
-                    <td className="px-5 py-3 text-slate-300 text-xs">
-                      {r.stuckOn ?? <span className="text-emerald-400 font-bold">Completado ✓</span>}
-                    </td>
-                    <td className={`px-5 py-3 text-xs ${isStale ? "text-rose-400 font-bold" : "text-slate-400"}`}>
-                      {r.daysSinceSignup} días
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <Link
-                        href={`/admin/clinics/${r.id}`}
-                        className="text-xs font-bold text-brand-400 hover:underline"
-                      >
-                        Ver detalle →
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
+                    )}
+                  </div>
+                  <BadgeNew tone={tone}>{r.completedSteps}/{r.totalSteps}</BadgeNew>
+                </div>
 
-      <div className="text-xs text-slate-500">
+                <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden", marginBottom: 8 }}>
+                  <div style={{ height: "100%", width: `${pct}%`, background: barColor, transition: "width 0.3s" }} />
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-3)", marginBottom: 4 }}>
+                  <span>
+                    Paso: <span style={{ color: "var(--text-1)" }}>{r.stuckOn ?? "Completado"}</span>
+                  </span>
+                  <span className="mono">{formatRelativeDate(r.createdAt)}</span>
+                </div>
+
+                {isStale && (
+                  <div style={{ fontSize: 10, color: "var(--danger)", fontWeight: 600, marginBottom: 6 }}>
+                    {r.daysSinceSignup} días sin avanzar
+                  </div>
+                )}
+
+                <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+                  {r.email ? (
+                    <a
+                      href={`mailto:${r.email}?subject=Tu%20onboarding%20en%20MediFlow&body=Hola,%20notamos%20que%20no%20has%20completado%20la%20configuración%20inicial.%20¿Podemos%20ayudarte?`}
+                      style={{ flex: 1, textDecoration: "none" }}
+                    >
+                      <ButtonNew size="sm" variant="secondary" style={{ width: "100%" }}>
+                        Contactar
+                      </ButtonNew>
+                    </a>
+                  ) : (
+                    <ButtonNew size="sm" variant="secondary" disabled style={{ flex: 1 }}>
+                      Contactar
+                    </ButtonNew>
+                  )}
+                  <Link href={`/admin/clinics/${r.id}`} style={{ flex: 1, textDecoration: "none" }}>
+                    <ButtonNew size="sm" variant="ghost" style={{ width: "100%" }}>
+                      Ver
+                    </ButtonNew>
+                  </Link>
+                </div>
+              </CardNew>
+            );
+          })}
+        </div>
+      )}
+
+      <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 20 }}>
         Pasos tracked: {steps.map(s => s.label).join(" · ")}
       </div>
     </div>

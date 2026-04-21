@@ -2,7 +2,12 @@
 
 import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { Trash2, Plus, Tag, Copy } from "lucide-react";
+import { Trash2, Plus, Copy, X, Ticket, CheckCircle2, XCircle } from "lucide-react";
+import { CardNew }   from "@/components/ui/design-system/card-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { BadgeNew }  from "@/components/ui/design-system/badge-new";
+import { KpiCard }   from "@/components/ui/design-system/kpi-card";
+import { fmtMXN, formatRelativeDate } from "@/lib/format";
 
 interface Coupon {
   id: string;
@@ -21,6 +26,7 @@ interface Coupon {
 export function CouponsClient({ initial }: { initial: Coupon[] }) {
   const [list, setList] = useState<Coupon[]>(initial);
   const [saving, setSaving] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({
     code: "",
     type: "percentage" as "percentage" | "fixed",
@@ -35,6 +41,11 @@ export function CouponsClient({ initial }: { initial: Coupon[] }) {
     expired:  list.filter(c => c.validUntil && new Date(c.validUntil) < new Date()).length,
     redeemed: list.reduce((s, c) => s + c.usedCount, 0),
   }), [list]);
+
+  function openCreate() {
+    setForm({ code: "", type: "percentage", value: "", appliesTo: "all", maxUses: "", validUntil: "" });
+    setShowModal(true);
+  }
 
   async function create() {
     if (!form.code.trim()) { toast.error("Código requerido"); return; }
@@ -59,6 +70,7 @@ export function CouponsClient({ initial }: { initial: Coupon[] }) {
       setList(prev => [created, ...prev]);
       setForm({ code: "", type: "percentage", value: "", appliesTo: "all", maxUses: "", validUntil: "" });
       toast.success("Cupón creado");
+      setShowModal(false);
     } catch (e: any) { toast.error(e.message); }
     finally { setSaving(false); }
   }
@@ -92,148 +104,116 @@ export function CouponsClient({ initial }: { initial: Coupon[] }) {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-extrabold">Cupones y descuentos</h1>
-        <p className="text-slate-400 text-sm">Aplícalos al registrar pagos de suscripción en /admin/payments.</p>
+    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 22, flexWrap: "wrap" }}>
+        <div>
+          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+            Cupones y descuentos
+          </h1>
+          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, margin: 0 }}>
+            Aplícalos al registrar pagos de suscripción en /admin/payments.
+          </p>
+        </div>
+        <ButtonNew variant="primary" icon={<Plus size={14} />} onClick={openCreate}>
+          Nuevo cupón
+        </ButtonNew>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
-          <div className="text-xs text-slate-400 font-semibold uppercase mb-2">Activos</div>
-          <div className="text-3xl font-extrabold text-emerald-400">{stats.active}</div>
-        </div>
-        <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
-          <div className="text-xs text-slate-400 font-semibold uppercase mb-2">Canjeados total</div>
-          <div className="text-3xl font-extrabold text-brand-400">{stats.redeemed}</div>
-        </div>
-        <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
-          <div className="text-xs text-slate-400 font-semibold uppercase mb-2">Expirados</div>
-          <div className="text-3xl font-extrabold text-slate-400">{stats.expired}</div>
-        </div>
+      {/* KPI row */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 14, marginBottom: 20 }}>
+        <KpiCard label="Activos" value={String(stats.active)} icon={CheckCircle2}
+          delta={{ value: `${list.length} total`, direction: "up" }} />
+        <KpiCard label="Canjeados" value={String(stats.redeemed)} icon={Ticket}
+          delta={{ value: "Total acumulado", direction: "up" }} />
+        <KpiCard label="Expirados" value={String(stats.expired)} icon={XCircle}
+          delta={{ value: "Sin uso", direction: "down" }} />
       </div>
 
-      {/* Form */}
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5 space-y-3">
-        <h2 className="text-sm font-bold">Nuevo cupón</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <input
-            placeholder="LANZAMIENTO20"
-            value={form.code}
-            onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))}
-            className="bg-slate-800 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 font-mono uppercase"
-          />
-          <select
-            value={form.type}
-            onChange={e => setForm(f => ({ ...f, type: e.target.value as any }))}
-            className="bg-slate-800 border border-slate-600 text-white text-sm rounded-lg px-3 py-2"
-          >
-            <option value="percentage">% descuento</option>
-            <option value="fixed">$ fijo</option>
-          </select>
-          <input
-            type="number"
-            placeholder={form.type === "percentage" ? "20" : "100"}
-            value={form.value}
-            onChange={e => setForm(f => ({ ...f, value: e.target.value }))}
-            className="bg-slate-800 border border-slate-600 text-white text-sm rounded-lg px-3 py-2"
-          />
-          <select
-            value={form.appliesTo}
-            onChange={e => setForm(f => ({ ...f, appliesTo: e.target.value as any }))}
-            className="bg-slate-800 border border-slate-600 text-white text-sm rounded-lg px-3 py-2"
-          >
-            <option value="all">Todos los planes</option>
-            <option value="BASIC">Solo BASIC</option>
-            <option value="PRO">Solo PRO</option>
-            <option value="CLINIC">Solo CLINIC</option>
-          </select>
-          <input
-            type="number"
-            placeholder="Usos máx"
-            value={form.maxUses}
-            onChange={e => setForm(f => ({ ...f, maxUses: e.target.value }))}
-            className="bg-slate-800 border border-slate-600 text-white text-sm rounded-lg px-3 py-2"
-          />
-          <input
-            type="date"
-            value={form.validUntil}
-            onChange={e => setForm(f => ({ ...f, validUntil: e.target.value }))}
-            className="bg-slate-800 border border-slate-600 text-white text-sm rounded-lg px-3 py-2"
-          />
-        </div>
-        <button
-          onClick={create}
-          disabled={saving}
-          className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-bold px-5 py-2 rounded-lg text-sm disabled:opacity-50"
-        >
-          <Plus className="w-4 h-4" />
-          {saving ? "Creando…" : "Crear cupón"}
-        </button>
-      </div>
-
-      {/* List */}
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-700">
-          <h2 className="font-bold text-sm">Cupones ({list.length})</h2>
-        </div>
+      {/* Table */}
+      <CardNew noPad title={`Cupones (${list.length})`}>
         {list.length === 0 ? (
-          <div className="py-10 text-center text-slate-500 text-sm">Sin cupones</div>
+          <div style={{ padding: "40px 18px", textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
+            Sin cupones
+          </div>
         ) : (
-          <table className="w-full text-sm">
+          <table className="table-new">
             <thead>
-              <tr className="border-b border-slate-700 text-xs text-slate-400">
-                {["Código", "Descuento", "Aplica a", "Usos", "Válido hasta", "Estado", ""].map(h => (
-                  <th key={h} className="px-5 py-3 text-left font-bold uppercase tracking-wide">{h}</th>
-                ))}
+              <tr>
+                <th>Código</th>
+                <th>Tipo</th>
+                <th>Valor</th>
+                <th>Usos</th>
+                <th>Válido hasta</th>
+                <th>Aplica</th>
+                <th>Estado</th>
+                <th style={{ textAlign: "right" }}>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {list.map(c => {
-                const expired = c.validUntil && new Date(c.validUntil) < new Date();
+                const expired = !!(c.validUntil && new Date(c.validUntil) < new Date());
+                const isActive = c.active && !expired;
                 return (
-                  <tr key={c.id} className="border-b border-slate-800 hover:bg-slate-800/40">
-                    <td className="px-5 py-3">
-                      <button onClick={() => copyCode(c.code)} className="inline-flex items-center gap-2 group">
-                        <Tag className="w-3 h-3 text-brand-400" />
-                        <span className="font-mono font-bold text-brand-400">{c.code}</span>
-                        <Copy className="w-3 h-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </button>
-                    </td>
-                    <td className="px-5 py-3 font-semibold">
-                      {c.type === "percentage" ? `${c.value}%` : `$${c.value.toFixed(2)} MXN`}
-                    </td>
-                    <td className="px-5 py-3 text-slate-300 text-xs">
-                      {c.appliesTo === "all" ? "Todos los planes" : `Solo ${c.appliesTo}`}
-                    </td>
-                    <td className="px-5 py-3 text-slate-300 text-xs">
-                      {c.usedCount}{c.maxUses != null ? ` / ${c.maxUses}` : ""}
-                    </td>
-                    <td className="px-5 py-3 text-slate-400 text-xs">
-                      {c.validUntil ? new Date(c.validUntil).toLocaleDateString("es-MX") : "Sin fecha"}
-                    </td>
-                    <td className="px-5 py-3">
+                  <tr key={c.id}>
+                    <td>
                       <button
-                        onClick={() => toggleActive(c)}
-                        className={`text-xs font-bold px-2 py-0.5 rounded-full border ${
-                          expired
-                            ? "bg-slate-800 text-slate-400 border-slate-700"
-                            : c.active
-                              ? "bg-emerald-900/50 text-emerald-400 border-emerald-700"
-                              : "bg-slate-800 text-slate-400 border-slate-700"
-                        }`}
+                        type="button"
+                        onClick={() => copyCode(c.code)}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 8,
+                          background: "transparent",
+                          border: "none",
+                          cursor: "pointer",
+                          padding: 0,
+                        }}
                       >
-                        {expired ? "Expirado" : c.active ? "Activo" : "Pausado"}
+                        <span className="mono" style={{ fontWeight: 600, color: "var(--brand)" }}>{c.code}</span>
+                        <Copy size={12} style={{ color: "var(--text-3)" }} />
                       </button>
                     </td>
-                    <td className="px-5 py-3 text-right">
-                      <button
-                        onClick={() => remove(c.id)}
-                        className="p-1.5 rounded-lg hover:bg-rose-900/40 text-slate-400 hover:text-rose-400"
-                        aria-label="Eliminar"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                    <td>
+                      <BadgeNew tone={c.type === "percentage" ? "info" : "brand"}>
+                        {c.type === "percentage" ? "%" : "$ fijo"}
+                      </BadgeNew>
+                    </td>
+                    <td className="mono" style={{ color: "var(--text-1)", fontWeight: 500 }}>
+                      {c.type === "percentage" ? `${c.value}%` : fmtMXN(c.value)}
+                    </td>
+                    <td className="mono" style={{ color: "var(--text-2)" }}>
+                      {c.usedCount}{c.maxUses != null ? ` / ${c.maxUses}` : " / ∞"}
+                    </td>
+                    <td className="mono" style={{ color: "var(--text-3)", fontSize: 12 }}>
+                      {c.validUntil ? formatRelativeDate(c.validUntil) : "Sin fin"}
+                    </td>
+                    <td>
+                      <BadgeNew tone="neutral">
+                        {c.appliesTo === "all" ? "Todos" : c.appliesTo}
+                      </BadgeNew>
+                    </td>
+                    <td>
+                      <BadgeNew tone={expired ? "neutral" : isActive ? "success" : "warning"} dot>
+                        {expired ? "Expirado" : isActive ? "Activo" : "Pausado"}
+                      </BadgeNew>
+                    </td>
+                    <td>
+                      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                        <ButtonNew size="sm" variant="ghost" onClick={() => toggleActive(c)}>
+                          {c.active ? "Pausar" : "Activar"}
+                        </ButtonNew>
+                        <ButtonNew
+                          size="sm"
+                          variant="ghost"
+                          icon={<Trash2 size={13} />}
+                          onClick={() => remove(c.id)}
+                          style={{ color: "var(--danger)" }}
+                          aria-label="Eliminar"
+                        >
+                          Eliminar
+                        </ButtonNew>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -241,7 +221,128 @@ export function CouponsClient({ initial }: { initial: Coupon[] }) {
             </tbody>
           </table>
         )}
-      </div>
+      </CardNew>
+
+      {/* Create modal */}
+      {showModal && (
+        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal__header">
+              <div className="modal__title">Nuevo cupón</div>
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                className="btn-new btn-new--ghost btn-new--sm"
+                aria-label="Cerrar"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            <div className="modal__body">
+              <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                <div>
+                  <div className="form-section__title">
+                    Código y descuento
+                    <span className="form-section__rule" />
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div className="field-new">
+                      <label className="field-new__label">
+                        Código <span className="req">*</span>
+                      </label>
+                      <input
+                        className="input-new mono"
+                        placeholder="LANZAMIENTO20"
+                        value={form.code}
+                        onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))}
+                        style={{ textTransform: "uppercase" }}
+                      />
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      <div className="field-new">
+                        <label className="field-new__label">Tipo</label>
+                        <select
+                          className="input-new"
+                          value={form.type}
+                          onChange={e => setForm(f => ({ ...f, type: e.target.value as any }))}
+                        >
+                          <option value="percentage">% descuento</option>
+                          <option value="fixed">$ fijo</option>
+                        </select>
+                      </div>
+                      <div className="field-new">
+                        <label className="field-new__label">
+                          Valor <span className="req">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          className="input-new"
+                          placeholder={form.type === "percentage" ? "20" : "100"}
+                          value={form.value}
+                          onChange={e => setForm(f => ({ ...f, value: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="form-section__title">
+                    Restricciones
+                    <span className="form-section__rule" />
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div className="field-new">
+                      <label className="field-new__label">Aplica a</label>
+                      <select
+                        className="input-new"
+                        value={form.appliesTo}
+                        onChange={e => setForm(f => ({ ...f, appliesTo: e.target.value as any }))}
+                      >
+                        <option value="all">Todos los planes</option>
+                        <option value="BASIC">Solo BASIC</option>
+                        <option value="PRO">Solo PRO</option>
+                        <option value="CLINIC">Solo CLINIC</option>
+                      </select>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      <div className="field-new">
+                        <label className="field-new__label">Usos máximos</label>
+                        <input
+                          type="number"
+                          className="input-new"
+                          placeholder="Ilimitado"
+                          value={form.maxUses}
+                          onChange={e => setForm(f => ({ ...f, maxUses: e.target.value }))}
+                        />
+                      </div>
+                      <div className="field-new">
+                        <label className="field-new__label">Válido hasta</label>
+                        <input
+                          type="date"
+                          className="input-new"
+                          value={form.validUntil}
+                          onChange={e => setForm(f => ({ ...f, validUntil: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="modal__footer">
+              <ButtonNew variant="ghost" onClick={() => setShowModal(false)}>
+                Cancelar
+              </ButtonNew>
+              <ButtonNew variant="primary" onClick={create} disabled={saving}>
+                {saving ? "Creando…" : "Crear cupón"}
+              </ButtonNew>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

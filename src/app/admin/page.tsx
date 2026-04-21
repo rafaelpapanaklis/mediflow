@@ -1,8 +1,18 @@
 export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import Link from "next/link";
+import {
+  DollarSign, TrendingUp, CheckCircle, Building2,
+  AlertTriangle, Clock, XCircle, Plus, FileText,
+} from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency } from "@/lib/utils";
+import { formatRelativeDate } from "@/lib/format";
+import { CardNew }   from "@/components/ui/design-system/card-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { BadgeNew }  from "@/components/ui/design-system/badge-new";
+import { AvatarNew } from "@/components/ui/design-system/avatar-new";
+import { KpiCard }   from "@/components/ui/design-system/kpi-card";
 
 export const metadata: Metadata = { title: "Super Admin — MediFlow" };
 
@@ -14,17 +24,35 @@ export default async function AdminPage() {
   } catch (err: any) {
     console.error("Admin page error:", err);
     return (
-      <div className="max-w-3xl mx-auto px-6 py-12">
-        <div className="bg-red-950/50 border border-red-800 rounded-2xl p-6">
-          <h1 className="text-xl font-bold text-red-400 mb-3">Error al cargar el panel admin</h1>
-          <p className="text-sm text-red-300 mb-4">{err.message ?? "Error desconocido"}</p>
-          {err.message?.includes("column") || err.message?.includes("relation") ? (
-            <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 text-sm text-slate-300">
-              <p className="font-bold mb-2">La base de datos necesita ser migrada.</p>
-              <p className="text-slate-400">Ve a tu Supabase SQL Editor y ejecuta el archivo <code className="text-brand-400">sql/migration_multi_category.sql</code></p>
-            </div>
-          ) : null}
-        </div>
+      <div style={{ maxWidth: 820, margin: "0 auto", padding: "48px 24px" }}>
+        <CardNew>
+          <div style={{ padding: 8 }}>
+            <h1 style={{ fontSize: 18, fontWeight: 600, color: "var(--danger)", margin: 0, marginBottom: 12 }}>
+              Error al cargar el panel admin
+            </h1>
+            <p style={{ fontSize: 13, color: "var(--text-3)", marginBottom: 16 }}>
+              {err.message ?? "Error desconocido"}
+            </p>
+            {err.message?.includes("column") || err.message?.includes("relation") ? (
+              <div style={{
+                background: "var(--bg-elev)",
+                border: "1px solid var(--border-soft)",
+                borderRadius: 10,
+                padding: 16,
+                fontSize: 13,
+                color: "var(--text-2)",
+              }}>
+                <p style={{ fontWeight: 600, margin: 0, marginBottom: 6 }}>
+                  La base de datos necesita ser migrada.
+                </p>
+                <p style={{ color: "var(--text-3)", margin: 0 }}>
+                  Ve a tu Supabase SQL Editor y ejecuta el archivo{" "}
+                  <code className="mono" style={{ color: "#c4b5fd" }}>sql/migration_multi_category.sql</code>
+                </p>
+              </div>
+            ) : null}
+          </div>
+        </CardNew>
       </div>
     );
   }
@@ -71,156 +99,274 @@ async function renderAdminDashboard() {
   const pendingPay   = subInvoices.filter(i => i.status==="pending").reduce((s,i)=>s+i.amount,0);
   const growthRate   = newClinicsPrev > 0 ? Math.round(((newClinicsMonth-newClinicsPrev)/newClinicsPrev)*100) : 0;
 
+  const fechaStr = now.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
   return (
-      <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
         <div>
-          <h1 className="text-2xl font-extrabold">Dashboard financiero</h1>
-          <p className="text-slate-400 text-sm">{now.toLocaleDateString("es-MX",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</p>
+          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+            Panel Admin
+          </h1>
+          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, margin: 0, textTransform: "capitalize" }}>
+            Resumen de operaciones — {fechaStr}
+          </p>
         </div>
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
-            <div className="text-xs text-slate-400 font-semibold uppercase tracking-wide mb-2">MRR Activo</div>
-            <div className="text-3xl font-extrabold text-emerald-400">{formatCurrency(mrr)}</div>
-            <div className="text-xs text-slate-500 mt-1">{activeClinics.length} clínicas activas</div>
-          </div>
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
-            <div className="text-xs text-slate-400 font-semibold uppercase tracking-wide mb-2">MRR Potencial</div>
-            <div className="text-3xl font-extrabold text-blue-400">{formatCurrency(mrrPotential)}</div>
-            <div className="text-xs text-slate-500 mt-1">Incluye {trialClinics.length} en trial</div>
-          </div>
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
-            <div className="text-xs text-slate-400 font-semibold uppercase tracking-wide mb-2">Cobrado este mes</div>
-            <div className="text-3xl font-extrabold text-white">{formatCurrency(paidMonth)}</div>
-            <div className="text-xs text-slate-500 mt-1">{formatCurrency(pendingPay)} pendiente</div>
-          </div>
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
-            <div className="text-xs text-slate-400 font-semibold uppercase tracking-wide mb-2">Nuevas este mes</div>
-            <div className="text-3xl font-extrabold text-white">{newClinicsMonth}</div>
-            <div className={`text-xs font-semibold mt-1 ${growthRate >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-              {growthRate >= 0 ? "↑" : "↓"} {Math.abs(growthRate)}% vs mes anterior
-            </div>
-          </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Link href="/admin/payments" style={{ textDecoration: "none" }}>
+            <ButtonNew variant="secondary" icon={<Plus size={14} />}>Registrar pago</ButtonNew>
+          </Link>
+          <Link href="/admin/reports" style={{ textDecoration: "none" }}>
+            <ButtonNew variant="primary" icon={<FileText size={14} />}>Reporte completo</ButtonNew>
+          </Link>
         </div>
+      </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {[
-            {label:"Total clínicas",   value:allClinics.length,    color:"text-white"},
-            {label:"Activas (pagando)",value:activeClinics.length, color:"text-emerald-400"},
-            {label:"En trial",         value:trialClinics.length,  color:"text-blue-400"},
-            {label:"Trial expirado",   value:expiredClinics.length,color:"text-red-400"},
-          ].map(k => (
-            <div key={k.label} className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
-              <div className="text-xs text-slate-400 font-semibold uppercase tracking-wide mb-2">{k.label}</div>
-              <div className={`text-3xl font-extrabold ${k.color}`}>{k.value}</div>
-            </div>
-          ))}
+      {/* KPI principales */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 14, marginBottom: 20 }}>
+        <KpiCard label="MRR Activo" value={formatCurrency(mrr)} icon={DollarSign}
+          delta={{ value: `${activeClinics.length} clínicas`, direction: "up" }} />
+        <KpiCard label="MRR Potencial" value={formatCurrency(mrrPotential)} icon={TrendingUp}
+          delta={{ value: `+${trialClinics.length} en trial`, direction: "up" }} />
+        <KpiCard label="Cobrado este mes" value={formatCurrency(paidMonth)} icon={CheckCircle}
+          delta={{ value: `${formatCurrency(pendingPay)} pendiente`, direction: "down" }} />
+        <KpiCard label="Nuevas clínicas" value={String(newClinicsMonth)} icon={Building2}
+          delta={{ value: `${Math.abs(growthRate)}% vs mes anterior`, direction: growthRate >= 0 ? "up" : "down" }} />
+      </div>
+
+      {/* Contadores secundarios */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 14, marginBottom: 20 }}>
+        <CardNew>
+          <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>
+            Total clínicas
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 600, color: "var(--text-1)" }}>{allClinics.length}</div>
+        </CardNew>
+        <CardNew>
+          <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--success)" }} />
+            Activas
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 600, color: "var(--text-1)" }}>{activeClinics.length}</div>
+        </CardNew>
+        <CardNew>
+          <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--warning)" }} />
+            En trial
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 600, color: "var(--text-1)" }}>{trialClinics.length}</div>
+        </CardNew>
+        <CardNew>
+          <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--danger)" }} />
+            Trial expirado
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 600, color: "var(--text-1)" }}>{expiredClinics.length}</div>
+        </CardNew>
+      </div>
+
+      {/* Alertas críticas */}
+      {(churnRisk.length > 0 || inactiveTrial.length > 0 || expiredClinics.length > 0) && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 14, marginBottom: 20 }}>
+          <CardNew
+            title="Riesgo de churn"
+            sub="Activas sin login 7+ días"
+            action={<AlertTriangle size={16} style={{ color: "var(--danger)" }} />}
+          >
+            {churnRisk.length === 0 ? (
+              <div style={{ fontSize: 13, color: "var(--text-3)", padding: "8px 0" }}>Sin riesgo actual</div>
+            ) : (
+              <div>
+                {churnRisk.slice(0, 5).map(c => (
+                  <div key={c.id} className="list-row" style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0" }}>
+                    <AvatarNew name={c.name} size="sm" />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, color: "var(--text-1)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {c.name}
+                      </div>
+                    </div>
+                    <span className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>
+                      {formatRelativeDate(c.users[0]?.lastLogin)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardNew>
+
+          <CardNew
+            title="Trial inactivo"
+            sub="Nunca usaron la app"
+            action={<Clock size={16} style={{ color: "var(--warning)" }} />}
+          >
+            {inactiveTrial.length === 0 ? (
+              <div style={{ fontSize: 13, color: "var(--text-3)", padding: "8px 0" }}>Todos activos</div>
+            ) : (
+              <div>
+                {inactiveTrial.slice(0, 5).map(c => (
+                  <div key={c.id} className="list-row" style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0" }}>
+                    <AvatarNew name={c.name} size="sm" />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, color: "var(--text-1)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {c.name}
+                      </div>
+                    </div>
+                    <span className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>
+                      {formatRelativeDate(c.users[0]?.lastLogin)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardNew>
+
+          <CardNew
+            title="Trial expirado"
+            sub="No convirtieron"
+            action={<XCircle size={16} style={{ color: "var(--text-3)" }} />}
+          >
+            {expiredClinics.length === 0 ? (
+              <div style={{ fontSize: 13, color: "var(--text-3)", padding: "8px 0" }}>Sin expirados</div>
+            ) : (
+              <div>
+                {expiredClinics.slice(0, 5).map(c => (
+                  <div key={c.id} className="list-row" style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0" }}>
+                    <AvatarNew name={c.name} size="sm" />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, color: "var(--text-1)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {c.name}
+                      </div>
+                    </div>
+                    <span className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>
+                      {formatRelativeDate(c.trialEndsAt)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardNew>
         </div>
+      )}
 
-        {(churnRisk.length > 0 || inactiveTrial.length > 0 || expiredClinics.length > 0) && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {churnRisk.length > 0 && (
-              <Link href="/admin/churn" className="bg-red-950/50 border border-red-800 rounded-2xl p-4 hover:bg-red-950 transition-colors">
-                <div className="text-red-400 font-bold text-sm mb-1">🔴 Riesgo de churn</div>
-                <div className="text-2xl font-extrabold">{churnRisk.length}</div>
-                <div className="text-xs text-red-300 mt-1">Activas sin login 7+ días</div>
-              </Link>
-            )}
-            {inactiveTrial.length > 0 && (
-              <Link href="/admin/churn" className="bg-amber-950/50 border border-amber-800 rounded-2xl p-4 hover:bg-amber-950 transition-colors">
-                <div className="text-amber-400 font-bold text-sm mb-1">⚠️ Trial inactivo</div>
-                <div className="text-2xl font-extrabold">{inactiveTrial.length}</div>
-                <div className="text-xs text-amber-300 mt-1">En trial pero sin usar la app</div>
-              </Link>
-            )}
-            {expiredClinics.length > 0 && (
-              <Link href="/admin/clinics" className="bg-slate-900 border border-slate-700 rounded-2xl p-4 hover:bg-slate-800 transition-colors">
-                <div className="text-slate-400 font-bold text-sm mb-1">💤 Trial expirado</div>
-                <div className="text-2xl font-extrabold">{expiredClinics.length}</div>
-                <div className="text-xs text-slate-400 mt-1">No convirtieron a pago</div>
-              </Link>
-            )}
-          </div>
-        )}
-
-        <div className="bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700">
-            <h2 className="font-bold">Pagos de suscripción recientes</h2>
-            <Link href="/admin/payments" className="text-xs text-brand-400 hover:underline font-semibold">Ver todos →</Link>
-          </div>
+      {/* Últimos pagos */}
+      <div style={{ marginBottom: 20 }}>
+        <CardNew
+          noPad
+          title="Últimos pagos"
+          action={
+            <Link href="/admin/payments" style={{ textDecoration: "none" }}>
+              <ButtonNew size="sm" variant="ghost">Ver todos</ButtonNew>
+            </Link>
+          }
+        >
           {subInvoices.length === 0 ? (
-            <div className="py-10 text-center text-slate-500 text-sm">Sin pagos registrados aún</div>
+            <div style={{ padding: 40, textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
+              Sin pagos registrados aún
+            </div>
           ) : (
-            <table className="w-full text-sm">
-              <thead><tr className="text-xs text-slate-400 border-b border-slate-700">
-                <th className="px-5 py-3 text-left">Clínica</th>
-                <th className="px-5 py-3 text-left">Monto</th>
-                <th className="px-5 py-3 text-left">Método</th>
-                <th className="px-5 py-3 text-left">Estado</th>
-                <th className="px-5 py-3 text-left">Fecha</th>
-              </tr></thead>
+            <table className="table-new">
+              <thead>
+                <tr>
+                  <th>Clínica</th>
+                  <th>Monto</th>
+                  <th>Método</th>
+                  <th>Estado</th>
+                  <th>Fecha</th>
+                </tr>
+              </thead>
               <tbody>
-                {subInvoices.slice(0,10).map(inv => (
-                  <tr key={inv.id} className="border-b border-slate-800 hover:bg-slate-800/50">
-                    <td className="px-5 py-3 font-semibold">{inv.clinic.name}</td>
-                    <td className="px-5 py-3 text-emerald-400 font-bold">{formatCurrency(inv.amount)}</td>
-                    <td className="px-5 py-3 text-slate-400 capitalize">{inv.method ?? "—"}</td>
-                    <td className="px-5 py-3">
-                      <span className={`text-xs font-bold px-2 py-1 rounded-full ${inv.status==="paid"?"bg-emerald-900/50 text-emerald-400":inv.status==="failed"?"bg-red-900/50 text-red-400":"bg-amber-900/50 text-amber-400"}`}>
-                        {inv.status==="paid"?"Pagado":inv.status==="failed"?"Fallido":"Pendiente"}
-                      </span>
+                {subInvoices.slice(0, 10).map(inv => (
+                  <tr key={inv.id}>
+                    <td>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <AvatarNew name={inv.clinic.name} size="sm" />
+                        <span style={{ color: "var(--text-1)", fontWeight: 500 }}>{inv.clinic.name}</span>
+                      </div>
                     </td>
-                    <td className="px-5 py-3 text-slate-400 text-xs">{new Date(inv.createdAt).toLocaleDateString("es-MX")}</td>
+                    <td className="mono" style={{ color: "var(--text-1)", fontWeight: 500 }}>
+                      {formatCurrency(inv.amount)}
+                    </td>
+                    <td style={{ color: "var(--text-3)", textTransform: "capitalize" }}>{inv.method ?? "—"}</td>
+                    <td>
+                      <BadgeNew tone={inv.status === "paid" ? "success" : inv.status === "failed" ? "danger" : "warning"}>
+                        {inv.status === "paid" ? "Pagado" : inv.status === "failed" ? "Fallido" : "Pendiente"}
+                      </BadgeNew>
+                    </td>
+                    <td className="mono" style={{ color: "var(--text-3)" }}>
+                      {formatRelativeDate(inv.createdAt)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
-        </div>
-
-        <div className="bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700">
-            <h2 className="font-bold">Clínicas recientes</h2>
-            <Link href="/admin/clinics" className="text-xs text-brand-400 hover:underline font-semibold">Ver todas →</Link>
-          </div>
-          <table className="w-full text-sm">
-            <thead><tr className="text-xs text-slate-400 border-b border-slate-700">
-              <th className="px-5 py-3 text-left">Clínica</th>
-              <th className="px-5 py-3 text-left">Plan</th>
-              <th className="px-5 py-3 text-left">Pacientes</th>
-              <th className="px-5 py-3 text-left">Estado</th>
-              <th className="px-5 py-3 text-left">Creada</th>
-            </tr></thead>
-            <tbody>
-              {allClinics.slice(0,10).map(clinic => {
-                const isActive  = clinic.subscriptionStatus === "active";
-                const isTrial   = clinic.trialEndsAt && new Date(clinic.trialEndsAt) > now;
-                const isExpired = clinic.trialEndsAt && new Date(clinic.trialEndsAt) < now && !isActive;
-                const trialDays = clinic.trialEndsAt ? Math.ceil((new Date(clinic.trialEndsAt).getTime()-now.getTime())/(1000*60*60*24)) : null;
-                return (
-                  <tr key={clinic.id} className="border-b border-slate-800 hover:bg-slate-800/50">
-                    <td className="px-5 py-3">
-                      <Link href={`/admin/clinics/${clinic.id}`} className="font-semibold hover:text-brand-400">{clinic.name}</Link>
-                      <div className="text-xs text-slate-500">{clinic.users[0]?.email}</div>
-                    </td>
-                    <td className="px-5 py-3">
-                      <span className="text-xs font-bold text-slate-300">{clinic.plan}</span>
-                      <div className="text-xs text-slate-500">{formatCurrency(PLAN_PRICES[clinic.plan]??0)}/mes</div>
-                    </td>
-                    <td className="px-5 py-3 text-slate-300">{clinic._count.patients}</td>
-                    <td className="px-5 py-3">
-                      {isActive  && <span className="text-xs bg-emerald-900/50 text-emerald-400 px-2 py-1 rounded-full font-bold">Activa</span>}
-                      {isTrial   && <span className="text-xs bg-blue-900/50 text-blue-400 px-2 py-1 rounded-full font-bold">Trial {trialDays}d</span>}
-                      {isExpired && <span className="text-xs bg-red-900/50 text-red-400 px-2 py-1 rounded-full font-bold">Expirado</span>}
-                      {!isActive&&!isTrial&&!isExpired && <span className="text-xs bg-slate-700 text-slate-400 px-2 py-1 rounded-full font-bold">Sin plan</span>}
-                    </td>
-                    <td className="px-5 py-3 text-slate-400 text-xs">{new Date(clinic.createdAt).toLocaleDateString("es-MX")}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        </CardNew>
       </div>
+
+      {/* Últimas clínicas */}
+      <CardNew
+        noPad
+        title="Últimas clínicas registradas"
+        action={
+          <Link href="/admin/clinics" style={{ textDecoration: "none" }}>
+            <ButtonNew size="sm" variant="ghost">Ver todas</ButtonNew>
+          </Link>
+        }
+      >
+        <table className="table-new">
+          <thead>
+            <tr>
+              <th>Clínica</th>
+              <th>Plan</th>
+              <th>Pacientes</th>
+              <th>Estado</th>
+              <th>Registro</th>
+            </tr>
+          </thead>
+          <tbody>
+            {allClinics.slice(0, 10).map(clinic => {
+              const isActive  = clinic.subscriptionStatus === "active";
+              const isTrial   = clinic.trialEndsAt && new Date(clinic.trialEndsAt) > now;
+              const isExpired = clinic.trialEndsAt && new Date(clinic.trialEndsAt) < now && !isActive;
+              const trialDays = clinic.trialEndsAt ? Math.ceil((new Date(clinic.trialEndsAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : null;
+              return (
+                <tr key={clinic.id}>
+                  <td>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <AvatarNew name={clinic.name} size="sm" />
+                      <div style={{ minWidth: 0 }}>
+                        <Link href={`/admin/clinics/${clinic.id}`} style={{ color: "var(--text-1)", fontWeight: 500, textDecoration: "none" }}>
+                          {clinic.name}
+                        </Link>
+                        <div style={{ fontSize: 11, color: "var(--text-3)" }}>{clinic.users[0]?.email}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <BadgeNew tone={clinic.plan === "CLINIC" ? "brand" : clinic.plan === "PRO" ? "info" : "neutral"}>
+                      {clinic.plan}
+                    </BadgeNew>
+                    <div className="mono" style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
+                      {formatCurrency(PLAN_PRICES[clinic.plan] ?? 0)}/mes
+                    </div>
+                  </td>
+                  <td className="mono" style={{ color: "var(--text-2)" }}>{clinic._count.patients}</td>
+                  <td>
+                    {isActive  && <BadgeNew tone="success" dot>Activa</BadgeNew>}
+                    {isTrial   && <BadgeNew tone="warning" dot>Trial {trialDays}d</BadgeNew>}
+                    {isExpired && <BadgeNew tone="danger" dot>Expirado</BadgeNew>}
+                    {!isActive && !isTrial && !isExpired && <BadgeNew tone="neutral">Sin plan</BadgeNew>}
+                  </td>
+                  <td className="mono" style={{ color: "var(--text-3)" }}>
+                    {formatRelativeDate(clinic.createdAt)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </CardNew>
+    </div>
   );
 }

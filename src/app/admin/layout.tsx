@@ -1,17 +1,33 @@
-import Link from "next/link";
-import { AdminNav } from "./admin-nav";
+import { AdminSidebar } from "./admin-nav";
+import { prisma } from "@/lib/prisma";
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+async function getNavCounts() {
+  try {
+    const [clinics, atRisk] = await Promise.all([
+      prisma.clinic.count().catch(() => 0),
+      prisma.clinic.count({
+        where: {
+          subscriptionStatus: { in: ["trialing", "past_due"] },
+        },
+      }).catch(() => 0),
+    ]);
+    return { clinics, atRisk };
+  } catch {
+    return { clinics: 0, atRisk: 0 };
+  }
+}
+
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  const counts = await getNavCounts();
+
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      <nav className="bg-slate-900 border-b border-slate-700 px-6 h-14 flex items-center gap-4">
-        <Link href="/admin" className="flex items-center gap-2 font-extrabold text-brand-400">
-          <div className="w-6 h-6 rounded-lg bg-brand-600 flex items-center justify-center text-[11px] font-extrabold text-white">M</div>
-          MediFlow Admin
-        </Link>
-        <AdminNav />
-      </nav>
-      {children}
+    <div style={{ display: "flex", minHeight: "100vh", background: "var(--bg)", color: "var(--text-1)" }}>
+      <AdminSidebar counts={counts} />
+      <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+        <div style={{ flex: 1, padding: "28px 28px 40px" }}>
+          {children}
+        </div>
+      </main>
     </div>
   );
 }

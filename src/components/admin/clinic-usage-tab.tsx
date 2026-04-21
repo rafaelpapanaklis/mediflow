@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Zap, HardDrive, MessageCircle, Scan } from "lucide-react";
 import { formatBytes, type PlanLimits } from "@/lib/plans";
+import { CardNew } from "@/components/ui/design-system/card-new";
 
 interface Usage {
   plan: string;
@@ -19,10 +20,52 @@ function pct(used: number, limit: number) {
   return Math.min(100, Math.round((used / limit) * 100));
 }
 
-function barClass(p: number) {
-  if (p >= 90) return "bg-rose-500";
-  if (p >= 70) return "bg-amber-500";
-  return "bg-emerald-500";
+function barColor(p: number) {
+  if (p >= 90) return "var(--danger)";
+  if (p >= 70) return "var(--warning)";
+  return "var(--brand)";
+}
+
+interface UsageRowProps {
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  used: string;
+  limit: string;
+  pctValue: number;
+}
+
+function UsageRow({ icon, title, subtitle, used, limit, pctValue }: UsageRowProps) {
+  return (
+    <CardNew>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+        <div style={{ color: "var(--brand)", display: "grid", placeItems: "center" }}>{icon}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: "var(--text-1)", margin: 0 }}>{title}</h3>
+          <p style={{ fontSize: 12, color: "var(--text-3)", margin: "2px 0 0 0" }}>{subtitle}</p>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 18, fontWeight: 800, color: "var(--text-1)" }}>{used}</div>
+          <div style={{ fontSize: 11, color: "var(--text-3)" }}>de {limit}</div>
+        </div>
+      </div>
+      <div style={{
+        height: 8,
+        background: "rgba(255,255,255,0.06)",
+        borderRadius: 4,
+        overflow: "hidden",
+      }}>
+        <div style={{
+          height: "100%",
+          width: `${pctValue}%`,
+          background: barColor(pctValue),
+          borderRadius: 4,
+          transition: "width .3s",
+        }} />
+      </div>
+      <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 6 }}>{pctValue}% del límite</div>
+    </CardNew>
+  );
 }
 
 export function ClinicUsageTab({ clinicId }: { clinicId: string }) {
@@ -36,90 +79,95 @@ export function ClinicUsageTab({ clinicId }: { clinicId: string }) {
       .catch(() => setError("Error al cargar uso"));
   }, [clinicId]);
 
-  if (error) return <div className="bg-rose-950/40 border border-rose-700 rounded-xl p-4 text-rose-300 text-sm">{error}</div>;
-  if (!data) return <div className="bg-slate-900 border border-slate-700 rounded-xl p-10 text-center text-slate-500 text-sm">Cargando…</div>;
+  if (error) return (
+    <div style={{
+      padding: 16,
+      background: "rgba(239,68,68,0.08)",
+      border: "1px solid rgba(239,68,68,0.3)",
+      borderRadius: 12,
+      color: "var(--danger)",
+      fontSize: 13,
+    }}>{error}</div>
+  );
+  if (!data) return (
+    <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
+      Cargando…
+    </div>
+  );
 
   const aiPct = pct(data.ai.used, data.ai.limit);
   const stPct = pct(data.storage.used, data.storage.limit);
   const waPct = pct(data.whatsapp.sentThisMonth, data.whatsapp.limit);
 
   return (
-    <div className="space-y-5">
-      <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 flex items-center justify-between">
-        <div>
-          <div className="text-xs text-slate-400">Plan</div>
-          <div className="text-lg font-bold text-brand-400">{data.planLabel} ({data.plan})</div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Plan header */}
+      <CardNew>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <div style={{
+              fontSize: 10,
+              color: "var(--text-3)",
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+              fontWeight: 600,
+            }}>Plan</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "var(--brand)", marginTop: 2 }}>
+              {data.planLabel} ({data.plan})
+            </div>
+          </div>
+          <div style={{ textAlign: "right", fontSize: 11, color: "var(--text-3)" }}>
+            Last AI reset: {new Date(data.ai.lastResetAt).toLocaleDateString("es-MX")}
+          </div>
         </div>
-        <div className="text-right text-xs text-slate-500">
-          Last AI reset: {new Date(data.ai.lastResetAt).toLocaleDateString("es-MX")}
-        </div>
-      </div>
+      </CardNew>
 
-      {/* AI */}
-      <div className="bg-slate-900 border border-slate-700 rounded-xl p-5">
-        <div className="flex items-center gap-3 mb-3">
-          <Zap className="w-5 h-5 text-brand-400" />
-          <div className="flex-1">
-            <h3 className="text-sm font-bold">Tokens IA consumidos este mes</h3>
-            <p className="text-xs text-slate-500">Se reinician cada primer día del mes automáticamente.</p>
-          </div>
-          <div className="text-right">
-            <div className="text-lg font-extrabold text-white">{data.ai.used.toLocaleString()}</div>
-            <div className="text-xs text-slate-400">de {data.ai.limit.toLocaleString()}</div>
-          </div>
-        </div>
-        <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden">
-          <div className={`h-full ${barClass(aiPct)}`} style={{ width: `${aiPct}%` }} />
-        </div>
-        <div className="text-xs text-slate-400 mt-1.5">{aiPct}% del límite</div>
-      </div>
+      <UsageRow
+        icon={<Zap size={20} />}
+        title="Tokens IA consumidos este mes"
+        subtitle="Se reinician cada primer día del mes automáticamente."
+        used={data.ai.used.toLocaleString()}
+        limit={data.ai.limit.toLocaleString()}
+        pctValue={aiPct}
+      />
 
-      {/* Storage */}
-      <div className="bg-slate-900 border border-slate-700 rounded-xl p-5">
-        <div className="flex items-center gap-3 mb-3">
-          <HardDrive className="w-5 h-5 text-brand-400" />
-          <div className="flex-1">
-            <h3 className="text-sm font-bold">Storage usado</h3>
-            <p className="text-xs text-slate-500">{data.storage.files.toLocaleString()} archivos en patient-files.</p>
-          </div>
-          <div className="text-right">
-            <div className="text-lg font-extrabold text-white">{formatBytes(data.storage.used)}</div>
-            <div className="text-xs text-slate-400">de {formatBytes(data.storage.limit)}</div>
-          </div>
-        </div>
-        <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden">
-          <div className={`h-full ${barClass(stPct)}`} style={{ width: `${stPct}%` }} />
-        </div>
-        <div className="text-xs text-slate-400 mt-1.5">{stPct}% del límite del plan</div>
-      </div>
+      <UsageRow
+        icon={<HardDrive size={20} />}
+        title="Storage usado"
+        subtitle={`${data.storage.files.toLocaleString()} archivos en patient-files.`}
+        used={formatBytes(data.storage.used)}
+        limit={formatBytes(data.storage.limit)}
+        pctValue={stPct}
+      />
 
-      {/* WhatsApp */}
-      <div className="bg-slate-900 border border-slate-700 rounded-xl p-5">
-        <div className="flex items-center gap-3 mb-3">
-          <MessageCircle className="w-5 h-5 text-brand-400" />
-          <div className="flex-1">
-            <h3 className="text-sm font-bold">WhatsApps enviados este mes</h3>
-            <p className="text-xs text-slate-500">Recordatorios de cita + recalls + manuales.</p>
-          </div>
-          <div className="text-right">
-            <div className="text-lg font-extrabold text-white">{data.whatsapp.sentThisMonth.toLocaleString()}</div>
-            <div className="text-xs text-slate-400">de {data.whatsapp.limit.toLocaleString()}</div>
-          </div>
-        </div>
-        <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden">
-          <div className={`h-full ${barClass(waPct)}`} style={{ width: `${waPct}%` }} />
-        </div>
-      </div>
+      <UsageRow
+        icon={<MessageCircle size={20} />}
+        title="WhatsApps enviados este mes"
+        subtitle="Recordatorios de cita + recalls + manuales."
+        used={data.whatsapp.sentThisMonth.toLocaleString()}
+        limit={data.whatsapp.limit.toLocaleString()}
+        pctValue={waPct}
+      />
 
-      {/* XRay */}
-      <div className="bg-slate-900 border border-slate-700 rounded-xl p-5 flex items-center gap-4">
-        <Scan className="w-5 h-5 text-brand-400" />
-        <div className="flex-1">
-          <h3 className="text-sm font-bold">Análisis IA de radiografías</h3>
-          <p className="text-xs text-slate-500">Llamadas al endpoint /api/xrays/[id]/analyze este mes.</p>
+      {/* XRay (no limit) */}
+      <CardNew>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <div style={{ color: "var(--brand)", display: "grid", placeItems: "center" }}>
+            <Scan size={20} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: "var(--text-1)", margin: 0 }}>
+              Análisis IA de radiografías
+            </h3>
+            <p style={{ fontSize: 12, color: "var(--text-3)", margin: "2px 0 0 0" }}>
+              Llamadas al endpoint /api/xrays/[id]/analyze este mes.
+            </p>
+          </div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: "var(--text-1)" }}>
+            {data.xray.analysesThisMonth.toLocaleString()}
+          </div>
         </div>
-        <div className="text-2xl font-extrabold text-white">{data.xray.analysesThisMonth.toLocaleString()}</div>
-      </div>
+      </CardNew>
     </div>
   );
 }

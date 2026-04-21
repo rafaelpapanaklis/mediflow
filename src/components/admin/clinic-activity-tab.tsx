@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Calendar, CreditCard, FileText, User, FileImage, Activity as ActivityIcon } from "lucide-react";
+import { CardNew } from "@/components/ui/design-system/card-new";
 
 interface User { id: string; firstName: string; lastName: string; email: string; role: string; lastLogin: string | null }
 
@@ -41,8 +42,21 @@ export function ClinicActivityTab({ clinicId }: { clinicId: string }) {
       .catch(() => setError("Error al cargar actividad"));
   }, [clinicId]);
 
-  if (error) return <div className="bg-rose-950/40 border border-rose-700 rounded-xl p-4 text-rose-300 text-sm">{error}</div>;
-  if (!data) return <div className="bg-slate-900 border border-slate-700 rounded-xl p-10 text-center text-slate-500 text-sm">Cargando…</div>;
+  if (error) return (
+    <div style={{
+      padding: 16,
+      background: "rgba(239,68,68,0.08)",
+      border: "1px solid rgba(239,68,68,0.3)",
+      borderRadius: 12,
+      color: "var(--danger)",
+      fontSize: 13,
+    }}>{error}</div>
+  );
+  if (!data) return (
+    <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
+      Cargando…
+    </div>
+  );
 
   const { timeline, dailyActivity, userActivity, users } = data;
   const chartData = dailyActivity.map(d => ({ ...d, label: d.date.slice(5) }));
@@ -57,88 +71,145 @@ export function ClinicActivityTab({ clinicId }: { clinicId: string }) {
   ];
 
   return (
-    <div className="space-y-5">
-      {/* Timeline */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {timelineItems.map(item => (
-          <div key={item.label} className="bg-slate-900 border border-slate-700 rounded-xl p-4 flex items-start gap-3">
-            <div className="w-10 h-10 rounded-lg bg-brand-600/15 flex items-center justify-center flex-shrink-0">
-              <item.icon className="w-5 h-5 text-brand-400" />
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Timeline cards grid */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+        gap: 12,
+      }}>
+        {timelineItems.map(item => {
+          const Icon = item.icon;
+          return (
+            <div key={item.label} style={{
+              background: "var(--bg-elev)",
+              border: "1px solid var(--border-soft)",
+              borderRadius: 12,
+              padding: 14,
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 12,
+            }}>
+              <div style={{
+                width: 40, height: 40, borderRadius: 10,
+                background: "var(--brand-soft)",
+                display: "grid", placeItems: "center",
+                flexShrink: 0,
+                color: "var(--brand)",
+              }}>
+                <Icon size={18} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11, color: "var(--text-3)" }}>{item.label}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-1)", marginTop: 2 }}>{relTime(item.iso)}</div>
+                {item.detail && (
+                  <div style={{
+                    fontSize: 11,
+                    color: "var(--text-3)",
+                    marginTop: 2,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}>{item.detail}</div>
+                )}
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-xs text-slate-400">{item.label}</div>
-              <div className="text-sm font-bold text-white mt-0.5">{relTime(item.iso)}</div>
-              {item.detail && <div className="text-xs text-slate-500 truncate mt-0.5">{item.detail}</div>}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Daily chart */}
-      <div className="bg-slate-900 border border-slate-700 rounded-xl p-5">
-        <h3 className="text-sm font-bold mb-3">Actividad últimos 30 días</h3>
-        <div className="h-56">
+      <CardNew title="Actividad últimos 30 días">
+        <div style={{ height: 224 }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis dataKey="label" stroke="#64748b" tick={{ fontSize: 10 }} />
-              <YAxis stroke="#64748b" tick={{ fontSize: 10 }} allowDecimals={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-soft)" />
+              <XAxis dataKey="label" stroke="var(--text-3)" tick={{ fontSize: 10 }} />
+              <YAxis stroke="var(--text-3)" tick={{ fontSize: 10 }} allowDecimals={false} />
               <Tooltip
-                contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, fontSize: 12 }}
+                contentStyle={{
+                  background: "var(--bg-elev-2)",
+                  border: "1px solid var(--border-soft)",
+                  borderRadius: 8,
+                  fontSize: 12,
+                  color: "var(--text-1)",
+                }}
                 cursor={{ fill: "rgba(255,255,255,0.04)" }}
               />
-              <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="count" fill="var(--brand)" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </div>
+      </CardNew>
 
-      {/* Last logins */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-slate-900 border border-slate-700 rounded-xl p-5">
-          <h3 className="text-sm font-bold mb-3">Últimos accesos</h3>
+      {/* Last logins + activity per user */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+        gap: 16,
+      }}>
+        <CardNew title="Últimos accesos">
           {users.length === 0 ? (
-            <div className="text-xs text-slate-500">Sin usuarios</div>
+            <div style={{ fontSize: 12, color: "var(--text-3)" }}>Sin usuarios</div>
           ) : (
-            <div className="space-y-2">
-              {users.slice(0, 6).map(u => (
-                <div key={u.id} className="flex items-center justify-between text-xs border-b border-slate-800 py-1.5 last:border-0">
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {users.slice(0, 6).map((u, idx, arr) => (
+                <div
+                  key={u.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    fontSize: 12,
+                    padding: "6px 0",
+                    borderBottom: idx < arr.length - 1 ? "1px solid var(--border-soft)" : "none",
+                  }}
+                >
                   <div>
-                    <div className="font-semibold text-slate-200">{u.firstName} {u.lastName}</div>
-                    <div className="text-slate-500">{u.email}</div>
+                    <div style={{ fontWeight: 600, color: "var(--text-1)" }}>{u.firstName} {u.lastName}</div>
+                    <div style={{ color: "var(--text-3)" }}>{u.email}</div>
                   </div>
-                  <div className="text-slate-400">{relTime(u.lastLogin)}</div>
+                  <div style={{ color: "var(--text-2)" }}>{relTime(u.lastLogin)}</div>
                 </div>
               ))}
             </div>
           )}
-        </div>
+        </CardNew>
 
-        <div className="bg-slate-900 border border-slate-700 rounded-xl p-5">
-          <h3 className="text-sm font-bold mb-3">Acciones por usuario (30 días)</h3>
+        <CardNew title="Acciones por usuario (30 días)">
           {userActivity.length === 0 ? (
-            <div className="text-xs text-slate-500">Sin registros de auditoría</div>
+            <div style={{ fontSize: 12, color: "var(--text-3)" }}>Sin registros de auditoría</div>
           ) : (
-            <div className="space-y-2">
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {userActivity.slice(0, 6).map(row => (
-                <div key={row.userId} className="text-xs">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-semibold text-slate-200">
+                <div key={row.userId} style={{ fontSize: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span style={{ fontWeight: 600, color: "var(--text-1)" }}>
                       {row.user ? `${row.user.firstName} ${row.user.lastName}` : row.userId}
                     </span>
-                    <span className="text-brand-400 font-bold">{row.count}</span>
+                    <span className="mono" style={{ color: "var(--brand)", fontWeight: 700 }}>{row.count}</span>
                   </div>
-                  <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                  <div style={{
+                    height: 6,
+                    background: "rgba(255,255,255,0.06)",
+                    borderRadius: 3,
+                    overflow: "hidden",
+                  }}>
                     <div
-                      className="h-full bg-brand-500"
-                      style={{ width: `${Math.min(100, (row.count / (userActivity[0]?.count || 1)) * 100)}%` }}
+                      style={{
+                        height: "100%",
+                        background: "var(--brand)",
+                        width: `${Math.min(100, (row.count / (userActivity[0]?.count || 1)) * 100)}%`,
+                        borderRadius: 3,
+                        transition: "width .3s",
+                      }}
                     />
                   </div>
                 </div>
               ))}
             </div>
           )}
-        </div>
+        </CardNew>
       </div>
     </div>
   );

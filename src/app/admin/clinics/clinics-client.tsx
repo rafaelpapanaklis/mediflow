@@ -1,11 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { Search, DollarSign, Activity, Clock, XCircle, Download } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { formatRelativeDate } from "@/lib/format";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
+import { CardNew }   from "@/components/ui/design-system/card-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { BadgeNew }  from "@/components/ui/design-system/badge-new";
+import { AvatarNew } from "@/components/ui/design-system/avatar-new";
+import { KpiCard }   from "@/components/ui/design-system/kpi-card";
 
 const PLAN_PRICES: Record<string, number> = { BASIC: 49, PRO: 99, CLINIC: 249 };
 
@@ -17,6 +23,15 @@ export function AdminClinicsClient({ clinics: initial }: Props) {
   const [search, setSearch]   = useState("");
   const [filter, setFilter]   = useState("all");
   const [loading, setLoading] = useState<string | null>(null);
+
+  const counts = useMemo(() => {
+    const now = Date.now();
+    const active  = clinics.filter(c => !c.trialEndsAt || new Date(c.trialEndsAt).getTime() >= now).length;
+    const trial   = clinics.filter(c => c.trialEndsAt && new Date(c.trialEndsAt).getTime() > now).length;
+    const expired = clinics.filter(c => c.trialEndsAt && new Date(c.trialEndsAt).getTime() < now).length;
+    const mrr     = clinics.reduce((s, c) => s + (PLAN_PRICES[c.plan] ?? 0), 0);
+    return { all: clinics.length, active, trial, expired, mrr };
+  }, [clinics]);
 
   const filtered = clinics.filter(c => {
     const q = search.toLowerCase();
@@ -85,141 +100,226 @@ export function AdminClinicsClient({ clinics: initial }: Props) {
     }
   }
 
+  const filters = [
+    { id: "all",     label: "Todas",     count: counts.all },
+    { id: "active",  label: "Activas",   count: counts.active },
+    { id: "trial",   label: "En trial",  count: counts.trial },
+    { id: "expired", label: "Expiradas", count: counts.expired },
+  ];
+
   return (
-      <div className="p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-xl font-extrabold">Clínicas ({clinics.length})</h1>
-            <p className="text-slate-400 text-sm">Gestiona todas las clínicas registradas</p>
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="flex gap-3 mb-5">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-            <input className="w-full h-10 bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-4 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-600/50"
-              placeholder="Buscar clínica, email…" value={search} onChange={e => setSearch(e.target.value)} />
-          </div>
-          <div className="flex gap-1 bg-slate-900 border border-slate-700 rounded-xl p-1">
-            {[{id:"all",label:"Todas"},{id:"active",label:"Activas"},{id:"trial",label:"En trial"},{id:"expired",label:"Expiradas"}].map(f => (
-              <button key={f.id} onClick={() => setFilter(f.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${filter === f.id ? "bg-brand-600 text-white" : "text-slate-400 hover:text-white"}`}>
-                {f.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Table */}
-        <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-700">
-                {["Clínica","Contacto","Plan","Pacientes","Tokens IA","Trial / Estado","Acciones"].map(h => (
-                  <th key={h} className="text-left px-4 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-wide">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(clinic => {
-                const expired    = clinic.trialEndsAt && new Date(clinic.trialEndsAt) < new Date();
-                const trialDays  = clinic.trialEndsAt ? Math.ceil((new Date(clinic.trialEndsAt).getTime() - Date.now()) / 86400000) : null;
-                const owner      = clinic.users[0];
-                const isLoading  = loading === clinic.id;
-
-                return (
-                  <tr key={clinic.id} className="border-b border-slate-800 hover:bg-slate-800/40 transition-colors">
-                    <td className="px-4 py-3">
-                      <Link href={`/admin/clinics/${clinic.id}`} className="font-semibold text-white hover:text-brand-400 transition-colors">{clinic.name}</Link>
-                      <div className="text-[10px] text-slate-500">{clinic.specialty} · {clinic.country}</div>
-                      <div className="text-[10px] text-slate-600 font-mono">{clinic.slug}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {owner && (
-                        <>
-                          <div className="text-xs text-slate-300">{owner.firstName} {owner.lastName}</div>
-                          <div className="text-[10px] text-slate-500">{owner.email}</div>
-                        </>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <select
-                        value={clinic.plan}
-                        onChange={e => updatePlan(clinic.id, e.target.value)}
-                        disabled={isLoading}
-                        className="bg-slate-800 border border-slate-600 text-white text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-600/50"
-                      >
-                        <option value="BASIC">BASIC — $49/mes</option>
-                        <option value="PRO">PRO — $99/mes</option>
-                        <option value="CLINIC">CLINIC — $249/mes</option>
-                      </select>
-                      <div className="text-[10px] text-slate-500 mt-0.5">{formatCurrency(PLAN_PRICES[clinic.plan] ?? 0, "MXN")}/mes</div>
-                    </td>
-                    <td className="px-4 py-3 text-slate-300">
-                      <div className="font-bold">{clinic._count.patients}</div>
-                      <div className="text-[10px] text-slate-500">{clinic._count.appointments} citas</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {(() => {
-                        const used  = clinic.aiTokensUsed ?? 0;
-                        const limit = clinic.aiTokensLimit ?? 50000;
-                        const pct   = limit > 0 ? Math.round((used / limit) * 100) : 0;
-                        const color = pct > 90 ? "#ef4444" : pct > 60 ? "#eab308" : "#22c55e";
-                        return (
-                          <div>
-                            <div className="text-xs text-slate-300 font-bold">{used.toLocaleString()}<span className="text-slate-500 font-normal"> / {limit.toLocaleString()}</span></div>
-                            <div className="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden mt-1">
-                              <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
-                            </div>
-                            <div className="text-[10px] text-slate-500 mt-0.5">{pct}% usado</div>
-                          </div>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-4 py-3">
-                      {expired ? (
-                        <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-rose-900/50 text-rose-400 border border-rose-700">
-                          ✗ Expirado
-                        </span>
-                      ) : trialDays !== null ? (
-                        <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-amber-900/50 text-amber-400 border border-amber-700">
-                          ⏳ {trialDays}d restantes
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-900/50 text-emerald-400 border border-emerald-700">
-                          ✓ Activo
-                        </span>
-                      )}
-                      <div className="text-[10px] text-slate-600 mt-1">
-                        Registro: {new Date(clinic.createdAt).toLocaleDateString("es-MX")}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col gap-1.5">
-                        <button onClick={() => extendTrial(clinic.id, 30)} disabled={isLoading}
-                          className="text-[10px] font-bold px-2 py-1 rounded-lg bg-emerald-900/40 text-emerald-400 border border-emerald-700 hover:bg-emerald-900/70 transition-colors disabled:opacity-50">
-                          +30 días
-                        </button>
-                        <button onClick={() => extendTrial(clinic.id, 14)} disabled={isLoading}
-                          className="text-[10px] font-bold px-2 py-1 rounded-lg bg-brand-900/40 text-brand-400 border border-brand-700 hover:bg-brand-900/70 transition-colors disabled:opacity-50">
-                          +14 días
-                        </button>
-                        <button onClick={() => suspendClinic(clinic.id)} disabled={isLoading}
-                          className="text-[10px] font-bold px-2 py-1 rounded-lg bg-rose-900/40 text-rose-400 border border-rose-700 hover:bg-rose-900/70 transition-colors disabled:opacity-50">
-                          Suspender
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {filtered.length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-500">Sin resultados</td></tr>
-              )}
-            </tbody>
-          </table>
+    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
+        <div>
+          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+            Clínicas
+          </h1>
+          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, margin: 0 }}>
+            {clinics.length} clínicas registradas en el sistema
+          </p>
         </div>
       </div>
+
+      {/* KPI row */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 14, marginBottom: 20 }}>
+        <KpiCard label="Activas" value={String(counts.active)} icon={Activity}
+          delta={{ value: `${counts.all ? Math.round((counts.active / counts.all) * 100) : 0}% del total`, direction: "up" }} />
+        <KpiCard label="En trial" value={String(counts.trial)} icon={Clock}
+          delta={{ value: "Periodo de prueba", direction: "up" }} />
+        <KpiCard label="Expiradas" value={String(counts.expired)} icon={XCircle}
+          delta={{ value: "No convertidas", direction: "down" }} />
+        <KpiCard label="MRR total" value={formatCurrency(counts.mrr, "MXN")} icon={DollarSign}
+          delta={{ value: `${counts.all} clínicas`, direction: "up" }} />
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+        <div className="search-field" style={{ position: "relative", flex: "1 1 280px", maxWidth: 360 }}>
+          <Search
+            size={14}
+            style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-3)", pointerEvents: "none" }}
+          />
+          <input
+            className="input-new"
+            style={{ paddingLeft: 34 }}
+            placeholder="Buscar por nombre, slug, email…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="segment-new" style={{ display: "inline-flex", gap: 2 }}>
+          {filters.map(f => (
+            <button
+              key={f.id}
+              onClick={() => setFilter(f.id)}
+              className={`segment-new__btn ${filter === f.id ? "segment-new__btn--active" : ""}`}
+            >
+              {f.label}
+              <span style={{ marginLeft: 6, opacity: 0.6, fontSize: 11 }}>{f.count}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Table */}
+      <CardNew noPad>
+        <table className="table-new">
+          <thead>
+            <tr>
+              <th>Clínica</th>
+              <th>Plan</th>
+              <th>Contacto</th>
+              <th>Pacientes</th>
+              <th>Tokens IA</th>
+              <th>Estado</th>
+              <th style={{ textAlign: "right" }}>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(clinic => {
+              const expired   = clinic.trialEndsAt && new Date(clinic.trialEndsAt) < new Date();
+              const trialDays = clinic.trialEndsAt ? Math.ceil((new Date(clinic.trialEndsAt).getTime() - Date.now()) / 86400000) : null;
+              const owner     = clinic.users[0];
+              const isLoading = loading === clinic.id;
+              const used      = clinic.aiTokensUsed ?? 0;
+              const limit     = clinic.aiTokensLimit ?? 50000;
+              const pct       = limit > 0 ? Math.round((used / limit) * 100) : 0;
+              const tokenColor = pct > 90 ? "var(--danger)" : pct > 70 ? "var(--warning)" : "var(--success)";
+
+              return (
+                <tr key={clinic.id}>
+                  <td>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <AvatarNew name={clinic.name} size="sm" />
+                      <div style={{ minWidth: 0 }}>
+                        <Link
+                          href={`/admin/clinics/${clinic.id}`}
+                          style={{ color: "var(--text-1)", fontWeight: 500, textDecoration: "none", display: "block" }}
+                        >
+                          {clinic.name}
+                        </Link>
+                        <div className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>
+                          {clinic.slug}
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--text-3)" }}>
+                          {clinic.specialty} · {clinic.country}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <BadgeNew tone={clinic.plan === "CLINIC" ? "brand" : clinic.plan === "PRO" ? "info" : "neutral"}>
+                      {clinic.plan}
+                    </BadgeNew>
+                    <div className="mono" style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4 }}>
+                      {formatCurrency(PLAN_PRICES[clinic.plan] ?? 0, "MXN")}/mes
+                    </div>
+                    <select
+                      value={clinic.plan}
+                      onChange={e => updatePlan(clinic.id, e.target.value)}
+                      disabled={isLoading}
+                      className="input-new"
+                      style={{ marginTop: 6, fontSize: 11, padding: "4px 6px", height: "auto" }}
+                    >
+                      <option value="BASIC">BASIC — $49/mes</option>
+                      <option value="PRO">PRO — $99/mes</option>
+                      <option value="CLINIC">CLINIC — $249/mes</option>
+                    </select>
+                  </td>
+                  <td>
+                    {owner ? (
+                      <div>
+                        <div style={{ fontSize: 12, color: "var(--text-2)" }}>
+                          {owner.firstName} {owner.lastName}
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--text-3)" }}>{owner.email}</div>
+                      </div>
+                    ) : (
+                      <span style={{ color: "var(--text-3)" }}>—</span>
+                    )}
+                  </td>
+                  <td>
+                    <div className="mono" style={{ fontSize: 13, color: "var(--text-1)", fontWeight: 500 }}>
+                      {clinic._count.patients}
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--text-3)" }}>
+                      {clinic._count.appointments} citas
+                    </div>
+                  </td>
+                  <td>
+                    <div className="mono" style={{ fontSize: 12, color: "var(--text-2)" }}>
+                      {used.toLocaleString()}
+                      <span style={{ color: "var(--text-3)" }}> / {limit.toLocaleString()}</span>
+                    </div>
+                    <div style={{ width: "100%", height: 4, background: "var(--bg-elev)", borderRadius: 2, overflow: "hidden", marginTop: 4 }}>
+                      <div
+                        style={{
+                          height: "100%",
+                          width: `${Math.min(pct, 100)}%`,
+                          background: tokenColor,
+                          transition: "width 0.3s",
+                        }}
+                      />
+                    </div>
+                    <div className="mono" style={{ fontSize: 10, color: "var(--text-3)", marginTop: 2 }}>
+                      {pct}% usado
+                    </div>
+                  </td>
+                  <td>
+                    {expired ? (
+                      <BadgeNew tone="danger" dot>Expirado</BadgeNew>
+                    ) : trialDays !== null && trialDays > 0 ? (
+                      <BadgeNew tone="warning" dot>{trialDays}d restantes</BadgeNew>
+                    ) : (
+                      <BadgeNew tone="success" dot>Activa</BadgeNew>
+                    )}
+                    <div className="mono" style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4 }}>
+                      {formatRelativeDate(clinic.createdAt)}
+                    </div>
+                  </td>
+                  <td>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
+                      <ButtonNew
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => extendTrial(clinic.id, 30)}
+                        disabled={isLoading}
+                      >
+                        +30 días
+                      </ButtonNew>
+                      <ButtonNew
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => extendTrial(clinic.id, 14)}
+                        disabled={isLoading}
+                      >
+                        +14 días
+                      </ButtonNew>
+                      <ButtonNew
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => suspendClinic(clinic.id)}
+                        disabled={isLoading}
+                        style={{ color: "var(--danger)" }}
+                      >
+                        Suspender
+                      </ButtonNew>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={7} style={{ padding: 40, textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
+                  Sin resultados
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </CardNew>
+    </div>
   );
 }

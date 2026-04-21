@@ -30,15 +30,22 @@ export default async function CfdiPaymentPage({ params }: { params: { id: string
   if (!payment) notFound();
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8 space-y-6">
-      <Link href="/admin/payments" className="inline-flex items-center gap-2 text-xs text-slate-400 hover:text-white">
-        <ArrowLeft className="w-3.5 h-3.5" />
+    <div style={{ maxWidth: 960, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
+      <Link
+        href="/admin/payments"
+        style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-3)", textDecoration: "none" }}
+      >
+        <ArrowLeft size={14} />
         Volver a pagos
       </Link>
 
       <div>
-        <h1 className="text-2xl font-extrabold">Generar CFDI</h1>
-        <p className="text-slate-400 text-sm">Factura fiscal SAT para el pago #{payment.id.slice(0, 8)}</p>
+        <h1 style={{ fontSize: 22, fontWeight: 600, letterSpacing: "-0.02em", color: "var(--text-1)", margin: 0 }}>
+          Generar CFDI
+        </h1>
+        <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
+          Factura fiscal SAT para el pago <span className="mono">#{payment.id.slice(0, 8)}</span>
+        </p>
       </div>
 
       <CfdiClient

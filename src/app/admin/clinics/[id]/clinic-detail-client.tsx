@@ -2,14 +2,19 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Eye, Edit, Shield, Clock, Users, FileText, CreditCard, Activity, Trash2, BarChart3, MessageCircle, Mail, Download } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { ArrowLeft, Eye, Shield, Clock, Users, FileText, CreditCard, Activity, Trash2, BarChart3, MessageCircle, Mail, Download } from "lucide-react";
 import toast from "react-hot-toast";
 import { ClinicActivityTab } from "@/components/admin/clinic-activity-tab";
 import { ClinicUsageTab } from "@/components/admin/clinic-usage-tab";
 import { ClinicStripeTab } from "@/components/admin/clinic-stripe-tab";
 import { SendMessageModal } from "@/components/admin/send-message-modal";
 import { DeleteClinicModal } from "@/components/admin/delete-clinic-modal";
+import { CardNew } from "@/components/ui/design-system/card-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { BadgeNew } from "@/components/ui/design-system/badge-new";
+import { AvatarNew } from "@/components/ui/design-system/avatar-new";
+import { KpiCard } from "@/components/ui/design-system/kpi-card";
+import { fmtMXN, formatRelativeDate } from "@/lib/format";
 import type { TemplateChannel } from "@/lib/admin-templates";
 
 interface AdminNote {
@@ -21,6 +26,14 @@ interface AdminNote {
 
 const PLAN_PRICES: Record<string, number> = { BASIC: 49, PRO: 99, CLINIC: 249 };
 const BANK_INFO = { nombre: "Efthymios Rafail Papanaklis", clabe: "012910015008025244", banco: "BBVA" };
+
+type BadgeTone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
+
+function planTone(plan: string): BadgeTone {
+  if (plan === "CLINIC") return "brand";
+  if (plan === "PRO")    return "info";
+  return "neutral";
+}
 
 interface Props {
   clinic:               any;
@@ -159,114 +172,119 @@ export function AdminClinicDetailClient({
     }
   }
 
-  function relativeTime(iso: string): string {
-    const diff = Date.now() - new Date(iso).getTime();
-    const min = Math.floor(diff / 60000);
-    if (min < 1)    return "justo ahora";
-    if (min < 60)   return `hace ${min} min`;
-    const hrs = Math.floor(min / 60);
-    if (hrs < 24)   return `hace ${hrs} h`;
-    const days = Math.floor(hrs / 24);
-    if (days < 30)  return `hace ${days} d`;
-    return new Date(iso).toLocaleDateString("es-MX");
-  }
-
   const TABS = [
-    { id: "overview",  label: "Resumen",       icon: Activity },
-    { id: "account",   label: "Cuenta",         icon: Users    },
+    { id: "overview",  label: "Resumen",       icon: Activity    },
+    { id: "account",   label: "Cuenta",         icon: Users      },
     { id: "billing",   label: "Facturación",    icon: CreditCard },
     { id: "stripe",    label: "Stripe",         icon: CreditCard },
-    { id: "activity",  label: "Actividad",      icon: Clock    },
-    { id: "usage",     label: "Uso",            icon: BarChart3 },
-    { id: "notes",     label: "Notas internas", icon: FileText },
+    { id: "activity",  label: "Actividad",      icon: Clock      },
+    { id: "usage",     label: "Uso",            icon: BarChart3  },
+    { id: "notes",     label: "Notas internas", icon: FileText   },
   ];
 
   return (
-      <div className="p-6">
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <Link href="/admin/clinics" className="p-2 rounded-lg hover:bg-slate-800 transition-colors">
-            <ArrowLeft className="w-4 h-4 text-slate-400" />
+    <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Header */}
+      <CardNew noPad>
+        <div style={{ padding: 20, display: "flex", alignItems: "flex-start", gap: 16 }}>
+          <Link
+            href="/admin/clinics"
+            style={{
+              padding: 8,
+              borderRadius: 8,
+              display: "grid",
+              placeItems: "center",
+              color: "var(--text-3)",
+              border: "1px solid var(--border-soft)",
+              background: "var(--bg-elev)",
+              flexShrink: 0,
+            }}
+            aria-label="Volver"
+          >
+            <ArrowLeft size={14} />
           </Link>
-          <div className="flex-1">
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-extrabold">{clinic.name}</h1>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                expired ? "bg-rose-900/50 text-rose-400 border-rose-700" : "bg-emerald-900/50 text-emerald-400 border-emerald-700"
-              }`}>{expired ? "Expirado" : `${daysLeft}d activo`}</span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-brand-900/50 text-brand-400 border-brand-700">{clinic.plan}</span>
+          <AvatarNew name={clinic.name} size="xl" />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
+              <h1 style={{ fontSize: 20, margin: 0, color: "var(--text-1)", fontWeight: 600 }}>{clinic.name}</h1>
+              <BadgeNew tone={planTone(clinic.plan)}>{clinic.plan}</BadgeNew>
+              <BadgeNew tone={expired ? "danger" : "success"} dot>
+                {expired ? "Expirado" : (daysLeft !== null ? `${daysLeft}d activo` : "Activo")}
+              </BadgeNew>
             </div>
-            <p className="text-slate-400 text-sm">{clinic.specialty} · {clinic.city}, {clinic.country} · {clinic.slug}.mediflow.app</p>
+            <div style={{ display: "flex", gap: 20, fontSize: 12, color: "var(--text-2)", flexWrap: "wrap" }}>
+              <span>{clinic.specialty}</span>
+              <span>{clinic.city ?? "—"}, {clinic.country}</span>
+              {clinic.phone && <span>{clinic.phone}</span>}
+              <span className="mono">/{clinic.slug}</span>
+            </div>
           </div>
-          {/* Action buttons */}
-          <button
-            onClick={() => setModalChannel("whatsapp")}
-            className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-colors"
-          >
-            <MessageCircle className="w-4 h-4" />
-            WhatsApp
-          </button>
-          <button
-            onClick={() => setModalChannel("email")}
-            className="flex items-center gap-2 px-3 py-2 bg-sky-600 text-white text-xs font-bold rounded-xl hover:bg-sky-700 transition-colors"
-          >
-            <Mail className="w-4 h-4" />
-            Email
-          </button>
-          <a
-            href={`/api/admin/clinics/${clinic.id}/export`}
-            target="_blank"
-            className="flex items-center gap-2 px-3 py-2 bg-slate-800 border border-slate-700 text-white text-xs font-bold rounded-xl hover:bg-slate-700 transition-colors"
-            title="Descargar ZIP con CSVs + manifest"
-          >
-            <Download className="w-4 h-4" />
-            Exportar
-          </a>
-          <a
-            href={`/api/admin/impersonate?clinicId=${clinic.id}`}
-            target="_blank"
-            className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white text-sm font-bold rounded-xl hover:bg-violet-700 transition-colors"
-          >
-            <Eye className="w-4 h-4" />
-            Ver como clínica
-          </a>
+          <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <ButtonNew variant="secondary" icon={<MessageCircle size={14} />} onClick={() => setModalChannel("whatsapp")}>
+              WhatsApp
+            </ButtonNew>
+            <ButtonNew variant="secondary" icon={<Mail size={14} />} onClick={() => setModalChannel("email")}>
+              Email
+            </ButtonNew>
+            <a
+              href={`/api/admin/clinics/${clinic.id}/export`}
+              target="_blank"
+              style={{ textDecoration: "none" }}
+              title="Descargar ZIP con CSVs + manifest"
+            >
+              <ButtonNew variant="secondary" icon={<Download size={14} />}>
+                Exportar
+              </ButtonNew>
+            </a>
+            <a
+              href={`/api/admin/impersonate?clinicId=${clinic.id}`}
+              target="_blank"
+              style={{ textDecoration: "none" }}
+            >
+              <ButtonNew variant="primary" icon={<Eye size={14} />}>
+                Impersonar
+              </ButtonNew>
+            </a>
+          </div>
         </div>
+      </CardNew>
 
-        {/* KPIs */}
-        <div className="grid grid-cols-5 gap-3 mb-6">
-          {[
-            { label: "Pacientes",    value: clinic._count.patients,     color: "text-brand-400"   },
-            { label: "Citas",        value: clinic._count.appointments, color: "text-emerald-400" },
-            { label: "Expedientes",  value: clinic._count.records,      color: "text-violet-400"  },
-            { label: "Facturas",     value: totalInvoices,              color: "text-amber-400"   },
-            { label: "Ingresos",     value: formatCurrency(totalRevenue, "MXN"), color: "text-green-400" },
-          ].map(k => (
-            <div key={k.label} className="bg-slate-900 border border-slate-700 rounded-xl p-4 text-center">
-              <div className={`text-2xl font-extrabold ${k.color}`}>{k.value}</div>
-              <div className="text-xs text-slate-400 mt-0.5">{k.label}</div>
-            </div>
-          ))}
-        </div>
+      {/* KPIs */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
+        <KpiCard label="Pacientes"   value={String(clinic._count.patients)}     icon={Users}    />
+        <KpiCard label="Citas"       value={String(clinic._count.appointments)} icon={Clock}    />
+        <KpiCard label="Expedientes" value={String(clinic._count.records)}      icon={FileText} />
+        <KpiCard label="Facturas"    value={String(totalInvoices)}              icon={CreditCard} />
+        <KpiCard label="Ingresos"    value={fmtMXN(totalRevenue)}               icon={BarChart3}  />
+      </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 bg-slate-900 border border-slate-700 rounded-xl p-1 w-fit mb-6">
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${tab === t.id ? "bg-brand-600 text-white" : "text-slate-400 hover:text-white"}`}>
-              <t.icon className="w-3.5 h-3.5" />
+      {/* Tabs */}
+      <div className="tabs-new">
+        {TABS.map(t => {
+          const Icon = t.icon;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`tab-new ${tab === t.id ? "tab-new--active" : ""}`}
+            >
+              <Icon size={14} />
               {t.label}
             </button>
-          ))}
-        </div>
+          );
+        })}
+      </div>
 
-        {/* TAB: OVERVIEW */}
-        {tab === "overview" && (
-          <div className="space-y-5">
-          <div className="grid grid-cols-2 gap-5">
+      {/* TAB: OVERVIEW */}
+      {tab === "overview" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             {/* Clinic info */}
-            <div className="bg-slate-900 border border-slate-700 rounded-xl p-5">
-              <h2 className="text-sm font-bold mb-4 text-slate-200">Datos de la clínica</h2>
-              <div className="space-y-2.5 text-sm">
+            <CardNew>
+              <div className="form-section__title">
+                Datos de la clínica <span className="form-section__rule" />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", fontSize: 13 }}>
                 {[
                   { label: "Nombre",       val: clinic.name },
                   { label: "Slug/URL",     val: `${clinic.slug}.mediflow.app` },
@@ -277,245 +295,351 @@ export function AdminClinicDetailClient({
                   { label: "Email",        val: clinic.email ?? "—" },
                   { label: "Registro",     val: new Date(clinic.createdAt).toLocaleDateString("es-MX") },
                 ].map(r => (
-                  <div key={r.label} className="flex justify-between py-1.5 border-b border-slate-800">
-                    <span className="text-slate-400">{r.label}</span>
-                    <span className="font-semibold text-slate-200">{r.val}</span>
+                  <div
+                    key={r.label}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      padding: "8px 0",
+                      borderBottom: "1px solid var(--border-soft)",
+                    }}
+                  >
+                    <span style={{ color: "var(--text-3)" }}>{r.label}</span>
+                    <span style={{ color: "var(--text-1)", fontWeight: 500 }}>{r.val}</span>
                   </div>
                 ))}
               </div>
-            </div>
+            </CardNew>
 
             {/* Plan management */}
-            <div className="space-y-4">
-              <div className="bg-slate-900 border border-slate-700 rounded-xl p-5">
-                <h2 className="text-sm font-bold mb-4 text-slate-200">Gestión de plan</h2>
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-xs text-slate-400 mb-1 block">Plan actual</label>
-                    <select value={editPlan} onChange={e => setEditPlan(e.target.value)}
-                      className="w-full bg-slate-800 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-600/50">
-                      <option value="BASIC">BASIC — $49/mes</option>
-                      <option value="PRO">PRO — $99/mes</option>
-                      <option value="CLINIC">CLINIC — $249/mes</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs text-slate-400 mb-1 block">Vencimiento actual</label>
-                    <div className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm">
-                      {clinic.trialEndsAt ? new Date(clinic.trialEndsAt).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" }) : "Sin fecha"}
-                      {daysLeft !== null && <span className={`ml-2 font-bold ${expired ? "text-rose-400" : "text-emerald-400"}`}>({expired ? "Expirado" : `${daysLeft} días restantes`})</span>}
-                    </div>
-                  </div>
-                  <button onClick={updatePlan} disabled={saving}
-                    className="w-full py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors">
-                    {saving ? "Guardando…" : "Activar plan + 1 mes"}
-                  </button>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[7, 14, 30].map(days => (
-                      <button key={days} onClick={() => extendTrial(days)} disabled={saving}
-                        className="py-1.5 bg-brand-900/50 text-brand-400 border border-brand-700 text-xs font-bold rounded-lg hover:bg-brand-900 disabled:opacity-50 transition-colors">
-                        +{days} días
-                      </button>
-                    ))}
-                  </div>
-                  <button onClick={suspendClinic} disabled={saving}
-                    className="w-full py-2 bg-rose-900/40 text-rose-400 border border-rose-700 text-sm font-bold rounded-lg hover:bg-rose-900/70 disabled:opacity-50 transition-colors">
-                    ⚠️ Suspender clínica
-                  </button>
-                </div>
+            <CardNew>
+              <div className="form-section__title">
+                Gestión de plan <span className="form-section__rule" />
               </div>
-            </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <div className="field-new">
+                  <label className="field-new__label">Plan actual</label>
+                  <select
+                    value={editPlan}
+                    onChange={e => setEditPlan(e.target.value)}
+                    className="input-new"
+                  >
+                    <option value="BASIC">BASIC — $49/mes</option>
+                    <option value="PRO">PRO — $99/mes</option>
+                    <option value="CLINIC">CLINIC — $249/mes</option>
+                  </select>
+                </div>
+
+                <div className="field-new">
+                  <label className="field-new__label">Vencimiento actual</label>
+                  <div
+                    style={{
+                      background: "var(--bg-elev)",
+                      border: "1px solid var(--border-soft)",
+                      borderRadius: 8,
+                      padding: "8px 12px",
+                      fontSize: 13,
+                      color: "var(--text-1)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <span>
+                      {clinic.trialEndsAt
+                        ? new Date(clinic.trialEndsAt).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
+                        : "Sin fecha"}
+                    </span>
+                    {daysLeft !== null && (
+                      <BadgeNew tone={expired ? "danger" : "success"}>
+                        {expired ? "Expirado" : `${daysLeft} días restantes`}
+                      </BadgeNew>
+                    )}
+                  </div>
+                </div>
+
+                <ButtonNew variant="primary" onClick={updatePlan} disabled={saving}>
+                  {saving ? "Guardando…" : "Activar plan + 1 mes"}
+                </ButtonNew>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                  {[7, 14, 30].map(days => (
+                    <ButtonNew
+                      key={days}
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => extendTrial(days)}
+                      disabled={saving}
+                    >
+                      +{days} días
+                    </ButtonNew>
+                  ))}
+                </div>
+
+                <ButtonNew variant="danger" onClick={suspendClinic} disabled={saving}>
+                  Suspender clínica
+                </ButtonNew>
+              </div>
+            </CardNew>
           </div>
 
           {/* Zona de peligro */}
-          <div className="rounded-2xl border-2 border-red-700/60 bg-red-950/30 p-5 space-y-3">
-            <div className="flex items-center gap-2">
-              <Shield className="w-4 h-4 text-red-400" />
-              <h2 className="text-sm font-extrabold text-red-300 uppercase tracking-wide">Zona de peligro</h2>
+          <div
+            style={{
+              borderRadius: 12,
+              border: "1px solid var(--danger)",
+              background: "color-mix(in oklab, var(--danger) 8%, transparent)",
+              padding: 20,
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Shield size={14} style={{ color: "var(--danger)" }} />
+              <h2
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "var(--danger)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.04em",
+                  margin: 0,
+                }}
+              >
+                Zona de peligro
+              </h2>
             </div>
-            <p className="text-xs text-red-200/80 leading-relaxed">
+            <p style={{ fontSize: 12, color: "var(--text-2)", lineHeight: 1.5, margin: 0 }}>
               Eliminar una clínica borra de forma permanente todos sus datos (pacientes, citas, expedientes,
               facturas, usuarios, archivos, etc.) y sus archivos en Supabase Storage. Esta acción no se puede deshacer.
             </p>
-            <button
-              onClick={() => setShowDeleteModal(true)}
-              className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold px-4 py-2 rounded-xl transition-colors"
-            >
-              <Trash2 className="w-4 h-4" />
-              Eliminar clínica
-            </button>
-          </div>
-          </div>
-        )}
-
-        {/* TAB: ACCOUNT */}
-        {tab === "account" && (
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-5">
-            <h2 className="text-sm font-bold mb-4 text-slate-200">Usuarios de la clínica</h2>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-700">
-                  {["Nombre","Email","Teléfono","Rol","Estado","Registro"].map(h => (
-                    <th key={h} className="text-left px-3 py-2.5 text-[11px] font-bold text-slate-400 uppercase tracking-wide">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {clinic.users.map((u: any) => (
-                  <tr key={u.id} className="border-b border-slate-800 hover:bg-slate-800/40">
-                    <td className="px-3 py-3 font-semibold text-white">{u.firstName} {u.lastName}</td>
-                    <td className="px-3 py-3 text-slate-300">{u.email}</td>
-                    <td className="px-3 py-3 text-slate-400">{u.phone ?? "—"}</td>
-                    <td className="px-3 py-3">
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-900/50 text-brand-400 border border-brand-700">{u.role}</span>
-                    </td>
-                    <td className="px-3 py-3">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${u.isActive ? "bg-emerald-900/50 text-emerald-400 border-emerald-700" : "bg-rose-900/50 text-rose-400 border-rose-700"}`}>
-                        {u.isActive ? "Activo" : "Inactivo"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3 text-slate-400 text-xs">{new Date(u.createdAt).toLocaleDateString("es-MX")}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* TAB: BILLING */}
-        {tab === "billing" && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-4">
-              {[
-                { label: "Plan",          val: clinic.plan,                              color: "text-brand-400"   },
-                { label: "Ingresos totales", val: formatCurrency(totalRevenue, "MXN"),  color: "text-emerald-400" },
-                { label: "Total facturas", val: totalInvoices,                           color: "text-violet-400"  },
-              ].map(k => (
-                <div key={k.label} className="bg-slate-900 border border-slate-700 rounded-xl p-4">
-                  <div className={`text-2xl font-extrabold ${k.color}`}>{k.val}</div>
-                  <div className="text-xs text-slate-400">{k.label}</div>
-                </div>
-              ))}
-            </div>
-            <div className="bg-slate-900 border border-brand-700 rounded-xl p-5">
-              <div className="text-xs font-bold text-brand-400 uppercase tracking-wide mb-3">Datos para recibir pago</div>
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div><div className="text-slate-400 text-xs mb-1">Nombre</div><div className="font-semibold">{BANK_INFO.nombre}</div></div>
-                <div><div className="text-slate-400 text-xs mb-1">CLABE</div><div className="font-mono font-bold text-brand-400 text-lg">{BANK_INFO.clabe}</div></div>
-                <div><div className="text-slate-400 text-xs mb-1">Banco</div><div className="font-semibold">{BANK_INFO.banco}</div></div>
-              </div>
-              <div className="mt-3 text-xs text-slate-500">
-                Envía estos datos al cliente cuando necesite renovar su plan.
-              </div>
+            <div>
+              <ButtonNew variant="danger" icon={<Trash2 size={14} />} onClick={() => setShowDeleteModal(true)}>
+                Eliminar clínica
+              </ButtonNew>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* TAB: ACTIVITY */}
-        {tab === "activity" && <ClinicActivityTab clinicId={clinic.id} />}
-
-        {/* TAB: USAGE */}
-        {tab === "usage" && <ClinicUsageTab clinicId={clinic.id} />}
-
-        {/* TAB: STRIPE */}
-        {tab === "stripe" && (
-          <ClinicStripeTab
-            clinicId={clinic.id}
-            clinicName={clinic.name}
-            plan={clinic.plan}
-            stripeCustomerId={clinic.stripeCustomerId ?? null}
-            stripeSubscriptionId={clinic.stripeSubscriptionId ?? null}
-            subscriptionStatus={clinic.subscriptionStatus ?? null}
-            stripeConfigured={stripeConfigured}
-            instructions={stripeInstructions}
-          />
-        )}
-
-        {/* TAB: NOTES */}
-        {tab === "notes" && (
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-5">
-            <h2 className="text-sm font-bold mb-4 text-slate-200">Notas internas</h2>
-            <p className="text-xs text-slate-500 mb-4">Solo visibles para el super admin. Se persisten en la DB por clínica.</p>
-            <div className="flex flex-col gap-2 mb-4">
-              <textarea
-                rows={3}
-                className="w-full bg-slate-800 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-600/50 placeholder:text-slate-500"
-                placeholder="Ej: Cliente pagó el 15/03, activar PRO por 1 año…"
-                value={note}
-                onChange={e => setNote(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) addNote(); }}
-              />
-              <button
-                onClick={addNote}
-                disabled={savingNote || !note.trim()}
-                className="self-end px-4 py-2 bg-brand-600 text-white text-sm font-bold rounded-lg hover:bg-brand-700 disabled:opacity-50 transition-colors"
-              >
-                {savingNote ? "Guardando…" : "Agregar nota"}
-              </button>
-            </div>
-            {!notesLoaded ? (
-              <p className="text-sm text-slate-500 text-center py-6">Cargando…</p>
-            ) : notes.length === 0 ? (
-              <p className="text-sm text-slate-500 text-center py-6">Sin notas aún</p>
-            ) : (
-              <div className="space-y-2">
-                {notes.map(n => {
-                  const authorLabel = n.author
-                    ? `${n.author.firstName} ${n.author.lastName}`
-                    : "Super admin";
-                  return (
-                    <div key={n.id} className="flex items-start gap-2 bg-slate-800 rounded-lg px-3 py-2.5 group">
-                      <span className="text-brand-400 text-xs mt-0.5">📝</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-slate-300 whitespace-pre-wrap break-words">{n.content}</p>
-                        <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500">
-                          <span className="font-semibold text-slate-400">{authorLabel}</span>
-                          <span>·</span>
-                          <span>{relativeTime(n.createdAt)}</span>
+      {/* TAB: ACCOUNT */}
+      {tab === "account" && (
+        <CardNew>
+          <div className="form-section__title">
+            Usuarios de la clínica <span className="form-section__rule" />
+          </div>
+          <table className="table-new">
+            <thead>
+              <tr>
+                <th>Usuario</th>
+                <th>Teléfono</th>
+                <th>Rol</th>
+                <th>Estado</th>
+                <th>Registro</th>
+              </tr>
+            </thead>
+            <tbody>
+              {clinic.users.map((u: any) => (
+                <tr key={u.id}>
+                  <td>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <AvatarNew name={`${u.firstName} ${u.lastName}`} size="sm" />
+                      <div>
+                        <div style={{ fontWeight: 500, color: "var(--text-1)" }}>
+                          {u.firstName} {u.lastName}
                         </div>
+                        <div style={{ fontSize: 11, color: "var(--text-3)" }}>{u.email}</div>
                       </div>
-                      <button
-                        onClick={() => deleteNote(n.id)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-rose-900/40 text-slate-400 hover:text-rose-400 flex-shrink-0"
-                        aria-label="Eliminar nota"
-                        title="Eliminar"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                  </td>
+                  <td style={{ color: "var(--text-2)" }}>{u.phone ?? "—"}</td>
+                  <td>
+                    <BadgeNew tone="brand">{u.role}</BadgeNew>
+                  </td>
+                  <td>
+                    <BadgeNew tone={u.isActive ? "success" : "neutral"} dot>
+                      {u.isActive ? "Activo" : "Inactivo"}
+                    </BadgeNew>
+                  </td>
+                  <td className="mono" style={{ color: "var(--text-3)", fontSize: 12 }}>
+                    {new Date(u.createdAt).toLocaleDateString("es-MX")}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardNew>
+      )}
+
+      {/* TAB: BILLING */}
+      {tab === "billing" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+            <KpiCard label="Plan"             value={clinic.plan}         icon={CreditCard} />
+            <KpiCard label="Ingresos totales" value={fmtMXN(totalRevenue)} icon={BarChart3}  />
+            <KpiCard label="Total facturas"   value={String(totalInvoices)} icon={FileText}  />
           </div>
-        )}
 
-        {modalChannel && (
-          <SendMessageModal
-            clinicId={clinic.id}
-            clinicName={clinic.name}
-            channel={modalChannel}
-            onClose={() => setModalChannel(null)}
-          />
-        )}
+          <CardNew>
+            <div className="form-section__title">
+              Datos para recibir pago <span className="form-section__rule" />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+              <div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 4 }}>Nombre</div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-1)" }}>{BANK_INFO.nombre}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 4 }}>CLABE</div>
+                <div className="mono" style={{ fontSize: 15, fontWeight: 600, color: "var(--brand)" }}>
+                  {BANK_INFO.clabe}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 4 }}>Banco</div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-1)" }}>{BANK_INFO.banco}</div>
+              </div>
+            </div>
+            <div style={{ marginTop: 12, fontSize: 11, color: "var(--text-3)" }}>
+              Envía estos datos al cliente cuando necesite renovar su plan.
+            </div>
+          </CardNew>
+        </div>
+      )}
 
-        {showDeleteModal && (
-          <DeleteClinicModal
-            clinicId={clinic.id}
-            clinicName={clinic.name}
-            counts={{
-              users:        clinic._count?.users        ?? clinic.users?.length ?? 0,
-              patients:     clinic._count?.patients     ?? 0,
-              appointments: clinic._count?.appointments ?? 0,
-              records:      clinic._count?.records      ?? 0,
-              invoices:     clinic._count?.invoices     ?? 0,
-              files:        clinic._count?.files        ?? 0,
-            }}
-            canDelete={totalClinicsInSystem > 1}
-            reason={totalClinicsInSystem <= 1 ? "Es la única clínica del sistema. El admin no permite borrar la última para no dejar la app vacía (útil durante QA/testing)." : undefined}
-            onClose={() => setShowDeleteModal(false)}
-          />
-        )}
-      </div>
+      {/* TAB: ACTIVITY */}
+      {tab === "activity" && <ClinicActivityTab clinicId={clinic.id} />}
+
+      {/* TAB: USAGE */}
+      {tab === "usage" && <ClinicUsageTab clinicId={clinic.id} />}
+
+      {/* TAB: STRIPE */}
+      {tab === "stripe" && (
+        <ClinicStripeTab
+          clinicId={clinic.id}
+          clinicName={clinic.name}
+          plan={clinic.plan}
+          stripeCustomerId={clinic.stripeCustomerId ?? null}
+          stripeSubscriptionId={clinic.stripeSubscriptionId ?? null}
+          subscriptionStatus={clinic.subscriptionStatus ?? null}
+          stripeConfigured={stripeConfigured}
+          instructions={stripeInstructions}
+        />
+      )}
+
+      {/* TAB: NOTES */}
+      {tab === "notes" && (
+        <CardNew>
+          <div className="form-section__title">
+            Notas internas <span className="form-section__rule" />
+          </div>
+          <p style={{ fontSize: 12, color: "var(--text-3)", marginTop: 0, marginBottom: 16 }}>
+            Solo visibles para el super admin. Se persisten en la DB por clínica.
+          </p>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+            <textarea
+              className="input-new"
+              style={{ minHeight: 80, resize: "vertical" }}
+              placeholder="Ej: Cliente pagó el 15/03, activar PRO por 1 año…"
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) addNote(); }}
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <ButtonNew variant="primary" onClick={addNote} disabled={savingNote || !note.trim()}>
+                {savingNote ? "Guardando…" : "Agregar nota"}
+              </ButtonNew>
+            </div>
+          </div>
+
+          {!notesLoaded ? (
+            <p style={{ fontSize: 13, color: "var(--text-3)", textAlign: "center", padding: "24px 0" }}>
+              Cargando…
+            </p>
+          ) : notes.length === 0 ? (
+            <p style={{ fontSize: 13, color: "var(--text-3)", textAlign: "center", padding: "24px 0" }}>
+              Sin notas aún
+            </p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {notes.map(n => {
+                const authorLabel = n.author
+                  ? `${n.author.firstName} ${n.author.lastName}`
+                  : "Super admin";
+                return (
+                  <div key={n.id} className="list-row" style={{ alignItems: "flex-start", gap: 10 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p
+                        style={{
+                          fontSize: 13,
+                          color: "var(--text-1)",
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-word",
+                          margin: 0,
+                        }}
+                      >
+                        {n.content}
+                      </p>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          marginTop: 6,
+                          fontSize: 11,
+                          color: "var(--text-3)",
+                        }}
+                      >
+                        <span style={{ fontWeight: 500, color: "var(--text-2)" }}>{authorLabel}</span>
+                        <span>·</span>
+                        <span>{formatRelativeDate(n.createdAt)}</span>
+                      </div>
+                    </div>
+                    <ButtonNew
+                      variant="ghost"
+                      size="sm"
+                      icon={<Trash2 size={14} />}
+                      onClick={() => deleteNote(n.id)}
+                      aria-label="Eliminar nota"
+                      title="Eliminar"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardNew>
+      )}
+
+      {modalChannel && (
+        <SendMessageModal
+          clinicId={clinic.id}
+          clinicName={clinic.name}
+          channel={modalChannel}
+          onClose={() => setModalChannel(null)}
+        />
+      )}
+
+      {showDeleteModal && (
+        <DeleteClinicModal
+          clinicId={clinic.id}
+          clinicName={clinic.name}
+          counts={{
+            users:        clinic._count?.users        ?? clinic.users?.length ?? 0,
+            patients:     clinic._count?.patients     ?? 0,
+            appointments: clinic._count?.appointments ?? 0,
+            records:      clinic._count?.records      ?? 0,
+            invoices:     clinic._count?.invoices     ?? 0,
+            files:        clinic._count?.files        ?? 0,
+          }}
+          canDelete={totalClinicsInSystem > 1}
+          reason={totalClinicsInSystem <= 1 ? "Es la única clínica del sistema. El admin no permite borrar la última para no dejar la app vacía (útil durante QA/testing)." : undefined}
+          onClose={() => setShowDeleteModal(false)}
+        />
+      )}
+    </div>
   );
 }
