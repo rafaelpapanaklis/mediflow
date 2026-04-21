@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { rateLimit } from "@/lib/rate-limit";
+import { sendWelcomeEmail } from "@/lib/email";
+import { SITE_URL } from "@/lib/seo";
 
 const CATEGORY_MAP: Record<string, string> = {
   dental: "DENTAL", odontologia: "DENTAL",
@@ -103,6 +105,15 @@ export async function POST(req: NextRequest) {
         schedules: { createMany: { data: [0,1,2,3,4].map(day => ({ dayOfWeek: day, enabled: true, openTime: "09:00", closeTime: "18:00" })) } },
       },
     });
+
+    // Welcome email (no bloquea el response si falla)
+    sendWelcomeEmail({
+      email: data.email,
+      firstName: data.firstName,
+      clinicName: data.clinicName,
+      trialEndsAt,
+      dashboardUrl: `${SITE_URL}/dashboard`,
+    }).catch(err => console.error("[register] welcome email failed:", err));
 
     return NextResponse.json({ success: true });
   } catch (err: any) {

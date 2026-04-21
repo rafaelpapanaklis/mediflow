@@ -1,10 +1,11 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import toast from "react-hot-toast";
 import { Activity, Flame, Zap } from "lucide-react";
 import { CardNew }   from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
+import { EvolutionChart } from "@/components/clinical/shared";
 
 const ACTIVITY_LEVELS = [
   { id:"sedentary",   label:"Sedentario",             factor:1.2   },
@@ -48,6 +49,24 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
     } as Record<string, string>,
   });
   const [smartGoals, setSmartGoals] = useState<{ objetivo: string; fechaMeta: string; progreso: string; estado: string }[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
+  useEffect(() => {
+    fetch(`/api/clinical?patientId=${patientId}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setHistory(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, [patientId]);
+
+  const weightData = useMemo(() =>
+    history
+      .filter(r => r?.specialtyData?.anthropometrics?.weight)
+      .map(r => ({
+        date: new Date(r.visitDate).toLocaleDateString("es-MX", { day: "numeric", month: "short" }),
+        value: Number(r.specialtyData.anthropometrics.weight),
+      }))
+      .reverse(),
+    [history]
+  );
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
   const setMP = (k: string, v: string) => setForm(f => ({ ...f, mealPlan: { ...f.mealPlan, [k]: v } }));
   const setFF = (k: string, v: string) => setForm(f => ({ ...f, foodFrequency: { ...f.foodFrequency, [k]: v } }));
@@ -184,6 +203,21 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
               <div style={{ fontSize: 10, color: "var(--text-3)", marginTop: 4 }}>Lorentz</div>
             </div>
           </div>
+        )}
+      </CardNew>
+
+      <CardNew title="Evolución de peso" sub="Histórico de consultas">
+        {weightData.length < 2 ? (
+          <div style={{ fontSize: 12, color: "var(--text-3)", fontStyle: "italic", padding: "12px 0" }}>
+            Agrega 2+ consultas para ver evolución
+          </div>
+        ) : (
+          <EvolutionChart
+            data={weightData}
+            metric="Peso"
+            color="#fbbf24"
+            unit="kg"
+          />
         )}
       </CardNew>
 

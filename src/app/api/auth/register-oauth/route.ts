@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { rateLimit } from "@/lib/rate-limit";
+import { sendWelcomeEmail } from "@/lib/email";
+import { SITE_URL } from "@/lib/seo";
 
 /**
  * Completar registro para usuarios que entraron via OAuth (Google/Microsoft).
@@ -138,6 +140,14 @@ export async function POST(req: NextRequest) {
         },
       },
     });
+
+    sendWelcomeEmail({
+      email,
+      firstName,
+      clinicName: data.clinicName,
+      trialEndsAt,
+      dashboardUrl: `${SITE_URL}/dashboard`,
+    }).catch(err => console.error("[register-oauth] welcome email failed:", err));
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
