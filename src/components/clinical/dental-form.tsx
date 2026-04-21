@@ -4,6 +4,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { formatCurrency } from "@/lib/utils";
 import toast from "react-hot-toast";
+import { TreatmentTimeline } from "@/components/clinical/shared";
 
 interface CatalogProcedure { id: string; name: string; basePrice: number; category: string }
 interface SelectedProcedure { id: string; name: string; price: number; quantity: number }
@@ -55,6 +56,43 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
       .then((data: CatalogProcedure[]) => setCatalog(Array.isArray(data) ? data : []))
       .catch(() => setCatalog([]));
   }, []);
+
+  const [treatmentPlans, setTreatmentPlans] = useState<any[]>([]);
+  useEffect(() => {
+    fetch(`/api/treatments?patientId=${patientId}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setTreatmentPlans(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, [patientId]);
+
+  const orthoMilestones = useMemo(() => {
+    const plan = treatmentPlans.find(p => {
+      const name = (p?.name || "").toLowerCase();
+      return (name.includes("ortodoncia") || name.includes("ortho")) && p.status === "ACTIVE";
+    }) ?? treatmentPlans.find(p => {
+      const name = (p?.name || "").toLowerCase();
+      return name.includes("ortodoncia") || name.includes("ortho");
+    });
+    if (!plan?.startDate) return null;
+    const start = new Date(plan.startDate);
+    const end = plan.endDate ? new Date(plan.endDate) : new Date(start.getTime() + (plan.totalSessions ?? 12) * (plan.sessionIntervalDays ?? 30) * 86400000);
+    const months: { date: string; title: string; status: "completed" | "current" | "pending"; notes?: string }[] = [];
+    const now = new Date();
+    const cursor = new Date(start);
+    let i = 0;
+    while (cursor <= end && i < 36) {
+      const isCompleted = cursor < now && (cursor.getFullYear() < now.getFullYear() || cursor.getMonth() < now.getMonth());
+      const isCurrent = cursor.getFullYear() === now.getFullYear() && cursor.getMonth() === now.getMonth();
+      months.push({
+        date: cursor.toLocaleDateString("es-MX", { month: "short", year: "2-digit" }),
+        title: `Mes ${i + 1}`,
+        status: isCompleted ? "completed" : isCurrent ? "current" : "pending",
+      });
+      cursor.setMonth(cursor.getMonth() + 1);
+      i++;
+    }
+    return { plan, months };
+  }, [treatmentPlans]);
 
   const filteredCatalog = useMemo(() => {
     const q = procSearch.toLowerCase().trim();
@@ -287,6 +325,12 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
 
   return (
     <form onSubmit={e => { e.preventDefault(); handleSave(); }} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {orthoMilestones && orthoMilestones.months.length > 0 && (
+        <CardNew title={`Línea de tiempo — ${orthoMilestones.plan.name}`} sub="Plan de ortodoncia mes a mes">
+          <TreatmentTimeline milestones={orthoMilestones.months} />
+        </CardNew>
+      )}
+
       {/* ANAMNESIS */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         <div className="field-new">

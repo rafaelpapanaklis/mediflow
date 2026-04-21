@@ -1,9 +1,10 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import toast from "react-hot-toast";
 import { CardNew }   from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
+import { BodyMap, BeforeAfterGallery } from "@/components/clinical/shared";
 
 const BODY_ZONES = [
   "Cuero cabelludo","Cara","Cuello","Tórax anterior","Tórax posterior/Espalda",
@@ -105,6 +106,50 @@ export function DermatologyForm({ patientId, onSaved }: Props) {
   const removeMed = (i: number) => setMedications(m => m.filter((_, j) => j !== i));
 
   const [returnDate, setReturnDate] = useState("");
+
+  const [history, setHistory] = useState<any[]>([]);
+  const [beforeAfter, setBeforeAfter] = useState<any[]>([]);
+  useEffect(() => {
+    fetch(`/api/clinical?patientId=${patientId}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setHistory(Array.isArray(d) ? d : []))
+      .catch(() => {});
+    fetch(`/api/before-after?patientId=${patientId}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setBeforeAfter(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, [patientId]);
+
+  const lesionMarkers = useMemo(() => {
+    const out: { x: number; y: number; color: string; label?: string }[] = [];
+    for (const r of history) {
+      const lesions = r?.specialtyData?.bodyMap?.zones ?? r?.specialtyData?.lesions ?? [];
+      if (!Array.isArray(lesions)) continue;
+      for (const l of lesions) {
+        if (typeof l?.x === "number" && typeof l?.y === "number") {
+          out.push({
+            x: l.x,
+            y: l.y,
+            color: "#a78bfa",
+            label: l.zone || l.type || undefined,
+          });
+        }
+      }
+    }
+    return out;
+  }, [history]);
+
+  const galleryImages = useMemo(() =>
+    beforeAfter
+      .filter(p => p?.url)
+      .map(p => ({
+        id: p.id,
+        url: p.url,
+        date: p.takenAt ? new Date(p.takenAt).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" }) : "",
+        label: p.angle || p.category || "Foto",
+      })),
+    [beforeAfter]
+  );
 
   async function handleSave() {
     if (!subjective && !assessment) { toast.error("Agrega el motivo de consulta o diagnóstico"); return; }
@@ -400,6 +445,28 @@ export function DermatologyForm({ patientId, onSaved }: Props) {
           </div>
         </div>
       </CardNew>
+
+      {/* Seguimiento visual */}
+      {(lesionMarkers.length > 0 || galleryImages.length > 0) && (
+        <CardNew title="Seguimiento visual" sub="Mapa de lesiones y comparativa fotográfica">
+          <div style={{ display: "grid", gridTemplateColumns: lesionMarkers.length > 0 && galleryImages.length > 0 ? "1fr 1fr" : "1fr", gap: 14 }}>
+            {lesionMarkers.length > 0 && (
+              <BodyMap
+                view="front"
+                markers={lesionMarkers}
+                color="#a78bfa"
+                legend={[{ color: "#a78bfa", label: "Lesión registrada" }]}
+              />
+            )}
+            {galleryImages.length > 0 && (
+              <BeforeAfterGallery
+                images={galleryImages}
+                sessionLabel="Antes/Después"
+              />
+            )}
+          </div>
+        </CardNew>
+      )}
 
       {/* Diagnóstico y plan */}
       <CardNew title="Diagnóstico y plan">

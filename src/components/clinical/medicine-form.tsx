@@ -1,11 +1,12 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import toast from "react-hot-toast";
 import { Calculator } from "lucide-react";
 import { CardNew }   from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { CalculatorModal } from "@/components/clinical/calculators/calculator-modal";
+import { EvolutionChart } from "@/components/clinical/shared";
 
 const DIAGNOSES_CIE10 = ["J00 - Resfriado común","J06 - IRA superior","J18 - Neumonía","K29 - Gastritis","K57 - Diverticulosis","K92 - Hemorragia GI","E11 - Diabetes tipo 2","E14 - Diabetes NE","I10 - Hipertensión esencial","I50 - Insuficiencia cardíaca","J45 - Asma","F32 - Depresión","F41 - Ansiedad","M54 - Dorsalgia","N39 - ITU","Otro"];
 const SPECIALTIES = ["Cardiología","Neurología","Dermatología","Gastroenterología","Ortopedia","Ginecología","Urología","Psiquiatría","Oftalmología","ORL","Endocrinología","Reumatología","Oncología"];
@@ -55,6 +56,52 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
 
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
   const setV = (k: string, v: string) => setForm(f => ({ ...f, vitals: { ...f.vitals, [k]: v } }));
+
+  const [bpTab, setBpTab] = useState<"systolic" | "diastolic">("systolic");
+  const [history, setHistory] = useState<any[]>([]);
+  useEffect(() => {
+    fetch(`/api/clinical?patientId=${patientId}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setHistory(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, [patientId]);
+
+  function parseBp(record: any): { sys: number; dia: number } | null {
+    const bp = record?.vitals?.bloodPressure ?? record?.specialtyData?.vitals?.bloodPressure;
+    if (!bp) return null;
+    if (typeof bp === "string") {
+      const m = bp.match(/(\d+)\s*\/\s*(\d+)/);
+      if (m) return { sys: Number(m[1]), dia: Number(m[2]) };
+      return null;
+    }
+    if (typeof bp === "object" && bp.systolic && bp.diastolic) {
+      return { sys: Number(bp.systolic), dia: Number(bp.diastolic) };
+    }
+    return null;
+  }
+
+  const bpHistory = useMemo(() =>
+    history
+      .map(r => ({ record: r, bp: parseBp(r) }))
+      .filter(x => x.bp !== null)
+      .slice(0, 6)
+      .map(x => ({
+        date: new Date(x.record.visitDate).toLocaleDateString("es-MX", { day: "numeric", month: "short" }),
+        sys: x.bp!.sys,
+        dia: x.bp!.dia,
+      }))
+      .reverse(),
+    [history]
+  );
+
+  const systolicData = useMemo(() =>
+    bpHistory.map(b => ({ date: b.date, value: b.sys })),
+    [bpHistory]
+  );
+  const diastolicData = useMemo(() =>
+    bpHistory.map(b => ({ date: b.date, value: b.dia })),
+    [bpHistory]
+  );
 
   function addMed() { set("medications", [...form.medications, { drug:"", dose:"", frequency:"", duration:"", route:"oral", instructions:"" }]); }
   function removeMed(i: number) { set("medications", form.medications.filter((_,j) => j !== i)); }
@@ -272,6 +319,55 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
               </div>
             ))}
           </div>
+        )}
+      </CardNew>
+
+      {/* Evolución TA */}
+      <CardNew title="Evolución TA" sub="Últimos 6 controles">
+        <div className="segment-new" style={{ marginBottom: 14 }}>
+          <button
+            type="button"
+            className={`segment-new__btn ${bpTab === "systolic" ? "segment-new__btn--active" : ""}`}
+            onClick={() => setBpTab("systolic")}
+          >
+            Sistólica
+          </button>
+          <button
+            type="button"
+            className={`segment-new__btn ${bpTab === "diastolic" ? "segment-new__btn--active" : ""}`}
+            onClick={() => setBpTab("diastolic")}
+          >
+            Diastólica
+          </button>
+        </div>
+        {bpTab === "systolic" ? (
+          systolicData.length < 2 ? (
+            <div style={{ fontSize: 12, color: "var(--text-3)", fontStyle: "italic", padding: 12 }}>
+              Agrega 2+ consultas para ver evolución
+            </div>
+          ) : (
+            <EvolutionChart
+              data={systolicData}
+              metric="TA Sistólica"
+              color="#34d399"
+              unit="mmHg"
+              normalRange={{ min: 90, max: 120 }}
+            />
+          )
+        ) : (
+          diastolicData.length < 2 ? (
+            <div style={{ fontSize: 12, color: "var(--text-3)", fontStyle: "italic", padding: 12 }}>
+              Agrega 2+ consultas para ver evolución
+            </div>
+          ) : (
+            <EvolutionChart
+              data={diastolicData}
+              metric="TA Diastólica"
+              color="#34d399"
+              unit="mmHg"
+              normalRange={{ min: 60, max: 80 }}
+            />
+          )
         )}
       </CardNew>
 

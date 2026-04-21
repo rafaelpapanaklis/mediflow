@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Building, User, Clock, Shield, Receipt, Bot, CalendarCheck, ExternalLink, Zap } from "lucide-react";
+import { Building, User, Clock, Shield, Receipt, Bot, CalendarCheck, ExternalLink, Zap, CreditCard } from "lucide-react";
+import { SubscriptionTab } from "@/components/dashboard/subscription-tab";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -170,14 +171,15 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
   const isAdminUser = initUser.role === "ADMIN" || initUser.role === "SUPER_ADMIN";
 
   const TABS = [
-    { id:"clinica",     label:"Mi clínica",    icon:Building,      show:true        },
-    { id:"servicios",   label:"Servicios",     icon:Zap,           show:isAdminUser },
-    { id:"perfil",      label:"Mi perfil",     icon:User,          show:true        },
-    { id:"facturacion", label:"Facturación",   icon:Receipt,       show:isAdminUser },
-    { id:"ia",          label:"Asistente IA",  icon:Bot,           show:true        },
-    { id:"integraciones",label:"Integraciones",icon:CalendarCheck, show:true        },
-    { id:"horarios",    label:"Horarios",      icon:Clock,         show:isAdminUser },
-    { id:"seguridad",   label:"Seguridad",     icon:Shield,        show:true        },
+    { id:"clinica",      label:"Mi clínica",    icon:Building,      show:true        },
+    { id:"subscription", label:"Suscripción",   icon:CreditCard,    show:isAdminUser },
+    { id:"servicios",    label:"Servicios",     icon:Zap,           show:isAdminUser },
+    { id:"perfil",       label:"Mi perfil",     icon:User,          show:true        },
+    { id:"facturacion",  label:"Facturación",   icon:Receipt,       show:isAdminUser },
+    { id:"ia",           label:"Asistente IA",  icon:Bot,           show:true        },
+    { id:"integraciones",label:"Integraciones", icon:CalendarCheck, show:true        },
+    { id:"horarios",     label:"Horarios",      icon:Clock,         show:isAdminUser },
+    { id:"seguridad",    label:"Seguridad",     icon:Shield,        show:true        },
   ].filter(t => t.show);
 
   return (
@@ -207,6 +209,9 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           ))}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
+
+      {/* ── SUSCRIPCIÓN ── */}
+      {tab === "subscription" && <SubscriptionTab clinic={clinic} />}
 
       {/* ── CLÍNICA ── */}
       {tab === "clinica" && (

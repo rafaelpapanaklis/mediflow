@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Plus, Printer, Edit } from "lucide-react";
@@ -10,6 +10,7 @@ import { DentalForm }          from "@/components/clinical/dental-form";
 import { NutritionForm }       from "@/components/clinical/nutrition-form";
 import { PsychologyForm }      from "@/components/clinical/psychology-form";
 import { GeneralMedicineForm } from "@/components/clinical/medicine-form";
+import { EvolutionChart, TreatmentTimeline } from "@/components/clinical/shared";
 import toast from "react-hot-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -187,6 +188,79 @@ export function PatientDetailClient({
   }
 
   const detectedSpecialty = detectSpecialty(specialty);
+
+  const [evolutionPlans, setEvolutionPlans] = useState<any[]>([]);
+  useEffect(() => {
+    fetch(`/api/treatments?patientId=${patient.id}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setEvolutionPlans(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, [patient.id]);
+
+  const mainChart = useMemo(() => {
+    if (detectedSpecialty === "dental") return null;
+    if (detectedSpecialty === "nutrition") {
+      const data = records
+        .filter((r: any) => r?.specialtyData?.anthropometrics?.weight)
+        .map((r: any) => ({
+          date: new Date(r.visitDate).toLocaleDateString("es-MX", { day: "numeric", month: "short" }),
+          value: Number(r.specialtyData.anthropometrics.weight),
+        }))
+        .reverse();
+      return { data, metric: "Peso", color: "#fbbf24", unit: "kg" as string | undefined, normalRange: undefined as { min: number; max: number } | undefined };
+    }
+    if (detectedSpecialty === "psychology") {
+      const data = records
+        .filter((r: any) => r?.specialtyData?.scales?.phq9?.score !== undefined)
+        .map((r: any) => ({
+          date: new Date(r.visitDate).toLocaleDateString("es-MX", { day: "numeric", month: "short" }),
+          value: Number(r.specialtyData.scales.phq9.score),
+        }))
+        .reverse();
+      return { data, metric: "PHQ-9 · Depresión", color: "#38bdf8", unit: undefined, normalRange: { min: 0, max: 4 } };
+    }
+    const data: { date: string; value: number }[] = [];
+    for (const r of records) {
+      const bp = r?.vitals?.bloodPressure ?? r?.specialtyData?.vitals?.bloodPressure;
+      if (!bp) continue;
+      if (typeof bp === "string") {
+        const m = bp.match(/(\d+)\s*\/\s*(\d+)/);
+        if (m) data.push({
+          date: new Date(r.visitDate).toLocaleDateString("es-MX", { day: "numeric", month: "short" }),
+          value: Number(m[1]),
+        });
+      } else if (typeof bp === "object" && bp.systolic) {
+        data.push({
+          date: new Date(r.visitDate).toLocaleDateString("es-MX", { day: "numeric", month: "short" }),
+          value: Number(bp.systolic),
+        });
+      }
+    }
+    return { data: data.reverse(), metric: "TA Sistólica", color: "#34d399", unit: "mmHg", normalRange: { min: 90, max: 120 } };
+  }, [records, detectedSpecialty]);
+
+  const activePlanMilestones = useMemo(() => {
+    const plan = evolutionPlans.find(p => p.status === "ACTIVE") ?? evolutionPlans[0];
+    if (!plan?.startDate) return null;
+    const start = new Date(plan.startDate);
+    const end = plan.endDate ? new Date(plan.endDate) : new Date(start.getTime() + (plan.totalSessions ?? 6) * (plan.sessionIntervalDays ?? 30) * 86400000);
+    const now = new Date();
+    const months: { date: string; title: string; status: "completed" | "current" | "pending" }[] = [];
+    const cursor = new Date(start);
+    let i = 0;
+    while (cursor <= end && i < 24) {
+      const isCompleted = cursor < now && (cursor.getFullYear() < now.getFullYear() || cursor.getMonth() < now.getMonth());
+      const isCurrent = cursor.getFullYear() === now.getFullYear() && cursor.getMonth() === now.getMonth();
+      months.push({
+        date: cursor.toLocaleDateString("es-MX", { month: "short", year: "2-digit" }),
+        title: `Sesión ${i + 1}`,
+        status: isCompleted ? "completed" : isCurrent ? "current" : "pending",
+      });
+      cursor.setMonth(cursor.getMonth() + 1);
+      i++;
+    }
+    return { plan, months };
+  }, [evolutionPlans]);
   const age = patient.dob ? new Date().getFullYear() - new Date(patient.dob).getFullYear() : null;
   const initials = getInitials(patient.firstName, patient.lastName);
   const color    = avatarColor(patient.id);
@@ -543,7 +617,37 @@ export function PatientDetailClient({
 
           {/* ===== TAB: EVOLUCION ===== */}
           {tab === "evolucion" && (
-            <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <>
+              {(mainChart || activePlanMilestones) && (
+                <div style={{ display: "grid", gridTemplateColumns: mainChart && activePlanMilestones ? "1fr 1fr" : "1fr", gap: 14, marginBottom: 14 }}>
+                  {mainChart && (
+                    mainChart.data.length < 2 ? (
+                      <div className="card" style={{ padding: 16, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200 }}>
+                        <div style={{ fontSize: 12, color: "var(--text-2)" }}>
+                          Agrega 2+ consultas para ver evolución de {mainChart.metric}
+                        </div>
+                      </div>
+                    ) : (
+                      <EvolutionChart
+                        data={mainChart.data}
+                        metric={mainChart.metric}
+                        color={mainChart.color}
+                        unit={mainChart.unit}
+                        normalRange={mainChart.normalRange}
+                      />
+                    )
+                  )}
+                  {activePlanMilestones && activePlanMilestones.months.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 8 }}>
+                        {activePlanMilestones.plan.name}
+                      </div>
+                      <TreatmentTimeline milestones={activePlanMilestones.months} />
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="flex items-center justify-between px-5 py-4 border-b border-border">
                 <h2 className="text-sm font-bold">Evolución clínica — {records.length} consulta{records.length !== 1 ? "s" : ""}</h2>
                 <button onClick={() => setTab("expediente")} className="text-xs font-semibold text-brand-600 hover:underline">+ Nueva nota SOAP</button>

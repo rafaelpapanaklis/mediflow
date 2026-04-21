@@ -45,6 +45,57 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
   const setMS = (k: string, v: string) => setForm(f => ({ ...f, mentalStatus: { ...f.mentalStatus, [k]: v } }));
 
+  const [scaleTab, setScaleTab] = useState<"phq9" | "gad7">("phq9");
+  const [history, setHistory] = useState<any[]>([]);
+  const [upcoming, setUpcoming] = useState<any[]>([]);
+  useEffect(() => {
+    fetch(`/api/clinical?patientId=${patientId}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setHistory(Array.isArray(d) ? d : []))
+      .catch(() => {});
+    fetch(`/api/appointments`)
+      .then(r => r.ok ? r.json() : [])
+      .then((d: any[]) => {
+        const now = new Date();
+        const filtered = (Array.isArray(d) ? d : [])
+          .filter(a => a.patientId === patientId && new Date(a.date) >= now && !["CANCELLED", "NO_SHOW"].includes(a.status))
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+          .slice(0, 6);
+        setUpcoming(filtered);
+      })
+      .catch(() => {});
+  }, [patientId]);
+
+  const phq9Data = useMemo(() =>
+    history
+      .filter(r => r?.specialtyData?.scales?.phq9?.score !== undefined)
+      .map(r => ({
+        date: new Date(r.visitDate).toLocaleDateString("es-MX", { day: "numeric", month: "short" }),
+        value: Number(r.specialtyData.scales.phq9.score),
+      }))
+      .reverse(),
+    [history]
+  );
+  const gad7Data = useMemo(() =>
+    history
+      .filter(r => r?.specialtyData?.scales?.gad7?.score !== undefined)
+      .map(r => ({
+        date: new Date(r.visitDate).toLocaleDateString("es-MX", { day: "numeric", month: "short" }),
+        value: Number(r.specialtyData.scales.gad7.score),
+      }))
+      .reverse(),
+    [history]
+  );
+  const upcomingItems = useMemo(() =>
+    upcoming.map(a => ({
+      date: a.date,
+      title: a.type || "Sesión",
+      category: a.mode === "TELECONSULTATION" ? "Teleconsulta" : "Presencial",
+      color: "#38bdf8",
+    })),
+    [upcoming]
+  );
+
   const phq9Score = phq9.reduce((a, b) => a + b, 0);
   const gad7Score = gad7.reduce((a, b) => a + b, 0);
   const auditCScore = auditC.reduce((a, b) => a + b, 0);
@@ -157,6 +208,56 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
               {APPROACHES.map(a => <option key={a}>{a}</option>)}
             </select>
           </div>
+        </div>
+      </CardNew>
+
+      {/* Evolución emocional */}
+      <CardNew title="Evolución emocional" sub="Histórico de escalas y próximas sesiones">
+        <div className="segment-new" style={{ marginBottom: 14 }}>
+          <button
+            type="button"
+            className={`segment-new__btn ${scaleTab === "phq9" ? "segment-new__btn--active" : ""}`}
+            onClick={() => setScaleTab("phq9")}
+          >
+            PHQ-9
+          </button>
+          <button
+            type="button"
+            className={`segment-new__btn ${scaleTab === "gad7" ? "segment-new__btn--active" : ""}`}
+            onClick={() => setScaleTab("gad7")}
+          >
+            GAD-7
+          </button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          {scaleTab === "phq9" ? (
+            phq9Data.length < 2 ? (
+              <div style={{ fontSize: 12, color: "var(--text-3)", fontStyle: "italic", padding: 12 }}>
+                Agrega 2+ consultas para ver evolución
+              </div>
+            ) : (
+              <EvolutionChart
+                data={phq9Data}
+                metric="PHQ-9 · Depresión"
+                color="#38bdf8"
+                normalRange={{ min: 0, max: 4 }}
+              />
+            )
+          ) : (
+            gad7Data.length < 2 ? (
+              <div style={{ fontSize: 12, color: "var(--text-3)", fontStyle: "italic", padding: 12 }}>
+                Agrega 2+ consultas para ver evolución
+              </div>
+            ) : (
+              <EvolutionChart
+                data={gad7Data}
+                metric="GAD-7 · Ansiedad"
+                color="#38bdf8"
+                normalRange={{ min: 0, max: 4 }}
+              />
+            )
+          )}
+          <RecurringCalendar items={upcomingItems} title="Próximas sesiones" emptyMessage="Sin sesiones agendadas" />
         </div>
       </CardNew>
 

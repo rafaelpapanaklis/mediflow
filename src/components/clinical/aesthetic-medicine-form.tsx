@@ -1,9 +1,10 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import toast from "react-hot-toast";
 import { CardNew }   from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
+import { FaceInjectionMap, BeforeAfterGallery, RecurringCalendar } from "@/components/clinical/shared";
 
 const PROCEDURES = ["botox", "fillers", "PRP", "mesoterapia", "peeling", "hilos tensores", "láser"] as const;
 const FITZPATRICK = ["I", "II", "III", "IV", "V", "VI"] as const;
@@ -87,6 +88,72 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
     if (gaisPre === null || gaisPost === null) return null;
     return gaisPost - gaisPre;
   }, [gaisPre, gaisPost]);
+
+  const [beforeAfter, setBeforeAfter] = useState<any[]>([]);
+  const [upcoming, setUpcoming] = useState<any[]>([]);
+  useEffect(() => {
+    fetch(`/api/before-after?patientId=${patientId}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setBeforeAfter(Array.isArray(d) ? d : []))
+      .catch(() => {});
+    fetch(`/api/appointments`)
+      .then(r => r.ok ? r.json() : [])
+      .then((d: any[]) => {
+        const now = new Date();
+        const filtered = (Array.isArray(d) ? d : [])
+          .filter(a => a.patientId === patientId && new Date(a.date) >= now && !["CANCELLED", "NO_SHOW"].includes(a.status))
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+          .slice(0, 6);
+        setUpcoming(filtered);
+      })
+      .catch(() => {});
+  }, [patientId]);
+
+  const galleryImages = useMemo(() =>
+    beforeAfter
+      .filter(p => p?.url)
+      .map(p => ({
+        id: p.id,
+        url: p.url,
+        date: p.takenAt ? new Date(p.takenAt).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" }) : "",
+        label: p.angle || p.category || "Foto",
+      })),
+    [beforeAfter]
+  );
+  const upcomingItems = useMemo(() =>
+    upcoming.map(a => ({
+      date: a.date,
+      title: a.type || "Sesión",
+      category: a.mode === "TELECONSULTATION" ? "Teleconsulta" : "Presencial",
+      color: "#a78bfa",
+    })),
+    [upcoming]
+  );
+  const injectionPoints = useMemo(() => {
+    const proc = (form.procedimiento || "").toLowerCase();
+    if (!proc.includes("toxina") && !proc.includes("botox")) return null;
+    const entries = Object.entries(zoneMap)
+      .filter(([, v]) => {
+        const n = parseFloat(v.units);
+        return !isNaN(n) && n > 0;
+      });
+    const coords: Record<string, { x: number; y: number }> = {
+      frente: { x: 50, y: 20 },
+      glabela: { x: 50, y: 30 },
+      patasDeGallo: { x: 20, y: 40 },
+      surcoNasogeniano: { x: 32, y: 60 },
+      labios: { x: 50, y: 72 },
+      menton: { x: 50, y: 85 },
+      pomulos: { x: 30, y: 50 },
+      lineaMandibular: { x: 25, y: 78 },
+    };
+    return entries.map(([key, v]) => ({
+      x: coords[key]?.x ?? 50,
+      y: coords[key]?.y ?? 50,
+      units: parseFloat(v.units) || 0,
+      product: v.product || form.producto,
+    }));
+  }, [form.procedimiento, form.producto, zoneMap]);
 
   function toggleZona(z: string) {
     setForm(f => ({ ...f, zonas: f.zonas.includes(z) ? f.zonas.filter(x => x !== z) : [...f.zonas, z] }));
@@ -332,6 +399,24 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
           </div>
         </div>
       </CardNew>
+
+      {/* Seguimiento visual */}
+      {(injectionPoints !== null || galleryImages.length > 0 || upcomingItems.length > 0) && (
+        <CardNew title="Seguimiento visual" sub="Mapa de aplicación, antes/después y próximas sesiones">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
+            {injectionPoints !== null && injectionPoints.length > 0 && (
+              <FaceInjectionMap
+                injections={injectionPoints}
+                product={form.producto || "Toxina"}
+              />
+            )}
+            {galleryImages.length > 0 && (
+              <BeforeAfterGallery images={galleryImages} sessionLabel="Antes/Después" />
+            )}
+            <RecurringCalendar items={upcomingItems} title="Próximas sesiones" emptyMessage="Sin sesiones agendadas" />
+          </div>
+        </CardNew>
+      )}
 
       {/* GAIS */}
       <CardNew

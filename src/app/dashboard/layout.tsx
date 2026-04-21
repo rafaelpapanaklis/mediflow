@@ -4,13 +4,21 @@ import { Topbar } from "@/components/dashboard/topbar";
 import { QuickActionsBar } from "@/components/dashboard/quick-actions";
 import { TodayStrip } from "@/components/dashboard/today-strip";
 import { GlobalAnnouncementBanner } from "@/components/dashboard/global-announcement-banner";
+import { TrialBanner } from "@/components/dashboard/trial-banner";
 import { prisma } from "@/lib/prisma";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
   const clinic = user.clinic;
   const allClinics = await getUserClinics();
-  const isSuspended = clinic.trialEndsAt && new Date(clinic.trialEndsAt) < new Date();
+  const trialEndsAt = clinic.trialEndsAt ? new Date(clinic.trialEndsAt) : null;
+  const now = new Date();
+  const isSuspended = trialEndsAt && trialEndsAt < now;
+  // Trial activo = futuro Y sin suscripción activa pagando
+  const subscriptionActive =
+    (clinic as any).subscriptionStatus === "active" ||
+    (clinic as any).subscriptionStatus === "paid";
+  const isInTrial = !!trialEndsAt && trialEndsAt > now && !subscriptionActive;
 
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
   const todayEnd   = new Date(); todayEnd.setHours(23, 59, 59, 999);
@@ -88,6 +96,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <a href="/dashboard/suspended" className="underline hover:no-underline">Ver opciones de pago →</a>
           </div>
         )}
+        {isInTrial && trialEndsAt && <TrialBanner trialEndsAt={trialEndsAt} />}
         <GlobalAnnouncementBanner />
         <Topbar crumbs={[clinic.name, "Dashboard"]} hasNotifications />
         <div className="border-b border-border bg-card pt-16 lg:pt-0">
