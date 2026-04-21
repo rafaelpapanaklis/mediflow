@@ -3,11 +3,16 @@ import { prisma } from "@/lib/prisma";
 import { ClinicLandingClient } from "./landing-client";
 import type { Metadata } from "next";
 import {
-  getSpecialty,
+  getSpecialty as getLegacySpecialty,
   isHealthSpecialty,
-  SPECIALTY_SLUGS,
+  SPECIALTY_SLUGS as LEGACY_SPECIALTY_SLUGS,
 } from "@/lib/specialty-content";
-import { SpecialtyPage } from "@/components/public/specialty/specialty-page";
+import { SpecialtyPage as LegacySpecialtyPage } from "@/components/public/specialty/specialty-page";
+import {
+  getSpecialty as getNewSpecialty,
+  SPECIALTY_SLUGS as NEW_SPECIALTY_SLUGS,
+} from "@/lib/specialty-data";
+import { SpecialtyPage } from "@/components/public/landing/specialty/specialty-page";
 import {
   buildMetadata,
   softwareApplicationLd,
@@ -36,11 +41,7 @@ const CATEGORY_HIGHLIGHTS: Record<string, string[]> = {
   OTHER: ["Expediente clínico digital", "Agenda inteligente", "Facturación integrada"],
 };
 
-/**
- * Slugs reservados que NO son ni especialidades ni clínicas — son rutas
- * top-level u operacionales que [slug] nunca debe intentar resolver.
- * Las especialidades viven en SPECIALTY_SLUGS (separado).
- */
+/** Slugs reservados top-level que [slug] nunca intenta resolver. */
 const NON_SPECIALTY_RESERVED = [
   "dashboard","admin","api","auth","login","register",
   "pricing","features","contact","consentimiento","portal",
@@ -50,22 +51,38 @@ const NON_SPECIALTY_RESERVED = [
 interface Props { params: { slug: string } }
 
 export function generateStaticParams() {
-  return SPECIALTY_SLUGS.map((slug) => ({ slug }));
+  const combined = new Set<string>([
+    ...NEW_SPECIALTY_SLUGS,
+    ...LEGACY_SPECIALTY_SLUGS,
+  ]);
+  return Array.from(combined).map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  // 1) Especialidad
-  const specialty = getSpecialty(params.slug);
-  if (specialty) {
+  // 1) New specialty landing (Claude Design)
+  const newSpec = getNewSpecialty(params.slug);
+  if (newSpec) {
     return buildMetadata({
-      title: specialty.seoTitle,
-      description: specialty.seoDescription,
-      path: `/${specialty.slug}`,
-      ogImage: `/og/${specialty.slug}.png`, // TODO: generar imágenes OG
+      title: `${newSpec.name} · MediFlow`,
+      description: newSpec.heroSub,
+      path: `/${newSpec.slug}`,
+      ogImage: `/og/${newSpec.slug}.png`,
+      keywords: [newSpec.name, newSpec.category, "software clínica México", "CFDI", "expediente electrónico"],
     });
   }
 
-  // 2) Clínica (lógica original intacta)
+  // 2) Legacy specialty landing
+  const legacySpec = getLegacySpecialty(params.slug);
+  if (legacySpec) {
+    return buildMetadata({
+      title: legacySpec.seoTitle,
+      description: legacySpec.seoDescription,
+      path: `/${legacySpec.slug}`,
+      ogImage: `/og/${legacySpec.slug}.png`,
+    });
+  }
+
+  // 3) Clínica (landing pública)
   const clinic = await prisma.clinic.findUnique({
     where: { slug: params.slug },
     select: { name: true, description: true, logoUrl: true },
@@ -79,26 +96,58 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function ClinicLandingPage({ params }: Props) {
-  // 1) Slug reservado fuera de especialidades → 404
+  // 1) Reserved slugs
   if (NON_SPECIALTY_RESERVED.includes(params.slug)) notFound();
 
-  // 2) Página de especialidad
-  const specialty = getSpecialty(params.slug);
-  if (specialty) {
-    const url = `${SITE_URL}/${specialty.slug}`;
+  // 2) NEW specialty landing (Claude Design, 17 especialidades médicas)
+  const newSpec = getNewSpecialty(params.slug);
+  if (newSpec) {
+    const url = `${SITE_URL}/${newSpec.slug}`;
     const ldBlocks: object[] = [
       softwareApplicationLd({
-        name: `MediFlow para ${specialty.nombre}`,
-        description: specialty.seoDescription,
+        name: `MediFlow para ${newSpec.name}`,
+        description: newSpec.heroSub,
+        url,
+        category: "HealthApplication",
+      }),
+      medicalBusinessLd({
+        name: `MediFlow — software para ${newSpec.name.toLowerCase()}`,
+        description: newSpec.heroSub,
+        url,
+        medicalSpecialty: newSpec.category,
+      }),
+    ];
+    return (
+      <>
+        {ldBlocks.map((ld, i) => (
+          <script
+            key={i}
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
+          />
+        ))}
+        <SpecialtyPage slug={newSpec.slug} />
+      </>
+    );
+  }
+
+  // 3) Legacy specialty landing
+  const legacySpec = getLegacySpecialty(params.slug);
+  if (legacySpec) {
+    const url = `${SITE_URL}/${legacySpec.slug}`;
+    const ldBlocks: object[] = [
+      softwareApplicationLd({
+        name: `MediFlow para ${legacySpec.nombre}`,
+        description: legacySpec.seoDescription,
         url,
         category: "BusinessApplication",
       }),
     ];
-    if (isHealthSpecialty(specialty.slug)) {
+    if (isHealthSpecialty(legacySpec.slug)) {
       ldBlocks.push(
         medicalBusinessLd({
-          name: `MediFlow — software para ${specialty.nombre.toLowerCase()}`,
-          description: specialty.seoDescription,
+          name: `MediFlow — software para ${legacySpec.nombre.toLowerCase()}`,
+          description: legacySpec.seoDescription,
           url,
         }),
       );
@@ -112,12 +161,12 @@ export default async function ClinicLandingPage({ params }: Props) {
             dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
           />
         ))}
-        <SpecialtyPage content={specialty} />
+        <LegacySpecialtyPage content={legacySpec} />
       </>
     );
   }
 
-  // 3) Landing pública de clínica (lógica original intacta)
+  // 4) Landing pública de clínica
   const clinic = await prisma.clinic.findUnique({
     where:   { slug: params.slug },
     include: {
@@ -128,7 +177,6 @@ export default async function ClinicLandingPage({ params }: Props) {
   });
 
   if (!clinic) notFound();
-
   const c = clinic as any;
 
   if (!c.landingActive) {
