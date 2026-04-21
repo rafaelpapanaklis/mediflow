@@ -118,6 +118,10 @@ export function SignupForm() {
           plan: form.plan,
           billing: form.billing,
           paymentMethod: form.payMethod,
+          paymentMethodLast4:
+            form.payMethod === "card"
+              ? form.card.number.replace(/\s/g, "").slice(-4) || undefined
+              : undefined,
         }),
       });
 

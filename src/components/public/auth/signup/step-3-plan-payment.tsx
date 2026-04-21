@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import cardValidator from "card-validator";
 import { FormField } from "../form-field";
 import { PlanCard, type Billing, type PlanId } from "./plan-card";
 import { PaymentMethodCard } from "./payment-method-card";
@@ -104,28 +105,69 @@ const formatExpiry = (v: string) => {
   return `${n.slice(0, 2)}/${n.slice(2)}`;
 };
 
-function detectCardBrand(num: string): "visa" | "mastercard" | "amex" | null {
-  const n = num.replace(/\s/g, "");
-  if (/^4/.test(n)) return "visa";
-  if (/^(5[1-5]|2[2-7])/.test(n)) return "mastercard";
-  if (/^3[47]/.test(n)) return "amex";
-  return null;
+export type CardBrand = "visa" | "mastercard" | "american-express" | "discover" | "diners-club" | "jcb" | "maestro" | "unionpay" | "mir" | "elo" | "hiper" | "hipercard" | null;
+
+interface CardValidationResult {
+  brand: CardBrand;
+  maxCvcLength: number;
+  errors: {
+    number?: string;
+    expiry?: string;
+    cvc?: string;
+    name?: string;
+    zip?: string;
+  };
 }
 
-function isValidExpiry(expiry: string): boolean {
-  // Must be MM/YY and be a valid future date
-  if (!/^\d{2}\/\d{2}$/.test(expiry)) return false;
-  const [mmStr, yyStr] = expiry.split("/");
-  const mm = Number(mmStr);
-  const yy = Number(yyStr);
-  if (mm < 1 || mm > 12) return false;
-  const now = new Date();
-  const currentYear = now.getFullYear() % 100;
-  const currentMonth = now.getMonth() + 1;
-  if (yy < currentYear) return false;
-  if (yy === currentYear && mm < currentMonth) return false;
-  return true;
+function validateCardFields(card: CardDetails, touched: CardTouched): CardValidationResult {
+  const numberCheck = cardValidator.number(card.number);
+  const expiryCheck = cardValidator.expirationDate(card.expiry);
+  const brand = (numberCheck.card?.type as CardBrand) ?? null;
+  const maxCvcLength = brand === "american-express" ? 4 : 3;
+  const cvcCheck = cardValidator.cvv(card.cvc, maxCvcLength);
+
+  const digits = card.number.replace(/\s/g, "");
+  const errors: CardValidationResult["errors"] = {};
+
+  if (touched.number && digits.length > 0) {
+    if (!numberCheck.isPotentiallyValid) errors.number = "Número de tarjeta inválido";
+    else if (!numberCheck.isValid) errors.number = "Número incompleto o inválido (falla verificación Luhn)";
+  }
+  if (touched.expiry && card.expiry) {
+    if (!expiryCheck.isPotentiallyValid) errors.expiry = "Fecha inválida";
+    else if (!expiryCheck.isValid) errors.expiry = "La tarjeta está vencida";
+  }
+  if (touched.cvc && card.cvc.length > 0 && !cvcCheck.isValid) {
+    errors.cvc = `CVC debe tener ${maxCvcLength} dígitos`;
+  }
+  if (touched.name && card.name.trim().length > 0 && card.name.trim().length < 2) {
+    errors.name = "Ingresa el nombre completo";
+  }
+  if (touched.zip && card.zip.length > 0 && card.zip.length < 4) {
+    errors.zip = "Código postal inválido";
+  }
+
+  return { brand, maxCvcLength, errors };
 }
+
+export interface CardTouched {
+  number?: boolean;
+  expiry?: boolean;
+  cvc?: boolean;
+  name?: boolean;
+  zip?: boolean;
+}
+
+const BRAND_LOGO: Record<string, string> = {
+  "visa":              "Visa",
+  "mastercard":        "MC",
+  "american-express":  "Amex",
+  "discover":          "Disc",
+  "diners-club":       "Diners",
+  "jcb":               "JCB",
+  "maestro":           "Maestro",
+  "unionpay":          "UnionPay",
+};
 
 const TRUST_BADGES: Array<[string, string]> = [
   ["🔒", "Encriptación SSL 256-bit"],
@@ -147,20 +189,29 @@ export function Step3PlanPayment({
       ? currentPlan.priceAnnual
       : currentPlan.priceMonthly;
 
+  const [touched, setTouched] = useState<CardTouched>({});
+  const markTouched = (field: keyof CardTouched) =>
+    setTouched(t => (t[field] ? t : { ...t, [field]: true }));
+
+  const validation = useMemo(
+    () => validateCardFields(values.card, touched),
+    [values.card, touched],
+  );
+  const { brand, maxCvcLength, errors: cardErrors } = validation;
+
   const cardValid = useMemo(() => {
     if (values.payMethod !== "card") return true;
-    const { number, expiry, cvc, name, zip } = values.card;
-    const digits = number.replace(/\s/g, "");
-    const minLen = detectCardBrand(number) === "amex" ? 15 : 16;
+    const n = cardValidator.number(values.card.number);
+    const e = cardValidator.expirationDate(values.card.expiry);
+    const c = cardValidator.cvv(values.card.cvc, brand === "american-express" ? 4 : 3);
     return (
-      digits.length >= minLen &&
-      isValidExpiry(expiry) &&
-      cvc.length >= 3 &&
-      cvc.length <= 4 &&
-      name.trim().length >= 2 &&
-      zip.length >= 4
+      n.isValid &&
+      e.isValid &&
+      c.isValid &&
+      values.card.name.trim().length >= 2 &&
+      values.card.zip.length >= 4
     );
-  }, [values.card, values.payMethod]);
+  }, [values.card, values.payMethod, brand]);
 
   const canSubmit =
     !!values.plan &&
@@ -249,14 +300,30 @@ export function Step3PlanPayment({
                 >
                   <FormField
                     label="Número de tarjeta"
-                    placeholder="1234 5678 9012 3456"
-                    inputMode="numeric"
-                    autoComplete="cc-number"
-                    value={values.card.number}
-                    onChange={e =>
-                      setCard({ number: formatCardNumber(e.target.value) })
+                    error={cardErrors.number}
+                    hint={
+                      brand && !cardErrors.number
+                        ? `Tarjeta ${BRAND_LOGO[brand] ?? brand} detectada ✓`
+                        : undefined
                     }
-                  />
+                  >
+                    <div style={{ position: "relative" }}>
+                      <input
+                        placeholder="1234 5678 9012 3456"
+                        inputMode="numeric"
+                        autoComplete="cc-number"
+                        value={values.card.number}
+                        onChange={e => setCard({ number: formatCardNumber(e.target.value) })}
+                        onBlur={() => markTouched("number")}
+                        style={inputStyle(!!cardErrors.number)}
+                      />
+                      {brand && (
+                        <div style={brandBadgeStyle}>
+                          {BRAND_LOGO[brand] ?? brand}
+                        </div>
+                      )}
+                    </div>
+                  </FormField>
 
                   <div
                     style={{
@@ -267,54 +334,64 @@ export function Step3PlanPayment({
                   >
                     <FormField
                       label="Expira (MM/AA)"
-                      placeholder="05/29"
-                      inputMode="numeric"
-                      autoComplete="cc-exp"
-                      value={values.card.expiry}
-                      onChange={e =>
-                        setCard({ expiry: formatExpiry(e.target.value) })
-                      }
-                    />
+                      error={cardErrors.expiry}
+                    >
+                      <input
+                        placeholder="05/29"
+                        inputMode="numeric"
+                        autoComplete="cc-exp"
+                        value={values.card.expiry}
+                        onChange={e => setCard({ expiry: formatExpiry(e.target.value) })}
+                        onBlur={() => markTouched("expiry")}
+                        style={inputStyle(!!cardErrors.expiry)}
+                      />
+                    </FormField>
                     <FormField
                       label="CVC"
-                      placeholder={
-                        detectCardBrand(values.card.number) === "amex"
-                          ? "4 dígitos"
-                          : "3 dígitos"
-                      }
-                      inputMode="numeric"
-                      autoComplete="cc-csc"
-                      maxLength={
-                        detectCardBrand(values.card.number) === "amex" ? 4 : 3
-                      }
-                      value={values.card.cvc}
-                      onChange={e =>
-                        setCard({ cvc: e.target.value.replace(/\D/g, "") })
-                      }
-                    />
+                      error={cardErrors.cvc}
+                    >
+                      <input
+                        placeholder={`${maxCvcLength} dígitos`}
+                        inputMode="numeric"
+                        autoComplete="cc-csc"
+                        maxLength={maxCvcLength}
+                        value={values.card.cvc}
+                        onChange={e => setCard({ cvc: e.target.value.replace(/\D/g, "") })}
+                        onBlur={() => markTouched("cvc")}
+                        style={inputStyle(!!cardErrors.cvc)}
+                      />
+                    </FormField>
                   </div>
 
                   <FormField
                     label="Nombre en la tarjeta"
-                    placeholder="MARIANA MORALES"
-                    autoComplete="cc-name"
-                    value={values.card.name}
-                    onChange={e =>
-                      setCard({ name: e.target.value.toUpperCase() })
-                    }
-                  />
+                    error={cardErrors.name}
+                  >
+                    <input
+                      placeholder="MARIANA MORALES"
+                      autoComplete="cc-name"
+                      value={values.card.name}
+                      onChange={e => setCard({ name: e.target.value.toUpperCase() })}
+                      onBlur={() => markTouched("name")}
+                      style={inputStyle(!!cardErrors.name)}
+                    />
+                  </FormField>
 
                   <FormField
                     label="Código postal"
-                    placeholder="44100"
-                    inputMode="numeric"
-                    autoComplete="postal-code"
-                    maxLength={5}
-                    value={values.card.zip}
-                    onChange={e =>
-                      setCard({ zip: e.target.value.replace(/\D/g, "") })
-                    }
-                  />
+                    error={cardErrors.zip}
+                  >
+                    <input
+                      placeholder="44100"
+                      inputMode="numeric"
+                      autoComplete="postal-code"
+                      maxLength={5}
+                      value={values.card.zip}
+                      onChange={e => setCard({ zip: e.target.value.replace(/\D/g, "") })}
+                      onBlur={() => markTouched("zip")}
+                      style={inputStyle(!!cardErrors.zip)}
+                    />
+                  </FormField>
                 </div>
               </PaymentMethodCard>
 
@@ -699,6 +776,39 @@ function BillingToggle({
     </div>
   );
 }
+
+const inputStyle = (hasError: boolean): React.CSSProperties => ({
+  width: "100%",
+  height: 42,
+  padding: "0 14px",
+  borderRadius: 10,
+  background: "rgba(255,255,255,0.03)",
+  border: `1px solid ${hasError ? "rgba(239,68,68,0.55)" : "var(--ld-border)"}`,
+  color: "var(--ld-fg)",
+  fontSize: 14,
+  fontFamily: "inherit",
+  outline: "none",
+  transition: "border-color .15s",
+  boxSizing: "border-box",
+});
+
+const brandBadgeStyle: React.CSSProperties = {
+  position: "absolute",
+  right: 10,
+  top: "50%",
+  transform: "translateY(-50%)",
+  padding: "3px 8px",
+  borderRadius: 6,
+  background: "rgba(124,58,237,0.15)",
+  border: "1px solid rgba(124,58,237,0.3)",
+  color: "var(--ld-brand-light)",
+  fontSize: 10,
+  fontWeight: 600,
+  letterSpacing: "0.04em",
+  textTransform: "uppercase",
+  fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+  pointerEvents: "none",
+};
 
 function Checkbox({
   checked,
