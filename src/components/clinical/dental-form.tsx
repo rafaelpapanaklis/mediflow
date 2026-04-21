@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { CardNew } from "@/components/ui/design-system/card-new";
 import { formatCurrency } from "@/lib/utils";
 import toast from "react-hot-toast";
 
@@ -286,7 +286,7 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <form onSubmit={e => { e.preventDefault(); handleSave(); }} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {/* ANAMNESIS */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         <div className="field-new">
@@ -470,8 +470,7 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
       </div>
 
       {/* PERIODONTAL */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Evaluación periodontal</h3>
+      <CardNew title="Evaluación periodontal">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             { key: "plaque",     label: "Índice de placa",  placeholder: "Ej. 35%" },
@@ -479,9 +478,9 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
             { key: "gingival",   label: "Estado gingival",  placeholder: "Sana / Inflamada" },
             { key: "pocketDepth",label: "Bolsas periodontales", placeholder: "Ej. 2-3mm" },
           ].map(f => (
-            <div key={f.key} className="space-y-1">
-              <Label className="text-xs">{f.label}</Label>
-              <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <div key={f.key} className="field-new">
+              <label className="field-new__label">{f.label}</label>
+              <input className="input-new"
                 placeholder={f.placeholder}
                 value={(form.periodontal as any)[f.key] ?? ""}
                 onChange={e => set("periodontal", { ...form.periodontal, [f.key]: e.target.value })} />
@@ -494,16 +493,15 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
             className="w-4 h-4 accent-brand-600" />
           <label htmlFor="bleeding" className="text-sm font-medium">Sangrado al sondeo presente</label>
         </div>
-      </div>
+      </CardNew>
 
       {/* EVALUACIÓN OCLUSAL */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Evaluación Oclusal</h3>
+      <CardNew title="Evaluación Oclusal">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Clase molar</Label>
+          <div className="field-new">
+            <label className="field-new__label">Clase molar</label>
             <select
-              className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="input-new"
               value={form.occlusal.molarClass}
               onChange={e => set("occlusal", { ...form.occlusal, molarClass: e.target.value })}
             >
@@ -514,21 +512,21 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
               <option value="Clase III">Clase III</option>
             </select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Sobremordida (mm)</Label>
-            <input type="number" className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          <div className="field-new">
+            <label className="field-new__label">Sobremordida (mm)</label>
+            <input type="number" className="input-new"
               placeholder="Ej. 3" value={form.occlusal.overbite}
               onChange={e => set("occlusal", { ...form.occlusal, overbite: e.target.value })} />
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Overjet (mm)</Label>
-            <input type="number" className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          <div className="field-new">
+            <label className="field-new__label">Overjet (mm)</label>
+            <input type="number" className="input-new"
               placeholder="Ej. 2" value={form.occlusal.overjet}
               onChange={e => set("occlusal", { ...form.occlusal, overjet: e.target.value })} />
           </div>
         </div>
         <div className="mt-3">
-          <Label className="text-xs">Mordida</Label>
+          <label className="field-new__label">Mordida</label>
           <div className="flex flex-wrap gap-3 mt-1.5">
             {["Abierta anterior", "Cruzada posterior", "Cruzada anterior", "Profunda", "Normal"].map(opt => (
               <label key={opt} className="flex items-center gap-1.5 text-sm">
@@ -545,22 +543,21 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
             ))}
           </div>
         </div>
-      </div>
+      </CardNew>
 
       {/* EVALUACIÓN ATM / BRUXISMO */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Evaluación ATM / Bruxismo</h3>
+      <CardNew title="Evaluación ATM / Bruxismo">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Apertura bucal (mm)</Label>
-            <input type="number" className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          <div className="field-new">
+            <label className="field-new__label">Apertura bucal (mm)</label>
+            <input type="number" className="input-new"
               placeholder="Ej. 42" value={form.tmj.opening}
               onChange={e => set("tmj", { ...form.tmj, opening: e.target.value })} />
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Chasquido</Label>
+          <div className="field-new">
+            <label className="field-new__label">Chasquido</label>
             <select
-              className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="input-new"
               value={form.tmj.clicking}
               onChange={e => set("tmj", { ...form.tmj, clicking: e.target.value })}
             >
@@ -571,10 +568,10 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
               <option value="Bilateral">Bilateral</option>
             </select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Dolor ATM</Label>
+          <div className="field-new">
+            <label className="field-new__label">Dolor ATM</label>
             <select
-              className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="input-new"
               value={form.tmj.pain}
               onChange={e => set("tmj", { ...form.tmj, pain: e.target.value })}
             >
@@ -585,10 +582,10 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
               <option value="Severo">Severo</option>
             </select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Guarda oclusal</Label>
+          <div className="field-new">
+            <label className="field-new__label">Guarda oclusal</label>
             <select
-              className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="input-new"
               value={form.tmj.guard}
               onChange={e => set("tmj", { ...form.tmj, guard: e.target.value })}
             >
@@ -600,11 +597,10 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
             </select>
           </div>
         </div>
-      </div>
+      </CardNew>
 
       {/* INSTRUCCIONES DE HIGIENE ORAL */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Instrucciones de higiene oral</h3>
+      <CardNew title="Instrucciones de higiene oral">
         <div className="flex flex-wrap gap-3">
           {[
             "Técnica de cepillado enseñada (Bass modificada)",
@@ -627,19 +623,17 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
             </label>
           ))}
         </div>
-      </div>
+      </CardNew>
 
       {/* PROCEDIMIENTOS Y FACTURACIÓN */}
-      <div className="rounded-xl border border-border p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold">💰 Procedimientos realizados</h3>
-          {selectedProcs.length > 0 && (
-            <div className="text-sm font-bold text-brand-700 dark:text-brand-400">
-              Total: {formatCurrency(proceduresTotal)}
-            </div>
-          )}
-        </div>
-
+      <CardNew
+        title="💰 Procedimientos realizados"
+        action={selectedProcs.length > 0 ? (
+          <div className="text-sm font-bold text-brand-700 dark:text-brand-400">
+            Total: {formatCurrency(proceduresTotal)}
+          </div>
+        ) : undefined}
+      >
         {/* Selected procedures table */}
         {selectedProcs.length > 0 && (
           <div className="mb-3 rounded-lg border border-border overflow-hidden">
@@ -690,7 +684,7 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
           <input
             type="text"
             placeholder="🔍 Buscar procedimiento del catálogo..."
-            className="w-full h-9 rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            className="input-new"
             value={procSearch}
             onChange={e => setProcSearch(e.target.value)}
           />
@@ -723,61 +717,64 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
             💡 Al guardar el expediente se creará automáticamente una factura borrador con estos procedimientos. Podrás editarla en la sección de Facturación antes de confirmar.
           </div>
         )}
-      </div>
+      </CardNew>
 
       {/* PRESCRIPCIÓN */}
-      <div className="rounded-xl border border-border p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold">💊 Prescripción médica</h3>
-          <button className="text-xs font-semibold text-brand-600 hover:underline"
+      <CardNew
+        title="💊 Prescripción médica"
+        action={(
+          <button type="button" className="text-xs font-semibold text-brand-600 hover:underline"
             onClick={() => set("medications", [...form.medications, { drug:"", dose:"", duration:"" }])}>+ Agregar</button>
-        </div>
+        )}
+      >
         <div className="space-y-2">
           {form.medications.map((med, i) => (
             <div key={i} className="grid grid-cols-3 gap-2">
-              <input className="flex h-9 rounded-lg border border-border bg-card px-3 text-sm focus:outline-none" placeholder="Medicamento" value={med.drug}
+              <input className="input-new" placeholder="Medicamento" value={med.drug}
                 onChange={e => { const m = [...form.medications]; m[i].drug = e.target.value; set("medications", m); }} />
-              <input className="flex h-9 rounded-lg border border-border bg-card px-3 text-sm focus:outline-none" placeholder="Dosis (ej. 500mg c/8h)" value={med.dose}
+              <input className="input-new" placeholder="Dosis (ej. 500mg c/8h)" value={med.dose}
                 onChange={e => { const m = [...form.medications]; m[i].dose = e.target.value; set("medications", m); }} />
-              <input className="flex h-9 rounded-lg border border-border bg-card px-3 text-sm focus:outline-none" placeholder="Duración (ej. 7 días)" value={med.duration}
+              <input className="input-new" placeholder="Duración (ej. 7 días)" value={med.duration}
                 onChange={e => { const m = [...form.medications]; m[i].duration = e.target.value; set("medications", m); }} />
             </div>
           ))}
         </div>
-      </div>
+      </CardNew>
 
       {/* DIAGNÓSTICO Y PLAN */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label>Observaciones clínicas / Diagnóstico</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+        <div className="field-new">
+          <label className="field-new__label">Observaciones clínicas / Diagnóstico</label>
+          <textarea className="input-new"
+            style={{ minHeight: 80, resize: "vertical" }}
             placeholder="Diagnóstico, hallazgos clínicos…" value={form.assessment} onChange={e => set("assessment", e.target.value)} />
         </div>
-        <div className="space-y-1.5">
-          <Label>Plan de tratamiento futuro</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+        <div className="field-new">
+          <label className="field-new__label">Plan de tratamiento futuro</label>
+          <textarea className="input-new"
+            style={{ minHeight: 80, resize: "vertical" }}
             placeholder="Próximos procedimientos a realizar…" value={form.plan} onChange={e => set("plan", e.target.value)} />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label>Radiografías tomadas</Label>
-          <input className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+        <div className="field-new">
+          <label className="field-new__label">Radiografías tomadas</label>
+          <input className="input-new"
             placeholder="Rx panorámica, periapical #26…" value={form.xrays} onChange={e => set("xrays", e.target.value)} />
         </div>
-        <div className="space-y-1.5">
-          <Label>Próxima cita recomendada</Label>
-          <input className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+        <div className="field-new">
+          <label className="field-new__label">Próxima cita recomendada</label>
+          <input className="input-new"
             placeholder="En 3 meses, urgente, etc." value={form.nextVisit} onChange={e => set("nextVisit", e.target.value)} />
         </div>
       </div>
 
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={saving} size="lg">
-          {saving ? "Guardando…" : "💾 Guardar expediente dental"}
-        </Button>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <ButtonNew variant="primary" type="submit" disabled={saving}>
+          {saving ? "Guardando…" : "Guardar consulta"}
+        </ButtonNew>
       </div>
-    </div>
+    </form>
   );
 }

@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
+import { CardNew } from "@/components/ui/design-system/card-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
 
 const SERVICIOS = ["hidroterapia", "sauna", "flotación", "body wrap", "circuito termal", "masaje spa", "facial spa", "paquete pareja", "ritual completo"] as const;
 const SALUD_OPTIONS = ["problemas cardiovasculares", "claustrofobia", "embarazo", "presión baja", "alergias cutáneas", "ninguno"] as const;
@@ -129,83 +130,80 @@ export function SpaForm({ patientId, onSaved }: Props) {
   }
 
   return (
-    <div className="space-y-6">
-      {/* ANAMNESIS */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label>Motivo de consulta / HEA</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-            placeholder="¿Por qué viene el paciente hoy?" value={form.subjective} onChange={e => set("subjective", e.target.value)} />
+    <form onSubmit={e => { e.preventDefault(); handleSave(); }} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <CardNew title="Anamnesis">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="field-new">
+            <label className="field-new__label">Motivo de consulta / HEA</label>
+            <textarea className="input-new" style={{ minHeight: 80, resize: "vertical" }}
+              placeholder="¿Por qué viene el paciente hoy?" value={form.subjective} onChange={e => set("subjective", e.target.value)} />
+          </div>
+          <div className="field-new">
+            <label className="field-new__label">Exploración física / Observaciones</label>
+            <textarea className="input-new" style={{ minHeight: 80, resize: "vertical" }}
+              placeholder="Estado actual del paciente…" value={form.objective} onChange={e => set("objective", e.target.value)} />
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <Label>Exploración física / Observaciones</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-            placeholder="Estado actual del paciente…" value={form.objective} onChange={e => set("objective", e.target.value)} />
-        </div>
-      </div>
+      </CardNew>
 
-      {/* SERVICIO & DURACIÓN */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Datos del servicio</h3>
+      <CardNew title="Datos del servicio">
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Tipo de servicio</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          <div className="field-new">
+            <label className="field-new__label">Tipo de servicio</label>
+            <select className="input-new"
               value={form.tipoServicio} onChange={e => set("tipoServicio", e.target.value)}>
               <option value="">Seleccionar…</option>
               {SERVICIOS.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
             </select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Preferencia temperatura</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          <div className="field-new">
+            <label className="field-new__label">Preferencia temperatura</label>
+            <select className="input-new"
               value={form.temperatura} onChange={e => set("temperatura", e.target.value)}>
               <option value="">Seleccionar…</option>
               {TEMPERATURAS.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
             </select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Duración del servicio</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          <div className="field-new">
+            <label className="field-new__label">Duración del servicio</label>
+            <select className="input-new"
               value={form.duracion} onChange={e => set("duracion", e.target.value)}>
               <option value="">Seleccionar…</option>
               {DURACIONES.map(d => <option key={d} value={d}>{d} min</option>)}
             </select>
           </div>
         </div>
-      </div>
+      </CardNew>
 
-      {/* PREFERENCIAS PERSONALIZADAS */}
-      <div className="rounded-xl border border-border dark:border-border p-4">
-        <h3 className="text-sm font-bold mb-3">🎯 Preferencias personalizadas</h3>
+      <CardNew title="Preferencias personalizadas">
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="space-y-1">
-            <Label className="text-xs">Temperatura preferida</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          <div className="field-new">
+            <label className="field-new__label">Temperatura preferida</label>
+            <select className="input-new"
               value={prefTemperatura} onChange={e => setPrefTemperatura(e.target.value)}>
               <option value="">Seleccionar…</option>
               {PREF_TEMPERATURAS.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Presión de masaje</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          <div className="field-new">
+            <label className="field-new__label">Presión de masaje</label>
+            <select className="input-new"
               value={prefPresion} onChange={e => setPrefPresion(e.target.value)}>
               <option value="">Seleccionar…</option>
               {PREF_PRESION.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Música</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          <div className="field-new">
+            <label className="field-new__label">Música</label>
+            <select className="input-new"
               value={prefMusica} onChange={e => setPrefMusica(e.target.value)}>
               <option value="">Seleccionar…</option>
               {PREF_MUSICA.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Iluminación</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          <div className="field-new">
+            <label className="field-new__label">Iluminación</label>
+            <select className="input-new"
               value={prefIluminacion} onChange={e => setPrefIluminacion(e.target.value)}>
               <option value="">Seleccionar…</option>
               {PREF_ILUMINACION.map(i => <option key={i} value={i}>{i}</option>)}
@@ -213,7 +211,7 @@ export function SpaForm({ patientId, onSaved }: Props) {
           </div>
         </div>
         <div className="mt-3">
-          <Label className="text-xs">Aromas preferidos</Label>
+          <label className="field-new__label">Aromas preferidos</label>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1">
             {PREF_AROMAS.map(a => (
               <label key={a} className="flex items-center gap-2 cursor-pointer">
@@ -224,11 +222,9 @@ export function SpaForm({ patientId, onSaved }: Props) {
           </div>
         </div>
         <p className="text-xs text-muted-foreground mt-3 italic">Estas preferencias se guardan para personalizar futuras visitas.</p>
-      </div>
+      </CardNew>
 
-      {/* CUESTIONARIO DE SALUD */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Cuestionario de salud</h3>
+      <CardNew title="Cuestionario de salud">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {SALUD_OPTIONS.map(s => (
             <label key={s} className="flex items-center gap-2 cursor-pointer">
@@ -238,11 +234,9 @@ export function SpaForm({ patientId, onSaved }: Props) {
             </label>
           ))}
         </div>
-      </div>
+      </CardNew>
 
-      {/* AROMATERAPIA */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Preferencias aromaterapia</h3>
+      <CardNew title="Preferencias aromaterapia">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {AROMAS.map(a => (
             <label key={a} className="flex items-center gap-2 cursor-pointer">
@@ -252,15 +246,12 @@ export function SpaForm({ patientId, onSaved }: Props) {
             </label>
           ))}
         </div>
-      </div>
+      </CardNew>
 
-      {/* ESCALA DE ESTRÉS / BIENESTAR */}
-      <div className="rounded-xl border border-border dark:border-border p-4">
-        <h3 className="text-sm font-bold mb-4">🧘 Nivel de estrés / bienestar</h3>
-
+      <CardNew title="Nivel de estrés / bienestar">
         <div className="space-y-4">
           <div>
-            <Label className="text-xs mb-2 block">Nivel de estrés al llegar (1-10)</Label>
+            <label className="field-new__label">Nivel de estrés al llegar (1-10)</label>
             <div className="flex gap-1">
               {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
                 <button key={n} type="button" onClick={() => setEstresLlegar(n)}
@@ -273,7 +264,7 @@ export function SpaForm({ patientId, onSaved }: Props) {
           </div>
 
           <div>
-            <Label className="text-xs mb-2 block">Nivel de estrés al salir (1-10)</Label>
+            <label className="field-new__label">Nivel de estrés al salir (1-10)</label>
             <div className="flex gap-1">
               {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
                 <button key={n} type="button" onClick={() => setEstresSalir(n)}
@@ -293,7 +284,7 @@ export function SpaForm({ patientId, onSaved }: Props) {
           )}
 
           <div>
-            <Label className="text-xs mb-2 block">Calidad de sueño últimas noches</Label>
+            <label className="field-new__label">Calidad de sueño últimas noches</label>
             <div className="flex gap-1">
               {CALIDAD_SUENO.map((label, i) => (
                 <button key={label} type="button" onClick={() => setCalidadSueno(i + 1)}
@@ -304,83 +295,81 @@ export function SpaForm({ patientId, onSaved }: Props) {
             </div>
           </div>
         </div>
-      </div>
+      </CardNew>
 
-      {/* OBSERVACIONES & RECOMENDACIONES */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label>Observaciones durante servicio</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-            placeholder="Reacciones, notas durante el servicio…" value={form.observaciones} onChange={e => set("observaciones", e.target.value)} />
+      <CardNew title="Observaciones y recomendaciones">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="field-new">
+            <label className="field-new__label">Observaciones durante servicio</label>
+            <textarea className="input-new" style={{ minHeight: 80, resize: "vertical" }}
+              placeholder="Reacciones, notas durante el servicio…" value={form.observaciones} onChange={e => set("observaciones", e.target.value)} />
+          </div>
+          <div className="field-new">
+            <label className="field-new__label">Recomendaciones post-servicio</label>
+            <textarea className="input-new" style={{ minHeight: 80, resize: "vertical" }}
+              placeholder="Cuidados posteriores…" value={form.recomendacionesPost} onChange={e => set("recomendacionesPost", e.target.value)} />
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <Label>Recomendaciones post-servicio</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-            placeholder="Cuidados posteriores…" value={form.recomendacionesPost} onChange={e => set("recomendacionesPost", e.target.value)} />
+        <div className="field-new mt-4">
+          <label className="field-new__label">Productos recomendados para casa</label>
+          <textarea className="input-new" style={{ minHeight: 80, resize: "vertical" }}
+            placeholder="Productos sugeridos para uso en casa…" value={form.productosRecomendados} onChange={e => set("productosRecomendados", e.target.value)} />
         </div>
-      </div>
+      </CardNew>
 
-      <div className="space-y-1.5">
-        <Label>Productos recomendados para casa</Label>
-        <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-          placeholder="Productos sugeridos para uso en casa…" value={form.productosRecomendados} onChange={e => set("productosRecomendados", e.target.value)} />
-      </div>
-
-      {/* DIAGNÓSTICO & PLAN */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label>Diagnóstico / Evaluación</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-            placeholder="Evaluación general…" value={form.assessment} onChange={e => set("assessment", e.target.value)} />
+      <CardNew title="Diagnóstico y plan">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="field-new">
+            <label className="field-new__label">Diagnóstico / Evaluación</label>
+            <textarea className="input-new" style={{ minHeight: 80, resize: "vertical" }}
+              placeholder="Evaluación general…" value={form.assessment} onChange={e => set("assessment", e.target.value)} />
+          </div>
+          <div className="field-new">
+            <label className="field-new__label">Plan</label>
+            <textarea className="input-new" style={{ minHeight: 80, resize: "vertical" }}
+              placeholder="Plan de seguimiento…" value={form.plan} onChange={e => set("plan", e.target.value)} />
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <Label>Plan</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-            placeholder="Plan de seguimiento…" value={form.plan} onChange={e => set("plan", e.target.value)} />
-        </div>
-      </div>
+      </CardNew>
 
-      {/* CIRCUITO TERMAL PERSONALIZADO */}
-      <div className="rounded-xl border border-border dark:border-border p-4">
-        <h3 className="text-sm font-bold mb-3">♨️ Circuito termal recomendado</h3>
-
+      <CardNew title="Circuito termal recomendado">
         {form.cuestionarioSalud.length > 0 && !form.cuestionarioSalud.includes("ninguno") && (
           <div className="mb-3 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 text-xs text-amber-800 dark:text-amber-300">
-            ⚠️ Contraindicaciones detectadas: {form.cuestionarioSalud.join(", ")}. Ajustar circuito en consecuencia.
+            Contraindicaciones detectadas: {form.cuestionarioSalud.join(", ")}. Ajustar circuito en consecuencia.
           </div>
         )}
 
         {circuito.map((step, idx) => (
           <div key={idx} className="grid grid-cols-[auto_1fr_auto_auto_1fr_auto] gap-2 mb-2 items-end">
             <div className="flex flex-col items-center gap-1">
-              {idx === 0 && <Label className="text-xs">Paso</Label>}
+              {idx === 0 && <label className="field-new__label">Paso</label>}
               <span className="h-9 w-9 flex items-center justify-center rounded-lg bg-brand-600/15 text-brand-700 dark:text-brand-300 text-sm font-bold">{idx + 1}</span>
             </div>
-            <div className="space-y-1">
-              {idx === 0 && <Label className="text-xs">Servicio</Label>}
-              <select className="flex h-9 w-full rounded-md border border-border bg-card px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <div className="field-new">
+              {idx === 0 && <label className="field-new__label">Servicio</label>}
+              <select className="input-new"
                 value={step.servicio} onChange={e => updateCircuitoStep(idx, "servicio", e.target.value)}>
                 <option value="">Seleccionar…</option>
                 {CIRCUITO_SERVICIOS.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
-            <div className="space-y-1">
-              {idx === 0 && <Label className="text-xs">Min</Label>}
-              <input type="number" min={0} className="flex h-9 w-16 rounded-md border border-border bg-card px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <div className="field-new">
+              {idx === 0 && <label className="field-new__label">Min</label>}
+              <input type="number" min={0} className="input-new" style={{ width: 64 }}
                 value={step.duracion || ""} onChange={e => updateCircuitoStep(idx, "duracion", parseInt(e.target.value) || 0)} placeholder="min" />
             </div>
-            <div className="space-y-1">
-              {idx === 0 && <Label className="text-xs">°C</Label>}
-              <input type="number" className="flex h-9 w-16 rounded-md border border-border bg-card px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <div className="field-new">
+              {idx === 0 && <label className="field-new__label">°C</label>}
+              <input type="number" className="input-new" style={{ width: 64 }}
                 value={step.temperatura || ""} onChange={e => updateCircuitoStep(idx, "temperatura", parseInt(e.target.value) || 0)} placeholder="°C" />
             </div>
-            <div className="space-y-1">
-              {idx === 0 && <Label className="text-xs">Notas</Label>}
-              <input className="flex h-9 w-full rounded-md border border-border bg-card px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            <div className="field-new">
+              {idx === 0 && <label className="field-new__label">Notas</label>}
+              <input className="input-new"
                 value={step.notas} onChange={e => updateCircuitoStep(idx, "notas", e.target.value)} placeholder="Notas…" />
             </div>
             <div className="flex gap-1">
-              {idx === 0 && <Label className="text-xs invisible">Act</Label>}
+              {idx === 0 && <label className="field-new__label invisible">Act</label>}
               <button type="button" onClick={() => moveCircuitoStep(idx, -1)} disabled={idx === 0} className="h-9 w-7 flex items-center justify-center rounded border border-border text-xs hover:bg-muted disabled:opacity-30">↑</button>
               <button type="button" onClick={() => moveCircuitoStep(idx, 1)} disabled={idx === circuito.length - 1} className="h-9 w-7 flex items-center justify-center rounded border border-border text-xs hover:bg-muted disabled:opacity-30">↓</button>
               <button type="button" onClick={() => removeCircuitoStep(idx)} className="h-9 w-7 flex items-center justify-center rounded border border-red-200 dark:border-red-800 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 text-lg">×</button>
@@ -396,13 +385,13 @@ export function SpaForm({ patientId, onSaved }: Props) {
             <span className="text-sm font-medium">Tiempo total: <span className="text-brand-600 dark:text-brand-400">{circuitoTotalMin} min</span></span>
           )}
         </div>
-      </div>
+      </CardNew>
 
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={saving} size="lg">
-          {saving ? "Guardando…" : "Guardar expediente spa"}
-        </Button>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <ButtonNew variant="primary" type="submit" disabled={saving}>
+          {saving ? "Guardando…" : "Guardar consulta"}
+        </ButtonNew>
       </div>
-    </div>
+    </form>
   );
 }

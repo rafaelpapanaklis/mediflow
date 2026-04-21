@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { CardNew } from "@/components/ui/design-system/card-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
 import toast from "react-hot-toast";
 
 const SERVICIOS = [
@@ -138,37 +138,38 @@ export function NailSalonForm({ patientId, onSaved }: Props) {
   }
 
   return (
-    <div className="space-y-6">
-      {/* SOAP */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label>Motivo de visita</Label>
-          <textarea
-            className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-            placeholder="¿Qué servicio busca el cliente?"
-            value={form.subjective}
-            onChange={(e) => set("subjective", e.target.value)}
-          />
+    <form onSubmit={e => { e.preventDefault(); handleSave(); }} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <CardNew title="SOAP inicial">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="field-new">
+            <label className="field-new__label">Motivo de visita</label>
+            <textarea
+              className="input-new"
+              style={{ minHeight: 80, resize: "vertical" }}
+              placeholder="¿Qué servicio busca el cliente?"
+              value={form.subjective}
+              onChange={(e) => set("subjective", e.target.value)}
+            />
+          </div>
+          <div className="field-new">
+            <label className="field-new__label">Observaciones previas</label>
+            <textarea
+              className="input-new"
+              style={{ minHeight: 80, resize: "vertical" }}
+              placeholder="Estado previo de las uñas, historial…"
+              value={form.objective}
+              onChange={(e) => set("objective", e.target.value)}
+            />
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <Label>Observaciones previas</Label>
-          <textarea
-            className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-            placeholder="Estado previo de las uñas, historial…"
-            value={form.objective}
-            onChange={(e) => set("objective", e.target.value)}
-          />
-        </div>
-      </div>
+      </CardNew>
 
-      {/* SERVICIO */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Servicio</h3>
+      <CardNew title="Servicio">
         <div className="grid grid-cols-3 gap-4">
-          <div className="space-y-1.5">
-            <Label>Servicio</Label>
+          <div className="field-new">
+            <label className="field-new__label">Servicio</label>
             <select
-              className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="input-new"
               value={form.servicio}
               onChange={(e) => set("servicio", e.target.value)}
             >
@@ -180,10 +181,10 @@ export function NailSalonForm({ patientId, onSaved }: Props) {
               ))}
             </select>
           </div>
-          <div className="space-y-1.5">
-            <Label>Mano/pie</Label>
+          <div className="field-new">
+            <label className="field-new__label">Mano/pie</label>
             <select
-              className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="input-new"
               value={form.manoPie}
               onChange={(e) => set("manoPie", e.target.value)}
             >
@@ -195,10 +196,10 @@ export function NailSalonForm({ patientId, onSaved }: Props) {
               ))}
             </select>
           </div>
-          <div className="space-y-1.5">
-            <Label>Forma preferida</Label>
+          <div className="field-new">
+            <label className="field-new__label">Forma preferida</label>
             <select
-              className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="input-new"
               value={form.formaPreferida}
               onChange={(e) => set("formaPreferida", e.target.value)}
             >
@@ -211,55 +212,51 @@ export function NailSalonForm({ patientId, onSaved }: Props) {
             </select>
           </div>
         </div>
-      </div>
+      </CardNew>
 
-      {/* DETALLES */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Detalles del servicio</h3>
+      <CardNew title="Detalles del servicio">
         <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label>Material/producto usado</Label>
+          <div className="field-new">
+            <label className="field-new__label">Material/producto usado</label>
             <input
-              className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="input-new"
               placeholder="Ej. Gel UV, Acrílico Mia Secret…"
               value={form.materialProducto}
               onChange={(e) => set("materialProducto", e.target.value)}
             />
           </div>
-          <div className="space-y-1.5">
-            <Label>Color/diseño aplicado</Label>
+          <div className="field-new">
+            <label className="field-new__label">Color/diseño aplicado</label>
             <input
-              className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="input-new"
               placeholder="Ej. Rojo cereza #45, french tips…"
               value={form.colorDiseno}
               onChange={(e) => set("colorDiseno", e.target.value)}
             />
           </div>
         </div>
-        <div className="mt-4 space-y-1.5">
-          <Label>Condición de uñas</Label>
+        <div className="field-new mt-4">
+          <label className="field-new__label">Condición de uñas</label>
           <textarea
-            className="flex min-h-[60px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            className="input-new"
+            style={{ minHeight: 80, resize: "vertical" }}
             placeholder="Observaciones: hongos, fragilidad, manchas, estrías, daño previo…"
             value={form.condicionUnas}
             onChange={(e) => set("condicionUnas", e.target.value)}
           />
         </div>
-        <div className="mt-4 space-y-1.5">
-          <Label>Técnico asignado</Label>
+        <div className="field-new mt-4">
+          <label className="field-new__label">Técnico asignado</label>
           <input
-            className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+            className="input-new"
             placeholder="Nombre del técnico"
             value={form.tecnicoAsignado}
             onChange={(e) => set("tecnicoAsignado", e.target.value)}
           />
         </div>
-      </div>
+      </CardNew>
 
-      {/* EVALUACIÓN DE SALUD UNGUEAL */}
-      <div className="rounded-xl border border-border dark:border-border p-4">
-        <h3 className="text-sm font-bold mb-4">🔍 Evaluación de salud ungueal</h3>
-
+      <CardNew title="Evaluación de salud ungueal">
         {/* Manos */}
         <p className="text-xs font-semibold mb-2">Manos</p>
         <div className="grid grid-cols-2 gap-4 mb-4">
@@ -271,7 +268,7 @@ export function NailSalonForm({ patientId, onSaved }: Props) {
                   <div key={dedo} className="flex items-center gap-2">
                     <span className="text-xs w-16 shrink-0">{dedo}</span>
                     <select
-                      className="flex h-7 w-full rounded-md border border-border bg-card px-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                      className="input-new"
                       value={(state as Record<string, string>)[dedo]}
                       onChange={e => (setter as React.Dispatch<React.SetStateAction<Record<string, string>>>)(prev => ({ ...prev, [dedo]: e.target.value }))}
                     >
@@ -296,7 +293,7 @@ export function NailSalonForm({ patientId, onSaved }: Props) {
                   <div key={dedo} className="flex items-center gap-2">
                     <span className="text-xs w-16 shrink-0">{dedo}</span>
                     <select
-                      className="flex h-7 w-full rounded-md border border-border bg-card px-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                      className="input-new"
                       value={(state as Record<string, string>)[dedo]}
                       onChange={e => (setter as React.Dispatch<React.SetStateAction<Record<string, string>>>)(prev => ({ ...prev, [dedo]: e.target.value }))}
                     >
@@ -310,34 +307,33 @@ export function NailSalonForm({ patientId, onSaved }: Props) {
           ))}
         </div>
 
-        <div className="space-y-1.5">
-          <Label className="">Resumen general de salud ungueal</Label>
+        <div className="field-new">
+          <label className="field-new__label">Resumen general de salud ungueal</label>
           <textarea
-            className="flex min-h-[60px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            className="input-new"
+            style={{ minHeight: 80, resize: "vertical" }}
             placeholder="Resumen general del estado de las uñas…"
             value={resumenSaludUngueal}
             onChange={e => setResumenSaludUngueal(e.target.value)}
           />
         </div>
-      </div>
+      </CardNew>
 
-      {/* PREFERENCIAS DE LA CLIENTA */}
-      <div className="rounded-xl border border-border dark:border-border p-4">
-        <h3 className="text-sm font-bold mb-3">💅 Preferencias de la clienta</h3>
+      <CardNew title="Preferencias de la clienta">
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="space-y-1.5">
-            <Label className="">Forma favorita</Label>
+          <div className="field-new">
+            <label className="field-new__label">Forma favorita</label>
             <input
-              className="flex h-10 w-full rounded-lg border border-border bg-muted px-3 text-sm focus:outline-none"
+              className="input-new"
               value={form.formaPreferida ? form.formaPreferida.charAt(0).toUpperCase() + form.formaPreferida.slice(1) : "Sin seleccionar"}
               readOnly
             />
           </div>
-          <div className="space-y-1.5">
-            <Label className="">Color recurrente</Label>
+          <div className="field-new">
+            <label className="field-new__label">Color recurrente</label>
             <div className="flex gap-2">
               <input
-                className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                className="input-new"
                 placeholder="Ej. Rojo cereza, Rosa pastel…"
                 value={colorRecurrente}
                 onChange={e => setColorRecurrente(e.target.value)}
@@ -347,10 +343,10 @@ export function NailSalonForm({ patientId, onSaved }: Props) {
               )}
             </div>
           </div>
-          <div className="space-y-1.5">
-            <Label className="">Tipo de servicio preferido</Label>
+          <div className="field-new">
+            <label className="field-new__label">Tipo de servicio preferido</label>
             <select
-              className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="input-new"
               value={tipoServicioPref}
               onChange={e => setTipoServicioPref(e.target.value)}
             >
@@ -358,19 +354,19 @@ export function NailSalonForm({ patientId, onSaved }: Props) {
               {TIPOS_SERVICIO_PREF.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
-          <div className="space-y-1.5">
-            <Label className="">Marca de esmalte favorita</Label>
+          <div className="field-new">
+            <label className="field-new__label">Marca de esmalte favorita</label>
             <input
-              className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="input-new"
               placeholder="Ej. OPI, Essie, Gelish…"
               value={marcaFavorita}
               onChange={e => setMarcaFavorita(e.target.value)}
             />
           </div>
-          <div className="space-y-1.5">
-            <Label className="">Largo preferido</Label>
+          <div className="field-new">
+            <label className="field-new__label">Largo preferido</label>
             <select
-              className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="input-new"
               value={largoPreferido}
               onChange={e => setLargoPreferido(e.target.value)}
             >
@@ -379,21 +375,19 @@ export function NailSalonForm({ patientId, onSaved }: Props) {
             </select>
           </div>
         </div>
-        <div className="mt-4 space-y-1.5">
-          <Label className="">Notas de estilo</Label>
+        <div className="field-new mt-4">
+          <label className="field-new__label">Notas de estilo</label>
           <textarea
-            className="flex min-h-[60px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
+            className="input-new"
+            style={{ minHeight: 80, resize: "vertical" }}
             placeholder="Preferencias de diseño, inspiraciones, estilos favoritos…"
             value={notasEstilo}
             onChange={e => setNotasEstilo(e.target.value)}
           />
         </div>
-      </div>
+      </CardNew>
 
-      {/* ALERGIAS Y REACCIONES */}
-      <div className="rounded-xl border border-amber-400 dark:border-amber-600 p-4">
-        <h3 className="text-sm font-bold mb-3">⚠️ Alergias y reacciones</h3>
-
+      <CardNew title="Alergias y reacciones">
         <label className={`flex items-center gap-2 mb-4 p-2 rounded-lg cursor-pointer ${alergiaMetacrilato ? "bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700" : "bg-muted border border-border"}`}>
           <input type="checkbox" checked={alergiaMetacrilato} onChange={e => setAlergiaMetacrilato(e.target.checked)} className="w-4 h-4 accent-red-600" />
           <span className={`text-sm font-medium ${alergiaMetacrilato ? "text-red-700 dark:text-red-400" : ""}`}>Alergia confirmada al metacrilato</span>
@@ -401,19 +395,19 @@ export function NailSalonForm({ patientId, onSaved }: Props) {
 
         {alergias.map((a, idx) => (
           <div key={idx} className="grid grid-cols-[1fr_1fr_auto_auto_auto] gap-2 mb-2 items-end">
-            <div className="space-y-1">
-              {idx === 0 && <Label className="text-xs">Producto/Material</Label>}
+            <div className="field-new">
+              {idx === 0 && <label className="field-new__label">Producto/Material</label>}
               <input
-                className="flex h-9 w-full rounded-md border border-border bg-card px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                className="input-new"
                 placeholder="Producto…"
                 value={a.producto}
                 onChange={e => updateAlergia(idx, "producto", e.target.value)}
               />
             </div>
-            <div className="space-y-1">
-              {idx === 0 && <Label className="text-xs">Tipo de reacción</Label>}
+            <div className="field-new">
+              {idx === 0 && <label className="field-new__label">Tipo de reacción</label>}
               <select
-                className="flex h-9 w-full rounded-md border border-border bg-card px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                className="input-new"
                 value={a.tipoReaccion}
                 onChange={e => updateAlergia(idx, "tipoReaccion", e.target.value)}
               >
@@ -421,10 +415,10 @@ export function NailSalonForm({ patientId, onSaved }: Props) {
                 {TIPOS_REACCION.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
-            <div className="space-y-1">
-              {idx === 0 && <Label className="text-xs">Severidad</Label>}
+            <div className="field-new">
+              {idx === 0 && <label className="field-new__label">Severidad</label>}
               <select
-                className="flex h-9 w-full rounded-md border border-border bg-card px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                className="input-new"
                 value={a.severidad}
                 onChange={e => updateAlergia(idx, "severidad", e.target.value)}
               >
@@ -432,11 +426,11 @@ export function NailSalonForm({ patientId, onSaved }: Props) {
                 {SEVERIDADES.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
-            <div className="space-y-1">
-              {idx === 0 && <Label className="text-xs">Fecha</Label>}
+            <div className="field-new">
+              {idx === 0 && <label className="field-new__label">Fecha</label>}
               <input
                 type="date"
-                className="flex h-9 rounded-md border border-border bg-card px-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                className="input-new"
                 value={a.fecha}
                 onChange={e => updateAlergia(idx, "fecha", e.target.value)}
               />
@@ -444,38 +438,41 @@ export function NailSalonForm({ patientId, onSaved }: Props) {
             <button type="button" onClick={() => removeAlergia(idx)} className="h-9 w-9 flex items-center justify-center rounded-md border border-red-200 dark:border-red-800 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 text-lg">×</button>
           </div>
         ))}
-        <Button type="button" variant="outline" size="sm" onClick={addAlergia} className="mt-2">
+        <ButtonNew variant="secondary" type="button" onClick={addAlergia}>
           + Agregar alergia/reacción
-        </Button>
-      </div>
+        </ButtonNew>
+      </CardNew>
 
-      {/* RESULTADO Y NOTAS */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label>Resultado / Evaluación</Label>
-          <textarea
-            className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-            placeholder="Resultado del servicio, observaciones finales…"
-            value={form.assessment}
-            onChange={(e) => set("assessment", e.target.value)}
-          />
+      <CardNew title="Resultado y notas">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="field-new">
+            <label className="field-new__label">Resultado / Evaluación</label>
+            <textarea
+              className="input-new"
+              style={{ minHeight: 80, resize: "vertical" }}
+              placeholder="Resultado del servicio, observaciones finales…"
+              value={form.assessment}
+              onChange={(e) => set("assessment", e.target.value)}
+            />
+          </div>
+          <div className="field-new">
+            <label className="field-new__label">Notas</label>
+            <textarea
+              className="input-new"
+              style={{ minHeight: 80, resize: "vertical" }}
+              placeholder="Preferencias del cliente, alergias, próxima cita…"
+              value={form.notas}
+              onChange={(e) => set("notas", e.target.value)}
+            />
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <Label>Notas</Label>
-          <textarea
-            className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-            placeholder="Preferencias del cliente, alergias, próxima cita…"
-            value={form.notas}
-            onChange={(e) => set("notas", e.target.value)}
-          />
-        </div>
-      </div>
+      </CardNew>
 
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={saving} size="lg">
-          {saving ? "Guardando…" : "Guardar registro de uñas"}
-        </Button>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <ButtonNew variant="primary" type="submit" disabled={saving}>
+          {saving ? "Guardando…" : "Guardar consulta"}
+        </ButtonNew>
       </div>
-    </div>
+    </form>
   );
 }

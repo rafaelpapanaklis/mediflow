@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo } from "react";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { CardNew } from "@/components/ui/design-system/card-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
 import toast from "react-hot-toast";
 
 const ARTICULACIONES = ["hombro", "codo", "muñeca", "cadera", "rodilla", "tobillo", "columna cervical", "columna lumbar"] as const;
@@ -196,37 +196,29 @@ export function PhysiotherapyForm({ patientId, onSaved }: Props) {
     } catch (err: any) { toast.error(err.message ?? "Error al guardar"); } finally { setSaving(false); }
   }
 
-  const inputCls = "flex h-9 w-full rounded-lg border border-border bg-card dark:bg-zinc-900 dark:text-zinc-100 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20";
-  const selectCls = inputCls;
-  const textareaCls = "flex min-h-[80px] w-full rounded-lg border border-border bg-card dark:bg-zinc-900 dark:text-zinc-100 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none";
-
   return (
-    <div className="space-y-6">
-      {/* DIAGNÓSTICO & REFERENCIA */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Diagnóstico y referencia</h3>
+    <form onSubmit={e => { e.preventDefault(); handleSave(); }} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <CardNew title="Diagnóstico y referencia">
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Diagnóstico</Label>
-            <input className={inputCls}
+          <div className="field-new">
+            <label className="field-new__label">Diagnóstico</label>
+            <input className="input-new"
               placeholder="Ej. Cervicalgia mecánica" value={form.diagnostico} onChange={e => set("diagnostico", e.target.value)} />
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Código CIE-10</Label>
-            <input className={inputCls}
+          <div className="field-new">
+            <label className="field-new__label">Código CIE-10</label>
+            <input className="input-new"
               placeholder="Ej. M54.2" value={form.codigoCIE} onChange={e => set("codigoCIE", e.target.value)} />
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Médico referente</Label>
-            <input className={inputCls}
+          <div className="field-new">
+            <label className="field-new__label">Médico referente</label>
+            <input className="input-new"
               placeholder="Dr. / Dra." value={form.medicoReferente} onChange={e => set("medicoReferente", e.target.value)} />
           </div>
         </div>
-      </div>
+      </CardNew>
 
-      {/* ESCALA DE DOLOR VAS */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Escala de dolor VAS</h3>
+      <CardNew title="Escala de dolor VAS">
         <div className="space-y-2">
           <input type="range" min={0} max={10} step={1} value={form.dolorVAS}
             onChange={e => set("dolorVAS", Number(e.target.value))}
@@ -238,39 +230,35 @@ export function PhysiotherapyForm({ patientId, onSaved }: Props) {
           </div>
           <p className="text-center text-sm font-semibold">Valor actual: {form.dolorVAS}</p>
         </div>
-      </div>
+      </CardNew>
 
-      {/* ROM TABLE */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Mediciones ROM</h3>
+      <CardNew title="Mediciones ROM">
         <div className="space-y-2">
           {romRows.map((row, i) => (
             <div key={i} className="grid grid-cols-4 gap-2">
-              <select className={selectCls}
+              <select className="input-new"
                 value={row.articulacion} onChange={e => updateRom(i, "articulacion", e.target.value)}>
                 <option value="">Articulación…</option>
                 {ARTICULACIONES.map(a => <option key={a} value={a}>{a.charAt(0).toUpperCase() + a.slice(1)}</option>)}
               </select>
-              <input className={inputCls}
+              <input className="input-new"
                 placeholder="Movimiento" value={row.movimiento} onChange={e => updateRom(i, "movimiento", e.target.value)} />
-              <input type="number" className={inputCls}
+              <input type="number" className="input-new"
                 placeholder="Grados" value={row.grados} onChange={e => updateRom(i, "grados", e.target.value)} />
-              <select className={selectCls}
+              <select className="input-new"
                 value={row.lado} onChange={e => updateRom(i, "lado", e.target.value)}>
                 <option value="">Lado…</option>
                 {LADOS.map(l => <option key={l} value={l}>{l.charAt(0).toUpperCase() + l.slice(1)}</option>)}
               </select>
             </div>
           ))}
-          <Button type="button" variant="outline" size="sm" onClick={() => setRomRows(r => [...r, { articulacion: "", movimiento: "", grados: "", lado: "" }])}>
+          <ButtonNew variant="secondary" type="button" onClick={() => setRomRows(r => [...r, { articulacion: "", movimiento: "", grados: "", lado: "" }])}>
             + Agregar fila ROM
-          </Button>
+          </ButtonNew>
         </div>
-      </div>
+      </CardNew>
 
-      {/* TESTS ORTOPÉDICOS ESPECIALES */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">{"\uD83E\uDDEA"} Tests ortopédicos especiales</h3>
+      <CardNew title="Tests ortopédicos especiales">
         <div className="space-y-4">
           {Object.entries(ORTHO_TESTS).map(([region, tests]) => (
             <div key={region}>
@@ -297,7 +285,7 @@ export function PhysiotherapyForm({ patientId, onSaved }: Props) {
                             Negativo -
                           </button>
                         </div>
-                        <select className="h-8 rounded-lg border border-border bg-card dark:bg-zinc-900 dark:text-zinc-100 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                        <select className="input-new"
                           value={orthoTests[t].lateralidad} onChange={e => setOrthoField(t, "lateralidad", e.target.value)}>
                           <option value="Izq">Izq</option>
                           <option value="Der">Der</option>
@@ -324,11 +312,9 @@ export function PhysiotherapyForm({ patientId, onSaved }: Props) {
             </div>
           </div>
         )}
-      </div>
+      </CardNew>
 
-      {/* TRATAMIENTO APLICADO */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Tratamiento aplicado</h3>
+      <CardNew title="Tratamiento aplicado">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
           {TRATAMIENTOS.map(t => (
             <label key={t} className="flex items-center gap-2 cursor-pointer">
@@ -338,57 +324,51 @@ export function PhysiotherapyForm({ patientId, onSaved }: Props) {
             </label>
           ))}
         </div>
-      </div>
+      </CardNew>
 
-      {/* HEP TABLE */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Programa de ejercicios en casa (HEP)</h3>
+      <CardNew title="Programa de ejercicios en casa (HEP)">
         <div className="space-y-2">
           {hepRows.map((row, i) => (
             <div key={i} className="grid grid-cols-4 gap-2">
-              <input className={inputCls}
+              <input className="input-new"
                 placeholder="Ejercicio" value={row.nombre} onChange={e => updateHep(i, "nombre", e.target.value)} />
-              <input type="number" className={inputCls}
+              <input type="number" className="input-new"
                 placeholder="Series" value={row.series} onChange={e => updateHep(i, "series", e.target.value)} />
-              <input type="number" className={inputCls}
+              <input type="number" className="input-new"
                 placeholder="Repeticiones" value={row.repeticiones} onChange={e => updateHep(i, "repeticiones", e.target.value)} />
-              <select className={selectCls}
+              <select className="input-new"
                 value={row.frecuencia} onChange={e => updateHep(i, "frecuencia", e.target.value)}>
                 <option value="">Frecuencia…</option>
                 {FRECUENCIAS.map(f => <option key={f} value={f}>{f}</option>)}
               </select>
             </div>
           ))}
-          <Button type="button" variant="outline" size="sm" onClick={() => setHepRows(r => [...r, { nombre: "", series: "", repeticiones: "", frecuencia: "" }])}>
+          <ButtonNew variant="secondary" type="button" onClick={() => setHepRows(r => [...r, { nombre: "", series: "", repeticiones: "", frecuencia: "" }])}>
             + Agregar ejercicio
-          </Button>
+          </ButtonNew>
         </div>
-      </div>
+      </CardNew>
 
-      {/* SESIONES */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Control de sesiones</h3>
+      <CardNew title="Control de sesiones">
         <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Sesiones autorizadas</Label>
-            <input type="number" className={inputCls}
+          <div className="field-new">
+            <label className="field-new__label">Sesiones autorizadas</label>
+            <input type="number" className="input-new"
               placeholder="Ej. 12" value={form.sesionesAutorizadas} onChange={e => set("sesionesAutorizadas", e.target.value)} />
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Sesiones realizadas</Label>
-            <input type="number" className={inputCls}
+          <div className="field-new">
+            <label className="field-new__label">Sesiones realizadas</label>
+            <input type="number" className="input-new"
               placeholder="Ej. 3" value={form.sesionesRealizadas} onChange={e => set("sesionesRealizadas", e.target.value)} />
           </div>
         </div>
-      </div>
+      </CardNew>
 
-      {/* ESCALAS FUNCIONALES VALIDADAS (Outcome measures) */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">{"\uD83D\uDCCA"} Escalas funcionales validadas</h3>
+      <CardNew title="Escalas funcionales validadas">
         <div className="space-y-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Escala</Label>
-            <select className={selectCls} value={outcomeScale} onChange={e => { setOutcomeScale(e.target.value); setOutcomeScores({}); }}>
+          <div className="field-new">
+            <label className="field-new__label">Escala</label>
+            <select className="input-new" value={outcomeScale} onChange={e => { setOutcomeScale(e.target.value); setOutcomeScores({}); }}>
               <option value="">Seleccionar escala…</option>
               {Object.keys(OUTCOME_SCALES).map(s => <option key={s} value={s}>{s}</option>)}
             </select>
@@ -420,11 +400,9 @@ export function PhysiotherapyForm({ patientId, onSaved }: Props) {
             </div>
           )}
         </div>
-      </div>
+      </CardNew>
 
-      {/* EVALUACIÓN POSTURAL Y DE MARCHA */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">{"\uD83E\uDDCD"} Evaluación postural y marcha</h3>
+      <CardNew title="Evaluación postural y marcha">
         <div className="space-y-4">
           {/* Vista anterior */}
           <div>
@@ -470,75 +448,76 @@ export function PhysiotherapyForm({ patientId, onSaved }: Props) {
           </div>
           {/* Patrón de marcha */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs">Patrón de marcha</Label>
-              <select className={selectCls} value={patronMarcha} onChange={e => setPatronMarcha(e.target.value)}>
+            <div className="field-new">
+              <label className="field-new__label">Patrón de marcha</label>
+              <select className="input-new" value={patronMarcha} onChange={e => setPatronMarcha(e.target.value)}>
                 <option value="">Seleccionar…</option>
                 {PATRONES_MARCHA.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
           </div>
           {/* Notas posturales */}
-          <div className="space-y-1.5">
-            <Label className="text-xs">Notas posturales</Label>
-            <textarea className={textareaCls}
+          <div className="field-new">
+            <label className="field-new__label">Notas posturales</label>
+            <textarea className="input-new"
+              style={{ minHeight: 80, resize: "vertical" }}
               placeholder="Observaciones de postura y marcha…" value={notasPosturales} onChange={e => setNotasPosturales(e.target.value)} />
           </div>
         </div>
-      </div>
+      </CardNew>
 
-      {/* NOTAS SOAP */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Notas SOAP</h3>
+      <CardNew title="Notas SOAP">
         <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label>Subjetivo</Label>
-            <textarea className={textareaCls}
+          <div className="field-new">
+            <label className="field-new__label">Subjetivo</label>
+            <textarea className="input-new"
+              style={{ minHeight: 80, resize: "vertical" }}
               placeholder="Lo que refiere el paciente…" value={form.subjective} onChange={e => set("subjective", e.target.value)} />
           </div>
-          <div className="space-y-1.5">
-            <Label>Objetivo</Label>
-            <textarea className={textareaCls}
+          <div className="field-new">
+            <label className="field-new__label">Objetivo</label>
+            <textarea className="input-new"
+              style={{ minHeight: 80, resize: "vertical" }}
               placeholder="Hallazgos clínicos…" value={form.objective} onChange={e => set("objective", e.target.value)} />
           </div>
-          <div className="space-y-1.5">
-            <Label>Evaluación</Label>
-            <textarea className={textareaCls}
+          <div className="field-new">
+            <label className="field-new__label">Evaluación</label>
+            <textarea className="input-new"
+              style={{ minHeight: 80, resize: "vertical" }}
               placeholder="Diagnóstico y evaluación…" value={form.assessment} onChange={e => set("assessment", e.target.value)} />
           </div>
-          <div className="space-y-1.5">
-            <Label>Plan</Label>
-            <textarea className={textareaCls}
+          <div className="field-new">
+            <label className="field-new__label">Plan</label>
+            <textarea className="input-new"
+              style={{ minHeight: 80, resize: "vertical" }}
               placeholder="Plan de tratamiento…" value={form.plan} onChange={e => set("plan", e.target.value)} />
           </div>
         </div>
-      </div>
+      </CardNew>
 
-      {/* SCORE FUNCIONAL */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Score funcional</h3>
+      <CardNew title="Score funcional">
         <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Tipo de score</Label>
-            <select className={selectCls}
+          <div className="field-new">
+            <label className="field-new__label">Tipo de score</label>
+            <select className="input-new"
               value={form.scoreTipo} onChange={e => set("scoreTipo", e.target.value)}>
               <option value="">Seleccionar…</option>
               {SCORES_TIPO.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Score</Label>
-            <input type="number" className={inputCls}
+          <div className="field-new">
+            <label className="field-new__label">Score</label>
+            <input type="number" className="input-new"
               placeholder="Valor numérico" value={form.scoreValor} onChange={e => set("scoreValor", e.target.value)} />
           </div>
         </div>
-      </div>
+      </CardNew>
 
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={saving} size="lg">
-          {saving ? "Guardando…" : "Guardar expediente fisioterapia"}
-        </Button>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <ButtonNew variant="primary" type="submit" disabled={saving}>
+          {saving ? "Guardando…" : "Guardar consulta"}
+        </ButtonNew>
       </div>
-    </div>
+    </form>
   );
 }

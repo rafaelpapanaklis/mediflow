@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { CardNew } from "@/components/ui/design-system/card-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
 import toast from "react-hot-toast";
 
 const FITZPATRICK = ["I", "II", "III", "IV", "V", "VI"];
@@ -179,22 +179,10 @@ export function LaserForm({ patientId, onSaved }: Props) {
     }
   }
 
-  const inputCls =
-    "flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20";
-  const selectCls = inputCls;
-  const textareaCls =
-    "flex min-h-[70px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none";
-
   return (
-    <div className="space-y-6">
-      {/* Checklist pre-sesión */}
-      <div className={`rounded-xl border-2 p-4 ${
-        allChecklistChecked
-          ? "border-emerald-400 bg-emerald-50/50 dark:bg-emerald-900/20 dark:border-emerald-500"
-          : "border-amber-400 bg-amber-50/50 dark:bg-amber-900/20 dark:border-amber-500"
-      }`}>
+    <form onSubmit={e => { e.preventDefault(); handleSave(); }} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <CardNew title="Checklist pre-sesión (confirmar con el cliente)">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold">{"\u2705"} Checklist pre-sesión (confirmar con el cliente)</h3>
           <span className={`text-xs font-bold px-2 py-1 rounded-full ${
             allChecklistChecked
               ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-800 dark:text-emerald-200"
@@ -223,16 +211,14 @@ export function LaserForm({ patientId, onSaved }: Props) {
             </label>
           ))}
         </div>
-      </div>
+      </CardNew>
 
-      {/* Evaluacion del paciente */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Evaluacion del paciente</h3>
+      <CardNew title="Evaluacion del paciente">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Fototipo Fitzpatrick</Label>
+          <div className="field-new">
+            <label className="field-new__label">Fototipo Fitzpatrick</label>
             <select
-              className={selectCls}
+              className="input-new"
               value={form.fitzpatrick}
               onChange={(e) => set("fitzpatrick", e.target.value)}
             >
@@ -244,10 +230,10 @@ export function LaserForm({ patientId, onSaved }: Props) {
               ))}
             </select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Color de vello</Label>
+          <div className="field-new">
+            <label className="field-new__label">Color de vello</label>
             <select
-              className={selectCls}
+              className="input-new"
               value={form.colorVello}
               onChange={(e) => set("colorVello", e.target.value)}
             >
@@ -259,10 +245,10 @@ export function LaserForm({ patientId, onSaved }: Props) {
               ))}
             </select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Grosor</Label>
+          <div className="field-new">
+            <label className="field-new__label">Grosor</label>
             <select
-              className={selectCls}
+              className="input-new"
               value={form.grosor}
               onChange={(e) => set("grosor", e.target.value)}
             >
@@ -274,10 +260,10 @@ export function LaserForm({ patientId, onSaved }: Props) {
               ))}
             </select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Maquina</Label>
+          <div className="field-new">
+            <label className="field-new__label">Maquina</label>
             <select
-              className={selectCls}
+              className="input-new"
               value={form.maquina}
               onChange={(e) => set("maquina", e.target.value)}
             >
@@ -290,15 +276,13 @@ export function LaserForm({ patientId, onSaved }: Props) {
             </select>
           </div>
         </div>
-      </div>
+      </CardNew>
 
-      {/* Zona tratada */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Zona tratada</h3>
-        <div className="space-y-1">
-          <Label className="text-xs">Zona</Label>
+      <CardNew title="Zona tratada">
+        <div className="field-new">
+          <label className="field-new__label">Zona</label>
           <select
-            className={selectCls}
+            className="input-new"
             value={form.zona}
             onChange={(e) => set("zona", e.target.value)}
           >
@@ -310,49 +294,47 @@ export function LaserForm({ patientId, onSaved }: Props) {
             ))}
           </select>
         </div>
-      </div>
+      </CardNew>
 
-      {/* Parametros */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Parametros del equipo</h3>
+      <CardNew title="Parametros del equipo">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Fluencia (J/cm²)</Label>
+          <div className="field-new">
+            <label className="field-new__label">Fluencia (J/cm²)</label>
             <input
               type="number"
               step="0.1"
-              className={inputCls}
+              className="input-new"
               placeholder="Ej: 18.5"
               value={form.fluencia}
               onChange={(e) => set("fluencia", e.target.value)}
             />
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Ancho de pulso (ms)</Label>
+          <div className="field-new">
+            <label className="field-new__label">Ancho de pulso (ms)</label>
             <input
               type="number"
               step="0.1"
-              className={inputCls}
+              className="input-new"
               placeholder="Ej: 30"
               value={form.anchoPulso}
               onChange={(e) => set("anchoPulso", e.target.value)}
             />
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Spot size (mm)</Label>
+          <div className="field-new">
+            <label className="field-new__label">Spot size (mm)</label>
             <input
               type="number"
               step="0.1"
-              className={inputCls}
+              className="input-new"
               placeholder="Ej: 12"
               value={form.spotSize}
               onChange={(e) => set("spotSize", e.target.value)}
             />
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Metodo de enfriamiento</Label>
+          <div className="field-new">
+            <label className="field-new__label">Metodo de enfriamiento</label>
             <select
-              className={selectCls}
+              className="input-new"
               value={form.enfriamiento}
               onChange={(e) => set("enfriamiento", e.target.value)}
             >
@@ -365,38 +347,36 @@ export function LaserForm({ patientId, onSaved }: Props) {
             </select>
           </div>
         </div>
-      </div>
+      </CardNew>
 
-      {/* Sesiones */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Progreso de sesiones</h3>
+      <CardNew title="Progreso de sesiones">
         <div className="grid grid-cols-3 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Numero de sesion</Label>
+          <div className="field-new">
+            <label className="field-new__label">Numero de sesion</label>
             <input
               type="number"
               min="1"
-              className={inputCls}
+              className="input-new"
               placeholder="Ej: 3"
               value={form.sesionActual}
               onChange={(e) => set("sesionActual", e.target.value)}
             />
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Total de sesiones planeadas</Label>
+          <div className="field-new">
+            <label className="field-new__label">Total de sesiones planeadas</label>
             <input
               type="number"
               min="1"
-              className={inputCls}
+              className="input-new"
               placeholder="Ej: 8"
               value={form.sesionesTotal}
               onChange={(e) => set("sesionesTotal", e.target.value)}
             />
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Intervalo proxima sesion</Label>
+          <div className="field-new">
+            <label className="field-new__label">Intervalo proxima sesion</label>
             <select
-              className={selectCls}
+              className="input-new"
               value={form.intervalo}
               onChange={(e) => set("intervalo", e.target.value)}
             >
@@ -413,12 +393,10 @@ export function LaserForm({ patientId, onSaved }: Props) {
             Sesion {form.sesionActual} de {form.sesionesTotal}
           </p>
         )}
-      </div>
+      </CardNew>
 
-      {/* Estimacion de reduccion acumulada */}
       {form.zona && (
-        <div className="rounded-xl border border-border p-4">
-          <h3 className="text-sm font-bold mb-3">{"\uD83D\uDCCA"} Estimación de reducción acumulada</h3>
+        <CardNew title="Estimación de reducción acumulada">
           <div className="space-y-3">
             <div className="space-y-2">
               <div className="flex items-center gap-3">
@@ -427,7 +405,8 @@ export function LaserForm({ patientId, onSaved }: Props) {
                   type="number"
                   min="0"
                   max="100"
-                  className={inputCls + " max-w-[100px]"}
+                  className="input-new"
+                  style={{ maxWidth: 100 }}
                   placeholder="0-100"
                   value={form.reduccionPorZona[form.zona] ?? ""}
                   onChange={(e) =>
@@ -461,12 +440,10 @@ export function LaserForm({ patientId, onSaved }: Props) {
               </p>
             </div>
           </div>
-        </div>
+        </CardNew>
       )}
 
-      {/* Reacciones observadas */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Reacciones observadas</h3>
+      <CardNew title="Reacciones observadas">
         <div className="flex flex-wrap gap-2">
           {REACCIONES.map((r) => (
             <label
@@ -489,45 +466,43 @@ export function LaserForm({ patientId, onSaved }: Props) {
             </label>
           ))}
         </div>
-      </div>
+      </CardNew>
 
-      {/* Test spot */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">{"\uD83D\uDD2C"} Test spot (requerido antes de primera sesión)</h3>
+      <CardNew title="Test spot (requerido antes de primera sesión)">
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Zona probada</Label>
+          <div className="field-new">
+            <label className="field-new__label">Zona probada</label>
             <input
               type="text"
-              className={inputCls}
+              className="input-new"
               placeholder="Ej: Antebrazo interno"
               value={form.testSpotZona}
               onChange={(e) => set("testSpotZona", e.target.value)}
             />
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Parámetros del test (fluencia, pulso)</Label>
+          <div className="field-new">
+            <label className="field-new__label">Parámetros del test (fluencia, pulso)</label>
             <input
               type="text"
-              className={inputCls}
+              className="input-new"
               placeholder="Ej: 15 J/cm², 30ms"
               value={form.testSpotParametros}
               onChange={(e) => set("testSpotParametros", e.target.value)}
             />
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Fecha del test</Label>
+          <div className="field-new">
+            <label className="field-new__label">Fecha del test</label>
             <input
               type="date"
-              className={inputCls}
+              className="input-new"
               value={form.testSpotFecha}
               onChange={(e) => set("testSpotFecha", e.target.value)}
             />
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Reacción a 24h</Label>
+          <div className="field-new">
+            <label className="field-new__label">Reacción a 24h</label>
             <select
-              className={selectCls}
+              className="input-new"
               value={form.testSpotReaccion24}
               onChange={(e) => set("testSpotReaccion24", e.target.value)}
             >
@@ -537,10 +512,10 @@ export function LaserForm({ patientId, onSaved }: Props) {
               ))}
             </select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Reacción a 48h</Label>
+          <div className="field-new">
+            <label className="field-new__label">Reacción a 48h</label>
             <select
-              className={selectCls}
+              className="input-new"
               value={form.testSpotReaccion48}
               onChange={(e) => set("testSpotReaccion48", e.target.value)}
             >
@@ -550,10 +525,10 @@ export function LaserForm({ patientId, onSaved }: Props) {
               ))}
             </select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Resultado</Label>
+          <div className="field-new">
+            <label className="field-new__label">Resultado</label>
             <select
-              className={selectCls}
+              className="input-new"
               value={form.testSpotResultado}
               onChange={(e) => set("testSpotResultado", e.target.value)}
             >
@@ -564,44 +539,48 @@ export function LaserForm({ patientId, onSaved }: Props) {
             </select>
           </div>
         </div>
-      </div>
+      </CardNew>
 
-      {/* SOAP */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {([
-          { key: "subjective", label: "Subjetivo", ph: "Sensibilidad, historial…" },
-          { key: "objective", label: "Objetivo", ph: "Observaciones de la piel…" },
-          { key: "assessment", label: "Evaluacion", ph: "Respuesta al tratamiento…" },
-          { key: "plan", label: "Plan", ph: "Ajustes, proxima sesion…" },
-        ] as const).map((f) => (
-          <div key={f.key} className="space-y-1.5">
-            <Label>{f.label}</Label>
-            <textarea
-              className={textareaCls}
-              placeholder={f.ph}
-              value={(form as any)[f.key]}
-              onChange={(e) => set(f.key, e.target.value)}
-            />
-          </div>
-        ))}
-      </div>
+      <CardNew title="SOAP">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {([
+            { key: "subjective", label: "Subjetivo", ph: "Sensibilidad, historial…" },
+            { key: "objective", label: "Objetivo", ph: "Observaciones de la piel…" },
+            { key: "assessment", label: "Evaluacion", ph: "Respuesta al tratamiento…" },
+            { key: "plan", label: "Plan", ph: "Ajustes, proxima sesion…" },
+          ] as const).map((f) => (
+            <div key={f.key} className="field-new">
+              <label className="field-new__label">{f.label}</label>
+              <textarea
+                className="input-new"
+                style={{ minHeight: 80, resize: "vertical" }}
+                placeholder={f.ph}
+                value={(form as any)[f.key]}
+                onChange={(e) => set(f.key, e.target.value)}
+              />
+            </div>
+          ))}
+        </div>
+      </CardNew>
 
-      {/* Notas */}
-      <div className="space-y-1.5">
-        <Label>Notas adicionales</Label>
-        <textarea
-          className={textareaCls}
-          placeholder="Observaciones del procedimiento…"
-          value={form.notas}
-          onChange={(e) => set("notas", e.target.value)}
-        />
-      </div>
+      <CardNew title="Notas adicionales">
+        <div className="field-new">
+          <label className="field-new__label">Notas adicionales</label>
+          <textarea
+            className="input-new"
+            style={{ minHeight: 80, resize: "vertical" }}
+            placeholder="Observaciones del procedimiento…"
+            value={form.notas}
+            onChange={(e) => set("notas", e.target.value)}
+          />
+        </div>
+      </CardNew>
 
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={saving} size="lg">
-          {saving ? "Guardando…" : "Guardar registro de depilacion laser"}
-        </Button>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <ButtonNew variant="primary" type="submit" disabled={saving}>
+          {saving ? "Guardando…" : "Guardar consulta"}
+        </ButtonNew>
       </div>
-    </div>
+    </form>
   );
 }

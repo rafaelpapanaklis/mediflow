@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { CardNew } from "@/components/ui/design-system/card-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
 import toast from "react-hot-toast";
 
 const TIPOS_MASAJE = [
@@ -145,24 +145,16 @@ export function MassageForm({ patientId, onSaved }: Props) {
     }
   }
 
-  const inputCls =
-    "flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20";
-  const selectCls = inputCls;
-  const textareaCls =
-    "flex min-h-[70px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none";
-
   const PRESION_LABELS = ["1 - Suave", "2 - Ligera", "3 - Media", "4 - Profunda", "5 - Firme"];
 
   return (
-    <div className="space-y-6">
-      {/* Tipo y Presion */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Tipo de masaje</h3>
+    <form onSubmit={e => { e.preventDefault(); handleSave(); }} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <CardNew title="Tipo de masaje">
         <div className="space-y-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Tipo</Label>
+          <div className="field-new">
+            <label className="field-new__label">Tipo</label>
             <select
-              className={selectCls}
+              className="input-new"
               value={form.tipo}
               onChange={(e) => set("tipo", e.target.value)}
             >
@@ -174,8 +166,8 @@ export function MassageForm({ patientId, onSaved }: Props) {
               ))}
             </select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Presion preferida</Label>
+          <div className="field-new">
+            <label className="field-new__label">Presion preferida</label>
             <div className="flex gap-4">
               {PRESION_LABELS.map((label, i) => (
                 <label key={i} className="flex items-center gap-1.5 text-sm cursor-pointer">
@@ -192,11 +184,9 @@ export function MassageForm({ patientId, onSaved }: Props) {
             </div>
           </div>
         </div>
-      </div>
+      </CardNew>
 
-      {/* Zonas de enfoque */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Zonas de enfoque</h3>
+      <CardNew title="Zonas de enfoque">
         <div className="flex flex-wrap gap-2">
           {ZONAS.map((z) => (
             <label
@@ -217,11 +207,9 @@ export function MassageForm({ patientId, onSaved }: Props) {
             </label>
           ))}
         </div>
-      </div>
+      </CardNew>
 
-      {/* Trigger points identificados */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">{"\uD83C\uDFAF"} Trigger points identificados</h3>
+      <CardNew title="Trigger points identificados">
         <div className="flex flex-wrap gap-2">
           {TRIGGER_POINTS.map((tp) => (
             <label
@@ -248,7 +236,7 @@ export function MassageForm({ patientId, onSaved }: Props) {
               <div key={tp} className="flex items-center gap-3">
                 <span className="text-sm min-w-[180px]">{tp}</span>
                 <select
-                  className={selectCls}
+                  className="input-new"
                   value={form.triggerPointTipo[tp] || "Activo"}
                   onChange={(e) =>
                     setForm((f) => ({
@@ -264,11 +252,9 @@ export function MassageForm({ patientId, onSaved }: Props) {
             ))}
           </div>
         )}
-      </div>
+      </CardNew>
 
-      {/* Evaluacion postural */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">{"\uD83E\uDDCD"} Evaluación postural</h3>
+      <CardNew title="Evaluación postural">
         <div className="flex flex-wrap gap-2">
           {EVALUACION_POSTURAL.map((ep) => (
             <label
@@ -289,20 +275,19 @@ export function MassageForm({ patientId, onSaved }: Props) {
             </label>
           ))}
         </div>
-        <div className="mt-3 space-y-1.5">
-          <Label className="text-xs">Notas posturales</Label>
+        <div className="field-new mt-3">
+          <label className="field-new__label">Notas posturales</label>
           <textarea
-            className={textareaCls}
+            className="input-new"
+            style={{ minHeight: 80, resize: "vertical" }}
             placeholder="Observaciones adicionales sobre la postura..."
             value={form.notasPosturales}
             onChange={(e) => set("notasPosturales", e.target.value)}
           />
         </div>
-      </div>
+      </CardNew>
 
-      {/* Zonas de dolor */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3 text-red-600">Zonas de dolor reportadas</h3>
+      <CardNew title="Zonas de dolor reportadas">
         <div className="flex flex-wrap gap-2">
           {ZONAS.map((z) => (
             <label
@@ -323,22 +308,22 @@ export function MassageForm({ patientId, onSaved }: Props) {
             </label>
           ))}
         </div>
-      </div>
+      </CardNew>
 
-      {/* Tecnicas aplicadas */}
-      <div className="space-y-1.5">
-        <Label>Tecnicas aplicadas por zona</Label>
-        <textarea
-          className={textareaCls}
-          placeholder="Ej: Espalda alta — fricciones + amasamiento profundo…"
-          value={form.tecnicas}
-          onChange={(e) => set("tecnicas", e.target.value)}
-        />
-      </div>
+      <CardNew title="Tecnicas aplicadas">
+        <div className="field-new">
+          <label className="field-new__label">Tecnicas aplicadas por zona</label>
+          <textarea
+            className="input-new"
+            style={{ minHeight: 80, resize: "vertical" }}
+            placeholder="Ej: Espalda alta — fricciones + amasamiento profundo…"
+            value={form.tecnicas}
+            onChange={(e) => set("tecnicas", e.target.value)}
+          />
+        </div>
+      </CardNew>
 
-      {/* Contraindicaciones */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Contraindicaciones revisadas</h3>
+      <CardNew title="Contraindicaciones revisadas">
         <div className="flex flex-wrap gap-2">
           {CONTRAINDICACIONES.map((c) => (
             <label
@@ -359,14 +344,12 @@ export function MassageForm({ patientId, onSaved }: Props) {
             </label>
           ))}
         </div>
-      </div>
+      </CardNew>
 
-      {/* Escala Visual Análoga de Dolor */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">{"\uD83D\uDCCA"} Escala Visual Análoga de Dolor</h3>
+      <CardNew title="Escala Visual Análoga de Dolor">
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label className="text-xs">Dolor antes de la sesión</Label>
+          <div className="field-new">
+            <label className="field-new__label">Dolor antes de la sesión</label>
             <div className="flex gap-1">
               {Array.from({ length: 11 }, (_, i) => {
                 const hue = 120 - i * 12;
@@ -392,8 +375,8 @@ export function MassageForm({ patientId, onSaved }: Props) {
               })}
             </div>
           </div>
-          <div className="space-y-2">
-            <Label className="text-xs">Dolor después de la sesión</Label>
+          <div className="field-new">
+            <label className="field-new__label">Dolor después de la sesión</label>
             <div className="flex gap-1">
               {Array.from({ length: 11 }, (_, i) => {
                 const hue = 120 - i * 12;
@@ -435,11 +418,9 @@ export function MassageForm({ patientId, onSaved }: Props) {
             </div>
           )}
         </div>
-      </div>
+      </CardNew>
 
-      {/* Notas SOAP */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Notas SOAP</h3>
+      <CardNew title="Notas SOAP">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {([
             { key: "subjective", label: "Subjetivo", ph: "Motivo de consulta, molestias…" },
@@ -447,10 +428,11 @@ export function MassageForm({ patientId, onSaved }: Props) {
             { key: "assessment", label: "Evaluacion", ph: "Valoracion del terapeuta…" },
             { key: "plan", label: "Plan", ph: "Proxima sesion, ejercicios…" },
           ] as const).map((f) => (
-            <div key={f.key} className="space-y-1.5">
-              <Label>{f.label}</Label>
+            <div key={f.key} className="field-new">
+              <label className="field-new__label">{f.label}</label>
               <textarea
-                className={textareaCls}
+                className="input-new"
+                style={{ minHeight: 80, resize: "vertical" }}
                 placeholder={f.ph}
                 value={(form as any)[f.key]}
                 onChange={(e) => set(f.key, e.target.value)}
@@ -458,24 +440,26 @@ export function MassageForm({ patientId, onSaved }: Props) {
             </div>
           ))}
         </div>
-      </div>
+      </CardNew>
 
-      {/* Recomendaciones post-masaje */}
-      <div className="space-y-1.5">
-        <Label>Recomendaciones post-masaje</Label>
-        <textarea
-          className={textareaCls}
-          placeholder="Hidratacion, reposo, estiramientos…"
-          value={form.recomendaciones}
-          onChange={(e) => set("recomendaciones", e.target.value)}
-        />
-      </div>
+      <CardNew title="Recomendaciones post-masaje">
+        <div className="field-new">
+          <label className="field-new__label">Recomendaciones post-masaje</label>
+          <textarea
+            className="input-new"
+            style={{ minHeight: 80, resize: "vertical" }}
+            placeholder="Hidratacion, reposo, estiramientos…"
+            value={form.recomendaciones}
+            onChange={(e) => set("recomendaciones", e.target.value)}
+          />
+        </div>
+      </CardNew>
 
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={saving} size="lg">
-          {saving ? "Guardando…" : "Guardar registro de masaje"}
-        </Button>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <ButtonNew variant="primary" type="submit" disabled={saving}>
+          {saving ? "Guardando…" : "Guardar consulta"}
+        </ButtonNew>
       </div>
-    </div>
+    </form>
   );
 }

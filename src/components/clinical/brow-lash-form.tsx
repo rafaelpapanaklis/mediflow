@@ -1,8 +1,8 @@
 "use client";
 import { useState, useMemo } from "react";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
+import { CardNew } from "@/components/ui/design-system/card-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
 
 const SERVICIOS = [
   "Extensiones clásicas",
@@ -170,22 +170,14 @@ export function BrowLashForm({ patientId, onSaved }: Props) {
     }
   }
 
-  const inputCls =
-    "flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20";
-  const selectCls = inputCls;
-  const textareaCls =
-    "flex min-h-[70px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none";
-
   return (
-    <div className="space-y-6">
-      {/* Servicio y Forma de ojo */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Servicio</h3>
+    <form onSubmit={e => { e.preventDefault(); handleSave(); }} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <CardNew title="Servicio">
         <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Servicio</Label>
+          <div className="field-new">
+            <label className="field-new__label">Servicio</label>
             <select
-              className={selectCls}
+              className="input-new"
               value={form.servicio}
               onChange={(e) => set("servicio", e.target.value)}
             >
@@ -197,10 +189,10 @@ export function BrowLashForm({ patientId, onSaved }: Props) {
               ))}
             </select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Forma de ojo</Label>
+          <div className="field-new">
+            <label className="field-new__label">Forma de ojo</label>
             <select
-              className={selectCls}
+              className="input-new"
               value={form.formaOjo}
               onChange={(e) => set("formaOjo", e.target.value)}
             >
@@ -213,11 +205,9 @@ export function BrowLashForm({ patientId, onSaved }: Props) {
             </select>
           </div>
         </div>
-      </div>
+      </CardNew>
 
-      {/* Mapa de pestañas */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Mapa de pestañas</h3>
+      <CardNew title="Mapa de pestañas">
         <div className="grid grid-cols-3 gap-4">
           {(["inner", "middle", "outer"] as const).map((zone) => {
             const labels: Record<string, string> = {
@@ -228,10 +218,10 @@ export function BrowLashForm({ patientId, onSaved }: Props) {
             return (
               <div key={zone} className="space-y-2">
                 <p className="text-xs font-semibold text-brand-600">{labels[zone]}</p>
-                <div className="space-y-1">
-                  <Label className="text-xs">Curvatura</Label>
+                <div className="field-new">
+                  <label className="field-new__label">Curvatura</label>
                   <select
-                    className={selectCls}
+                    className="input-new"
                     value={(form.lashMap as any)[zone].curl}
                     onChange={(e) => setLash(zone, "curl", e.target.value)}
                   >
@@ -242,10 +232,10 @@ export function BrowLashForm({ patientId, onSaved }: Props) {
                     ))}
                   </select>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Longitud (mm)</Label>
+                <div className="field-new">
+                  <label className="field-new__label">Longitud (mm)</label>
                   <select
-                    className={selectCls}
+                    className="input-new"
                     value={(form.lashMap as any)[zone].longitud}
                     onChange={(e) => setLash(zone, "longitud", e.target.value)}
                   >
@@ -256,10 +246,10 @@ export function BrowLashForm({ patientId, onSaved }: Props) {
                     ))}
                   </select>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Grosor (mm)</Label>
+                <div className="field-new">
+                  <label className="field-new__label">Grosor (mm)</label>
                   <select
-                    className={selectCls}
+                    className="input-new"
                     value={(form.lashMap as any)[zone].grosor}
                     onChange={(e) => setLash(zone, "grosor", e.target.value)}
                   >
@@ -274,51 +264,47 @@ export function BrowLashForm({ patientId, onSaved }: Props) {
             );
           })}
         </div>
-      </div>
+      </CardNew>
 
-      {/* Adhesivo y Color */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Materiales</h3>
+      <CardNew title="Materiales">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Adhesivo usado</Label>
+          <div className="field-new">
+            <label className="field-new__label">Adhesivo usado</label>
             <input
-              className={inputCls}
+              className="input-new"
               placeholder="Nombre del adhesivo"
               value={form.adhesivo}
               onChange={(e) => set("adhesivo", e.target.value)}
             />
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Lote del adhesivo</Label>
+          <div className="field-new">
+            <label className="field-new__label">Lote del adhesivo</label>
             <input
-              className={inputCls}
+              className="input-new"
               placeholder="N.o de lote"
               value={form.adhesivoBatch}
               onChange={(e) => set("adhesivoBatch", e.target.value)}
             />
           </div>
-          <div className="space-y-1 col-span-2">
-            <Label className="text-xs">Formula de color (marca + mezcla)</Label>
+          <div className="field-new col-span-2">
+            <label className="field-new__label">Formula de color (marca + mezcla)</label>
             <input
-              className={inputCls}
+              className="input-new"
               placeholder="Ej: RefectoCil #3 + #3.1 (50/50)"
               value={form.formulaColor}
               onChange={(e) => set("formulaColor", e.target.value)}
             />
           </div>
         </div>
-      </div>
+      </CardNew>
 
-      {/* Patch test + Refill */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Seguridad y seguimiento</h3>
+      <CardNew title="Seguridad y seguimiento">
         <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Fecha de patch test</Label>
+          <div className="field-new">
+            <label className="field-new__label">Fecha de patch test</label>
             <input
               type="date"
-              className={inputCls}
+              className="input-new"
               value={form.patchTestDate}
               onChange={(e) => set("patchTestDate", e.target.value)}
             />
@@ -326,10 +312,10 @@ export function BrowLashForm({ patientId, onSaved }: Props) {
               <p className="text-xs font-semibold text-red-600 mt-1">{patchWarning}</p>
             )}
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Intervalo de refill recomendado</Label>
+          <div className="field-new">
+            <label className="field-new__label">Intervalo de refill recomendado</label>
             <select
-              className={selectCls}
+              className="input-new"
               value={form.refillInterval}
               onChange={(e) => set("refillInterval", e.target.value)}
             >
@@ -341,16 +327,14 @@ export function BrowLashForm({ patientId, onSaved }: Props) {
             </select>
           </div>
         </div>
-      </div>
+      </CardNew>
 
-      {/* EVALUACIÓN DE PESTAÑAS NATURALES */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Evaluación de pestañas naturales</h3>
+      <CardNew title="Evaluación de pestañas naturales">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Longitud natural</Label>
+          <div className="field-new">
+            <label className="field-new__label">Longitud natural</label>
             <select
-              className={selectCls + " dark:bg-neutral-900"}
+              className="input-new"
               value={form.longitudNatural}
               onChange={(e) => set("longitudNatural", e.target.value)}
             >
@@ -360,10 +344,10 @@ export function BrowLashForm({ patientId, onSaved }: Props) {
               <option value="Largas (>11mm)">Largas (&gt;11mm)</option>
             </select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Densidad</Label>
+          <div className="field-new">
+            <label className="field-new__label">Densidad</label>
             <select
-              className={selectCls + " dark:bg-neutral-900"}
+              className="input-new"
               value={form.densidad}
               onChange={(e) => set("densidad", e.target.value)}
             >
@@ -373,10 +357,10 @@ export function BrowLashForm({ patientId, onSaved }: Props) {
               <option value="Abundante">Abundante</option>
             </select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Curvatura natural</Label>
+          <div className="field-new">
+            <label className="field-new__label">Curvatura natural</label>
             <select
-              className={selectCls + " dark:bg-neutral-900"}
+              className="input-new"
               value={form.curvaturaNatural}
               onChange={(e) => set("curvaturaNatural", e.target.value)}
             >
@@ -387,8 +371,8 @@ export function BrowLashForm({ patientId, onSaved }: Props) {
             </select>
           </div>
         </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Condición</Label>
+        <div className="field-new">
+          <label className="field-new__label">Condición</label>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {["Sanas", "Quebradizas", "Con gaps/huecos", "Debilitadas por extensiones previas"].map((c) => (
               <label key={c} className="flex items-center gap-2 cursor-pointer">
@@ -403,30 +387,28 @@ export function BrowLashForm({ patientId, onSaved }: Props) {
             ))}
           </div>
         </div>
-      </div>
+      </CardNew>
 
-      {/* TASA DE RETENCIÓN */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Tasa de retención</h3>
+      <CardNew title="Tasa de retención">
         <div className="grid grid-cols-2 gap-3 mb-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Semanas desde última aplicación</Label>
+          <div className="field-new">
+            <label className="field-new__label">Semanas desde última aplicación</label>
             <input
               type="number"
               min={0}
-              className={inputCls + " dark:bg-neutral-900"}
+              className="input-new"
               placeholder="0"
               value={form.semanasDesdeUltima}
               onChange={(e) => set("semanasDesdeUltima", e.target.value)}
             />
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">% de extensiones retenidas</Label>
+          <div className="field-new">
+            <label className="field-new__label">% de extensiones retenidas</label>
             <input
               type="number"
               min={0}
               max={100}
-              className={inputCls + " dark:bg-neutral-900"}
+              className="input-new"
               placeholder="0"
               value={form.porcentajeRetencion}
               onChange={(e) => set("porcentajeRetencion", e.target.value)}
@@ -454,11 +436,9 @@ export function BrowLashForm({ patientId, onSaved }: Props) {
             </p>
           </div>
         )}
-      </div>
+      </CardNew>
 
-      {/* HISTORIAL DE SENSIBILIDAD */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Historial de sensibilidad</h3>
+      <CardNew title="Historial de sensibilidad">
         {form.historialSensibilidad.length === 0 && (
           <p className="text-sm text-muted-foreground mb-3">Sin reacciones registradas.</p>
         )}
@@ -466,28 +446,28 @@ export function BrowLashForm({ patientId, onSaved }: Props) {
           {form.historialSensibilidad.map((entry, idx) => (
             <div key={idx} className="rounded-lg border border-border p-3 space-y-2 bg-neutral-50 dark:bg-neutral-800/50">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-xs">Fecha</Label>
+                <div className="field-new">
+                  <label className="field-new__label">Fecha</label>
                   <input
                     type="date"
-                    className={inputCls + " dark:bg-neutral-900"}
+                    className="input-new"
                     value={entry.fecha}
                     onChange={(e) => updateSensibilidad(idx, "fecha", e.target.value)}
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Producto/Adhesivo</Label>
+                <div className="field-new">
+                  <label className="field-new__label">Producto/Adhesivo</label>
                   <input
-                    className={inputCls + " dark:bg-neutral-900"}
+                    className="input-new"
                     placeholder="Producto…"
                     value={entry.producto}
                     onChange={(e) => updateSensibilidad(idx, "producto", e.target.value)}
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Reacción</Label>
+                <div className="field-new">
+                  <label className="field-new__label">Reacción</label>
                   <select
-                    className={selectCls + " dark:bg-neutral-900"}
+                    className="input-new"
                     value={entry.reaccion}
                     onChange={(e) => updateSensibilidad(idx, "reaccion", e.target.value)}
                   >
@@ -498,10 +478,10 @@ export function BrowLashForm({ patientId, onSaved }: Props) {
                     <option value="Reacción alérgica severa">Reacción alérgica severa</option>
                   </select>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Notas</Label>
+                <div className="field-new">
+                  <label className="field-new__label">Notas</label>
                   <input
-                    className={inputCls + " dark:bg-neutral-900"}
+                    className="input-new"
                     placeholder="Notas…"
                     value={entry.notas}
                     onChange={(e) => updateSensibilidad(idx, "notas", e.target.value)}
@@ -525,43 +505,45 @@ export function BrowLashForm({ patientId, onSaved }: Props) {
         >
           + Agregar reacción
         </button>
-      </div>
+      </CardNew>
 
-      {/* SOAP + Notas */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {([
-          { key: "subjective", label: "Subjetivo" },
-          { key: "objective", label: "Objetivo" },
-          { key: "assessment", label: "Evaluacion" },
-          { key: "plan", label: "Plan" },
-        ] as const).map((f) => (
-          <div key={f.key} className="space-y-1.5">
-            <Label>{f.label}</Label>
-            <textarea
-              className={textareaCls}
-              placeholder={f.label}
-              value={(form as any)[f.key]}
-              onChange={(e) => set(f.key, e.target.value)}
-            />
-          </div>
-        ))}
-      </div>
+      <CardNew title="SOAP y notas">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {([
+            { key: "subjective", label: "Subjetivo" },
+            { key: "objective", label: "Objetivo" },
+            { key: "assessment", label: "Evaluacion" },
+            { key: "plan", label: "Plan" },
+          ] as const).map((f) => (
+            <div key={f.key} className="field-new">
+              <label className="field-new__label">{f.label}</label>
+              <textarea
+                className="input-new"
+                style={{ minHeight: 80, resize: "vertical" }}
+                placeholder={f.label}
+                value={(form as any)[f.key]}
+                onChange={(e) => set(f.key, e.target.value)}
+              />
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 field-new">
+          <label className="field-new__label">Notas adicionales</label>
+          <textarea
+            className="input-new"
+            style={{ minHeight: 80, resize: "vertical" }}
+            placeholder="Observaciones del procedimiento…"
+            value={form.notas}
+            onChange={(e) => set("notas", e.target.value)}
+          />
+        </div>
+      </CardNew>
 
-      <div className="space-y-1.5">
-        <Label>Notas adicionales</Label>
-        <textarea
-          className={textareaCls}
-          placeholder="Observaciones del procedimiento…"
-          value={form.notas}
-          onChange={(e) => set("notas", e.target.value)}
-        />
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <ButtonNew variant="primary" type="submit" disabled={saving}>
+          {saving ? "Guardando…" : "Guardar consulta"}
+        </ButtonNew>
       </div>
-
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={saving} size="lg">
-          {saving ? "Guardando…" : "Guardar registro cejas/pestañas"}
-        </Button>
-      </div>
-    </div>
+    </form>
   );
 }

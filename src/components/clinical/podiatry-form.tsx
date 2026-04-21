@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo } from "react";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { CardNew } from "@/components/ui/design-system/card-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
 import toast from "react-hot-toast";
 
 const RIESGO_PIE = ["bajo", "medio", "alto", "urgente", "no aplica"] as const;
@@ -176,69 +176,62 @@ export function PodiatryForm({ patientId, onSaved }: Props) {
     } catch (err: any) { toast.error(err.message ?? "Error al guardar"); } finally { setSaving(false); }
   }
 
-  const inputCls = "flex h-9 w-full rounded-lg border border-border bg-card dark:bg-zinc-900 dark:text-zinc-100 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20";
-  const selectCls = inputCls;
-  const textareaCls = "flex min-h-[80px] w-full rounded-lg border border-border bg-card dark:bg-zinc-900 dark:text-zinc-100 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none";
-
   const itbInterpIzq = getItbInterpretation(itbIzq);
   const itbInterpDer = getItbInterpretation(itbDer);
 
   return (
-    <div className="space-y-6">
-      {/* ANAMNESIS */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label>Motivo de consulta / HEA</Label>
-          <textarea className={textareaCls}
-            placeholder="¿Por qué viene el paciente hoy?" value={form.subjective} onChange={e => set("subjective", e.target.value)} />
+    <form onSubmit={e => { e.preventDefault(); handleSave(); }} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <CardNew title="Anamnesis">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="field-new">
+            <label className="field-new__label">Motivo de consulta / HEA</label>
+            <textarea className="input-new" style={{ minHeight: 80, resize: "vertical" }}
+              placeholder="¿Por qué viene el paciente hoy?" value={form.subjective} onChange={e => set("subjective", e.target.value)} />
+          </div>
+          <div className="field-new">
+            <label className="field-new__label">Exploración física / Observaciones</label>
+            <textarea className="input-new" style={{ minHeight: 80, resize: "vertical" }}
+              placeholder="Estado actual del pie, hallazgos…" value={form.objective} onChange={e => set("objective", e.target.value)} />
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <Label>Exploración física / Observaciones</Label>
-          <textarea className={textareaCls}
-            placeholder="Estado actual del pie, hallazgos…" value={form.objective} onChange={e => set("objective", e.target.value)} />
-        </div>
-      </div>
+      </CardNew>
 
-      {/* RIESGO & TRATAMIENTO */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Evaluación podológica</h3>
+      <CardNew title="Evaluación podológica">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Riesgo pie diabético</Label>
-            <select className={selectCls}
+          <div className="field-new">
+            <label className="field-new__label">Riesgo pie diabético</label>
+            <select className="input-new"
               value={form.riesgoPie} onChange={e => set("riesgoPie", e.target.value)}>
               <option value="">Seleccionar…</option>
               {RIESGO_PIE.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
             </select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Score ABI (opcional)</Label>
-            <input type="number" step="0.01" className={inputCls}
+          <div className="field-new">
+            <label className="field-new__label">Score ABI (opcional)</label>
+            <input type="number" step="0.01" className="input-new"
               placeholder="Ej. 0.95" value={form.scoreABI} onChange={e => set("scoreABI", e.target.value)} />
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Tratamiento</Label>
-            <select className={selectCls}
+          <div className="field-new">
+            <label className="field-new__label">Tratamiento</label>
+            <select className="input-new"
               value={form.tratamiento} onChange={e => set("tratamiento", e.target.value)}>
               <option value="">Seleccionar…</option>
               {TRATAMIENTOS.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
             </select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Pie afectado</Label>
-            <select className={selectCls}
+          <div className="field-new">
+            <label className="field-new__label">Pie afectado</label>
+            <select className="input-new"
               value={form.pieAfectado} onChange={e => set("pieAfectado", e.target.value)}>
               <option value="">Seleccionar…</option>
               {PIE_AFECTADO.map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
             </select>
           </div>
         </div>
-      </div>
+      </CardNew>
 
-      {/* SCREENING DE PIE DIABÉTICO */}
       {form.riesgoPie && form.riesgoPie !== "no aplica" && (
-        <div className="rounded-xl border border-border p-4">
-          <h3 className="text-sm font-bold mb-3">{"\uD83E\uDDB6"} Screening de pie diabético (IWGDF)</h3>
+        <CardNew title="Screening de pie diabético (IWGDF)">
           <div className="space-y-4">
             {/* Monofilamento 10g */}
             <div>
@@ -276,16 +269,16 @@ export function PodiatryForm({ patientId, onSaved }: Props) {
 
             {/* Sensibilidad vibratoria */}
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <Label className="text-xs">Sensibilidad vibratoria (izq)</Label>
-                <select className={selectCls} value={sensibilidadIzq} onChange={e => setSensibilidadIzq(e.target.value)}>
+              <div className="field-new">
+                <label className="field-new__label">Sensibilidad vibratoria (izq)</label>
+                <select className="input-new" value={sensibilidadIzq} onChange={e => setSensibilidadIzq(e.target.value)}>
                   <option value="">Seleccionar…</option>
                   {SENSIBILIDAD_OPCIONES.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Sensibilidad vibratoria (der)</Label>
-                <select className={selectCls} value={sensibilidadDer} onChange={e => setSensibilidadDer(e.target.value)}>
+              <div className="field-new">
+                <label className="field-new__label">Sensibilidad vibratoria (der)</label>
+                <select className="input-new" value={sensibilidadDer} onChange={e => setSensibilidadDer(e.target.value)}>
                   <option value="">Seleccionar…</option>
                   {SENSIBILIDAD_OPCIONES.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
@@ -294,16 +287,16 @@ export function PodiatryForm({ patientId, onSaved }: Props) {
 
             {/* Temperatura */}
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <Label className="text-xs">Temperatura del pie (izq)</Label>
-                <select className={selectCls} value={temperaturaIzq} onChange={e => setTemperaturaIzq(e.target.value)}>
+              <div className="field-new">
+                <label className="field-new__label">Temperatura del pie (izq)</label>
+                <select className="input-new" value={temperaturaIzq} onChange={e => setTemperaturaIzq(e.target.value)}>
                   <option value="">Seleccionar…</option>
                   {TEMPERATURA_OPCIONES.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Temperatura del pie (der)</Label>
-                <select className={selectCls} value={temperaturaDer} onChange={e => setTemperaturaDer(e.target.value)}>
+              <div className="field-new">
+                <label className="field-new__label">Temperatura del pie (der)</label>
+                <select className="input-new" value={temperaturaDer} onChange={e => setTemperaturaDer(e.target.value)}>
                   <option value="">Seleccionar…</option>
                   {TEMPERATURA_OPCIONES.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
@@ -346,42 +339,40 @@ export function PodiatryForm({ patientId, onSaved }: Props) {
               Clasificación IWGDF: {iwgdfRiesgo.texto}
             </div>
           </div>
-        </div>
+        </CardNew>
       )}
 
-      {/* EVALUACIÓN VASCULAR */}
       {form.riesgoPie && form.riesgoPie !== "no aplica" && (
-        <div className="rounded-xl border border-border p-4">
-          <h3 className="text-sm font-bold mb-3">{"\uD83E\uDEC0"} Evaluación vascular</h3>
+        <CardNew title="Evaluación vascular">
           <div className="space-y-4">
             {/* Pulsos */}
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <Label className="text-xs">Pulso tibial posterior (izq)</Label>
-                <select className={selectCls} value={pulsoTibialIzq} onChange={e => setPulsoTibialIzq(e.target.value)}>
+              <div className="field-new">
+                <label className="field-new__label">Pulso tibial posterior (izq)</label>
+                <select className="input-new" value={pulsoTibialIzq} onChange={e => setPulsoTibialIzq(e.target.value)}>
                   <option value="">Seleccionar…</option>
                   {PULSO_OPCIONES.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Pulso tibial posterior (der)</Label>
-                <select className={selectCls} value={pulsoTibialDer} onChange={e => setPulsoTibialDer(e.target.value)}>
+              <div className="field-new">
+                <label className="field-new__label">Pulso tibial posterior (der)</label>
+                <select className="input-new" value={pulsoTibialDer} onChange={e => setPulsoTibialDer(e.target.value)}>
                   <option value="">Seleccionar…</option>
                   {PULSO_OPCIONES.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <Label className="text-xs">Pulso pedio dorsal (izq)</Label>
-                <select className={selectCls} value={pulsoPedioIzq} onChange={e => setPulsoPedioIzq(e.target.value)}>
+              <div className="field-new">
+                <label className="field-new__label">Pulso pedio dorsal (izq)</label>
+                <select className="input-new" value={pulsoPedioIzq} onChange={e => setPulsoPedioIzq(e.target.value)}>
                   <option value="">Seleccionar…</option>
                   {PULSO_OPCIONES.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Pulso pedio dorsal (der)</Label>
-                <select className={selectCls} value={pulsoPedioDer} onChange={e => setPulsoPedioDer(e.target.value)}>
+              <div className="field-new">
+                <label className="field-new__label">Pulso pedio dorsal (der)</label>
+                <select className="input-new" value={pulsoPedioDer} onChange={e => setPulsoPedioDer(e.target.value)}>
                   <option value="">Seleccionar…</option>
                   {PULSO_OPCIONES.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
@@ -390,16 +381,16 @@ export function PodiatryForm({ patientId, onSaved }: Props) {
 
             {/* Llenado capilar */}
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <Label className="text-xs">Llenado capilar (izq)</Label>
-                <select className={selectCls} value={llenadoIzq} onChange={e => setLlenadoIzq(e.target.value)}>
+              <div className="field-new">
+                <label className="field-new__label">Llenado capilar (izq)</label>
+                <select className="input-new" value={llenadoIzq} onChange={e => setLlenadoIzq(e.target.value)}>
                   <option value="">Seleccionar…</option>
                   {LLENADO_OPCIONES.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Llenado capilar (der)</Label>
-                <select className={selectCls} value={llenadoDer} onChange={e => setLlenadoDer(e.target.value)}>
+              <div className="field-new">
+                <label className="field-new__label">Llenado capilar (der)</label>
+                <select className="input-new" value={llenadoDer} onChange={e => setLlenadoDer(e.target.value)}>
                   <option value="">Seleccionar…</option>
                   {LLENADO_OPCIONES.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
@@ -408,16 +399,16 @@ export function PodiatryForm({ patientId, onSaved }: Props) {
 
             {/* Coloración */}
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <Label className="text-xs">Coloración (izq)</Label>
-                <select className={selectCls} value={coloracionIzq} onChange={e => setColoracionIzq(e.target.value)}>
+              <div className="field-new">
+                <label className="field-new__label">Coloración (izq)</label>
+                <select className="input-new" value={coloracionIzq} onChange={e => setColoracionIzq(e.target.value)}>
                   <option value="">Seleccionar…</option>
                   {COLORACION_OPCIONES.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Coloración (der)</Label>
-                <select className={selectCls} value={coloracionDer} onChange={e => setColoracionDer(e.target.value)}>
+              <div className="field-new">
+                <label className="field-new__label">Coloración (der)</label>
+                <select className="input-new" value={coloracionDer} onChange={e => setColoracionDer(e.target.value)}>
                   <option value="">Seleccionar…</option>
                   {COLORACION_OPCIONES.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
@@ -426,26 +417,24 @@ export function PodiatryForm({ patientId, onSaved }: Props) {
 
             {/* ITB */}
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <Label className="text-xs">ITB (Índice tobillo-brazo) izq</Label>
-                <input type="number" step="0.01" min="0" max="2" className={inputCls}
+              <div className="field-new">
+                <label className="field-new__label">ITB (Índice tobillo-brazo) izq</label>
+                <input type="number" step="0.01" min="0" max="2" className="input-new"
                   placeholder="0.00 - 2.00" value={itbIzq} onChange={e => setItbIzq(e.target.value)} />
                 {itbInterpIzq && <p className={`text-xs font-medium mt-1 ${itbInterpIzq.color}`}>{itbInterpIzq.text}</p>}
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">ITB (Índice tobillo-brazo) der</Label>
-                <input type="number" step="0.01" min="0" max="2" className={inputCls}
+              <div className="field-new">
+                <label className="field-new__label">ITB (Índice tobillo-brazo) der</label>
+                <input type="number" step="0.01" min="0" max="2" className="input-new"
                   placeholder="0.00 - 2.00" value={itbDer} onChange={e => setItbDer(e.target.value)} />
                 {itbInterpDer && <p className={`text-xs font-medium mt-1 ${itbInterpDer.color}`}>{itbInterpDer.text}</p>}
               </div>
             </div>
           </div>
-        </div>
+        </CardNew>
       )}
 
-      {/* ZONA DEL PIE */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Zona del pie</h3>
+      <CardNew title="Zona del pie">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {ZONAS_PIE.map(z => (
             <label key={z} className="flex items-center gap-2 cursor-pointer">
@@ -455,11 +444,9 @@ export function PodiatryForm({ patientId, onSaved }: Props) {
             </label>
           ))}
         </div>
-      </div>
+      </CardNew>
 
-      {/* HERIDA */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Herida / Lesión</h3>
+      <CardNew title="Herida / Lesión">
         <label className="flex items-center gap-2 cursor-pointer mb-3">
           <input type="checkbox" checked={form.heridaExiste} onChange={e => set("heridaExiste", e.target.checked)}
             className="w-4 h-4 accent-brand-600" />
@@ -467,24 +454,24 @@ export function PodiatryForm({ patientId, onSaved }: Props) {
         </label>
         {form.heridaExiste && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs">Largo (cm)</Label>
-              <input type="number" step="0.1" className={inputCls}
+            <div className="field-new">
+              <label className="field-new__label">Largo (cm)</label>
+              <input type="number" step="0.1" className="input-new"
                 placeholder="cm" value={form.heridaLargo} onChange={e => set("heridaLargo", e.target.value)} />
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Ancho (cm)</Label>
-              <input type="number" step="0.1" className={inputCls}
+            <div className="field-new">
+              <label className="field-new__label">Ancho (cm)</label>
+              <input type="number" step="0.1" className="input-new"
                 placeholder="cm" value={form.heridaAncho} onChange={e => set("heridaAncho", e.target.value)} />
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Profundidad (cm)</Label>
-              <input type="number" step="0.1" className={inputCls}
+            <div className="field-new">
+              <label className="field-new__label">Profundidad (cm)</label>
+              <input type="number" step="0.1" className="input-new"
                 placeholder="cm" value={form.heridaProfundidad} onChange={e => set("heridaProfundidad", e.target.value)} />
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Tipo</Label>
-              <select className={selectCls}
+            <div className="field-new">
+              <label className="field-new__label">Tipo</label>
+              <select className="input-new"
                 value={form.heridaTipo} onChange={e => set("heridaTipo", e.target.value)}>
                 <option value="">Seleccionar…</option>
                 {TIPO_HERIDA.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
@@ -492,53 +479,50 @@ export function PodiatryForm({ patientId, onSaved }: Props) {
             </div>
           </div>
         )}
-      </div>
+      </CardNew>
 
-      {/* ORTESIS & CALZADO */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Ortesis y calzado</h3>
+      <CardNew title="Ortesis y calzado">
         <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Estado de ortesis (si aplica)</Label>
-            <select className={selectCls}
+          <div className="field-new">
+            <label className="field-new__label">Estado de ortesis (si aplica)</label>
+            <select className="input-new"
               value={form.estadoOrtesis} onChange={e => set("estadoOrtesis", e.target.value)}>
               <option value="">Seleccionar…</option>
               {ESTADO_ORTESIS.map(e => <option key={e} value={e}>{e.charAt(0).toUpperCase() + e.slice(1)}</option>)}
             </select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Intervalo de recall</Label>
-            <select className={selectCls}
+          <div className="field-new">
+            <label className="field-new__label">Intervalo de recall</label>
+            <select className="input-new"
               value={form.recall} onChange={e => set("recall", e.target.value)}>
               <option value="">Seleccionar…</option>
               {RECALL.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
         </div>
-        <div className="space-y-1.5 mt-3">
-          <Label>Evaluación de calzado</Label>
-          <textarea className={textareaCls}
+        <div className="field-new" style={{ marginTop: 12 }}>
+          <label className="field-new__label">Evaluación de calzado</label>
+          <textarea className="input-new" style={{ minHeight: 80, resize: "vertical" }}
             placeholder="Tipo de calzado, desgaste, adecuación…" value={form.evaluacionCalzado} onChange={e => set("evaluacionCalzado", e.target.value)} />
         </div>
-      </div>
+      </CardNew>
 
-      {/* DIAGNÓSTICO & PLAN */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label>Diagnóstico / Evaluación</Label>
-          <textarea className={textareaCls}
-            placeholder="Diagnóstico podológico…" value={form.assessment} onChange={e => set("assessment", e.target.value)} />
+      <CardNew title="Diagnóstico y plan">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="field-new">
+            <label className="field-new__label">Diagnóstico / Evaluación</label>
+            <textarea className="input-new" style={{ minHeight: 80, resize: "vertical" }}
+              placeholder="Diagnóstico podológico…" value={form.assessment} onChange={e => set("assessment", e.target.value)} />
+          </div>
+          <div className="field-new">
+            <label className="field-new__label">Plan</label>
+            <textarea className="input-new" style={{ minHeight: 80, resize: "vertical" }}
+              placeholder="Plan de tratamiento…" value={form.plan} onChange={e => set("plan", e.target.value)} />
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <Label>Plan</Label>
-          <textarea className={textareaCls}
-            placeholder="Plan de tratamiento…" value={form.plan} onChange={e => set("plan", e.target.value)} />
-        </div>
-      </div>
+      </CardNew>
 
-      {/* MAPA PLANTAR */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">{"\uD83D\uDC63"} Mapa plantar</h3>
+      <CardNew title="Mapa plantar">
         <div className="grid grid-cols-2 gap-6">
           {/* Pie izquierdo */}
           <div>
@@ -547,7 +531,7 @@ export function PodiatryForm({ patientId, onSaved }: Props) {
               {PLANTAR_ZONAS.map(zona => (
                 <div key={zona} className="flex items-center gap-2">
                   <span className="text-sm min-w-[140px]">{zona}</span>
-                  <select className={`${selectCls} ${plantarIzq[zona] ? getPlantarColor(plantarIzq[zona]) : ""}`}
+                  <select className={`input-new ${plantarIzq[zona] ? getPlantarColor(plantarIzq[zona]) : ""}`}
                     value={plantarIzq[zona] ?? ""} onChange={e => setPlantarIzq(prev => ({ ...prev, [zona]: e.target.value }))}>
                     <option value="">--</option>
                     {PLANTAR_ESTADOS.map(e => <option key={e} value={e}>{e}</option>)}
@@ -563,7 +547,7 @@ export function PodiatryForm({ patientId, onSaved }: Props) {
               {PLANTAR_ZONAS.map(zona => (
                 <div key={zona} className="flex items-center gap-2">
                   <span className="text-sm min-w-[140px]">{zona}</span>
-                  <select className={`${selectCls} ${plantarDer[zona] ? getPlantarColor(plantarDer[zona]) : ""}`}
+                  <select className={`input-new ${plantarDer[zona] ? getPlantarColor(plantarDer[zona]) : ""}`}
                     value={plantarDer[zona] ?? ""} onChange={e => setPlantarDer(prev => ({ ...prev, [zona]: e.target.value }))}>
                     <option value="">--</option>
                     {PLANTAR_ESTADOS.map(e => <option key={e} value={e}>{e}</option>)}
@@ -573,24 +557,26 @@ export function PodiatryForm({ patientId, onSaved }: Props) {
             </div>
           </div>
         </div>
-        <div className="space-y-1.5 mt-4">
-          <Label className="text-xs">Notas plantares</Label>
-          <textarea className={textareaCls}
+        <div className="field-new" style={{ marginTop: 16 }}>
+          <label className="field-new__label">Notas plantares</label>
+          <textarea className="input-new" style={{ minHeight: 80, resize: "vertical" }}
             placeholder="Observaciones del mapa plantar…" value={notasPlantares} onChange={e => setNotasPlantares(e.target.value)} />
         </div>
-      </div>
+      </CardNew>
 
-      <div className="space-y-1.5">
-        <Label>Notas clínicas</Label>
-        <textarea className={textareaCls}
-          placeholder="Notas adicionales…" value={form.notasClinicas} onChange={e => set("notasClinicas", e.target.value)} />
-      </div>
+      <CardNew title="Notas clínicas">
+        <div className="field-new">
+          <label className="field-new__label">Notas clínicas</label>
+          <textarea className="input-new" style={{ minHeight: 80, resize: "vertical" }}
+            placeholder="Notas adicionales…" value={form.notasClinicas} onChange={e => set("notasClinicas", e.target.value)} />
+        </div>
+      </CardNew>
 
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={saving} size="lg">
-          {saving ? "Guardando…" : "Guardar expediente podología"}
-        </Button>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <ButtonNew variant="primary" type="submit" disabled={saving}>
+          {saving ? "Guardando…" : "Guardar consulta"}
+        </ButtonNew>
       </div>
-    </div>
+    </form>
   );
 }
