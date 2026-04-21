@@ -1,8 +1,9 @@
 "use client";
 import { useState, useMemo } from "react";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
+import { CardNew }   from "@/components/ui/design-system/card-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 
 const PROCEDURES = ["botox", "fillers", "PRP", "mesoterapia", "peeling", "hilos tensores", "láser"] as const;
 const FITZPATRICK = ["I", "II", "III", "IV", "V", "VI"] as const;
@@ -20,27 +21,27 @@ const CONTRAINDICATIONS = [
 ] as const;
 
 const ZONE_MAP = [
-  { key: "frente", label: "Frente" },
-  { key: "glabela", label: "Glabela (entrecejo)" },
-  { key: "patasDeGallo", label: "Patas de gallo" },
-  { key: "surcoNasogeniano", label: "Surco nasogeniano" },
-  { key: "labios", label: "Labios" },
-  { key: "menton", label: "Mentón" },
-  { key: "pomulos", label: "Pómulos" },
-  { key: "lineaMandibular", label: "Línea mandibular" },
+  { key: "frente",            label: "Frente" },
+  { key: "glabela",           label: "Glabela (entrecejo)" },
+  { key: "patasDeGallo",      label: "Patas de gallo" },
+  { key: "surcoNasogeniano",  label: "Surco nasogeniano" },
+  { key: "labios",            label: "Labios" },
+  { key: "menton",            label: "Mentón" },
+  { key: "pomulos",           label: "Pómulos" },
+  { key: "lineaMandibular",   label: "Línea mandibular" },
 ] as const;
 
 const GAIS_OPTIONS = [
   { label: "Muy mejorado", value: 3 },
-  { label: "Mejorado", value: 2 },
-  { label: "Sin cambio", value: 1 },
-  { label: "Peor", value: 0 },
-  { label: "Mucho peor", value: -1 },
+  { label: "Mejorado",     value: 2 },
+  { label: "Sin cambio",   value: 1 },
+  { label: "Peor",         value: 0 },
+  { label: "Mucho peor",   value: -1 },
 ] as const;
 
-interface ZoneEntry { product: string; units: string; }
+interface ZoneEntry { product: string; units: string }
 
-interface Props { patientId: string; onSaved: (record: any) => void; }
+interface Props { patientId: string; onSaved: (record: any) => void }
 
 export function AestheticMedicineForm({ patientId, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
@@ -68,9 +69,7 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
 
   function toggleContraindicacion(c: string) {
-    setContraindicaciones(prev =>
-      prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]
-    );
+    setContraindicaciones(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]);
   }
 
   function setZoneField(key: string, field: keyof ZoneEntry, value: string) {
@@ -90,10 +89,7 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
   }, [gaisPre, gaisPost]);
 
   function toggleZona(z: string) {
-    setForm(f => ({
-      ...f,
-      zonas: f.zonas.includes(z) ? f.zonas.filter(x => x !== z) : [...f.zonas, z],
-    }));
+    setForm(f => ({ ...f, zonas: f.zonas.includes(z) ? f.zonas.filter(x => x !== z) : [...f.zonas, z] }));
   }
 
   async function handleSave() {
@@ -104,26 +100,16 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           patientId,
-          subjective: form.subjective,
-          objective: form.objective,
-          assessment: form.assessment,
-          plan: form.plan,
+          subjective: form.subjective, objective: form.objective,
+          assessment: form.assessment, plan: form.plan,
           specialtyData: {
             type: "aesthetic_medicine",
-            fototipo: form.fototipo,
-            procedimiento: form.procedimiento,
-            zonas: form.zonas,
-            unidades: form.unidades,
-            producto: form.producto,
-            lote: form.lote,
-            notasPost: form.notasPost,
-            planSiguiente: form.planSiguiente,
-            contraindicaciones,
-            mapaZonas: zoneMap,
-            totalUnidades: totalUnits,
-            gaisPre,
-            gaisPost,
-            gaisDelta,
+            fototipo: form.fototipo, procedimiento: form.procedimiento,
+            zonas: form.zonas, unidades: form.unidades,
+            producto: form.producto, lote: form.lote,
+            notasPost: form.notasPost, planSiguiente: form.planSiguiente,
+            contraindicaciones, mapaZonas: zoneMap, totalUnidades: totalUnits,
+            gaisPre, gaisPost, gaisDelta,
           },
         }),
       });
@@ -134,120 +120,174 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
     } catch (err: any) { toast.error(err.message ?? "Error al guardar"); } finally { setSaving(false); }
   }
 
-  return (
-    <div className="space-y-6">
-      {/* ANAMNESIS */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label>Motivo de consulta / HEA</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-            placeholder="¿Por qué viene el paciente hoy?" value={form.subjective} onChange={e => set("subjective", e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <Label>Exploración física / Observaciones</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-            placeholder="Estado actual de la piel, zonas a tratar…" value={form.objective} onChange={e => set("objective", e.target.value)} />
-        </div>
-      </div>
+  // Tag button compartido para zonas faciales / contraindicaciones
+  const tagButton = (isActive: boolean): React.CSSProperties => ({
+    cursor: "pointer",
+    background: isActive ? "var(--brand-soft)" : "rgba(255,255,255,0.04)",
+    color: isActive ? "#c4b5fd" : "var(--text-2)",
+    borderColor: isActive ? "rgba(124,58,237,0.3)" : "var(--border-soft)",
+  });
 
-      {/* CHECKLIST DE CONTRAINDICACIONES */}
-      <div className="rounded-xl border border-red-300 dark:border-red-700 bg-card p-4">
-        <h3 className="text-sm font-bold mb-3 text-red-700 dark:text-red-400">🚫 Checklist de contraindicaciones</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Motivo + exploración */}
+      <CardNew title="Motivo de consulta y exploración">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
+          <div className="field-new">
+            <label className="field-new__label">Motivo de consulta / HEA</label>
+            <textarea
+              className="input-new"
+              style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
+              placeholder="¿Por qué viene el paciente hoy?"
+              value={form.subjective}
+              onChange={e => set("subjective", e.target.value)}
+            />
+          </div>
+          <div className="field-new">
+            <label className="field-new__label">Exploración física / Observaciones</label>
+            <textarea
+              className="input-new"
+              style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
+              placeholder="Estado actual de la piel, zonas a tratar…"
+              value={form.objective}
+              onChange={e => set("objective", e.target.value)}
+            />
+          </div>
+        </div>
+      </CardNew>
+
+      {/* Contraindicaciones */}
+      <CardNew
+        title="Checklist de contraindicaciones"
+        sub="Evaluar antes de proceder"
+        action={
+          contraindicaciones.length > 0 ? (
+            <BadgeNew tone="danger" dot>{contraindicaciones.length} detectadas</BadgeNew>
+          ) : undefined
+        }
+      >
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 8 }}>
           {CONTRAINDICATIONS.map(c => (
-            <label key={c} className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={contraindicaciones.includes(c)}
-                onChange={() => toggleContraindicacion(c)}
-                className="w-4 h-4 accent-red-600"
-              />
-              <span className="text-sm">{c}</span>
-            </label>
+            <button
+              key={c}
+              type="button"
+              className="tag-new"
+              style={tagButton(contraindicaciones.includes(c))}
+              onClick={() => toggleContraindicacion(c)}
+            >
+              {contraindicaciones.includes(c) && "✓ "}{c}
+            </button>
           ))}
         </div>
         {contraindicaciones.length > 0 && (
-          <div className="mt-3 rounded-lg border border-amber-400 bg-amber-50 dark:bg-amber-900/30 dark:border-amber-600 px-3 py-2 text-sm text-amber-800 dark:text-amber-300 font-medium">
-            ⚠️ Contraindicaciones detectadas — evaluar riesgo/beneficio
+          <div style={{
+            marginTop: 12,
+            padding: 10,
+            borderRadius: 8,
+            background: "var(--warning-soft)",
+            border: "1px solid rgba(245,158,11,0.2)",
+            fontSize: 11,
+            color: "#fcd34d",
+          }}>
+            ⚠ Contraindicaciones detectadas — evaluar riesgo/beneficio antes del procedimiento
           </div>
         )}
-      </div>
+      </CardNew>
 
-      {/* FOTOTIPO & PROCEDIMIENTO */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Datos del procedimiento</h3>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Fototipo Fitzpatrick</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-              value={form.fototipo} onChange={e => set("fototipo", e.target.value)}>
+      {/* Datos del procedimiento */}
+      <CardNew title="Datos del procedimiento">
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px 14px" }}>
+          <div className="field-new">
+            <label className="field-new__label">Fototipo Fitzpatrick</label>
+            <select className="input-new" value={form.fototipo} onChange={e => set("fototipo", e.target.value)}>
               <option value="">Seleccionar…</option>
               {FITZPATRICK.map(f => <option key={f} value={f}>Tipo {f}</option>)}
             </select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Procedimiento</Label>
-            <select className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-              value={form.procedimiento} onChange={e => set("procedimiento", e.target.value)}>
+          <div className="field-new">
+            <label className="field-new__label">Procedimiento</label>
+            <select className="input-new" value={form.procedimiento} onChange={e => set("procedimiento", e.target.value)}>
               <option value="">Seleccionar…</option>
               {PROCEDURES.map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
             </select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Unidades/ml aplicados</Label>
-            <input type="number" className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-              placeholder="Ej. 20" value={form.unidades} onChange={e => set("unidades", e.target.value)} />
+          <div className="field-new">
+            <label className="field-new__label">Unidades/ml aplicados</label>
+            <input
+              type="number"
+              className="input-new mono"
+              placeholder="20"
+              value={form.unidades}
+              onChange={e => set("unidades", e.target.value)}
+            />
           </div>
         </div>
-      </div>
+      </CardNew>
 
-      {/* ZONA FACIAL */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Zona facial de aplicación</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      {/* Zonas faciales */}
+      <CardNew title="Zona facial de aplicación">
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {FACIAL_ZONES.map(z => (
-            <label key={z} className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={form.zonas.includes(z)} onChange={() => toggleZona(z)}
-                className="w-4 h-4 accent-brand-600" />
-              <span className="text-sm capitalize">{z}</span>
-            </label>
+            <button
+              key={z}
+              type="button"
+              className="tag-new"
+              style={{ ...tagButton(form.zonas.includes(z)), textTransform: "capitalize" }}
+              onClick={() => toggleZona(z)}
+            >
+              {form.zonas.includes(z) && "✓ "}{z}
+            </button>
           ))}
         </div>
-      </div>
+      </CardNew>
 
-      {/* PRODUCTO & LOTE */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Producto utilizado</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Producto usado</Label>
-            <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-              placeholder="Ej. Botox Allergan" value={form.producto} onChange={e => set("producto", e.target.value)} />
+      {/* Producto + lote */}
+      <CardNew title="Producto utilizado">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
+          <div className="field-new">
+            <label className="field-new__label">Producto usado</label>
+            <input
+              className="input-new"
+              placeholder="Ej. Botox Allergan"
+              value={form.producto}
+              onChange={e => set("producto", e.target.value)}
+            />
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Número de lote</Label>
-            <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-              placeholder="Ej. LOT-2026-0412" value={form.lote} onChange={e => set("lote", e.target.value)} />
+          <div className="field-new">
+            <label className="field-new__label">Número de lote</label>
+            <input
+              className="input-new mono"
+              placeholder="LOT-2026-0412"
+              value={form.lote}
+              onChange={e => set("lote", e.target.value)}
+            />
           </div>
         </div>
-      </div>
+      </CardNew>
 
-      {/* MAPA FACIAL CON UNIDADES/ZONA */}
-      <div className="rounded-xl border border-border bg-card p-4">
-        <h3 className="text-sm font-bold mb-3">💉 Registro de aplicación por zona</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {/* Mapa facial con unidades/zona */}
+      <CardNew
+        title="Registro de aplicación por zona"
+        action={
+          <div style={{ fontSize: 12, color: "var(--text-2)" }}>
+            Total: <span className="mono" style={{ fontWeight: 600, color: "var(--brand)" }}>{totalUnits}</span> U/ml
+          </div>
+        }
+      >
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           {ZONE_MAP.map(z => (
-            <div key={z.key} className="flex items-center gap-2">
-              <span className="text-sm font-medium w-40 shrink-0">{z.label}</span>
+            <div key={z.key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 12, color: "var(--text-2)", width: 160, flexShrink: 0 }}>{z.label}</span>
               <input
-                className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                className="input-new"
                 placeholder="Producto"
                 value={zoneMap[z.key]?.product ?? ""}
                 onChange={e => setZoneField(z.key, "product", e.target.value)}
               />
               <input
                 type="number"
-                className="flex h-9 w-24 shrink-0 rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                className="input-new mono"
+                style={{ width: 80, flexShrink: 0 }}
                 placeholder="U/ml"
                 value={zoneMap[z.key]?.units ?? ""}
                 onChange={e => setZoneField(z.key, "units", e.target.value)}
@@ -255,96 +295,100 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
             </div>
           ))}
         </div>
-        <div className="mt-3 pt-3 border-t border-border flex justify-end">
-          <span className="text-sm font-bold">Total unidades/ml: <span className="text-brand-600">{totalUnits}</span></span>
-        </div>
-      </div>
+      </CardNew>
 
-      {/* NOTAS & PLAN */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label>Notas post-procedimiento</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-            placeholder="Cuidados posteriores, reacciones observadas…" value={form.notasPost} onChange={e => set("notasPost", e.target.value)} />
+      {/* Notas + plan */}
+      <CardNew title="Notas y plan">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
+          <div className="field-new">
+            <label className="field-new__label">Notas post-procedimiento</label>
+            <textarea
+              className="input-new"
+              style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
+              placeholder="Cuidados posteriores, reacciones observadas…"
+              value={form.notasPost}
+              onChange={e => set("notasPost", e.target.value)}
+            />
+          </div>
+          <div className="field-new">
+            <label className="field-new__label">Diagnóstico / Evaluación</label>
+            <textarea
+              className="input-new"
+              style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
+              placeholder="Diagnóstico estético, hallazgos…"
+              value={form.assessment}
+              onChange={e => set("assessment", e.target.value)}
+            />
+          </div>
+          <div className="field-new" style={{ gridColumn: "1 / -1" }}>
+            <label className="field-new__label">Plan siguiente sesión</label>
+            <textarea
+              className="input-new"
+              style={{ minHeight: 70, padding: "10px 12px", height: "auto", resize: "vertical" }}
+              placeholder="Plan de tratamiento para próxima visita…"
+              value={form.planSiguiente}
+              onChange={e => set("planSiguiente", e.target.value)}
+            />
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <Label>Diagnóstico / Evaluación</Label>
-          <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-            placeholder="Diagnóstico estético, hallazgos…" value={form.assessment} onChange={e => set("assessment", e.target.value)} />
-        </div>
-      </div>
+      </CardNew>
 
-      <div className="space-y-1.5">
-        <Label>Plan siguiente sesión</Label>
-        <textarea className="flex min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-          placeholder="Plan de tratamiento para próxima visita…" value={form.planSiguiente} onChange={e => set("planSiguiente", e.target.value)} />
-      </div>
-
-      {/* ESCALA GAIS */}
-      <div className="rounded-xl border border-border bg-card p-4">
-        <h3 className="text-sm font-bold mb-3">📊 Escala GAIS (Global Aesthetic Improvement Scale)</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Pre-procedimiento */}
-          <div className="space-y-2">
-            <Label className="text-xs font-semibold">Pre-procedimiento</Label>
-            <div className="space-y-1">
+      {/* GAIS */}
+      <CardNew
+        title="Escala GAIS"
+        sub="Global Aesthetic Improvement Scale"
+        action={
+          gaisDelta !== null ? (
+            <BadgeNew tone={gaisDelta > 0 ? "success" : gaisDelta === 0 ? "neutral" : "danger"} dot>
+              Δ {gaisDelta > 0 ? "+" : ""}{gaisDelta} {gaisDelta > 0 ? "Mejoría" : gaisDelta === 0 ? "Sin cambio" : "Empeoramiento"}
+            </BadgeNew>
+          ) : undefined
+        }
+      >
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 14px" }}>
+          <div>
+            <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 10 }}>
+              Pre-procedimiento
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {GAIS_OPTIONS.map(opt => (
-                <label key={`pre-${opt.value}`} className="flex items-center gap-2 cursor-pointer">
+                <label key={`pre-${opt.value}`} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-2)", cursor: "pointer" }}>
                   <input
                     type="radio"
                     name="gais-pre"
                     checked={gaisPre === opt.value}
                     onChange={() => setGaisPre(opt.value)}
-                    className="w-4 h-4 accent-brand-600"
                   />
-                  <span className="text-sm">{opt.label} ({opt.value})</span>
+                  {opt.label} <span className="mono" style={{ color: "var(--text-4)" }}>({opt.value})</span>
                 </label>
               ))}
             </div>
           </div>
-          {/* Post-procedimiento */}
-          <div className="space-y-2">
-            <Label className="text-xs font-semibold">Post-procedimiento</Label>
-            <div className="space-y-1">
+          <div>
+            <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 10 }}>
+              Post-procedimiento
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {GAIS_OPTIONS.map(opt => (
-                <label key={`post-${opt.value}`} className="flex items-center gap-2 cursor-pointer">
+                <label key={`post-${opt.value}`} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-2)", cursor: "pointer" }}>
                   <input
                     type="radio"
                     name="gais-post"
                     checked={gaisPost === opt.value}
                     onChange={() => setGaisPost(opt.value)}
-                    className="w-4 h-4 accent-brand-600"
                   />
-                  <span className="text-sm">{opt.label} ({opt.value})</span>
+                  {opt.label} <span className="mono" style={{ color: "var(--text-4)" }}>({opt.value})</span>
                 </label>
               ))}
             </div>
           </div>
         </div>
-        {/* Delta indicator */}
-        {gaisDelta !== null && (
-          <div className="mt-3 pt-3 border-t border-border flex items-center gap-2">
-            <span className="text-sm font-medium">Cambio (delta):</span>
-            <span className={`text-sm font-bold px-2 py-0.5 rounded-full ${
-              gaisDelta > 0
-                ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400"
-                : gaisDelta === 0
-                  ? "bg-muted text-muted-foreground"
-                  : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400"
-            }`}>
-              {gaisDelta > 0 ? "+" : ""}{gaisDelta}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {gaisDelta > 0 ? "Mejoría" : gaisDelta === 0 ? "Sin cambio" : "Empeoramiento"}
-            </span>
-          </div>
-        )}
-      </div>
+      </CardNew>
 
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={saving} size="lg">
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <ButtonNew variant="primary" onClick={handleSave} disabled={saving}>
           {saving ? "Guardando…" : "Guardar expediente estético"}
-        </Button>
+        </ButtonNew>
       </div>
     </div>
   );

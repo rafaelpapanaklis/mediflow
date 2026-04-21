@@ -1,16 +1,18 @@
 "use client";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
+import { AlertTriangle } from "lucide-react";
+import { CardNew }   from "@/components/ui/design-system/card-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 
 const PHQ9_ITEMS = ["Poco interés en actividades","Sentirse deprimido/sin esperanza","Problemas para dormir","Sentirse cansado","Poco apetito o comer en exceso","Sentirse mal consigo mismo","Dificultad para concentrarse","Moverse/hablar lento, o agitación","Pensamientos de hacerse daño"];
 const GAD7_ITEMS = ["Sentirse nervioso o ansioso","No poder parar de preocuparse","Preocuparse demasiado por cosas","Dificultad para relajarse","Tan inquieto que es difícil estar quieto","Irritarse o enojarse fácilmente","Sentir miedo de que algo malo pase"];
-const PHQ9_SEVERITY = (s: number) => s <= 4 ? "Mínimo" : s <= 9 ? "Leve" : s <= 14 ? "Moderado" : s <= 19 ? "Moderado-severo" : "Severo";
-const GAD7_SEVERITY = (s: number) => s <= 4 ? "Mínimo" : s <= 9 ? "Leve" : s <= 14 ? "Moderado" : "Severo";
-const PHQ9_COLOR   = (s: number) => s <= 4 ? "text-emerald-600" : s <= 9 ? "text-amber-600" : "text-rose-600";
-const GAD7_COLOR   = (s: number) => s <= 4 ? "text-emerald-600" : s <= 9 ? "text-amber-600" : "text-rose-600";
-const NOTE_TYPES   = ["SOAP","BIRP","DAP"];
+const PHQ9_SEVERITY = (s: number) => s <= 4 ? "Mínima" : s <= 9 ? "Leve" : s <= 14 ? "Moderada" : s <= 19 ? "Moderadamente severa" : "Severa";
+const GAD7_SEVERITY = (s: number) => s <= 4 ? "Mínima" : s <= 9 ? "Leve" : s <= 14 ? "Moderada" : "Severa";
+const PHQ9_TONE = (s: number): "success" | "info" | "warning" | "danger" => s <= 4 ? "success" : s <= 9 ? "info" : s <= 14 ? "warning" : "danger";
+const GAD7_TONE = (s: number): "success" | "info" | "warning" | "danger" => s <= 4 ? "success" : s <= 9 ? "info" : s <= 14 ? "warning" : "danger";
+const NOTE_TYPES   = ["SOAP","BIRP","DAP"] as const;
 const APPROACHES   = ["TCC (Cognitivo-conductual)","Psicodinámico","Humanista","Gestalt","EMDR","Mindfulness","DBT","ACT","Sistémico","Otro"];
 const SESSION_TYPES = ["Individual","Pareja","Familia","Grupo","Evaluación inicial","Seguimiento","Alta"];
 
@@ -18,7 +20,7 @@ interface Props { patientId: string; sessionNum: number; onSaved: (record: any) 
 
 export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
   const [saving,     setSaving]   = useState(false);
-  const [noteType,   setNoteType] = useState("SOAP");
+  const [noteType,   setNoteType] = useState<typeof NOTE_TYPES[number]>("SOAP");
   const [phq9,       setPHQ9]     = useState<number[]>(new Array(9).fill(0));
   const [gad7,       setGAD7]     = useState<number[]>(new Array(7).fill(0));
   const [applyScales, setApplyScales] = useState(true);
@@ -48,14 +50,19 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
   const waisrRated = waisr.filter(v => v > 0);
   const waisrAvg = waisrRated.length > 0 ? waisrRated.reduce((a, b) => a + b, 0) / waisrRated.length : 0;
   const waisrLabel = waisrAvg <= 2 ? "Débil — requiere atención" : waisrAvg <= 3.5 ? "Moderada — en desarrollo" : "Fuerte";
-  const waisrColor = waisrAvg <= 2 ? "text-rose-600 dark:text-rose-400" : waisrAvg <= 3.5 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400";
+  const waisrTone: "success" | "warning" | "danger" = waisrAvg <= 2 ? "danger" : waisrAvg <= 3.5 ? "warning" : "success";
   const auditCLabel = auditCScore < 3 ? "Bajo riesgo" : auditCScore <= 7 ? "Riesgo moderado" : "Alto riesgo";
-  const auditCColor = auditCScore < 3 ? "text-emerald-600 dark:text-emerald-400" : auditCScore <= 7 ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400";
+  const auditCTone: "success" | "warning" | "danger" = auditCScore < 3 ? "success" : auditCScore <= 7 ? "warning" : "danger";
+
+  const highRisk = applyScales && (phq9Score >= 20 || phq9[8] > 0 || form.mentalStatus.suicidalIdeation !== "no");
 
   function addGoal() { set("treatmentGoals", [...form.treatmentGoals, { goal: "", status: "En progreso" }]); }
 
   async function handleSave() {
-    if (!form.subjective && !form.objective && !form.dap_data) { toast.error("Completa al menos el contenido de la sesión"); return; }
+    if (!form.subjective && !form.objective && !form.dap_data && !form.birp_behavior) {
+      toast.error("Completa al menos el contenido de la sesión");
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/clinical", {
@@ -94,157 +101,218 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
     } catch (err: any) { toast.error(err.message ?? "Error"); } finally { setSaving(false); }
   }
 
-  const ScaleQuestion = ({ items, values, onChange, label }: { items: string[]; values: number[]; onChange: (i: number, v: number) => void; label: string }) => (
-    <div className="space-y-2">
-      <div className="grid grid-cols-5 gap-1 text-[10px] font-bold text-center text-muted-foreground mb-1">
-        <span></span><span>Nunca (0)</span><span>Varios días (1)</span><span>Más de la mitad (2)</span><span>Casi todos (3)</span>
+  // Helper para una pregunta de escala (PHQ-9 / GAD-7) con segment 0-3
+  const ScaleItem = ({ idx, label, values, onChange }: {
+    idx: number; label: string; values: number[]; onChange: (v: number) => void;
+  }) => (
+    <div style={{
+      display: "grid",
+      gridTemplateColumns: "1fr auto",
+      gap: 12,
+      alignItems: "center",
+      padding: "10px 0",
+      borderBottom: "1px solid var(--border-soft)",
+    }}>
+      <div style={{ fontSize: 12, color: "var(--text-2)" }}>
+        <span className="mono" style={{ color: "var(--text-4)", marginRight: 6 }}>{idx + 1}.</span>
+        {label}
       </div>
-      {items.map((item, i) => (
-        <div key={i} className="grid grid-cols-5 gap-1 items-center text-xs">
-          <span className="text-foreground leading-tight">{item}</span>
-          {[0,1,2,3].map(v => (
-            <button key={v} onClick={() => onChange(i, v)}
-              className={`h-7 rounded-lg border text-xs font-bold transition-all ${values[i] === v ? "bg-brand-600 text-white border-brand-600" : "bg-card border-border hover:border-brand-300"}`}>
-              {v}
-            </button>
-          ))}
-        </div>
-      ))}
+      <div className="segment-new">
+        {[0, 1, 2, 3].map(v => (
+          <button
+            key={v}
+            type="button"
+            className={`segment-new__btn ${values[idx] === v ? "segment-new__btn--active" : ""}`}
+            onClick={() => onChange(v)}
+            style={{ minWidth: 24 }}
+          >
+            {v}
+          </button>
+        ))}
+      </div>
     </div>
   );
 
   return (
-    <div className="space-y-6">
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {/* Sesión info */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="space-y-1.5">
-          <Label>Sesión #</Label>
-          <div className="h-10 flex items-center px-3 rounded-lg bg-muted border border-border text-sm font-bold">{sessionNum}</div>
-        </div>
-        <div className="space-y-1.5">
-          <Label>Tipo de sesión</Label>
-          <select className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-            value={form.sessionType} onChange={e => set("sessionType", e.target.value)}>
-            {SESSION_TYPES.map(t => <option key={t}>{t}</option>)}
-          </select>
-        </div>
-        <div className="space-y-1.5">
-          <Label>Enfoque terapéutico</Label>
-          <select className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-            value={form.approach} onChange={e => set("approach", e.target.value)}>
-            {APPROACHES.map(a => <option key={a}>{a}</option>)}
-          </select>
-        </div>
-      </div>
-
-      {/* Note type selector */}
-      <div className="flex gap-1 bg-muted rounded-xl p-1 w-fit">
-        {NOTE_TYPES.map(t => (
-          <button key={t} onClick={() => setNoteType(t)}
-            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${noteType === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-            Nota {t}
-          </button>
-        ))}
-      </div>
-
-      {/* SOAP note */}
-      {noteType === "SOAP" && (
-        <div className="grid grid-cols-2 gap-4">
-          {[
-            { key:"subjective", label:"S — Subjetivo (reporte del paciente)", ph:"¿Cómo se siente? ¿Qué comenta hoy?" },
-            { key:"objective",  label:"O — Objetivo (observaciones del terapeuta)", ph:"Estado anímico, lenguaje no verbal, comportamiento…" },
-            { key:"assessment", label:"A — Evaluación / Diagnóstico", ph:"Diagnóstico DSM-5, hipótesis clínica…" },
-            { key:"plan",       label:"P — Plan terapéutico", ph:"Intervenciones, tareas, objetivos próxima sesión…" },
-          ].map(f => (
-            <div key={f.key} className="space-y-1.5">
-              <Label className="text-xs">{f.label}</Label>
-              <textarea className="flex min-h-[90px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-                placeholder={f.ph} value={(form as any)[f.key]} onChange={e => set(f.key, e.target.value)} />
+      <CardNew title="Información de la sesión">
+        <div style={{ display: "grid", gridTemplateColumns: "auto 1fr 1fr", gap: "12px 14px" }}>
+          <div className="field-new">
+            <label className="field-new__label">Sesión</label>
+            <div className="input-new mono" style={{ display: "flex", alignItems: "center", fontWeight: 600, minWidth: 60, justifyContent: "center" }}>
+              #{sessionNum}
             </div>
+          </div>
+          <div className="field-new">
+            <label className="field-new__label">Tipo de sesión</label>
+            <select className="input-new" value={form.sessionType} onChange={e => set("sessionType", e.target.value)}>
+              {SESSION_TYPES.map(t => <option key={t}>{t}</option>)}
+            </select>
+          </div>
+          <div className="field-new">
+            <label className="field-new__label">Enfoque terapéutico</label>
+            <select className="input-new" value={form.approach} onChange={e => set("approach", e.target.value)}>
+              {APPROACHES.map(a => <option key={a}>{a}</option>)}
+            </select>
+          </div>
+        </div>
+      </CardNew>
+
+      {/* Formato de notas */}
+      <CardNew title="Formato de notas">
+        <div className="segment-new">
+          {NOTE_TYPES.map(t => (
+            <button
+              key={t}
+              type="button"
+              className={`segment-new__btn ${noteType === t ? "segment-new__btn--active" : ""}`}
+              onClick={() => setNoteType(t)}
+            >
+              Nota {t}
+            </button>
           ))}
         </div>
-      )}
+      </CardNew>
 
-      {/* BIRP note */}
-      {noteType === "BIRP" && (
-        <div className="grid grid-cols-2 gap-4">
-          {[
-            { key:"birp_behavior",     label:"B — Comportamiento del paciente",  ph:"Conductas observadas, verbalizaciones…" },
-            { key:"birp_intervention", label:"I — Intervenciones del terapeuta", ph:"Técnicas aplicadas, preguntas clave…" },
-            { key:"birp_response",     label:"R — Respuesta del paciente",       ph:"Cómo reaccionó a las intervenciones…" },
-            { key:"birp_plan",         label:"P — Plan",                         ph:"Próximos pasos, tarea para casa…" },
-          ].map(f => (
-            <div key={f.key} className="space-y-1.5">
-              <Label className="text-xs">{f.label}</Label>
-              <textarea className="flex min-h-[90px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-                placeholder={f.ph} value={(form as any)[f.key]} onChange={e => set(f.key, e.target.value)} />
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* DAP note */}
-      {noteType === "DAP" && (
-        <div className="grid grid-cols-3 gap-4">
-          {[
-            { key:"dap_data",       label:"D — Datos de la sesión",    ph:"Lo que ocurrió en la sesión…" },
-            { key:"dap_assessment", label:"A — Evaluación clínica",   ph:"Interpretación clínica…" },
-            { key:"dap_plan",       label:"P — Plan",                  ph:"Intervenciones futuras…" },
-          ].map(f => (
-            <div key={f.key} className="space-y-1.5">
-              <Label className="text-xs">{f.label}</Label>
-              <textarea className="flex min-h-[100px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-                placeholder={f.ph} value={(form as any)[f.key]} onChange={e => set(f.key, e.target.value)} />
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Estado mental */}
-      <div className="rounded-xl border border-border p-4">
-        <h3 className="text-sm font-bold mb-3">Estado mental</h3>
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-          {[
-            { key:"mood",              label:"Estado de ánimo",          opts:["Eutímico","Deprimido","Ansioso","Irritable","Expansivo","Lábil"] },
-            { key:"sleepQuality",      label:"Calidad del sueño",        opts:["Buena","Regular","Mala","Insomnio","Hipersomnia"] },
-            { key:"appetiteChanges",   label:"Apetito",                  opts:["Normal","Aumentado","Disminuido","Sin cambios"] },
-            { key:"socialFunctioning", label:"Funcionamiento social",    opts:["Adecuado","Levemente afectado","Moderadamente afectado","Severamente afectado"] },
-            { key:"workFunctioning",   label:"Funcionamiento laboral/académico", opts:["Adecuado","Levemente afectado","Moderadamente afectado","Severamente afectado","Sin actividad"] },
-            { key:"suicidalIdeation",  label:"Ideación suicida / autolesión", opts:["no","Pasiva","Activa sin plan","Activa con plan"] },
-          ].map(f => (
-            <div key={f.key} className="space-y-1">
-              <Label className="text-xs">{f.label}</Label>
-              <select className={`flex h-9 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20 ${f.key === "suicidalIdeation" && form.mentalStatus.suicidalIdeation !== "no" ? "border-rose-400 bg-rose-50" : "border-border bg-card"}`}
-                value={(form.mentalStatus as any)[f.key]} onChange={e => setMS(f.key, e.target.value)}>
-                {f.opts.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
-            </div>
-          ))}
-        </div>
-        {form.mentalStatus.suicidalIdeation !== "no" && (
-          <div className="mt-3 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-700 rounded-xl text-xs text-rose-700 dark:text-rose-300 font-bold">
-            ⚠️ Alerta: ideación suicida registrada. Evalúa protocolo de seguridad y documenta plan de crisis.
+      {/* Notas de sesión */}
+      <CardNew title="Notas de sesión">
+        {noteType === "SOAP" && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "12px 14px" }}>
+            {[
+              { key: "subjective", label: "S — Subjetivo (reporte del paciente)",     ph: "¿Cómo se siente? ¿Qué comenta hoy?" },
+              { key: "objective",  label: "O — Objetivo (observaciones del terapeuta)", ph: "Estado anímico, lenguaje no verbal…" },
+              { key: "assessment", label: "A — Evaluación / Diagnóstico",               ph: "Diagnóstico DSM-5, hipótesis clínica…" },
+              { key: "plan",       label: "P — Plan terapéutico",                       ph: "Intervenciones, tareas, objetivos…" },
+            ].map(f => (
+              <div key={f.key} className="field-new">
+                <label className="field-new__label">{f.label}</label>
+                <textarea
+                  className="input-new"
+                  style={{ minHeight: 100, padding: "10px 12px", height: "auto", resize: "vertical" }}
+                  placeholder={f.ph}
+                  value={(form as any)[f.key]}
+                  onChange={e => set(f.key, e.target.value)}
+                />
+              </div>
+            ))}
           </div>
         )}
-      </div>
+
+        {noteType === "BIRP" && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "12px 14px" }}>
+            {[
+              { key: "birp_behavior",     label: "B — Comportamiento del paciente",  ph: "Conductas observadas, verbalizaciones…" },
+              { key: "birp_intervention", label: "I — Intervenciones del terapeuta", ph: "Técnicas aplicadas, preguntas clave…" },
+              { key: "birp_response",     label: "R — Respuesta del paciente",       ph: "Cómo reaccionó a las intervenciones…" },
+              { key: "birp_plan",         label: "P — Plan",                         ph: "Próximos pasos, tarea para casa…" },
+            ].map(f => (
+              <div key={f.key} className="field-new">
+                <label className="field-new__label">{f.label}</label>
+                <textarea
+                  className="input-new"
+                  style={{ minHeight: 100, padding: "10px 12px", height: "auto", resize: "vertical" }}
+                  placeholder={f.ph}
+                  value={(form as any)[f.key]}
+                  onChange={e => set(f.key, e.target.value)}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {noteType === "DAP" && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px 14px" }}>
+            {[
+              { key: "dap_data",       label: "D — Datos de la sesión", ph: "Lo que ocurrió en la sesión…" },
+              { key: "dap_assessment", label: "A — Evaluación clínica", ph: "Interpretación clínica…" },
+              { key: "dap_plan",       label: "P — Plan",               ph: "Intervenciones futuras…" },
+            ].map(f => (
+              <div key={f.key} className="field-new">
+                <label className="field-new__label">{f.label}</label>
+                <textarea
+                  className="input-new"
+                  style={{ minHeight: 110, padding: "10px 12px", height: "auto", resize: "vertical" }}
+                  placeholder={f.ph}
+                  value={(form as any)[f.key]}
+                  onChange={e => set(f.key, e.target.value)}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </CardNew>
+
+      {/* Estado mental */}
+      <CardNew title="Estado mental">
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px 14px" }}>
+          {[
+            { key: "mood",              label: "Estado de ánimo",                  opts: ["", "Eutímico", "Deprimido", "Ansioso", "Irritable", "Expansivo", "Lábil"] },
+            { key: "sleepQuality",      label: "Calidad del sueño",                opts: ["", "Buena", "Regular", "Mala", "Insomnio", "Hipersomnia"] },
+            { key: "appetiteChanges",   label: "Apetito",                          opts: ["", "Normal", "Aumentado", "Disminuido", "Sin cambios"] },
+            { key: "socialFunctioning", label: "Funcionamiento social",            opts: ["", "Adecuado", "Levemente afectado", "Moderadamente afectado", "Severamente afectado"] },
+            { key: "workFunctioning",   label: "Funcionamiento laboral/académico", opts: ["", "Adecuado", "Levemente afectado", "Moderadamente afectado", "Severamente afectado", "Sin actividad"] },
+            { key: "suicidalIdeation",  label: "Ideación suicida / autolesión",    opts: ["no", "Pasiva", "Activa sin plan", "Activa con plan"] },
+          ].map(f => {
+            const alert = f.key === "suicidalIdeation" && form.mentalStatus.suicidalIdeation !== "no";
+            return (
+              <div key={f.key} className="field-new">
+                <label className="field-new__label">{f.label}</label>
+                <select
+                  className="input-new"
+                  style={alert ? { borderColor: "rgba(239,68,68,0.4)", background: "rgba(239,68,68,0.06)" } : undefined}
+                  value={(form.mentalStatus as any)[f.key]}
+                  onChange={e => setMS(f.key, e.target.value)}
+                >
+                  {f.opts.map(o => <option key={o} value={o}>{o || "—"}</option>)}
+                </select>
+              </div>
+            );
+          })}
+        </div>
+      </CardNew>
+
+      {/* Alerta de riesgo alto */}
+      {highRisk && (
+        <div style={{
+          padding: 14,
+          background: "rgba(239,68,68,0.08)",
+          border: "1px solid rgba(239,68,68,0.3)",
+          borderRadius: "var(--radius-lg)",
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 12,
+        }}>
+          <AlertTriangle size={20} style={{ color: "var(--danger)", flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#fca5a5" }}>Riesgo alto detectado</div>
+            <div style={{ fontSize: 11, color: "var(--text-2)", marginTop: 4, lineHeight: 1.55 }}>
+              {phq9Score >= 20 && <>Score PHQ-9 severo ({phq9Score}/27). </>}
+              {phq9[8] > 0 && <>Ideación suicida en PHQ-9 (pregunta 9). </>}
+              {form.mentalStatus.suicidalIdeation !== "no" && form.mentalStatus.suicidalIdeation !== "" && <>Ideación reportada: {form.mentalStatus.suicidalIdeation}. </>}
+              Completa el plan de seguridad abajo y documenta la intervención en el plan terapéutico.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Plan de seguridad — solo si ideación suicida */}
-      {form.mentalStatus.suicidalIdeation !== "no" && (
-        <div className="rounded-xl border-2 border-rose-400 dark:border-rose-600 p-4 bg-card">
-          <h3 className="text-sm font-bold mb-3 text-rose-700 dark:text-rose-300">🚨 Plan de seguridad</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {form.mentalStatus.suicidalIdeation !== "no" && form.mentalStatus.suicidalIdeation !== "" && (
+        <CardNew title="Plan de seguridad" sub="Protocolo de crisis para ideación suicida">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "12px 14px" }}>
             {[
-              { key: "warningSignals",    label: "Señales de advertencia",                   ph: "¿Qué pensamientos, sentimientos o situaciones detonan la crisis?" },
-              { key: "copingStrategies",  label: "Estrategias de afrontamiento internas",    ph: "Cosas que puedo hacer solo/a para distraerme" },
-              { key: "supportPeople",     label: "Personas de apoyo",                        ph: "Nombres y teléfonos de personas a quién llamar" },
-              { key: "emergencyContacts", label: "Contactos profesionales de emergencia",    ph: "Línea de crisis, terapeuta de guardia, hospital" },
-              { key: "meansRestriction",  label: "Restricción de medios letales",            ph: "Pasos para limitar acceso a medios" },
-              { key: "reasonToLive",      label: "Razón para vivir",                         ph: "Lo más importante para mí en este momento" },
+              { key: "warningSignals",    label: "Señales de advertencia",                ph: "Pensamientos, sentimientos o situaciones que detonan la crisis" },
+              { key: "copingStrategies",  label: "Estrategias de afrontamiento internas", ph: "Cosas que puede hacer solo/a para distraerse" },
+              { key: "supportPeople",     label: "Personas de apoyo",                     ph: "Nombres y teléfonos a quién llamar" },
+              { key: "emergencyContacts", label: "Contactos profesionales de emergencia", ph: "Línea de crisis, terapeuta de guardia, hospital" },
+              { key: "meansRestriction",  label: "Restricción de medios letales",         ph: "Pasos para limitar acceso a medios" },
+              { key: "reasonToLive",      label: "Razón para vivir",                      ph: "Lo más importante para el paciente" },
             ].map(f => (
-              <div key={f.key} className="space-y-1">
-                <Label className="text-xs">{f.label}</Label>
+              <div key={f.key} className="field-new">
+                <label className="field-new__label">{f.label}</label>
                 <textarea
-                  className="flex min-h-[70px] w-full rounded-lg border border-border dark:border-border bg-card dark:bg-muted px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-rose-500/20 resize-none"
+                  className="input-new"
+                  style={{ minHeight: 70, padding: "8px 12px", height: "auto", resize: "vertical" }}
                   placeholder={f.ph}
                   value={(safetyPlan as any)[f.key]}
                   onChange={e => setSafetyPlan(prev => ({ ...prev, [f.key]: e.target.value }))}
@@ -252,164 +320,262 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
               </div>
             ))}
           </div>
-        </div>
+        </CardNew>
       )}
 
-      {/* Alianza terapéutica (WAI-SR simplificada) */}
-      <div className="rounded-xl border border-border p-4 bg-card">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold">🤝 Alianza terapéutica</h3>
-          {waisrRated.length > 0 && (
-            <div className="text-right">
-              <span className={`text-lg font-extrabold ${waisrColor}`}>{waisrAvg.toFixed(1)}</span>
-              <span className={`text-xs font-bold ml-1 ${waisrColor}`}>{waisrLabel}</span>
+      {/* Alianza terapéutica WAI-SR */}
+      <CardNew
+        title="Alianza terapéutica (WAI-SR)"
+        action={
+          waisrRated.length > 0 ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="mono" style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>{waisrAvg.toFixed(1)}/5</span>
+              <BadgeNew tone={waisrTone} dot>{waisrLabel}</BadgeNew>
             </div>
-          )}
+          ) : undefined
+        }
+      >
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "auto repeat(5, auto)",
+          gap: 8,
+          fontSize: 9,
+          color: "var(--text-4)",
+          textTransform: "uppercase",
+          letterSpacing: "0.06em",
+          fontWeight: 600,
+          marginBottom: 8,
+        }}>
+          <span />
+          <span style={{ textAlign: "center" }}>Nunca 1</span>
+          <span style={{ textAlign: "center" }}>Rara vez 2</span>
+          <span style={{ textAlign: "center" }}>A veces 3</span>
+          <span style={{ textAlign: "center" }}>Frecuente 4</span>
+          <span style={{ textAlign: "center" }}>Siempre 5</span>
         </div>
-        <div className="space-y-2">
-          <div className="grid grid-cols-6 gap-1 text-[10px] font-bold text-center text-muted-foreground mb-1">
-            <span></span><span>Nunca (1)</span><span>Rara vez (2)</span><span>A veces (3)</span><span>Frecuente (4)</span><span>Siempre (5)</span>
-          </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {[
             "El paciente y yo trabajamos hacia metas mutuamente acordadas",
             "Se ha establecido un vínculo de confianza y respeto mutuo",
             "Hay acuerdo sobre las tareas y métodos del tratamiento",
             "El paciente se siente comprendido en la relación terapéutica",
           ].map((item, i) => (
-            <div key={i} className="grid grid-cols-6 gap-1 items-center text-xs">
-              <span className="text-foreground leading-tight">{item}</span>
-              {[1,2,3,4,5].map(v => (
-                <button key={v} onClick={() => { const n = [...waisr]; n[i] = v; setWaisr(n); }}
-                  className={`h-7 rounded-lg border text-xs font-bold transition-all ${waisr[i] === v ? "bg-brand-600 text-white border-brand-600 dark:bg-brand-500 dark:border-brand-500" : "bg-card dark:bg-muted border-border hover:border-brand-300 dark:hover:border-brand-400"}`}>
-                  {v}
-                </button>
-              ))}
+            <div key={i} style={{
+              display: "grid",
+              gridTemplateColumns: "1fr auto",
+              gap: 12,
+              alignItems: "center",
+              paddingBottom: 8,
+              borderBottom: "1px solid var(--border-soft)",
+            }}>
+              <div style={{ fontSize: 12, color: "var(--text-2)" }}>{item}</div>
+              <div className="segment-new">
+                {[1, 2, 3, 4, 5].map(v => (
+                  <button
+                    key={v}
+                    type="button"
+                    className={`segment-new__btn ${waisr[i] === v ? "segment-new__btn--active" : ""}`}
+                    onClick={() => { const n = [...waisr]; n[i] = v; setWaisr(n); }}
+                    style={{ minWidth: 24 }}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
             </div>
           ))}
         </div>
-      </div>
+      </CardNew>
 
       {/* Escalas PHQ-9 y GAD-7 */}
-      <div className="rounded-xl border border-border p-4">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-bold">Escalas de evaluación estandarizadas</h3>
-          <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
-            <input type="checkbox" checked={applyScales} onChange={e => setApplyScales(e.target.checked)} className="accent-brand-600" />
-            Aplicar escalas esta sesión
+      <CardNew
+        title="Escalas estandarizadas"
+        action={
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-2)", cursor: "pointer" }}>
+            <input type="checkbox" checked={applyScales} onChange={e => setApplyScales(e.target.checked)} />
+            Aplicar esta sesión
           </label>
-        </div>
-        {applyScales && (
-          <div className="grid lg:grid-cols-2 gap-6">
+        }
+      >
+        {!applyScales ? (
+          <div style={{ fontSize: 12, color: "var(--text-3)", fontStyle: "italic" }}>
+            Escalas desactivadas para esta sesión.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            {/* PHQ-9 */}
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wide">PHQ-9 · Depresión</h4>
-                <div className="text-right">
-                  <span className={`text-lg font-extrabold ${PHQ9_COLOR(phq9Score)}`}>{phq9Score}</span>
-                  <span className={`text-xs font-bold ml-1 ${PHQ9_COLOR(phq9Score)}`}>{PHQ9_SEVERITY(phq9Score)}</span>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <h4 style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, margin: 0 }}>
+                  PHQ-9 · Depresión
+                </h4>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span className="mono" style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>{phq9Score}/27</span>
+                  <BadgeNew tone={PHQ9_TONE(phq9Score)} dot>{PHQ9_SEVERITY(phq9Score)}</BadgeNew>
                 </div>
               </div>
-              <ScaleQuestion items={PHQ9_ITEMS} values={phq9} onChange={(i, v) => { const n = [...phq9]; n[i] = v; setPHQ9(n); }} label="PHQ-9" />
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "auto repeat(4, auto)",
+                gap: 8,
+                fontSize: 9,
+                color: "var(--text-4)",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                fontWeight: 600,
+                marginBottom: 4,
+              }}>
+                <span />
+                <span style={{ textAlign: "center" }}>Nunca</span>
+                <span style={{ textAlign: "center" }}>Varios días</span>
+                <span style={{ textAlign: "center" }}>Mitad del tiempo</span>
+                <span style={{ textAlign: "center" }}>Casi todos</span>
+              </div>
+              {PHQ9_ITEMS.map((item, i) => (
+                <ScaleItem
+                  key={i}
+                  idx={i}
+                  label={item}
+                  values={phq9}
+                  onChange={v => { const n = [...phq9]; n[i] = v; setPHQ9(n); }}
+                />
+              ))}
             </div>
+
+            {/* GAD-7 */}
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wide">GAD-7 · Ansiedad</h4>
-                <div className="text-right">
-                  <span className={`text-lg font-extrabold ${GAD7_COLOR(gad7Score)}`}>{gad7Score}</span>
-                  <span className={`text-xs font-bold ml-1 ${GAD7_COLOR(gad7Score)}`}>{GAD7_SEVERITY(gad7Score)}</span>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <h4 style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, margin: 0 }}>
+                  GAD-7 · Ansiedad
+                </h4>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span className="mono" style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>{gad7Score}/21</span>
+                  <BadgeNew tone={GAD7_TONE(gad7Score)} dot>{GAD7_SEVERITY(gad7Score)}</BadgeNew>
                 </div>
               </div>
-              <ScaleQuestion items={GAD7_ITEMS} values={gad7} onChange={(i, v) => { const n = [...gad7]; n[i] = v; setGAD7(n); }} label="GAD-7" />
+              {GAD7_ITEMS.map((item, i) => (
+                <ScaleItem
+                  key={i}
+                  idx={i}
+                  label={item}
+                  values={gad7}
+                  onChange={v => { const n = [...gad7]; n[i] = v; setGAD7(n); }}
+                />
+              ))}
             </div>
           </div>
         )}
-      </div>
+      </CardNew>
 
-      {/* Screening de sustancias */}
-      <div className="rounded-xl border border-border p-4 bg-card">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold">🍷 Screening de sustancias</h3>
-          <div className="text-right">
-            <span className={`text-lg font-extrabold ${auditCColor}`}>{auditCScore}</span>
-            <span className={`text-xs font-bold ml-1 ${auditCColor}`}>{auditCLabel}</span>
+      {/* Screening sustancias */}
+      <CardNew
+        title="Screening de sustancias"
+        action={
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{auditCScore}/12</span>
+            <BadgeNew tone={auditCTone} dot>{auditCLabel}</BadgeNew>
           </div>
-        </div>
-
-        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-2">AUDIT-C</h4>
-        <div className="space-y-2 mb-4">
+        }
+      >
+        <h4 style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginTop: 0, marginBottom: 10 }}>
+          AUDIT-C (alcohol)
+        </h4>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10, marginBottom: 18 }}>
           {[
-            { label: "Frecuencia de consumo de alcohol", opts: ["Nunca (0)","Mensual o menos (1)","2-4 veces/mes (2)","2-3 veces/semana (3)","4+ veces/semana (4)"] },
-            { label: "Cantidad habitual de tragos por ocasión", opts: ["1-2 (0)","3-4 (1)","5-6 (2)","7-9 (3)","10+ (4)"] },
-            { label: "Frecuencia de consumo excesivo (6+ tragos)", opts: ["Nunca (0)","Menos de mensual (1)","Mensual (2)","Semanal (3)","Diario o casi (4)"] },
+            { label: "Frecuencia de consumo de alcohol",           opts: ["Nunca (0)", "Mensual o menos (1)", "2-4 veces/mes (2)", "2-3 veces/semana (3)", "4+ veces/semana (4)"] },
+            { label: "Cantidad habitual de tragos por ocasión",    opts: ["1-2 (0)", "3-4 (1)", "5-6 (2)", "7-9 (3)", "10+ (4)"] },
+            { label: "Frecuencia de consumo excesivo (6+ tragos)", opts: ["Nunca (0)", "Menos de mensual (1)", "Mensual (2)", "Semanal (3)", "Diario o casi (4)"] },
           ].map((q, i) => (
-            <div key={i} className="space-y-1">
-              <Label className="text-xs">{q.label}</Label>
+            <div key={i} className="field-new">
+              <label className="field-new__label">{q.label}</label>
               <select
-                className="flex h-9 w-full rounded-lg border border-border bg-card dark:bg-muted px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                className="input-new"
                 value={auditC[i]}
-                onChange={e => { const n = [...auditC]; n[i] = Number(e.target.value); setAuditC(n); }}>
+                onChange={e => { const n = [...auditC]; n[i] = Number(e.target.value); setAuditC(n); }}
+              >
                 {q.opts.map((o, v) => <option key={v} value={v}>{o}</option>)}
               </select>
             </div>
           ))}
         </div>
 
-        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-2">DAST-10 (simplificado)</h4>
-        <div className="space-y-2">
-          <label className="flex items-center gap-2 text-sm cursor-pointer">
-            <input type="checkbox" checked={dastPositive} onChange={e => setDastPositive(e.target.checked)} className="accent-brand-600" />
-            ¿El paciente reporta uso de sustancias no prescritas?
-          </label>
-          {dastPositive && (
-            <div className="space-y-1">
-              <Label className="text-xs">Detalle de sustancias y frecuencia</Label>
-              <textarea
-                className="flex min-h-[70px] w-full rounded-lg border border-border dark:border-border bg-card dark:bg-muted px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-                placeholder="Ej: Cannabis 3 veces/semana, cocaína uso esporádico..."
-                value={dastDetail}
-                onChange={e => setDastDetail(e.target.value)}
-              />
-            </div>
-          )}
-        </div>
-      </div>
+        <h4 style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 10 }}>
+          DAST (otras sustancias)
+        </h4>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-1)", cursor: "pointer", marginBottom: 10 }}>
+          <input type="checkbox" checked={dastPositive} onChange={e => setDastPositive(e.target.checked)} />
+          ¿El paciente reporta uso de sustancias no prescritas?
+        </label>
+        {dastPositive && (
+          <div className="field-new">
+            <label className="field-new__label">Detalle de sustancias y frecuencia</label>
+            <textarea
+              className="input-new"
+              style={{ minHeight: 70, padding: "8px 12px", height: "auto", resize: "vertical" }}
+              placeholder="Ej: Cannabis 3 veces/semana, cocaína uso esporádico…"
+              value={dastDetail}
+              onChange={e => setDastDetail(e.target.value)}
+            />
+          </div>
+        )}
+      </CardNew>
 
-      {/* Plan terapéutico con metas */}
-      <div className="rounded-xl border border-border p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold">🎯 Objetivos terapéuticos</h3>
-          <button onClick={addGoal} className="text-xs font-semibold text-brand-600 hover:underline">+ Agregar meta</button>
-        </div>
-        <div className="space-y-2">
+      {/* Plan terapéutico */}
+      <CardNew
+        title="Plan terapéutico"
+        action={<ButtonNew size="sm" variant="ghost" onClick={addGoal}>+ Agregar meta</ButtonNew>}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
           {form.treatmentGoals.map((g, i) => (
-            <div key={i} className="flex gap-2">
-              <input className="flex-1 h-9 rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-                placeholder={`Meta ${i+1}: Reducir ansiedad ante situaciones sociales…`}
-                value={g.goal} onChange={e => { const goals = [...form.treatmentGoals]; goals[i].goal = e.target.value; set("treatmentGoals", goals); }} />
-              <select className="h-9 rounded-lg border border-border bg-card px-2 text-xs focus:outline-none"
-                value={g.status} onChange={e => { const goals = [...form.treatmentGoals]; goals[i].status = e.target.value; set("treatmentGoals", goals); }}>
-                {["En progreso","Logrado","Abandonado","Nuevo"].map(s => <option key={s}>{s}</option>)}
-              </select>
+            <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+              <div className="field-new" style={{ flex: 1 }}>
+                <label className="field-new__label">Meta {i + 1}</label>
+                <input
+                  className="input-new"
+                  placeholder="Reducir ansiedad ante situaciones sociales…"
+                  value={g.goal}
+                  onChange={e => { const goals = [...form.treatmentGoals]; goals[i].goal = e.target.value; set("treatmentGoals", goals); }}
+                />
+              </div>
+              <div className="field-new" style={{ width: 140 }}>
+                <label className="field-new__label">Estado</label>
+                <select
+                  className="input-new"
+                  value={g.status}
+                  onChange={e => { const goals = [...form.treatmentGoals]; goals[i].status = e.target.value; set("treatmentGoals", goals); }}
+                >
+                  {["En progreso", "Logrado", "Abandonado", "Nuevo"].map(s => <option key={s}>{s}</option>)}
+                </select>
+              </div>
             </div>
           ))}
         </div>
-        <div className="mt-3 space-y-2">
-          <div className="space-y-1"><Label className="text-xs">Tarea para casa / Actividades entre sesiones</Label>
-            <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-              placeholder="Registro de pensamientos automáticos, técnica de respiración diafragmática…"
-              value={form.homework} onChange={e => set("homework", e.target.value)} />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
+          <div className="field-new">
+            <label className="field-new__label">Tarea para casa / Actividades entre sesiones</label>
+            <input
+              className="input-new"
+              placeholder="Registro de pensamientos automáticos, técnica de respiración…"
+              value={form.homework}
+              onChange={e => set("homework", e.target.value)}
+            />
           </div>
-          <div className="space-y-1"><Label className="text-xs">Objetivo para próxima sesión</Label>
-            <input className="flex h-9 w-full rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+          <div className="field-new">
+            <label className="field-new__label">Objetivo para próxima sesión</label>
+            <input
+              className="input-new"
               placeholder="Trabajar técnica de exposición gradual…"
-              value={form.nextGoal} onChange={e => set("nextGoal", e.target.value)} />
+              value={form.nextGoal}
+              onChange={e => set("nextGoal", e.target.value)}
+            />
           </div>
         </div>
-      </div>
+      </CardNew>
 
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={saving} size="lg">
-          {saving ? "Guardando…" : "💾 Guardar sesión de psicología"}
-        </Button>
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <ButtonNew variant="primary" onClick={handleSave} disabled={saving}>
+          {saving ? "Guardando…" : "Guardar sesión de psicología"}
+        </ButtonNew>
       </div>
     </div>
   );
