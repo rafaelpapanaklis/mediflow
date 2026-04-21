@@ -4,11 +4,77 @@
 
 @layer base {
   :root {
-    /* ── Claude Design tokens (phase 1 — dark by default) ── */
-    --bg:            #0A0A0F;
-    --bg-elev:       #111118;
-    --bg-elev-2:     #16161F;
+    /* ── LIGHT MODE (default) ── */
+    --bg:            #F8F7FC;            /* blanco con hint violeta */
+    --bg-elev:       #FFFFFF;            /* cards blancos puros */
+    --bg-elev-2:     #F0EEF7;            /* nested light purple */
+    --bg-hover:      rgba(124,58,237,0.04);
+
+    --border-soft:   rgba(15,10,30,0.08);
+    --border-strong: rgba(15,10,30,0.14);
+    --border-brand:  rgba(124,58,237,0.30);
+
+    --brand:         #7c3aed;
+    --brand-soft:    rgba(124,58,237,0.10);
+    --brand-softer:  rgba(124,58,237,0.04);
+
+    --text-1: #14101F;                   /* casi negro con tinte violeta */
+    --text-2: #4A4560;
+    --text-3: #7D7892;
+    --text-4: #A8A4B8;
+
+    --success:      #059669;
+    --success-soft: rgba(5,150,105,0.10);
+    --warning:      #d97706;
+    --warning-soft: rgba(217,119,6,0.10);
+    --danger:       #dc2626;
+    --danger-soft:  rgba(220,38,38,0.10);
+    --info:         #2563eb;
+    --info-soft:    rgba(37,99,235,0.10);
+
+    --radius-sm: 6px;
+    --radius:    10px;
+    --radius-lg: 14px;
+
+    /* ── Tailwind-compat HSL (light) ── */
+    --background:        250 18% 97%;
+    --foreground:        255 30% 9%;
+    --card:              0 0% 100%;
+    --card-foreground:   255 30% 9%;
+    --muted:             250 12% 92%;
+    --muted-foreground:  250 10% 42%;
+    --border:            255 30% 9% / 0.08;
+    --primary:           262 83% 58%;
+    --primary-foreground: 0 0% 100%;
+    --accent:            239 84% 67%;
+    --accent-foreground: 0 0% 100%;
+    --destructive:         0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Sidebar (light) */
+    --sidebar:              0 0% 100%;
+    --sidebar-foreground:   255 30% 9%;
+    --sidebar-border:       255 30% 9% / 0.08;
+    --sidebar-accent:       250 12% 92%;
+    --sidebar-accent-foreground: 255 30% 9%;
+
+    /* Brand accents (compat) */
+    --violet: 262 83% 58%;
+    --indigo: 239 84% 67%;
+    --teal:   173 80% 40%;
+    --surface:          0 0% 100%;
+    --surface-elevated: 250 12% 92%;
+  }
+
+  /* ── DARK MODE — space purple ── */
+  .dark {
+    color-scheme: dark;
+
+    --bg:            #0B0815;            /* tinte morado espacial */
+    --bg-elev:       #121020;            /* cards con tinte morado */
+    --bg-elev-2:     #1A1630;            /* nested elements */
     --bg-hover:      rgba(255,255,255,0.03);
+
     --border-soft:   rgba(255,255,255,0.06);
     --border-strong: rgba(255,255,255,0.10);
     --border-brand:  rgba(124,58,237,0.30);
@@ -31,42 +97,22 @@
     --info:         #3b82f6;
     --info-soft:    rgba(59,130,246,0.12);
 
-    --radius-sm: 6px;
-    --radius:    10px;
-    --radius-lg: 14px;
-
-    /* ── Tailwind-compat HSL tokens (mapeados a la paleta dark) ── */
-    --background:        240 18% 4%;   /* #0A0A0F */
-    --foreground:        240 12% 92%;  /* #E8E8EC */
-    --card:              240 16% 7%;   /* #111118 */
+    /* Tailwind-compat HSL (dark — space purple) */
+    --background:        255 30% 6%;
+    --foreground:        240 12% 92%;
+    --card:              255 25% 10%;
     --card-foreground:   240 12% 92%;
-    --muted:             240 10% 10%;
+    --muted:             255 20% 14%;
     --muted-foreground:  240 5% 60%;
     --border:            0 0% 100% / 0.06;
-    --primary:           262 83% 58%;  /* #7C3AED violet */
-    --primary-foreground: 0 0% 100%;
-    --accent:            239 84% 67%;  /* #6366F1 indigo */
-    --accent-foreground: 0 0% 100%;
-    --destructive:         0 84% 60%;  /* #ef4444 */
-    --destructive-foreground: 0 0% 100%;
-
-    /* Sidebar (dark, igual a bg) */
-    --sidebar:              240 18% 4%;
-    --sidebar-foreground:   240 12% 92%;
-    --sidebar-border:       0 0% 100% / 0.06;
-    --sidebar-accent:       240 10% 10%;
+    --sidebar:           255 30% 6%;
+    --sidebar-foreground: 240 12% 92%;
+    --sidebar-border:    0 0% 100% / 0.06;
+    --sidebar-accent:    255 20% 14%;
     --sidebar-accent-foreground: 240 12% 92%;
-
-    /* Brand accents (se mantienen para componentes viejos) */
-    --violet: 262 83% 58%;
-    --indigo: 239 84% 67%;
-    --teal:   173 80% 40%;
-    --surface:          240 16% 7%;
-    --surface-elevated: 240 10% 10%;
+    --surface:           255 25% 10%;
+    --surface-elevated:  255 20% 14%;
   }
-
-  /* Se mantiene .dark para compat con el toggle actual — mismos tokens. */
-  .dark { color-scheme: dark; }
 
   * { border-color: hsl(var(--border)); }
 
@@ -76,14 +122,23 @@
     background: var(--bg);
     color: var(--text-1);
     background-image:
-      radial-gradient(ellipse 1200px 600px at 50% -10%, rgba(124,58,237,0.06), transparent 70%),
-      linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+      radial-gradient(ellipse 1200px 600px at 50% -10%, rgba(124,58,237,0.05), transparent 70%),
+      linear-gradient(rgba(20,16,31,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(20,16,31,0.025) 1px, transparent 1px);
     background-size: auto, 32px 32px, 32px 32px;
     background-attachment: fixed;
     font-size: 1rem;
     line-height: 1.65;
     -webkit-font-smoothing: antialiased;
+  }
+
+  .dark body {
+    background-image:
+      radial-gradient(ellipse 1200px 600px at 50% -10%, rgba(124,58,237,0.10), transparent 70%),
+      radial-gradient(ellipse 800px 400px at 90% 10%, rgba(168,85,247,0.06), transparent 70%),
+      linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size: auto, auto, 32px 32px, 32px 32px;
   }
 
   /* ─── Dark mode overrides — inputs, tables, semantic *-50 bg colors ─── */
@@ -96,7 +151,7 @@
   }
   .dark input::placeholder,
   .dark textarea::placeholder { color: hsl(var(--muted-foreground)) !important; }
-  .dark table tr:hover td { background-color: hsl(217 33% 16%) !important; }
+  .dark table tr:hover td { background-color: hsl(255 20% 14%) !important; }
   .dark thead tr          { background-color: hsl(var(--card))   !important; }
   .dark .bg-emerald-50    { background-color: rgb(6 78 59 / 0.3)   !important; }
   .dark .bg-amber-50      { background-color: rgb(120 53 15 / 0.3) !important; }
@@ -1011,3 +1066,135 @@
 .orb-purple { background: rgba(124, 58, 237, 0.15); }
 .orb-teal   { background: rgba(20, 184, 166, 0.1);  }
 .orb-indigo { background: rgba(99, 102, 241, 0.1);  }
+
+/* ═══════════════════════════════════════════════════════════════════
+   LIGHT MODE OVERRIDES — contraste para textos + badges
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Badges: en light mode los colores pastel no contrastan — texto más oscuro */
+:root:not(.dark) .badge-new--success { color: #047857; }
+:root:not(.dark) .badge-new--warning { color: #b45309; }
+:root:not(.dark) .badge-new--danger  { color: #b91c1c; }
+:root:not(.dark) .badge-new--info    { color: #1d4ed8; }
+:root:not(.dark) .badge-new--brand   { color: #6d28d9; }
+:root:not(.dark) .badge-new--neutral { color: var(--text-2); background: rgba(15,10,30,0.04); }
+
+/* KPI icon: en light mode fondo morado tenue + color brand */
+:root:not(.dark) .kpi__icon {
+  color: var(--brand);
+  background: var(--brand-soft);
+  border-color: rgba(124,58,237,0.15);
+}
+
+/* Nav item activo: en light mode el texto debe ser brand (no blanco) */
+:root:not(.dark) .nav-item-new--active {
+  color: var(--brand);
+  background: var(--brand-soft);
+  border-color: rgba(124,58,237,0.2);
+  box-shadow: 0 0 12px rgba(124,58,237,0.08), inset 0 0 0 1px rgba(124,58,237,0.08);
+}
+
+/* Sidebar + topbar: fondo blanco translúcido en light */
+:root:not(.dark) .sidebar-new {
+  background: rgba(255,255,255,0.7);
+}
+:root:not(.dark) .topbar-new {
+  background: rgba(255,255,255,0.7);
+}
+
+/* Primary button shadow suave para light */
+:root:not(.dark) .btn-new--primary {
+  box-shadow: 0 0 0 1px rgba(124,58,237,0.3), 0 4px 12px -4px rgba(124,58,237,0.3);
+}
+
+/* Ghost button hover en light */
+:root:not(.dark) .btn-new--ghost:hover {
+  background: var(--bg-hover);
+}
+
+/* Cards en light: sombra suave en vez de borders sólo */
+:root:not(.dark) .card,
+:root:not(.dark) .kpi {
+  box-shadow: 0 1px 3px rgba(15,10,30,0.04), 0 1px 2px rgba(15,10,30,0.03);
+}
+
+/* Modal en light: sombra más notoria */
+:root:not(.dark) .modal {
+  box-shadow: 0 20px 50px -10px rgba(15,10,30,0.25), 0 8px 20px -8px rgba(15,10,30,0.15);
+}
+
+/* Table hover row en light */
+:root:not(.dark) .table-new tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+/* Input placeholder en light más legible */
+:root:not(.dark) .input-new::placeholder {
+  color: var(--text-3);
+}
+
+/* Avatar border en light (para destacarse sobre card blanco) */
+:root:not(.dark) .avatar-new {
+  box-shadow: 0 0 0 1px rgba(15,10,30,0.06);
+}
+
+/* Tag-new en light */
+:root:not(.dark) .tag-new {
+  background: var(--bg-elev-2);
+  color: var(--text-2);
+  border-color: var(--border-soft);
+}
+:root:not(.dark) .tag-new:hover {
+  background: var(--brand-soft);
+  color: var(--brand);
+  border-color: rgba(124,58,237,0.2);
+}
+
+/* User chip en light */
+:root:not(.dark) .user-chip-new:hover {
+  background: var(--bg-hover);
+}
+
+/* Segment button activo en light */
+:root:not(.dark) .segment-new__btn--active {
+  color: var(--brand);
+  background: var(--bg-elev);
+  box-shadow: 0 1px 3px rgba(15,10,30,0.08);
+}
+
+/* Form section rule en light */
+:root:not(.dark) .form-section__rule {
+  background: var(--border-soft);
+}
+
+/* Scrollbar más visible en light */
+:root:not(.dark) .scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(15,10,30,0.18);
+}
+:root:not(.dark) .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(15,10,30,0.32);
+}
+
+/* Skeleton shimmer — invisible con rgba(255,255,255,.03) en light */
+:root:not(.dark) .skel-new {
+  background: linear-gradient(90deg, rgba(15,10,30,0.04) 0%, rgba(15,10,30,0.08) 50%, rgba(15,10,30,0.04) 100%);
+}
+
+/* Counts (nav badge, tab, kbd) con fondo visible en light */
+:root:not(.dark) .nav-item-new__count,
+:root:not(.dark) .tab__count,
+:root:not(.dark) .topbar-new__search kbd {
+  background: rgba(15,10,30,0.06);
+  color: var(--text-2);
+}
+
+/* Progress track en light (usado en varios componentes inline) */
+:root:not(.dark) .progress-track {
+  background: rgba(15,10,30,0.06);
+}
+
+/* Icon button (ghost icon) en light mejor contraste de fondo al hover */
+:root:not(.dark) .icon-btn-new:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}

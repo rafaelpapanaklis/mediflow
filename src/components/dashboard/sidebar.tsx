@@ -75,12 +75,10 @@ interface SidebarProps {
 }
 
 function useDarkMode() {
-  const [dark, setDark] = useState(true); // default dark (Claude Design)
+  const [dark, setDark] = useState(false);
   useLayoutEffect(() => {
-    const saved = localStorage.getItem("theme");
-    const isDark = saved !== "light";
-    setDark(isDark);
-    document.documentElement.classList.toggle("dark", isDark);
+    const hasDarkClass = document.documentElement.classList.contains("dark");
+    setDark(hasDarkClass);
   }, []);
   function toggle() {
     const next = !dark;
