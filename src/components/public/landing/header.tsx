@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Logo } from "./primitives/logo";
+import { SpecialtiesDropdown } from "./specialties-dropdown";
 
 export function Header() {
   const [mode, setMode] = useState<"dark" | "light">("dark");
@@ -19,13 +20,6 @@ export function Header() {
     document.documentElement.querySelector(".landing-theme")?.setAttribute("data-mode", mode);
     try { localStorage.setItem("ld-theme", mode); } catch {}
   }, [mode, mounted]);
-
-  const navLinks = [
-    { label: "Producto",       href: "#features" },
-    { label: "Especialidades", href: "#specialties" },
-    { label: "Precios",        href: "#pricing" },
-    { label: "Clientes",       href: "#testimonials" },
-  ];
 
   return (
     <div style={{
@@ -48,10 +42,20 @@ export function Header() {
           <Logo size={22} color="var(--ld-brand-light)" />
         </Link>
 
-        <div style={{ display: "flex", gap: 28, fontSize: 13, color: "var(--ld-fg-muted)" }} className="ld-nav-links">
-          {navLinks.map(l => (
-            <Link key={l.href} href={l.href} style={{ color: "inherit", textDecoration: "none" }}>{l.label}</Link>
-          ))}
+        <div
+          className="ld-nav-links"
+          style={{
+            display: "flex",
+            gap: 28,
+            fontSize: 13,
+            color: "var(--ld-fg-muted)",
+            alignItems: "center",
+          }}
+        >
+          <Link href="#features" style={{ color: "inherit", textDecoration: "none" }}>Producto</Link>
+          <SpecialtiesDropdown />
+          <Link href="#pricing" style={{ color: "inherit", textDecoration: "none" }}>Precios</Link>
+          <Link href="#testimonials" style={{ color: "inherit", textDecoration: "none" }}>Clientes</Link>
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 13 }}>
