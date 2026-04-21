@@ -680,6 +680,59 @@
 /* mono utility ---------------------------------------------------- */
 .mono { font-family: var(--font-jetbrains-mono, monospace); }
 
+/* Switch --------------------------------------------------------- */
+.switch {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.1);
+  cursor: pointer;
+  transition: background .15s;
+  border: none;
+  flex-shrink: 0;
+}
+.switch--on {
+  background: var(--brand);
+  box-shadow: 0 0 12px rgba(124,58,237,0.3);
+}
+.switch__thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform .2s;
+}
+.switch--on .switch__thumb { transform: translateX(16px); }
+.switch:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Vertical nav (settings tabs sidebar) --------------------------- */
+.vnav-item {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all .15s;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+.vnav-item:hover { background: var(--bg-hover); color: var(--text-1); }
+.vnav-item--active {
+  background: var(--brand-soft);
+  color: #fff;
+  border-color: rgba(124,58,237,0.25);
+}
+
 /* Modal ----------------------------------------------------------- */
 .modal-overlay {
   position: fixed;

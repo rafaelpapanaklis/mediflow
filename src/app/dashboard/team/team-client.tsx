@@ -1,10 +1,24 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Plus, X, Edit, UserCheck, UserX, Trash2, Copy, Check } from "lucide-react";
+import { Plus, X, Edit, UserCheck, UserX, Trash2, Copy, Check, Stethoscope, Shield, Users as UsersIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { KpiCard }   from "@/components/ui/design-system/kpi-card";
+import { CardNew }   from "@/components/ui/design-system/card-new";
+import { BadgeNew }  from "@/components/ui/design-system/badge-new";
+import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import toast from "react-hot-toast";
+
+type RoleTone = "success" | "info" | "warning" | "brand" | "neutral";
+const ROLE_TONE: Record<string, { tone: RoleTone; label: string }> = {
+  SUPER_ADMIN:  { tone: "brand",   label: "Super Admin" },
+  ADMIN:        { tone: "info",    label: "Admin" },
+  DOCTOR:       { tone: "success", label: "Doctor" },
+  RECEPTIONIST: { tone: "warning", label: "Recepcionista" },
+  READONLY:     { tone: "neutral", label: "Solo lectura" },
+};
 
 const DOCTOR_COLORS = [
   "#3b82f6","#7c3aed","#059669","#e11d48","#d97706",
@@ -325,143 +339,201 @@ export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Pro
   }
 
   return (
-    <div>
+    <div style={{ padding: "24px 28px", maxWidth: 1400, margin: "0 auto" }}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
         <div>
-          <h1 className="text-2xl font-extrabold">👥 Equipo médico</h1>
-          <p className="text-base text-muted-foreground mt-0.5">
+          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+            Equipo médico
+          </h1>
+          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
             {clinicName} · {active} miembro{active !== 1 ? "s" : ""} activo{active !== 1 ? "s" : ""}
           </p>
         </div>
-        <Button onClick={() => { setForm(emptyForm()); setShowNew(true); }}>
-          <Plus className="w-5 h-5 mr-2" /> Agregar doctor
-        </Button>
+        <ButtonNew variant="primary" icon={<Plus size={14} />} onClick={() => { setForm(emptyForm()); setShowNew(true); }}>
+          Invitar miembro
+        </ButtonNew>
       </div>
 
       {/* Temp password banner */}
       {tempPass && (
-        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-2xl p-4 mb-5">
-          <div className="flex items-start gap-3">
-            <span className="text-2xl flex-shrink-0">🔑</span>
-            <div className="flex-1">
-              <div className="text-base font-bold text-amber-800 dark:text-amber-200 mb-1">
+        <div style={{
+          background: "var(--warning-soft)",
+          border: "1px solid rgba(245,158,11,0.25)",
+          borderRadius: "var(--radius-lg)",
+          padding: 16, marginBottom: 18,
+        }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#fcd34d", marginBottom: 4 }}>
                 Doctor creado — contraseña temporal
               </div>
-              <div className="text-sm text-amber-700 dark:text-amber-300 mb-3">
+              <div style={{ fontSize: 11, color: "#fcd34d", opacity: 0.8, marginBottom: 10 }}>
                 Comparte esta contraseña con el doctor. Puede cambiarla en Configuración → Seguridad.
               </div>
-              <div className="flex items-center gap-3 flex-wrap">
-                <code className="text-base font-mono font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-900 dark:text-amber-100 px-4 py-2 rounded-xl tracking-widest">
-                  {tempPass}
-                </code>
-                <button onClick={copyPass}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm font-semibold transition-colors">
-                  {copied ? <Check className="w-4 h-4"/> : <Copy className="w-4 h-4"/>}
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <code className="mono" style={{
+                  fontSize: 13, fontWeight: 700,
+                  background: "rgba(245,158,11,0.2)",
+                  color: "#fde68a",
+                  padding: "6px 14px",
+                  borderRadius: 8,
+                  letterSpacing: 2,
+                }}>{tempPass}</code>
+                <ButtonNew variant="secondary" size="sm" onClick={copyPass} icon={copied ? <Check size={12} /> : <Copy size={12} />}>
                   {copied ? "Copiado" : "Copiar"}
-                </button>
+                </ButtonNew>
               </div>
             </div>
-            <button onClick={() => setTempPass(null)} className="text-amber-600 hover:text-amber-800 p-1">
-              <X className="w-4 h-4"/>
+            <button
+              onClick={() => setTempPass(null)}
+              type="button"
+              className="btn-new btn-new--ghost btn-new--sm"
+              aria-label="Cerrar"
+            >
+              <X size={12} />
             </button>
           </div>
         </div>
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        {[
-          { label:"Doctores activos", val:doctors, color:"text-brand-600",   icon:"🩺" },
-          { label:"Administradores",  val:admins,  color:"text-violet-600",  icon:"🛡️" },
-          { label:"Total activos",    val:active,  color:"text-emerald-600", icon:"👥" },
-        ].map(s => (
-          <div key={s.label} className="bg-card border border-border rounded-2xl px-5 py-4 shadow-card">
-            <div className="text-xl mb-1">{s.icon}</div>
-            <div className={`text-3xl font-extrabold ${s.color}`}>{s.val}</div>
-            <div className="text-sm text-muted-foreground mt-0.5">{s.label}</div>
-          </div>
-        ))}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginBottom: 20 }}>
+        <KpiCard label="Total activos"      value={String(active)}   icon={UsersIcon} />
+        <KpiCard label="Doctores"           value={String(doctors)}  icon={Stethoscope} />
+        <KpiCard label="Administradores"    value={String(admins)}   icon={Shield} />
+        <KpiCard label="Total miembros"     value={String(team.length)} icon={UsersIcon} />
       </div>
 
       {/* Filter */}
-      <div className="flex gap-2 mb-4">
-        {(["active","all","inactive"] as const).map(f => (
-          <button key={f} onClick={() => setFilter(f)}
-            className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${filter === f ? "bg-brand-600 text-white" : "bg-card border border-border hover:border-slate-400"}`}>
-            {f === "active" ? "Activos" : f === "all" ? "Todos" : "Inactivos"}
-          </button>
-        ))}
+      <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+        <div className="segment-new">
+          {(["active", "all", "inactive"] as const).map(f => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setFilter(f)}
+              className={`segment-new__btn ${filter === f ? "segment-new__btn--active" : ""}`}
+            >
+              {f === "active" ? "Activos" : f === "all" ? "Todos" : "Inactivos"}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* List */}
-      <div className="bg-card border border-border rounded-2xl shadow-card overflow-hidden">
-        {filtered.length === 0 ? (
-          <div className="text-center py-16 text-muted-foreground">
-            <p className="text-base font-semibold">No hay miembros</p>
-            <button onClick={() => { setForm(emptyForm()); setShowNew(true); }}
-              className="mt-2 text-sm text-brand-600 hover:underline font-semibold">
-              + Agregar primer doctor
-            </button>
-          </div>
-        ) : filtered.map((m, idx) => (
-          <div key={m.id}
-            className={`flex items-center gap-4 px-6 py-4 group hover:bg-muted/10 transition-colors ${idx > 0 ? "border-t border-border/50" : ""} ${!m.isActive ? "opacity-60" : ""}`}>
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-bold text-base flex-shrink-0"
-              style={{ background: m.color }}>
-              {m.firstName[0]}{m.lastName[0]}
+      {/* List — grid de tarjetas */}
+      {filtered.length === 0 ? (
+        <CardNew>
+          <div style={{ padding: 40, textAlign: "center" }}>
+            <UsersIcon size={32} style={{ color: "var(--text-4)", margin: "0 auto 12px" }} />
+            <p style={{ color: "var(--text-2)", fontSize: 14, fontWeight: 500 }}>No hay miembros</p>
+            <div style={{ marginTop: 12 }}>
+              <ButtonNew
+                variant="primary"
+                size="sm"
+                icon={<Plus size={14} />}
+                onClick={() => { setForm(emptyForm()); setShowNew(true); }}
+              >
+                Agregar primer doctor
+              </ButtonNew>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-bold text-base">{m.firstName} {m.lastName}</span>
-                {m.id === currentUserId && (
-                  <span className="text-xs font-bold bg-brand-500/15 text-brand-700 px-2 py-0.5 rounded-full">Tú</span>
-                )}
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                  m.role === "ADMIN" ? "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300" :
-                  m.role === "DOCTOR" ? "bg-brand-500/15 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300" :
-                  "bg-muted text-muted-foreground"
-                }`}>
-                  {ROLES.find(r => r.value === m.role)?.label ?? m.role}
-                </span>
-                {!m.isActive && <span className="text-xs font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full">Inactivo</span>}
-              </div>
-              <div className="text-sm text-muted-foreground">{m.email}</div>
-              {m.specialty && <div className="text-sm text-muted-foreground">{m.specialty}</div>}
-              {m.services?.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-1.5">
-                  {m.services.slice(0,4).map(s => (
-                    <span key={s} className="text-xs bg-muted/60 text-muted-foreground px-2 py-0.5 rounded-full font-medium">{s}</span>
-                  ))}
-                  {m.services.length > 4 && <span className="text-xs text-muted-foreground">+{m.services.length-4}</span>}
+          </div>
+        </CardNew>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
+          {filtered.map(m => {
+            const fullName = `${m.firstName} ${m.lastName}`;
+            const roleCfg = ROLE_TONE[m.role] ?? ROLE_TONE.DOCTOR;
+            return (
+              <div key={m.id} className="card" style={{ padding: 20, opacity: m.isActive ? 1 : 0.5 }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
+                  <AvatarNew name={fullName} size="lg" />
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 12, flexWrap: "wrap", justifyContent: "center" }}>
+                    <h3 style={{ fontSize: 14, color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+                      {fullName}
+                    </h3>
+                    {m.id === currentUserId && (
+                      <span className="tag-new" style={{ color: "#c4b5fd", borderColor: "rgba(124,58,237,0.2)", background: "var(--brand-soft)" }}>Tú</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>{m.email}</div>
+                  {m.specialty && (
+                    <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>{m.specialty}</div>
+                  )}
+                  <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
+                    <BadgeNew tone={roleCfg.tone} dot>{roleCfg.label}</BadgeNew>
+                    {!m.isActive && <BadgeNew tone="danger" dot>Inactivo</BadgeNew>}
+                  </div>
+
+                  {m.services?.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 10, justifyContent: "center" }}>
+                      {m.services.slice(0, 4).map(s => (
+                        <span key={s} className="tag-new">{s}</span>
+                      ))}
+                      {m.services.length > 4 && (
+                        <span style={{ fontSize: 10, color: "var(--text-3)" }}>+{m.services.length - 4}</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Stats mini */}
+                  <div style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(2, 1fr)",
+                    gap: 10,
+                    marginTop: 16,
+                    paddingTop: 16,
+                    borderTop: "1px solid var(--border-soft)",
+                    width: "100%",
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 9, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Citas</div>
+                      <div className="mono" style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)", marginTop: 2 }}>
+                        {m._count.appointments}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 9, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Expedientes</div>
+                      <div className="mono" style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)", marginTop: 2 }}>
+                        {m._count.records}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: "flex", gap: 6, marginTop: 14, justifyContent: "center" }}>
+                    <ButtonNew size="sm" variant="secondary" icon={<Edit size={12} />} onClick={() => openEdit(m)}>
+                      Editar
+                    </ButtonNew>
+                    {m.id !== currentUserId && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => toggleActive(m)}
+                          className="btn-new btn-new--ghost btn-new--sm"
+                          style={{ padding: 0, width: 28 }}
+                          title={m.isActive ? "Desactivar" : "Activar"}
+                        >
+                          {m.isActive ? <UserX size={12} /> : <UserCheck size={12} />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteMember(m)}
+                          className="btn-new btn-new--ghost btn-new--sm"
+                          style={{ padding: 0, width: 28 }}
+                          title="Eliminar"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
-            <div className="hidden md:flex items-center gap-4 text-sm text-muted-foreground flex-shrink-0">
-              <span>{m._count.appointments} citas</span>
-              <span>{m._count.records} exp.</span>
-            </div>
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-              <button onClick={() => openEdit(m)}
-                className="p-2 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
-                <Edit className="w-4 h-4"/>
-              </button>
-              {m.id !== currentUserId && (
-                <>
-                  <button onClick={() => toggleActive(m)}
-                    className="p-2 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
-                    {m.isActive ? <UserX className="w-4 h-4"/> : <UserCheck className="w-4 h-4"/>}
-                  </button>
-                  <button onClick={() => deleteMember(m)}
-                    className="p-2 rounded-xl hover:bg-rose-50 text-muted-foreground hover:text-rose-600 transition-colors">
-                    <Trash2 className="w-4 h-4"/>
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* New modal */}
       {showNew && (

@@ -181,23 +181,32 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
   ].filter(t => t.show);
 
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-extrabold">Configuración</h1>
-        <p className="text-base text-muted-foreground mt-0.5">Personaliza tu clínica, perfil e integraciones</p>
+    <div style={{ padding: "24px 28px", maxWidth: 1400, margin: "0 auto" }}>
+      <div style={{ marginBottom: 22 }}>
+        <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+          Configuración
+        </h1>
+        <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
+          Personaliza tu clínica, perfil e integraciones
+        </p>
       </div>
 
-      {/* Tabs */}
-      <div className="flex flex-wrap gap-1 bg-card border border-border rounded-xl p-1 w-fit mb-6 shadow-card">
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all
-              ${tab === t.id ? "bg-brand-600 text-white" : "text-muted-foreground hover:text-foreground"}`}>
-            <t.icon className="w-3.5 h-3.5" />
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {/* Layout: sidebar vertical + panel */}
+      <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
+        <div style={{ width: 220, display: "flex", flexDirection: "column", gap: 2, flexShrink: 0, position: "sticky", top: 24 }}>
+          {TABS.map(t => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={`vnav-item ${tab === t.id ? "vnav-item--active" : ""}`}
+            >
+              <t.icon size={14} />
+              <span>{t.label}</span>
+            </button>
+          ))}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
 
       {/* ── CLÍNICA ── */}
       {tab === "clinica" && (
@@ -604,6 +613,8 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           </div>
         </div>
       )}
+        </div>
+      </div>
     </div>
   );
 }
