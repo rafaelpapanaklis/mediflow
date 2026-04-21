@@ -307,90 +307,186 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
         </div>
       )}
 
-      {/* ── Detail panel (modal) ── */}
+      {/* ── Detail modal ── */}
       {selected && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-          style={{ background:"rgba(0,0,0,0.5)" }}
-          onClick={e => { if (e.target === e.currentTarget) setSelected(null); }}>
-          <div className="bg-card rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-card z-10">
-              <h2 className="text-lg font-bold">{selected.name}</h2>
-              <button onClick={() => setSelected(null)} className="p-1.5 rounded-xl hover:bg-muted transition-colors">
-                <X className="w-5 h-5" />
+        <div className="modal-overlay" onClick={() => setSelected(null)}>
+          <div className="modal modal--wide" onClick={e => e.stopPropagation()}>
+            <div className="modal__header">
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <AvatarNew name={`${selected.patient.firstName} ${selected.patient.lastName}`} size="sm" />
+                <div>
+                  <div className="modal__title">{selected.name}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
+                    {selected.patient.firstName} {selected.patient.lastName}
+                  </div>
+                </div>
+                <div style={{ marginLeft: 8 }}>
+                  <BadgeNew tone={(STATUS_TONE[selected.status] ?? STATUS_TONE.ACTIVE).tone} dot>
+                    {(STATUS_TONE[selected.status] ?? STATUS_TONE.ACTIVE).label}
+                  </BadgeNew>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelected(null)}
+                type="button"
+                className="btn-new btn-new--ghost btn-new--sm"
+                aria-label="Cerrar"
+              >
+                <X size={14} />
               </button>
             </div>
 
-            <div className="px-6 py-5 space-y-5">
-              {/* Patient + doctor */}
-              <div className="flex gap-3">
-                <div className="flex-1 bg-muted/30 rounded-xl p-3">
-                  <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">Paciente</div>
-                  <Link href={`/dashboard/patients/${selected.patient.id}`} onClick={() => setSelected(null)}
-                    className="text-base font-bold text-brand-600 hover:underline">
+            <div className="modal__body">
+              {/* Patient + doctor info */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px", marginBottom: 18 }}>
+                <div style={{ padding: 12, background: "var(--bg-elev-2)", border: "1px solid var(--border-soft)", borderRadius: 10 }}>
+                  <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 4 }}>Paciente</div>
+                  <Link
+                    href={`/dashboard/patients/${selected.patient.id}`}
+                    onClick={() => setSelected(null)}
+                    style={{ fontSize: 13, fontWeight: 600, color: "#c4b5fd", textDecoration: "none" }}
+                  >
                     {selected.patient.firstName} {selected.patient.lastName}
                   </Link>
-                  {selected.patient.phone && <div className="text-sm text-muted-foreground">{selected.patient.phone}</div>}
+                  {selected.patient.phone && (
+                    <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>{selected.patient.phone}</div>
+                  )}
                 </div>
-                <div className="flex-1 bg-muted/30 rounded-xl p-3">
-                  <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">Doctor</div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-full flex-shrink-0" style={{ background:selected.doctor.color }} />
-                    <span className="text-base font-bold">Dr/a. {selected.doctor.firstName} {selected.doctor.lastName}</span>
+                <div style={{ padding: 12, background: "var(--bg-elev-2)", border: "1px solid var(--border-soft)", borderRadius: 10 }}>
+                  <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 4 }}>Doctor</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ width: 10, height: 10, borderRadius: "50%", background: selected.doctor.color, flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
+                      Dr/a. {selected.doctor.firstName} {selected.doctor.lastName}
+                    </span>
                   </div>
                 </div>
               </div>
 
               {/* Progress bar */}
-              <div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="font-semibold">Progreso</span>
-                  <span className="text-muted-foreground">{selected.sessions.length} de {selected.totalSessions} sesiones ({progressPct(selected)}%)</span>
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 8 }}>
+                  <span style={{ fontWeight: 600, color: "var(--text-1)" }}>Progreso</span>
+                  <span className="mono" style={{ color: "var(--text-3)" }}>
+                    {selected.sessions.length}/{selected.totalSessions} ({progressPct(selected)}%)
+                  </span>
                 </div>
-                <div className="h-3 bg-muted rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full transition-all ${selected.status==="COMPLETED" ? "bg-emerald-500" : "bg-brand-600"}`}
-                    style={{ width:`${progressPct(selected)}%` }} />
+                <div style={{ height: 8, background: "rgba(255,255,255,0.06)", borderRadius: 4, overflow: "hidden" }}>
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${progressPct(selected)}%`,
+                      background: selected.status === "COMPLETED" ? "var(--success)" : "var(--brand)",
+                      borderRadius: 4,
+                      transition: "width .3s",
+                      boxShadow: selected.status === "COMPLETED" ? "0 0 8px var(--success)" : "0 0 8px var(--brand)",
+                    }}
+                  />
                 </div>
               </div>
 
               {/* Stats grid */}
-              <div className="grid grid-cols-3 gap-3">
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 18 }}>
                 {[
-                  { label:"Costo total", val:formatCurrency(selected.totalCost) },
-                  { label:"Intervalo",   val:`${selected.sessionIntervalDays} días` },
-                  { label:"Estado",      val:STATUS_CFG[selected.status]?.label ?? selected.status },
+                  { label: "Costo total", val: formatCurrency(selected.totalCost) },
+                  { label: "Intervalo",   val: `${selected.sessionIntervalDays} días` },
+                  { label: "Sesiones",    val: `${selected.sessions.length}/${selected.totalSessions}` },
                 ].map(s => (
-                  <div key={s.label} className="bg-muted/20 rounded-xl p-3 text-center">
-                    <div className="text-sm font-bold">{s.val}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">{s.label}</div>
+                  <div
+                    key={s.label}
+                    style={{
+                      padding: 12,
+                      background: "var(--bg-elev-2)",
+                      border: "1px solid var(--border-soft)",
+                      borderRadius: 10,
+                    }}
+                  >
+                    <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>
+                      {s.label}
+                    </div>
+                    <div className="mono" style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>{s.val}</div>
                   </div>
                 ))}
               </div>
 
               {/* Sessions timeline */}
-              <div>
-                <div className="text-sm font-bold mb-3">Sesiones realizadas</div>
-                <div className="space-y-2">
+              <div style={{ marginBottom: 18 }}>
+                <div className="form-section__title">
+                  Sesiones
+                  <span className="form-section__rule" />
+                </div>
+                <div style={{ position: "relative", paddingLeft: 28 }}>
+                  <div style={{
+                    position: "absolute",
+                    left: 11,
+                    top: 4,
+                    bottom: 4,
+                    width: 2,
+                    background: "var(--border-soft)",
+                  }} />
                   {selected.sessions.map(s => (
-                    <div key={s.id} className="flex items-center gap-3 py-2 border-b border-border/50 last:border-0">
-                      <div className="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center flex-shrink-0">
-                        <CheckCircle className="w-4 h-4 text-emerald-600" />
+                    <div key={s.id} style={{ position: "relative", marginBottom: 12 }}>
+                      <div style={{
+                        position: "absolute",
+                        left: -22,
+                        top: 6,
+                        width: 22,
+                        height: 22,
+                        borderRadius: "50%",
+                        background: "var(--success)",
+                        border: "2px solid var(--success)",
+                        display: "grid",
+                        placeItems: "center",
+                        boxShadow: "0 0 8px rgba(16,185,129,0.4)",
+                      }}>
+                        <CheckCircle size={12} style={{ color: "#fff" }} />
                       </div>
-                      <div className="flex-1">
-                        <span className="text-sm font-semibold">Sesión {s.sessionNumber}</span>
-                        {s.notes && <div className="text-xs text-muted-foreground">{s.notes}</div>}
+                      <div style={{
+                        background: "var(--bg-elev)",
+                        border: "1px solid var(--border-soft)",
+                        borderRadius: 8,
+                        padding: 10,
+                      }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-1)" }}>Sesión {s.sessionNumber}</div>
+                            {s.notes && <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4 }}>{s.notes}</div>}
+                          </div>
+                          {s.completedAt && (
+                            <span className="mono" style={{ fontSize: 10, color: "var(--text-3)" }}>
+                              {new Date(s.completedAt).toLocaleDateString("es-MX", { day: "numeric", month: "short" })}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <span className="text-xs text-muted-foreground">
-                        {s.completedAt ? new Date(s.completedAt).toLocaleDateString("es-MX",{day:"numeric",month:"short"}) : ""}
-                      </span>
                     </div>
                   ))}
-                  {/* Pending sessions */}
                   {Array.from({ length: Math.max(0, selected.totalSessions - selected.sessions.length) }).map((_, i) => (
-                    <div key={`pending-${i}`} className="flex items-center gap-3 py-2 border-b border-border/50 last:border-0 opacity-40">
-                      <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                        <Clock className="w-4 h-4 text-muted-foreground" />
+                    <div key={`pending-${i}`} style={{ position: "relative", marginBottom: 12, opacity: 0.5 }}>
+                      <div style={{
+                        position: "absolute",
+                        left: -22,
+                        top: 6,
+                        width: 22,
+                        height: 22,
+                        borderRadius: "50%",
+                        background: "var(--bg-elev-2)",
+                        border: "2px solid var(--border-soft)",
+                        display: "grid",
+                        placeItems: "center",
+                      }}>
+                        <Clock size={12} style={{ color: "var(--text-4)" }} />
                       </div>
-                      <span className="text-sm text-muted-foreground">Sesión {selected.sessions.length + i + 1}</span>
+                      <div style={{
+                        background: "var(--bg-elev)",
+                        border: "1px solid var(--border-soft)",
+                        borderRadius: 8,
+                        padding: 10,
+                        fontSize: 12,
+                        color: "var(--text-3)",
+                      }}>
+                        Sesión {selected.sessions.length + i + 1} · Pendiente
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -398,14 +494,24 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
 
               {/* Add session */}
               {selected.status === "ACTIVE" && (
-                <div>
+                <div style={{ marginBottom: 14 }}>
                   {addingSession === selected.id ? (
-                    <div className="space-y-3">
-                      <textarea className="w-full border border-border rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-                        placeholder="Notas de la sesión (opcional)" rows={2}
-                        value={sessionNote} onChange={e => setSessionNote(e.target.value)} />
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      <div className="form-section__title">
+                        Registrar sesión
+                        <span className="form-section__rule" />
+                      </div>
+                      <div className="field-new">
+                        <label className="field-new__label">Notas de la sesión</label>
+                        <textarea
+                          className="input-new"
+                          placeholder="Observaciones, progreso o notas clínicas (opcional)"
+                          rows={3}
+                          value={sessionNote}
+                          onChange={e => setSessionNote(e.target.value)}
+                        />
+                      </div>
 
-                      {/* Inventory picker */}
                       <InventoryPicker
                         clinicItems={invItems}
                         selected={selInv}
@@ -428,44 +534,63 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                         onRemove={(id) => setSelInv(prev => prev.filter(i => i.id !== id))}
                       />
 
-                      <div className="flex gap-2">
-                        <button onClick={() => addSession(selected.id)} disabled={saving}
-                          className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold text-sm transition-colors disabled:opacity-50">
-                          {saving ? "Guardando…" : "Confirmar sesión"}
-                        </button>
-                        <button onClick={() => { setAddingSession(null); setSessionNote(""); setSelInv([]); }}
-                          className="px-4 py-2.5 border border-border rounded-xl text-sm font-semibold hover:bg-muted transition-colors">
+                      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                        <ButtonNew
+                          variant="ghost"
+                          onClick={() => { setAddingSession(null); setSessionNote(""); setSelInv([]); }}
+                        >
                           Cancelar
-                        </button>
+                        </ButtonNew>
+                        <ButtonNew
+                          variant="primary"
+                          onClick={() => addSession(selected.id)}
+                          disabled={saving}
+                          icon={<CheckCircle size={14} />}
+                        >
+                          {saving ? "Guardando…" : "Confirmar sesión"}
+                        </ButtonNew>
                       </div>
                     </div>
                   ) : (
-                    <button onClick={() => setAddingSession(selected.id)}
-                      className="w-full py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-semibold text-base transition-colors flex items-center justify-center gap-2">
-                      <Plus className="w-5 h-5" /> Registrar sesión completada
-                    </button>
+                    <ButtonNew
+                      variant="primary"
+                      onClick={() => setAddingSession(selected.id)}
+                      icon={<Plus size={14} />}
+                      style={{ width: "100%", justifyContent: "center" }}
+                    >
+                      Registrar sesión completada
+                    </ButtonNew>
                   )}
                 </div>
               )}
 
               {/* Status change */}
-              {selected.status === "ACTIVE" && (
-                <div className="flex gap-2 pt-1">
-                  <button onClick={() => changeStatus(selected.id, "PAUSED")}
-                    className="flex-1 py-2 border border-amber-300 text-amber-700 rounded-xl text-sm font-semibold hover:bg-amber-50 transition-colors">
-                    ⏸ Pausar
-                  </button>
-                  <button onClick={() => changeStatus(selected.id, "ABANDONED")}
-                    className="flex-1 py-2 border border-rose-300 text-rose-700 rounded-xl text-sm font-semibold hover:bg-rose-50 transition-colors">
+              {selected.status === "ACTIVE" && addingSession !== selected.id && (
+                <div style={{ display: "flex", gap: 8, paddingTop: 10, borderTop: "1px solid var(--border-soft)" }}>
+                  <ButtonNew
+                    variant="secondary"
+                    onClick={() => changeStatus(selected.id, "PAUSED")}
+                    style={{ flex: 1, justifyContent: "center" }}
+                  >
+                    Pausar
+                  </ButtonNew>
+                  <ButtonNew
+                    variant="danger"
+                    onClick={() => changeStatus(selected.id, "ABANDONED")}
+                    style={{ flex: 1, justifyContent: "center" }}
+                  >
                     Marcar abandonado
-                  </button>
+                  </ButtonNew>
                 </div>
               )}
               {selected.status === "PAUSED" && (
-                <button onClick={() => changeStatus(selected.id, "ACTIVE")}
-                  className="w-full py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-sm font-semibold transition-colors">
-                  ▶ Reactivar tratamiento
-                </button>
+                <ButtonNew
+                  variant="primary"
+                  onClick={() => changeStatus(selected.id, "ACTIVE")}
+                  style={{ width: "100%", justifyContent: "center" }}
+                >
+                  Reactivar tratamiento
+                </ButtonNew>
               )}
             </div>
           </div>
@@ -474,81 +599,164 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
 
       {/* ── New plan modal ── */}
       {showNew && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-          style={{ background:"rgba(0,0,0,0.5)" }}
-          onClick={e => { if (e.target === e.currentTarget) setShowNew(false); }}>
-          <div className="bg-card rounded-2xl w-full max-w-lg shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-              <h2 className="text-lg font-bold">Nuevo plan de tratamiento</h2>
-              <button onClick={() => setShowNew(false)} className="p-1.5 rounded-xl hover:bg-muted"><X className="w-5 h-5" /></button>
+        <div className="modal-overlay" onClick={() => setShowNew(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal__header">
+              <div className="modal__title">Nuevo plan de tratamiento</div>
+              <button
+                type="button"
+                onClick={() => setShowNew(false)}
+                className="btn-new btn-new--ghost btn-new--sm"
+                aria-label="Cerrar"
+              >
+                <X size={14} />
+              </button>
             </div>
-            <div className="px-6 py-5 space-y-4">
-              {/* Patient */}
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold">Paciente *</label>
-                <select className="w-full h-11 rounded-xl border border-border px-3 text-base focus:outline-none"
-                  value={form.patientId} onChange={e => setForm(f=>({...f,patientId:e.target.value}))}>
-                  <option value="">Selecciona un paciente</option>
-                  {patients.map(p => <option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>)}
-                </select>
-              </div>
-              {/* Doctor (admin only) */}
-              {isAdmin && (
-                <div className="space-y-1.5">
-                  <label className="text-sm font-semibold">Doctor *</label>
-                  <select className="w-full h-11 rounded-xl border border-border px-3 text-base focus:outline-none"
-                    value={form.doctorId} onChange={e => setForm(f=>({...f,doctorId:e.target.value}))}>
-                    {doctors.map(d => <option key={d.id} value={d.id}>Dr/a. {d.firstName} {d.lastName}</option>)}
-                  </select>
+
+            <div className="modal__body">
+              <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                {/* Información general */}
+                <div>
+                  <div className="form-section__title">
+                    Información general
+                    <span className="form-section__rule" />
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div className="field-new">
+                      <label className="field-new__label">
+                        Paciente <span className="req">*</span>
+                      </label>
+                      <select
+                        className="input-new"
+                        value={form.patientId}
+                        onChange={e => setForm(f => ({ ...f, patientId: e.target.value }))}
+                      >
+                        <option value="">Selecciona un paciente</option>
+                        {patients.map(p => (
+                          <option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {isAdmin && (
+                      <div className="field-new">
+                        <label className="field-new__label">
+                          Doctor <span className="req">*</span>
+                        </label>
+                        <select
+                          className="input-new"
+                          value={form.doctorId}
+                          onChange={e => setForm(f => ({ ...f, doctorId: e.target.value }))}
+                        >
+                          {doctors.map(d => (
+                            <option key={d.id} value={d.id}>Dr/a. {d.firstName} {d.lastName}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    <div className="field-new">
+                      <label className="field-new__label">
+                        Nombre del tratamiento <span className="req">*</span>
+                      </label>
+                      <input
+                        className="input-new"
+                        placeholder="Ej: Ortodoncia 18 meses"
+                        value={form.name}
+                        onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                      />
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                        {COMMON_TREATMENTS.slice(0, 5).map(t => (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => setForm(f => ({ ...f, name: t }))}
+                            className="tag-new"
+                            style={{ cursor: "pointer" }}
+                          >
+                            {t}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="field-new">
+                      <label className="field-new__label">Descripción</label>
+                      <textarea
+                        className="input-new"
+                        placeholder="Notas o detalles del plan (opcional)"
+                        rows={2}
+                        value={form.description}
+                        onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                      />
+                    </div>
+                  </div>
                 </div>
-              )}
-              {/* Name */}
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold">Nombre del tratamiento *</label>
-                <input className="w-full h-11 rounded-xl border border-border px-3 text-base focus:outline-none"
-                  placeholder="Ej: Ortodoncia 18 meses"
-                  value={form.name} onChange={e => setForm(f=>({...f,name:e.target.value}))} />
-                <div className="flex flex-wrap gap-1.5 mt-1">
-                  {COMMON_TREATMENTS.slice(0,5).map(t => (
-                    <button key={t} onClick={() => setForm(f=>({...f,name:t}))}
-                      className="text-xs px-2.5 py-1 bg-muted rounded-full hover:bg-brand-500/15 hover:text-brand-700 transition-colors">
-                      {t}
-                    </button>
-                  ))}
+
+                {/* Plan de sesiones */}
+                <div>
+                  <div className="form-section__title">
+                    Plan de sesiones
+                    <span className="form-section__rule" />
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "12px 14px" }}>
+                    <div className="field-new">
+                      <label className="field-new__label">Total de sesiones</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        className="input-new"
+                        value={form.totalSessions}
+                        onChange={e => setForm(f => ({ ...f, totalSessions: e.target.value }))}
+                      />
+                    </div>
+                    <div className="field-new">
+                      <label className="field-new__label">Días entre sesiones</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="365"
+                        className="input-new"
+                        value={form.sessionIntervalDays}
+                        onChange={e => setForm(f => ({ ...f, sessionIntervalDays: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Costos */}
+                <div>
+                  <div className="form-section__title">
+                    Costo
+                    <span className="form-section__rule" />
+                  </div>
+                  <div className="field-new">
+                    <label className="field-new__label">Costo total del tratamiento (MXN)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      className="input-new"
+                      placeholder="0.00"
+                      value={form.totalCost}
+                      onChange={e => setForm(f => ({ ...f, totalCost: e.target.value }))}
+                    />
+                  </div>
                 </div>
               </div>
-              {/* Sessions + interval */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-semibold">Total de sesiones</label>
-                  <input type="number" min="1" max="100"
-                    className="w-full h-11 rounded-xl border border-border px-3 text-base focus:outline-none"
-                    value={form.totalSessions} onChange={e => setForm(f=>({...f,totalSessions:e.target.value}))} />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-semibold">Días entre sesiones</label>
-                  <input type="number" min="1" max="365"
-                    className="w-full h-11 rounded-xl border border-border px-3 text-base focus:outline-none"
-                    value={form.sessionIntervalDays} onChange={e => setForm(f=>({...f,sessionIntervalDays:e.target.value}))} />
-                </div>
-              </div>
-              {/* Cost */}
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold">Costo total del tratamiento</label>
-                <input type="number" min="0"
-                  className="w-full h-11 rounded-xl border border-border px-3 text-base focus:outline-none"
-                  placeholder="$0.00 MXN" value={form.totalCost} onChange={e => setForm(f=>({...f,totalCost:e.target.value}))} />
-              </div>
-              <div className="flex gap-3">
-                <button onClick={() => setShowNew(false)}
-                  className="flex-1 py-3 border border-border bg-card text-foreground rounded-xl font-semibold text-base transition-colors hover:bg-muted">
-                  Cancelar
-                </button>
-                <button onClick={createPlan} disabled={saving || !form.patientId || !form.name.trim()}
-                  className="flex-1 py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-base transition-colors disabled:opacity-50">
-                  {saving ? "Creando…" : "Crear plan de tratamiento"}
-                </button>
-              </div>
+            </div>
+
+            <div className="modal__footer">
+              <ButtonNew variant="ghost" onClick={() => setShowNew(false)}>
+                Cancelar
+              </ButtonNew>
+              <ButtonNew
+                variant="primary"
+                onClick={createPlan}
+                disabled={saving || !form.patientId || !form.name.trim()}
+              >
+                {saving ? "Creando…" : "Crear plan"}
+              </ButtonNew>
             </div>
           </div>
         </div>
@@ -576,34 +784,82 @@ function InventoryPicker({ clinicItems, selected, loading, onOpen, onAdd, onQtyC
   );
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-semibold text-muted-foreground">📦 Insumos utilizados</span>
-        <button type="button"
+    <div className="field-new">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <label className="field-new__label" style={{ margin: 0 }}>Insumos utilizados</label>
+        <button
+          type="button"
           onClick={() => { setOpen(o => !o); if (!open) onOpen(); }}
-          className="text-xs font-semibold text-brand-600 hover:underline">
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: "#c4b5fd",
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            padding: 0,
+          }}
+        >
           {open ? "Cerrar" : "+ Agregar insumo"}
         </button>
       </div>
 
       {/* Selected items */}
       {selected.length > 0 && (
-        <div className="space-y-1.5 mb-2">
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
           {selected.map(item => (
-            <div key={item.id} className="flex items-center gap-2 bg-muted/30 rounded-xl px-3 py-2">
-              <span className="text-sm font-semibold flex-1">{item.name}</span>
-              <div className="flex items-center gap-1">
-                <button type="button"
+            <div
+              key={item.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                background: "var(--bg-elev-2)",
+                border: "1px solid var(--border-soft)",
+                borderRadius: 10,
+                padding: "8px 10px",
+              }}
+            >
+              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-1)", flex: 1 }}>{item.name}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <button
+                  type="button"
                   onClick={() => item.qty > 1 && onQtyChange(item.id, item.qty - 1)}
-                  className="w-6 h-6 rounded-lg bg-card border border-border flex items-center justify-center text-sm font-bold hover:bg-muted">−</button>
-                <span className="text-sm font-bold w-8 text-center">{item.qty}</span>
-                <button type="button"
+                  style={{
+                    width: 22, height: 22, borderRadius: 6,
+                    background: "var(--bg-elev)", border: "1px solid var(--border-soft)",
+                    color: "var(--text-1)", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                  }}
+                >
+                  −
+                </button>
+                <span className="mono" style={{ fontSize: 12, fontWeight: 600, color: "var(--text-1)", width: 28, textAlign: "center" }}>
+                  {item.qty}
+                </span>
+                <button
+                  type="button"
                   onClick={() => onQtyChange(item.id, item.qty + 1)}
-                  className="w-6 h-6 rounded-lg bg-card border border-border flex items-center justify-center text-sm font-bold hover:bg-muted">+</button>
-                <span className="text-xs text-muted-foreground ml-1">{item.unit}</span>
+                  style={{
+                    width: 22, height: 22, borderRadius: 6,
+                    background: "var(--bg-elev)", border: "1px solid var(--border-soft)",
+                    color: "var(--text-1)", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                  }}
+                >
+                  +
+                </button>
+                <span style={{ fontSize: 10, color: "var(--text-3)", marginLeft: 4 }}>{item.unit}</span>
               </div>
-              <button type="button" onClick={() => onRemove(item.id)}
-                className="text-rose-500 hover:text-rose-700 ml-1 text-sm font-bold">×</button>
+              <button
+                type="button"
+                onClick={() => onRemove(item.id)}
+                style={{
+                  color: "var(--danger)", background: "transparent", border: "none",
+                  marginLeft: 4, fontSize: 14, fontWeight: 700, cursor: "pointer",
+                }}
+                aria-label="Eliminar insumo"
+              >
+                ×
+              </button>
             </div>
           ))}
         </div>
@@ -611,10 +867,10 @@ function InventoryPicker({ clinicItems, selected, loading, onOpen, onAdd, onQtyC
 
       {/* Item picker dropdown */}
       {open && (
-        <div className="border border-border rounded-xl bg-card shadow-lg">
-          <div className="p-2 border-b border-border">
+        <div style={{ background: "var(--bg-elev)", border: "1px solid var(--border-soft)", borderRadius: 10, overflow: "hidden" }}>
+          <div style={{ padding: 8, borderBottom: "1px solid var(--border-soft)" }}>
             <input
-              className="w-full px-3 py-2 text-sm rounded-lg border border-border focus:outline-none bg-card"
+              className="input-new"
               placeholder="Buscar insumo…"
               value={search}
               onChange={e => setSearch(e.target.value)}
@@ -622,26 +878,54 @@ function InventoryPicker({ clinicItems, selected, loading, onOpen, onAdd, onQtyC
             />
           </div>
           {loading ? (
-            <div className="p-3 text-sm text-muted-foreground text-center">Cargando inventario…</div>
+            <div style={{ padding: 12, fontSize: 12, color: "var(--text-3)", textAlign: "center" }}>
+              Cargando inventario…
+            </div>
           ) : filtered.length === 0 ? (
-            <div className="p-3 text-sm text-muted-foreground text-center">Sin insumos{search ? " que coincidan" : " en inventario"}</div>
+            <div style={{ padding: 12, fontSize: 12, color: "var(--text-3)", textAlign: "center" }}>
+              Sin insumos{search ? " que coincidan" : " en inventario"}
+            </div>
           ) : (
-            <div className="max-h-48 overflow-y-auto">
-              {filtered.map(item => (
-                <button key={item.id} type="button"
-                  onClick={() => { onAdd(item); }}
-                  disabled={!!selected.find(s => s.id === item.id)}
-                  className="w-full flex items-center gap-3 px-3 py-2 hover:bg-muted/50 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed">
-                  <span className="text-lg">{item.emoji}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold truncate">{item.name}</div>
-                    <div className="text-xs text-muted-foreground">{item.category} · {item.quantity} {item.unit} disponibles</div>
-                  </div>
-                  {selected.find(s => s.id === item.id) && (
-                    <span className="text-xs text-emerald-600 font-bold flex-shrink-0">✓ Agregado</span>
-                  )}
-                </button>
-              ))}
+            <div style={{ maxHeight: 200, overflowY: "auto" }}>
+              {filtered.map(item => {
+                const isSelected = !!selected.find(s => s.id === item.id);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => { onAdd(item); }}
+                    disabled={isSelected}
+                    style={{
+                      width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      padding: "8px 12px",
+                      background: "transparent",
+                      border: "none",
+                      textAlign: "left",
+                      cursor: isSelected ? "not-allowed" : "pointer",
+                      opacity: isSelected ? 0.45 : 1,
+                      color: "var(--text-1)",
+                    }}
+                    onMouseOver={e => { if (!isSelected) e.currentTarget.style.background = "var(--bg-elev-2)"; }}
+                    onMouseOut={e => { e.currentTarget.style.background = "transparent"; }}
+                  >
+                    <span style={{ fontSize: 16 }}>{item.emoji}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {item.name}
+                      </div>
+                      <div style={{ fontSize: 10, color: "var(--text-3)" }}>
+                        {item.category} · {item.quantity} {item.unit} disponibles
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <span style={{ fontSize: 10, color: "var(--success)", fontWeight: 700, flexShrink: 0 }}>✓ Agregado</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
