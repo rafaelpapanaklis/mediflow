@@ -55,45 +55,40 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Create the plan
-  const plan = await prisma.paymentPlan.create({
-    data: {
-      clinicId:     ctx.clinicId,
-      patientId,
-      invoiceId:    invoiceId ?? null,
-      name,
-      totalAmount,
-      downPayment:  downPayment ?? 0,
-      installments,
-      frequency:    frequency ?? "MONTHLY",
-      startDate:    startDate ? new Date(startDate) : new Date(),
-      notes:        notes ?? null,
-      status:       "ACTIVE",
-    },
-  });
-
-  // Generate installments
   const remaining    = totalAmount - (downPayment ?? 0);
   const baseInstall  = Math.round((remaining / installments) * 100) / 100;
   const freqDays     = frequency === "WEEKLY" ? 7 : frequency === "BIWEEKLY" ? 14 : 30;
   const start        = startDate ? new Date(startDate) : new Date();
 
-  const installmentData = Array.from({ length: installments }, (_, i) => {
-    const dueDate = new Date(start);
-    dueDate.setDate(dueDate.getDate() + freqDays * (i + 1));
-    // Last installment covers the exact residual to avoid rounding drift
-    const amount = i === installments - 1
-      ? Math.round((remaining - baseInstall * (installments - 1)) * 100) / 100
-      : baseInstall;
-    return {
-      planId:      plan.id,
-      installment: i + 1,
-      amount,
-      dueDate,
-    };
-  });
+  const plan = await prisma.$transaction(async (tx) => {
+    const created = await tx.paymentPlan.create({
+      data: {
+        clinicId:     ctx.clinicId,
+        patientId,
+        invoiceId:    invoiceId ?? null,
+        name,
+        totalAmount,
+        downPayment:  downPayment ?? 0,
+        installments,
+        frequency:    frequency ?? "MONTHLY",
+        startDate:    startDate ? new Date(startDate) : new Date(),
+        notes:        notes ?? null,
+        status:       "ACTIVE",
+      },
+    });
 
-  await prisma.planPayment.createMany({ data: installmentData });
+    const installmentData = Array.from({ length: installments }, (_, i) => {
+      const dueDate = new Date(start);
+      dueDate.setDate(dueDate.getDate() + freqDays * (i + 1));
+      const amount = i === installments - 1
+        ? Math.round((remaining - baseInstall * (installments - 1)) * 100) / 100
+        : baseInstall;
+      return { planId: created.id, installment: i + 1, amount, dueDate };
+    });
+
+    await tx.planPayment.createMany({ data: installmentData });
+    return created;
+  });
 
   const result = await prisma.paymentPlan.findUnique({
     where:   { id: plan.id },
