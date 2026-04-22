@@ -15,8 +15,10 @@ async function emailExists(raw: string) {
 }
 
 export async function GET(req: NextRequest) {
+  const limited = rateLimit(req, 10);
+  if (limited) return limited;
   const email = req.nextUrl.searchParams.get("email");
-  if (!email) return NextResponse.json({ exists: false });
+  if (!email) return NextResponse.json({ error: "email required" }, { status: 400 });
   return NextResponse.json({ exists: await emailExists(email) });
 }
 
