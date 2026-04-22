@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
 
     created.push(cat.id);
     } catch (err: any) {
-      console.error(`Seed error for ${cat.id}:`, err);
+      console.error(`Seed error for ${cat.id}:`, err?.message ?? "unknown");
       errors.push(`${cat.id}: ${err.message ?? "Unknown error"}`);
     }
   }
@@ -141,7 +141,7 @@ export async function POST(req: NextRequest) {
     errors,
   });
   } catch (err: any) {
-    console.error("Seed clinics fatal error:", err);
-    return NextResponse.json({ error: err.message ?? "Internal server error", stack: err.stack?.split("\n").slice(0, 5) }, { status: 500 });
+    console.error("Seed clinics fatal error:", err?.message ?? "unknown");
+    return NextResponse.json({ error: err.message ?? "Internal server error" }, { status: 500 });
   }
 }

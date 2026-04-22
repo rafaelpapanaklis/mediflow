@@ -74,7 +74,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       const { error } = await supabase.storage.from("patient-files").remove(batch);
       if (error) {
         storageErrors += batch.length;
-        console.error("[admin/clinics DELETE] storage batch failed:", error);
+        console.error("[admin/clinics DELETE] storage batch failed:", (error as any)?.message ?? "unknown");
       } else {
         storageDeleted += batch.length;
       }
@@ -88,7 +88,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   try {
     await prisma.clinic.delete({ where: { id: clinicId } });
   } catch (err: any) {
-    console.error("[admin/clinics DELETE] prisma delete failed:", err);
+    console.error("[admin/clinics DELETE] prisma delete failed:", err?.message ?? "unknown");
     return NextResponse.json(
       { error: "Error al eliminar la clínica de la base de datos", detail: err?.message },
       { status: 500 },

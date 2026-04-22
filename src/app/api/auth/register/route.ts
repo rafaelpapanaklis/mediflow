@@ -5,6 +5,7 @@ import { z } from "zod";
 import { rateLimit } from "@/lib/rate-limit";
 import { sendWelcomeEmail } from "@/lib/email";
 import { SITE_URL } from "@/lib/seo";
+import { logError } from "@/lib/safe-log";
 
 const CATEGORY_MAP: Record<string, string> = {
   dental: "DENTAL", odontologia: "DENTAL",
@@ -113,11 +114,11 @@ export async function POST(req: NextRequest) {
       clinicName: data.clinicName,
       trialEndsAt,
       dashboardUrl: `${SITE_URL}/dashboard`,
-    }).catch(err => console.error("[register] welcome email failed:", err));
+    }).catch(err => logError("[register] welcome email failed:", err));
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    console.error("Register error:", err);
+    logError("[register]", err);
     return NextResponse.json({ error: err.message ?? "Error interno" }, { status: 500 });
   }
 }
