@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
   if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
 
   const supabase = getAdminSupabase();
-  const ext  = file.name.split(".").pop() ?? "jpg";
+  const ext  = (file.name.split(".").pop() ?? "jpg").replace(/[^a-z0-9]/gi, "").slice(0, 8).toLowerCase() || "jpg";
   const path = `${ctx.clinicId}/${patientId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
 
   const bytes = await file.arrayBuffer();

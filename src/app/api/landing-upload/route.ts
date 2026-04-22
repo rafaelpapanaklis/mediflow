@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Archivo demasiado grande (máx 50MB)" }, { status: 400 });
   }
 
-  const ext  = file.name.split(".").pop() ?? "jpg";
+  const ext  = (file.name.split(".").pop() ?? "jpg").replace(/[^a-z0-9]/gi, "").slice(0, 8).toLowerCase() || "jpg";
   const path = `landing/${ctx.clinicId}/${field}/${Date.now()}.${ext}`;
 
   const supabase = getAdminSupabase();
