@@ -90,10 +90,7 @@ export async function POST(req: NextRequest) {
         where: { id: reminder.appointmentId },
         data:  { status: "CONFIRMED", confirmedAt: new Date() },
       });
-      await prisma.$executeRawUnsafe(
-        `UPDATE whatsapp_reminders SET "patientReply"=$1,"repliedAt"=NOW() WHERE id=$2`,
-        text, reminder.id
-      );
+      await prisma.$executeRaw`UPDATE whatsapp_reminders SET "patientReply"=${text}, "repliedAt"=NOW() WHERE id=${reminder.id}`;
 
       if (clinic.waAccessToken && clinic.waPhoneNumberId) {
         const appt = reminder.appointment;
@@ -109,10 +106,7 @@ export async function POST(req: NextRequest) {
         where: { id: reminder.appointmentId },
         data:  { status: "CANCELLED", cancelledAt: new Date(), cancelReason: "Cancelado por paciente vía WhatsApp" },
       });
-      await prisma.$executeRawUnsafe(
-        `UPDATE whatsapp_reminders SET "patientReply"=$1,"repliedAt"=NOW() WHERE id=$2`,
-        text, reminder.id
-      );
+      await prisma.$executeRaw`UPDATE whatsapp_reminders SET "patientReply"=${text}, "repliedAt"=NOW() WHERE id=${reminder.id}`;
 
       if (clinic.waAccessToken && clinic.waPhoneNumberId) {
         await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, from,
@@ -121,10 +115,7 @@ export async function POST(req: NextRequest) {
       }
     } else {
       // Save reply but don't change appointment status
-      await prisma.$executeRawUnsafe(
-        `UPDATE whatsapp_reminders SET "patientReply"=$1,"repliedAt"=NOW() WHERE id=$2`,
-        text, reminder.id
-      );
+      await prisma.$executeRaw`UPDATE whatsapp_reminders SET "patientReply"=${text}, "repliedAt"=NOW() WHERE id=${reminder.id}`;
     }
 
     return NextResponse.json({ ok: true });
