@@ -95,16 +95,17 @@ export function ClinicalClient({
       return;
     }
 
+    const ctrl = new AbortController();
     setLoading(true);
-    // Load patient records
-    fetch(`/api/clinical?patientId=${currentPatientId}`)
+    fetch(`/api/clinical?patientId=${currentPatientId}`, { signal: ctrl.signal })
       .then(r => r.json())
       .then(data => {
         setRecords(Array.isArray(data) ? data : []);
         setSessionCount((Array.isArray(data) ? data.length : 0) + 1);
       })
-      .catch(() => setRecords([]))
-      .finally(() => setLoading(false));
+      .catch(err => { if (err.name !== "AbortError") setRecords([]); })
+      .finally(() => { if (!ctrl.signal.aborted) setLoading(false); });
+    return () => ctrl.abort();
 
     // Find patient from list
     const patient = patients.find(p => p.id === currentPatientId);

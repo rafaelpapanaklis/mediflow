@@ -59,16 +59,17 @@ export function WalkInClient({ initialQueue }: { initialQueue: QueueItem[] }) {
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
+    const ctrl = new AbortController();
     const interval = setInterval(async () => {
       try {
-        const res = await fetch("/api/walk-in");
+        const res = await fetch("/api/walk-in", { signal: ctrl.signal });
         if (res.ok) {
           const data = await res.json();
-          if (Array.isArray(data)) setQueue(data);
+          if (Array.isArray(data) && !ctrl.signal.aborted) setQueue(data);
         }
       } catch { /* ignore */ }
     }, 30000);
-    return () => clearInterval(interval);
+    return () => { clearInterval(interval); ctrl.abort(); };
   }, []);
 
   async function handleAdd() {

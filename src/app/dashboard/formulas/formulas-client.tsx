@@ -43,12 +43,14 @@ export function FormulasClient({ patients }: { patients: Patient[] }) {
 
   useEffect(() => {
     if (!selectedPatient) { setRecords([]); return; }
+    const ctrl = new AbortController();
     setLoading(true);
-    fetch(`/api/formulas?patientId=${selectedPatient}`)
+    fetch(`/api/formulas?patientId=${selectedPatient}`, { signal: ctrl.signal })
       .then(r => { if (!r.ok) throw new Error("Error"); return r.json(); })
       .then(data => setRecords(Array.isArray(data) ? data : []))
-      .catch(() => toast.error("Error al cargar fórmulas"))
-      .finally(() => setLoading(false));
+      .catch(err => { if (err.name !== "AbortError") toast.error("Error al cargar fórmulas"); })
+      .finally(() => { if (!ctrl.signal.aborted) setLoading(false); });
+    return () => ctrl.abort();
   }, [selectedPatient]);
 
   function renderFormula(formula: Record<string, unknown>) {

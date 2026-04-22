@@ -284,12 +284,13 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
 
   // Refresh appointments when page gains focus (back from another page/tab)
   useEffect(() => {
+    let mounted = true;
     async function refresh() {
       try {
         const res = await fetch("/api/appointments");
-        if (res.ok) {
+        if (res.ok && mounted) {
           const data = await res.json();
-          setAppts(data);
+          if (mounted) setAppts(data);
         }
       } catch { /* silent */ }
     }
@@ -298,6 +299,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
     function onVisible() { if (document.visibilityState === "visible") refresh(); }
     document.addEventListener("visibilitychange", onVisible);
     return () => {
+      mounted = false;
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", onVisible);
     };

@@ -31,12 +31,14 @@ export function BeforeAfterClient({ patients }: { patients: Patient[] }) {
 
   useEffect(() => {
     if (!selectedPatient) { setPhotos([]); return; }
+    const ctrl = new AbortController();
     setLoading(true);
-    fetch(`/api/before-after?patientId=${selectedPatient}`)
+    fetch(`/api/before-after?patientId=${selectedPatient}`, { signal: ctrl.signal })
       .then(r => { if (!r.ok) throw new Error("Error"); return r.json(); })
       .then(data => setPhotos(Array.isArray(data) ? data : []))
-      .catch(() => toast.error("Error al cargar fotos"))
-      .finally(() => setLoading(false));
+      .catch(err => { if (err.name !== "AbortError") toast.error("Error al cargar fotos"); })
+      .finally(() => { if (!ctrl.signal.aborted) setLoading(false); });
+    return () => ctrl.abort();
   }, [selectedPatient]);
 
   async function handleAdd() {
