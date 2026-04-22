@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import * as Select from "@radix-ui/react-select";
+import { Check, ChevronDown } from "lucide-react";
 import { FormField } from "../form-field";
 import { SPECIALTIES, SPECIALTY_SLUGS } from "@/lib/specialty-data";
 
@@ -61,26 +63,106 @@ const CLINIC_SIZES: Array<{ value: string; label: string }> = [
   { value: "16+", label: "16+ doctores · multi-sucursal" },
 ];
 
-const selectStyle: React.CSSProperties = {
-  width: "100%",
-  height: 42,
-  padding: "0 36px 0 14px",
-  borderRadius: 10,
-  background: "#111115",
-  border: "1px solid var(--ld-border)",
-  color: "var(--ld-fg)",
-  fontSize: 14,
-  fontFamily: "inherit",
-  outline: "none",
-  appearance: "none",
-  WebkitAppearance: "none",
-  cursor: "pointer",
-  colorScheme: "dark",
-  backgroundImage:
-    "url(\"data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='rgba(245,245,247,0.5)' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
-  backgroundRepeat: "no-repeat",
-  backgroundPosition: "right 14px center",
-};
+interface ThemedSelectProps {
+  value: string;
+  onValueChange: (v: string) => void;
+  placeholder: string;
+  options: Array<{ value: string; label: string }>;
+  disabled?: boolean;
+}
+
+function ThemedSelect({
+  value,
+  onValueChange,
+  placeholder,
+  options,
+  disabled,
+}: ThemedSelectProps) {
+  const hasValue = !!value;
+  return (
+    <>
+    <Select.Root value={value || undefined} onValueChange={onValueChange} disabled={disabled}>
+      <Select.Trigger
+        style={{
+          width: "100%",
+          height: 42,
+          padding: "0 14px",
+          borderRadius: 10,
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid var(--ld-border)",
+          color: hasValue ? "var(--ld-fg)" : "var(--ld-fg-muted)",
+          fontSize: 14,
+          fontFamily: "inherit",
+          outline: "none",
+          cursor: disabled ? "not-allowed" : "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+          textAlign: "left",
+        }}
+      >
+        <Select.Value placeholder={placeholder} />
+        <Select.Icon asChild>
+          <ChevronDown size={16} style={{ color: "rgba(245,245,247,0.5)", flexShrink: 0 }} />
+        </Select.Icon>
+      </Select.Trigger>
+      <Select.Portal>
+        <Select.Content
+          position="popper"
+          sideOffset={6}
+          style={{
+            background: "#111115",
+            border: "1px solid var(--ld-border)",
+            borderRadius: 10,
+            padding: 4,
+            zIndex: 9999,
+            minWidth: "var(--radix-select-trigger-width)",
+            maxHeight: 320,
+            boxShadow: "0 12px 40px -12px rgba(0,0,0,0.6)",
+          }}
+        >
+          <Select.Viewport style={{ maxHeight: 312, overflowY: "auto" }}>
+            {options.map(opt => (
+              <Select.Item
+                key={opt.value}
+                value={opt.value}
+                className="themed-select-item"
+                style={{
+                  padding: "8px 30px 8px 12px",
+                  borderRadius: 6,
+                  fontSize: 14,
+                  color: "#f5f5f7",
+                  cursor: "pointer",
+                  outline: "none",
+                  userSelect: "none",
+                  position: "relative",
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
+                <Select.ItemText>{opt.label}</Select.ItemText>
+                <Select.ItemIndicator style={{ position: "absolute", right: 10, display: "inline-flex" }}>
+                  <Check size={14} style={{ color: "#a78bfa" }} />
+                </Select.ItemIndicator>
+              </Select.Item>
+            ))}
+          </Select.Viewport>
+        </Select.Content>
+      </Select.Portal>
+    </Select.Root>
+    <style jsx global>{`
+      .themed-select-item[data-highlighted] {
+        background: rgba(124, 58, 237, 0.15);
+        color: #fff;
+      }
+      .themed-select-item[data-state="checked"] {
+        background: rgba(124, 58, 237, 0.08);
+      }
+    `}</style>
+    </>
+  );
+}
 
 export function Step2Clinic({
   values,
@@ -93,6 +175,12 @@ export function Step2Clinic({
   const clinicValid = values.clinicName.trim().length >= 2;
   const canContinue =
     clinicValid && !!values.specialty && !!values.state;
+
+  const specialtyOptions = SPECIALTY_SLUGS.map(slug => ({
+    value: slug,
+    label: SPECIALTIES[slug].name,
+  }));
+  const stateOptions = ESTADOS_MX.map(s => ({ value: s, label: s }));
 
   return (
     <form
@@ -121,43 +209,21 @@ export function Step2Clinic({
         label="Especialidad principal"
         hint="Podrás agregar más especialidades después, en la configuración."
       >
-        <select
+        <ThemedSelect
           value={values.specialty}
-          onChange={e => onChange({ specialty: e.target.value })}
-          style={{
-            ...selectStyle,
-            color: values.specialty ? "var(--ld-fg)" : "var(--ld-fg-muted)",
-          }}
-        >
-          <option value="" disabled>
-            Selecciona una especialidad
-          </option>
-          {SPECIALTY_SLUGS.map(slug => (
-            <option key={slug} value={slug}>
-              {SPECIALTIES[slug].name}
-            </option>
-          ))}
-        </select>
+          onValueChange={v => onChange({ specialty: v })}
+          placeholder="Selecciona una especialidad"
+          options={specialtyOptions}
+        />
       </FormField>
 
       <FormField label="Tamaño de la clínica">
-        <select
+        <ThemedSelect
           value={values.clinicSize}
-          onChange={e => onChange({ clinicSize: e.target.value })}
-          style={{
-            ...selectStyle,
-            color: values.clinicSize ? "var(--ld-fg)" : "var(--ld-fg-muted)",
-          }}
-        >
-          <option value="" disabled>
-            ¿Cuántos doctores atienden?
-          </option>
-          {CLINIC_SIZES.map(size => (
-            <option key={size.value} value={size.value}>
-              {size.label}
-            </option>
-          ))}
-        </select>
+          onValueChange={v => onChange({ clinicSize: v })}
+          placeholder="¿Cuántos doctores atienden?"
+          options={CLINIC_SIZES}
+        />
       </FormField>
 
       <div
@@ -175,23 +241,12 @@ export function Step2Clinic({
           onChange={e => onChange({ city: e.target.value })}
         />
         <FormField label="Estado">
-          <select
+          <ThemedSelect
             value={values.state}
-            onChange={e => onChange({ state: e.target.value })}
-            style={{
-              ...selectStyle,
-              color: values.state ? "var(--ld-fg)" : "var(--ld-fg-muted)",
-            }}
-          >
-            <option value="" disabled>
-              Estado
-            </option>
-            {ESTADOS_MX.map(s => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
+            onValueChange={v => onChange({ state: v })}
+            placeholder="Estado"
+            options={stateOptions}
+          />
         </FormField>
       </div>
 
