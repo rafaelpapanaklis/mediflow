@@ -41,17 +41,18 @@ export async function POST(req: NextRequest) {
   if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
 
   // Get doctor info
-  const doctor = await prisma.user.findUnique({
-    where:  { id: doctorId },
+  const doctor = await prisma.user.findFirst({
+    where:  { id: doctorId, clinicId: ctx.clinicId, isActive: true },
     select: { id: true, firstName: true, lastName: true, email: true,
               googleCalendarToken: true, googleRefreshToken: true,
               googleCalendarEnabled: true, googleCalendarEmail: true,
               stripeAccountId: true, stripeOnboarded: true, teleconsultPrice: true },
   });
+  if (!doctor) return NextResponse.json({ error: "Doctor no encontrado" }, { status: 404 });
 
   // Teleconsultation validations
   if (body.mode === "TELECONSULTATION") {
-    if (!doctor?.stripeAccountId || !doctor?.stripeOnboarded) {
+    if (!doctor.stripeAccountId || !doctor.stripeOnboarded) {
       return NextResponse.json({ error: "El doctor no tiene configurado Stripe para recibir pagos" }, { status: 400 });
     }
     if (!doctor.teleconsultPrice) {
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
       mode:         body.mode || "IN_PERSON",
       ...(body.mode === "TELECONSULTATION" && {
         paymentStatus: "pending",
-        paymentAmount: doctor!.teleconsultPrice,
+        paymentAmount: doctor.teleconsultPrice,
       }),
     },
   });
