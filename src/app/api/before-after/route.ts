@@ -32,6 +32,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "patientId, category, angle, and url are required" }, { status: 400 });
   }
 
+  // Validar que la URL sea HTTPS y apunte al dominio de Supabase Storage de la clínica
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") {
+      return NextResponse.json({ error: "URL debe usar https" }, { status: 400 });
+    }
+    const supabaseHost = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").host;
+    if (supabaseHost && parsed.host !== supabaseHost) {
+      return NextResponse.json({ error: "URL no permitida" }, { status: 400 });
+    }
+  } catch {
+    return NextResponse.json({ error: "URL inválida" }, { status: 400 });
+  }
+
   // Verify patient belongs to clinic
   const patient = await prisma.patient.findFirst({
     where: { id: patientId, clinicId: ctx.clinicId },
