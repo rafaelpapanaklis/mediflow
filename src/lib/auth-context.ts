@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { readActiveClinicCookie, logClinicFallback } from "@/lib/active-clinic";
 
 export interface AuthContext {
   userId:       string;
@@ -31,13 +31,8 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
-    let activeClinicId: string | undefined;
-    try {
-      const cookieStore = cookies();
-      activeClinicId = cookieStore.get("activeClinicId")?.value;
-    } catch { /* cookies() can fail in some contexts */ }
+    const activeClinicId = readActiveClinicCookie();
 
-    // Try active clinic first, then fallback to first clinic
     const dbUser = activeClinicId
       ? await prisma.user.findFirst({
           where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true },
@@ -52,6 +47,10 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     });
 
     if (!finalUser || !finalUser.isActive) return null;
+
+    if (activeClinicId && activeClinicId !== finalUser.clinicId) {
+      logClinicFallback({ supabaseId: user.id, requestedClinicId: activeClinicId, actualClinicId: finalUser.clinicId });
+    }
 
     const isSuperAdmin   = finalUser.role === "SUPER_ADMIN";
     const isAdmin        = finalUser.role === "ADMIN" || isSuperAdmin;

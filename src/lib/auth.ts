@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
+import { readActiveClinicCookie, logClinicFallback } from "@/lib/active-clinic";
 
 export async function getSession() {
   const supabase = createClient();
@@ -17,13 +17,8 @@ export async function requireAuth() {
 
 export async function getCurrentUser() {
   const supabaseUser = await requireAuth();
-  let activeClinicId: string | undefined;
-  try {
-    const cookieStore = cookies();
-    activeClinicId = cookieStore.get("activeClinicId")?.value;
-  } catch { /* cookies() can fail in some contexts */ }
+  const activeClinicId = readActiveClinicCookie();
 
-  // If there's an active clinic cookie, try to find the user in that clinic
   if (activeClinicId) {
     const user = await prisma.user.findFirst({
       where: { supabaseId: supabaseUser.id, clinicId: activeClinicId, isActive: true },
@@ -32,19 +27,20 @@ export async function getCurrentUser() {
     if (user) return user;
   }
 
-  // Fallback: find the first active user record for this supabase account
   const user = await prisma.user.findFirst({
     where: { supabaseId: supabaseUser.id, isActive: true },
     include: { clinic: true },
     orderBy: { createdAt: "asc" },
   });
   if (!user) redirect("/onboarding");
+
+  if (activeClinicId && activeClinicId !== user.clinicId) {
+    logClinicFallback({ supabaseId: supabaseUser.id, requestedClinicId: activeClinicId, actualClinicId: user.clinicId });
+  }
+
   return user;
 }
 
-/**
- * Get all clinics the current supabase user has access to.
- */
 export async function getUserClinics() {
   const supabaseUser = await requireAuth();
   const users = await prisma.user.findMany({
