@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { Logo } from "../../landing/primitives/logo";
 import { SocialButtons } from "../social-buttons";
@@ -103,6 +103,7 @@ export function SignupForm() {
     password: isOAuthFlow ? "oauth-no-password" : "",
   }));
   const [loading, setLoading] = useState(false);
+  const submitLockRef = useRef(false);
 
   // Sync email from query param si cambia
   useEffect(() => {
@@ -118,7 +119,8 @@ export function SignupForm() {
   void effectiveSteps;
 
   async function handleSubmit() {
-    if (loading) return;
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
     setLoading(true);
     try {
       const slug = slugifyClinic(form.clinicName);
@@ -175,6 +177,7 @@ export function SignupForm() {
         toast.error(data.error ?? "Ya existe una cuenta con este correo");
         setTimeout(() => router.push("/login"), 2000);
         setLoading(false);
+        submitLockRef.current = false;
         return;
       }
       if (!res.ok) throw new Error(data.error ?? "Error al crear cuenta");
@@ -200,6 +203,7 @@ export function SignupForm() {
       const msg = err instanceof Error ? err.message : "Error al crear cuenta";
       toast.error(msg);
       setLoading(false);
+      submitLockRef.current = false;
     }
   }
 
