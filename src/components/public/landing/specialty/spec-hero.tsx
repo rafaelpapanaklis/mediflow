@@ -161,7 +161,7 @@ export function SpecHero({ spec }: { spec: Specialty }) {
                 flexWrap: "wrap",
               }}
             >
-              <span>✓ Sin tarjeta</span>
+              <span>✓ Acceso completo</span>
               <span>✓ Migración gratis</span>
               <span>✓ Cancela cuando quieras</span>
             </div>

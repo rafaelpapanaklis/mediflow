@@ -60,7 +60,7 @@ export function SpecFinalCTA({ spec }: { spec: Specialty }) {
             lineHeight: 1.55,
           }}
         >
-          14 días completos de PRO. Sin tarjeta. Migramos tus datos gratis.
+          14 días completos de PRO. Cancela cuando quieras. Migramos tus datos gratis.
         </p>
         <div
           style={{

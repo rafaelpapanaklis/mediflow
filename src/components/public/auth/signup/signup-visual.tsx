@@ -59,7 +59,7 @@ export function SignupVisual() {
             boxShadow: "0 0 10px #34d399",
           }}
         />
-        Prueba gratis · 14 días · Sin tarjeta hoy
+        Prueba gratis · 14 días · Cancela cuando quieras
       </div>
 
       {/* H1 + sub */}

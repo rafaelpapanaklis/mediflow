@@ -118,7 +118,7 @@ export function FinalCTA() {
             letterSpacing: "0.02em",
           }}
         >
-          <span>✓ Sin tarjeta</span>
+          <span>✓ Cancela cuando quieras</span>
           <span>✓ Migración incluida</span>
           <span>✓ Soporte en español</span>
         </div>
