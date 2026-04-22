@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOAuthClient, verifyState, getOrCreateClinicCalendar } from "@/lib/google-calendar";
 import { prisma } from "@/lib/prisma";
+import { createClient } from "@/lib/supabase/server";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -12,10 +13,24 @@ export async function GET(req: NextRequest) {
   if (error || !code || !state) return NextResponse.redirect(`${BASE}&gcal=error`);
 
   try {
-    // Verify state signature (HMAC) instead of session cookie
+    // Verify state signature (HMAC) AND que pertenezca a la sesión actual
     const userId = verifyState(state);
     if (!userId) {
       console.error("Google OAuth: invalid state signature");
+      return NextResponse.redirect(`${BASE}&gcal=error`);
+    }
+    const supabase = createClient();
+    const { data: { user: sessionUser } } = await supabase.auth.getUser();
+    if (!sessionUser) {
+      console.error("Google OAuth: no active session for state");
+      return NextResponse.redirect(`${BASE}&gcal=error`);
+    }
+    const sessionDbUser = await prisma.user.findFirst({
+      where: { supabaseId: sessionUser.id, isActive: true },
+      select: { id: true },
+    });
+    if (!sessionDbUser || sessionDbUser.id !== userId) {
+      console.error("Google OAuth: state userId does not match session");
       return NextResponse.redirect(`${BASE}&gcal=error`);
     }
 
