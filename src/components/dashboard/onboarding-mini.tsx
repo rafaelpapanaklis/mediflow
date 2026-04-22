@@ -14,7 +14,9 @@ export function OnboardingMini({ completed }: Props) {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    if (localStorage.getItem("onboarding-dismissed") === "true") setDismissed(true);
+    try {
+      if (localStorage.getItem("onboarding-dismissed") === "true") setDismissed(true);
+    } catch { /* incógnito puede bloquear */ }
   }, []);
 
   const doneCount = STEPS.filter((s) => completed.includes(s.id)).length;
@@ -26,7 +28,7 @@ export function OnboardingMini({ completed }: Props) {
   function dismiss(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    localStorage.setItem("onboarding-dismissed", "true");
+    try { localStorage.setItem("onboarding-dismissed", "true"); } catch { /* incógnito */ }
     setDismissed(true);
   }
 

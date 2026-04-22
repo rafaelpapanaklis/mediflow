@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Search, Plus, Download, ChevronLeft, ChevronRight, Users } from "lucide-react";
@@ -46,6 +46,8 @@ export function PatientsClient({ patients, total, activeCount, page, totalPages,
   const [search, setSearch]   = useState(initialSearch);
   const [showNew, setShowNew] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout>();
+
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
   function navigate(params: Record<string, string | undefined>) {
     const q = new URLSearchParams();
