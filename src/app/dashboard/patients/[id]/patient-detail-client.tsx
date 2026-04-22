@@ -276,6 +276,7 @@ export function PatientDetailClient({
 
   async function createAppointment(e: React.FormEvent) {
     e.preventDefault();
+    if (savingAppt) return;
     setSavingAppt(true);
     try {
       const res = await fetch("/api/appointments", {
