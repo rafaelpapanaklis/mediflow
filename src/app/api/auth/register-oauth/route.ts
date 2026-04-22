@@ -68,7 +68,23 @@ export async function POST(req: NextRequest) {
       where: { supabaseId: supabaseUser.id, isActive: true },
     });
     if (existing) {
-      return NextResponse.json({ success: true, alreadyRegistered: true });
+      return NextResponse.json(
+        { error: "Ya existe una clínica registrada con esta cuenta. Inicia sesión." },
+        { status: 409 },
+      );
+    }
+
+    // También bloquear si el email ya existe bajo otro supabaseId
+    // (caso: usuario se registró con email+password y ahora intenta OAuth con el mismo correo).
+    // User.email no es @unique en el schema, por eso lo validamos aquí.
+    const existingByEmail = await prisma.user.findFirst({
+      where: { email: { equals: email, mode: "insensitive" }, isActive: true },
+    });
+    if (existingByEmail) {
+      return NextResponse.json(
+        { error: "Ya existe una clínica registrada con esta cuenta. Inicia sesión." },
+        { status: 409 },
+      );
     }
 
     if (data.slug) {

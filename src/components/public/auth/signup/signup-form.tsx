@@ -171,6 +171,12 @@ export function SignupForm() {
         success?: boolean;
         error?: string;
       };
+      if (res.status === 409) {
+        toast.error(data.error ?? "Ya existe una cuenta con este correo");
+        setTimeout(() => router.push("/login"), 2000);
+        setLoading(false);
+        return;
+      }
       if (!res.ok) throw new Error(data.error ?? "Error al crear cuenta");
 
       // Auto-login sólo en flujo email/password (OAuth ya tiene sesión activa)
