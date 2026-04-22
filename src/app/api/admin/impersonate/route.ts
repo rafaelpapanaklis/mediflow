@@ -76,6 +76,24 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Error al generar acceso temporal" }, { status: 500 });
   }
 
+  // Audit trail: AdminClinicNote sirve como bitácora de impersonación (authorId=null
+  // porque el super-admin se autentica con ADMIN_SECRET_TOKEN, no como User).
+  // La TTL del magic link la hereda de Supabase (OTP Expiry en Authentication settings).
+  try {
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+    const ua = req.headers.get("user-agent")?.slice(0, 200) ?? "unknown";
+    await prisma.adminClinicNote.create({
+      data: {
+        clinicId,
+        authorId: null,
+        content: `[IMPERSONATION] super-admin accedió como ${user.email} (${user.firstName} ${user.lastName}) desde IP ${ip} · UA ${ua} · ${new Date().toISOString()}`,
+      },
+    });
+    console.warn("[impersonate]", JSON.stringify({ clinicId, targetUser: user.email, ip, at: new Date().toISOString() }));
+  } catch (logErr) {
+    console.error("[impersonate] audit log failed:", logErr);
+  }
+
   // 7. Build the magic link URL and redirect
   const magicLinkUrl = new URL(`${req.nextUrl.origin}/api/auth/callback`);
   magicLinkUrl.searchParams.set("token_hash", data.properties.hashed_token);
