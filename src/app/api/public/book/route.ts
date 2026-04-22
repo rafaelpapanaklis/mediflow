@@ -91,14 +91,13 @@ export async function POST(req: NextRequest) {
   });
 
   if (!patient) {
-    let attempts = 0;
-    while (!patient && attempts < 3) {
-      attempts++;
-      try {
-        const count = await prisma.patient.count({ where: { clinicId: clinic.id } });
+    try {
+      patient = await prisma.$transaction(async (tx) => {
+        // Serializa creates concurrentes por clínica tomando row-lock del registro de la clínica
+        await tx.$executeRaw`SELECT 1 FROM clinics WHERE id = ${clinic.id} FOR UPDATE`;
+        const count = await tx.patient.count({ where: { clinicId: clinic.id } });
         const patientNumber = `P${String(count + 1).padStart(4, "0")}`;
-
-        patient = await prisma.patient.create({
+        return tx.patient.create({
           data: {
             clinicId:       clinic.id,
             patientNumber,
@@ -109,10 +108,9 @@ export async function POST(req: NextRequest) {
             primaryDoctorId:doctorId,
           },
         });
-      } catch (err: any) {
-        if (err.code === "P2002" && attempts < 3) continue;
-        throw err;
-      }
+      });
+    } catch (err) {
+      console.error("[public/book] patient create failed:", err);
     }
   }
 
