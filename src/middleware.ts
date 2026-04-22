@@ -16,8 +16,31 @@ const RESERVED_PATHS = new Set([
   "teleconsulta","pago",
 ]);
 
+const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+function csrfOriginMismatch(request: NextRequest): boolean {
+  if (!UNSAFE_METHODS.has(request.method)) return false;
+  const origin = request.headers.get("origin");
+  const referer = request.headers.get("referer");
+  const host = request.headers.get("host");
+  if (!host) return true;
+  const sourceHost = (() => {
+    try { return origin ? new URL(origin).host : referer ? new URL(referer).host : null; }
+    catch { return null; }
+  })();
+  if (!sourceHost) return true;
+  return sourceHost !== host;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // CSRF check para mutaciones en /api/admin/* (session-cookie auth)
+  if (pathname.startsWith("/api/admin") && UNSAFE_METHODS.has(request.method)) {
+    if (csrfOriginMismatch(request)) {
+      return NextResponse.json({ error: "CSRF: origin mismatch" }, { status: 403 });
+    }
+  }
 
   if (pathname.startsWith("/admin") && pathname !== "/admin/login") {
     try {
@@ -44,5 +67,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/admin/:path*"],
+  matcher: ["/dashboard/:path*", "/admin/:path*", "/api/admin/:path*"],
 };
