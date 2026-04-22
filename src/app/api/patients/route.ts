@@ -6,7 +6,6 @@ import { revalidatePath } from "next/cache";
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  console.log("[api/patients GET] ctx.clinicId =", ctx.clinicId);
 
   const { searchParams } = new URL(req.url);
   const search = searchParams.get("search");

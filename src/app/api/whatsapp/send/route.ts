@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { readActiveClinicCookie } from "@/lib/active-clinic";
 
 async function getClinicId() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
-  const cookieStore = cookies();
-  const activeClinicId = cookieStore.get("activeClinicId")?.value;
-  console.log("[api/whatsapp/send] rawCookie=", activeClinicId?.slice(0, 30), "hasDot=", activeClinicId?.includes("."));
+  const activeClinicId = readActiveClinicCookie();
   if (activeClinicId) {
     const u = await prisma.user.findFirst({ where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true } });
     if (u) return u.clinicId;

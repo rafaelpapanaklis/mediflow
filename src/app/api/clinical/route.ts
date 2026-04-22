@@ -1,24 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { readActiveClinicCookie } from "@/lib/active-clinic";
 
 async function getDbUser() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
-  const cookieStore = cookies();
-  const activeClinicId = cookieStore.get("activeClinicId")?.value;
-  console.log("[api/clinical getDbUser]", JSON.stringify({ rawCookie: activeClinicId?.slice(0, 30), hasDot: activeClinicId?.includes(".") }));
+  const activeClinicId = readActiveClinicCookie();
   if (activeClinicId) {
     const u = await prisma.user.findFirst({ where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true }, include: { clinic: true } });
-    if (u) { console.log("[api/clinical] matched user clinicId=", u.clinicId); return u; }
-    console.warn("[api/clinical] NO MATCH for activeClinicId — falling back");
+    if (u) return u;
   }
-  const fb = await prisma.user.findFirst({ where: { supabaseId: user.id, isActive: true }, include: { clinic: true }, orderBy: { createdAt: "asc" } });
-  console.warn("[api/clinical] FALLBACK clinicId=", fb?.clinicId);
-  return fb;
+  return prisma.user.findFirst({ where: { supabaseId: user.id, isActive: true }, include: { clinic: true }, orderBy: { createdAt: "asc" } });
 }
 
 export async function GET(req: NextRequest) {
