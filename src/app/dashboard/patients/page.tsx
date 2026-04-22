@@ -11,6 +11,7 @@ export default async function PatientsPage({
   searchParams: { search?: string; page?: string; status?: string };
 }) {
   const user   = await getCurrentUser();
+  console.log("[patients/page]", JSON.stringify({ userId: user.id, clinicId: user.clinicId, clinicName: (user.clinic as any)?.name }));
   const search = searchParams.search?.trim() ?? "";
   const page   = Math.max(1, parseInt(searchParams.page ?? "1"));
   const skip   = (page - 1) * PAGE_SIZE;

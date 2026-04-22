@@ -10,11 +10,15 @@ async function getDbUser() {
   if (!user) return null;
   const cookieStore = cookies();
   const activeClinicId = cookieStore.get("activeClinicId")?.value;
+  console.log("[api/clinical getDbUser]", JSON.stringify({ rawCookie: activeClinicId?.slice(0, 30), hasDot: activeClinicId?.includes(".") }));
   if (activeClinicId) {
     const u = await prisma.user.findFirst({ where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true }, include: { clinic: true } });
-    if (u) return u;
+    if (u) { console.log("[api/clinical] matched user clinicId=", u.clinicId); return u; }
+    console.warn("[api/clinical] NO MATCH for activeClinicId — falling back");
   }
-  return prisma.user.findFirst({ where: { supabaseId: user.id, isActive: true }, include: { clinic: true }, orderBy: { createdAt: "asc" } });
+  const fb = await prisma.user.findFirst({ where: { supabaseId: user.id, isActive: true }, include: { clinic: true }, orderBy: { createdAt: "asc" } });
+  console.warn("[api/clinical] FALLBACK clinicId=", fb?.clinicId);
+  return fb;
 }
 
 export async function GET(req: NextRequest) {

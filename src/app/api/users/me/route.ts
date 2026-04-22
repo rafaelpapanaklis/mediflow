@@ -9,6 +9,7 @@ async function getDbUser() {
   if (!user) return null;
   const cookieStore = cookies();
   const activeClinicId = cookieStore.get("activeClinicId")?.value;
+  console.log("[api/users/me] rawCookie=", activeClinicId?.slice(0, 30), "hasDot=", activeClinicId?.includes("."));
   if (activeClinicId) {
     const u = await prisma.user.findFirst({ where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true } });
     if (u) return u;

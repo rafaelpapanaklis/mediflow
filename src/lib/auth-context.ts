@@ -32,6 +32,7 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     if (!user) return null;
 
     const activeClinicId = readActiveClinicCookie();
+    const rawCookie = (() => { try { return require("next/headers").cookies().get("activeClinicId")?.value ?? null; } catch { return null; } })();
 
     const dbUser = activeClinicId
       ? await prisma.user.findFirst({
@@ -47,6 +48,16 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     });
 
     if (!finalUser || !finalUser.isActive) return null;
+
+    const fallbackUsed = !dbUser;
+    console.log("[getAuthContext]", JSON.stringify({
+      supabaseId: user.id,
+      rawCookie: rawCookie ? rawCookie.slice(0, 20) + "..." : null,
+      parsedClinicId: activeClinicId,
+      finalClinicId: finalUser.clinicId,
+      fallbackUsed,
+      fallbackReason: fallbackUsed ? (rawCookie ? (activeClinicId ? "User-not-found-for-signed-clinicId" : "HMAC-invalid-or-unsigned") : "cookie-missing") : null,
+    }));
 
     if (activeClinicId && activeClinicId !== finalUser.clinicId) {
       logClinicFallback({ supabaseId: user.id, requestedClinicId: activeClinicId, actualClinicId: finalUser.clinicId });
