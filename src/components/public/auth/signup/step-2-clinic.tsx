@@ -122,7 +122,7 @@ function ThemedSelect({
             boxShadow: "0 12px 40px -12px rgba(0,0,0,0.6)",
           }}
         >
-          <Select.Viewport style={{ maxHeight: 312, overflowY: "auto" }}>
+          <Select.Viewport className="themed-select-viewport" style={{ maxHeight: 312, overflowY: "auto" }}>
             {options.map(opt => (
               <Select.Item
                 key={opt.value}
@@ -158,6 +158,26 @@ function ThemedSelect({
       }
       .themed-select-item[data-state="checked"] {
         background: rgba(124, 58, 237, 0.08);
+      }
+      .themed-select-viewport {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(124, 58, 237, 0.4) rgba(255, 255, 255, 0.04);
+      }
+      .themed-select-viewport::-webkit-scrollbar {
+        width: 10px;
+      }
+      .themed-select-viewport::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.04);
+        border-radius: 10px;
+        margin: 4px 0;
+      }
+      .themed-select-viewport::-webkit-scrollbar-thumb {
+        background: rgba(124, 58, 237, 0.45);
+        border-radius: 10px;
+        border: 2px solid #111115;
+      }
+      .themed-select-viewport::-webkit-scrollbar-thumb:hover {
+        background: rgba(124, 58, 237, 0.7);
       }
     `}</style>
     </>
