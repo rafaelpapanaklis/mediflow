@@ -46,7 +46,14 @@ export async function middleware(request: NextRequest) {
     try {
       const token = request.cookies.get("admin_token")?.value;
       const secret = process.env.ADMIN_SECRET_TOKEN;
-      if (!token || !secret || token !== secret) {
+      const ok = !!token && !!secret && token.length === secret.length &&
+        // timing-safe via simple XOR loop (middleware Edge runtime sin crypto.timingSafeEqual garantizado)
+        (() => {
+          let diff = 0;
+          for (let i = 0; i < token.length; i++) diff |= token.charCodeAt(i) ^ secret.charCodeAt(i);
+          return diff === 0;
+        })();
+      if (!ok) {
         const url = request.nextUrl.clone();
         url.pathname = "/admin/login";
         return NextResponse.redirect(url);

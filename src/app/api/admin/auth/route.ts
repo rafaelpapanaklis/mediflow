@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createHmac } from "crypto";
+import { createHmac, timingSafeEqual } from "crypto";
 import { rateLimit } from "@/lib/rate-limit";
+
+function safeEqual(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return timingSafeEqual(aBuf, bBuf);
+}
 
 /**
  * Minimal TOTP verification without otplib (avoids Edge/serverless compatibility issues).
@@ -60,7 +67,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (step === "password") {
-      if (password !== adminPassword) {
+      if (!safeEqual(String(password ?? ""), adminPassword)) {
         await new Promise(r => setTimeout(r, 1000));
         return NextResponse.json({ error: "Contraseña incorrecta" }, { status: 401 });
       }
@@ -68,7 +75,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (step === "totp") {
-      if (password !== adminPassword) return NextResponse.json({ error: "Sesión inválida" }, { status: 401 });
+      if (!safeEqual(String(password ?? ""), adminPassword)) return NextResponse.json({ error: "Sesión inválida" }, { status: 401 });
 
       const isValid = verifyTOTP(totp, adminTotp);
 
