@@ -54,7 +54,7 @@ function verifyTOTP(token: string, secret: string): boolean {
 
 export async function POST(req: NextRequest) {
   try {
-    const rl = rateLimit(req, 5);
+    const rl = rateLimit(req, 3, 15 * 60 * 1000);
     if (rl) return rl;
 
     const { step, password, totp } = await req.json();
