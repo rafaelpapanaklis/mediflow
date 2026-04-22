@@ -148,8 +148,22 @@ async function renderPaymentsPage() {
     [] as any[],
   );
 
-  const thisMonth = thisMonthRev._sum.amount ?? 0;
-  const prevMonth = prevMonthRev._sum.amount ?? 0;
+  // Prisma tipa `_sum` como `... | null` (puede venir null si 0 filas matchean
+  // el where); usamos optional chaining para no explotar con "cannot read
+  // properties of null". Number() fuerza a primitivo JS por si algún Float
+  // llegara como Decimal del driver.
+  const thisMonth = Number(thisMonthRev?._sum?.amount ?? 0);
+  const prevMonth = Number(prevMonthRev?._sum?.amount ?? 0);
+  const currentMRR = Number(mrrResult?._sum?.monthlyPrice ?? 0);
+  const thisMonthPayments = Number(thisMonthRev?._count ?? 0);
+
+  // Sanitizamos los arrays a plain objects antes de pasarlos al client
+  // component. Evita que cualquier Decimal/class-instance/valor no serializable
+  // reviente el Flight boundary (error no atrapable por el try/catch de arriba
+  // porque ocurre durante el render de React, después del return).
+  const serialized = JSON.parse(JSON.stringify({
+    recentPayments, pendingTransfers, overdueClinics, clinics,
+  }));
 
   return (
     <PaymentsClient
@@ -158,19 +172,19 @@ async function renderPaymentsPage() {
         activeClinics,
         trialClinics,
         expiredClinics,
-        currentMRR: mrrResult._sum.monthlyPrice ?? 0,
+        currentMRR,
         thisMonthRevenue: thisMonth,
-        thisMonthPayments: thisMonthRev._count ?? 0,
+        thisMonthPayments,
         prevMonthRevenue: prevMonth,
         revenueChange:
           prevMonth > 0
             ? Math.round(((thisMonth - prevMonth) / prevMonth) * 100)
             : 0,
       }}
-      recentPayments={recentPayments as any}
-      pendingTransfers={pendingTransfers as any}
-      overdueClinics={overdueClinics as any}
-      clinics={clinics as any}
+      recentPayments={serialized.recentPayments}
+      pendingTransfers={serialized.pendingTransfers}
+      overdueClinics={serialized.overdueClinics}
+      clinics={serialized.clinics}
     />
   );
 }
