@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import * as Select from "@radix-ui/react-select";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { FormField } from "../form-field";
 import { SPECIALTIES, SPECIALTY_SLUGS } from "@/lib/specialty-data";
 
@@ -119,10 +119,25 @@ function ThemedSelect({
             zIndex: 9999,
             minWidth: "var(--radix-select-trigger-width)",
             maxHeight: 320,
+            overflow: "hidden",
             boxShadow: "0 12px 40px -12px rgba(0,0,0,0.6)",
           }}
         >
-          <Select.Viewport className="themed-select-viewport" style={{ maxHeight: 312, overflowY: "auto" }}>
+          <Select.ScrollUpButton
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              height: 24,
+              background: "linear-gradient(180deg, #111115 0%, rgba(17,17,21,0.9) 100%)",
+              color: "rgba(245,245,247,0.6)",
+              fontSize: 10,
+              cursor: "default",
+            }}
+          >
+            <ChevronUp size={14} />
+          </Select.ScrollUpButton>
+          <Select.Viewport className="themed-select-viewport">
             {options.map(opt => (
               <Select.Item
                 key={opt.value}
@@ -148,6 +163,20 @@ function ThemedSelect({
               </Select.Item>
             ))}
           </Select.Viewport>
+          <Select.ScrollDownButton
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              height: 24,
+              background: "linear-gradient(0deg, #111115 0%, rgba(17,17,21,0.9) 100%)",
+              color: "rgba(245,245,247,0.6)",
+              fontSize: 10,
+              cursor: "default",
+            }}
+          >
+            <ChevronDown size={14} />
+          </Select.ScrollDownButton>
         </Select.Content>
       </Select.Portal>
     </Select.Root>
