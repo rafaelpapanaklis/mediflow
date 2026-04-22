@@ -61,12 +61,17 @@ const CLINIC_SIZES: Array<{ value: string; label: string }> = [
   { value: "16+", label: "16+ doctores · multi-sucursal" },
 ];
 
+const optionStyle: React.CSSProperties = {
+  background: "#1a1a1f",
+  color: "#f5f5f7",
+};
+
 const selectStyle: React.CSSProperties = {
   width: "100%",
   height: 42,
   padding: "0 36px 0 14px",
   borderRadius: 10,
-  background: "rgba(255,255,255,0.03)",
+  background: "#111115",
   border: "1px solid var(--ld-border)",
   color: "var(--ld-fg)",
   fontSize: 14,
@@ -128,11 +133,11 @@ export function Step2Clinic({
             color: values.specialty ? "var(--ld-fg)" : "var(--ld-fg-muted)",
           }}
         >
-          <option value="" disabled>
+          <option value="" disabled style={optionStyle}>
             Selecciona una especialidad
           </option>
           {SPECIALTY_SLUGS.map(slug => (
-            <option key={slug} value={slug}>
+            <option key={slug} value={slug} style={optionStyle}>
               {SPECIALTIES[slug].name}
             </option>
           ))}
@@ -148,11 +153,11 @@ export function Step2Clinic({
             color: values.clinicSize ? "var(--ld-fg)" : "var(--ld-fg-muted)",
           }}
         >
-          <option value="" disabled>
+          <option value="" disabled style={optionStyle}>
             ¿Cuántos doctores atienden?
           </option>
           {CLINIC_SIZES.map(size => (
-            <option key={size.value} value={size.value}>
+            <option key={size.value} value={size.value} style={optionStyle}>
               {size.label}
             </option>
           ))}
@@ -182,11 +187,11 @@ export function Step2Clinic({
               color: values.state ? "var(--ld-fg)" : "var(--ld-fg-muted)",
             }}
           >
-            <option value="" disabled>
+            <option value="" disabled style={optionStyle}>
               Estado
             </option>
             {ESTADOS_MX.map(s => (
-              <option key={s} value={s}>
+              <option key={s} value={s} style={optionStyle}>
                 {s}
               </option>
             ))}
