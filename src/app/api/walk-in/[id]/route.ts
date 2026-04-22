@@ -34,7 +34,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   });
   if (!entry) return NextResponse.json({ error: "Queue entry not found" }, { status: 404 });
 
-  await prisma.walkInQueue.delete({ where: { id: params.id } });
+  await prisma.walkInQueue.deleteMany({ where: { id: params.id, clinicId: ctx.clinicId } });
 
   return NextResponse.json({ success: true });
 }

@@ -35,7 +35,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   });
   if (!booking) return NextResponse.json({ error: "Booking not found" }, { status: 404 });
 
-  await prisma.resourceBooking.delete({ where: { id: params.id } });
+  await prisma.resourceBooking.deleteMany({ where: { id: params.id, clinicId: ctx.clinicId } });
 
   return NextResponse.json({ success: true });
 }

@@ -53,6 +53,6 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   });
   if (!plan) return NextResponse.json({ error: "Plan no encontrado" }, { status: 404 });
 
-  await prisma.paymentPlan.update({ where: { id: params.id }, data: { status: "CANCELLED" } });
+  await prisma.paymentPlan.updateMany({ where: { id: params.id, clinicId: ctx.clinicId }, data: { status: "CANCELLED" } });
   return NextResponse.json({ success: true });
 }

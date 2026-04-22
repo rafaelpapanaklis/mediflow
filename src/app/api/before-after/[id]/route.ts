@@ -13,7 +13,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     return NextResponse.json({ error: "Photo not found" }, { status: 404 });
   }
 
-  await prisma.beforeAfterPhoto.delete({ where: { id: params.id } });
+  await prisma.beforeAfterPhoto.deleteMany({ where: { id: params.id, clinicId: ctx.clinicId } });
 
   return NextResponse.json({ success: true });
 }

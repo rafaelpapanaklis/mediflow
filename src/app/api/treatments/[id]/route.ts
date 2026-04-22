@@ -87,7 +87,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!["ACTIVE","COMPLETED","ABANDONED","PAUSED"].includes(body.status)) {
       return NextResponse.json({ error: "Estado inválido" }, { status: 400 });
     }
-    await prisma.treatmentPlan.update({ where: { id: params.id }, data: { status: body.status } });
+    await prisma.treatmentPlan.updateMany({ where: { id: params.id, clinicId: ctx.clinicId }, data: { status: body.status } });
     return NextResponse.json({ success: true });
   }
 
@@ -99,7 +99,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (body.totalSessions       !== undefined) data.totalSessions       = Number(body.totalSessions);
   if (body.sessionIntervalDays !== undefined) data.sessionIntervalDays = Number(body.sessionIntervalDays);
 
-  await prisma.treatmentPlan.update({ where: { id: params.id }, data });
+  await prisma.treatmentPlan.updateMany({ where: { id: params.id, clinicId: ctx.clinicId }, data });
   return NextResponse.json({ success: true });
 }
 
@@ -111,6 +111,6 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   if (ctx.isDoctor && plan.doctorId !== ctx.userId) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }
-  await prisma.treatmentPlan.delete({ where: { id: params.id } });
+  await prisma.treatmentPlan.deleteMany({ where: { id: params.id, clinicId: ctx.clinicId } });
   return NextResponse.json({ success: true });
 }

@@ -94,6 +94,6 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     console.error("Storage delete error (non-fatal):", e);
   }
 
-  await prisma.patientFile.delete({ where: { id: params.id } });
+  await prisma.patientFile.deleteMany({ where: { id: params.id, clinicId: ctx.clinicId } });
   return NextResponse.json({ success: true });
 }

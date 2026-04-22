@@ -97,14 +97,14 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
 
   // If doctor has appointments/records, deactivate instead of delete
   if (member._count.appointments > 0 || member._count.records > 0) {
-    await prisma.user.update({ where: { id: params.id }, data: { isActive: false } });
+    await prisma.user.updateMany({ where: { id: params.id, clinicId: ctx!.clinicId }, data: { isActive: false } });
     return NextResponse.json({ deactivated: true, message: "Doctor desactivado (tiene registros históricos)" });
   }
 
   // No records — safe to delete
   const supabaseAdmin = getAdminClient();
   await supabaseAdmin.auth.admin.deleteUser(member.supabaseId);
-  await prisma.user.delete({ where: { id: params.id } });
+  await prisma.user.deleteMany({ where: { id: params.id, clinicId: ctx!.clinicId } });
 
   return NextResponse.json({ deleted: true });
 }

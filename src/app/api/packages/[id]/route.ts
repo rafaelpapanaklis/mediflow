@@ -48,7 +48,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     );
   }
 
-  await prisma.servicePackage.delete({ where: { id: params.id } });
+  await prisma.servicePackage.deleteMany({ where: { id: params.id, clinicId: ctx.clinicId } });
 
   return NextResponse.json({ success: true });
 }

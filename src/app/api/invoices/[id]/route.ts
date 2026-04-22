@@ -41,7 +41,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const newStatus = newBalance <= 0 ? "PAID" : "PARTIAL";
   await prisma.$transaction([
     prisma.payment.create({ data: { invoiceId: params.id, amount, method, reference, notes } }),
-    prisma.invoice.update({ where: { id: params.id }, data: { paid: newPaid, balance: Math.max(0, newBalance), status: newStatus as any, paidAt: newStatus === "PAID" ? new Date() : undefined, paymentMethod: method } }),
+    prisma.invoice.updateMany({ where: { id: params.id, clinicId }, data: { paid: newPaid, balance: Math.max(0, newBalance), status: newStatus as any, paidAt: newStatus === "PAID" ? new Date() : undefined, paymentMethod: method } }),
   ]);
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/billing");
@@ -75,7 +75,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     updateData.balance = total - invoice.paid;
   }
 
-  const updated = await prisma.invoice.update({ where: { id: params.id }, data: updateData });
+  await prisma.invoice.updateMany({ where: { id: params.id, clinicId }, data: updateData });
+  const updated = await prisma.invoice.findFirst({ where: { id: params.id, clinicId } });
   revalidatePath("/dashboard/billing");
   return NextResponse.json(updated);
 }
@@ -87,7 +88,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   if (!invoice) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (invoice.status !== "DRAFT" && invoice.paid === 0) {
     // Non-draft without payments — mark cancelled instead of delete
-    await prisma.invoice.update({ where: { id: params.id }, data: { status: "CANCELLED" } });
+    await prisma.invoice.updateMany({ where: { id: params.id, clinicId }, data: { status: "CANCELLED" } });
     revalidatePath("/dashboard/billing");
     return NextResponse.json({ success: true, cancelled: true });
   }
@@ -95,7 +96,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     return NextResponse.json({ error: "No se puede eliminar una factura con pagos registrados" }, { status: 400 });
   }
   // Only drafts can be hard-deleted
-  await prisma.invoice.delete({ where: { id: params.id } });
+  await prisma.invoice.deleteMany({ where: { id: params.id, clinicId } });
   revalidatePath("/dashboard/billing");
   return NextResponse.json({ success: true });
 }
