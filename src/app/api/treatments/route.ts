@@ -10,12 +10,13 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const patientId = searchParams.get("patientId");
   const status    = searchParams.get("status"); // ACTIVE | COMPLETED | ABANDONED | PAUSED
+  const limit = Math.min(Math.max(parseInt(searchParams.get("limit") ?? "200"), 1), 500);
+  const skip  = Math.max(parseInt(searchParams.get("skip") ?? "0"), 0);
 
   const treatments = await prisma.treatmentPlan.findMany({
     where: {
       clinicId:  ctx.clinicId,
       ...(patientId ? { patientId } : {}),
-      // Doctors only see their own plans
       ...(ctx.isDoctor ? { doctorId: ctx.userId } : {}),
       ...(status ? { status: status as any } : {}),
     },
@@ -25,6 +26,8 @@ export async function GET(req: NextRequest) {
       sessions: { orderBy: { sessionNumber: "asc" } },
     },
     orderBy: { createdAt: "desc" },
+    take: limit,
+    skip,
   });
 
   return NextResponse.json(treatments.map(t => ({

@@ -10,6 +10,8 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const search = searchParams.get("search");
   const status = searchParams.get("status");
+  const limit = Math.min(Math.max(parseInt(searchParams.get("limit") ?? "100"), 1), 500);
+  const skip  = Math.max(parseInt(searchParams.get("skip") ?? "0"), 0);
 
   const patients = await prisma.patient.findMany({
     where: buildPatientWhere(ctx, {
@@ -30,7 +32,8 @@ export async function GET(req: NextRequest) {
       _count: { select: { appointments: true } },
     },
     orderBy: { createdAt: "desc" },
-    take: 100,
+    take: limit,
+    skip,
   });
 
   return NextResponse.json(patients);

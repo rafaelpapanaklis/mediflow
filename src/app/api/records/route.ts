@@ -34,12 +34,16 @@ export async function GET(req: NextRequest) {
   if (!dbUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { searchParams } = new URL(req.url);
   const patientId = searchParams.get("patientId");
+  const limit = Math.min(Math.max(parseInt(searchParams.get("limit") ?? "200"), 1), 500);
+  const skip  = Math.max(parseInt(searchParams.get("skip") ?? "0"), 0);
   const where: any = { clinicId: dbUser.clinicId };
   if (patientId) where.patientId = patientId;
   const records = await prisma.medicalRecord.findMany({
     where: { ...where, OR: [{ isPrivate: false }, { isPrivate: true, doctorId: dbUser.id }] },
     include: { doctor: { select: { id: true, firstName: true, lastName: true } } },
     orderBy: { visitDate: "desc" },
+    take: limit,
+    skip,
   });
   return NextResponse.json(records);
 }
