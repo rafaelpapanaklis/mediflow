@@ -27,7 +27,7 @@ const schema = z.object({
   phone: z.string().optional(), plan: z.enum(["BASIC","PRO","CLINIC"]).default("PRO"),
   slug: z.string().optional(),
   paymentMethod: z
-    .enum(["stripe", "transfer", "card", "paypal"])
+    .enum(["stripe", "transfer", "card", "paypal", "none"])
     .default("transfer"),
   paymentMethodLast4: z.string().regex(/^\d{4}$/).optional(), // solo para card
   billing: z.enum(["monthly", "annual"]).default("monthly"),
@@ -80,12 +80,13 @@ export async function POST(req: NextRequest) {
     const paymentMethodType =
       data.paymentMethod === "card" || data.paymentMethod === "stripe"
         ? "card"
-        : data.paymentMethod; // "paypal" | "transfer"
+        : data.paymentMethod; // "paypal" | "transfer" | "none"
 
     const paymentMethodCollected =
       paymentMethodType === "card"
         ? !!data.paymentMethodLast4
         : paymentMethodType === "paypal" || paymentMethodType === "transfer";
+    // "none" cae al else implícito → false (correcto, no hay método capturado)
 
     await prisma.clinic.create({
       data: {

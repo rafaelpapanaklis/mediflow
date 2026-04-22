@@ -19,7 +19,7 @@ export interface CardDetails {
 export interface Step3Values {
   plan: PlanId;
   billing: Billing;
-  payMethod: "card" | "paypal";
+  payMethod: "card" | "paypal" | "none";
   card: CardDetails;
   acceptedTerms: boolean;
   acceptedCharge: boolean;
@@ -213,12 +213,13 @@ export function Step3PlanPayment({
     );
   }, [values.card, values.payMethod, brand]);
 
+  const needsCharge = values.payMethod !== "none";
   const canSubmit =
     !!values.plan &&
     !!values.payMethod &&
     cardValid &&
     values.acceptedTerms &&
-    values.acceptedCharge &&
+    (!needsCharge || values.acceptedCharge) &&
     !loading;
 
   const setCard = (patch: Partial<CardDetails>) =>
@@ -268,13 +269,17 @@ export function Step3PlanPayment({
               kicker="Método de pago"
               title="¿Cómo quieres pagar después de los 14 días?"
               subtitle={
-                <>
-                  <span style={{ color: "#34d399", fontWeight: 500 }}>
-                    No se te cobrará nada hoy.
-                  </span>{" "}
-                  Tu método de pago se guarda de forma segura y sólo se usa
-                  cuando termina tu prueba — y sólo si no cancelas.
-                </>
+                values.payMethod === "none" ? (
+                  <>Elige cuándo quieres agregar tu método de pago.</>
+                ) : (
+                  <>
+                    <span style={{ color: "#34d399", fontWeight: 500 }}>
+                      No se te cobrará nada hoy.
+                    </span>{" "}
+                    Tu método de pago se guarda de forma segura y sólo se usa
+                    cuando termina tu prueba — y sólo si no cancelas.
+                  </>
+                )
               }
             />
 
@@ -439,6 +444,52 @@ export function Step3PlanPayment({
                   </div>
                 </div>
               </PaymentMethodCard>
+
+              <PaymentMethodCard
+                method="none"
+                selected={values.payMethod === "none"}
+                onSelect={() => onChange({ payMethod: "none" })}
+              >
+                <div
+                  style={{
+                    paddingTop: 12,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 13,
+                      color: "var(--ld-fg-muted)",
+                      lineHeight: 1.55,
+                    }}
+                  >
+                    No se te pedirá tarjeta ni PayPal ahora. Al terminar tus
+                    14 días gratis, te llegará un email para agregar método de
+                    pago y continuar. Puedes cancelar en cualquier momento sin
+                    cargo.
+                  </div>
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      alignSelf: "flex-start",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "7px 12px",
+                      borderRadius: 100,
+                      background: "rgba(52,211,153,0.1)",
+                      border: "1px solid rgba(52,211,153,0.3)",
+                      fontSize: 12,
+                      color: "#34d399",
+                      fontWeight: 500,
+                    }}
+                  >
+                    <span aria-hidden="true">🎁</span>
+                    14 días gratis · sin compromiso
+                  </div>
+                </div>
+              </PaymentMethodCard>
             </div>
 
             {/* Trust badges */}
@@ -506,13 +557,15 @@ export function Step3PlanPayment({
               </Link>{" "}
               de MediFlow.
             </Checkbox>
-            <Checkbox
-              checked={values.acceptedCharge}
-              onChange={v => onChange({ acceptedCharge: v })}
-            >
-              Autorizo a MediFlow a cobrar mi método de pago al terminar los 14
-              días si no cancelo antes.
-            </Checkbox>
+            {values.payMethod !== "none" && (
+              <Checkbox
+                checked={values.acceptedCharge}
+                onChange={v => onChange({ acceptedCharge: v })}
+              >
+                Autorizo a MediFlow a cobrar mi método de pago al terminar los 14
+                días si no cancelo antes.
+              </Checkbox>
+            )}
 
             <div style={{ textAlign: "center", marginTop: 10 }}>
               <div

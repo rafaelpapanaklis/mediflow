@@ -26,7 +26,7 @@ interface SignupState {
   // Step 3
   plan: PlanId;
   billing: Billing;
-  payMethod: "card" | "paypal";
+  payMethod: "card" | "paypal" | "none";
   card: CardDetails;
   acceptedTerms: boolean;
   acceptedCharge: boolean;

@@ -22,7 +22,7 @@ const schema = z.object({
   phone: z.string().optional(),
   plan: z.enum(["BASIC", "PRO", "CLINIC"]).default("PRO"),
   slug: z.string().optional(),
-  paymentMethod: z.enum(["stripe", "transfer", "card", "paypal"]).default("transfer"),
+  paymentMethod: z.enum(["stripe", "transfer", "card", "paypal", "none"]).default("transfer"),
   paymentMethodLast4: z.string().regex(/^\d{4}$/).optional(),
   billing: z.enum(["monthly", "annual"]).default("monthly"),
 });

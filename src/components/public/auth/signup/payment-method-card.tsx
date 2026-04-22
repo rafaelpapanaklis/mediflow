@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 
 interface PaymentMethodCardProps {
-  method: "card" | "paypal";
+  method: "card" | "paypal" | "none";
   selected: boolean;
   onSelect: () => void;
   children?: ReactNode;
@@ -16,11 +16,17 @@ export function PaymentMethodCard({
   children,
 }: PaymentMethodCardProps) {
   const title =
-    method === "card" ? "Tarjeta de débito o crédito" : "PayPal";
+    method === "card"
+      ? "Tarjeta de débito o crédito"
+      : method === "paypal"
+        ? "PayPal"
+        : "Agregar método de pago más tarde";
   const subtitle =
     method === "card"
       ? "Visa, Mastercard, American Express · Paga en MXN o USD"
-      : "Vincula tu cuenta PayPal · redirección segura";
+      : method === "paypal"
+        ? "Vincula tu cuenta PayPal · redirección segura"
+        : "Empieza tu prueba gratis · Te pediremos método de pago antes de cobrar al terminar los 14 días";
 
   return (
     <div
@@ -79,7 +85,7 @@ export function PaymentMethodCard({
             {subtitle}
           </div>
         </div>
-        {method === "card" ? <CardBrandsRow /> : <PayPalMark />}
+        {method === "card" ? <CardBrandsRow /> : method === "paypal" ? <PayPalMark /> : <TrialBadge />}
       </button>
 
       <div
@@ -152,6 +158,28 @@ function PayPalMark() {
     >
       <span style={{ fontStyle: "italic" }}>Pay</span>
       <span style={{ color: "#009cde", fontStyle: "italic" }}>Pal</span>
+    </div>
+  );
+}
+
+function TrialBadge() {
+  return (
+    <div
+      style={{
+        padding: "4px 10px",
+        borderRadius: 100,
+        background: "rgba(52,211,153,0.12)",
+        border: "1px solid rgba(52,211,153,0.3)",
+        color: "#34d399",
+        fontSize: 10,
+        fontWeight: 600,
+        letterSpacing: "0.08em",
+        textTransform: "uppercase",
+        fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+        pointerEvents: "none",
+      }}
+    >
+      Modo prueba
     </div>
   );
 }
