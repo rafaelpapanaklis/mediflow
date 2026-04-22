@@ -22,6 +22,8 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function Step1Account({ values, onChange, onContinue }: Step1AccountProps) {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [checking, setChecking] = useState(false);
+  const [emailServerError, setEmailServerError] = useState<string | undefined>();
 
   const nameValid = values.nombre.trim().length >= 2;
   const emailValid = EMAIL_RE.test(values.email);
@@ -31,7 +33,9 @@ export function Step1Account({ values, onChange, onContinue }: Step1AccountProps
   const errors = {
     nombre:
       touched.nombre && !nameValid ? "Ingresa tu nombre completo" : undefined,
-    email: touched.email && !emailValid ? "Email inválido" : undefined,
+    email:
+      (touched.email && !emailValid ? "Email inválido" : undefined) ??
+      emailServerError,
     password:
       touched.password && !pwValid
         ? "La contraseña es muy débil"
@@ -40,14 +44,37 @@ export function Step1Account({ values, onChange, onContinue }: Step1AccountProps
 
   const canContinue = nameValid && emailValid && pwValid;
 
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canContinue || checking) return;
+
+    setEmailServerError(undefined);
+    setChecking(true);
+    try {
+      const res = await fetch("/api/auth/check-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: values.email }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.exists === true) {
+          setEmailServerError("Este correo ya está registrado. Inicia sesión");
+          return;
+        }
+      }
+      onContinue();
+    } catch {
+      onContinue();
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  const buttonDisabled = !canContinue || checking;
+
   return (
-    <form
-      onSubmit={e => {
-        e.preventDefault();
-        if (canContinue) onContinue();
-      }}
-      style={{ display: "flex", flexDirection: "column", gap: 16 }}
-    >
+    <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <FormField
         label="Nombre completo"
         placeholder="Dra. Mariana Morales"
@@ -66,7 +93,10 @@ export function Step1Account({ values, onChange, onContinue }: Step1AccountProps
         autoComplete="email"
         hint="Usaremos este correo para verificarte y enviarte notificaciones."
         value={values.email}
-        onChange={e => onChange({ email: e.target.value })}
+        onChange={e => {
+          onChange({ email: e.target.value });
+          if (emailServerError) setEmailServerError(undefined);
+        }}
         onBlur={() => setTouched(t => ({ ...t, email: true }))}
         error={errors.email}
         required
@@ -88,20 +118,20 @@ export function Step1Account({ values, onChange, onContinue }: Step1AccountProps
 
       <button
         type="submit"
-        disabled={!canContinue}
+        disabled={buttonDisabled}
         style={{
           width: "100%",
           height: 44,
           borderRadius: 10,
-          background: !canContinue
+          background: buttonDisabled
             ? "rgba(124,58,237,0.4)"
             : "linear-gradient(180deg, #8b5cf6, #7c3aed)",
           color: "#fff",
           fontSize: 14,
           fontWeight: 600,
           border: "none",
-          cursor: !canContinue ? "not-allowed" : "pointer",
-          boxShadow: !canContinue
+          cursor: buttonDisabled ? "not-allowed" : "pointer",
+          boxShadow: buttonDisabled
             ? "none"
             : "0 8px 20px -6px rgba(124,58,237,0.5), inset 0 1px 0 rgba(255,255,255,0.15)",
           fontFamily: "inherit",
@@ -109,7 +139,7 @@ export function Step1Account({ values, onChange, onContinue }: Step1AccountProps
           marginTop: 4,
         }}
       >
-        Continuar →
+        {checking ? "Verificando…" : "Continuar →"}
       </button>
 
       <div
