@@ -23,15 +23,17 @@ export async function POST(req: NextRequest) {
   try {
     const rawBody = await req.text();
 
-    // Verify X-Hub-Signature-256 from Meta (REQUIRED)
+    // Verify X-Hub-Signature-256 from Meta (REQUIRED — sin APP_SECRET configurado, rechazar).
     const appSecret = process.env.WHATSAPP_APP_SECRET;
+    if (!appSecret) {
+      console.error("[whatsapp/webhook] WHATSAPP_APP_SECRET no configurado — rechazando request");
+      return NextResponse.json({ error: "Webhook not configured" }, { status: 503 });
+    }
     const signature = req.headers.get("x-hub-signature-256");
-    if (appSecret) {
-      if (!signature) return NextResponse.json({ error: "Missing signature" }, { status: 403 });
-      const expectedSig = "sha256=" + createHmac("sha256", appSecret).update(rawBody).digest("hex");
-      if (signature !== expectedSig) {
-        return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
-      }
+    if (!signature) return NextResponse.json({ error: "Missing signature" }, { status: 403 });
+    const expectedSig = "sha256=" + createHmac("sha256", appSecret).update(rawBody).digest("hex");
+    if (signature !== expectedSig) {
+      return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
     }
 
     const body = JSON.parse(rawBody);
