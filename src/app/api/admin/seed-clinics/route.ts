@@ -8,6 +8,9 @@ import { prisma } from "@/lib/prisma";
  * Only works for the specified email. Safe to call multiple times — skips existing.
  */
 export async function POST(req: NextRequest) {
+  if (process.env.NODE_ENV === "production" && !process.env.ALLOW_SEED_IN_PROD) {
+    return NextResponse.json({ error: "Seed endpoint disabled in production" }, { status: 403 });
+  }
   try {
   // Allow access from admin panel (admin_token cookie) OR from the user's own session
   const adminToken = req.cookies.get("admin_token")?.value;
