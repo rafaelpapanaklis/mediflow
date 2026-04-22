@@ -24,6 +24,9 @@ export async function GET(req: NextRequest, { params }: { params: { token: strin
 
 // POST /api/consent/[token] — patient signs the form
 export async function POST(req: NextRequest, { params }: { params: { token: string } }) {
+  const rl = rateLimit(req, 5);
+  if (rl) return rl;
+
   const form = await prisma.consentForm.findUnique({ where: { token: params.token } });
 
   if (!form) return NextResponse.json({ error: "Formulario no encontrado" }, { status: 404 });
