@@ -149,7 +149,7 @@ export default async function DashboardPage() {
     const monthDate = row.month instanceof Date ? row.month : new Date(row.month);
     if (isNaN(monthDate.getTime())) continue;
     const key = `${monthDate.getFullYear()}-${monthDate.getMonth()}`;
-    revenueByMonth.set(key, Number(row.total ?? 0));
+    revenueByMonth.set(key, Number((Number(row.total ?? 0)).toFixed(2)));
   }
   const chartData: Array<{ label: string; value: number }> = [];
   for (let i = 5; i >= 0; i--) {

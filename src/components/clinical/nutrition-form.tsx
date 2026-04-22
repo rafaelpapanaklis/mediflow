@@ -51,10 +51,12 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
   const [smartGoals, setSmartGoals] = useState<{ objetivo: string; fechaMeta: string; progreso: string; estado: string }[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   useEffect(() => {
-    fetch(`/api/clinical?patientId=${patientId}`)
+    const ctrl = new AbortController();
+    fetch(`/api/clinical?patientId=${patientId}`, { signal: ctrl.signal })
       .then(r => r.ok ? r.json() : [])
       .then(d => setHistory(Array.isArray(d) ? d : []))
-      .catch(() => {});
+      .catch(err => { if (err.name !== "AbortError") toast.error("No se pudo cargar el histórico"); });
+    return () => ctrl.abort();
   }, [patientId]);
 
   const weightData = useMemo(() =>
