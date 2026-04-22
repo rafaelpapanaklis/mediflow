@@ -107,8 +107,8 @@ async function computeMetrics(from: Date, to: Date) {
     ]);
     monthlySeries.push({
       month: monthKey,
-      paid:       paidAgg._sum.amount ?? 0,
-      payments:   paidAgg._count ?? 0,
+      paid:       Number(paidAgg?._sum?.amount ?? 0),
+      payments:   Number(paidAgg?._count ?? 0),
       newClinics: newC,
       churned,
     });
@@ -127,8 +127,8 @@ async function computeMetrics(from: Date, to: Date) {
       totalClinics:  allClinics.length,
       newClinicsPeriod,
       churnedPeriod,
-      periodRevenue: periodPayments._sum.amount ?? 0,
-      periodPayments: periodPayments._count,
+      periodRevenue: Number(periodPayments?._sum?.amount ?? 0),
+      periodPayments: Number(periodPayments?._count ?? 0),
     },
     monthlySeries,
     periodInvoices,

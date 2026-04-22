@@ -6,6 +6,11 @@ import { ReportsClient } from "./reports-client";
 
 export const metadata: Metadata = { title: "Reportes — MediFlow" };
 
+async function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
+  try { return await p; }
+  catch (e) { console.error("[dashboard/reports] query failed:", e); return fallback; }
+}
+
 export default async function ReportsPage() {
   const user      = await getCurrentUser();
   const clinicId  = user.clinicId;
@@ -18,39 +23,49 @@ export default async function ReportsPage() {
     return { start, end, label: start.toLocaleDateString("es-MX", { month: "short", year: "2-digit" }) };
   });
 
-  // FIX: run all 18 queries in parallel instead of 6 sequential loops
   const [revenueResults, patientCounts, apptCounts, topTypes, byStatus] = await Promise.all([
     Promise.all(ranges.map(r =>
-      prisma.payment.aggregate({ where: { invoice: { clinicId }, paidAt: { gte: r.start, lte: r.end } }, _sum: { amount: true } })
+      safe(
+        prisma.payment.aggregate({ where: { invoice: { clinicId }, paidAt: { gte: r.start, lte: r.end } }, _sum: { amount: true } }),
+        { _sum: { amount: 0 } } as any,
+      )
     )),
     Promise.all(ranges.map(r =>
-      prisma.patient.count({ where: { clinicId, createdAt: { gte: r.start, lte: r.end } } })
+      safe(prisma.patient.count({ where: { clinicId, createdAt: { gte: r.start, lte: r.end } } }), 0)
     )),
     Promise.all(ranges.map(r =>
-      prisma.appointment.count({ where: { clinicId, date: { gte: r.start, lte: r.end } } })
+      safe(prisma.appointment.count({ where: { clinicId, date: { gte: r.start, lte: r.end } } }), 0)
     )),
-    prisma.appointment.groupBy({
+    safe(prisma.appointment.groupBy({
       by: ["type"], where: { clinicId },
       _count: { id: true }, orderBy: { _count: { id: "desc" } }, take: 6,
-    }),
-    prisma.appointment.groupBy({
+    }), [] as any[]),
+    safe(prisma.appointment.groupBy({
       by: ["status"], where: { clinicId },
       _count: { id: true },
-    }),
+    }), [] as any[]),
   ]);
 
+  // Prisma tipa `_sum` como `... | null` (puede venir null si 0 filas matchean
+  // el where). Optional chaining + Number() defiende contra null y contra un
+  // posible Decimal si la columna en prod fuese NUMERIC.
   const monthlyData = ranges.map((r, i) => ({
     label:        r.label,
-    revenue:      revenueResults[i]._sum.amount ?? 0,
-    patients:     patientCounts[i],
-    appointments: apptCounts[i],
+    revenue:      Number(revenueResults[i]?._sum?.amount ?? 0),
+    patients:     patientCounts[i] ?? 0,
+    appointments: apptCounts[i] ?? 0,
   }));
+
+  // Sanitizamos los groupBy antes del Flight boundary para evitar que un
+  // Decimal/class-instance reviente el render de React (no atrapable por
+  // try/catch porque ocurre después del return).
+  const serialized = JSON.parse(JSON.stringify({ topTypes, byStatus }));
 
   return (
     <ReportsClient
       monthlyData={monthlyData}
-      topTypes={topTypes as any}
-      byStatus={byStatus as any}
+      topTypes={serialized.topTypes}
+      byStatus={serialized.byStatus}
     />
   );
 }
