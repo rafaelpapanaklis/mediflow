@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { rateLimit } from "@/lib/rate-limit";
 
 const SYSTEM_PROMPT = `Eres un homeópata experto basado en Boericke, Kent y el Organon de Hahnemann. Dado un conjunto de síntomas rúbricos (mentales, generales y locales), sugieres los remedios más probables con su score de coincidencia (0-100) y la potencia inicial recomendada.
 
@@ -16,6 +17,9 @@ Formato de salida:
 {"remedies":[{"name":"...","score":...,"potency":"...","rationale":"..."}]}`;
 
 export async function POST(req: NextRequest) {
+  const rl = rateLimit(req, 10, 5 * 60 * 1000);
+  if (rl) return rl;
+
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

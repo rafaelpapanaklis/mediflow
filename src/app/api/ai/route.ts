@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { rateLimit } from "@/lib/rate-limit";
 
 const AI_SYSTEM_PROMPT = `Eres un asistente clínico de apoyo para médicos en México. 
 Tu función es ayudar al doctor a:
@@ -19,6 +20,9 @@ IMPORTANTE:
 - Máximo 300 palabras por respuesta para ser eficiente`;
 
 export async function POST(req: NextRequest) {
+  const rl = rateLimit(req, 10, 5 * 60 * 1000);
+  if (rl) return rl;
+
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

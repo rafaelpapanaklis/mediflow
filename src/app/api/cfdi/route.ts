@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { rateLimit } from "@/lib/rate-limit";
 import {
   createInvoice, createOrUpdateCustomer, getOrgApiKey,
   validateRfc, CLAVES_SAT_MEDICOS, UNIDAD_SAT,
 } from "@/lib/facturapi";
 
 export async function POST(req: NextRequest) {
+  const rl = rateLimit(req, 5, 60 * 60 * 1000);
+  if (rl) return rl;
+
   const ctx = await getAuthContext();
   const err = requireAdmin(ctx);
   if (err) return err;

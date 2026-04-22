@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdmin } from "@supabase/supabase-js";
+import { rateLimit } from "@/lib/rate-limit";
 
 const ANALYSIS_SYSTEM_PROMPT = `Actúas como un asistente de análisis radiográfico dental. Tu rol es identificar hallazgos visibles en la imagen y reportarlos con confianza calibrada a lo que realmente se ve. NO eres el diagnóstico final — el doctor revisa tu análisis y decide.
 
@@ -203,6 +204,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 /* ═══════════════════════════════════════════════════════════════════ */
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const rl = rateLimit(req, 10, 5 * 60 * 1000);
+  if (rl) return rl;
+
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
