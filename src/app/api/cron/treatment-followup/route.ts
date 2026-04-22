@@ -6,7 +6,10 @@ import { sendWhatsAppMessage } from "@/lib/whatsapp";
 // Called daily at 10am MX by Vercel Cron (configured in vercel.json)
 // Sends WhatsApp reminders to patients who are overdue for their next treatment session
 export async function GET(req: NextRequest) {
-  // Verify cron secret — only accept Authorization: Bearer header
+  if (!process.env.CRON_SECRET) {
+    console.error("[cron/treatment-followup] CRON_SECRET no configurado");
+    return NextResponse.json({ error: "Cron not configured" }, { status: 503 });
+  }
   const auth = req.headers.get("authorization");
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

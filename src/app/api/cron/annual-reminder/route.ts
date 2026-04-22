@@ -5,7 +5,10 @@ import { sendWhatsAppMessage } from "@/lib/whatsapp";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  // Verify cron secret
+  if (!process.env.CRON_SECRET) {
+    console.error("[cron/annual-reminder] CRON_SECRET no configurado");
+    return NextResponse.json({ error: "Cron not configured" }, { status: 503 });
+  }
   const auth = req.headers.get("authorization");
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
