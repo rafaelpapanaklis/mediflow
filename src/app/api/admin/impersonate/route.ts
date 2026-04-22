@@ -1,12 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { timingSafeEqual } from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import { prisma } from "@/lib/prisma";
+import { writeActiveClinicCookie } from "@/lib/active-clinic";
+
+function safeEqual(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return timingSafeEqual(aBuf, bBuf);
+}
 
 export async function GET(req: NextRequest) {
   // 1. Verify admin is authenticated
   const adminToken = cookies().get("admin_token")?.value;
-  if (!adminToken || adminToken !== process.env.ADMIN_SECRET_TOKEN) {
+  const secret = process.env.ADMIN_SECRET_TOKEN;
+  if (!adminToken || !secret || !safeEqual(adminToken, secret)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
@@ -103,5 +113,10 @@ export async function GET(req: NextRequest) {
   // Add a banner param so the dashboard knows we're in admin mode
   const finalUrl = `${req.nextUrl.origin}/auth/confirm?token_hash=${data.properties.hashed_token}&type=email&next=/dashboard`;
 
-  return NextResponse.redirect(finalUrl);
+  const response = NextResponse.redirect(finalUrl);
+  // Setear la cookie activeClinicId firmada para la clínica impersonada.
+  // Sin esto, getAuthContext cae al fallback (primer User por createdAt asc)
+  // cuando el super-admin pertenece a múltiples clínicas.
+  writeActiveClinicCookie(response, clinicId);
+  return response;
 }
