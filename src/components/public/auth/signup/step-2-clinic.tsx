@@ -61,11 +61,6 @@ const CLINIC_SIZES: Array<{ value: string; label: string }> = [
   { value: "16+", label: "16+ doctores · multi-sucursal" },
 ];
 
-const optionStyle: React.CSSProperties = {
-  background: "#1a1a1f",
-  color: "#f5f5f7",
-};
-
 const selectStyle: React.CSSProperties = {
   width: "100%",
   height: 42,
@@ -80,6 +75,7 @@ const selectStyle: React.CSSProperties = {
   appearance: "none",
   WebkitAppearance: "none",
   cursor: "pointer",
+  colorScheme: "dark",
   backgroundImage:
     "url(\"data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='rgba(245,245,247,0.5)' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
   backgroundRepeat: "no-repeat",
@@ -133,11 +129,11 @@ export function Step2Clinic({
             color: values.specialty ? "var(--ld-fg)" : "var(--ld-fg-muted)",
           }}
         >
-          <option value="" disabled style={optionStyle}>
+          <option value="" disabled>
             Selecciona una especialidad
           </option>
           {SPECIALTY_SLUGS.map(slug => (
-            <option key={slug} value={slug} style={optionStyle}>
+            <option key={slug} value={slug}>
               {SPECIALTIES[slug].name}
             </option>
           ))}
@@ -153,11 +149,11 @@ export function Step2Clinic({
             color: values.clinicSize ? "var(--ld-fg)" : "var(--ld-fg-muted)",
           }}
         >
-          <option value="" disabled style={optionStyle}>
+          <option value="" disabled>
             ¿Cuántos doctores atienden?
           </option>
           {CLINIC_SIZES.map(size => (
-            <option key={size.value} value={size.value} style={optionStyle}>
+            <option key={size.value} value={size.value}>
               {size.label}
             </option>
           ))}
@@ -187,11 +183,11 @@ export function Step2Clinic({
               color: values.state ? "var(--ld-fg)" : "var(--ld-fg-muted)",
             }}
           >
-            <option value="" disabled style={optionStyle}>
+            <option value="" disabled>
               Estado
             </option>
             {ESTADOS_MX.map(s => (
-              <option key={s} value={s} style={optionStyle}>
+              <option key={s} value={s}>
                 {s}
               </option>
             ))}
