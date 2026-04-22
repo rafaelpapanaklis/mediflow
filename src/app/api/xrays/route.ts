@@ -65,6 +65,11 @@ export async function POST(req: NextRequest) {
   const path = `${ctx.clinicId}/${patientId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
 
   const bytes = await file.arrayBuffer();
+
+  const { validateMagicNumber } = await import("@/lib/validate-upload");
+  const magicError = await validateMagicNumber(bytes, ALLOWED_TYPES);
+  if (magicError) return NextResponse.json({ error: magicError }, { status: 400 });
+
   const { error: uploadError } = await supabase.storage
     .from("patient-files")
     .upload(path, bytes, { contentType: file.type, upsert: false });

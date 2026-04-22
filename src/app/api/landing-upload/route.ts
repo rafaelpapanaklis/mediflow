@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { createClient as createAdmin } from "@supabase/supabase-js";
+import { validateMagicNumber } from "@/lib/validate-upload";
 
 function getAdminSupabase() {
   return createAdmin(
@@ -34,6 +35,9 @@ export async function POST(req: NextRequest) {
 
   const supabase = getAdminSupabase();
   const bytes    = await file.arrayBuffer();
+
+  const magicError = await validateMagicNumber(bytes, ALLOWED_TYPES);
+  if (magicError) return NextResponse.json({ error: magicError }, { status: 400 });
 
   const { error } = await supabase.storage
     .from("patient-files")
