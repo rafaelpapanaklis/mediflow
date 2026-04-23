@@ -1,54 +1,66 @@
 "use client";
 
-import { Bell, HelpCircle, Search, ChevronRight } from "lucide-react";
-import { Fragment, type ReactNode } from "react";
+import { Search, ChevronRight } from "lucide-react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { CommandPalette } from "./command-palette";
+import { NotificationsPopover } from "./notifications-popover";
 
 type TopbarProps = {
   crumbs?: string[];
   right?: ReactNode;
-  hasNotifications?: boolean;
 };
 
-// Topbar compartido del dashboard (fase 1 — solo visible ≥lg para no
-// duplicar la barra top móvil que renderiza el Sidebar).
 export function Topbar({
   crumbs = ["Dashboard"],
   right,
-  hasNotifications = false,
 }: TopbarProps) {
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen(true);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
-    <div className="topbar-new hidden lg:flex">
-      <div className="topbar-new__crumbs">
-        {crumbs.map((c, i) => (
-          <Fragment key={`${i}-${c}`}>
-            {i > 0 && (
-              <ChevronRight size={12} style={{ color: "var(--text-4)" }} />
-            )}
-            <span className={i === crumbs.length - 1 ? "topbar-new__crumb--current" : ""}>
-              {c}
-            </span>
-          </Fragment>
-        ))}
-      </div>
-
-      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-        {right}
-
-        <div className="topbar-new__search">
-          <Search size={12} />
-          <span>Buscar pacientes, citas…</span>
-          <kbd>⌘K</kbd>
+    <>
+      <div className="topbar-new hidden lg:flex">
+        <div className="topbar-new__crumbs">
+          {crumbs.map((c, i) => (
+            <Fragment key={`${i}-${c}`}>
+              {i > 0 && (
+                <ChevronRight size={12} style={{ color: "var(--text-4)" }} />
+              )}
+              <span className={i === crumbs.length - 1 ? "topbar-new__crumb--current" : ""}>
+                {c}
+              </span>
+            </Fragment>
+          ))}
         </div>
 
-        <button className="icon-btn-new" title="Notificaciones" type="button">
-          <Bell size={14} />
-          {hasNotifications && <span className="icon-btn-new__dot" />}
-        </button>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          {right}
 
-        <button className="icon-btn-new" title="Ayuda" type="button">
-          <HelpCircle size={14} />
-        </button>
+          <button
+            type="button"
+            onClick={() => setPaletteOpen(true)}
+            className="topbar-new__search"
+            style={{ cursor: "pointer", border: "1px solid var(--border-soft)", textAlign: "left" }}
+          >
+            <Search size={12} />
+            <span>Buscar pacientes, citas…</span>
+            <kbd>⌘K</kbd>
+          </button>
+
+          <NotificationsPopover />
+        </div>
       </div>
-    </div>
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+    </>
   );
 }

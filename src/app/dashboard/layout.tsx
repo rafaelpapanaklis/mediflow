@@ -73,7 +73,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         )}
         {isInTrial && trialEndsAt && <TrialBanner trialEndsAt={trialEndsAt} />}
         <GlobalAnnouncementBanner />
-        <Topbar crumbs={[clinic.name, "Dashboard"]} hasNotifications />
+        <Topbar crumbs={[clinic.name, "Dashboard"]} />
         <main
           className="flex-1 pt-20 lg:pt-6"
           style={{ padding: "clamp(12px, 1.5vw, 28px)", paddingTop: "clamp(16px, 2vw, 24px)" }}
