@@ -136,8 +136,8 @@
     background-image:
       radial-gradient(ellipse 1200px 600px at 50% -10%, rgba(124,58,237,0.10), transparent 70%),
       radial-gradient(ellipse 800px 400px at 90% 10%, rgba(168,85,247,0.06), transparent 70%),
-      linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+      linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px);
     background-size: auto, auto, 32px 32px, 32px 32px;
   }
 
