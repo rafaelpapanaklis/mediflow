@@ -165,13 +165,13 @@ export function PatientsClient({ patients, total, activeCount, page, totalPages,
                         </Link>
                       </td>
                       <td>
-                        <div style={{ color: "var(--text-1)" }}>{p.phone || "—"}</div>
+                        <div className="mono" style={{ color: "var(--text-1)" }}>{p.phone || "—"}</div>
                         <div style={{ fontSize: 11, color: "var(--text-3)" }}>{p.email || "—"}</div>
                       </td>
                       <td className="mono" style={{ color: "var(--text-2)" }}>
                         {p._count?.records ?? 0}
                       </td>
-                      <td style={{ color: "var(--text-2)" }}>
+                      <td className="mono" style={{ color: "var(--text-2)" }}>
                         {formatRelativeDate(lastVisit)}
                       </td>
                       <td>

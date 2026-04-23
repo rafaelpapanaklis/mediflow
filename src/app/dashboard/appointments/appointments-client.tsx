@@ -908,11 +908,11 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                   className="w-full text-left px-4 py-3 hover:bg-muted/20 transition-colors">
                   <div className="flex items-center gap-2 mb-1">
                     <div className={`w-2 h-2 rounded-full ${cfg.dot}`} />
-                    <span className="text-base font-bold">{appt.startTime}</span>
+                    <span className="mono text-base font-bold">{appt.startTime}</span>
                     <span className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.text}`}>{cfg.label}</span>
                   </div>
                   <div className="text-base font-bold truncate">{appt.patient.firstName} {appt.patient.lastName}</div>
-                  <div className="text-sm text-muted-foreground">{appt.type} · {appt.durationMins} min</div>
+                  <div className="text-sm text-muted-foreground">{appt.type} · <span className="mono">{appt.durationMins}</span> min</div>
                   {appt.notes && <div className="text-sm text-muted-foreground/70 truncate italic mt-0.5">📝 {appt.notes}</div>}
                   <div className="flex gap-2 mt-1 flex-wrap">
                     {appt.googleCalendarEventId && <span className="text-xs text-brand-600 font-semibold flex items-center gap-1"><CalendarCheck className="w-3 h-3"/>Google Cal</span>}

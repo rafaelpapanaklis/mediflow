@@ -288,7 +288,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                         <span style={{ color: "var(--text-1)" }}>{fullName}</span>
                       </div>
                     </td>
-                    <td style={{ color: "var(--text-2)" }}>
+                    <td className="mono" style={{ color: "var(--text-2)" }}>
                       {formatRelativeDate(inv.createdAt)}
                     </td>
                     <td className="mono" style={{ textAlign: "right", color: "var(--text-1)" }}>
