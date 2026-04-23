@@ -3,12 +3,13 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Search, Plus, Download, ChevronLeft, ChevronRight, Users } from "lucide-react";
+import { Search, Plus, Download, Upload, ChevronLeft, ChevronRight, Users } from "lucide-react";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { CardNew }   from "@/components/ui/design-system/card-new";
 import { NewPatientModal } from "@/components/dashboard/new-patient-modal";
+import { ImportPatientsModal } from "@/components/dashboard/import-patients-modal";
 import { formatRelativeDate, ageFromDob } from "@/lib/format";
 
 interface Props {
@@ -45,6 +46,7 @@ export function PatientsClient({ patients, total, activeCount, page, totalPages,
   const router = useRouter();
   const [search, setSearch]   = useState(initialSearch);
   const [showNew, setShowNew] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
@@ -82,6 +84,9 @@ export function PatientsClient({ patients, total, activeCount, page, totalPages,
           <a href="/api/patients/export" target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
             <ButtonNew variant="secondary" icon={<Download size={14} />}>Exportar</ButtonNew>
           </a>
+          <ButtonNew variant="secondary" icon={<Upload size={14} />} onClick={() => setShowImport(true)}>
+            Importar Excel
+          </ButtonNew>
           <ButtonNew variant="primary" icon={<Plus size={14} />} onClick={() => setShowNew(true)}>
             Nuevo paciente
           </ButtonNew>
@@ -242,6 +247,7 @@ export function PatientsClient({ patients, total, activeCount, page, totalPages,
       </CardNew>
 
       <NewPatientModal open={showNew} onClose={() => setShowNew(false)} onCreated={() => { router.refresh(); setShowNew(false); }} />
+      <ImportPatientsModal open={showImport} onClose={() => setShowImport(false)} onImported={() => { router.refresh(); setShowImport(false); }} />
     </div>
   );
 }
