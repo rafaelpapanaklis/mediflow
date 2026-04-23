@@ -41,10 +41,10 @@ export function ReportsClient({ monthlyData, topTypes, byStatus }: Props) {
   const pieData = byStatus.map(s => ({ name: STATUS_LABELS[s.status] ?? s.status, value: s._count.id }));
 
   return (
-    <div style={{ padding: "24px 28px", maxWidth: 1400, margin: "0 auto" }}>
+    <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
       {/* Header */}
       <div style={{ marginBottom: 22 }}>
-        <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+        <h1 style={{ fontSize: "clamp(16px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
           Reportes y estadísticas
         </h1>
         <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>

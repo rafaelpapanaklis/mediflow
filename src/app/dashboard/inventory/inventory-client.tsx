@@ -262,11 +262,11 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
   }
 
   return (
-    <div style={{ padding: "24px 28px", maxWidth: 1400, margin: "0 auto" }}>
+    <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>Inventario</h1>
+          <h1 style={{ fontSize: "clamp(16px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>Inventario</h1>
           <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
             {items.length} artículos registrados · {kpis.totalQty.toLocaleString("es-MX")} unidades en stock
           </p>

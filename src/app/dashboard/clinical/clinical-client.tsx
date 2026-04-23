@@ -132,7 +132,7 @@ export function ClinicalClient({
   }
 
   return (
-    <div style={{ display: "flex", gap: 20, padding: "24px 28px", maxWidth: 1400, margin: "0 auto" }}>
+    <div style={{ display: "flex", gap: 20, padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
       {/* Patient list sidebar */}
       <div style={{ width: 260, flexShrink: 0 }}>
         <CardNew noPad>

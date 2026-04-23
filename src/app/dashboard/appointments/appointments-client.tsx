@@ -808,11 +808,11 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                        `${currentDate.getDate()} de ${MONTHS_ES[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
 
   return (
-    <div style={{ padding: "24px 28px", maxWidth: 1400, margin: "0 auto" }}>
+    <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
       {/* Header: title + period nav + actions */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>Agenda</h1>
+          <h1 style={{ fontSize: "clamp(16px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>Agenda</h1>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
             <button onClick={prevPeriod} className="icon-btn-new" type="button" aria-label="Periodo anterior">
               <ChevronLeft size={14} />
