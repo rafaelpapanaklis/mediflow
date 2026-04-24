@@ -1677,3 +1677,21 @@
     padding: 0 8px !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   EmptyStateNew — fade-in al montar
+   ═══════════════════════════════════════════════════════════════════ */
+
+@keyframes mf-empty-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.mf-empty {
+  animation: mf-empty-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mf-empty {
+    animation: none !important;
+  }
+}
