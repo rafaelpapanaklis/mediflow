@@ -30,14 +30,24 @@ export async function GET(request: Request) {
   const supabaseId = sessionData.user.id;
   const email = sessionData.user.email ?? "";
 
-  // ¿El user ya tiene una Clinic vinculada?
+  // ¿El user ya tiene Clinic(s)?
   try {
-    const dbUser = await prisma.user.findFirst({
+    const userClinics = await prisma.user.findMany({
       where: { supabaseId, isActive: true },
       select: { clinicId: true },
+      orderBy: { createdAt: "asc" },
     });
-    if (dbUser) {
-      return NextResponse.redirect(`${origin}${next}`);
+    if (userClinics.length > 0) {
+      const res = NextResponse.redirect(`${origin}${next}`);
+      // Sembrar/limpiar cookie activeClinicId del nuevo supabaseId.
+      res.cookies.set("notifLastSeen", "", { path: "/", maxAge: 0 });
+      const { writeActiveClinicCookie } = await import("@/lib/active-clinic");
+      if (userClinics.length === 1) {
+        writeActiveClinicCookie(res, userClinics[0].clinicId);
+      } else {
+        res.cookies.set("activeClinicId", "", { path: "/", maxAge: 0 });
+      }
+      return res;
     }
   } catch (err) {
     // DB no disponible (build/prerendering) — fall through a signup
