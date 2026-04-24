@@ -1695,3 +1695,15 @@
     animation: none !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Home por rol — grids responsive (Fase 3)
+   ═══════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 1023.98px) {
+  .mf-home-receptionist-grid,
+  .mf-home-doctor-grid,
+  .mf-home-admin-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
