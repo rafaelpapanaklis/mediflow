@@ -4,7 +4,6 @@ import { getCurrentUser, getUserClinics } from "@/lib/auth";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
 import { GlobalAnnouncementBanner } from "@/components/dashboard/global-announcement-banner";
-import { TrialBanner } from "@/components/dashboard/trial-banner";
 import { ActiveConsultProvider } from "@/components/dashboard/active-consult-provider";
 import { PatientContextBar } from "@/components/dashboard/patient-context-bar";
 import { prisma } from "@/lib/prisma";
@@ -74,9 +73,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <a href="/dashboard/suspended" className="underline hover:no-underline">Ver opciones de pago →</a>
           </div>
         )}
-        {isInTrial && trialEndsAt && <TrialBanner trialEndsAt={trialEndsAt} />}
         <GlobalAnnouncementBanner />
-        <Topbar crumbs={[clinic.name, "Dashboard"]} />
+        <Topbar
+          crumbs={[clinic.name, "Dashboard"]}
+          trialEndsAt={isInTrial ? trialEndsAt : null}
+          plan={clinic.plan as any}
+        />
         <PatientContextBar />
         <main
           className="flex-1 pt-20 lg:pt-6"

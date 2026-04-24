@@ -1585,3 +1585,71 @@
     transition: none !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Trial Pill — animaciones + tokens + responsive
+   ═══════════════════════════════════════════════════════════════════ */
+
+@keyframes mf-trial-pill-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes mf-trial-pill-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-2px); }
+}
+
+.mf-trial-pill {
+  animation: mf-trial-pill-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.mf-trial-pill[data-dismissing="true"] {
+  animation: mf-trial-pill-out 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes mf-trial-pill-nudge {
+  0%, 100% { transform: translateX(0); }
+  25%      { transform: translateX(-1px); }
+  75%      { transform: translateX(1px); }
+}
+.mf-trial-pill[data-urgency="critical"] {
+  animation:
+    mf-trial-pill-in 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    mf-trial-pill-nudge 0.4s ease-in-out 0.3s 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mf-trial-pill,
+  .mf-trial-pill[data-dismissing="true"],
+  .mf-trial-pill[data-urgency="critical"] {
+    animation: none !important;
+  }
+}
+
+/* ─── Trial Pill — colores accent por modo (WCAG AA en los 4 estados) ─── */
+:root:not(.dark) {
+  --trial-accent-calm:    #6d28d9;
+  --trial-accent-warning: #b45309;
+  --trial-accent-danger:  #b91c1c;
+}
+.dark {
+  --trial-accent-calm:    #c4b5fd;
+  --trial-accent-warning: #fbbf24;
+  --trial-accent-danger:  #f87171;
+}
+
+/* ─── Trial Pill — label responsive switches ─── */
+.mf-trial-pill__label-full { display: inline; }
+.mf-trial-pill__label-compact,
+.mf-trial-pill__label-min { display: none; }
+
+@media (max-width: 1023.98px) {
+  .mf-trial-pill__label-full { display: none !important; }
+  .mf-trial-pill__label-compact { display: inline !important; }
+  .mf-trial-pill__badge { display: none !important; }
+}
+
+@media (max-width: 639.98px) {
+  .mf-trial-pill__label-compact { display: none !important; }
+  .mf-trial-pill__label-min { display: inline !important; }
+  .mf-trial-pill { padding: 0 8px !important; gap: 4px !important; }
+}

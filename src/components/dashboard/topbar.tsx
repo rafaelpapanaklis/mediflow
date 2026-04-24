@@ -8,18 +8,24 @@ import { CommandPalette } from "./command-palette";
 import { CommandPaletteHint } from "./command-palette-hint";
 import { KeyboardShortcutsPanel } from "./keyboard-shortcuts-panel";
 import { NotificationsPopover } from "./notifications-popover";
+import { TrialPill } from "./trial-pill";
 import { useCommandPalette } from "@/hooks/use-command-palette";
 import { useActiveConsult } from "@/hooks/use-active-consult";
 import { useGoToShortcuts, useCreateShortcuts } from "@/lib/command-palette/shortcuts";
+import type { ClinicPlan } from "./sidebar";
 
 type TopbarProps = {
   crumbs?: string[];
   right?: ReactNode;
+  trialEndsAt?: Date | string | null;
+  plan?: ClinicPlan;
 };
 
 export function Topbar({
   crumbs = ["Dashboard"],
   right,
+  trialEndsAt,
+  plan,
 }: TopbarProps) {
   const router = useRouter();
   const { open: paletteOpen, setOpen: setPaletteOpen } = useCommandPalette();
@@ -82,6 +88,14 @@ export function Topbar({
             </Fragment>
           ))}
         </div>
+
+        {trialEndsAt && plan && (
+          <TrialPill
+            trialEndsAt={trialEndsAt}
+            plan={plan}
+            onUpgradeClick={() => router.push("/dashboard/settings?tab=subscription")}
+          />
+        )}
 
         <div className="hidden lg:flex" style={{ marginLeft: "auto", alignItems: "center", gap: 8 }}>
           {right}
