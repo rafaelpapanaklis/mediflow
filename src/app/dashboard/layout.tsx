@@ -5,6 +5,8 @@ import { Sidebar } from "@/components/dashboard/sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
 import { GlobalAnnouncementBanner } from "@/components/dashboard/global-announcement-banner";
 import { TrialBanner } from "@/components/dashboard/trial-banner";
+import { ActiveConsultProvider } from "@/components/dashboard/active-consult-provider";
+import { PatientContextBar } from "@/components/dashboard/patient-context-bar";
 import { prisma } from "@/lib/prisma";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -48,6 +50,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (clinic.waConnected) onboardingCompleted.push("whatsapp");
 
   return (
+    <ActiveConsultProvider>
     <div className="dashboard-shell flex min-h-screen font-sans">
       <Sidebar
         user={{
@@ -74,6 +77,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         {isInTrial && trialEndsAt && <TrialBanner trialEndsAt={trialEndsAt} />}
         <GlobalAnnouncementBanner />
         <Topbar crumbs={[clinic.name, "Dashboard"]} />
+        <PatientContextBar />
         <main
           className="flex-1 pt-20 lg:pt-6"
           style={{ padding: "clamp(12px, 1.5vw, 28px)", paddingTop: "clamp(16px, 2vw, 24px)" }}
@@ -82,5 +86,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </main>
       </div>
     </div>
+    </ActiveConsultProvider>
   );
 }

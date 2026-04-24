@@ -39,7 +39,7 @@ const GROUP_ORDER: CommandGroup[] = [
 
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const router = useRouter();
-  const activeConsult = useActiveConsult();
+  const { consult: activeConsult } = useActiveConsult();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 

@@ -3,11 +3,13 @@
 import { ChevronRight } from "lucide-react";
 import { Fragment, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 import { CommandPalette } from "./command-palette";
 import { CommandPaletteHint } from "./command-palette-hint";
 import { KeyboardShortcutsPanel } from "./keyboard-shortcuts-panel";
 import { NotificationsPopover } from "./notifications-popover";
 import { useCommandPalette } from "@/hooks/use-command-palette";
+import { useActiveConsult } from "@/hooks/use-active-consult";
 import { useGoToShortcuts, useCreateShortcuts } from "@/lib/command-palette/shortcuts";
 
 type TopbarProps = {
@@ -22,6 +24,7 @@ export function Topbar({
   const router = useRouter();
   const { open: paletteOpen, setOpen: setPaletteOpen } = useCommandPalette();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const { consult } = useActiveConsult();
   const modalsClosed = !paletteOpen && !shortcutsOpen;
 
   useGoToShortcuts({ enabled: modalsClosed });
@@ -30,8 +33,12 @@ export function Topbar({
     onCreateAppointment: () => router.push("/dashboard/appointments?new=1"),
     onCreatePatient:     () => router.push("/dashboard/patients?new=1"),
     onCreateInvoice:     () => router.push("/dashboard/billing?new=1"),
-    onCreateSoap:        () => {
-      // TODO(Fase 2.3): conectar con useActiveConsult()
+    onCreateSoap: () => {
+      if (consult) {
+        router.push(`/dashboard/patients/${consult.patientId}?tab=soap&new=1`);
+      } else {
+        toast("Inicia una consulta primero", { icon: "ℹ️" });
+      }
     },
     onToggleTheme: () => {
       const html = document.documentElement;
