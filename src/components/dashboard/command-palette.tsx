@@ -191,6 +191,34 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      // Shortcuts de acción cuando el input está vacío — pattern Linear/Raycast
+      if (query.trim() === "" && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        const key = e.key.toLowerCase();
+        const shortcutMap: Record<string, string> = {
+          c: "create:appointment",
+          n: "create:patient",
+          i: "create:invoice",
+          t: "cmd:toggle-theme",
+        };
+        if (shortcutMap[key]) {
+          const target = items.find((it) => it.id === shortcutMap[key]);
+          if (target) {
+            e.preventDefault();
+            target.run(ctx);
+            return;
+          }
+        }
+        // S solo si hay consulta activa (active:soap)
+        if (key === "s") {
+          const soapAction = items.find((it) => it.id === "active:soap");
+          if (soapAction) {
+            e.preventDefault();
+            soapAction.run(ctx);
+            return;
+          }
+        }
+      }
+
       if (e.key === "ArrowDown") {
         e.preventDefault();
         setHighlightedIndex((i) => (total === 0 ? 0 : (i + 1) % total));
@@ -209,7 +237,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         if (total > 0) setHighlightedIndex(total - 1);
       }
     },
-    [total, highlightedIndex, grouped.flat, ctx],
+    [total, highlightedIndex, grouped.flat, ctx, query, items],
   );
 
   useEffect(() => {
@@ -380,6 +408,15 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
               <FooterHint keys={["↑", "↓"]} label="navegar" />
               <FooterHint keys={["↵"]} label="abrir" />
               <FooterHint keys={["esc"]} label="cerrar" />
+              {query.trim() === "" && (
+                <span style={{
+                  color: "var(--text-3)",
+                  fontSize: 10,
+                  fontStyle: "italic",
+                }}>
+                  o presiona C/N/I/T
+                </span>
+              )}
             </div>
             <button
               onClick={() => {
