@@ -80,6 +80,19 @@ interface UseCreateShortcutsOptions {
   onToggleTheme?: () => void;
 }
 
+/**
+ * Shortcuts de creación con letras sueltas (sin Cmd/Ctrl).
+ * Pattern de Linear/Superhuman: single-letter cuando no hay foco en input.
+ * No chocan con shortcuts del browser.
+ *
+ * Letras:
+ *   C  → Cita nueva
+ *   N  → Nuevo paciente
+ *   I  → Invoice/factura
+ *   T  → Toggle tema
+ *   S  → SOAP (requiere paciente activo, activo cuando useActiveConsult
+ *        retorne valor en Fase 2.3)
+ */
 export function useCreateShortcuts(opts: UseCreateShortcutsOptions) {
   const { enabled } = opts;
 
@@ -87,33 +100,28 @@ export function useCreateShortcuts(opts: UseCreateShortcutsOptions) {
     if (!enabled) return;
 
     const handler = (e: KeyboardEvent) => {
-      const meta = e.metaKey || e.ctrlKey;
-      if (!meta) return;
+      if (isTypingContext()) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
 
-      if (e.shiftKey) {
-        switch (e.key.toLowerCase()) {
-          case "p":
-            e.preventDefault();
-            opts.onCreatePatient?.();
-            break;
-          case "f":
-            e.preventDefault();
-            opts.onCreateInvoice?.();
-            break;
-          case "s":
-            e.preventDefault();
-            opts.onCreateSoap?.();
-            break;
-          case "d":
-            e.preventDefault();
-            opts.onToggleTheme?.();
-            break;
-        }
-      } else {
-        if (e.key.toLowerCase() === "n") {
+      const key = e.key.toLowerCase();
+
+      switch (key) {
+        case "c":
           e.preventDefault();
           opts.onCreateAppointment?.();
-        }
+          break;
+        case "n":
+          e.preventDefault();
+          opts.onCreatePatient?.();
+          break;
+        case "i":
+          e.preventDefault();
+          opts.onCreateInvoice?.();
+          break;
+        case "t":
+          e.preventDefault();
+          opts.onToggleTheme?.();
+          break;
       }
     };
 

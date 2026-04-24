@@ -39,16 +39,16 @@ const SECTIONS: ShortcutSection[] = [
   {
     title: "Crear",
     rows: [
-      { keys: ["⌘", "N"], label: "Nueva cita" },
-      { keys: ["⌘", "⇧", "P"], label: "Nuevo paciente" },
-      { keys: ["⌘", "⇧", "F"], label: "Nueva factura" },
-      { keys: ["⌘", "⇧", "S"], label: "Nota SOAP del paciente activo" },
+      { keys: ["C"], label: "Nueva cita" },
+      { keys: ["N"], label: "Nuevo paciente" },
+      { keys: ["I"], label: "Nueva factura" },
+      { keys: ["S"], label: "Nota SOAP del paciente activo" },
     ],
   },
   {
     title: "Sistema",
     rows: [
-      { keys: ["⌘", "⇧", "D"], label: "Alternar tema claro / oscuro" },
+      { keys: ["T"], label: "Alternar tema claro / oscuro" },
     ],
   },
 ];
@@ -233,8 +233,9 @@ export function KeyboardShortcutsPanel({ open, onOpenChange }: KeyboardShortcuts
                 lineHeight: 1.6,
               }}
             >
-              En Windows/Linux, <InlineKbd>⌘</InlineKbd> se reemplaza por{" "}
-              <InlineKbd>Ctrl</InlineKbd>. En Mac, <InlineKbd>⇧</InlineKbd> es Shift.
+              Los atajos de una sola letra (C, N, I, T, S) solo funcionan cuando no
+              estás escribiendo en un campo. <InlineKbd>⌘</InlineKbd> equivale a{" "}
+              <InlineKbd>Ctrl</InlineKbd> en Windows.
             </p>
           </div>
         </Dialog.Content>
