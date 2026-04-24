@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Menu } from "lucide-react";
 import { Fragment, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -50,8 +50,27 @@ export function Topbar({
 
   return (
     <>
-      <div className="topbar-new hidden lg:flex">
-        <div className="topbar-new__crumbs">
+      <div className="topbar-new">
+        <button
+          type="button"
+          aria-label="Abrir navegación"
+          onClick={() => window.dispatchEvent(new CustomEvent("mf:open-mobile-sidebar"))}
+          className="lg:hidden"
+          style={{
+            width: 32, height: 32,
+            display: "grid", placeItems: "center",
+            borderRadius: 8,
+            background: "var(--bg-hover)",
+            border: "1px solid var(--border-soft)",
+            color: "var(--text-2)",
+            cursor: "pointer",
+            flexShrink: 0,
+          }}
+        >
+          <Menu size={16} />
+        </button>
+
+        <div className="topbar-new__crumbs hidden lg:flex">
           {crumbs.map((c, i) => (
             <Fragment key={`${i}-${c}`}>
               {i > 0 && (
@@ -64,7 +83,7 @@ export function Topbar({
           ))}
         </div>
 
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+        <div className="hidden lg:flex" style={{ marginLeft: "auto", alignItems: "center", gap: 8 }}>
           {right}
           <CommandPaletteHint onClick={() => setPaletteOpen(true)} />
           <NotificationsPopover />

@@ -1,524 +1,1019 @@
 "use client";
-
+import { useEffect, useMemo, useState, useCallback, useRef, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useLayoutEffect, useRef, useState, type ComponentType } from "react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import {
-  LayoutDashboard, Calendar, Users, CreditCard,
-  BarChart2, Settings, LogOut, Menu, X, Stethoscope,
-  Sun, Moon, MessageCircle, Package, UserCog, Activity,
-  Camera, Gift, FlaskConical, Clock, DoorOpen, Dumbbell,
-  Footprints, FileImage, Globe, Sparkles, ChevronDown, ChevronsUpDown,
-  Building2, Video, ClipboardList, User as UserIcon,
-  PanelLeftClose, PanelLeft,
+  Home, Calendar, Users, MessageCircle,
+  Stethoscope, Sparkles, FileImage, Camera, FlaskConical, Dumbbell, Footprints,
+  Activity, Gift, DoorOpen, Package,
+  CreditCard, BarChart3, UserCog, Globe, ClipboardList, Settings,
+  ChevronDown, ChevronRight, Moon, Sun, LogOut, PanelLeftClose, PanelLeft,
+  X, type LucideIcon,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
-import toast from "react-hot-toast";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Tooltip, TooltipContent, TooltipTrigger, TooltipProvider,
-} from "@/components/ui/tooltip";
-import { OnboardingMini } from "./onboarding-mini";
+import { useSidebarCounts } from "@/hooks/use-sidebar-counts";
+import { useActiveConsult } from "@/hooks/use-active-consult";
 
-type NavSection = "work" | "admin";
+// ═══════════════════════════════════════════════════════════════════
+// Tipos
+// ═══════════════════════════════════════════════════════════════════
 
-type NavItem = {
-  key:       string;
-  href:      string;
-  icon:      ComponentType<{ size?: number | string; className?: string }>;
-  label:     string;
-  adminOnly: boolean;
-  section:   NavSection;
-};
+export type UserRole =
+  | "SUPER_ADMIN"
+  | "ADMIN"
+  | "DOCTOR"
+  | "RECEPTIONIST"
+  | "READONLY"
+  | "ACCOUNTANT";
 
-const CATEGORY_FEATURES: Record<string, string[]> = {
-  DENTAL: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","xrays","whatsapp","team","reports","settings","procedures","landing","ai-assistant","teleconsulta"],
-  MEDICINE: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","xrays","whatsapp","team","reports","settings","procedures","landing","ai-assistant","teleconsulta"],
-  NUTRITION: ["dashboard","appointments","patients","clinical","treatments","billing","whatsapp","team","reports","settings","procedures","landing","ai-assistant","teleconsulta"],
-  PSYCHOLOGY: ["dashboard","appointments","patients","clinical","treatments","billing","whatsapp","team","reports","settings","procedures","landing","ai-assistant","teleconsulta"],
-  DERMATOLOGY: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","before-after","packages","xrays","whatsapp","team","reports","settings","procedures","landing","ai-assistant","teleconsulta"],
-  AESTHETIC_MEDICINE: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","before-after","packages","whatsapp","team","reports","settings","procedures","landing","ai-assistant","teleconsulta"],
-  HAIR_RESTORATION: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","before-after","whatsapp","team","reports","settings","procedures","landing","ai-assistant","teleconsulta"],
-  BEAUTY_CENTER: ["dashboard","appointments","patients","clinical","packages","billing","inventory","before-after","whatsapp","team","reports","settings","landing","ai-assistant","teleconsulta"],
-  BROW_LASH: ["dashboard","appointments","patients","clinical","formulas","packages","billing","inventory","before-after","whatsapp","team","reports","settings","landing","ai-assistant","teleconsulta"],
-  MASSAGE: ["dashboard","appointments","patients","clinical","packages","billing","whatsapp","team","reports","settings","landing","ai-assistant","teleconsulta"],
-  LASER_HAIR_REMOVAL: ["dashboard","appointments","patients","clinical","packages","billing","inventory","before-after","whatsapp","team","reports","settings","landing","ai-assistant","teleconsulta"],
-  HAIR_SALON: ["dashboard","appointments","patients","clinical","formulas","billing","inventory","walk-in","before-after","packages","whatsapp","team","reports","settings","landing","ai-assistant"],
-  ALTERNATIVE_MEDICINE: ["dashboard","appointments","patients","clinical","treatments","formulas","billing","inventory","whatsapp","team","reports","settings","procedures","landing","ai-assistant","teleconsulta"],
-  NAIL_SALON: ["dashboard","appointments","patients","clinical","billing","inventory","walk-in","whatsapp","team","reports","settings","landing","ai-assistant"],
-  SPA: ["dashboard","appointments","patients","clinical","packages","billing","inventory","resources","before-after","whatsapp","team","reports","settings","landing","ai-assistant","teleconsulta"],
-  PHYSIOTHERAPY: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","exercises","whatsapp","team","reports","settings","procedures","landing","ai-assistant","teleconsulta"],
-  PODIATRY: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","orthotics","exercises","whatsapp","team","reports","settings","procedures","landing","ai-assistant","teleconsulta"],
-  OTHER: ["dashboard","appointments","patients","clinical","treatments","billing","inventory","whatsapp","team","reports","settings","procedures","landing","ai-assistant","teleconsulta"],
-};
+export type ClinicCategory =
+  | "DENTAL" | "MEDICINE" | "NUTRITION" | "PSYCHOLOGY"
+  | "DERMATOLOGY" | "AESTHETIC_MEDICINE" | "HAIR_RESTORATION"
+  | "BEAUTY_CENTER" | "BROW_LASH" | "HAIR_SALON"
+  | "MASSAGE" | "SPA" | "LASER_HAIR_REMOVAL"
+  | "NAIL_SALON" | "PHYSIOTHERAPY" | "PODIATRY"
+  | "ALTERNATIVE_MEDICINE" | "OTHER";
 
-interface ClinicOption {
-  clinicId:   string;
+export type ClinicPlan = "BASIC" | "PRO" | "CLINIC";
+
+// Shape compatible con el layout actual del repo
+export interface SidebarUser {
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: UserRole;
+  color?: string;
+  id?: string;
+  avatarUrl?: string | null;
+}
+
+export interface SidebarClinicRef {
+  clinicId: string;
   clinicName: string;
-  category:   string;
-  plan:       string;
-  role:       string;
+  plan?: ClinicPlan;
 }
 
-interface SidebarProps {
-  user:                  { firstName: string; lastName: string; email: string; role: string; color?: string };
-  clinicName:            string;
-  clinicId:              string;
-  plan:                  string;
-  clinicCategory?:       string;
-  allClinics?:           ClinicOption[];
-  onboardingCompleted?:  string[];
+export interface SidebarProps {
+  user: SidebarUser;
+  clinicName: string;
+  clinicId: string;
+  plan: ClinicPlan;
+  clinicCategory: ClinicCategory;
+  allClinics?: SidebarClinicRef[];
+  onboardingCompleted?: string[];
 }
 
-function useDarkMode() {
-  const [dark, setDark] = useState(false);
-  useLayoutEffect(() => {
-    const hasDarkClass = document.documentElement.classList.contains("dark");
-    setDark(hasDarkClass);
-  }, []);
-  function toggle() {
-    const next = !dark;
-    setDark(next);
-    document.documentElement.classList.toggle("dark", next);
-    localStorage.setItem("theme", next ? "dark" : "light");
-  }
-  return { dark, toggle };
+// ═══════════════════════════════════════════════════════════════════
+// Nav items
+// ═══════════════════════════════════════════════════════════════════
+
+type Section = "workspace" | "clinico" | "catalogo" | "admin";
+
+interface NavItemDef {
+  id: string;
+  section: Section;
+  label: string;
+  href: string;
+  icon: LucideIcon;
+  categories?: ClinicCategory[];
+  adminOnly?: boolean;
+  countKey?: "messagesUnread" | "clinicalDrafts" | "xraysUnanalyzed";
+  matchExact?: boolean;
 }
 
-function useCollapsed() {
-  const [collapsed, setCollapsed] = useState(false);
+const NAV_ITEMS: NavItemDef[] = [
+  { id: "home",         section: "workspace", label: "Hoy",         href: "/dashboard",               icon: Home,          matchExact: true },
+  { id: "appointments", section: "workspace", label: "Agenda",      href: "/dashboard/appointments",  icon: Calendar },
+  { id: "patients",     section: "workspace", label: "Pacientes",   href: "/dashboard/patients",      icon: Users },
+  { id: "messages",     section: "workspace", label: "Mensajes",    href: "/dashboard/whatsapp",      icon: MessageCircle, countKey: "messagesUnread" },
+
+  { id: "clinical",     section: "clinico", label: "Expedientes",  href: "/dashboard/clinical",     icon: Stethoscope, countKey: "clinicalDrafts" },
+  { id: "ai",           section: "clinico", label: "IA asistente", href: "/dashboard/ai-assistant", icon: Sparkles },
+  { id: "xrays",        section: "clinico", label: "Radiografías", href: "/dashboard/xrays",
+    icon: FileImage, countKey: "xraysUnanalyzed",
+    categories: ["DENTAL", "MEDICINE", "PODIATRY"] },
+  { id: "before-after", section: "clinico", label: "Antes/Después", href: "/dashboard/before-after",
+    icon: Camera,
+    categories: ["DERMATOLOGY", "AESTHETIC_MEDICINE", "BEAUTY_CENTER", "HAIR_RESTORATION", "LASER_HAIR_REMOVAL"] },
+  { id: "formulas",     section: "clinico", label: "Fórmulas",      href: "/dashboard/formulas",
+    icon: FlaskConical,
+    categories: ["BROW_LASH", "HAIR_SALON", "ALTERNATIVE_MEDICINE"] },
+  { id: "exercises",    section: "clinico", label: "Ejercicios",    href: "/dashboard/exercises",
+    icon: Dumbbell,
+    categories: ["PHYSIOTHERAPY", "PODIATRY"] },
+  { id: "orthotics",    section: "clinico", label: "Ortesis",       href: "/dashboard/orthotics",
+    icon: Footprints,
+    categories: ["PODIATRY"] },
+
+  { id: "treatments",   section: "catalogo", label: "Tratamientos", href: "/dashboard/treatments", icon: Activity },
+  { id: "packages",     section: "catalogo", label: "Paquetes",     href: "/dashboard/packages",
+    icon: Gift, adminOnly: true,
+    categories: ["AESTHETIC_MEDICINE", "BEAUTY_CENTER", "DERMATOLOGY", "HAIR_RESTORATION",
+                 "LASER_HAIR_REMOVAL", "SPA", "MASSAGE", "BROW_LASH", "HAIR_SALON"] },
+  { id: "resources",    section: "catalogo", label: "Recursos",     href: "/dashboard/resources",
+    icon: DoorOpen, adminOnly: true,
+    categories: ["SPA", "MASSAGE", "BEAUTY_CENTER", "DENTAL", "MEDICINE",
+                 "AESTHETIC_MEDICINE", "PHYSIOTHERAPY"] },
+  { id: "inventory",    section: "catalogo", label: "Inventario",   href: "/dashboard/inventory",
+    icon: Package, adminOnly: true,
+    categories: ["DENTAL", "MEDICINE", "PODIATRY", "DERMATOLOGY", "AESTHETIC_MEDICINE"] },
+
+  { id: "billing",    section: "admin", label: "Facturación",    href: "/dashboard/billing",    icon: CreditCard },
+  { id: "reports",    section: "admin", label: "Reportes",       href: "/dashboard/reports",    icon: BarChart3 },
+  { id: "team",       section: "admin", label: "Equipo",         href: "/dashboard/team",       icon: UserCog },
+  { id: "landing",    section: "admin", label: "Página web",     href: "/dashboard/landing",    icon: Globe },
+  { id: "procedures", section: "admin", label: "Procedimientos", href: "/dashboard/procedures", icon: ClipboardList },
+  { id: "settings",   section: "admin", label: "Configuración",  href: "/dashboard/settings",   icon: Settings },
+];
+
+// ═══════════════════════════════════════════════════════════════════
+// Hooks locales
+// ═══════════════════════════════════════════════════════════════════
+
+function useBooleanLocalStorage(key: string, defaultValue: boolean): [boolean, (v: boolean) => void] {
+  const [value, setValue] = useState<boolean>(defaultValue);
+  const hydrated = useRef(false);
+
   useEffect(() => {
-    const saved = localStorage.getItem("sidebar-collapsed");
-    if (saved === "1") setCollapsed(true);
-  }, []);
-  function toggle() {
-    setCollapsed((c) => {
-      const next = !c;
-      localStorage.setItem("sidebar-collapsed", next ? "1" : "0");
-      return next;
-    });
-  }
-  return { collapsed, toggle };
+    if (hydrated.current) return;
+    hydrated.current = true;
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (raw === "1") setValue(true);
+      else if (raw === "0") setValue(false);
+    } catch {}
+  }, [key]);
+
+  const set = useCallback(
+    (v: boolean) => {
+      setValue(v);
+      try { window.localStorage.setItem(key, v ? "1" : "0"); } catch {}
+    },
+    [key],
+  );
+
+  return [value, set];
 }
 
-export function Sidebar({
-  user, clinicName, clinicId, plan,
-  clinicCategory = "OTHER",
-  allClinics = [],
-  onboardingCompleted,
-}: SidebarProps) {
+function isActivePath(pathname: string | null, href: string, matchExact?: boolean): boolean {
+  if (!pathname) return false;
+  if (matchExact) return pathname === href;
+  return pathname === href || pathname.startsWith(href + "/");
+}
+
+function shouldShowItem(item: NavItemDef, role: UserRole, category: ClinicCategory): boolean {
+  if (item.adminOnly && role !== "SUPER_ADMIN" && role !== "ADMIN") return false;
+  if (item.categories && item.categories.length > 0) {
+    if (!item.categories.includes(category)) return false;
+  }
+  return true;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Componente principal
+// ═══════════════════════════════════════════════════════════════════
+
+export function Sidebar(props: SidebarProps) {
   const pathname = usePathname();
-  const router   = useRouter();
-  const [open, setOpen] = useState(false);
-  const { dark, toggle: toggleDark } = useDarkMode();
-  const { collapsed, toggle: toggleCollapsed } = useCollapsed();
-  const [switching, setSwitching] = useState(false);
-  const hasMultipleClinics = allClinics.length > 1;
+  const counts = useSidebarCounts();
+  const activeConsult = useActiveConsult().consult;
 
-  async function switchClinic(targetClinicId: string) {
-    if (targetClinicId === clinicId || switching) return;
-    setSwitching(true);
-    try {
-      const res = await fetch("/api/switch-clinic", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clinicId: targetClinicId }),
-      });
-      if (!res.ok) throw new Error();
-      window.location.href = "/dashboard";
-    } catch {
-      toast.error("Error al cambiar de clínica");
-    } finally {
-      setSwitching(false);
+  const [collapsed, setCollapsed] = useBooleanLocalStorage("sidebar-collapsed", false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const defaultAdminExpanded =
+    props.user.role === "SUPER_ADMIN" || props.user.role === "ADMIN";
+  const [adminExpanded, setAdminExpanded] = useBooleanLocalStorage(
+    "sidebar-admin-expanded",
+    defaultAdminExpanded,
+  );
+
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023.98px)");
+    const onChange = () => setIsMobile(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobile) setMobileOpen(false);
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (!isMobile) return;
+    const handler = () => setMobileOpen(true);
+    window.addEventListener("mf:open-mobile-sidebar", handler);
+    return () => window.removeEventListener("mf:open-mobile-sidebar", handler);
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileOpen(false);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [mobileOpen]);
+
+  const previousPathname = useRef(pathname);
+  useEffect(() => {
+    if (previousPathname.current !== pathname) {
+      previousPathname.current = pathname;
+      if (isMobile) setMobileOpen(false);
     }
-  }
+  }, [pathname, isMobile]);
 
-  const CATEGORY_LABELS: Record<string, string> = {
-    DENTAL: "Odontología", MEDICINE: "Medicina", NUTRITION: "Nutrición", PSYCHOLOGY: "Psicología",
-    DERMATOLOGY: "Dermatología", AESTHETIC_MEDICINE: "Med. Estética", HAIR_RESTORATION: "Capilar",
-    BEAUTY_CENTER: "Estética", BROW_LASH: "Cejas/Pestañas", MASSAGE: "Masajes",
-    LASER_HAIR_REMOVAL: "Láser", HAIR_SALON: "Peluquería", ALTERNATIVE_MEDICINE: "Med. Alternativa",
-    NAIL_SALON: "Uñas", SPA: "Spa", PHYSIOTHERAPY: "Fisioterapia", PODIATRY: "Podología", OTHER: "Otra",
-  };
+  const visibleItems = useMemo(() => {
+    return NAV_ITEMS.filter((item) =>
+      shouldShowItem(item, props.user.role, props.clinicCategory),
+    );
+  }, [props.user.role, props.clinicCategory]);
 
-  const isAdmin = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
-  const features = CATEGORY_FEATURES[clinicCategory] ?? CATEGORY_FEATURES.OTHER;
+  const itemsBySection = useMemo(() => {
+    const map: Record<Section, NavItemDef[]> = {
+      workspace: [], clinico: [], catalogo: [], admin: [],
+    };
+    visibleItems.forEach((it) => map[it.section].push(it));
+    return map;
+  }, [visibleItems]);
 
-  const ALL_NAV: NavItem[] = [
-    { key: "dashboard",    href: "/dashboard",              icon: LayoutDashboard, label: "Dashboard",       adminOnly: false, section: "work"  },
-    { key: "appointments", href: "/dashboard/appointments", icon: Calendar,        label: "Agenda",          adminOnly: false, section: "work"  },
-    { key: "patients",     href: "/dashboard/patients",     icon: Users,           label: "Pacientes",       adminOnly: false, section: "work"  },
-    { key: "clinical",     href: "/dashboard/clinical",     icon: Stethoscope,     label: "Expedientes",     adminOnly: false, section: "work"  },
-    { key: "treatments",   href: "/dashboard/treatments",   icon: Activity,        label: "Tratamientos",    adminOnly: false, section: "work"  },
-    { key: "before-after", href: "/dashboard/before-after", icon: Camera,          label: "Antes/Después",   adminOnly: false, section: "work"  },
-    { key: "formulas",     href: "/dashboard/formulas",     icon: FlaskConical,    label: "Fórmulas",        adminOnly: false, section: "work"  },
-    { key: "walk-in",      href: "/dashboard/walk-in",      icon: Clock,           label: "Lista de espera", adminOnly: false, section: "work"  },
-    { key: "exercises",    href: "/dashboard/exercises",    icon: Dumbbell,        label: "Ejercicios",      adminOnly: false, section: "work"  },
-    { key: "orthotics",    href: "/dashboard/orthotics",    icon: Footprints,      label: "Ortesis",         adminOnly: false, section: "work"  },
-    { key: "xrays",        href: "/dashboard/xrays",        icon: FileImage,       label: "Radiografías",    adminOnly: false, section: "work"  },
-    { key: "ai-assistant", href: "/dashboard/ai-assistant", icon: Sparkles,        label: "IA Asistente",    adminOnly: false, section: "work"  },
-    { key: "teleconsulta", href: "/dashboard/teleconsulta", icon: Video,           label: "Teleconsulta",    adminOnly: false, section: "work"  },
+  const getCount = useCallback((key?: NavItemDef["countKey"]): number => key ? counts[key] : 0, [counts]);
 
-    { key: "packages",     href: "/dashboard/packages",     icon: Gift,            label: "Paquetes",        adminOnly: true,  section: "admin" },
-    { key: "resources",    href: "/dashboard/resources",    icon: DoorOpen,        label: "Recursos/Salas",  adminOnly: true,  section: "admin" },
-    { key: "billing",      href: "/dashboard/billing",      icon: CreditCard,      label: "Facturación",     adminOnly: true,  section: "admin" },
-    { key: "inventory",    href: "/dashboard/inventory",    icon: Package,         label: "Inventario",      adminOnly: true,  section: "admin" },
-    { key: "whatsapp",     href: "/dashboard/whatsapp",     icon: MessageCircle,   label: "WhatsApp",        adminOnly: true,  section: "admin" },
-    { key: "team",         href: "/dashboard/team",         icon: UserCog,         label: "Equipo",          adminOnly: true,  section: "admin" },
-    { key: "reports",      href: "/dashboard/reports",      icon: BarChart2,       label: "Reportes",        adminOnly: true,  section: "admin" },
-    { key: "procedures",   href: "/dashboard/procedures",   icon: ClipboardList,   label: "Procedimientos",  adminOnly: true,  section: "admin" },
-    { key: "landing",      href: "/dashboard/landing",      icon: Globe,           label: "Página web",      adminOnly: true,  section: "admin" },
-    { key: "settings",     href: "/dashboard/settings",     icon: Settings,        label: "Configuración",   adminOnly: false, section: "admin" },
-  ];
+  const renderItem = useCallback(
+    (item: NavItemDef) => {
+      const active = isActivePath(pathname, item.href, item.matchExact);
+      const count = getCount(item.countKey);
+      const Icon = item.icon;
+      const hasConsultBadge = item.id === "home" && Boolean(activeConsult);
 
-  const NAV = ALL_NAV.filter(n => {
-    if (!features.includes(n.key)) return false;
-    if (n.adminOnly && !isAdmin) return false;
-    return true;
-  });
+      const content = (
+        <Link
+          key={item.id}
+          href={item.href}
+          aria-current={active ? "page" : undefined}
+          className={`mf-sidebar-item ${active ? "mf-sidebar-item--active" : ""}`}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: collapsed ? 0 : 10,
+            justifyContent: collapsed ? "center" : "flex-start",
+            padding: collapsed ? "8px 0" : "7px 10px",
+            borderRadius: 8,
+            color: active ? undefined : "var(--text-2)",
+            fontSize: 13,
+            fontWeight: 500,
+            textDecoration: "none",
+            background: active ? "var(--brand-soft)" : "transparent",
+            border: active ? "1px solid rgba(124,58,237,0.20)" : "1px solid transparent",
+            boxShadow: active
+              ? "0 0 12px rgba(124,58,237,0.08), inset 0 0 0 1px rgba(124,58,237,0.08)"
+              : "none",
+            transition: "background 0.15s, color 0.15s, border-color 0.15s",
+            whiteSpace: "nowrap",
+          }}
+          onMouseEnter={(e) => {
+            if (active) return;
+            e.currentTarget.style.background = "var(--bg-hover)";
+            e.currentTarget.style.color = "var(--text-1)";
+          }}
+          onMouseLeave={(e) => {
+            if (active) return;
+            e.currentTarget.style.background = "transparent";
+            e.currentTarget.style.color = "var(--text-2)";
+          }}
+        >
+          <Icon size={16} aria-hidden style={{ flexShrink: 0 }} />
+          {!collapsed && (
+            <>
+              <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+                {item.label}
+              </span>
+              {count > 0 && (
+                <span
+                  aria-label={`${count} pendiente${count === 1 ? "" : "s"}`}
+                  style={{
+                    fontFamily: "var(--font-jetbrains-mono, monospace)",
+                    fontSize: 10,
+                    fontWeight: 500,
+                    padding: "1px 6px",
+                    minWidth: 18,
+                    textAlign: "center",
+                    borderRadius: 10,
+                    background: active ? "rgba(124,58,237,0.20)" : "var(--brand-soft)",
+                    color: active ? "var(--brand)" : "var(--text-2)",
+                    flexShrink: 0,
+                  }}
+                >
+                  {count > 99 ? "99+" : count}
+                </span>
+              )}
+              {hasConsultBadge && (
+                <span
+                  aria-label="Consulta en curso"
+                  title="Consulta en curso"
+                  style={{
+                    width: 6, height: 6, borderRadius: "50%",
+                    background: "var(--success)",
+                    boxShadow: "0 0 4px rgba(16,185,129,0.6)",
+                    flexShrink: 0,
+                  }}
+                />
+              )}
+            </>
+          )}
+          {collapsed && (count > 0 || hasConsultBadge) && (
+            <span
+              aria-hidden
+              className="mf-sidebar-item-dot"
+              style={{
+                background: hasConsultBadge ? "var(--success)" : "var(--brand)",
+                boxShadow: hasConsultBadge
+                  ? "0 0 4px rgba(16,185,129,0.6)"
+                  : "0 0 4px rgba(124,58,237,0.6)",
+              }}
+            />
+          )}
+        </Link>
+      );
 
-  const navWork  = NAV.filter(n => n.section === "work");
-  const navAdmin = NAV.filter(n => n.section === "admin");
+      if (collapsed) {
+        return (
+          <Tooltip.Root key={item.id} delayDuration={300}>
+            <Tooltip.Trigger asChild>{content}</Tooltip.Trigger>
+            <Tooltip.Portal>
+              <Tooltip.Content
+                side="right"
+                sideOffset={8}
+                style={{
+                  background: "var(--bg-elev)",
+                  border: "1px solid var(--border-strong)",
+                  borderRadius: 8,
+                  padding: "6px 10px",
+                  fontSize: 12,
+                  color: "var(--text-1)",
+                  boxShadow: "0 6px 20px -4px rgba(15,10,30,0.18), 0 2px 8px -2px rgba(15,10,30,0.10)",
+                  fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+                  zIndex: 50,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                {item.label}
+                {count > 0 && (
+                  <span
+                    style={{
+                      fontFamily: "var(--font-jetbrains-mono, monospace)",
+                      fontSize: 10,
+                      padding: "1px 5px",
+                      borderRadius: 10,
+                      background: "var(--brand-soft)",
+                      color: "var(--brand)",
+                    }}
+                  >
+                    {count > 99 ? "99+" : count}
+                  </span>
+                )}
+                <Tooltip.Arrow width={8} height={4} style={{ fill: "var(--bg-elev)" }} />
+              </Tooltip.Content>
+            </Tooltip.Portal>
+          </Tooltip.Root>
+        );
+      }
 
-  async function logout() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
-  }
+      return content;
+    },
+    [pathname, collapsed, activeConsult, getCount],
+  );
 
-  const initials = `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase();
-  const roleLabel: Record<string, string> = {
-    ADMIN: "Admin", DOCTOR: "Doctor", RECEPTIONIST: "Recep.",
-    SUPER_ADMIN: "Admin", READONLY: "Solo lectura",
-  };
-
-  // Helper: un nav item con el estilo .nav-item-new
-  const renderNavItem = (item: NavItem, isCollapsed: boolean) => {
-    const active = item.href === "/dashboard"
-      ? pathname === "/dashboard"
-      : pathname.startsWith(item.href);
-    const Icon = item.icon;
-    const isWa = item.key === "whatsapp";
-
-    const link = (
-      <Link
-        href={item.href}
-        prefetch
-        onClick={() => setOpen(false)}
-        aria-current={active ? "page" : undefined}
-        className={cn(
-          "nav-item-new",
-          active && "nav-item-new--active",
-          isCollapsed && "justify-center"
-        )}
-        style={isCollapsed ? { padding: "7px 0" } : undefined}
+  const renderSectionLabel = (label: string) => {
+    if (collapsed) return null;
+    return (
+      <div
+        style={{
+          padding: "14px 10px 6px",
+          fontSize: 10,
+          fontWeight: 600,
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          color: "var(--text-3)",
+        }}
       >
-        <Icon size={16} />
-        {!isCollapsed && (
+        {label}
+      </div>
+    );
+  };
+
+  const sidebarInner = (
+    <>
+      <ClinicSwitcher
+        collapsed={collapsed}
+        clinicName={props.clinicName}
+        clinicId={props.clinicId}
+        plan={props.plan}
+        allClinics={props.allClinics ?? []}
+      />
+
+      <nav
+        aria-label="Navegación principal"
+        className="scrollbar-thin"
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          overflowX: "hidden",
+          display: "flex",
+          flexDirection: "column",
+          gap: 2,
+          paddingInline: collapsed ? 8 : 0,
+        }}
+      >
+        {itemsBySection.workspace.map((it) => renderItem(it))}
+
+        {itemsBySection.clinico.length > 0 && (
           <>
-            <span className="truncate">{item.label}</span>
-            {isWa && !active && <span className="nav-item-new__dot" />}
+            {renderSectionLabel("Clínico")}
+            {itemsBySection.clinico.map((it) => renderItem(it))}
           </>
         )}
-      </Link>
-    );
 
-    if (isCollapsed) {
-      return (
-        <li key={item.href} style={{ listStyle: "none" }}>
-          <Tooltip>
-            <TooltipTrigger asChild>{link}</TooltipTrigger>
-            <TooltipContent side="right">{item.label}</TooltipContent>
-          </Tooltip>
-        </li>
-      );
+        {itemsBySection.catalogo.length > 0 && (
+          <>
+            {renderSectionLabel("Catálogo")}
+            {itemsBySection.catalogo.map((it) => renderItem(it))}
+          </>
+        )}
+
+        {itemsBySection.admin.length > 0 && !collapsed && (
+          <AdminSection
+            expanded={adminExpanded}
+            onToggle={() => setAdminExpanded(!adminExpanded)}
+            items={itemsBySection.admin}
+            renderItem={renderItem}
+          />
+        )}
+
+        {itemsBySection.admin.length > 0 && collapsed && (
+          <>
+            <div style={{ height: 8 }} />
+            {itemsBySection.admin.map((it) => renderItem(it))}
+          </>
+        )}
+      </nav>
+
+      <SidebarFooter
+        collapsed={collapsed}
+        onToggleCollapse={() => setCollapsed(!collapsed)}
+        user={props.user}
+      />
+    </>
+  );
+
+  if (isMobile) {
+    return (
+      <Tooltip.Provider>
+        {mobileOpen && (
+          <>
+            <div
+              aria-hidden
+              className="mf-sidebar-mobile-overlay"
+              onClick={() => setMobileOpen(false)}
+              style={{
+                position: "fixed", inset: 0,
+                background: "rgba(5,5,10,0.72)",
+                backdropFilter: "blur(6px)",
+                WebkitBackdropFilter: "blur(6px)",
+                zIndex: 49,
+              }}
+            />
+            <aside
+              role="dialog"
+              aria-label="Navegación"
+              aria-modal="true"
+              className="mf-sidebar-mobile-panel"
+              style={{
+                position: "fixed", top: 0, left: 0, bottom: 0,
+                width: "min(280px, 80vw)",
+                background: "var(--bg-elev)",
+                borderRight: "1px solid var(--border-soft)",
+                boxShadow: "4px 0 24px -4px rgba(15,10,30,0.18)",
+                zIndex: 50,
+                display: "flex",
+                flexDirection: "column",
+                paddingBlock: 14,
+                paddingInline: 10,
+                fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setMobileOpen(false)}
+                aria-label="Cerrar navegación"
+                style={{
+                  position: "absolute",
+                  top: 10, right: 10,
+                  width: 32, height: 32,
+                  display: "grid", placeItems: "center",
+                  borderRadius: 8,
+                  background: "var(--bg-elev-2)",
+                  border: "1px solid var(--border-soft)",
+                  color: "var(--text-2)",
+                  cursor: "pointer",
+                }}
+              >
+                <X size={14} />
+              </button>
+              {sidebarInner}
+            </aside>
+          </>
+        )}
+      </Tooltip.Provider>
+    );
+  }
+
+  return (
+    <Tooltip.Provider>
+      <aside
+        aria-label="Navegación lateral"
+        className={`sidebar-new ${collapsed ? "mf-sidebar--collapsed" : ""}`}
+        style={{
+          width: collapsed ? 68 : undefined,
+          paddingInline: collapsed ? 8 : 10,
+        }}
+      >
+        {sidebarInner}
+      </aside>
+    </Tooltip.Provider>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Clinic Switcher
+// ═══════════════════════════════════════════════════════════════════
+
+function ClinicSwitcher({
+  collapsed, clinicName, clinicId, plan, allClinics,
+}: {
+  collapsed: boolean;
+  clinicName: string;
+  clinicId: string;
+  plan: ClinicPlan;
+  allClinics: SidebarClinicRef[];
+}) {
+  const router = useRouter();
+  const hasOthers = allClinics.filter((c) => c.clinicId !== clinicId).length > 0;
+  const initials = clinicName
+    .split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
+
+  const switchClinic = async (id: string) => {
+    try {
+      const res = await fetch("/api/dashboard/switch-clinic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ clinicId: id }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      router.refresh();
+    } catch {
+      window.location.href = "/dashboard";
     }
-    return <li key={item.href} style={{ listStyle: "none" }}>{link}</li>;
   };
 
-  const SidebarContent = ({ isCollapsed }: { isCollapsed: boolean }) => (
-    <TooltipProvider delayDuration={0}>
+  const brandContent = (
+    <>
       <div
-        className={cn("sidebar-new", isCollapsed && "sidebar-new--collapsed")}
-        style={{ width: isCollapsed ? 72 : 232 }}
+        style={{
+          width: 28, height: 28,
+          borderRadius: 8,
+          background: "linear-gradient(135deg, #7c3aed, #5b21b6)",
+          display: "grid", placeItems: "center",
+          color: "#fff", fontWeight: 700, fontSize: 11,
+          boxShadow: "0 0 20px rgba(124,58,237,0.4), inset 0 1px 0 rgba(255,255,255,0.2)",
+          flexShrink: 0,
+        }}
       >
-        {/* Brand */}
-        <div className="sidebar-new__brand">
-          <div className="sidebar-new__logo">
-            <span style={{ fontSize: 14 }}>M</span>
-          </div>
-          {!isCollapsed && (
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="sidebar-new__brandname">MediFlow</div>
-              <div className="sidebar-new__brandsub">{plan}</div>
-            </div>
-          )}
-          {!isCollapsed && hasMultipleClinics && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className="icon-btn-new"
-                  style={{ width: 24, height: 24 }}
-                  aria-label="Cambiar clínica"
-                >
-                  <ChevronsUpDown size={12} />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-[240px]">
-                <DropdownMenuLabel>Cambiar clínica</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {allClinics.map(c => (
-                  <DropdownMenuItem
-                    key={c.clinicId}
-                    disabled={switching}
-                    onClick={() => switchClinic(c.clinicId)}
-                    className={cn(
-                      "flex cursor-pointer items-center gap-2",
-                      c.clinicId === clinicId && "bg-sidebar-accent"
-                    )}
-                  >
-                    <Building2 className="h-4 w-4 shrink-0" />
-                    <div className="flex min-w-0 flex-col">
-                      <span className="truncate text-sm font-medium">{c.clinicName}</span>
-                      <span className="truncate text-[11px] text-muted-foreground">
-                        {CATEGORY_LABELS[c.category] ?? c.category} · {c.plan}
-                      </span>
-                    </div>
-                    {c.clinicId === clinicId && (
-                      <span className="ml-auto h-2 w-2 shrink-0 rounded-full" style={{ background: "var(--brand)" }} />
-                    )}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-
-        {/* Clínica actual (sólo una) */}
-        {!isCollapsed && !hasMultipleClinics && (
+        {initials || "MF"}
+      </div>
+      {!collapsed && (
+        <div style={{ minWidth: 0, flex: 1, textAlign: "left" }}>
           <div
             style={{
-              padding: "0 10px 8px",
-              fontSize: 11,
-              color: "var(--text-3)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
+              fontSize: 13, fontWeight: 600,
+              color: "var(--text-1)",
+              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              letterSpacing: "-0.01em",
             }}
           >
             {clinicName}
           </div>
-        )}
-
-        {/* Nav scroll area */}
-        <nav className="scrollbar-thin" style={{ flex: 1, overflowY: "auto", marginRight: -4, paddingRight: 4 }}>
-          {!isCollapsed && <div className="nav-section-new">Principal</div>}
-          <ul style={{ margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 2 }}>
-            {navWork.map(item => renderNavItem(item, isCollapsed))}
-          </ul>
-
-          {navAdmin.length > 0 && (
-            <>
-              {!isCollapsed && <div className="nav-section-new">Administración</div>}
-              <ul style={{ margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 2 }}>
-                {navAdmin.map(item => renderNavItem(item, isCollapsed))}
-              </ul>
-            </>
-          )}
-        </nav>
-
-        {/* Footer */}
-        <div style={{ marginTop: "auto", paddingTop: 12, borderTop: "1px solid var(--border-soft)", display: "flex", flexDirection: "column", gap: 8 }}>
-          {!isCollapsed && onboardingCompleted && (
-            <div style={{ padding: "0 2px" }}>
-              <OnboardingMini completed={onboardingCompleted} />
-            </div>
-          )}
-
-          {/* Theme toggle */}
-          <button
-            onClick={toggleDark}
-            type="button"
-            className={cn("nav-item-new", isCollapsed && "justify-center")}
-            style={isCollapsed ? { padding: "7px 0" } : undefined}
-            aria-label="Cambiar tema"
+          <div
+            style={{
+              fontSize: 10, fontWeight: 600,
+              letterSpacing: "0.06em",
+              color: "var(--text-3)",
+              textTransform: "uppercase",
+            }}
           >
-            {dark ? <Moon size={14} /> : <Sun size={14} />}
-            {!isCollapsed && <span>{dark ? "Modo oscuro" : "Modo claro"}</span>}
-          </button>
-
-          {/* User chip + dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button type="button" className="user-chip-new" style={{ justifyContent: isCollapsed ? "center" : "flex-start" }}>
-                <div
-                  className="avatar-new"
-                  style={{
-                    background: `linear-gradient(135deg, ${user.color ?? "#a78bfa"}, #7c3aed)`,
-                    width: 28,
-                    height: 28,
-                    fontSize: 10,
-                  }}
-                >
-                  {initials}
-                </div>
-                {!isCollapsed && (
-                  <>
-                    <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                      <div className="user-chip-new__name truncate">
-                        {user.firstName} {user.lastName}
-                      </div>
-                      <div className="user-chip-new__role">
-                        {roleLabel[user.role] ?? user.role}
-                      </div>
-                    </div>
-                    <ChevronDown size={14} style={{ color: "var(--text-3)" }} />
-                  </>
-                )}
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align={isCollapsed ? "center" : "end"} side="top" className="w-56">
-              <DropdownMenuLabel>
-                <div className="flex flex-col">
-                  <span>{user.firstName} {user.lastName}</span>
-                  <span className="text-xs font-normal text-muted-foreground">{user.email}</span>
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <Link href="/dashboard/settings">
-                  <UserIcon className="mr-2 h-4 w-4" />
-                  Mi perfil
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive">
-                <LogOut className="mr-2 h-4 w-4" />
-                Cerrar sesión
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Collapse toggle (desktop only) */}
-          <button
-            onClick={toggleCollapsed}
-            type="button"
-            className={cn("nav-item-new hidden lg:flex", isCollapsed && "justify-center")}
-            style={isCollapsed ? { padding: "7px 0" } : undefined}
-            aria-label={isCollapsed ? "Expandir barra lateral" : "Colapsar barra lateral"}
-          >
-            {isCollapsed ? <PanelLeft size={14} /> : <PanelLeftClose size={14} />}
-            {!isCollapsed && <span>Colapsar</span>}
-          </button>
+            {plan}
+          </div>
         </div>
-      </div>
-    </TooltipProvider>
-  );
-
-  return (
-    <>
-      {/* Desktop sidebar */}
-      <div className="hidden lg:block">
-        <SidebarContent isCollapsed={collapsed} />
-      </div>
-
-      {/* Mobile top bar */}
-      <div
-        className="fixed left-0 right-0 top-0 z-40 flex h-14 items-center gap-3 border-b lg:hidden"
-        style={{
-          borderColor: "var(--border-soft)",
-          background: "rgba(10,10,15,0.9)",
-          backdropFilter: "blur(8px)",
-          padding: "0 16px",
-        }}
-      >
-        <button
-          onClick={() => setOpen(true)}
-          type="button"
-          className="icon-btn-new"
-          aria-label="Abrir menú"
-        >
-          <Menu size={14} />
-        </button>
-        <div className="sidebar-new__logo" style={{ width: 28, height: 28 }}>
-          <span style={{ fontSize: 14 }}>M</span>
-        </div>
-        <span className="sidebar-new__brandname">MediFlow</span>
-        <span
-          style={{ marginLeft: "auto", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12, color: "var(--text-3)" }}
-        >
-          {clinicName}
-        </span>
-      </div>
-
-      {/* Mobile drawer with focus trap */}
-      {open && (
-        <MobileDrawer onClose={() => setOpen(false)}>
-          <SidebarContent isCollapsed={false} />
-        </MobileDrawer>
+      )}
+      {!collapsed && hasOthers && (
+        <ChevronDown size={14} style={{ color: "var(--text-3)", flexShrink: 0 }} aria-hidden />
       )}
     </>
   );
-}
 
-function MobileDrawer({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
-  const drawerRef = useRef<HTMLElement>(null);
+  const brandStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: collapsed ? "8px 4px" : "8px 10px",
+    marginBottom: 10,
+    paddingBottom: 14,
+    borderBottom: "1px solid var(--border-soft)",
+    width: "100%",
+    background: "transparent",
+    border: "none",
+    borderRadius: 8,
+    cursor: hasOthers ? "pointer" : "default",
+    fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+    textAlign: "left",
+  };
 
-  useEffect(() => {
-    const drawer = drawerRef.current;
-    if (!drawer) return;
-
-    const firstFocusable = drawer.querySelector<HTMLElement>(
-      'a[href], button, input, textarea, select, [tabindex]:not([tabindex="-1"])'
-    );
-    firstFocusable?.focus();
-
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") { onClose(); return; }
-      if (e.key !== "Tab") return;
-
-      const focusable = drawer!.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input, textarea, select, [tabindex]:not([tabindex="-1"])'
-      );
-      if (focusable.length === 0) return;
-
-      const first = focusable[0];
-      const last  = focusable[focusable.length - 1];
-
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  if (!hasOthers) {
+    return <div style={brandStyle}>{brandContent}</div>;
+  }
 
   return (
-    <div className="fixed inset-0 z-50 flex lg:hidden" role="dialog" aria-modal="true">
-      <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.7)" }} onClick={onClose} />
-      <aside ref={drawerRef} className="relative flex h-full w-[280px] flex-col">
-        <button
-          type="button"
-          className="icon-btn-new"
-          style={{ position: "absolute", right: 12, top: 12, zIndex: 10 }}
-          onClick={onClose}
-          aria-label="Cerrar menú"
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger
+        aria-label={`Clínica activa: ${clinicName}. Cambiar clínica.`}
+        style={brandStyle}
+        onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+      >
+        {brandContent}
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="start" sideOffset={4}
+          style={{
+            minWidth: 220,
+            background: "var(--bg-elev)",
+            border: "1px solid var(--border-strong)",
+            borderRadius: 10, padding: 4,
+            boxShadow: "0 20px 50px -10px rgba(15,10,30,0.25), 0 8px 20px -8px rgba(15,10,30,0.15)",
+            zIndex: 50,
+            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+          }}
         >
-          <X size={14} />
-        </button>
-        {children}
-      </aside>
+          <div
+            style={{
+              padding: "6px 10px 4px",
+              fontSize: 10, fontWeight: 600,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: "var(--text-3)",
+            }}
+          >
+            Clínicas
+          </div>
+          {allClinics.map((c) => {
+            const isCurrent = c.clinicId === clinicId;
+            return (
+              <DropdownMenu.Item
+                key={c.clinicId}
+                onSelect={(e) => {
+                  if (!isCurrent) {
+                    e.preventDefault();
+                    switchClinic(c.clinicId);
+                  }
+                }}
+                style={{
+                  padding: "8px 10px",
+                  fontSize: 13,
+                  color: "var(--text-1)",
+                  borderRadius: 6,
+                  cursor: isCurrent ? "default" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  outline: "none",
+                  background: isCurrent ? "var(--brand-soft)" : "transparent",
+                }}
+              >
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {c.clinicName}
+                </span>
+                {isCurrent && (
+                  <span
+                    style={{
+                      fontSize: 9,
+                      letterSpacing: "0.06em",
+                      color: "var(--brand)",
+                      fontWeight: 600,
+                    }}
+                  >
+                    ACTUAL
+                  </span>
+                )}
+              </DropdownMenu.Item>
+            );
+          })}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Admin section
+// ═══════════════════════════════════════════════════════════════════
+
+function AdminSection({
+  expanded, onToggle, items, renderItem,
+}: {
+  expanded: boolean;
+  onToggle: () => void;
+  items: NavItemDef[];
+  renderItem: (item: NavItemDef) => ReactNode;
+}) {
+  return (
+    <div style={{ marginTop: 6 }}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        aria-controls="mf-sidebar-admin-items"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          width: "100%",
+          padding: "10px 10px 6px",
+          background: "transparent",
+          border: "none",
+          color: "var(--text-3)",
+          fontSize: 10,
+          fontWeight: 600,
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          cursor: "pointer",
+          fontFamily: "inherit",
+          textAlign: "left",
+        }}
+      >
+        <ChevronRight
+          size={12}
+          aria-hidden
+          className="mf-sidebar-admin-chevron"
+          data-collapsed={!expanded}
+          style={{ flexShrink: 0 }}
+        />
+        Administración
+      </button>
+      <div
+        className="mf-sidebar-admin-body"
+        data-collapsed={!expanded}
+        id="mf-sidebar-admin-items"
+      >
+        <div
+          className="mf-sidebar-admin-inner"
+          style={{ display: "flex", flexDirection: "column", gap: 2 }}
+          {...(!expanded ? ({ inert: "" } as any) : {})}
+        >
+          {items.map((it) => renderItem(it))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Footer
+// ═══════════════════════════════════════════════════════════════════
+
+function SidebarFooter({
+  collapsed, onToggleCollapse, user,
+}: {
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+  user: SidebarUser;
+}) {
+  const [isDark, setIsDark] = useState<boolean>(false);
+
+  useEffect(() => {
+    const sync = () => setIsDark(document.documentElement.classList.contains("dark"));
+    sync();
+    const obs = new MutationObserver(sync);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => obs.disconnect();
+  }, []);
+
+  const toggleTheme = () => {
+    const html = document.documentElement;
+    const nowDark = !html.classList.contains("dark");
+    html.classList.toggle("dark", nowDark);
+    try { window.localStorage.setItem("theme", nowDark ? "dark" : "light"); } catch {}
+    setIsDark(nowDark);
+  };
+
+  const logout = async () => {
+    try {
+      const { createClient } = await import("@/lib/supabase/client");
+      const supabase = createClient();
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error("[Sidebar] logout failed", err);
+    } finally {
+      window.location.href = "/login";
+    }
+  };
+
+  const displayName = `${user.firstName} ${user.lastName}`.trim();
+  const initials = displayName
+    .split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
+
+  const roleLabel: Record<UserRole, string> = {
+    SUPER_ADMIN: "Owner",
+    ADMIN: "Admin",
+    DOCTOR: "Doctor",
+    RECEPTIONIST: "Recepción",
+    READONLY: "Solo lectura",
+    ACCOUNTANT: "Contabilidad",
+  };
+
+  return (
+    <div
+      style={{
+        marginTop: 10,
+        paddingTop: 10,
+        borderTop: "1px solid var(--border-soft)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 4,
+      }}
+    >
+      <button
+        type="button"
+        onClick={toggleTheme}
+        aria-label={isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: collapsed ? 0 : 10,
+          justifyContent: collapsed ? "center" : "flex-start",
+          padding: collapsed ? "8px 0" : "7px 10px",
+          borderRadius: 8,
+          background: "transparent",
+          border: "none",
+          color: "var(--text-3)",
+          fontSize: 12,
+          cursor: "pointer",
+          fontFamily: "inherit",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "var(--bg-hover)";
+          e.currentTarget.style.color = "var(--text-1)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "transparent";
+          e.currentTarget.style.color = "var(--text-3)";
+        }}
+      >
+        {isDark ? <Sun size={14} aria-hidden /> : <Moon size={14} aria-hidden />}
+        {!collapsed && (isDark ? "Modo claro" : "Modo oscuro")}
+      </button>
+
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger
+          aria-label={`Usuario: ${displayName}. Abrir menú de sesión.`}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: collapsed ? 0 : 10,
+            justifyContent: collapsed ? "center" : "flex-start",
+            padding: collapsed ? "6px 0" : "6px 8px",
+            background: "transparent",
+            border: "1px solid var(--border-soft)",
+            borderRadius: 10,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            width: "100%",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        >
+          <div
+            style={{
+              width: 28, height: 28,
+              borderRadius: "50%",
+              background: user.color
+                ? `linear-gradient(135deg, ${user.color}, #7c3aed)`
+                : "linear-gradient(135deg, #a78bfa, #7c3aed)",
+              display: "grid",
+              placeItems: "center",
+              color: "#fff",
+              fontWeight: 600,
+              fontSize: 10,
+              flexShrink: 0,
+            }}
+          >
+            {initials || "?"}
+          </div>
+          {!collapsed && (
+            <div style={{ minWidth: 0, flex: 1, textAlign: "left" }}>
+              <div
+                style={{
+                  fontSize: 12, fontWeight: 600,
+                  color: "var(--text-1)",
+                  lineHeight: 1.2,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {displayName}
+              </div>
+              <div style={{ fontSize: 10, color: "var(--text-3)", lineHeight: 1.2 }}>
+                {roleLabel[user.role]}
+              </div>
+            </div>
+          )}
+          {!collapsed && (
+            <ChevronDown size={12} style={{ color: "var(--text-3)", flexShrink: 0 }} aria-hidden />
+          )}
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content
+            align="start" side="top" sideOffset={6}
+            style={{
+              minWidth: 180,
+              background: "var(--bg-elev)",
+              border: "1px solid var(--border-strong)",
+              borderRadius: 10, padding: 4,
+              boxShadow: "0 20px 50px -10px rgba(15,10,30,0.25), 0 8px 20px -8px rgba(15,10,30,0.15)",
+              zIndex: 50,
+              fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            }}
+          >
+            <DropdownMenu.Item
+              onSelect={logout}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "8px 10px",
+                fontSize: 13,
+                color: "var(--danger)",
+                borderRadius: 6,
+                cursor: "pointer",
+                outline: "none",
+              }}
+            >
+              <LogOut size={14} />
+              Cerrar sesión
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
+
+      <button
+        type="button"
+        onClick={onToggleCollapse}
+        aria-label={collapsed ? "Expandir sidebar" : "Colapsar sidebar"}
+        aria-pressed={collapsed}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: collapsed ? 0 : 10,
+          justifyContent: collapsed ? "center" : "flex-start",
+          padding: collapsed ? "8px 0" : "7px 10px",
+          borderRadius: 8,
+          background: "transparent",
+          border: "none",
+          color: "var(--text-3)",
+          fontSize: 12,
+          cursor: "pointer",
+          fontFamily: "inherit",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "var(--bg-hover)";
+          e.currentTarget.style.color = "var(--text-1)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "transparent";
+          e.currentTarget.style.color = "var(--text-3)";
+        }}
+      >
+        {collapsed ? <PanelLeft size={14} aria-hidden /> : <PanelLeftClose size={14} aria-hidden />}
+        {!collapsed && "Colapsar"}
+      </button>
     </div>
   );
 }

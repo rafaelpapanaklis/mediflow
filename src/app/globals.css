@@ -1498,3 +1498,90 @@
   .mf-pulse-dot { animation: none !important; }
   .mf-context-bar { animation: none !important; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Sidebar v2 — animaciones
+   ═══════════════════════════════════════════════════════════════════ */
+
+.mf-sidebar-admin-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.mf-sidebar-admin-body[data-collapsed="true"] {
+  grid-template-rows: 0fr;
+}
+.mf-sidebar-admin-body > .mf-sidebar-admin-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.mf-sidebar-admin-chevron {
+  transition: transform 0.18s ease;
+}
+.mf-sidebar-admin-chevron[data-collapsed="true"] {
+  transform: rotate(-90deg);
+}
+
+@keyframes mf-sidebar-slide-in {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes mf-sidebar-overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.mf-sidebar-mobile-panel {
+  animation: mf-sidebar-slide-in 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.mf-sidebar-mobile-overlay {
+  animation: mf-sidebar-overlay-in 0.2s ease-out;
+}
+
+.mf-sidebar-item {
+  position: relative;
+}
+.mf-sidebar-item--active::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  width: 2px;
+  height: 16px;
+  margin-top: -8px;
+  background: var(--brand);
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(124, 58, 237, 0.6);
+}
+.mf-sidebar--collapsed .mf-sidebar-item--active::before {
+  left: -8px;
+}
+
+.mf-sidebar-item-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  box-shadow: 0 0 4px rgba(124, 58, 237, 0.6);
+}
+
+/* Dark/light override del color del item activo — WCAG AA */
+:root:not(.dark) .mf-sidebar-item--active {
+  color: #6d28d9 !important; /* brand-700, 5.23:1 sobre brand-soft light */
+}
+.dark .mf-sidebar-item--active {
+  color: #c4b5fd !important; /* violet-300, 8.54:1 sobre brand-soft dark */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mf-sidebar-admin-body,
+  .mf-sidebar-admin-chevron,
+  .mf-sidebar-mobile-panel,
+  .mf-sidebar-mobile-overlay {
+    animation: none !important;
+    transition: none !important;
+  }
+}
