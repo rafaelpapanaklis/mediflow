@@ -10,8 +10,8 @@
     --bg-elev-2:     #F0EEF7;            /* nested light purple */
     --bg-hover:      rgba(124,58,237,0.04);
 
-    --border-soft:   rgba(15,10,30,0.08);
-    --border-strong: rgba(15,10,30,0.14);
+    --border-soft:   rgba(15,10,30,0.12);
+    --border-strong: rgba(15,10,30,0.20);
     --border-brand:  rgba(124,58,237,0.30);
 
     --brand:         #7c3aed;
@@ -35,6 +35,21 @@
     --radius-sm: 6px;
     --radius:    10px;
     --radius-lg: 14px;
+
+    /* ── Patient Context Bar (consulta activa) — brand tint neutro ── */
+    --consult-active-bg:     rgba(124,58,237,0.06);
+    --consult-active-border: rgba(124,58,237,0.25);
+    --consult-active-accent: var(--brand);
+    --consult-active-dot:    var(--success);
+
+    /* ── Alert stripes (alergias, advertencias críticas) ── */
+    --danger-soft-strong:    rgba(220,38,38,0.15);
+    --danger-border-strong:  rgba(220,38,38,0.35);
+    --warning-soft-strong:   rgba(217,119,6,0.15);
+    --warning-border-strong: rgba(217,119,6,0.35);
+
+    /* ── Interactive border (reservado v2.2+, no usar aún) ── */
+    --border-interactive:    rgba(15,10,30,0.28);
 
     /* ── Tailwind-compat HSL (light) ── */
     --background:        250 18% 97%;
@@ -97,6 +112,21 @@
     --info:         #3b82f6;
     --info-soft:    rgba(59,130,246,0.12);
 
+    /* ── Patient Context Bar (consulta activa) ── */
+    --consult-active-bg:     rgba(124,58,237,0.10);
+    --consult-active-border: rgba(124,58,237,0.30);
+    --consult-active-accent: #c4b5fd;
+    --consult-active-dot:    var(--success);
+
+    /* ── Alert stripes ── */
+    --danger-soft-strong:    rgba(239,68,68,0.18);
+    --danger-border-strong:  rgba(239,68,68,0.38);
+    --warning-soft-strong:   rgba(245,158,11,0.18);
+    --warning-border-strong: rgba(245,158,11,0.38);
+
+    /* ── Interactive border (reservado v2.2+) ── */
+    --border-interactive:    rgba(255,255,255,0.18);
+
     /* Tailwind-compat HSL (dark — space purple) */
     --background:        255 30% 6%;
     --foreground:        240 12% 92%;
@@ -127,8 +157,8 @@
     color: var(--text-1);
     background-image:
       radial-gradient(ellipse 1200px 600px at 50% -10%, rgba(124,58,237,0.05), transparent 70%),
-      linear-gradient(rgba(20,16,31,0.025) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(20,16,31,0.025) 1px, transparent 1px);
+      linear-gradient(rgba(20,16,31,0.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(20,16,31,0.055) 1px, transparent 1px);
     background-size: auto, 32px 32px, 32px 32px;
     background-attachment: fixed;
     font-size: 1rem;
@@ -162,6 +192,82 @@
   .dark .bg-rose-50       { background-color: rgb(136 19 55 / 0.3) !important; }
   .dark .bg-blue-50       { background-color: rgb(23 37 84 / 0.3)  !important; }
   .dark .bg-violet-50     { background-color: rgb(76 29 149 / 0.3) !important; }
+
+  /* ═══════════════════════════════════════════════════════════════
+     Focus visible — WCAG 2.1 SC 2.4.7 + 1.4.11
+     Solo aparece cuando se navega con teclado (no con click)
+     ═══════════════════════════════════════════════════════════════ */
+
+  :focus { outline: none; }
+
+  :focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+    border-radius: inherit;
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  [role="button"]:focus-visible,
+  [role="link"]:focus-visible,
+  [role="menuitem"]:focus-visible,
+  [role="option"]:focus-visible,
+  [role="tab"]:focus-visible,
+  [tabindex]:focus-visible,
+  summary:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.20);
+  }
+
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: none;
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.18);
+  }
+
+  .input-new:focus-visible {
+    outline: none;
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.18);
+  }
+
+  .btn-new:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 3px;
+    box-shadow:
+      0 0 0 4px rgba(124, 58, 237, 0.25),
+      inset 0 1px 0 rgba(255,255,255,0.15);
+  }
+
+  .btn-new--primary:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: -3px;
+    box-shadow:
+      0 0 0 2px var(--brand),
+      0 0 0 5px rgba(124, 58, 237, 0.40),
+      0 4px 16px -4px rgba(124,58,237,0.5);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :focus-visible {
+      box-shadow: 0 0 0 3px var(--brand);
+    }
+    .btn-new:focus-visible,
+    .btn-new--primary:focus-visible {
+      outline: 2px solid var(--brand);
+      outline-offset: 2px;
+      box-shadow: 0 0 0 3px var(--brand);
+    }
+    input:focus-visible,
+    textarea:focus-visible,
+    select:focus-visible,
+    .input-new:focus-visible {
+      box-shadow: 0 0 0 2px var(--brand);
+    }
+  }
 }
 
 @layer utilities {
