@@ -22,6 +22,13 @@ interface Props {
   period: AdminPeriod;
 }
 
+const PERIOD_SUBTITLE: Record<AdminPeriod, string> = {
+  day:     "Hoy",
+  month:   "Este mes",
+  quarter: "Últimos 3 meses",
+  year:    "Últimos 12 meses",
+};
+
 function iconForKpi(label: string) {
   const l = label.toLowerCase();
   if (l.includes("ingreso") || l.includes("revenue")) return DollarSign;
@@ -102,7 +109,7 @@ export function HomeAdmin({ clinic, data, period }: Props) {
       >
         <HomeSection
           title="Tendencia de ingresos"
-          subtitle="Últimos 6 meses"
+          subtitle={PERIOD_SUBTITLE[period]}
           noPad
         >
           <div style={{ padding: 18 }}>
