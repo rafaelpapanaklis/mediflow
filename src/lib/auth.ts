@@ -19,23 +19,42 @@ export async function getCurrentUser() {
   const supabaseUser = await requireAuth();
   const activeClinicId = readActiveClinicCookie();
 
+  console.log("[AUTH-DEBUG getCurrentUser]", JSON.stringify({
+    supabaseId: supabaseUser.id,
+    email: supabaseUser.email,
+    activeClinicId,
+  }));
+
   if (activeClinicId) {
     const user = await prisma.user.findFirst({
       where: { supabaseId: supabaseUser.id, clinicId: activeClinicId, isActive: true },
       include: { clinic: true },
     });
-    if (user) return user;
+    if (user) {
+      console.log("[AUTH-DEBUG getCurrentUser] cookie match → clinicId=", user.clinicId);
+      return user;
+    }
   }
 
-  const user = await prisma.user.findFirst({
+  const candidates = await prisma.user.findMany({
     where: { supabaseId: supabaseUser.id, isActive: true },
     include: { clinic: true },
     orderBy: { createdAt: "asc" },
   });
+  console.log("[AUTH-DEBUG getCurrentUser] candidates=", candidates.map(u => ({ id: u.id, email: u.email, clinicId: u.clinicId })));
+
+  const user = candidates[0];
   if (!user) redirect("/onboarding");
 
   if (activeClinicId && activeClinicId !== user.clinicId) {
+    console.warn("[AUTH-DEBUG getCurrentUser] FALLBACK USADO", JSON.stringify({
+      email: supabaseUser.email, requested: activeClinicId, actual: user.clinicId,
+    }));
     logClinicFallback({ supabaseId: supabaseUser.id, requestedClinicId: activeClinicId, actualClinicId: user.clinicId });
+  } else if (!activeClinicId && candidates.length > 1) {
+    console.warn("[AUTH-DEBUG getCurrentUser] sin cookie + multi-clínica → primer createdAt", JSON.stringify({
+      email: supabaseUser.email, picked: user.clinicId, allClinicIds: candidates.map(u => u.clinicId),
+    }));
   }
 
   return user;

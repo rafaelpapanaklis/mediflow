@@ -33,6 +33,10 @@ export async function getAuthContext(): Promise<AuthContext | null> {
 
     const activeClinicId = readActiveClinicCookie();
 
+    console.log("[AUTH-DEBUG getAuthContext]", JSON.stringify({
+      supabaseId: user.id, email: user.email, activeClinicId,
+    }));
+
     const dbUser = activeClinicId
       ? await prisma.user.findFirst({
           where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true },
@@ -49,6 +53,9 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     if (!finalUser || !finalUser.isActive) return null;
 
     if (activeClinicId && activeClinicId !== finalUser.clinicId) {
+      console.warn("[AUTH-DEBUG getAuthContext] FALLBACK USADO", JSON.stringify({
+        email: user.email, requested: activeClinicId, actual: finalUser.clinicId,
+      }));
       logClinicFallback({ supabaseId: user.id, requestedClinicId: activeClinicId, actualClinicId: finalUser.clinicId });
     }
 

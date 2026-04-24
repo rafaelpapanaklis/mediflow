@@ -26,12 +26,16 @@ export function LoginForm() {
     setLoading(true);
     try {
       const supabase = createClient();
+      // Cerrar sesión previa para evitar contaminación cross-account.
+      try { await supabase.auth.signOut(); } catch { /* ignore */ }
       const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
       if (authError) {
         setError("Email o contraseña incorrectos.");
         setLoading(false);
         return;
       }
+      // Sembrar/limpiar cookie activeClinicId para el nuevo supabaseId.
+      try { await fetch("/api/auth/post-login", { method: "POST" }); } catch { /* ignore */ }
       toast.success("¡Bienvenido!");
       router.push("/dashboard");
       router.refresh();
