@@ -75,7 +75,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         )}
         <GlobalAnnouncementBanner />
         <Topbar
-          crumbs={[clinic.name, "Dashboard"]}
+          clinicName={clinic.name}
           trialEndsAt={isInTrial ? trialEndsAt : null}
           plan={clinic.plan as any}
         />

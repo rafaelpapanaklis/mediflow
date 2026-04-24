@@ -1,8 +1,8 @@
 "use client";
 
 import { ChevronRight, Menu } from "lucide-react";
-import { Fragment, useState, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { Fragment, useState, useMemo, type ReactNode } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import toast from "react-hot-toast";
 import { CommandPalette } from "./command-palette";
 import { CommandPaletteHint } from "./command-palette-hint";
@@ -14,20 +14,59 @@ import { useActiveConsult } from "@/hooks/use-active-consult";
 import { useGoToShortcuts, useCreateShortcuts } from "@/lib/command-palette/shortcuts";
 import type { ClinicPlan } from "./sidebar";
 
+const ROUTE_LABELS: Record<string, string> = {
+  "/dashboard":               "Hoy",
+  "/dashboard/appointments":  "Agenda",
+  "/dashboard/patients":      "Pacientes",
+  "/dashboard/whatsapp":      "Mensajes",
+  "/dashboard/clinical":      "Expedientes",
+  "/dashboard/ai-assistant":  "IA asistente",
+  "/dashboard/xrays":         "Radiografías",
+  "/dashboard/before-after":  "Antes/Después",
+  "/dashboard/formulas":      "Fórmulas",
+  "/dashboard/exercises":     "Ejercicios",
+  "/dashboard/orthotics":     "Ortesis",
+  "/dashboard/treatments":    "Tratamientos",
+  "/dashboard/packages":      "Paquetes",
+  "/dashboard/resources":     "Recursos",
+  "/dashboard/inventory":     "Inventario",
+  "/dashboard/billing":       "Facturación",
+  "/dashboard/reports":       "Reportes",
+  "/dashboard/team":          "Equipo",
+  "/dashboard/landing":       "Página web",
+  "/dashboard/procedures":    "Procedimientos",
+  "/dashboard/settings":      "Configuración",
+};
+
+function resolveCurrentLabel(pathname: string | null): string {
+  if (!pathname) return "Hoy";
+  if (ROUTE_LABELS[pathname]) return ROUTE_LABELS[pathname];
+  const match = Object.keys(ROUTE_LABELS)
+    .filter((k) => k !== "/dashboard" && pathname.startsWith(`${k}/`))
+    .sort((a, b) => b.length - a.length)[0];
+  if (match) return ROUTE_LABELS[match];
+  return "Hoy";
+}
+
 type TopbarProps = {
-  crumbs?: string[];
+  clinicName: string;
   right?: ReactNode;
   trialEndsAt?: Date | string | null;
   plan?: ClinicPlan;
 };
 
 export function Topbar({
-  crumbs = ["Dashboard"],
+  clinicName,
   right,
   trialEndsAt,
   plan,
 }: TopbarProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const crumbs = useMemo(
+    () => [clinicName, resolveCurrentLabel(pathname)],
+    [clinicName, pathname],
+  );
   const { open: paletteOpen, setOpen: setPaletteOpen } = useCommandPalette();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const { consult } = useActiveConsult();
