@@ -1,9 +1,14 @@
 "use client";
 
-import { Search, ChevronRight } from "lucide-react";
-import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { ChevronRight } from "lucide-react";
+import { Fragment, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { CommandPalette } from "./command-palette";
+import { CommandPaletteHint } from "./command-palette-hint";
+import { KeyboardShortcutsPanel } from "./keyboard-shortcuts-panel";
 import { NotificationsPopover } from "./notifications-popover";
+import { useCommandPalette } from "@/hooks/use-command-palette";
+import { useGoToShortcuts, useCreateShortcuts } from "@/lib/command-palette/shortcuts";
 
 type TopbarProps = {
   crumbs?: string[];
@@ -14,18 +19,27 @@ export function Topbar({
   crumbs = ["Dashboard"],
   right,
 }: TopbarProps) {
-  const [paletteOpen, setPaletteOpen] = useState(false);
+  const router = useRouter();
+  const { open: paletteOpen, setOpen: setPaletteOpen } = useCommandPalette();
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const modalsClosed = !paletteOpen && !shortcutsOpen;
 
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setPaletteOpen(true);
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  useGoToShortcuts({ enabled: modalsClosed });
+  useCreateShortcuts({
+    enabled: modalsClosed,
+    onCreateAppointment: () => router.push("/dashboard/appointments?new=1"),
+    onCreatePatient:     () => router.push("/dashboard/patients?new=1"),
+    onCreateInvoice:     () => router.push("/dashboard/billing?new=1"),
+    onCreateSoap:        () => {
+      // TODO(Fase 2.3): conectar con useActiveConsult()
+    },
+    onToggleTheme: () => {
+      const html = document.documentElement;
+      const isDark = html.classList.contains("dark");
+      html.classList.toggle("dark");
+      try { localStorage.setItem("theme", isDark ? "light" : "dark"); } catch {}
+    },
+  });
 
   return (
     <>
@@ -45,22 +59,12 @@ export function Topbar({
 
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
           {right}
-
-          <button
-            type="button"
-            onClick={() => setPaletteOpen(true)}
-            className="topbar-new__search"
-            style={{ cursor: "pointer", border: "1px solid var(--border-soft)", textAlign: "left" }}
-          >
-            <Search size={12} />
-            <span>Buscar pacientes, citas…</span>
-            <kbd>⌘K</kbd>
-          </button>
-
+          <CommandPaletteHint onClick={() => setPaletteOpen(true)} />
           <NotificationsPopover />
         </div>
       </div>
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      <KeyboardShortcutsPanel open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </>
   );
 }
