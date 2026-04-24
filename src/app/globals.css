@@ -1653,3 +1653,27 @@
   .mf-trial-pill__label-min { display: inline !important; }
   .mf-trial-pill { padding: 0 8px !important; gap: 4px !important; }
 }
+
+/* ─── Trial Pill — CTA mini responsive ─── */
+
+/* En mobile <640px: ocultar el CTA y el divider; pill queda solo con label min */
+@media (max-width: 639.98px) {
+  .mf-trial-pill__cta,
+  .mf-trial-pill__divider {
+    display: none !important;
+  }
+  .mf-trial-pill {
+    padding-right: 8px !important;
+  }
+}
+
+/* En tablet 640-1023px: CTA visible pero "Activar plan" label se oculta,
+   queda solo la flecha ↗ — más compacto */
+@media (min-width: 640px) and (max-width: 1023.98px) {
+  .mf-trial-pill__cta-label {
+    display: none !important;
+  }
+  .mf-trial-pill__cta {
+    padding: 0 8px !important;
+  }
+}
