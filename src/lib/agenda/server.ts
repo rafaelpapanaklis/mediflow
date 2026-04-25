@@ -221,7 +221,7 @@ export async function aggregateAdminPeriodKpis(
         where: {
           clinicId,
           createdAt: { gte: from, lt: to },
-          status: { in: ["PAID", "PARTIAL"] },
+          status: { notIn: ["CANCELLED"] },
         },
         _sum: { paid: true },
       })
