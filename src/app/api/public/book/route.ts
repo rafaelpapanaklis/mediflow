@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { createCalendarEvent, refreshAccessToken, getOrCreateClinicCalendar } from "@/lib/google-calendar";
 import { rateLimit } from "@/lib/rate-limit";
+import { tzLocalToUtc } from "@/lib/agenda/time-utils";
 
 export async function POST(req: NextRequest) {
   try {
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
   const clinic = await prisma.clinic.findUnique({
     where: { slug },
     select: {
-      id: true, name: true, phone: true,
+      id: true, name: true, phone: true, timezone: true,
       waConnected: true, waPhoneNumberId: true, waAccessToken: true,
       schedules: { select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true } },
     },
@@ -133,6 +134,8 @@ export async function POST(req: NextRequest) {
       throw new Error("SLOT_TAKEN");
     }
 
+    const startsAtBook = tzLocalToUtc(date, slotH, slotM, clinic.timezone);
+    const endsAtBook = new Date(startsAtBook.getTime() + 30 * 60_000);
     return tx.appointment.create({
       data: {
         clinicId:    clinic.id,
@@ -143,6 +146,8 @@ export async function POST(req: NextRequest) {
         startTime,
         endTime,
         durationMins:30,
+        startsAt:    startsAtBook,
+        endsAt:      endsAtBook,
         status:      "PENDING",
         notes:       notes?.trim() || null,
       },
@@ -217,7 +222,7 @@ export async function POST(req: NextRequest) {
 
         const gcalEventId = await createCalendarEvent(token, clinicGcal.googleRefreshToken, {
           id: appt.id, type: type?.trim() || "Consulta general",
-          date, startTime, endTime,
+          startsAt: appt.startsAt, endsAt: appt.endsAt, clinicTimezone: clinic.timezone,
           patientName: `${firstName.trim()} ${lastName.trim()}`,
           clinicName: clinicGcal.name, clinicAddress: clinicGcal.address,
           notes: notes?.trim() || null,

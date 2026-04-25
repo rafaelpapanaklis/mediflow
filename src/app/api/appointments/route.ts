@@ -4,6 +4,8 @@ import { getAuthContext, buildAppointmentWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createCalendarEvent, refreshAccessToken, getOrCreateClinicCalendar } from "@/lib/google-calendar";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { tzLocalToUtc } from "@/lib/agenda/time-utils";
+import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
@@ -15,12 +17,14 @@ export async function GET(req: NextRequest) {
       patient: { select: { id: true, firstName: true, lastName: true, phone: true } },
       doctor:  { select: { id: true, firstName: true, lastName: true, color: true } },
     },
-    orderBy: [{ date: "asc" }, { startTime: "asc" }],
+    orderBy: { startsAt: "asc" },
   });
 
   return NextResponse.json(appts.map(a => ({
     ...a,
     date:      a.date instanceof Date ? a.date.toISOString() : a.date,
+    startsAt:  a.startsAt.toISOString(),
+    endsAt:    a.endsAt.toISOString(),
     createdAt: a.createdAt instanceof Date ? a.createdAt.toISOString() : a.createdAt,
     updatedAt: a.updatedAt instanceof Date ? a.updatedAt.toISOString() : a.updatedAt,
   })));
@@ -60,6 +64,29 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const clinic = await prisma.clinic.findUnique({
+    where:  { id: ctx.clinicId },
+    select: {
+      name: true, address: true, timezone: true,
+      googleCalendarEnabled: true,
+      googleCalendarToken:   true,
+      googleRefreshToken:    true,
+      googleClinicCalendarId: true,
+    },
+  });
+  if (!clinic) return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
+
+  const tz = clinic.timezone;
+  const durationMins: number = body.durationMins ?? 30;
+  const [sH, sM] = String(body.startTime).split(":").map(Number);
+  const startsAt = tzLocalToUtc(String(body.date).split("T")[0], sH, sM, tz);
+  const endsAt = body.endTime
+    ? (() => {
+        const [eH, eM] = String(body.endTime).split(":").map(Number);
+        return tzLocalToUtc(String(body.date).split("T")[0], eH, eM, tz);
+      })()
+    : new Date(startsAt.getTime() + durationMins * 60_000);
+
   const appt = await prisma.appointment.create({
     data: {
       clinicId:     ctx.clinicId,
@@ -69,7 +96,9 @@ export async function POST(req: NextRequest) {
       date:         new Date(body.date),
       startTime:    body.startTime,
       endTime:      body.endTime,
-      durationMins: body.durationMins ?? 30,
+      durationMins,
+      startsAt,
+      endsAt,
       status:       "PENDING",
       notes:        body.notes ?? null,
       mode:         body.mode || "IN_PERSON",
@@ -83,17 +112,6 @@ export async function POST(req: NextRequest) {
   // ── Google Calendar sync ────────────────────────────────────────────────
   // STRATEGY: Use clinic-level calendar if admin has connected Google.
   // Otherwise fall back to the doctor's personal calendar.
-
-  const clinic = await prisma.clinic.findUnique({
-    where:  { id: ctx.clinicId },
-    select: {
-      name: true, address: true,
-      googleCalendarEnabled: true,
-      googleCalendarToken:   true,
-      googleRefreshToken:    true,
-      googleClinicCalendarId: true,
-    },
-  });
 
   let gcalEventId: string | null = null;
 
@@ -126,9 +144,9 @@ export async function POST(req: NextRequest) {
       gcalEventId = await createCalendarEvent(token, clinic.googleRefreshToken, {
         id:          appt.id,
         type:        appt.type,
-        date:        body.date,
-        startTime:   appt.startTime,
-        endTime:     appt.endTime,
+        startsAt,
+        endsAt,
+        clinicTimezone: tz,
         patientName: `${patient.firstName} ${patient.lastName}`,
         clinicName:  clinic.name,
         clinicAddress: clinic.address,
@@ -151,12 +169,12 @@ export async function POST(req: NextRequest) {
       gcalEventId = await createCalendarEvent(token, doctor.googleRefreshToken, {
         id:          appt.id,
         type:        appt.type,
-        date:        body.date,
-        startTime:   appt.startTime,
-        endTime:     appt.endTime,
+        startsAt,
+        endsAt,
+        clinicTimezone: tz,
         patientName: `${patient.firstName} ${patient.lastName}`,
-        clinicName:  clinic?.name ?? ctx.clinic.name,
-        clinicAddress: clinic?.address,
+        clinicName:  clinic.name,
+        clinicAddress: clinic.address,
         notes:       appt.notes,
         doctorName:  doctor ? `${doctor.firstName} ${doctor.lastName}` : null,
         doctorEmail: doctor.googleCalendarEmail ?? doctor.email,
@@ -182,9 +200,10 @@ export async function POST(req: NextRequest) {
 
   if (clinicWa?.waConnected && clinicWa.waPhoneNumberId && clinicWa.waAccessToken && patient.phone) {
     try {
-      const dateObj = new Date(body.date);
-      const dateFormatted = dateObj.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
-      const msg = `✅ Cita agendada en ${clinicWa.name}\n\n📅 ${dateFormatted}\n🕐 ${appt.startTime} - ${appt.endTime}\n📋 ${appt.type}\n${doctor ? `👨‍⚕️ ${doctor.firstName} ${doctor.lastName}` : ""}\n\n¿Confirmas tu asistencia? Responde *sí* o *no*`;
+      const dateFormatted = new Intl.DateTimeFormat("es-MX", {
+        timeZone: tz, weekday: "long", day: "numeric", month: "long",
+      }).format(startsAt);
+      const msg = `✅ Cita agendada en ${clinicWa.name}\n\n📅 ${dateFormatted}\n🕐 ${timeHHMMInTz(startsAt, tz)} - ${timeHHMMInTz(endsAt, tz)}\n📋 ${appt.type}\n${doctor ? `👨‍⚕️ ${doctor.firstName} ${doctor.lastName}` : ""}\n\n¿Confirmas tu asistencia? Responde *sí* o *no*`;
 
       await sendWhatsAppMessage(clinicWa.waPhoneNumberId, clinicWa.waAccessToken, patient.phone, msg);
 
@@ -214,6 +233,8 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     ...appt,
     date: appt.date instanceof Date ? appt.date.toISOString() : appt.date,
+    startsAt: appt.startsAt.toISOString(),
+    endsAt: appt.endsAt.toISOString(),
     ...(body.mode === "TELECONSULTATION" && { paymentUrl: `/pago/${appt.id}` }),
   }, { status: 201 });
 }

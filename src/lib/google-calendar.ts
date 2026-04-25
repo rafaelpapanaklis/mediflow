@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import crypto from "crypto";
+import { rfc3339InTz } from "@/lib/agenda/legacy-helpers";
 
 // FIX: openid + email required so Google returns id_token with user email
 const SCOPES = [
@@ -105,9 +106,9 @@ export async function createCalendarEvent(
   appt: {
     id: string;
     type: string;
-    date: string;
-    startTime: string;
-    endTime: string;
+    startsAt: Date;
+    endsAt: Date;
+    clinicTimezone: string;
     patientName: string;
     clinicName: string;
     clinicAddress?: string | null;
@@ -124,10 +125,9 @@ export async function createCalendarEvent(
 
     const calendar = google.calendar({ version: "v3", auth: oauth2Client });
 
-    const tz      = "America/Mexico_City";
-    const dateStr = appt.date.split("T")[0];
-    const startDT = `${dateStr}T${appt.startTime}:00`;
-    const endDT   = `${dateStr}T${appt.endTime}:00`;
+    const tz      = appt.clinicTimezone;
+    const startDT = rfc3339InTz(appt.startsAt, tz);
+    const endDT   = rfc3339InTz(appt.endsAt, tz);
 
     const attendees: { email: string }[] = [];
     if (appt.doctorEmail)  attendees.push({ email: appt.doctorEmail  });
@@ -175,9 +175,9 @@ export async function updateCalendarEvent(
   googleEventId: string,
   appt: {
     type: string;
-    date: string;
-    startTime: string;
-    endTime: string;
+    startsAt: Date;
+    endsAt: Date;
+    clinicTimezone: string;
     patientName: string;
     clinicName: string;
     clinicAddress?: string | null;
@@ -191,10 +191,9 @@ export async function updateCalendarEvent(
     oauth2Client.setCredentials({ access_token: accessToken, refresh_token: refreshToken });
     const calendar = google.calendar({ version: "v3", auth: oauth2Client });
 
-    const tz      = "America/Mexico_City";
-    const dateStr = appt.date.split("T")[0];
-    const startDT = `${dateStr}T${appt.startTime}:00`;
-    const endDT   = `${dateStr}T${appt.endTime}:00`;
+    const tz      = appt.clinicTimezone;
+    const startDT = rfc3339InTz(appt.startsAt, tz);
+    const endDT   = rfc3339InTz(appt.endsAt, tz);
 
     const descLines = [
       `Paciente: ${appt.patientName}`,

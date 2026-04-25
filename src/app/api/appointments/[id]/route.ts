@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { deleteCalendarEvent, updateCalendarEvent, refreshAccessToken } from "@/lib/google-calendar";
 import { revalidatePath } from "next/cache";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { tzLocalToUtc } from "@/lib/agenda/time-utils";
+import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-helpers";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -21,6 +23,36 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   });
   if (!appt) return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 });
 
+  const clinicTz = await prisma.clinic.findUnique({
+    where: { id: ctx.clinicId },
+    select: { timezone: true },
+  });
+  const tz = clinicTz?.timezone ?? "America/Mexico_City";
+
+  let newStartsAt: Date | undefined;
+  let newEndsAt: Date | undefined;
+  if (
+    body.date !== undefined ||
+    body.startTime !== undefined ||
+    body.endTime !== undefined ||
+    body.durationMins !== undefined
+  ) {
+    const dateStr = body.date ?? dateISOInTz(appt.startsAt, tz);
+    const startStr = body.startTime ?? timeHHMMInTz(appt.startsAt, tz);
+    const [sH, sM] = String(startStr).split(":").map(Number);
+    newStartsAt = tzLocalToUtc(String(dateStr).split("T")[0], sH, sM, tz);
+
+    if (body.endTime !== undefined) {
+      const [eH, eM] = String(body.endTime).split(":").map(Number);
+      newEndsAt = tzLocalToUtc(String(dateStr).split("T")[0], eH, eM, tz);
+    } else {
+      const dur = body.durationMins != null
+        ? Number(body.durationMins)
+        : durationMinutes(appt.startsAt, appt.endsAt);
+      newEndsAt = new Date(newStartsAt.getTime() + dur * 60_000);
+    }
+  }
+
   const updated = await prisma.appointment.update({
     where: { id: params.id },
     data: {
@@ -33,6 +65,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       ...(body.endTime      !== undefined && { endTime:      body.endTime               }),
       ...(body.durationMins !== undefined && { durationMins: Number(body.durationMins)  }),
       ...(body.date         !== undefined && { date:         new Date(body.date)        }),
+      ...(newStartsAt && { startsAt: newStartsAt }),
+      ...(newEndsAt   && { endsAt:   newEndsAt   }),
       ...(body.reminderSent !== undefined && { reminderSent: body.reminderSent          }),
       ...(body.price        !== undefined && { price:        Number(body.price)         }),
       ...(body.isPaid       !== undefined && { isPaid:       Boolean(body.isPaid)       }),
@@ -65,16 +99,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
           else if (body.date !== undefined || body.startTime !== undefined || body.endTime !== undefined ||
                    body.type !== undefined || body.notes !== undefined || body.doctorId !== undefined || body.patientId !== undefined) {
             await updateCalendarEvent(token, clinic.googleRefreshToken, appt.googleCalendarEventId, {
-              type:         updated.type,
-              date:         updated.date instanceof Date ? updated.date.toISOString() : updated.date as string,
-              startTime:    updated.startTime,
-              endTime:      updated.endTime,
-              patientName:  `${updated.patient.firstName} ${updated.patient.lastName}`,
-              clinicName:   clinic.name,
-              clinicAddress: clinic.address,
-              notes:        updated.notes,
-              doctorName:   updated.doctor ? `${updated.doctor.firstName} ${updated.doctor.lastName}` : null,
-              calendarId:   clinic.googleClinicCalendarId ?? "primary",
+              type:           updated.type,
+              startsAt:       updated.startsAt,
+              endsAt:         updated.endsAt,
+              clinicTimezone: tz,
+              patientName:    `${updated.patient.firstName} ${updated.patient.lastName}`,
+              clinicName:     clinic.name,
+              clinicAddress:  clinic.address,
+              notes:          updated.notes,
+              doctorName:     updated.doctor ? `${updated.doctor.firstName} ${updated.doctor.lastName}` : null,
+              calendarId:     clinic.googleClinicCalendarId ?? "primary",
             });
           }
         }
@@ -93,10 +127,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       });
 
       if (waClinic?.waConnected && waClinic.waPhoneNumberId && waClinic.waAccessToken && updated.patient.phone) {
-        const fecha = updated.date instanceof Date
-          ? updated.date.toLocaleDateString("es-MX", { weekday: "long", year: "numeric", month: "long", day: "numeric" })
-          : new Date(updated.date as string).toLocaleDateString("es-MX", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
-        const hora = updated.startTime ?? "";
+        const fecha = new Intl.DateTimeFormat("es-MX", {
+          timeZone: tz, weekday: "long", year: "numeric", month: "long", day: "numeric",
+        }).format(updated.startsAt);
+        const hora = timeHHMMInTz(updated.startsAt, tz);
 
         await sendWhatsAppMessage(
           waClinic.waPhoneNumberId,
@@ -116,6 +150,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   return NextResponse.json({
     ...updated,
     date:      updated.date instanceof Date ? updated.date.toISOString() : updated.date,
+    startsAt:  updated.startsAt.toISOString(),
+    endsAt:    updated.endsAt.toISOString(),
     createdAt: updated.createdAt instanceof Date ? updated.createdAt.toISOString() : updated.createdAt,
     updatedAt: updated.updatedAt instanceof Date ? updated.updatedAt.toISOString() : updated.updatedAt,
   });
