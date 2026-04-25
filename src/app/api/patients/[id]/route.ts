@@ -11,7 +11,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const patient = await prisma.patient.findFirst({
     where: { ...buildPatientWhere(ctx), id: params.id },
     include: {
-      appointments: { orderBy: { date: "desc" }, include: { doctor: true } },
+      appointments: { orderBy: { startsAt: "desc" }, include: { doctor: true } },
       records:      { orderBy: { visitDate: "desc" }, include: { doctor: true } },
       invoices:     { include: { payments: true } },
     },

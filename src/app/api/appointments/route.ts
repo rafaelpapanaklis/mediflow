@@ -102,10 +102,6 @@ export async function POST(req: NextRequest) {
       patientId:    body.patientId,
       doctorId,
       type:         body.type,
-      date:         new Date(body.date),
-      startTime:    body.startTime,
-      endTime:      body.endTime,
-      durationMins,
       startsAt,
       endsAt,
       status:       "PENDING",
@@ -241,7 +237,6 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     ...appt,
-    date: appt.date instanceof Date ? appt.date.toISOString() : appt.date,
     startsAt: appt.startsAt.toISOString(),
     endsAt: appt.endsAt.toISOString(),
     ...(body.mode === "TELECONSULTATION" && { paymentUrl: `/pago/${appt.id}` }),

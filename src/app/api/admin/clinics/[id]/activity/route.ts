@@ -33,7 +33,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     prisma.appointment.findFirst({
       where: { clinicId },
       orderBy: { createdAt: "desc" },
-      select: { id: true, date: true, type: true, createdAt: true, patient: { select: { firstName: true, lastName: true } } },
+      select: { id: true, startsAt: true, type: true, createdAt: true, patient: { select: { firstName: true, lastName: true } } },
     }),
     prisma.invoice.findFirst({
       where: { clinicId },

@@ -78,10 +78,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "El horario está fuera del horario de atención" }, { status: 400 });
   }
 
-  // ── Verify slot is available ──────────────────────────────────────────────
-  const dateStart = new Date(y, m - 1, d, 0, 0, 0, 0);
-  const dateEnd   = new Date(y, m - 1, d, 23, 59, 59, 999);
-
   // ── Calculate end time ─────────────────────────────────────────────────────
   const endMins = slotMins + 30;
   const endTime = `${String(Math.floor(endMins / 60)).padStart(2,"0")}:${String(endMins % 60).padStart(2,"0")}`;
@@ -120,13 +116,15 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Check conflict + create appointment in a transaction (prevent double-booking) ──
+  const startsAtBook = tzLocalToUtc(date, slotH, slotM, clinic.timezone);
+  const endsAtBook = new Date(startsAtBook.getTime() + 30 * 60_000);
+
   const appt = await prisma.$transaction(async (tx) => {
     const conflict = await tx.appointment.findFirst({
       where: {
         clinicId:  clinic.id,
         doctorId,
-        date:      { gte: dateStart, lte: dateEnd },
-        startTime,
+        startsAt:  startsAtBook,
         status:    { notIn: ["CANCELLED","NO_SHOW"] },
       },
     });
@@ -134,18 +132,12 @@ export async function POST(req: NextRequest) {
       throw new Error("SLOT_TAKEN");
     }
 
-    const startsAtBook = tzLocalToUtc(date, slotH, slotM, clinic.timezone);
-    const endsAtBook = new Date(startsAtBook.getTime() + 30 * 60_000);
     return tx.appointment.create({
       data: {
         clinicId:    clinic.id,
         patientId:   patient!.id,
         doctorId,
         type:        type?.trim() || "Consulta general",
-        date:        apptDate,
-        startTime,
-        endTime,
-        durationMins:30,
         startsAt:    startsAtBook,
         endsAt:      endsAtBook,
         status:      "PENDING",

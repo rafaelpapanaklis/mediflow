@@ -61,10 +61,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       ...(body.doctorId     !== undefined && { doctorId:     body.doctorId              }),
       ...(body.type         !== undefined && { type:         body.type                  }),
       ...(body.notes        !== undefined && { notes:        body.notes                 }),
-      ...(body.startTime    !== undefined && { startTime:    body.startTime             }),
-      ...(body.endTime      !== undefined && { endTime:      body.endTime               }),
-      ...(body.durationMins !== undefined && { durationMins: Number(body.durationMins)  }),
-      ...(body.date         !== undefined && { date:         new Date(body.date)        }),
       ...(newStartsAt && { startsAt: newStartsAt }),
       ...(newEndsAt   && { endsAt:   newEndsAt   }),
       ...(body.reminderSent !== undefined && { reminderSent: body.reminderSent          }),
@@ -149,7 +145,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   return NextResponse.json({
     ...updated,
-    date:      updated.date instanceof Date ? updated.date.toISOString() : updated.date,
     startsAt:  updated.startsAt.toISOString(),
     endsAt:    updated.endsAt.toISOString(),
     createdAt: updated.createdAt instanceof Date ? updated.createdAt.toISOString() : updated.createdAt,

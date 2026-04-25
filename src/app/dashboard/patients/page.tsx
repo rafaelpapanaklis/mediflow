@@ -54,9 +54,9 @@ export default async function PatientsPage({
         tags: true,
         _count: { select: { appointments: true, records: true } },
         appointments: {
-          orderBy: { date: "desc" },
+          orderBy: { startsAt: "desc" },
           take: 1,
-          select: { date: true, status: true },
+          select: { startsAt: true, status: true },
         },
       },
     }),

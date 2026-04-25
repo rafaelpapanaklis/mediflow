@@ -23,13 +23,13 @@ export async function GET() {
     const [todayAppts, monthAppts, prevMonthAppts, monthPatients, prevMonthPatients, monthRevenue, prevMonthRevenue] =
       await Promise.all([
         prisma.appointment.findMany({
-          where:   { clinicId, date:{ gte:today, lte:todayEnd } },
+          where:   { clinicId, startsAt:{ gte:today, lte:todayEnd } },
           include: { patient:{select:{id:true,firstName:true,lastName:true,phone:true}},
                      doctor:{select:{id:true,firstName:true,lastName:true,color:true}} },
-          orderBy: { startTime:"asc" },
+          orderBy: { startsAt:"asc" },
         }),
-        prisma.appointment.count({ where:{ clinicId, date:{gte:firstMonth}, status:{not:"CANCELLED"} } }),
-        prisma.appointment.count({ where:{ clinicId, date:{gte:firstPrevMonth,lte:lastPrevMonth}, status:{not:"CANCELLED"} } }),
+        prisma.appointment.count({ where:{ clinicId, startsAt:{gte:firstMonth}, status:{not:"CANCELLED"} } }),
+        prisma.appointment.count({ where:{ clinicId, startsAt:{gte:firstPrevMonth,lte:lastPrevMonth}, status:{not:"CANCELLED"} } }),
         prisma.patient.count({ where:{ clinicId, createdAt:{gte:firstMonth} } }),
         prisma.patient.count({ where:{ clinicId, createdAt:{gte:firstPrevMonth,lte:lastPrevMonth} } }),
         prisma.invoice.aggregate({ where:{ clinicId, status:{in:["PAID","PARTIAL"]}, updatedAt:{gte:firstMonth} }, _sum:{paid:true} }),
@@ -40,11 +40,11 @@ export async function GET() {
     const [pendingInvoices, unconfirmedAppts, nextWeekAppts, lowInventory, recentPatients, doctorStats] =
       await Promise.all([
         prisma.invoice.aggregate({ where:{ clinicId, status:{in:["PENDING","PARTIAL"]} }, _sum:{balance:true}, _count:true }),
-        prisma.appointment.count({ where:{ clinicId, date:{gte:today}, status:"PENDING" } }),
+        prisma.appointment.count({ where:{ clinicId, startsAt:{gte:today}, status:"PENDING" } }),
         prisma.appointment.findMany({
-          where:   { clinicId, date:{gt:todayEnd,lte:nextSevenDays}, status:{not:"CANCELLED"} },
+          where:   { clinicId, startsAt:{gt:todayEnd,lte:nextSevenDays}, status:{not:"CANCELLED"} },
           include: { patient:{select:{firstName:true,lastName:true}}, doctor:{select:{firstName:true,lastName:true,color:true}} },
-          orderBy: [{date:"asc"},{startTime:"asc"}], take:20,
+          orderBy: { startsAt:"asc" }, take:20,
         }),
         prisma.inventoryItem.findMany({
           where:   { clinicId }, orderBy:{quantity:"asc"}, take:10,
@@ -56,7 +56,7 @@ export async function GET() {
         }),
         prisma.appointment.groupBy({
           by:    ["doctorId"],
-          where: { clinicId, date:{gte:firstMonth}, status:{not:"CANCELLED"} },
+          where: { clinicId, startsAt:{gte:firstMonth}, status:{not:"CANCELLED"} },
           _count:{ id:true },
         }),
       ]);

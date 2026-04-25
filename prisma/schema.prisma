@@ -310,19 +310,8 @@ model Appointment {
   patientId             String
   doctorId              String
   type                  String
-  /// @deprecated Use startsAt instead. Removed in Fase 4 M2.b.
-  date                  DateTime
-  /// @deprecated Use startsAt instead. Removed in Fase 4 M2.b.
-  startTime             String
-  /// @deprecated Use endsAt instead. Removed in Fase 4 M2.b.
-  endTime               String
-  /// @deprecated Computed from (endsAt - startsAt). Removed in Fase 4 M2.b.
-  durationMins          Int               @default(30)
-
-  /// @deprecated default(now()) es transitorio para que routes viejos sigan compilando hasta M2.b.
-  startsAt              DateTime          @default(now())                                          @db.Timestamptz(6)
-  /// @deprecated default(now() + 30m) es transitorio. M2.b lo remueve.
-  endsAt                DateTime          @default(dbgenerated("(now() + interval '30 minutes')")) @db.Timestamptz(6)
+  startsAt              DateTime          @db.Timestamptz(6)
+  endsAt                DateTime          @db.Timestamptz(6)
 
   resourceId            String?
 

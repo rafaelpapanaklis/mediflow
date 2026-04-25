@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     }),
     include: {
       primaryDoctor: { select: { id: true, firstName: true, lastName: true, color: true } },
-      appointments: { orderBy: { date: "desc" }, take: 1, select: { date: true, status: true } },
+      appointments: { orderBy: { startsAt: "desc" }, take: 1, select: { startsAt: true, status: true } },
       _count: { select: { appointments: true } },
     },
     orderBy: { createdAt: "desc" },

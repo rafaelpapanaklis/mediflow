@@ -47,8 +47,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     prisma.appointment.findMany({
       where: { clinicId },
       select: {
-        id: true, patientId: true, doctorId: true, type: true, date: true,
-        startTime: true, endTime: true, status: true, mode: true, price: true, isPaid: true,
+        id: true, patientId: true, doctorId: true, type: true,
+        startsAt: true, endsAt: true,
+        status: true, mode: true, price: true, isPaid: true,
         room: true, notes: true, createdAt: true,
       },
     }),
