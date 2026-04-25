@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createHmac } from "crypto";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 
 // GET — webhook verification by Meta
 export async function GET(req: NextRequest) {
@@ -94,11 +95,11 @@ export async function POST(req: NextRequest) {
 
       if (clinic.waAccessToken && clinic.waPhoneNumberId) {
         const appt = reminder.appointment;
-        const dateStr = new Date(appt.date).toLocaleDateString("es-MX", {
-          weekday: "long", day: "numeric", month: "long"
-        });
+        const dateStr = new Intl.DateTimeFormat("es-MX", {
+          timeZone: clinic.timezone, weekday: "long", day: "numeric", month: "long",
+        }).format(appt.startsAt);
         await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, from,
-          `✅ ¡Perfecto! Tu cita del ${dateStr} a las ${appt.startTime} está *confirmada*. Te esperamos. 😊`
+          `✅ ¡Perfecto! Tu cita del ${dateStr} a las ${timeHHMMInTz(appt.startsAt, clinic.timezone)} está *confirmada*. Te esperamos. 😊`
         );
       }
     } else if (isCancel) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createCheckoutSession } from "@/lib/stripe-connect";
+import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,7 +16,7 @@ export async function POST(req: NextRequest) {
       include: {
         patient: { select: { id: true, firstName: true, lastName: true, email: true } },
         doctor:  { select: { id: true, firstName: true, lastName: true, stripeAccountId: true } },
-        clinic:  { select: { id: true, name: true, teleCommissionPct: true } },
+        clinic:  { select: { id: true, name: true, timezone: true, teleCommissionPct: true } },
       },
     });
 
@@ -36,12 +37,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Format date and time for display
-    const dateObj = new Date(appointment.date);
-    const dateFormatted = dateObj.toLocaleDateString("es-MX", {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-    });
+    const dateFormatted = new Intl.DateTimeFormat("es-MX", {
+      timeZone: appointment.clinic.timezone, weekday: "long", day: "numeric", month: "long",
+    }).format(appointment.startsAt);
 
     const { sessionId, url } = await createCheckoutSession({
       appointmentId: appointment.id,
@@ -52,7 +50,7 @@ export async function POST(req: NextRequest) {
       clinicName: appointment.clinic.name,
       doctorName: `${appointment.doctor.firstName} ${appointment.doctor.lastName}`,
       appointmentDate: dateFormatted,
-      appointmentTime: appointment.startTime,
+      appointmentTime: timeHHMMInTz(appointment.startsAt, appointment.clinic.timezone),
     });
 
     await prisma.appointment.update({
