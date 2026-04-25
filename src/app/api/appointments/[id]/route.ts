@@ -1,193 +1,246 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getAuthContext } from "@/lib/auth-context";
+import { NextResponse, type NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { deleteCalendarEvent, updateCalendarEvent, refreshAccessToken } from "@/lib/google-calendar";
-import { revalidatePath } from "next/cache";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
-import { tzLocalToUtc } from "@/lib/agenda/time-utils";
-import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-helpers";
+import {
+  loadClinicSession,
+  requireRole,
+  isOverlapError,
+} from "@/lib/agenda/api-helpers";
+import { appointmentToDTO } from "@/lib/agenda/server";
+import { canOverrideOverlap } from "@/lib/agenda/transitions";
+import type {
+  AppointmentConflictError,
+  AppointmentStatus,
+  UpdateAppointmentInput,
+} from "@/lib/agenda/types";
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const ctx = await getAuthContext();
-  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+const APPT_INCLUDE = {
+  patient: { select: { id: true, firstName: true, lastName: true } },
+  doctor:  { select: { id: true, firstName: true, lastName: true } },
+} as const;
 
-  const body = await req.json();
+// ═════════════════════════════════════════════════════════════════
+// PATCH /api/appointments/:id
+// ═════════════════════════════════════════════════════════════════
 
-  // Verify appointment belongs to clinic; doctors can only update their own
-  const appt = await prisma.appointment.findFirst({
-    where: {
-      id:       params.id,
-      clinicId: ctx.clinicId,
-      ...(ctx.isDoctor ? { doctorId: ctx.userId } : {}),
-    },
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  const session = await loadClinicSession();
+  if (session instanceof NextResponse) return session;
+
+  const forbidden = requireRole(session, [
+    "RECEPTIONIST",
+    "DOCTOR",
+    "ADMIN",
+    "SUPER_ADMIN",
+  ]);
+  if (forbidden) return forbidden;
+
+  const existing = await prisma.appointment.findFirst({
+    where: { id: params.id, clinicId: session.clinic.id },
   });
-  if (!appt) return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 });
+  if (!existing) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
 
-  const clinicTz = await prisma.clinic.findUnique({
-    where: { id: ctx.clinicId },
-    select: { timezone: true },
-  });
-  const tz = clinicTz?.timezone ?? "America/Mexico_City";
+  let body: UpdateAppointmentInput;
+  try {
+    body = (await req.json()) as UpdateAppointmentInput;
+  } catch {
+    return NextResponse.json({ error: "invalid_json" }, { status: 400 });
+  }
 
-  let newStartsAt: Date | undefined;
-  let newEndsAt: Date | undefined;
-  if (
-    body.date !== undefined ||
-    body.startTime !== undefined ||
-    body.endTime !== undefined ||
-    body.durationMins !== undefined
-  ) {
-    const dateStr = body.date ?? dateISOInTz(appt.startsAt, tz);
-    const startStr = body.startTime ?? timeHHMMInTz(appt.startsAt, tz);
-    const [sH, sM] = String(startStr).split(":").map(Number);
-    newStartsAt = tzLocalToUtc(String(dateStr).split("T")[0], sH, sM, tz);
+  if (body.overrideReason && !canOverrideOverlap(session.user.role)) {
+    return NextResponse.json(
+      { error: "override_not_allowed_for_role" },
+      { status: 403 },
+    );
+  }
 
-    if (body.endTime !== undefined) {
-      const [eH, eM] = String(body.endTime).split(":").map(Number);
-      newEndsAt = tzLocalToUtc(String(dateStr).split("T")[0], eH, eM, tz);
+  const data: Prisma.AppointmentUpdateInput = {};
+
+  if (body.doctorId) {
+    const d = await prisma.user.findFirst({
+      where: {
+        id: body.doctorId,
+        clinicId: session.clinic.id,
+        role: "DOCTOR",
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    if (!d) return NextResponse.json({ error: "doctor_not_found" }, { status: 404 });
+    data.doctor = { connect: { id: body.doctorId } };
+  }
+
+  if (body.resourceId !== undefined) {
+    if (body.resourceId === null) {
+      data.resource = { disconnect: true };
     } else {
-      const dur = body.durationMins != null
-        ? Number(body.durationMins)
-        : durationMinutes(appt.startsAt, appt.endsAt);
-      newEndsAt = new Date(newStartsAt.getTime() + dur * 60_000);
-    }
-  }
-
-  const updated = await prisma.appointment.update({
-    where: { id: params.id },
-    data: {
-      ...(body.status       !== undefined && { status:       body.status                }),
-      ...(body.patientId    !== undefined && { patientId:    body.patientId             }),
-      ...(body.doctorId     !== undefined && { doctorId:     body.doctorId              }),
-      ...(body.type         !== undefined && { type:         body.type                  }),
-      ...(body.notes        !== undefined && { notes:        body.notes                 }),
-      ...(newStartsAt && { startsAt: newStartsAt }),
-      ...(newEndsAt   && { endsAt:   newEndsAt   }),
-      ...(body.reminderSent !== undefined && { reminderSent: body.reminderSent          }),
-      ...(body.price        !== undefined && { price:        Number(body.price)         }),
-      ...(body.isPaid       !== undefined && { isPaid:       Boolean(body.isPaid)       }),
-      ...(body.status === "CONFIRMED"     && { confirmedAt:  new Date()                 }),
-      ...(body.status === "CANCELLED"     && { cancelledAt:  new Date(), cancelReason: body.cancelReason ?? null }),
-    },
-    include: {
-      patient: { select: { firstName: true, lastName: true, email: true, phone: true } },
-      doctor:  { select: { firstName: true, lastName: true } },
-    },
-  });
-
-  // Google Calendar sync
-  if (appt.googleCalendarEventId) {
-    try {
-      const clinic = await prisma.clinic.findUnique({
-        where: { id: ctx.clinicId },
-        select: { name: true, address: true, googleCalendarToken: true, googleRefreshToken: true, googleClinicCalendarId: true },
+      const res = await prisma.resource.findFirst({
+        where: {
+          id: body.resourceId,
+          clinicId: session.clinic.id,
+          isActive: true,
+        },
+        select: { id: true },
       });
-
-      if (clinic?.googleRefreshToken) {
-        const token = await refreshAccessToken(clinic.googleRefreshToken) ?? clinic.googleCalendarToken;
-
-        if (token) {
-          // If cancelled or no-show → delete the event
-          if (body.status === "CANCELLED" || body.status === "NO_SHOW") {
-            await deleteCalendarEvent(token, clinic.googleRefreshToken, appt.googleCalendarEventId, clinic.googleClinicCalendarId ?? "primary");
-          }
-          // If date, time, type, notes, doctor, or patient changed → update the event
-          else if (body.date !== undefined || body.startTime !== undefined || body.endTime !== undefined ||
-                   body.type !== undefined || body.notes !== undefined || body.doctorId !== undefined || body.patientId !== undefined) {
-            await updateCalendarEvent(token, clinic.googleRefreshToken, appt.googleCalendarEventId, {
-              type:           updated.type,
-              startsAt:       updated.startsAt,
-              endsAt:         updated.endsAt,
-              clinicTimezone: tz,
-              patientName:    `${updated.patient.firstName} ${updated.patient.lastName}`,
-              clinicName:     clinic.name,
-              clinicAddress:  clinic.address,
-              notes:          updated.notes,
-              doctorName:     updated.doctor ? `${updated.doctor.firstName} ${updated.doctor.lastName}` : null,
-              calendarId:     clinic.googleClinicCalendarId ?? "primary",
-            });
-          }
-        }
-      }
-    } catch (e) {
-      console.error("Google Calendar sync on PATCH failed:", e);
+      if (!res) return NextResponse.json({ error: "resource_not_found" }, { status: 404 });
+      data.resource = { connect: { id: body.resourceId } };
     }
   }
 
-  // WhatsApp notification on reschedule
-  if (body.date !== undefined || body.startTime !== undefined) {
-    try {
-      const waClinic = await prisma.clinic.findUnique({
-        where: { id: appt.clinicId },
-        select: { waConnected: true, waPhoneNumberId: true, waAccessToken: true, name: true },
-      });
+  let newStarts = existing.startsAt;
+  let newEnds = existing.endsAt;
+  if (body.startsAt) {
+    newStarts = new Date(body.startsAt);
+    if (Number.isNaN(newStarts.getTime())) {
+      return NextResponse.json({ error: "invalid_startsAt" }, { status: 400 });
+    }
+    data.startsAt = newStarts;
+  }
+  if (body.endsAt) {
+    newEnds = new Date(body.endsAt);
+    if (Number.isNaN(newEnds.getTime())) {
+      return NextResponse.json({ error: "invalid_endsAt" }, { status: 400 });
+    }
+    data.endsAt = newEnds;
+  }
+  if (newEnds <= newStarts) {
+    return NextResponse.json({ error: "invalid_duration" }, { status: 400 });
+  }
 
-      if (waClinic?.waConnected && waClinic.waPhoneNumberId && waClinic.waAccessToken && updated.patient.phone) {
-        const fecha = new Intl.DateTimeFormat("es-MX", {
-          timeZone: tz, weekday: "long", year: "numeric", month: "long", day: "numeric",
-        }).format(updated.startsAt);
-        const hora = timeHHMMInTz(updated.startsAt, tz);
+  if (body.reason !== undefined) {
+    data.type = body.reason ?? "Consulta general";
+  }
 
-        await sendWhatsAppMessage(
-          waClinic.waPhoneNumberId,
-          waClinic.waAccessToken,
-          updated.patient.phone,
-          `📅 Tu cita en ${waClinic.name} ha sido reprogramada.\n\nNueva fecha: ${fecha}\nNueva hora: ${hora}\n\nSi necesitas cancelar, responde este mensaje.`
-        );
-      }
-    } catch (e) {
-      console.error("WhatsApp reschedule notification failed:", e);
+  if (body.overrideReason !== undefined) {
+    data.overrideReason = body.overrideReason;
+    if (body.overrideReason) {
+      data.overriddenByUser = { connect: { id: session.user.id } };
+      data.overriddenAt = new Date();
+    } else {
+      data.overriddenByUser = { disconnect: true };
+      data.overriddenAt = null;
     }
   }
 
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/appointments");
+  try {
+    const updated = await prisma.appointment.update({
+      where: { id: params.id },
+      data,
+      include: APPT_INCLUDE,
+    });
 
-  return NextResponse.json({
-    ...updated,
-    startsAt:  updated.startsAt.toISOString(),
-    endsAt:    updated.endsAt.toISOString(),
-    createdAt: updated.createdAt instanceof Date ? updated.createdAt.toISOString() : updated.createdAt,
-    updatedAt: updated.updatedAt instanceof Date ? updated.updatedAt.toISOString() : updated.updatedAt,
-  });
+    // TODO(M3.b): if body.notifyPatient → trigger WA notification (waConnected).
+
+    return NextResponse.json(
+      { appointment: appointmentToDTO(updated, session.clinic.category) },
+    );
+  } catch (err) {
+    if (isOverlapError(err)) {
+      const conflict = await findConflictingAppointment(
+        session.clinic.id,
+        params.id,
+        body.doctorId ?? existing.doctorId,
+        body.resourceId === undefined
+          ? existing.resourceId
+          : body.resourceId,
+        newStarts,
+        newEnds,
+      );
+      const payload: AppointmentConflictError = {
+        error: "appointment_overlap",
+        conflictingAppointment: conflict ?? {
+          id: "unknown",
+          patientName: "—",
+          startsAt: newStarts.toISOString(),
+          endsAt: newEnds.toISOString(),
+          doctorId: body.doctorId ?? existing.doctorId,
+          resourceId: body.resourceId === undefined
+            ? existing.resourceId
+            : body.resourceId,
+          status: "SCHEDULED",
+        },
+      };
+      return NextResponse.json(payload, { status: 409 });
+    }
+    console.error("[PATCH /api/appointments/:id] unexpected error", err);
+    return NextResponse.json({ error: "internal_error" }, { status: 500 });
+  }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  const ctx = await getAuthContext();
-  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+// ═════════════════════════════════════════════════════════════════
+// DELETE /api/appointments/:id  → soft cancel
+// ═════════════════════════════════════════════════════════════════
 
-  if (ctx.isDoctor) {
-    return NextResponse.json({ error: "Los doctores no pueden eliminar citas" }, { status: 403 });
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  const session = await loadClinicSession();
+  if (session instanceof NextResponse) return session;
+
+  const forbidden = requireRole(session, [
+    "RECEPTIONIST",
+    "ADMIN",
+    "SUPER_ADMIN",
+  ]);
+  if (forbidden) return forbidden;
+
+  const existing = await prisma.appointment.findFirst({
+    where: { id: params.id, clinicId: session.clinic.id },
+    select: { id: true, status: true },
+  });
+  if (!existing) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+  if (existing.status === "CANCELLED") {
+    return NextResponse.json({ ok: true });
   }
 
-  const appt = await prisma.appointment.findFirst({
-    where: { id: params.id, clinicId: ctx.clinicId },
-    select: { googleCalendarEventId: true, clinicId: true },
+  await prisma.appointment.update({
+    where: { id: params.id },
+    data: { status: "CANCELLED" },
   });
 
-  if (appt?.googleCalendarEventId) {
-    try {
-      const clinic = await prisma.clinic.findUnique({
-        where: { id: appt.clinicId },
-        select: { googleCalendarToken: true, googleRefreshToken: true, googleClinicCalendarId: true },
-      });
-      if (clinic?.googleRefreshToken) {
-        const token = await refreshAccessToken(clinic.googleRefreshToken) ?? clinic.googleCalendarToken;
-        if (token) {
-          await deleteCalendarEvent(token, clinic.googleRefreshToken, appt.googleCalendarEventId, clinic.googleClinicCalendarId ?? "primary");
-        }
-      }
-    } catch (e) {
-      console.error("Failed to delete Google Calendar event:", e);
-    }
-  }
+  return NextResponse.json({ ok: true });
+}
 
-  await prisma.appointment.deleteMany({
-    where: { id: params.id, clinicId: ctx.clinicId },
+async function findConflictingAppointment(
+  clinicId: string,
+  excludeId: string,
+  doctorId: string,
+  resourceId: string | null,
+  startsAt: Date,
+  endsAt: Date,
+) {
+  const candidates = await prisma.appointment.findMany({
+    where: {
+      clinicId,
+      id: { not: excludeId },
+      OR: [{ doctorId }, ...(resourceId ? [{ resourceId }] : [])],
+      status: { notIn: ["CANCELLED", "NO_SHOW"] },
+      overrideReason: null,
+      startsAt: { lt: endsAt },
+      endsAt: { gt: startsAt },
+    },
+    include: { patient: { select: { firstName: true, lastName: true } } },
+    take: 1,
   });
 
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/appointments");
-
-  return NextResponse.json({ success: true });
+  if (candidates.length === 0) return null;
+  const a = candidates[0];
+  const name = [a.patient.firstName, a.patient.lastName].filter(Boolean).join(" ").trim();
+  return {
+    id: a.id,
+    patientName: name || "—",
+    startsAt: a.startsAt.toISOString(),
+    endsAt: a.endsAt.toISOString(),
+    doctorId: a.doctorId,
+    resourceId: a.resourceId,
+    status: a.status as AppointmentStatus,
+  };
 }

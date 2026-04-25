@@ -1,244 +1,280 @@
-import { NextRequest, NextResponse } from "next/server";
-import { revalidatePath } from "next/cache";
-import { getAuthContext, buildAppointmentWhere } from "@/lib/auth-context";
+import { NextResponse, type NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { createCalendarEvent, refreshAccessToken, getOrCreateClinicCalendar } from "@/lib/google-calendar";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
-import { tzLocalToUtc } from "@/lib/agenda/time-utils";
-import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-helpers";
+import {
+  loadClinicSession,
+  requireRole,
+  isOverlapError,
+} from "@/lib/agenda/api-helpers";
+import {
+  appointmentToDTO,
+  fetchActiveDoctors,
+  fetchAppointmentsForDay,
+  fetchPendingValidation,
+  fetchResources,
+  fetchWaitlistCount,
+} from "@/lib/agenda/server";
+import {
+  dayRangeUtc,
+  isValidDateISO,
+  todayInTz,
+} from "@/lib/agenda/time-utils";
+import { canOverrideOverlap } from "@/lib/agenda/transitions";
+import type {
+  AgendaDayResponse,
+  AppointmentConflictError,
+  AppointmentStatus,
+  CreateAppointmentInput,
+} from "@/lib/agenda/types";
+
+const APPT_INCLUDE = {
+  patient: { select: { id: true, firstName: true, lastName: true } },
+  doctor:  { select: { id: true, firstName: true, lastName: true } },
+} as const;
+
+// ═════════════════════════════════════════════════════════════════
+// GET /api/appointments?date=&doctorId=&resourceId=&status=
+// Returns AgendaDayResponse (M3 shape — diferente al GET legacy de M2.b).
+// ═════════════════════════════════════════════════════════════════
 
 export async function GET(req: NextRequest) {
-  const ctx = await getAuthContext();
-  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await loadClinicSession();
+  if (session instanceof NextResponse) return session;
 
-  const clinicTz = await prisma.clinic.findUnique({
-    where: { id: ctx.clinicId },
-    select: { timezone: true },
-  });
-  const tz = clinicTz?.timezone ?? "America/Mexico_City";
+  const sp = req.nextUrl.searchParams;
+  const dateParam = sp.get("date");
+  const dateISO = dateParam && isValidDateISO(dateParam)
+    ? dateParam
+    : todayInTz(session.clinic.timezone);
 
-  const appts = await prisma.appointment.findMany({
-    where: buildAppointmentWhere(ctx),
-    include: {
-      patient: { select: { id: true, firstName: true, lastName: true, phone: true } },
-      doctor:  { select: { id: true, firstName: true, lastName: true, color: true } },
+  const doctorId = sp.get("doctorId") || undefined;
+  const resourceId = sp.get("resourceId") || undefined;
+  const statusCsv = sp.get("status");
+  const statuses: AppointmentStatus[] | undefined = statusCsv
+    ? (statusCsv.split(",").filter(Boolean) as AppointmentStatus[])
+    : undefined;
+
+  const doctorIdScope =
+    session.user.role === "DOCTOR" ? session.user.id : undefined;
+
+  const range = dayRangeUtc(dateISO, session.timeConfig);
+
+  const [appointments, doctors, resources, pendingValidation, waitlistCount] =
+    await Promise.all([
+      fetchAppointmentsForDay(dateISO, session.timeConfig, {
+        clinicId: session.clinic.id,
+        clinicCategory: session.clinic.category,
+        doctorIdScope,
+        doctorId,
+        resourceId,
+        statuses,
+      }),
+      fetchActiveDoctors(session.clinic.id, session.clinic.category),
+      fetchResources(session.clinic.id),
+      fetchPendingValidation(
+        dateISO,
+        session.timeConfig,
+        session.clinic.id,
+        session.clinic.category,
+      ),
+      fetchWaitlistCount(session.clinic.id),
+    ]);
+
+  const response: AgendaDayResponse = {
+    range: {
+      from: range.startUtc.toISOString(),
+      to: range.endUtc.toISOString(),
     },
-    orderBy: { startsAt: "asc" },
-  });
+    timezone: session.clinic.timezone,
+    slotMinutes: session.clinic.defaultSlotMinutes,
+    dayStart: session.clinic.agendaDayStart,
+    dayEnd: session.clinic.agendaDayEnd,
+    appointments,
+    doctors,
+    resources,
+    pendingValidation,
+    waitlistCount,
+  };
 
-  return NextResponse.json(appts.map(a => ({
-    ...a,
-    date:         dateISOInTz(a.startsAt, tz),
-    startTime:    timeHHMMInTz(a.startsAt, tz),
-    endTime:      timeHHMMInTz(a.endsAt, tz),
-    durationMins: durationMinutes(a.startsAt, a.endsAt),
-    startsAt:     a.startsAt.toISOString(),
-    endsAt:       a.endsAt.toISOString(),
-    createdAt:    a.createdAt instanceof Date ? a.createdAt.toISOString() : a.createdAt,
-    updatedAt:    a.updatedAt instanceof Date ? a.updatedAt.toISOString() : a.updatedAt,
-  })));
+  return NextResponse.json(response);
 }
 
+// ═════════════════════════════════════════════════════════════════
+// POST /api/appointments
+// ═════════════════════════════════════════════════════════════════
+
 export async function POST(req: NextRequest) {
-  const ctx = await getAuthContext();
-  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await loadClinicSession();
+  if (session instanceof NextResponse) return session;
 
-  const body = await req.json();
+  const forbidden = requireRole(session, [
+    "RECEPTIONIST",
+    "DOCTOR",
+    "ADMIN",
+    "SUPER_ADMIN",
+  ]);
+  if (forbidden) return forbidden;
 
-  const doctorId = ctx.isDoctor ? ctx.userId : (body.doctorId ?? ctx.userId);
-
-  const patient = await prisma.patient.findFirst({
-    where:  { id: body.patientId, clinicId: ctx.clinicId },
-    select: { id: true, firstName: true, lastName: true, email: true, phone: true },
-  });
-  if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
-
-  // Get doctor info
-  const doctor = await prisma.user.findFirst({
-    where:  { id: doctorId, clinicId: ctx.clinicId, isActive: true },
-    select: { id: true, firstName: true, lastName: true, email: true,
-              googleCalendarToken: true, googleRefreshToken: true,
-              googleCalendarEnabled: true, googleCalendarEmail: true,
-              stripeAccountId: true, stripeOnboarded: true, teleconsultPrice: true },
-  });
-  if (!doctor) return NextResponse.json({ error: "Doctor no encontrado" }, { status: 404 });
-
-  // Teleconsultation validations
-  if (body.mode === "TELECONSULTATION") {
-    if (!doctor.stripeAccountId || !doctor.stripeOnboarded) {
-      return NextResponse.json({ error: "El doctor no tiene configurado Stripe para recibir pagos" }, { status: 400 });
-    }
-    if (!doctor.teleconsultPrice) {
-      return NextResponse.json({ error: "El doctor no tiene precio de teleconsulta configurado" }, { status: 400 });
-    }
+  let body: CreateAppointmentInput;
+  try {
+    body = (await req.json()) as CreateAppointmentInput;
+  } catch {
+    return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
 
-  const clinic = await prisma.clinic.findUnique({
-    where:  { id: ctx.clinicId },
-    select: {
-      name: true, address: true, timezone: true,
-      googleCalendarEnabled: true,
-      googleCalendarToken:   true,
-      googleRefreshToken:    true,
-      googleClinicCalendarId: true,
-    },
-  });
-  if (!clinic) return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
+  const validation = validateCreate(body);
+  if (validation) {
+    return NextResponse.json({ error: validation }, { status: 400 });
+  }
 
-  const tz = clinic.timezone;
-  const durationMins: number = body.durationMins ?? 30;
-  const [sH, sM] = String(body.startTime).split(":").map(Number);
-  const startsAt = tzLocalToUtc(String(body.date).split("T")[0], sH, sM, tz);
-  const endsAt = body.endTime
-    ? (() => {
-        const [eH, eM] = String(body.endTime).split(":").map(Number);
-        return tzLocalToUtc(String(body.date).split("T")[0], eH, eM, tz);
-      })()
-    : new Date(startsAt.getTime() + durationMins * 60_000);
+  const startsAt = new Date(body.startsAt);
+  const endsAt = new Date(body.endsAt);
+  if (endsAt <= startsAt) {
+    return NextResponse.json({ error: "invalid_duration" }, { status: 400 });
+  }
 
-  const appt = await prisma.appointment.create({
-    data: {
-      clinicId:     ctx.clinicId,
-      patientId:    body.patientId,
-      doctorId,
-      type:         body.type,
-      startsAt,
-      endsAt,
-      status:       "PENDING",
-      notes:        body.notes ?? null,
-      mode:         body.mode || "IN_PERSON",
-      ...(body.mode === "TELECONSULTATION" && {
-        paymentStatus: "pending",
-        paymentAmount: doctor.teleconsultPrice,
-      }),
-    },
-  });
+  if (body.overrideReason && !canOverrideOverlap(session.user.role)) {
+    return NextResponse.json(
+      { error: "override_not_allowed_for_role" },
+      { status: 403 },
+    );
+  }
 
-  // ── Google Calendar sync ────────────────────────────────────────────────
-  // STRATEGY: Use clinic-level calendar if admin has connected Google.
-  // Otherwise fall back to the doctor's personal calendar.
+  const [patient, doctor, resource] = await Promise.all([
+    prisma.patient.findFirst({
+      where: { id: body.patientId, clinicId: session.clinic.id },
+      select: { id: true },
+    }),
+    prisma.user.findFirst({
+      where: {
+        id: body.doctorId,
+        clinicId: session.clinic.id,
+        role: "DOCTOR",
+        isActive: true,
+      },
+      select: { id: true },
+    }),
+    body.resourceId
+      ? prisma.resource.findFirst({
+          where: {
+            id: body.resourceId,
+            clinicId: session.clinic.id,
+            isActive: true,
+          },
+          select: { id: true },
+        })
+      : Promise.resolve(null),
+  ]);
 
-  let gcalEventId: string | null = null;
+  if (!patient) {
+    return NextResponse.json({ error: "patient_not_found" }, { status: 404 });
+  }
+  if (!doctor) {
+    return NextResponse.json({ error: "doctor_not_found" }, { status: 404 });
+  }
+  if (body.resourceId && !resource) {
+    return NextResponse.json({ error: "resource_not_found" }, { status: 404 });
+  }
 
-  // Option A: Clinic calendar (admin connected)
-  if (clinic?.googleCalendarEnabled && clinic.googleRefreshToken) {
-    let token = clinic.googleCalendarToken;
-
-    // Refresh if needed
-    if (!token) {
-      token = await refreshAccessToken(clinic.googleRefreshToken);
-      if (token) {
-        await prisma.clinic.update({ where: { id: ctx.clinicId }, data: { googleCalendarToken: token } });
-      }
-    }
-
-    if (token) {
-      // Auto-create clinic calendar if it doesn't exist yet
-      let calendarId = clinic.googleClinicCalendarId;
-      if (!calendarId) {
-        try {
-          calendarId = await getOrCreateClinicCalendar(token, clinic.googleRefreshToken, clinic.name);
-          if (calendarId) {
-            await prisma.clinic.update({ where: { id: ctx.clinicId }, data: { googleClinicCalendarId: calendarId } });
-          }
-        } catch (err) {
-          console.error("Error creating clinic calendar on-the-fly:", err);
-        }
-      }
-
-      gcalEventId = await createCalendarEvent(token, clinic.googleRefreshToken, {
-        id:          appt.id,
-        type:        appt.type,
+  try {
+    const created = await prisma.appointment.create({
+      data: {
+        clinicId: session.clinic.id,
+        patientId: body.patientId,
+        doctorId: body.doctorId,
+        resourceId: body.resourceId ?? null,
         startsAt,
         endsAt,
-        clinicTimezone: tz,
-        patientName: `${patient.firstName} ${patient.lastName}`,
-        clinicName:  clinic.name,
-        clinicAddress: clinic.address,
-        notes:       appt.notes,
-        doctorName:  doctor ? `${doctor.firstName} ${doctor.lastName}` : null,
-        doctorEmail: null,
-        patientEmail: patient.email ?? null,
-        calendarId:  calendarId ?? "primary",
-      });
-    }
-  }
-  // Option B: Doctor's personal calendar (fallback)
-  else if (doctor?.googleCalendarEnabled && doctor.googleRefreshToken) {
-    let token = doctor.googleCalendarToken;
-    if (!token) {
-      token = await refreshAccessToken(doctor.googleRefreshToken);
-      if (token) await prisma.user.update({ where: { id: doctorId }, data: { googleCalendarToken: token } });
-    }
-    if (token) {
-      gcalEventId = await createCalendarEvent(token, doctor.googleRefreshToken, {
-        id:          appt.id,
-        type:        appt.type,
-        startsAt,
-        endsAt,
-        clinicTimezone: tz,
-        patientName: `${patient.firstName} ${patient.lastName}`,
-        clinicName:  clinic.name,
-        clinicAddress: clinic.address,
-        notes:       appt.notes,
-        doctorName:  doctor ? `${doctor.firstName} ${doctor.lastName}` : null,
-        doctorEmail: doctor.googleCalendarEmail ?? doctor.email,
-        patientEmail: patient.email ?? null,
-        calendarId:  "primary",
-      });
-    }
-  }
-
-  if (gcalEventId) {
-    await prisma.appointment.update({
-      where: { id: appt.id },
-      data:  { googleCalendarEventId: gcalEventId },
+        status: "SCHEDULED",
+        type: body.reason ?? "Consulta general",
+        mode: body.isTeleconsult ? "TELECONSULTATION" : "IN_PERSON",
+        source: "STAFF",
+        requiresValidation: false,
+        overrideReason: body.overrideReason ?? null,
+        overriddenBy: body.overrideReason ? session.user.id : null,
+        overriddenAt: body.overrideReason ? new Date() : null,
+      },
+      include: APPT_INCLUDE,
     });
-  }
 
-  // ── WhatsApp confirmation to patient (skip for teleconsultation — sent after payment) ──
-  if (body.mode !== "TELECONSULTATION") {
-  const clinicWa = await prisma.clinic.findUnique({
-    where: { id: ctx.clinicId },
-    select: { waConnected: true, waPhoneNumberId: true, waAccessToken: true, name: true },
+    // TODO(M3.b): notifyPatient via WhatsApp si body.notifyPatient
+    //             y session.clinic.waConnected.
+
+    return NextResponse.json(
+      { appointment: appointmentToDTO(created, session.clinic.category) },
+      { status: 201 },
+    );
+  } catch (err) {
+    if (isOverlapError(err)) {
+      const conflict = await findConflictingAppointment(
+        session.clinic.id,
+        body.doctorId,
+        body.resourceId ?? null,
+        startsAt,
+        endsAt,
+      );
+      const payload: AppointmentConflictError = {
+        error: "appointment_overlap",
+        conflictingAppointment: conflict ?? {
+          id: "unknown",
+          patientName: "—",
+          startsAt: body.startsAt,
+          endsAt: body.endsAt,
+          doctorId: body.doctorId,
+          resourceId: body.resourceId ?? null,
+          status: "SCHEDULED",
+        },
+      };
+      return NextResponse.json(payload, { status: 409 });
+    }
+    if (err instanceof Prisma.PrismaClientValidationError) {
+      return NextResponse.json({ error: "validation" }, { status: 400 });
+    }
+    console.error("[POST /api/appointments] unexpected error", err);
+    return NextResponse.json({ error: "internal_error" }, { status: 500 });
+  }
+}
+
+function validateCreate(body: Partial<CreateAppointmentInput>): string | null {
+  if (!body.patientId || typeof body.patientId !== "string") return "missing_patientId";
+  if (!body.doctorId || typeof body.doctorId !== "string") return "missing_doctorId";
+  if (!body.startsAt || typeof body.startsAt !== "string") return "missing_startsAt";
+  if (!body.endsAt || typeof body.endsAt !== "string") return "missing_endsAt";
+  if (Number.isNaN(new Date(body.startsAt).getTime())) return "invalid_startsAt";
+  if (Number.isNaN(new Date(body.endsAt).getTime())) return "invalid_endsAt";
+  return null;
+}
+
+async function findConflictingAppointment(
+  clinicId: string,
+  doctorId: string,
+  resourceId: string | null,
+  startsAt: Date,
+  endsAt: Date,
+) {
+  const candidates = await prisma.appointment.findMany({
+    where: {
+      clinicId,
+      OR: [{ doctorId }, ...(resourceId ? [{ resourceId }] : [])],
+      status: { notIn: ["CANCELLED", "NO_SHOW"] },
+      overrideReason: null,
+      startsAt: { lt: endsAt },
+      endsAt: { gt: startsAt },
+    },
+    include: { patient: { select: { firstName: true, lastName: true } } },
+    take: 1,
   });
 
-  if (clinicWa?.waConnected && clinicWa.waPhoneNumberId && clinicWa.waAccessToken && patient.phone) {
-    try {
-      const dateFormatted = new Intl.DateTimeFormat("es-MX", {
-        timeZone: tz, weekday: "long", day: "numeric", month: "long",
-      }).format(startsAt);
-      const msg = `✅ Cita agendada en ${clinicWa.name}\n\n📅 ${dateFormatted}\n🕐 ${timeHHMMInTz(startsAt, tz)} - ${timeHHMMInTz(endsAt, tz)}\n📋 ${appt.type}\n${doctor ? `👨‍⚕️ ${doctor.firstName} ${doctor.lastName}` : ""}\n\n¿Confirmas tu asistencia? Responde *sí* o *no*`;
-
-      await sendWhatsAppMessage(clinicWa.waPhoneNumberId, clinicWa.waAccessToken, patient.phone, msg);
-
-      // Create reminder record for tracking
-      await prisma.whatsAppReminder.create({
-        data: {
-          clinicId:      ctx.clinicId,
-          appointmentId: appt.id,
-          patientPhone:  patient.phone,
-          type:          "CONFIRMATION",
-          message:       msg,
-          status:        "SENT",
-          sentAt:        new Date(),
-        },
-      });
-    } catch (e) {
-      console.error("WhatsApp confirmation failed:", e);
-      // Don't fail the appointment creation
-    }
-  }
-
-  } // end if not TELECONSULTATION
-
-  // Invalidate dashboard cache so KPIs refresh
-  revalidatePath("/dashboard");
-
-  return NextResponse.json({
-    ...appt,
-    startsAt: appt.startsAt.toISOString(),
-    endsAt: appt.endsAt.toISOString(),
-    ...(body.mode === "TELECONSULTATION" && { paymentUrl: `/pago/${appt.id}` }),
-  }, { status: 201 });
+  if (candidates.length === 0) return null;
+  const a = candidates[0];
+  const name = [a.patient.firstName, a.patient.lastName].filter(Boolean).join(" ").trim();
+  return {
+    id: a.id,
+    patientName: name || "—",
+    startsAt: a.startsAt.toISOString(),
+    endsAt: a.endsAt.toISOString(),
+    doctorId: a.doctorId,
+    resourceId: a.resourceId,
+    status: a.status as AppointmentStatus,
+  };
 }
