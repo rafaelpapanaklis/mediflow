@@ -104,6 +104,12 @@ model Clinic {
   teleCommissionPct   Float    @default(15)
   dailyApiKey         String?
 
+  // Agenda config (Fase 4)
+  defaultSlotMinutes  Int             @default(15)
+  agendaDayStart      Int             @default(8)
+  agendaDayEnd        Int             @default(20)
+  timezone            String          @default("America/Mexico_City")
+
   users        User[]
   patients     Patient[]
   appointments Appointment[]
@@ -130,6 +136,8 @@ model Clinic {
   xrayAnalyses         XrayAnalysis[]
   adminNotes           AdminClinicNote[]
   prescriptions        Prescription[]
+  resources            Resource[]
+  waitlistEntries      WaitlistEntry[]
 
   @@map("clinics")
 }
@@ -199,6 +207,9 @@ model User {
   auditLogs           AuditLog[]
   adminNotesAuthored  AdminClinicNote[]
   prescriptions       Prescription[]
+  apptsOverriddenBy   Appointment[]   @relation("ApptOverriddenBy")
+  waitlistCreated     WaitlistEntry[] @relation("WaitlistCreatedBy")
+  waitlistPreferred   WaitlistEntry[] @relation("WaitlistPreferredDoctor")
 
   @@unique([supabaseId, clinicId])
   @@index([supabaseId])
@@ -275,6 +286,7 @@ model Patient {
   packageRedemptions  PackageRedemption[]
   xrayAnalyses        XrayAnalysis[]
   prescriptions       Prescription[]
+  waitlistEntries     WaitlistEntry[]
 
   @@unique([clinicId, patientNumber])
   @@map("patients")
@@ -298,10 +310,33 @@ model Appointment {
   patientId             String
   doctorId              String
   type                  String
+  /// @deprecated Use startsAt instead. Removed in Fase 4 M2.b.
   date                  DateTime
+  /// @deprecated Use startsAt instead. Removed in Fase 4 M2.b.
   startTime             String
+  /// @deprecated Use endsAt instead. Removed in Fase 4 M2.b.
   endTime               String
+  /// @deprecated Computed from (endsAt - startsAt). Removed in Fase 4 M2.b.
   durationMins          Int               @default(30)
+
+  /// @deprecated default(now()) es transitorio para que routes viejos sigan compilando hasta M2.b.
+  startsAt              DateTime          @default(now())                                          @db.Timestamptz(6)
+  /// @deprecated default(now() + 30m) es transitorio. M2.b lo remueve.
+  endsAt                DateTime          @default(dbgenerated("(now() + interval '30 minutes')")) @db.Timestamptz(6)
+
+  resourceId            String?
+
+  source                AppointmentSource @default(STAFF)
+  requiresValidation    Boolean           @default(false)
+
+  overrideReason        String?           @db.VarChar(500)
+  overriddenBy          String?
+  overriddenAt          DateTime?         @db.Timestamptz(6)
+
+  checkedInAt           DateTime?         @db.Timestamptz(6)
+  startedAt             DateTime?         @db.Timestamptz(6)
+  completedAt           DateTime?         @db.Timestamptz(6)
+
   room                  String?
   status                AppointmentStatus @default(PENDING)
   notes                 String?
@@ -332,9 +367,15 @@ model Appointment {
   clinic    Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   patient   Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
   doctor    User               @relation(fields: [doctorId], references: [id])
+  resource         Resource?   @relation(fields: [resourceId],   references: [id], onDelete: SetNull)
+  overriddenByUser User?       @relation("ApptOverriddenBy", fields: [overriddenBy], references: [id], onDelete: SetNull)
   invoice   Invoice?
   reminders WhatsAppReminder[]
 
+  @@index([clinicId, startsAt, endsAt, status])
+  @@index([doctorId, startsAt])
+  @@index([resourceId, startsAt])
+  @@index([clinicId, requiresValidation])
   @@map("appointments")
 }
 
@@ -344,8 +385,11 @@ enum AppointmentMode {
 }
 
 enum AppointmentStatus {
+  /// @deprecated Use SCHEDULED. PENDING se mantiene por compat de datos legacy.
   PENDING
+  SCHEDULED
   CONFIRMED
+  CHECKED_IN
   IN_PROGRESS
   COMPLETED
   CANCELLED
@@ -982,4 +1026,74 @@ model Prescription {
   @@index([clinicId])
   @@index([patientId])
   @@map("prescriptions")
+}
+
+// ═══════════════════════════════════════════════════════════
+// Fase 4 — Agenda pro
+// ═══════════════════════════════════════════════════════════
+
+enum AppointmentSource {
+  STAFF
+  PATIENT_PORTAL
+  WEBSITE
+  WHATSAPP
+}
+
+/// Sillón / sala / equipo reservable.
+model Resource {
+  id              String        @id @default(cuid())
+  clinicId        String
+  name            String        @db.VarChar(120)
+  kind            ResourceKind  @default(CHAIR)
+  color           String?       @db.VarChar(9)
+  isActive        Boolean       @default(true)
+  orderIndex      Int           @default(0)
+
+  createdAt       DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime      @updatedAt      @db.Timestamptz(6)
+
+  clinic          Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  appointments    Appointment[]
+
+  @@index([clinicId, isActive, orderIndex])
+}
+
+enum ResourceKind {
+  CHAIR
+  ROOM
+  EQUIPMENT
+}
+
+/// Lista de espera de pacientes que quieren adelantar su cita
+/// si surge un hueco.
+model WaitlistEntry {
+  id                      String            @id @default(cuid())
+  clinicId                String
+  patientId               String
+  createdByUserId         String
+  reason                  String?           @db.VarChar(200)
+  priority                WaitlistPriority  @default(NORMAL)
+  preferredDoctorId       String?
+  preferredWindow         String?           @db.VarChar(80)
+  notes                   String?           @db.VarChar(500)
+
+  resolvedAt              DateTime?         @db.Timestamptz(6)
+  resolvedAppointmentId   String?
+
+  createdAt               DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime          @updatedAt      @db.Timestamptz(6)
+
+  clinic                  Clinic            @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient                 Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  createdBy               User              @relation("WaitlistCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  preferredDoctor         User?             @relation("WaitlistPreferredDoctor", fields: [preferredDoctorId], references: [id], onDelete: SetNull)
+
+  @@index([clinicId, resolvedAt])
+  @@index([patientId])
+}
+
+enum WaitlistPriority {
+  LOW
+  NORMAL
+  HIGH
 }
