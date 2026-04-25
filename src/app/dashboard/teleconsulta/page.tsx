@@ -1,17 +1,19 @@
 export const dynamic = "force-dynamic";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 import Link from "next/link";
 
 export default async function TeleconsultaPage() {
   const user = await getCurrentUser();
+  const tz = user.clinic.timezone;
   const appointments = await prisma.appointment.findMany({
     where: { clinicId: user.clinicId, mode: "TELECONSULTATION" },
     include: {
       patient: { select: { firstName: true, lastName: true } },
       doctor: { select: { firstName: true, lastName: true } },
     },
-    orderBy: { date: "desc" },
+    orderBy: { startsAt: "desc" },
     take: 50,
   });
 
@@ -47,8 +49,8 @@ export default async function TeleconsultaPage() {
               <tr key={a.id} className="border-b border-border/60 hover:bg-muted/20 transition-colors">
                 <td className="px-4 py-3 font-semibold">{a.patient.firstName} {a.patient.lastName}</td>
                 <td className="px-4 py-3 text-muted-foreground">Dr/a. {a.doctor.firstName} {a.doctor.lastName}</td>
-                <td className="px-4 py-3 text-muted-foreground">{new Date(a.date).toLocaleDateString("es-MX", { day: "numeric", month: "short" })}</td>
-                <td className="px-4 py-3 font-mono">{a.startTime}</td>
+                <td className="px-4 py-3 text-muted-foreground">{new Intl.DateTimeFormat("es-MX", { timeZone: tz, day: "numeric", month: "short" }).format(a.startsAt)}</td>
+                <td className="px-4 py-3 font-mono">{timeHHMMInTz(a.startsAt, tz)}</td>
                 <td className="px-4 py-3">
                   <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${a.paymentStatus === "paid" ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" : "bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"}`}>
                     {a.paymentStatus === "paid" ? "Pagado" : "Pendiente"}

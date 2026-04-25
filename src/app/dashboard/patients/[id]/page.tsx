@@ -6,9 +6,11 @@ import { notFound } from "next/navigation";
 import { PatientDetailClient } from "./patient-detail-client";
 import { PatientContextPanel } from "@/components/dashboard/patient-context";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-helpers";
 
 export default async function PatientDetailPage({ params }: { params: { id: string } }) {
   const user = await getCurrentUser();
+  const tz = user.clinic.timezone;
 
   const [patient, doctors] = await Promise.all([
     prisma.patient.findFirst({
@@ -16,7 +18,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
       include: {
         primaryDoctor: { select: { id: true, firstName: true, lastName: true, color: true } },
         appointments: {
-          orderBy: { date: "desc" },
+          orderBy: { startsAt: "desc" },
           take: 30,
           include: { doctor: { select: { id: true, firstName: true, lastName: true } } },
         },
@@ -52,15 +54,20 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   const totalBalance = patient.invoices.reduce((s, i) => s + i.balance, 0);
   const totalPlan    = patient.invoices.reduce((s, i) => s + i.total, 0);
 
-  const lastVisit  = patient.appointments[0]?.date?.toISOString() ?? null;
+  const lastVisit  = patient.appointments[0]?.startsAt?.toISOString() ?? null;
   const visitCount = patient.appointments.filter(a => a.status === "COMPLETED").length;
 
-  // Serialize all dates
+  // Serialize + override legacy strings derivados de startsAt/endsAt en clinic tz.
   const serializedAppts = patient.appointments.map(a => ({
     ...a,
-    date:      a.date instanceof Date ? a.date.toISOString() : String(a.date),
-    createdAt: a.createdAt instanceof Date ? a.createdAt.toISOString() : String(a.createdAt),
-    updatedAt: a.updatedAt instanceof Date ? a.updatedAt.toISOString() : String(a.updatedAt),
+    date:         dateISOInTz(a.startsAt, tz),
+    startTime:    timeHHMMInTz(a.startsAt, tz),
+    endTime:      timeHHMMInTz(a.endsAt, tz),
+    durationMins: durationMinutes(a.startsAt, a.endsAt),
+    startsAt:     a.startsAt.toISOString(),
+    endsAt:       a.endsAt.toISOString(),
+    createdAt:    a.createdAt instanceof Date ? a.createdAt.toISOString() : String(a.createdAt),
+    updatedAt:    a.updatedAt instanceof Date ? a.updatedAt.toISOString() : String(a.updatedAt),
   }));
 
   const serializedRecords = patient.records.map(r => ({

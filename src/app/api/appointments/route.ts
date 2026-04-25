@@ -5,11 +5,17 @@ import { prisma } from "@/lib/prisma";
 import { createCalendarEvent, refreshAccessToken, getOrCreateClinicCalendar } from "@/lib/google-calendar";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { tzLocalToUtc } from "@/lib/agenda/time-utils";
-import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
+import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-helpers";
 
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const clinicTz = await prisma.clinic.findUnique({
+    where: { id: ctx.clinicId },
+    select: { timezone: true },
+  });
+  const tz = clinicTz?.timezone ?? "America/Mexico_City";
 
   const appts = await prisma.appointment.findMany({
     where: buildAppointmentWhere(ctx),
@@ -22,11 +28,14 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json(appts.map(a => ({
     ...a,
-    date:      a.date instanceof Date ? a.date.toISOString() : a.date,
-    startsAt:  a.startsAt.toISOString(),
-    endsAt:    a.endsAt.toISOString(),
-    createdAt: a.createdAt instanceof Date ? a.createdAt.toISOString() : a.createdAt,
-    updatedAt: a.updatedAt instanceof Date ? a.updatedAt.toISOString() : a.updatedAt,
+    date:         dateISOInTz(a.startsAt, tz),
+    startTime:    timeHHMMInTz(a.startsAt, tz),
+    endTime:      timeHHMMInTz(a.endsAt, tz),
+    durationMins: durationMinutes(a.startsAt, a.endsAt),
+    startsAt:     a.startsAt.toISOString(),
+    endsAt:       a.endsAt.toISOString(),
+    createdAt:    a.createdAt instanceof Date ? a.createdAt.toISOString() : a.createdAt,
+    updatedAt:    a.updatedAt instanceof Date ? a.updatedAt.toISOString() : a.updatedAt,
   })));
 }
 
