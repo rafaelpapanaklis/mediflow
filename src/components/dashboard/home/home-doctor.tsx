@@ -9,6 +9,7 @@ import { TodayAppointmentRow } from "./parts/today-appointment-row";
 import { TaskRow } from "./parts/task-row";
 import { RecentPatientsCarousel } from "./parts/recent-patients-carousel";
 import { HomeShortcutBar } from "./parts/home-shortcut-bar";
+import { HomeQuickActions } from "./parts/home-quick-actions";
 import { EmptyAppointmentsToday } from "@/components/dashboard/empty-states";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import type { HomeDoctorData } from "@/lib/home/types";
@@ -38,7 +39,17 @@ export function HomeDoctor({ user, data }: Props) {
 
   return (
     <>
-      <Greeting userFullName={`Dr. ${user.displayName}`} trailing={trailing} />
+      <div style={{
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "space-between",
+        gap: 16,
+        flexWrap: "wrap",
+        marginBottom: 18,
+      }}>
+        <Greeting userFullName={`Dr. ${user.displayName}`} trailing={trailing} />
+        <HomeQuickActions />
+      </div>
 
       {data.nextAppointment && <HeroNextPatient appt={data.nextAppointment} />}
 

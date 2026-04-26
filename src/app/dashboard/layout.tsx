@@ -5,6 +5,8 @@ import { Sidebar } from "@/components/dashboard/sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
 import { GlobalAnnouncementBanner } from "@/components/dashboard/global-announcement-banner";
 import { ActiveConsultProvider } from "@/components/dashboard/active-consult-provider";
+import { NewAppointmentProvider } from "@/components/dashboard/new-appointment/new-appointment-provider";
+import { NewPatientProvider } from "@/components/dashboard/new-patient/new-patient-provider";
 import { PatientContextBar } from "@/components/dashboard/patient-context-bar";
 import { prisma } from "@/lib/prisma";
 
@@ -50,6 +52,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <ActiveConsultProvider>
+    <NewPatientProvider>
+    <NewAppointmentProvider>
     <div className="dashboard-shell flex min-h-screen font-sans">
       <Sidebar
         user={{
@@ -88,6 +92,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </main>
       </div>
     </div>
+    </NewAppointmentProvider>
+    </NewPatientProvider>
     </ActiveConsultProvider>
   );
 }

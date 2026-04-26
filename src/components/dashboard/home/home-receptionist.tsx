@@ -8,6 +8,7 @@ import { TodayAppointmentRow } from "./parts/today-appointment-row";
 import { ActionItemRow } from "./parts/action-item-row";
 import { WaitlistCard } from "./parts/waitlist-card";
 import { HomeShortcutBar } from "./parts/home-shortcut-bar";
+import { HomeQuickActions } from "./parts/home-quick-actions";
 import {
   EmptyAppointmentsToday,
   EmptyActionItemsAllClear,
@@ -49,14 +50,24 @@ export function HomeReceptionist({ user, data }: Props) {
 
   return (
     <>
-      <Greeting
-        userFullName={user.displayName}
-        trailing={
-          waiting > 0
-            ? `${waiting} paciente${waiting === 1 ? "" : "s"} en sala`
-            : undefined
-        }
-      />
+      <div style={{
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "space-between",
+        gap: 16,
+        flexWrap: "wrap",
+        marginBottom: 18,
+      }}>
+        <Greeting
+          userFullName={user.displayName}
+          trailing={
+            waiting > 0
+              ? `${waiting} paciente${waiting === 1 ? "" : "s"} en sala`
+              : undefined
+          }
+        />
+        <HomeQuickActions />
+      </div>
 
       <div
         style={{

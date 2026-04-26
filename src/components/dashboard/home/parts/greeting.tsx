@@ -28,7 +28,7 @@ export function Greeting({
   const first = firstName(userFullName);
 
   return (
-    <div style={{ marginBottom: 18 }}>
+    <div>
       <h1
         style={{
           fontSize: "clamp(18px, 1.6vw, 22px)",

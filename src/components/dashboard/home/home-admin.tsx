@@ -12,6 +12,7 @@ import { AdminPeriodToggle } from "./parts/admin-period-toggle";
 import { AdminAlertRow } from "./parts/admin-alert-row";
 import { TeamPerformanceTable } from "./parts/team-performance-table";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { HomeQuickActions } from "./parts/home-quick-actions";
 import { EmptyActionItemsAllClear } from "@/components/dashboard/empty-states";
 import type { HomeAdminData, AdminPeriod } from "@/lib/home/types";
 
@@ -44,10 +45,20 @@ export function HomeAdmin({ clinic, data, period }: Props) {
 
   return (
     <>
-      <Greeting
-        userFullName={clinic.name}
-        trailing="Resumen operativo"
-      />
+      <div style={{
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "space-between",
+        gap: 16,
+        flexWrap: "wrap",
+        marginBottom: 18,
+      }}>
+        <Greeting
+          userFullName={clinic.name}
+          trailing="Resumen operativo"
+        />
+        <HomeQuickActions />
+      </div>
 
       <div
         role="group"
