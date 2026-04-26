@@ -16,6 +16,7 @@ import type { ClinicPlan } from "./sidebar";
 
 const ROUTE_LABELS: Record<string, string> = {
   "/dashboard":               "Hoy",
+  "/dashboard/agenda":        "Agenda",
   "/dashboard/appointments":  "Agenda",
   "/dashboard/patients":      "Pacientes",
   "/dashboard/whatsapp":      "Mensajes",

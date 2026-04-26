@@ -84,7 +84,7 @@ interface NavItemDef {
 
 const NAV_ITEMS: NavItemDef[] = [
   { id: "home",         section: "workspace", label: "Hoy",         href: "/dashboard",               icon: Home,          matchExact: true },
-  { id: "appointments", section: "workspace", label: "Agenda",      href: "/dashboard/appointments",  icon: Calendar },
+  { id: "appointments", section: "workspace", label: "Agenda",      href: "/dashboard/agenda",        icon: Calendar },
   { id: "patients",     section: "workspace", label: "Pacientes",   href: "/dashboard/patients",      icon: Users },
   { id: "messages",     section: "workspace", label: "Mensajes",    href: "/dashboard/whatsapp",      icon: MessageCircle, countKey: "messagesUnread" },
 
