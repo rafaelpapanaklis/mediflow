@@ -290,7 +290,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
         const res = await fetch("/api/appointments");
         if (res.ok && mounted) {
           const data = await res.json();
-          if (mounted) setAppts(data);
+          if (mounted) setAppts(data.appointments ?? []);
         }
       } catch { /* silent */ }
     }
