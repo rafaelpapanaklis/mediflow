@@ -132,6 +132,34 @@ export function ClinicLayoutClient({
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dirtyRef = useRef(false);
 
+  // ── Drag local sin tocar `elements` hasta soltar ──
+  // movingPosition refleja la posición instantánea del elemento siendo
+  // movido. Durante el drag NO mutamos `elements` (eso disparaba 60 fps
+  // de setElements + sort + autosave-effect → ghosting visual). El render
+  // hace override solo del elemento siendo movido. Al onMouseUp se commitea.
+  const [movingPosition, setMovingPosition] = useState<{ col: number; row: number } | null>(null);
+  // RAF throttle: 1 update por frame de paint del browser, no 1 por evento.
+  const rafIdRef = useRef<number | null>(null);
+  const pendingMouseRef = useRef<{ x: number; y: number } | null>(null);
+  // Flag para evitar múltiples drops async simultáneos.
+  const dropInFlightRef = useRef<boolean>(false);
+
+  /** Cancela cualquier drag/move en curso sin commitear. Llamado por
+   *  Escape, onMouseLeave del SVG y unmount — evita ghosts colgando. */
+  const cancelDrag = useCallback(() => {
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
+    pendingMouseRef.current = null;
+    panStartRef.current = null;
+    moveStartRef.current = null;
+    setDragType(null);
+    setDragGhost(null);
+    setMovingId(null);
+    setMovingPosition(null);
+  }, []);
+
   const selectedElement = useMemo(
     () => elements.find((e) => e.id === selectedId) ?? null,
     [elements, selectedId],
@@ -272,6 +300,12 @@ export function ClinicLayoutClient({
     async (type: string, col: number, row: number) => {
       const td = catalog.byKey.get(type);
       if (!td) return;
+      // Evita carreras: si una promesa de creación de Resource sigue en
+      // vuelo, ignoramos drops nuevos (el usuario debe esperar). Sin esto
+      // dos drops rápidos podían crear 2 Resources con el mismo nombre.
+      if (dropInFlightRef.current) return;
+      dropInFlightRef.current = true;
+
       const id = nextIdRef.current++;
 
       // Para sillones (isChair): si hay un Resource(CHAIR) existente sin
@@ -288,7 +322,6 @@ export function ClinicLayoutClient({
           resourceId = free.id;
           chairName = free.name;
         } else {
-          // Crea Resource nuevo en la agenda.
           try {
             const proposed = `Consultorio ${liveChairs.length + 1}`;
             const res = await fetch("/api/agenda/resources", {
@@ -331,25 +364,28 @@ export function ClinicLayoutClient({
         resourceId,
         name: chairName ?? (td.isChair ? "Consultorio" : null),
       };
-      const snap = elements;
-      const next = [...snap, elem];
-      pushHistory(snap);
-      setElements(next);
+      // Functional setState evita stale closures entre el inicio del
+      // fetch (que puede tomar 200ms+) y el commit del nuevo elemento.
+      setElements((prev) => {
+        pushHistory(prev);
+        return [...prev, elem];
+      });
       setSelectedId(id);
       markDirty();
+      dropInFlightRef.current = false;
     },
     [catalog, elements, liveChairs, pushHistory, markDirty],
   );
 
   const updateElement = useCallback(
     (id: number, patch: Partial<LayoutElement>) => {
-      const snap = elements;
-      const next = snap.map((e) => (e.id === id ? { ...e, ...patch } : e));
-      pushHistory(snap);
-      setElements(next);
+      setElements((prev) => {
+        pushHistory(prev);
+        return prev.map((e) => (e.id === id ? { ...e, ...patch } : e));
+      });
       markDirty();
     },
-    [elements, pushHistory, markDirty],
+    [pushHistory, markDirty],
   );
 
   const deleteElement = useCallback(
@@ -370,10 +406,10 @@ export function ClinicLayoutClient({
         );
       }
 
-      const snap = elements;
-      const next = snap.filter((e) => e.id !== id);
-      pushHistory(snap);
-      setElements(next);
+      setElements((prev) => {
+        pushHistory(prev);
+        return prev.filter((e) => e.id !== id);
+      });
       if (selectedId === id) setSelectedId(null);
       markDirty();
 
@@ -402,24 +438,24 @@ export function ClinicLayoutClient({
 
   const duplicateElement = useCallback(
     (id: number) => {
-      const orig = elements.find((e) => e.id === id);
-      if (!orig) return;
-      const newId = nextIdRef.current++;
-      const dup: LayoutElement = {
-        ...orig,
-        id: newId,
-        col: orig.col + 2,
-        row: orig.row + 2,
-        // Duplicar un sillón NO comparte el resourceId — quien lo duplica
-        // debe asignar otro Resource manualmente.
-        resourceId: null,
-      };
-      pushHistory(elements);
-      setElements([...elements, dup]);
-      setSelectedId(newId);
+      setElements((prev) => {
+        const orig = prev.find((e) => e.id === id);
+        if (!orig) return prev;
+        const newId = nextIdRef.current++;
+        const dup: LayoutElement = {
+          ...orig,
+          id: newId,
+          col: orig.col + 2,
+          row: orig.row + 2,
+          resourceId: null,
+        };
+        pushHistory(prev);
+        setSelectedId(newId);
+        return [...prev, dup];
+      });
       markDirty();
     },
-    [elements, pushHistory, markDirty],
+    [pushHistory, markDirty],
   );
 
   const undo = useCallback(() => {
@@ -452,7 +488,7 @@ export function ClinicLayoutClient({
       }
       if (e.key === "Escape") {
         setSelectedId(null);
-        setDragType(null);
+        cancelDrag();
         setPanMode(false);
         return;
       }
@@ -476,7 +512,18 @@ export function ClinicLayoutClient({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [selectedId, elements, undo, duplicateElement, deleteElement, updateElement]);
+  }, [selectedId, elements, undo, duplicateElement, deleteElement, updateElement, cancelDrag]);
+
+  // Cleanup del RAF al desmontar (estricto en strict mode dev).
+  useEffect(() => {
+    return () => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, []);
 
   /* ─── Drag & drop / pan / mouse ─── */
 
@@ -523,39 +570,63 @@ export function ClinicLayoutClient({
     [panMode, panOffset.x, panOffset.y],
   );
 
+  /** Mousemove throttled con requestAnimationFrame.
+   *  Sin esto, 60 eventos/seg mutaban state → 60 re-renders del SVG con
+   *  47 elementos cada uno → ghosting visual. Ahora máx 1 update/frame. */
   const onSvgMouseMove = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
-      if (panMode && panStartRef.current) {
-        const dx = (e.clientX - panStartRef.current.x) / zoom;
-        const dy = (e.clientY - panStartRef.current.y) / zoom;
-        setPanOffset({
-          x: panStartRef.current.px + dx,
-          y: panStartRef.current.py + dy,
-        });
-        return;
-      }
-      if (dragType) {
-        const g = eventToGrid(e.clientX, e.clientY);
-        if (g) setDragGhost({ col: g.col, row: g.row });
-        return;
-      }
-      if (movingId !== null && moveStartRef.current) {
-        const g = eventToGrid(e.clientX, e.clientY);
-        if (!g) return;
-        const dx = g.col - moveStartRef.current.mx;
-        const dy = g.row - moveStartRef.current.my;
-        const nc = moveStartRef.current.col + dx;
-        const nr = moveStartRef.current.row + dy;
-        setElements((prev) =>
-          prev.map((el) => (el.id === movingId ? { ...el, col: nc, row: nr } : el)),
-        );
-      }
+      const cx = e.clientX;
+      const cy = e.clientY;
+      pendingMouseRef.current = { x: cx, y: cy };
+      if (rafIdRef.current !== null) return;
+      rafIdRef.current = requestAnimationFrame(() => {
+        rafIdRef.current = null;
+        const last = pendingMouseRef.current;
+        if (!last) return;
+        // Pan
+        if (panMode && panStartRef.current) {
+          const dx = (last.x - panStartRef.current.x) / zoom;
+          const dy = (last.y - panStartRef.current.y) / zoom;
+          setPanOffset({
+            x: panStartRef.current.px + dx,
+            y: panStartRef.current.py + dy,
+          });
+          return;
+        }
+        // Drag desde sidebar (ghost translúcido)
+        if (dragType) {
+          const g = eventToGrid(last.x, last.y);
+          if (g) setDragGhost({ col: g.col, row: g.row });
+          return;
+        }
+        // Move de elemento existente — actualiza SOLO movingPosition,
+        // no toques `elements` hasta el mouseUp. Esto evita 60 fps de
+        // setElements + sort + autosave-effect.
+        if (movingId !== null && moveStartRef.current) {
+          const g = eventToGrid(last.x, last.y);
+          if (!g) return;
+          const dx = g.col - moveStartRef.current.mx;
+          const dy = g.row - moveStartRef.current.my;
+          setMovingPosition({
+            col: moveStartRef.current.col + dx,
+            row: moveStartRef.current.row + dy,
+          });
+        }
+      });
     },
     [panMode, dragType, eventToGrid, movingId, zoom],
   );
 
   const onSvgMouseUp = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
+      // Cancela cualquier RAF pendiente para que no procese eventos
+      // posteriores al mouseUp.
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      pendingMouseRef.current = null;
+
       if (panMode && panStartRef.current) {
         panStartRef.current = null;
         markDirty();
@@ -563,21 +634,38 @@ export function ClinicLayoutClient({
       }
       if (dragType) {
         const g = eventToGrid(e.clientX, e.clientY);
-        if (g && g.col >= 0 && g.row >= 0 && g.col < GRID_COLS && g.row < GRID_ROWS) {
-          addElement(dragType, g.col, g.row);
-        }
+        // Limpiamos ghost y dragType ANTES de addElement (que puede ser
+        // async). Si addElement tarda, el ghost ya no aparece colgando.
         setDragType(null);
         setDragGhost(null);
+        if (g && g.col >= 0 && g.row >= 0 && g.col < GRID_COLS && g.row < GRID_ROWS) {
+          void addElement(dragType, g.col, g.row);
+        }
         return;
       }
       if (movingId !== null) {
+        // Commitea la posición final al array `elements` con functional
+        // setState. Solo aquí pagamos el re-render + autosave dirty.
+        const finalPos = movingPosition;
+        const id = movingId;
+        if (finalPos) {
+          setElements((prev) =>
+            prev.map((el) => (el.id === id ? { ...el, col: finalPos.col, row: finalPos.row } : el)),
+          );
+        }
         moveStartRef.current = null;
         setMovingId(null);
+        setMovingPosition(null);
         markDirty();
       }
     },
-    [panMode, dragType, eventToGrid, addElement, movingId, markDirty],
+    [panMode, dragType, eventToGrid, addElement, movingId, movingPosition, markDirty],
   );
+
+  /** Cancela cualquier drag/move en curso sin commitear. Se llama cuando
+   *  el mouse sale del SVG o al presionar Escape — evita ghosts colgando.
+   *  Movido más arriba para que esté disponible en el useEffect de
+   *  keyboard shortcuts (Esc llama cancelDrag). */
 
   const onElementMouseDown = useCallback(
     (e: React.MouseEvent, id: number) => {
@@ -648,48 +736,61 @@ export function ClinicLayoutClient({
     return cells;
   };
 
+  /** Sort memoizado: el sort por col+row solo se recalcula si `elements`
+   *  cambia. Sin esto cada render rebuild el array. Durante un drag de
+   *  move, `elements` NO cambia (solo movingPosition) → no reordenamos
+   *  → no re-keying en DOM → sin flicker. */
+  const sortedElements = useMemo(
+    () =>
+      elements
+        .slice()
+        .sort((a, b) => a.col + a.row - (b.col + b.row)),
+    [elements],
+  );
+
   const renderElements = () => {
-    return elements
-      .slice()
-      .sort((a, b) => a.col + a.row - (b.col + b.row)) // back-to-front por suma col+row
-      .map((el) => {
-        const td = catalog.byKey.get(el.type);
-        if (!td) return null;
-        const [sx, sy] = toScreen(el.col, el.row, ox, oy);
-        const isSel = el.id === selectedId;
-        const isMoving = el.id === movingId;
-        const chair = el.resourceId ? liveChairs.find((c) => c.id === el.resourceId) : null;
-        const labelText = td.isChair ? chair?.name ?? el.name ?? "Consultorio" : null;
-        return (
-          <g
-            key={el.id}
-            data-element-id={el.id}
-            className={isMoving ? styles.elementMoving : undefined}
-            onMouseDown={(e) => onElementMouseDown(e, el.id)}
-            style={{ cursor: panMode ? "inherit" : "move" }}
-            transform={el.rotation !== 0 ? `rotate(${el.rotation} ${sx} ${sy})` : undefined}
-          >
-            <g dangerouslySetInnerHTML={{ __html: td.draw(sx, sy) }} />
-            {labelText && (
-              <text x={sx + 20} y={sy - 64} className={styles.chairLabel} textAnchor="middle">
-                {labelText}
-              </text>
-            )}
-            {isSel && (
-              <rect
-                x={sx - 10}
-                y={sy - 88}
-                width={(td.w + 0.5) * ISO_C * 1.2}
-                height={(td.h + 1) * ISO_C}
-                className={styles.elementSelected}
-                fill="none"
-                pointerEvents="none"
-                rx={4}
-              />
-            )}
-          </g>
-        );
-      });
+    return sortedElements.map((el) => {
+      const td = catalog.byKey.get(el.type);
+      if (!td) return null;
+      // Override visual: el elemento siendo movido se renderiza con
+      // movingPosition (state local), no con el col/row del array.
+      const isMoving = el.id === movingId;
+      const renderCol = isMoving && movingPosition ? movingPosition.col : el.col;
+      const renderRow = isMoving && movingPosition ? movingPosition.row : el.row;
+      const [sx, sy] = toScreen(renderCol, renderRow, ox, oy);
+      const isSel = el.id === selectedId;
+      const chair = el.resourceId ? liveChairs.find((c) => c.id === el.resourceId) : null;
+      const labelText = td.isChair ? chair?.name ?? el.name ?? "Consultorio" : null;
+      return (
+        <g
+          key={el.id}
+          data-element-id={el.id}
+          className={isMoving ? styles.elementMoving : undefined}
+          onMouseDown={(e) => onElementMouseDown(e, el.id)}
+          style={{ cursor: panMode ? "inherit" : "move" }}
+          transform={el.rotation !== 0 ? `rotate(${el.rotation} ${sx} ${sy})` : undefined}
+        >
+          <g dangerouslySetInnerHTML={{ __html: td.draw(sx, sy) }} />
+          {labelText && (
+            <text x={sx + 20} y={sy - 64} className={styles.chairLabel} textAnchor="middle">
+              {labelText}
+            </text>
+          )}
+          {isSel && (
+            <rect
+              x={sx - 10}
+              y={sy - 88}
+              width={(td.w + 0.5) * ISO_C * 1.2}
+              height={(td.h + 1) * ISO_C}
+              className={styles.elementSelected}
+              fill="none"
+              pointerEvents="none"
+              rx={4}
+            />
+          )}
+        </g>
+      );
+    });
   };
 
   const renderGhost = () => {
@@ -958,7 +1059,7 @@ export function ClinicLayoutClient({
             onMouseDown={onSvgMouseDown}
             onMouseMove={onSvgMouseMove}
             onMouseUp={onSvgMouseUp}
-            onMouseLeave={onSvgMouseUp}
+            onMouseLeave={cancelDrag}
             onWheel={onSvgWheel}
           >
             <g>{renderGrid()}</g>
