@@ -19,7 +19,9 @@ import {
   Maximize2,
   Hand,
   MousePointer2,
+  ExternalLink,
 } from "lucide-react";
+import Link from "next/link";
 import toast from "react-hot-toast";
 import { toScreen, fromScreen, C as ISO_C } from "@/lib/floor-plan/iso";
 import { getCatalogForClinic } from "@/lib/floor-plan/elements";
@@ -27,8 +29,17 @@ import type {
   ElementType,
   LayoutElement,
   LayoutMetadata,
+  LiveAppointment,
   Rotation,
 } from "@/lib/floor-plan/elements";
+import {
+  LiveOverlay,
+  LiveTooltip,
+  LiveClock,
+  LiveStatusPanel,
+  LiveTimeline,
+  type HoverData,
+} from "./components/live-mode";
 import styles from "./clinic-layout.module.css";
 
 interface Chair {
@@ -87,6 +98,12 @@ export function ClinicLayoutClient({
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [savedAgo, setSavedAgo] = useState<string>("");
+
+  // Modo En Vivo
+  const [liveMode, setLiveMode] = useState(false);
+  const [viewTime, setViewTime] = useState<Date>(() => new Date());
+  const [appointments, setAppointments] = useState<LiveAppointment[]>([]);
+  const [hover, setHover] = useState<HoverData | null>(null);
 
   const nextIdRef = useRef<number>(
     Math.max(0, ...initialElements.map((e) => e.id)) + 1,
@@ -171,6 +188,63 @@ export function ClinicLayoutClient({
     const id = setInterval(update, 1000);
     return () => clearInterval(id);
   }, [savedAt]);
+
+  /* ─── Modo En Vivo: fetch appointments + auto-tick viewTime ─── */
+
+  useEffect(() => {
+    if (!liveMode) return;
+    let cancelled = false;
+    const fetchAppointments = async () => {
+      try {
+        const dateStr = viewTime.toISOString().slice(0, 10);
+        const res = await fetch(`/api/clinic-layout/appointments?date=${dateStr}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        const parsed: LiveAppointment[] = (data.appointments ?? []).map(
+          (a: { id: string; resourceId: string; patient: string; patientFull?: string; treatment: string; doctor: string; start: string; end: string }) => ({
+            id: a.id,
+            resourceId: a.resourceId,
+            patient: a.patient,
+            patientFull: a.patientFull,
+            treatment: a.treatment,
+            doctor: a.doctor,
+            start: new Date(a.start),
+            end: new Date(a.end),
+          }),
+        );
+        setAppointments(parsed);
+      } catch {/* silent */}
+    };
+    fetchAppointments();
+    const id = setInterval(fetchAppointments, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [liveMode, viewTime]);
+
+  // Auto-tick viewTime cada 5s si está cerca de "now" (no estamos viajando).
+  useEffect(() => {
+    if (!liveMode) return;
+    const id = setInterval(() => {
+      const now = new Date();
+      if (Math.abs(now.getTime() - viewTime.getTime()) < 90_000) {
+        setViewTime(now);
+      }
+    }, 5_000);
+    return () => clearInterval(id);
+  }, [liveMode, viewTime]);
+
+  // Al activar live, deselecciona y resetea viewTime a ahora.
+  useEffect(() => {
+    if (liveMode) {
+      setSelectedId(null);
+      setDragType(null);
+      setPanMode(false);
+      setViewTime(new Date());
+    }
+  }, [liveMode]);
 
   /* ─── Acciones sobre elementos ─── */
 
@@ -554,19 +628,38 @@ export function ClinicLayoutClient({
           <span className={styles.clinicPill}>{clinic.name}</span>
           <span className={styles.divider} />
 
-          {/* Toggle Edición / En Vivo (placeholder hasta commit 4) */}
+          {/* Toggle Edición / En Vivo */}
           <div className={styles.modeToggle}>
             <button
               type="button"
-              className={`${styles.modeBtn} ${styles.modeBtnActive}`}
-              disabled
+              className={`${styles.modeBtn} ${!liveMode ? styles.modeBtnActive : ""}`}
+              onClick={() => setLiveMode(false)}
+              aria-pressed={!liveMode}
             >
               Edición
             </button>
-            <button type="button" className={styles.modeBtn} disabled title="Disponible en commit 4">
+            <button
+              type="button"
+              className={`${styles.modeBtn} ${liveMode ? styles.modeBtnActiveLive : ""}`}
+              onClick={() => setLiveMode(true)}
+              aria-pressed={liveMode}
+            >
               En Vivo
             </button>
           </div>
+
+          {liveMode && <LiveClock />}
+          {liveMode && clinic.liveModeEnabled && clinic.liveModeSlug && (
+            <Link
+              href={`/live/${clinic.liveModeSlug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.toolbarBtn}
+              title="Abrir vista pública"
+            >
+              <ExternalLink size={13} aria-hidden /> {clinic.liveModeSlug}
+            </Link>
+          )}
 
           <span className={styles.spacer} />
 
@@ -593,59 +686,71 @@ export function ClinicLayoutClient({
               : "Sin cambios"}
           </span>
 
-          <button
-            type="button"
-            className={styles.toolbarBtn}
-            onClick={undo}
-            disabled={history.length <= 1}
-            title="Deshacer (⌘Z)"
-          >
-            <Undo2 size={13} aria-hidden /> Deshacer
-          </button>
-          <button
-            type="button"
-            className={styles.toolbarBtn}
-            onClick={() => setZoom((z) => Math.max(0.4, z / 1.1))}
-            title="Zoom -"
-          >
-            <ZoomOut size={13} aria-hidden />
-          </button>
-          <span className={styles.zoomPercent}>{Math.round(zoom * 100)}%</span>
-          <button
-            type="button"
-            className={styles.toolbarBtn}
-            onClick={() => setZoom((z) => Math.min(2.2, z * 1.1))}
-            title="Zoom +"
-          >
-            <ZoomIn size={13} aria-hidden />
-          </button>
-          <button
-            type="button"
-            className={styles.toolbarBtn}
-            onClick={() => {
-              setZoom(1);
-              setPanOffset({ x: 0, y: 0 });
-            }}
-            title="Restablecer 1:1"
-          >
-            <Maximize2 size={13} aria-hidden /> 1:1
-          </button>
-          <button
-            type="button"
-            className={`${styles.toolbarBtn} ${panMode ? styles.toolbarBtnPrimary : ""}`}
-            onClick={() => setPanMode((v) => !v)}
-            title="Modo manita (H)"
-          >
-            {panMode ? <Hand size={13} aria-hidden /> : <MousePointer2 size={13} aria-hidden />}
-          </button>
+          {!liveMode && (
+            <>
+              <button
+                type="button"
+                className={styles.toolbarBtn}
+                onClick={undo}
+                disabled={history.length <= 1}
+                title="Deshacer (⌘Z)"
+              >
+                <Undo2 size={13} aria-hidden /> Deshacer
+              </button>
+              <button
+                type="button"
+                className={styles.toolbarBtn}
+                onClick={() => setZoom((z) => Math.max(0.4, z / 1.1))}
+                title="Zoom -"
+              >
+                <ZoomOut size={13} aria-hidden />
+              </button>
+              <span className={styles.zoomPercent}>{Math.round(zoom * 100)}%</span>
+              <button
+                type="button"
+                className={styles.toolbarBtn}
+                onClick={() => setZoom((z) => Math.min(2.2, z * 1.1))}
+                title="Zoom +"
+              >
+                <ZoomIn size={13} aria-hidden />
+              </button>
+              <button
+                type="button"
+                className={styles.toolbarBtn}
+                onClick={() => {
+                  setZoom(1);
+                  setPanOffset({ x: 0, y: 0 });
+                }}
+                title="Restablecer 1:1"
+              >
+                <Maximize2 size={13} aria-hidden /> 1:1
+              </button>
+              <button
+                type="button"
+                className={`${styles.toolbarBtn} ${panMode ? styles.toolbarBtnPrimary : ""}`}
+                onClick={() => setPanMode((v) => !v)}
+                title="Modo manita (H)"
+              >
+                {panMode ? <Hand size={13} aria-hidden /> : <MousePointer2 size={13} aria-hidden />}
+              </button>
 
-          <span className={styles.kbdHint}>
-            <kbd>R</kbd> rota · <kbd>Del</kbd> borra · <kbd>⌘Z</kbd> deshacer · <kbd>H</kbd> pan
-          </span>
+              <span className={styles.kbdHint}>
+                <kbd>R</kbd> rota · <kbd>Del</kbd> borra · <kbd>⌘Z</kbd> deshacer · <kbd>H</kbd> pan
+              </span>
+            </>
+          )}
         </div>
 
         {/* ── Sidebar (paleta) ── */}
         <aside className={styles.sidebar}>
+          <div
+            className={`${styles.sidebarLockedOverlay} ${liveMode ? styles.sidebarLockedOverlayVisible : ""}`}
+            aria-hidden={!liveMode}
+          >
+            <Lock size={26} aria-hidden />
+            <strong>Modo En Vivo</strong>
+            Edición desactivada — vuelve a Edición para cambiar el layout.
+          </div>
           {catalog.grouped.map((group) => (
             <div key={group.id}>
               <button
@@ -693,11 +798,16 @@ export function ClinicLayoutClient({
           ))}
         </aside>
 
-        {/* ── Canvas ── */}
+        {/* ── Canvas + (Timeline si liveMode) ── */}
         <div
           className={styles.canvasWrap}
-          data-pan-mode={panMode ? "true" : "false"}
+          data-pan-mode={panMode && !liveMode ? "true" : "false"}
           data-panning={panStartRef.current ? "true" : "false"}
+          style={
+            liveMode
+              ? { display: "grid", gridTemplateRows: "1fr 180px" }
+              : undefined
+          }
         >
           <svg
             ref={svgRef}
@@ -714,12 +824,42 @@ export function ClinicLayoutClient({
             <g>{renderGrid()}</g>
             <g>{renderElements()}</g>
             <g>{renderGhost()}</g>
+            {liveMode && (
+              <LiveOverlay
+                elements={elements}
+                ox={ox}
+                oy={oy}
+                viewTime={viewTime}
+                appointments={appointments}
+                showFullNames={clinic.liveModeShowPatientNames}
+                onHover={setHover}
+              />
+            )}
           </svg>
+          {liveMode && (
+            <LiveTimeline
+              elements={elements}
+              chairs={chairs}
+              viewTime={viewTime}
+              appointments={appointments}
+              onSeek={setViewTime}
+              onResetNow={() => setViewTime(new Date())}
+            />
+          )}
         </div>
+        <LiveTooltip data={hover} />
 
-        {/* ── Properties panel ── */}
+        {/* ── Properties panel / Live status ── */}
         <aside className={styles.propertiesPanel}>
-          {!selectedElement || !selectedType ? (
+          {liveMode ? (
+            <LiveStatusPanel
+              elements={elements}
+              chairs={chairs}
+              viewTime={viewTime}
+              appointments={appointments}
+              showFullNames={clinic.liveModeShowPatientNames}
+            />
+          ) : !selectedElement || !selectedType ? (
             <div className={styles.propEmpty}>
               <MousePointer2 size={36} aria-hidden className={styles.propEmptyIcon} />
               <div>
