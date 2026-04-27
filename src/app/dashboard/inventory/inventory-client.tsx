@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Plus, Search, Package, X, Trash2, Minus, Check } from "lucide-react";
 import toast from "react-hot-toast";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
@@ -150,6 +150,16 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
   const [tab, setTab]           = useState<StatusTab>("todos");
   const [search, setSearch]     = useState("");
   const [showAdd, setShowAdd]   = useState(false);
+
+  // Esc cierra el modal — patrón consistente con resto del design system.
+  useEffect(() => {
+    if (!showAdd) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowAdd(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showAdd]);
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
   const [editQty, setEditQty]   = useState<Record<string, string>>({});
   const [newItem, setNewItem] = useState({
@@ -457,10 +467,24 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
 
       {/* Modal agregar */}
       {showAdd && (
-        <div className="modal-overlay" onClick={() => setShowAdd(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+        // BUG FIX: el modal se cerraba solo "después de unos segundos".
+        // Causa: el patrón anterior usaba `onClick={() => setShowAdd(false)}`
+        // en el overlay con `e.stopPropagation()` en el modal interior.
+        // Eventos sintéticos de re-render (input focus/blur, select native
+        // picker dismiss, etc.) podían burlar el stopPropagation en algunos
+        // browsers. Reemplazado por el patrón robusto: solo cerrar si el
+        // click landed *directamente* sobre el overlay (target === currentTarget),
+        // sin importar lo que bubblee desde dentro.
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="inventory-add-title"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowAdd(false); }}
+        >
+          <div className="modal">
             <div className="modal__header">
-              <div className="modal__title">Nuevo artículo</div>
+              <div id="inventory-add-title" className="modal__title">Nuevo artículo</div>
               <button
                 onClick={() => setShowAdd(false)}
                 type="button"
