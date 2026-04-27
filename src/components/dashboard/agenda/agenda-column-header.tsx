@@ -1,17 +1,31 @@
 "use client";
 
-import { AvatarNew } from "@/components/ui/design-system/avatar-new";
+import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
 import type { AgendaColumnDescriptor } from "@/app/dashboard/agenda/agenda-page-client";
 import styles from "./agenda.module.css";
 
 export function AgendaColumnHeader({ column }: { column: AgendaColumnDescriptor }) {
+  const accent =
+    column.type === "doctor" && column.doctorId
+      ? doctorColorFor(column.doctorId, column.color)
+      : column.color ?? null;
+
   return (
-    <div className={styles.columnHeader}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+    <div
+      className={styles.columnHeader}
+      style={accent ? ({ "--mf-occ-color": accent } as React.CSSProperties) : undefined}
+    >
+      <div className={styles.columnHeaderRow}>
         {column.type === "doctor" && (
-          <AvatarNew name={column.title} size="sm" />
+          <div
+            className={styles.columnHeaderAvatar}
+            style={{ background: accent ?? "var(--brand)" }}
+            aria-hidden
+          >
+            {doctorInitials(column.title)}
+          </div>
         )}
-        <div style={{ minWidth: 0, flex: 1 }}>
+        <div className={styles.columnHeaderText}>
           <div className={styles.columnHeaderTitle}>{column.title}</div>
           {column.subtitle && (
             <div className={styles.columnHeaderSub}>{column.subtitle}</div>

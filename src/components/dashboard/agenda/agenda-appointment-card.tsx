@@ -1,8 +1,9 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { Video, Footprints, AlertTriangle } from "lucide-react";
+import { useAgenda } from "./agenda-provider";
 import { formatSlotTime, timeToSlotIndex } from "@/lib/agenda/time-utils";
+import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
 import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
 
@@ -14,17 +15,7 @@ interface Props {
   timezone: string;
 }
 
-const STATUS_CLASS: Record<AppointmentStatus, string> = {
-  SCHEDULED:   styles.statusScheduled,
-  CONFIRMED:   styles.statusConfirmed,
-  CHECKED_IN:  styles.statusCheckedIn,
-  IN_PROGRESS: styles.statusInProgress,
-  COMPLETED:   styles.statusCompleted,
-  CANCELLED:   styles.statusCancelled,
-  NO_SHOW:     styles.statusNoShow,
-};
-
-const STATUS_DOT_BG: Record<AppointmentStatus, string> = {
+const STATUS_COLOR: Record<AppointmentStatus, string> = {
   SCHEDULED:   "var(--warning)",
   CONFIRMED:   "var(--info)",
   CHECKED_IN:  "var(--brand)",
@@ -41,91 +32,95 @@ export function AgendaAppointmentCard({
   dayStart,
   timezone,
 }: Props) {
-  const router = useRouter();
+  const { state, selectAppointment } = useAgenda();
 
   const config = { timezone, slotMinutes, dayStart, dayEnd: 24 };
   const startSlot = timeToSlotIndex(appointment.startsAt, dayISO, config);
   if (startSlot < 0) return null;
 
   const startMs = new Date(appointment.startsAt).getTime();
-  const endMs = new Date(appointment.endsAt).getTime();
+  const endMs = appointment.endsAt
+    ? new Date(appointment.endsAt).getTime()
+    : startMs + slotMinutes * 60_000;
   const durationMin = Math.max(slotMinutes, (endMs - startMs) / 60_000);
   const slotsSpan = Math.max(1, durationMin / slotMinutes);
 
   const compact = slotsSpan <= 1.5;
-  const ultraCompact = slotsSpan <= 1.0 && slotMinutes <= 15;
 
-  const top = `calc(${startSlot} * var(--mf-agenda-slot-h))`;
-  const height = `calc(${slotsSpan} * var(--mf-agenda-slot-h) - 2px)`;
+  const doctorMeta = appointment.doctor
+    ? state.doctors.find((d) => d.id === appointment.doctor!.id) ?? null
+    : null;
+  const docColor = appointment.doctor
+    ? doctorColorFor(appointment.doctor.id, doctorMeta?.color ?? null)
+    : "var(--brand)";
+  const statusColor = STATUS_COLOR[appointment.status];
+
+  const isSelected = state.selectedAppointmentId === appointment.id;
 
   const onClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    router.push(`/dashboard/appointments/${appointment.id}`);
+    selectAppointment(appointment.id);
   };
 
   const className = [
     styles.appt,
-    STATUS_CLASS[appointment.status],
     compact ? styles.apptCompact : "",
     appointment.requiresValidation ? styles.apptPending : "",
+    isSelected ? styles.selected : "",
   ]
     .filter(Boolean)
     .join(" ");
+
+  const initials = appointment.doctor
+    ? doctorInitials(appointment.doctor.shortName ?? "")
+    : null;
+
+  const treatment = appointment.reason ?? "Consulta";
 
   return (
     <div
       data-appt-id={appointment.id}
       className={className}
-      style={{ top, height, minHeight: 22 }}
+      style={
+        {
+          "--mf-slot-start": startSlot,
+          "--mf-slot-span": slotsSpan,
+          "--mf-doc-color": docColor,
+          "--mf-status-color": statusColor,
+          minHeight: 22,
+        } as React.CSSProperties
+      }
       onClick={onClick}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          router.push(`/dashboard/appointments/${appointment.id}`);
+          selectAppointment(appointment.id);
         }
       }}
       aria-label={`Cita: ${appointment.patient.name} a las ${formatSlotTime(appointment.startsAt, timezone)}`}
+      aria-selected={isSelected}
     >
-      {!ultraCompact && (
-        <div className={styles.apptTime}>
-          <span
-            className={styles.apptStatusDot}
-            style={{
-              background: STATUS_DOT_BG[appointment.status],
-              marginRight: 4,
-              verticalAlign: "middle",
-            }}
-            aria-hidden
-          />
-          {formatSlotTime(appointment.startsAt, timezone)}
-        </div>
-      )}
-      <div className={styles.apptName}>
-        {ultraCompact && (
-          <span
-            className={styles.apptStatusDot}
-            style={{
-              background: STATUS_DOT_BG[appointment.status],
-              marginRight: 4,
-              verticalAlign: "middle",
-            }}
-            aria-hidden
-          />
+      <div className={styles.apptRow1}>
+        {initials && (
+          <span className={styles.apptDocAvatar} aria-hidden>
+            {initials}
+          </span>
         )}
-        {appointment.patient.name}
+        <span className={styles.apptTime}>
+          {formatSlotTime(appointment.startsAt, timezone)}
+        </span>
+        <span className={styles.apptName}>{appointment.patient.name}</span>
       </div>
       {!compact && (
-        <div className={styles.apptMeta}>
+        <div className={styles.apptRow2}>
           {appointment.isTeleconsult && <Video size={10} aria-hidden />}
           {appointment.isWalkIn && <Footprints size={10} aria-hidden />}
           {appointment.requiresValidation && (
             <AlertTriangle size={10} aria-hidden style={{ color: "var(--warning)" }} />
           )}
-          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-            {appointment.reason ?? "Consulta"}
-          </span>
+          <span className={styles.apptTreatment}>{treatment}</span>
         </div>
       )}
     </div>

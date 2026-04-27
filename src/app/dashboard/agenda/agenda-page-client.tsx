@@ -8,6 +8,7 @@ import { AgendaColumnHeader } from "@/components/dashboard/agenda/agenda-column-
 import { AgendaColumn } from "@/components/dashboard/agenda/agenda-column";
 import { AgendaEmptyDay } from "@/components/dashboard/agenda/agenda-empty-day";
 import { AgendaHighlightListener } from "@/components/dashboard/agenda/agenda-highlight-listener";
+import { AgendaDetailPanel } from "@/components/dashboard/agenda/agenda-detail-panel";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import type { AgendaDayResponse } from "@/lib/agenda/types";
 import styles from "@/components/dashboard/agenda/agenda.module.css";
@@ -36,9 +37,10 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
   const { state } = useAgenda();
 
   const columns = computeColumns(state);
+  const detailOpen = state.selectedAppointmentId !== null;
 
   return (
-    <div className={`${styles.page} ${styles.detailClosed}`}>
+    <div className={`${styles.page} ${detailOpen ? "" : styles.detailClosed}`}>
       <AgendaTopbar />
       <AgendaSubToolbar />
       <div className={styles.body}>
@@ -73,6 +75,7 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
           </div>
         )}
       </div>
+      <AgendaDetailPanel />
       {highlightId && <AgendaHighlightListener highlightId={highlightId} />}
     </div>
   );
