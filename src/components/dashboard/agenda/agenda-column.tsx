@@ -8,7 +8,10 @@ import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/
 import { slotIndexToUtc } from "@/lib/agenda/time-utils";
 import type { DroppableData } from "@/lib/agenda/drag-utils";
 import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
-import type { AgendaColumnDescriptor } from "@/app/dashboard/agenda/agenda-page-client";
+import {
+  useDragOverlap,
+  type AgendaColumnDescriptor,
+} from "@/app/dashboard/agenda/agenda-page-client";
 import styles from "./agenda.module.css";
 
 export function AgendaColumn({ column }: { column: AgendaColumnDescriptor }) {
@@ -38,10 +41,12 @@ export function AgendaColumn({ column }: { column: AgendaColumnDescriptor }) {
           resourceId: null,
         };
 
+  const droppableId = `col:${column.key}`;
   const { setNodeRef: setDropRef, isOver } = useDroppable({
-    id: `col:${column.key}`,
+    id: droppableId,
     data: droppableData,
   });
+  const overlapMode = useDragOverlap(droppableId);
 
   const setRefs = useCallback(
     (el: HTMLDivElement | null) => {
@@ -103,10 +108,18 @@ export function AgendaColumn({ column }: { column: AgendaColumnDescriptor }) {
     );
   }
 
+  const dropClass = isOver
+    ? overlapMode === "conflict"
+      ? styles.dropOverConflict
+      : overlapMode === "ok"
+      ? styles.dropOverOk
+      : styles.dropOver
+    : "";
+
   return (
     <div
       ref={setRefs}
-      className={`${styles.column} ${isOver ? styles.dropOver : ""}`}
+      className={`${styles.column} ${dropClass}`}
       onClick={handleClick}
       role="grid"
       aria-label={`Columna ${column.title}`}

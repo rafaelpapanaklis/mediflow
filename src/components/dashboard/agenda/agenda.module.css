@@ -751,6 +751,20 @@
   outline: 1px dashed var(--brand);
   outline-offset: -2px;
 }
+/* Audit ajuste 3: feedback verde u rojo según overlap detectado en cliente */
+.column.dropOverOk,
+.weekDayCol.dropOverOk {
+  background-color: color-mix(in srgb, var(--success) 8%, transparent);
+  outline: 1.5px solid color-mix(in srgb, var(--success) 60%, transparent);
+  outline-offset: -2px;
+}
+.column.dropOverConflict,
+.weekDayCol.dropOverConflict {
+  background-color: color-mix(in srgb, var(--danger) 10%, transparent);
+  outline: 1.5px solid color-mix(in srgb, var(--danger) 60%, transparent);
+  outline-offset: -2px;
+  cursor: not-allowed;
+}
 
 .appt.dragging {
   box-shadow: 0 12px 28px -6px color-mix(in srgb, var(--mf-doc-color, var(--brand)) 50%, transparent);

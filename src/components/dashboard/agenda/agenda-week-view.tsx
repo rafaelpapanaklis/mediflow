@@ -6,6 +6,7 @@ import { useAgenda } from "./agenda-provider";
 import { AgendaTimeAxis } from "./agenda-time-axis";
 import { AgendaAppointmentCard } from "./agenda-appointment-card";
 import { todayInTz } from "@/lib/agenda/time-utils";
+import { useDragOverlap } from "@/app/dashboard/agenda/agenda-page-client";
 import type { DroppableData } from "@/lib/agenda/drag-utils";
 import styles from "./agenda.module.css";
 
@@ -115,15 +116,25 @@ function WeekDayColumn({ day, isToday, slotsTotal, showAppointments }: WeekDayCo
     dayISO: day.iso,
   };
 
+  const droppableId = `day:${day.iso}`;
   const { setNodeRef, isOver } = useDroppable({
-    id: `day:${day.iso}`,
+    id: droppableId,
     data: droppableData,
   });
+  const overlapMode = useDragOverlap(droppableId);
+
+  const dropClass = isOver
+    ? overlapMode === "conflict"
+      ? styles.dropOverConflict
+      : overlapMode === "ok"
+      ? styles.dropOverOk
+      : styles.dropOver
+    : "";
 
   const classes = [
     styles.weekDayCol,
     isToday ? styles.today : "",
-    isOver ? styles.dropOver : "",
+    dropClass,
   ]
     .filter(Boolean)
     .join(" ");

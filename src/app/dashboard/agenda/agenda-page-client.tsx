@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   DndContext,
@@ -8,6 +8,8 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragMoveEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import toast from "react-hot-toast";
 import { AgendaProvider } from "@/components/dashboard/agenda/agenda-provider";
@@ -60,6 +62,22 @@ export function AgendaPageClient(props: Props) {
   );
 }
 
+/* ─────── Drag overlap context (audit ajuste 3) ──────────
+ * El droppable bajo el cursor pinta verde u rojo en tiempo real durante el
+ * drag, según overlap detectado por el cliente. */
+type DragOverlapMode = "ok" | "conflict" | null;
+interface DragOverlapState {
+  overId: string | null;
+  mode: DragOverlapMode;
+}
+const DragOverlapContext = createContext<DragOverlapState>({ overId: null, mode: null });
+
+export function useDragOverlap(droppableId: string): DragOverlapMode {
+  const ctx = useContext(DragOverlapContext);
+  if (ctx.overId !== droppableId) return null;
+  return ctx.mode;
+}
+
 function AgendaShell({ highlightId }: { highlightId: string | null }) {
   const { state, dispatch, setDay } = useAgenda();
   const router = useRouter();
@@ -72,8 +90,78 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
   const columns = computeColumns(state);
   const detailOpen = state.selectedAppointmentId !== null;
 
+  const [dragOverlap, setDragOverlap] = useState<DragOverlapState>({ overId: null, mode: null });
+  /** Timer de undo activo (toast id + timeout). */
+  const undoTimerRef = useRef<{ toastId: string; timeoutId: ReturnType<typeof setTimeout> } | null>(null);
+  useEffect(() => () => {
+    if (undoTimerRef.current) {
+      clearTimeout(undoTimerRef.current.timeoutId);
+      toast.dismiss(undoTimerRef.current.toastId);
+    }
+  }, []);
+
+  const handleDragStart = useCallback((_e: DragStartEvent) => {
+    setDragOverlap({ overId: null, mode: null });
+  }, []);
+
+  const handleDragMove = useCallback(
+    (event: DragMoveEvent) => {
+      const { active, over, delta } = event;
+      if (!over) {
+        setDragOverlap({ overId: null, mode: null });
+        return;
+      }
+      const dragData = active.data.current as AppointmentDragData | undefined;
+      if (!dragData || dragData.kind !== "appt") {
+        setDragOverlap({ overId: String(over.id), mode: "ok" });
+        return;
+      }
+      const target = over.data.current as DroppableData | undefined;
+      if (!target) return;
+
+      const original = state.appointments.find((a) => a.id === dragData.appointmentId);
+      if (!original) return;
+
+      const currentDoctorId = original.doctor?.id ?? null;
+      const currentResourceId = original.resourceId;
+      let toDayISO = state.dayISO;
+      let newDoctorId = currentDoctorId;
+      let newResourceId = currentResourceId;
+      if (target.kind === "doctor-col") newDoctorId = target.doctorId;
+      else if (target.kind === "resource-col") newResourceId = target.resourceId;
+      else if (target.kind === "day-col") toDayISO = target.dayISO;
+
+      const result = recomputeTimes({
+        appt: original,
+        deltaY: delta.y,
+        slotMinutes: state.slotMinutes,
+        dayStart: state.dayStart,
+        dayEnd: state.dayEnd,
+        fromDayISO: state.dayISO,
+        toDayISO,
+        timezone: state.timezone,
+      });
+
+      const conflict = detectOverlap(
+        state.appointments,
+        original.id,
+        result.startsAt,
+        result.endsAt,
+        newDoctorId,
+        newResourceId,
+      );
+
+      setDragOverlap({
+        overId: String(over.id),
+        mode: conflict ? "conflict" : "ok",
+      });
+    },
+    [state.appointments, state.dayISO, state.dayEnd, state.dayStart, state.slotMinutes, state.timezone],
+  );
+
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
+      setDragOverlap({ overId: null, mode: null });
       const { active, over, delta } = event;
       if (!over) return;
       const dragData = active.data.current as
@@ -220,11 +308,73 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
       rescheduleAppointment(original.id, apiPayload)
         .then((updated) => {
           dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
-          if (toDayISO !== state.dayISO) {
-            setDay(toDayISO);
-          } else {
-            router.refresh();
+
+          // Undo toast 5s (audit ajuste 3): permite revertir el reschedule
+          // sin abrir modal previo (commit optimista directo).
+          if (undoTimerRef.current) {
+            clearTimeout(undoTimerRef.current.timeoutId);
+            toast.dismiss(undoTimerRef.current.toastId);
           }
+          const toastId = toast.success(
+            (t) => (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+                <span>Cita movida</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    toast.dismiss(t.id);
+                    if (undoTimerRef.current) {
+                      clearTimeout(undoTimerRef.current.timeoutId);
+                      undoTimerRef.current = null;
+                    }
+                    // Revertir
+                    dispatch({ type: "OPTIMISTIC_RESCHEDULE",
+                      id: original.id,
+                      doctorId: currentDoctorId ?? "",
+                      resourceId: currentResourceId,
+                      startsAt: original.startsAt,
+                      endsAt: original.endsAt ?? original.startsAt,
+                    });
+                    void rescheduleAppointment(original.id, {
+                      startsAt: original.startsAt,
+                      endsAt: original.endsAt ?? original.startsAt,
+                      doctorId: currentDoctorId !== updated.doctor?.id ? (currentDoctorId ?? undefined) : undefined,
+                      resourceId: currentResourceId !== updated.resourceId ? currentResourceId : undefined,
+                    })
+                      .then((reverted) => {
+                        dispatch({ type: "REPLACE_APPOINTMENT", appointment: reverted });
+                        toast.success("Cambio deshecho");
+                      })
+                      .catch(() => {
+                        dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
+                        toast.error("No se pudo deshacer");
+                      });
+                  }}
+                  style={{
+                    background: "transparent",
+                    border: "1px solid currentColor",
+                    color: "inherit",
+                    padding: "2px 10px",
+                    borderRadius: 6,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Deshacer
+                </button>
+              </span>
+            ),
+            { duration: 5000 },
+          );
+          const timeoutId = setTimeout(() => {
+            // Tras 5s, sincronizamos con el server por si otros viewers
+            // tienen datos stale.
+            if (toDayISO !== state.dayISO) setDay(toDayISO);
+            else router.refresh();
+            undoTimerRef.current = null;
+          }, 5000);
+          undoTimerRef.current = { toastId, timeoutId };
         })
         .catch((err: { error?: string; reason?: string }) => {
           dispatch({ type: "ROLLBACK_RESCHEDULE", original });
@@ -295,12 +445,20 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
 
   return (
     <div className={`${styles.page} ${detailOpen ? "" : styles.detailClosed}`}>
-      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-        <AgendaTopbar />
-        <AgendaSubToolbar />
-        {body}
-        <AgendaWaitlistSidebar />
-      </DndContext>
+      <DragOverlapContext.Provider value={dragOverlap}>
+        <DndContext
+          sensors={sensors}
+          onDragStart={handleDragStart}
+          onDragMove={handleDragMove}
+          onDragEnd={handleDragEnd}
+          onDragCancel={() => setDragOverlap({ overId: null, mode: null })}
+        >
+          <AgendaTopbar />
+          <AgendaSubToolbar />
+          {body}
+          <AgendaWaitlistSidebar />
+        </DndContext>
+      </DragOverlapContext.Provider>
       <AgendaDetailPanel />
       <AgendaResourcesModal />
       <AgendaValidateModal />
