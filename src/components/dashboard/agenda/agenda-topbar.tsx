@@ -1,15 +1,21 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, CalendarPlus, Search, ListChecks } from "lucide-react";
+import { useState } from "react";
+import * as Popover from "@radix-ui/react-popover";
+import { ChevronLeft, ChevronRight, CalendarPlus, Search, ListChecks, ChevronDown, Check } from "lucide-react";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { useAgenda } from "./agenda-provider";
 import { todayInTz, getTzParts, tzLocalToUtc } from "@/lib/agenda/time-utils";
 import type { AgendaViewMode } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
 
-const VIEW_TABS: Array<{ value: AgendaViewMode; label: string }> = [
+/** Tabs primarios visibles (audit ajuste 5: Mes/Lista al dropdown). */
+const PRIMARY_VIEW_TABS: Array<{ value: AgendaViewMode; label: string }> = [
   { value: "day",   label: "Día" },
   { value: "week",  label: "Semana" },
+];
+
+const SECONDARY_VIEW_TABS: Array<{ value: AgendaViewMode; label: string }> = [
   { value: "month", label: "Mes" },
   { value: "list",  label: "Lista" },
 ];
@@ -44,6 +50,7 @@ function formatHumanDate(dayISO: string, timezone: string): string {
 export function AgendaTopbar() {
   const { state, setDay, setViewMode, setSearchQuery, toggleWaitlist } = useAgenda();
   const { open: openNew } = useNewAppointmentDialog();
+  const [moreViewsOpen, setMoreViewsOpen] = useState(false);
 
   const today = todayInTz(state.timezone);
   const isToday = state.dayISO === today;
@@ -68,7 +75,7 @@ export function AgendaTopbar() {
       </div>
 
       <div className={styles.viewTabs} role="tablist" aria-label="Vista de agenda">
-        {VIEW_TABS.map((t) => (
+        {PRIMARY_VIEW_TABS.map((t) => (
           <button
             key={t.value}
             type="button"
@@ -80,6 +87,41 @@ export function AgendaTopbar() {
             {t.label}
           </button>
         ))}
+        <Popover.Root open={moreViewsOpen} onOpenChange={setMoreViewsOpen}>
+          <Popover.Trigger asChild>
+            <button
+              type="button"
+              className={`${styles.viewTab} ${SECONDARY_VIEW_TABS.some((s) => s.value === state.viewMode) ? styles.active : ""}`}
+              aria-haspopup="menu"
+              aria-expanded={moreViewsOpen}
+            >
+              {SECONDARY_VIEW_TABS.find((s) => s.value === state.viewMode)?.label ?? "Más vistas"}
+              <ChevronDown size={11} aria-hidden style={{ marginLeft: 3 }} />
+            </button>
+          </Popover.Trigger>
+          <Popover.Portal>
+            <Popover.Content
+              align="start"
+              sideOffset={6}
+              className={styles.moreViewsPopover}
+            >
+              {SECONDARY_VIEW_TABS.map((t) => (
+                <button
+                  key={t.value}
+                  type="button"
+                  className={`${styles.moreViewsItem} ${state.viewMode === t.value ? styles.active : ""}`}
+                  onClick={() => {
+                    setViewMode(t.value);
+                    setMoreViewsOpen(false);
+                  }}
+                >
+                  {state.viewMode === t.value && <Check size={11} aria-hidden />}
+                  <span>{t.label}</span>
+                </button>
+              ))}
+            </Popover.Content>
+          </Popover.Portal>
+        </Popover.Root>
       </div>
 
       <div className={styles.dateNav}>

@@ -174,6 +174,37 @@
 }
 .newApptBtn:hover { background: #8b5cf6; }
 
+/* Popover "Más vistas" (audit ajuste 5) */
+.moreViewsPopover {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px -6px rgba(15,10,30,0.15);
+  padding: 4px;
+  z-index: 250;
+  min-width: 140px;
+  font-family: var(--font-sora, "Sora", sans-serif);
+}
+.moreViewsItem {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 10px;
+  width: 100%;
+  font-size: 12px; font-weight: 500;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: var(--text-1);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+.moreViewsItem:hover { background: var(--bg-elev-2); }
+.moreViewsItem.active {
+  background: var(--brand-softer);
+  color: var(--brand);
+  font-weight: 600;
+}
+
 /* En viewports estrechos, ocultamos el datepicker (queda el chevrón + label + Hoy) */
 @media (max-width: 1180px) {
   .datePicker { display: none; }
@@ -1330,19 +1361,19 @@
   background: var(--brand-softer);
 }
 
-/* ─────── WAITLIST SIDEBAR ─────────────────────────────────────────── */
+/* ─────── WAITLIST SIDEBAR (izquierda — audit ajuste 4) ────────────── */
 .waitlistSidebar {
   position: absolute;
   top: 48px;
-  right: 0;
+  left: 0;
   bottom: 0;
   width: 320px;
   background: var(--bg-elev);
-  border-left: 1px solid var(--border-soft);
+  border-right: 1px solid var(--border-soft);
   display: flex;
   flex-direction: column;
   z-index: 30;
-  box-shadow: -8px 0 16px rgba(15,10,30,0.04);
+  box-shadow: 8px 0 16px rgba(15,10,30,0.04);
   font-family: var(--font-sora, "Sora", sans-serif);
 }
 .waitlistHeader {
