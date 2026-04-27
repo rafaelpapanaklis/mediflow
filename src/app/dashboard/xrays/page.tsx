@@ -27,9 +27,17 @@ export default async function XraysPage() {
     prisma.patientFile.findMany({
       where: { clinicId },
       orderBy: { createdAt: "desc" },
-      take: 20,
+      take: 30,
       include: {
         patient: { select: { id: true, firstName: true, lastName: true, patientNumber: true } },
+        xrayAnalysis: {
+          select: {
+            summary: true,
+            findings: true,
+            recommendations: true,
+            severity: true,
+          },
+        },
       },
     }),
     prisma.clinic.findUnique({
