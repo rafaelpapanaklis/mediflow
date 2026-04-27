@@ -480,34 +480,128 @@
   color: #fff; font-size: 9px; font-weight: 700;
   display: grid; place-items: center;
 }
-.detailStatusGrid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 3px;
-  padding: 0 14px 10px;
+/* Status pipeline (audit ajuste 1) — chips horizontales con flechas */
+.statusPipeline {
+  padding: 0 14px 12px;
 }
-.detailStatusBtn {
-  padding: 5px 4px;
+.statusPipelineRow {
+  display: flex; align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.pipelineChip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 9px;
   font-size: 10px; font-weight: 600;
   background: var(--bg-elev-2);
   border: 1px solid var(--border-soft);
-  border-radius: 5px;
-  color: var(--text-2);
+  border-radius: 999px;
+  color: var(--text-3);
   cursor: pointer;
   letter-spacing: 0.02em;
   font-family: inherit;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  position: relative;
 }
-.detailStatusBtn:hover {
-  border-color: var(--border-strong);
-  color: var(--text-1);
+.pipelineChip + .pipelineChip::before {
+  content: "›";
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-52%);
+  color: var(--text-4);
+  font-weight: 400;
+  font-size: 11px;
+  line-height: 1;
 }
-.detailStatusBtn.active {
-  background: color-mix(in srgb, var(--mf-status-color, var(--success)) 12%, var(--bg-elev));
-  border-color: var(--mf-status-color, var(--success));
-  color: var(--mf-status-color, var(--success));
+.pipelineChip.done {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 8%, var(--bg-elev));
+  border-color: color-mix(in srgb, var(--success) 25%, transparent);
 }
-.detailStatusBtn:disabled {
+.pipelineChip.current {
+  color: var(--mf-status-color, var(--brand));
+  background: color-mix(in srgb, var(--mf-status-color, var(--brand)) 14%, var(--bg-elev));
+  border-color: var(--mf-status-color, var(--brand));
+  font-weight: 700;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--mf-status-color, var(--brand)) 20%, transparent);
+}
+.pipelineChip.next {
+  color: var(--brand);
+  border-color: var(--brand);
+  border-style: dashed;
+  background: var(--brand-softer);
+  cursor: pointer;
+}
+.pipelineChip.next:hover {
+  background: var(--brand-soft);
+}
+.pipelineChip.future {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.pipelineChip:disabled {
+  cursor: not-allowed;
   opacity: 0.5;
+}
+.pipelineMore {
+  width: 26px; height: 22px;
+  display: grid; place-items: center;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  color: var(--text-3);
+  cursor: pointer;
+  margin-left: auto;
+}
+.pipelineMore:hover { color: var(--text-1); border-color: var(--border-strong); }
+.pipelineNote {
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--text-3);
+}
+.pipelineNote strong { color: var(--text-2); }
+.statusPopoverEmpty {
+  font-size: 11px;
+  color: var(--text-3);
+  padding: 6px 10px;
+  font-style: italic;
+}
+
+/* Botón inline "siguiente estado" en card hover (audit ajuste 2) */
+.apptNextBtn {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 6px 2px 4px;
+  font-size: 9px; font-weight: 700;
+  background: var(--mf-status-color, var(--success));
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: 0.02em;
+  opacity: 0;
+  transform: translateY(-1px);
+  transition: opacity 0.12s, transform 0.12s, filter 0.12s;
+  z-index: 3;
+  box-shadow: 0 2px 6px rgba(15,10,30,0.18);
+  white-space: nowrap;
+  max-width: 80%;
+}
+.appt:hover .apptNextBtn,
+.appt.selected .apptNextBtn {
+  opacity: 1;
+  transform: translateY(0);
+}
+.apptNextBtn:hover {
+  filter: brightness(1.08);
+}
+.apptNextBtn:disabled {
+  opacity: 0.6 !important;
   cursor: not-allowed;
 }
 .detailAlerts {

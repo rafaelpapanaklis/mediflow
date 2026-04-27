@@ -1,12 +1,16 @@
 "use client";
 
-import { Video, Footprints, AlertTriangle } from "lucide-react";
+import { useState } from "react";
+import toast from "react-hot-toast";
+import { Video, Footprints, AlertTriangle, Check, ArrowRight } from "lucide-react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useAgenda } from "./agenda-provider";
 import { AgendaStatusPopover } from "./agenda-status-popover";
 import { formatSlotTime, timeToSlotIndex } from "@/lib/agenda/time-utils";
 import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
+import { patchAppointmentStatus } from "@/lib/agenda/mutations";
+import { nextLogicalStatus } from "@/lib/agenda/status-pipeline";
 import type { AppointmentDragData } from "@/lib/agenda/drag-utils";
 import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
@@ -39,7 +43,8 @@ export function AgendaAppointmentCard({
   timezone,
   draggable = true,
 }: Props) {
-  const { state, selectAppointment } = useAgenda();
+  const { state, selectAppointment, dispatch } = useAgenda();
+  const [pendingNext, setPendingNext] = useState(false);
 
   const config = { timezone, slotMinutes, dayStart, dayEnd: 24 };
   const startSlot = timeToSlotIndex(appointment.startsAt, dayISO, config);
@@ -87,6 +92,28 @@ export function AgendaAppointmentCard({
     e.stopPropagation();
     selectAppointment(appointment.id);
   };
+
+  const nextStep = nextLogicalStatus(appointment.status);
+
+  async function advanceStatus() {
+    if (!nextStep || pendingNext) return;
+    setPendingNext(true);
+    const original = appointment;
+    dispatch({ type: "OPTIMISTIC_STATUS", id: appointment.id, status: nextStep.status });
+    try {
+      const updated = await patchAppointmentStatus(appointment.id, nextStep.status);
+      dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
+    } catch (err) {
+      dispatch({ type: "ROLLBACK_STATUS", original });
+      const reason =
+        (err as { reason?: string; error?: string })?.reason ??
+        (err as { error?: string })?.error ??
+        "No se pudo cambiar";
+      toast.error(reason);
+    } finally {
+      setPendingNext(false);
+    }
+  }
 
   const className = [
     styles.appt,
@@ -138,6 +165,33 @@ export function AgendaAppointmentCard({
       {...attributes}
     >
       <AgendaStatusPopover appointment={appointment} />
+      {nextStep && (
+        <button
+          type="button"
+          className={styles.apptNextBtn}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            void advanceStatus();
+          }}
+          disabled={pendingNext}
+          title={`${nextStep.label} (${appointment.patient.name})`}
+          aria-label={`${nextStep.label} cita de ${appointment.patient.name}`}
+        >
+          {pendingNext ? (
+            <span aria-hidden>…</span>
+          ) : (
+            <>
+              {nextStep.status === "SCHEDULED" ? (
+                <ArrowRight size={10} aria-hidden />
+              ) : (
+                <Check size={10} aria-hidden />
+              )}
+              <span>{nextStep.label}</span>
+            </>
+          )}
+        </button>
+      )}
       <div className={styles.apptRow1}>
         {initials && (
           <span className={styles.apptDocAvatar} aria-hidden>

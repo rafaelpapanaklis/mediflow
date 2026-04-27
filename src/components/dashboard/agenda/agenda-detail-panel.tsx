@@ -2,11 +2,19 @@
 
 import { useMemo, useState, useTransition } from "react";
 import toast from "react-hot-toast";
-import { Pencil, MessageCircle, X, Play, AlertTriangle } from "lucide-react";
+import * as Popover from "@radix-ui/react-popover";
+import { Pencil, MessageCircle, X, Play, AlertTriangle, MoreHorizontal, Check } from "lucide-react";
 import { useAgenda } from "./agenda-provider";
 import { formatSlotTime } from "@/lib/agenda/time-utils";
 import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
 import { patchAppointmentStatus } from "@/lib/agenda/mutations";
+import {
+  STATUS_PIPELINE,
+  STATUS_LABELS,
+  nextLogicalStatus,
+  offRailsStatuses,
+  pipelinePosition,
+} from "@/lib/agenda/status-pipeline";
 import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
 
@@ -19,15 +27,6 @@ const STATUS_COLOR: Record<AppointmentStatus, string> = {
   CANCELLED:   "var(--text-4)",
   NO_SHOW:     "var(--danger)",
 };
-
-const STATUS_OPTIONS: { value: AppointmentStatus; label: string }[] = [
-  { value: "SCHEDULED",   label: "Programada" },
-  { value: "CONFIRMED",   label: "Confirmada" },
-  { value: "CHECKED_IN",  label: "Llegó" },
-  { value: "IN_PROGRESS", label: "En curso" },
-  { value: "COMPLETED",   label: "Completada" },
-  { value: "NO_SHOW",     label: "No asistió" },
-];
 
 function patientInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -216,29 +215,11 @@ export function AgendaDetailPanel() {
       <div className={styles.detailSection}>
         <div className={styles.detailSectionTitle}>Estado</div>
       </div>
-      <div className={styles.detailStatusGrid}>
-        {STATUS_OPTIONS.map((opt) => {
-          const active = appt.status === opt.value;
-          const isPending = pendingStatus === opt.value;
-          return (
-            <button
-              key={opt.value}
-              type="button"
-              className={`${styles.detailStatusBtn} ${active ? styles.active : ""}`}
-              style={
-                {
-                  "--mf-status-color": STATUS_COLOR[opt.value],
-                } as React.CSSProperties
-              }
-              disabled={pendingStatus !== null && !isPending}
-              aria-pressed={active}
-              onClick={() => changeStatus(opt.value)}
-            >
-              {isPending ? "…" : opt.label}
-            </button>
-          );
-        })}
-      </div>
+      <StatusPipeline
+        appt={appt}
+        pendingStatus={pendingStatus}
+        onChange={changeStatus}
+      />
 
       {appt.requiresValidation && appt.overrideReason && (
         <div className={styles.detailAlerts}>
@@ -285,5 +266,114 @@ export function AgendaDetailPanel() {
         </button>
       </div>
     </aside>
+  );
+}
+
+/* ─────── Pipeline visual de estados (M5/M6/M7 audit · ajuste 1) ─────── */
+
+interface StatusPipelineProps {
+  appt: AgendaAppointmentDTO;
+  pendingStatus: AppointmentStatus | null;
+  onChange: (status: AppointmentStatus) => void;
+}
+
+function StatusPipeline({ appt, pendingStatus, onChange }: StatusPipelineProps) {
+  const [moreOpen, setMoreOpen] = useState(false);
+  const currentIdx = pipelinePosition(appt.status);
+  const next = nextLogicalStatus(appt.status);
+  const offRails = offRailsStatuses(appt.status);
+  const isOffRails = currentIdx === -1;
+
+  return (
+    <div className={styles.statusPipeline}>
+      <div className={styles.statusPipelineRow}>
+        {STATUS_PIPELINE.map((status, idx) => {
+          const isCurrent = appt.status === status;
+          const isDone = !isOffRails && idx < currentIdx;
+          const isNext = next?.status === status;
+          const isPending = pendingStatus === status;
+          const stateClass = isCurrent
+            ? styles.current
+            : isDone
+            ? styles.done
+            : isNext
+            ? styles.next
+            : styles.future;
+
+          return (
+            <button
+              key={status}
+              type="button"
+              className={`${styles.pipelineChip} ${stateClass}`}
+              style={{ "--mf-status-color": STATUS_COLOR[status] } as React.CSSProperties}
+              onClick={() => onChange(status)}
+              disabled={pendingStatus !== null && !isPending}
+              aria-current={isCurrent}
+              title={STATUS_LABELS[status]}
+            >
+              {isDone && <Check size={10} aria-hidden />}
+              <span>{STATUS_LABELS[status]}</span>
+              {isPending && <span aria-hidden>…</span>}
+            </button>
+          );
+        })}
+        <Popover.Root open={moreOpen} onOpenChange={setMoreOpen}>
+          <Popover.Trigger asChild>
+            <button
+              type="button"
+              className={styles.pipelineMore}
+              aria-label="Más opciones de estado"
+              title="Más opciones"
+            >
+              <MoreHorizontal size={14} />
+            </button>
+          </Popover.Trigger>
+          <Popover.Portal>
+            <Popover.Content
+              align="end"
+              sideOffset={6}
+              className={styles.statusPopover}
+            >
+              <div className={styles.statusPopoverTitle}>Estados especiales</div>
+              <div className={styles.statusPopoverList}>
+                {offRails.length === 0 ? (
+                  <div className={styles.statusPopoverEmpty}>Sin acciones disponibles</div>
+                ) : (
+                  offRails.map((status) => (
+                    <button
+                      key={status}
+                      type="button"
+                      className={styles.statusPopoverItem}
+                      style={{ "--mf-status-color": STATUS_COLOR[status] } as React.CSSProperties}
+                      onClick={() => {
+                        setMoreOpen(false);
+                        onChange(status);
+                      }}
+                      disabled={pendingStatus !== null}
+                    >
+                      <span
+                        className={styles.statusPopoverDot}
+                        style={{ background: STATUS_COLOR[status] }}
+                        aria-hidden
+                      />
+                      <span>
+                        {status === "SCHEDULED" && (appt.status === "CANCELLED" || appt.status === "NO_SHOW")
+                          ? "Re-abrir cita"
+                          : STATUS_LABELS[status]}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </Popover.Content>
+          </Popover.Portal>
+        </Popover.Root>
+      </div>
+      {isOffRails && (
+        <div className={styles.pipelineNote}>
+          Estado actual: <strong>{STATUS_LABELS[appt.status]}</strong>
+        </div>
+      )}
+    </div>
   );
 }

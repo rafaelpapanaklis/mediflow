@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import toast from "react-hot-toast";
-import { ChevronDown } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import { useAgenda } from "./agenda-provider";
 import { patchAppointmentStatus } from "@/lib/agenda/mutations";
+import { offRailsStatuses, STATUS_LABELS } from "@/lib/agenda/status-pipeline";
 import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
 
@@ -19,15 +20,6 @@ const STATUS_COLOR: Record<AppointmentStatus, string> = {
   NO_SHOW:     "var(--danger)",
 };
 
-const STATUS_OPTIONS: { value: AppointmentStatus; label: string }[] = [
-  { value: "SCHEDULED",   label: "Programada" },
-  { value: "CONFIRMED",   label: "Confirmada" },
-  { value: "CHECKED_IN",  label: "Llegó" },
-  { value: "IN_PROGRESS", label: "En consulta" },
-  { value: "COMPLETED",   label: "Terminó" },
-  { value: "NO_SHOW",     label: "No vino" },
-];
-
 interface Props {
   appointment: AgendaAppointmentDTO;
 }
@@ -37,6 +29,8 @@ export function AgendaStatusPopover({ appointment }: Props) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<AppointmentStatus | null>(null);
   const [, startTransition] = useTransition();
+
+  const offRails = useMemo(() => offRailsStatuses(appointment.status), [appointment.status]);
 
   async function changeStatus(target: AppointmentStatus) {
     if (appointment.status === target) {
@@ -67,6 +61,10 @@ export function AgendaStatusPopover({ appointment }: Props) {
     }
   }
 
+  // Si no hay opciones off-rails, no renderizamos el chevron (la card ya tiene
+  // su botón inline para forward states).
+  if (offRails.length === 0) return null;
+
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
@@ -80,9 +78,10 @@ export function AgendaStatusPopover({ appointment }: Props) {
             // Evitar que dnd-kit capture este pointerdown como inicio de drag
             e.stopPropagation();
           }}
-          aria-label="Cambiar estado"
+          aria-label="Más acciones de estado"
+          title="Más acciones"
         >
-          <ChevronDown size={10} aria-hidden />
+          <MoreHorizontal size={10} aria-hidden />
         </button>
       </Popover.Trigger>
       <Popover.Portal>
@@ -92,30 +91,34 @@ export function AgendaStatusPopover({ appointment }: Props) {
           sideOffset={6}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className={styles.statusPopoverTitle}>Cambiar estado</div>
+          <div className={styles.statusPopoverTitle}>Estados especiales</div>
           <div className={styles.statusPopoverList}>
-            {STATUS_OPTIONS.map((opt) => {
-              const isActive = appointment.status === opt.value;
-              const isPending = pending === opt.value;
+            {offRails.map((status) => {
+              const isPending = pending === status;
+              const label =
+                status === "SCHEDULED" &&
+                (appointment.status === "CANCELLED" || appointment.status === "NO_SHOW")
+                  ? "Re-abrir cita"
+                  : STATUS_LABELS[status];
               return (
                 <button
-                  key={opt.value}
+                  key={status}
                   type="button"
-                  className={`${styles.statusPopoverItem} ${isActive ? styles.active : ""}`}
+                  className={styles.statusPopoverItem}
                   style={
                     {
-                      "--mf-status-color": STATUS_COLOR[opt.value],
+                      "--mf-status-color": STATUS_COLOR[status],
                     } as React.CSSProperties
                   }
                   disabled={pending !== null && !isPending}
-                  onClick={() => void changeStatus(opt.value)}
+                  onClick={() => void changeStatus(status)}
                 >
                   <span
                     className={styles.statusPopoverDot}
-                    style={{ background: STATUS_COLOR[opt.value] }}
+                    style={{ background: STATUS_COLOR[status] }}
                     aria-hidden
                   />
-                  <span>{opt.label}</span>
+                  <span>{label}</span>
                   {isPending && <span className={styles.statusPopoverSpin}>…</span>}
                 </button>
               );
