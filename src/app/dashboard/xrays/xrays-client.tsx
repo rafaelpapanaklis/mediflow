@@ -21,6 +21,7 @@ import {
   Minus,
   Maximize2,
   Check,
+  Eraser,
   X as XIcon,
   FileDown,
 } from "lucide-react";
@@ -107,6 +108,47 @@ const SEV_LABEL: Record<AiFinding["severity"], string> = {
 type Tab = "ai" | "measurements" | "notes";
 type Tool = "pan" | "zoom" | "rotate" | "measure" | "angle" | "annotate";
 
+/** Coordenadas normalizadas (0..1) relativas al rect natural de la imagen,
+ *  para que las anotaciones se mantengan estables a cualquier zoom/tamaño. */
+interface Pt { x: number; y: number; }
+interface Annotation {
+  id: string;
+  type: "ruler" | "angle" | "freehand";
+  points: Pt[];
+  label?: string;
+  color?: string;
+  createdAt?: string;
+}
+
+/** DPI asumido para mostrar distancias en mm. La mayoría de radiografías
+ *  digitales rondan 300 DPI; sin metadata DICOM real es la mejor aproximación. */
+const ASSUMED_DPI = 300;
+const MM_PER_INCH = 25.4;
+
+function makeAnnotationId() {
+  return `a_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+}
+
+function distanceMm(a: Pt, b: Pt, naturalW: number, naturalH: number): number {
+  const dxPx = (b.x - a.x) * naturalW;
+  const dyPx = (b.y - a.y) * naturalH;
+  const px = Math.sqrt(dxPx * dxPx + dyPx * dyPx);
+  return (px / ASSUMED_DPI) * MM_PER_INCH;
+}
+
+function angleDeg(a: Pt, b: Pt, c: Pt, naturalW: number, naturalH: number): number {
+  const v1x = (a.x - b.x) * naturalW;
+  const v1y = (a.y - b.y) * naturalH;
+  const v2x = (c.x - b.x) * naturalW;
+  const v2y = (c.y - b.y) * naturalH;
+  const dot = v1x * v2x + v1y * v2y;
+  const m1 = Math.hypot(v1x, v1y);
+  const m2 = Math.hypot(v2x, v2y);
+  if (m1 === 0 || m2 === 0) return 0;
+  const cos = Math.max(-1, Math.min(1, dot / (m1 * m2)));
+  return (Math.acos(cos) * 180) / Math.PI;
+}
+
 function formatDate(d: string | Date | null) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("es-MX", {
@@ -181,6 +223,22 @@ export function XraysClient({
   const [notesDraft, setNotesDraft] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Transformaciones del visor ──
+  const [zoom, setZoom] = useState(1);
+  const [rotation, setRotation] = useState(0);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [naturalSize, setNaturalSize] = useState({ w: 0, h: 0 });
+  const stageRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const panStartRef = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
+
+  // ── Anotaciones ──
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [drafting, setDrafting] = useState<Annotation | null>(null);
+  const [savingAnn, setSavingAnn] = useState(false);
+  const drawingRef = useRef<boolean>(false);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const selectedPatient = useMemo(
     () => patients.find((p) => p.id === selectedPatientId) ?? null,
     [patients, selectedPatientId],
@@ -211,11 +269,73 @@ export function XraysClient({
     [files, compareFileId],
   );
 
-  // Reset notes draft cuando cambia file activo
+  // Reset notes draft, transformaciones y anotaciones cuando cambia file activo.
   useEffect(() => {
     setNotesDraft(activeFile?.doctorNotes ?? "");
     setHighlightedFindingId(null);
+    setZoom(1);
+    setRotation(0);
+    setPan({ x: 0, y: 0 });
+    setDrafting(null);
+    setNaturalSize({ w: 0, h: 0 });
+    if (!activeFileId) {
+      setAnnotations([]);
+      return;
+    }
+    // Carga anotaciones del server con fallback a localStorage por archivo.
+    let cancelled = false;
+    const lsKey = `mf:xray-annotations:${activeFileId}`;
+    (async () => {
+      try {
+        const res = await fetch(`/api/xrays/${activeFileId}/annotations`);
+        if (cancelled) return;
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.annotations) && data.annotations.length > 0) {
+            setAnnotations(data.annotations);
+            return;
+          }
+        }
+      } catch {/* silent — fallback localStorage */}
+      // Fallback localStorage
+      try {
+        const raw = window.localStorage.getItem(lsKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) setAnnotations(parsed);
+        } else {
+          setAnnotations([]);
+        }
+      } catch {
+        setAnnotations([]);
+      }
+    })();
+    return () => { cancelled = true; };
   }, [activeFileId, activeFile?.doctorNotes]);
+
+  // Persistencia debounced de anotaciones (server + localStorage).
+  useEffect(() => {
+    if (!activeFileId) return;
+    const id = activeFileId;
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      try {
+        window.localStorage.setItem(
+          `mf:xray-annotations:${id}`,
+          JSON.stringify(annotations),
+        );
+      } catch {/* quota — ignore */}
+      setSavingAnn(true);
+      void fetch(`/api/xrays/${id}/annotations`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ annotations }),
+      }).catch(() => {/* silent */}).finally(() => setSavingAnn(false));
+    }, 600);
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, [annotations, activeFileId]);
 
   // Refresca files al cambiar paciente
   useEffect(() => {
@@ -373,6 +493,173 @@ export function XraysClient({
   }, [compareMode, filteredFiles, activeFileId, compareFileId]);
 
   const aiPercent = aiLimit > 0 ? Math.min(100, Math.round((aiUsed / aiLimit) * 100)) : 0;
+
+  /* ─── Herramientas del visor ─── */
+
+  /** Convierte coords de pantalla a coords [0..1] del rect natural de la imagen.
+   *  Devuelve null si el click cae fuera de la imagen visible. */
+  const eventToImagePoint = useCallback((e: React.MouseEvent | MouseEvent): Pt | null => {
+    const img = imgRef.current;
+    if (!img) return null;
+    const rect = img.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    if (x < 0 || x > 1 || y < 0 || y > 1) return null;
+    return { x, y };
+  }, []);
+
+  const finalizeAnnotation = useCallback((ann: Annotation) => {
+    setAnnotations((prev) => [...prev, ann]);
+    setDrafting(null);
+  }, []);
+
+  const handleStageMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (compareMode) return;
+    if (e.button !== 0) return;
+
+    if (tool === "pan") {
+      panStartRef.current = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y };
+      return;
+    }
+
+    if (tool === "rotate") {
+      // Click rota 90° a la derecha cada vez.
+      setRotation((r) => (r + 90) % 360);
+      return;
+    }
+
+    if (tool === "zoom") {
+      // Click izquierdo zoom in, shift+click zoom out
+      setZoom((z) => Math.max(0.25, Math.min(6, z * (e.shiftKey ? 0.85 : 1.15))));
+      return;
+    }
+
+    if (tool === "annotate") {
+      const pt = eventToImagePoint(e);
+      if (!pt) return;
+      const id = makeAnnotationId();
+      setDrafting({
+        id,
+        type: "freehand",
+        points: [pt],
+        color: "#7c3aed",
+        createdAt: new Date().toISOString(),
+      });
+      drawingRef.current = true;
+      return;
+    }
+
+    if (tool === "measure") {
+      const pt = eventToImagePoint(e);
+      if (!pt) return;
+      if (!drafting || drafting.type !== "ruler") {
+        setDrafting({
+          id: makeAnnotationId(),
+          type: "ruler",
+          points: [pt],
+          color: "#10b981",
+          createdAt: new Date().toISOString(),
+        });
+        return;
+      }
+      // Segundo click: cierra
+      finalizeAnnotation({ ...drafting, points: [...drafting.points, pt] });
+      return;
+    }
+
+    if (tool === "angle") {
+      const pt = eventToImagePoint(e);
+      if (!pt) return;
+      if (!drafting || drafting.type !== "angle") {
+        setDrafting({
+          id: makeAnnotationId(),
+          type: "angle",
+          points: [pt],
+          color: "#f59e0b",
+          createdAt: new Date().toISOString(),
+        });
+        return;
+      }
+      const next = [...drafting.points, pt];
+      if (next.length === 3) {
+        finalizeAnnotation({ ...drafting, points: next });
+      } else {
+        setDrafting({ ...drafting, points: next });
+      }
+      return;
+    }
+  }, [compareMode, tool, pan.x, pan.y, eventToImagePoint, drafting, finalizeAnnotation]);
+
+  const handleStageMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (panStartRef.current && tool === "pan") {
+      const dx = e.clientX - panStartRef.current.x;
+      const dy = e.clientY - panStartRef.current.y;
+      setPan({ x: panStartRef.current.px + dx, y: panStartRef.current.py + dy });
+      return;
+    }
+
+    if (tool === "annotate" && drawingRef.current && drafting?.type === "freehand") {
+      const pt = eventToImagePoint(e);
+      if (!pt) return;
+      setDrafting((prev) =>
+        prev && prev.type === "freehand" ? { ...prev, points: [...prev.points, pt] } : prev,
+      );
+    }
+  }, [tool, drafting, eventToImagePoint]);
+
+  const handleStageMouseUp = useCallback(() => {
+    panStartRef.current = null;
+    if (tool === "annotate" && drawingRef.current && drafting?.type === "freehand") {
+      drawingRef.current = false;
+      if (drafting.points.length >= 2) {
+        finalizeAnnotation(drafting);
+      } else {
+        setDrafting(null);
+      }
+    }
+  }, [tool, drafting, finalizeAnnotation]);
+
+  const handleStageWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    if (compareMode) return;
+    if (tool !== "zoom" && tool !== "pan") return;
+    e.preventDefault();
+    const delta = -e.deltaY;
+    setZoom((z) => Math.max(0.25, Math.min(6, z * (delta > 0 ? 1.1 : 1 / 1.1))));
+  }, [compareMode, tool]);
+
+  const handleClearAnnotations = useCallback(() => {
+    if (annotations.length === 0 && !drafting) return;
+    if (!confirm("¿Borrar todas las anotaciones de esta radiografía?")) return;
+    setAnnotations([]);
+    setDrafting(null);
+    toast.success("Anotaciones borradas");
+  }, [annotations.length, drafting]);
+
+  const handleZoomBtn = useCallback((dir: "in" | "out" | "fit") => {
+    if (dir === "fit") {
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+      setRotation(0);
+      return;
+    }
+    setZoom((z) => Math.max(0.25, Math.min(6, z * (dir === "in" ? 1.2 : 1 / 1.2))));
+  }, []);
+
+  const handleImageLoad = useCallback(() => {
+    const img = imgRef.current;
+    if (!img) return;
+    setNaturalSize({ w: img.naturalWidth || 1, h: img.naturalHeight || 1 });
+  }, []);
+
+  // Esc cancela un draft en progreso.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && drafting) setDrafting(null);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [drafting]);
 
   /* ─── Render ─── */
 
@@ -574,6 +861,16 @@ export function XraysClient({
             <FlipHorizontal size={15} aria-hidden />
           </button>
           <span className={styles.toolDivider} />
+          <button
+            type="button"
+            className={styles.toolBtn}
+            onClick={handleClearAnnotations}
+            disabled={annotations.length === 0}
+            title="Borrar todas las anotaciones"
+          >
+            <Eraser size={15} aria-hidden />
+          </button>
+          <span className={styles.toolDivider} />
           <span className={styles.toolSlider}>
             Brillo
             <input
@@ -614,9 +911,16 @@ export function XraysClient({
         </div>
 
         <div
+          ref={stageRef}
           className={styles.viewerStage}
           data-compare={compareMode && compareFile ? "true" : "false"}
+          data-tool={tool}
           style={{ ["--brightness" as never]: `${brightness}%`, ["--contrast" as never]: `${contrast}%` }}
+          onMouseDown={handleStageMouseDown}
+          onMouseMove={handleStageMouseMove}
+          onMouseUp={handleStageMouseUp}
+          onMouseLeave={handleStageMouseUp}
+          onWheel={handleStageWheel}
         >
           {!activeFile ? (
             <div className={styles.viewerEmpty}>
@@ -661,11 +965,26 @@ export function XraysClient({
           ) : (
             <>
               {isImage(activeFile.mimeType) ? (
-                <img
-                  src={activeFile.url}
-                  alt={activeFile.name}
-                  className={inverted ? styles.viewerImgInverted : styles.viewerImg}
-                />
+                <div
+                  className={styles.viewerImgWrap}
+                  style={{
+                    transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom}) rotate(${rotation}deg)`,
+                  }}
+                >
+                  <img
+                    ref={imgRef}
+                    src={activeFile.url}
+                    alt={activeFile.name}
+                    onLoad={handleImageLoad}
+                    draggable={false}
+                    className={inverted ? styles.viewerImgInverted : styles.viewerImg}
+                  />
+                  <AnnotationsOverlay
+                    annotations={annotations}
+                    drafting={drafting}
+                    naturalSize={naturalSize}
+                  />
+                </div>
               ) : (
                 <div className={styles.viewerEmpty}>
                   Este archivo no es una imagen. <br />
@@ -715,12 +1034,35 @@ export function XraysClient({
               </div>
 
               <div className={styles.zoomControls}>
-                <button type="button" className={styles.zoomBtn} title="Zoom +"><Plus size={13} aria-hidden /></button>
-                <button type="button" className={styles.zoomBtn} title="Zoom -"><Minus size={13} aria-hidden /></button>
-                <button type="button" className={styles.zoomBtn} title="Ajustar"><Maximize2 size={13} aria-hidden /></button>
+                <button
+                  type="button"
+                  className={styles.zoomBtn}
+                  title="Zoom +"
+                  onClick={() => handleZoomBtn("in")}
+                >
+                  <Plus size={13} aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  className={styles.zoomBtn}
+                  title="Zoom -"
+                  onClick={() => handleZoomBtn("out")}
+                >
+                  <Minus size={13} aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  className={styles.zoomBtn}
+                  title="Ajustar al visor"
+                  onClick={() => handleZoomBtn("fit")}
+                >
+                  <Maximize2 size={13} aria-hidden />
+                </button>
               </div>
               <div className={styles.statusBar}>
-                Brillo: {brightness}% · Contraste: {contrast}% · Tool: {tool}
+                Zoom: {Math.round(zoom * 100)}% · Rotación: {rotation}° · Brillo: {brightness}% · Contraste: {contrast}% · Tool: {tool}
+                {savingAnn && <> · <em style={{ color: "#a78bfa" }}>guardando…</em></>}
+                {drafting && <> · <em>{drafting.type === "ruler" ? "click 2 puntos" : drafting.type === "angle" ? `${drafting.points.length}/3 puntos` : "dibujando…"}</em></>}
               </div>
             </>
           )}
@@ -946,5 +1288,142 @@ export function XraysClient({
         </div>
       </aside>
     </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Overlay SVG con anotaciones (regla, ángulo, lápiz). Coords [0..1]
+ * relativas al rect natural; el SVG cubre la imagen al 100%.
+ * ────────────────────────────────────────────────────────────────────── */
+function AnnotationsOverlay({
+  annotations,
+  drafting,
+  naturalSize,
+}: {
+  annotations: Annotation[];
+  drafting: Annotation | null;
+  naturalSize: { w: number; h: number };
+}) {
+  const all = drafting ? [...annotations, drafting] : annotations;
+
+  return (
+    <svg
+      className={styles.annotationSvg}
+      viewBox="0 0 1000 1000"
+      preserveAspectRatio="none"
+      pointerEvents="none"
+      aria-hidden
+    >
+      {all.map((a) => {
+        if (a.type === "ruler") {
+          const [p1, p2] = a.points;
+          if (!p1 || !p2) {
+            // En medio de un draft con sólo 1 punto — render dot
+            const p = p1 ?? p2;
+            return p ? (
+              <circle key={a.id} cx={p.x * 1000} cy={p.y * 1000} r={5} fill={a.color ?? "#10b981"} />
+            ) : null;
+          }
+          const mm = naturalSize.w > 0
+            ? distanceMm(p1, p2, naturalSize.w, naturalSize.h)
+            : 0;
+          const mx = (p1.x + p2.x) / 2 * 1000;
+          const my = (p1.y + p2.y) / 2 * 1000;
+          return (
+            <g key={a.id}>
+              <line
+                x1={p1.x * 1000} y1={p1.y * 1000}
+                x2={p2.x * 1000} y2={p2.y * 1000}
+                stroke={a.color ?? "#10b981"} strokeWidth={3}
+                strokeLinecap="round"
+              />
+              <circle cx={p1.x * 1000} cy={p1.y * 1000} r={5} fill={a.color ?? "#10b981"} />
+              <circle cx={p2.x * 1000} cy={p2.y * 1000} r={5} fill={a.color ?? "#10b981"} />
+              <rect
+                x={mx - 32} y={my - 18} width={64} height={20} rx={4}
+                fill="rgba(0,0,0,0.78)"
+              />
+              <text
+                x={mx} y={my - 4}
+                fill="#fff" fontSize={13} fontWeight={700}
+                textAnchor="middle"
+                style={{ fontFamily: "monospace" }}
+              >
+                {mm.toFixed(1)} mm
+              </text>
+            </g>
+          );
+        }
+
+        if (a.type === "angle") {
+          const pts = a.points;
+          if (pts.length < 1) return null;
+          const elements: React.ReactNode[] = [];
+          // Lines
+          for (let i = 0; i < pts.length - 1; i++) {
+            const p1 = pts[i];
+            const p2 = pts[i + 1];
+            elements.push(
+              <line
+                key={`${a.id}-l-${i}`}
+                x1={p1.x * 1000} y1={p1.y * 1000}
+                x2={p2.x * 1000} y2={p2.y * 1000}
+                stroke={a.color ?? "#f59e0b"} strokeWidth={3}
+                strokeLinecap="round"
+              />,
+            );
+          }
+          // Dots
+          pts.forEach((p, i) => {
+            elements.push(
+              <circle
+                key={`${a.id}-c-${i}`}
+                cx={p.x * 1000} cy={p.y * 1000} r={5}
+                fill={a.color ?? "#f59e0b"}
+              />,
+            );
+          });
+          // Label cuando ya hay 3 puntos
+          if (pts.length === 3 && naturalSize.w > 0) {
+            const deg = angleDeg(pts[0]!, pts[1]!, pts[2]!, naturalSize.w, naturalSize.h);
+            const lx = pts[1].x * 1000;
+            const ly = pts[1].y * 1000 - 18;
+            elements.push(
+              <g key={`${a.id}-label`}>
+                <rect x={lx - 30} y={ly - 16} width={60} height={20} rx={4} fill="rgba(0,0,0,0.78)" />
+                <text
+                  x={lx} y={ly - 2}
+                  fill="#fff" fontSize={13} fontWeight={700}
+                  textAnchor="middle"
+                  style={{ fontFamily: "monospace" }}
+                >
+                  {deg.toFixed(1)}°
+                </text>
+              </g>,
+            );
+          }
+          return <g key={a.id}>{elements}</g>;
+        }
+
+        if (a.type === "freehand") {
+          if (a.points.length < 2) return null;
+          const d = a.points
+            .map((p, i) => `${i === 0 ? "M" : "L"}${p.x * 1000} ${p.y * 1000}`)
+            .join(" ");
+          return (
+            <path
+              key={a.id}
+              d={d}
+              fill="none"
+              stroke={a.color ?? "#7c3aed"}
+              strokeWidth={2.5}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+          );
+        }
+        return null;
+      })}
+    </svg>
   );
 }

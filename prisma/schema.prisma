@@ -622,6 +622,12 @@ model PatientFile {
   doctorNotes          String?   @db.Text
   doctorNotesUpdatedAt DateTime?
 
+  // Anotaciones del visor (regla, ángulo, lápiz). Array de
+  // { id, type: "ruler"|"angle"|"freehand", points: [{x,y}], label?, color? }
+  // Las coordenadas son relativas (0..1) al rect natural de la imagen para
+  // que el dibujo sea estable a cualquier zoom/tamaño de visor.
+  annotations          Json?
+
   patient      Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
   clinic       Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   xrayAnalysis XrayAnalysis?
