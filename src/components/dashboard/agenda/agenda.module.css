@@ -9,6 +9,7 @@
   height: calc(100vh - 52px);
   max-height: calc(100vh - 52px);
   overflow: hidden;
+  position: relative;
 }
 .page.detailClosed {
   --mf-detail-w: 0px;
@@ -1219,4 +1220,176 @@
 .modalHelperLink:hover {
   border-color: var(--border-brand);
   background: var(--brand-softer);
+}
+
+/* ─────── WAITLIST SIDEBAR ─────────────────────────────────────────── */
+.waitlistSidebar {
+  position: absolute;
+  top: 48px;
+  right: 0;
+  bottom: 0;
+  width: 320px;
+  background: var(--bg-elev);
+  border-left: 1px solid var(--border-soft);
+  display: flex;
+  flex-direction: column;
+  z-index: 30;
+  box-shadow: -8px 0 16px rgba(15,10,30,0.04);
+  font-family: var(--font-sora, "Sora", sans-serif);
+}
+.waitlistHeader {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.waitlistTitle {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 700;
+  color: var(--text-1);
+  letter-spacing: -0.01em;
+}
+.waitlistBadge {
+  display: inline-grid; place-items: center;
+  min-width: 18px; height: 18px;
+  border-radius: 9px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 10px; font-weight: 700;
+  padding: 0 5px;
+  font-family: var(--font-jetbrains-mono, monospace);
+}
+.waitlistClose {
+  width: 24px; height: 24px;
+  display: grid; place-items: center;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.waitlistClose:hover { color: var(--text-1); }
+.waitlistBody {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 10px 12px 16px;
+}
+.waitlistEmpty {
+  text-align: center;
+  padding: 32px 12px;
+  color: var(--text-3); font-size: 12px;
+}
+.waitlistItem {
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 8px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.waitlistItem.dragging {
+  border-color: var(--brand);
+  box-shadow: 0 8px 20px -4px color-mix(in srgb, var(--brand) 35%, transparent);
+}
+.waitlistItemHead {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 9px;
+  align-items: center;
+}
+.waitlistAvatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #c4b5fd, #7c3aed);
+  color: #fff; font-size: 11px; font-weight: 700;
+  display: grid; place-items: center;
+}
+.waitlistItemMain {
+  min-width: 0;
+}
+.waitlistItemName {
+  font-size: 12px; font-weight: 600;
+  color: var(--text-1);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.waitlistItemReason {
+  font-size: 10px; color: var(--text-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.waitlistPriority {
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  display: inline-flex; align-items: center; gap: 3px;
+  flex-shrink: 0;
+}
+.waitlistItemMeta {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 10px; color: var(--text-3);
+  flex-wrap: wrap;
+}
+.waitlistItemActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 2px;
+}
+.waitlistAction {
+  padding: 6px 8px;
+  font-size: 11px; font-weight: 500;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-1);
+  border-radius: 5px;
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.waitlistAction:hover {
+  border-color: var(--border-brand);
+  background: var(--bg-elev-2);
+}
+.waitlistAction.danger {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 25%, transparent);
+}
+.waitlistAction.danger:hover {
+  background: var(--danger-soft);
+}
+.waitlistAction:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Botón toggle de waitlist en topbar */
+.waitlistToggleBtn {
+  position: relative;
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  color: var(--text-2);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.waitlistToggleBtn:hover {
+  border-color: var(--border-brand);
+  color: var(--brand);
+}
+.waitlistToggleBtn.active {
+  background: var(--brand-softer);
+  border-color: var(--border-brand);
+  color: var(--brand);
+}
+.waitlistToggleCount {
+  position: absolute;
+  top: -4px; right: -4px;
+  min-width: 14px; height: 14px;
+  padding: 0 3px;
+  display: grid; place-items: center;
+  border-radius: 7px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 8px; font-weight: 700;
+  font-family: var(--font-jetbrains-mono, monospace);
 }

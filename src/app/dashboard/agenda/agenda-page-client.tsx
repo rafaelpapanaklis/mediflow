@@ -24,7 +24,11 @@ import { AgendaListView } from "@/components/dashboard/agenda/agenda-list-view";
 import { AgendaMonthView } from "@/components/dashboard/agenda/agenda-month-view";
 import { AgendaWeekView } from "@/components/dashboard/agenda/agenda-week-view";
 import { AgendaResourcesModal } from "@/components/dashboard/agenda/agenda-resources-modal";
+import { AgendaWaitlistSidebar } from "@/components/dashboard/agenda/agenda-waitlist-sidebar";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
+import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
+import { slotIndexToUtc } from "@/lib/agenda/time-utils";
+import { updateWaitlist } from "@/lib/agenda/mutations";
 import {
   detectOverlap,
   recomputeTimes,
@@ -58,6 +62,7 @@ export function AgendaPageClient(props: Props) {
 function AgendaShell({ highlightId }: { highlightId: string | null }) {
   const { state, dispatch, setDay } = useAgenda();
   const router = useRouter();
+  const { open: openNewAppointment } = useNewAppointmentDialog();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -70,12 +75,72 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
     (event: DragEndEvent) => {
       const { active, over, delta } = event;
       if (!over) return;
-      const data = active.data.current as AppointmentDragData | undefined;
-      if (!data || data.kind !== "appt") return;
+      const dragData = active.data.current as
+        | AppointmentDragData
+        | { kind: "waitlist"; entryId: string; patient: { id: string; name: string }; reason: string | null; preferredDoctorId: string | null }
+        | undefined;
+      if (!dragData) return;
       const target = over.data.current as DroppableData | undefined;
       if (!target) return;
 
-      const original = state.appointments.find((a) => a.id === data.appointmentId);
+      // ─── Waitlist → cell: abrir NewAppointmentDialog pre-llenado ───
+      if (dragData.kind === "waitlist") {
+        const activatorEvent = event.activatorEvent as PointerEvent | undefined;
+        const startY = activatorEvent?.clientY ?? 0;
+        const overRect = over.rect;
+        const finalY = startY + delta.y;
+        const yInColumn = finalY - overRect.top;
+        const slotsTotal = ((state.dayEnd - state.dayStart) * 60) / state.slotMinutes;
+        const slotHpx = overRect.height / slotsTotal;
+        const slotIdx = Math.max(0, Math.min(slotsTotal - 1, Math.floor(yInColumn / slotHpx)));
+
+        let toDayISO = state.dayISO;
+        let doctorId: string | undefined = dragData.preferredDoctorId ?? undefined;
+        let resourceId: string | null | undefined;
+
+        if (target.kind === "doctor-col") {
+          doctorId = target.doctorId;
+        } else if (target.kind === "resource-col") {
+          resourceId = target.resourceId;
+        } else if (target.kind === "day-col") {
+          toDayISO = target.dayISO;
+        }
+
+        const startsAt = slotIndexToUtc(slotIdx, toDayISO, {
+          timezone: state.timezone,
+          slotMinutes: state.slotMinutes,
+          dayStart: state.dayStart,
+          dayEnd: state.dayEnd,
+        });
+
+        openNewAppointment({
+          initialPatient: dragData.patient,
+          initialReason: dragData.reason ?? undefined,
+          initialDoctorId: doctorId,
+          initialSlot: {
+            startsAt: startsAt.toISOString(),
+            doctorId,
+            resourceId: resourceId ?? null,
+          },
+          openAgendaAfter: true,
+          onCreated: async (appt) => {
+            try {
+              await updateWaitlist(dragData.entryId, {
+                status: "FULFILLED",
+                appointmentId: appt.id,
+              });
+              router.refresh();
+            } catch {
+              toast.error("Cita creada, pero no se pudo marcar la espera");
+            }
+          },
+        });
+        return;
+      }
+
+      if (dragData.kind !== "appt") return;
+
+      const original = state.appointments.find((a) => a.id === dragData.appointmentId);
       if (!original) return;
 
       const currentDoctorId = original.doctor?.id ?? null;
@@ -179,11 +244,9 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
       dispatch,
       setDay,
       router,
+      openNewAppointment,
     ],
   );
-
-  const supportsDrag =
-    state.viewMode === "day" || state.viewMode === "week";
 
   const body = (
     <div className={styles.body}>
@@ -231,15 +294,12 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
 
   return (
     <div className={`${styles.page} ${detailOpen ? "" : styles.detailClosed}`}>
-      <AgendaTopbar />
-      <AgendaSubToolbar />
-      {supportsDrag ? (
-        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-          {body}
-        </DndContext>
-      ) : (
-        body
-      )}
+      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+        <AgendaTopbar />
+        <AgendaSubToolbar />
+        {body}
+        <AgendaWaitlistSidebar />
+      </DndContext>
       <AgendaDetailPanel />
       <AgendaResourcesModal />
       {highlightId && <AgendaHighlightListener highlightId={highlightId} />}

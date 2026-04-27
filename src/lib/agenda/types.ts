@@ -19,7 +19,7 @@ export type AgendaColumnMode = "doctor" | "resource" | "unified";
 
 export type AgendaViewMode = "day" | "week" | "month" | "list";
 
-export type AgendaModalKey = "resources" | null;
+export type AgendaModalKey = "resources" | "validate" | null;
 
 export interface AgendaAppointmentDTO extends HomeAppointmentDTO {
   resourceId: string | null;

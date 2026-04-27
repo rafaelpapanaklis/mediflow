@@ -39,6 +39,7 @@ interface AgendaContextValue {
   selectAppointment: (id: string | null) => void;
   openModal: (key: AgendaModalKey) => void;
   closeModal: () => void;
+  toggleWaitlist: (open?: boolean) => void;
 }
 
 const AgendaContext = createContext<AgendaContextValue | null>(null);
@@ -116,14 +117,21 @@ export function AgendaProvider({
     dispatch({ type: "SET_MODAL", key: null });
   }, []);
 
+  const toggleWaitlist = useCallback((open?: boolean) => {
+    dispatch({
+      type: "TOGGLE_WAITLIST",
+      open: open ?? !state.waitlistOpen,
+    });
+  }, [state.waitlistOpen]);
+
   const ctx = useMemo<AgendaContextValue>(
     () => ({
       state, dispatch,
       setDay, setViewMode, setColumnMode,
       setSearchQuery, selectAppointment,
-      openModal, closeModal,
+      openModal, closeModal, toggleWaitlist,
     }),
-    [state, setDay, setViewMode, setColumnMode, setSearchQuery, selectAppointment, openModal, closeModal],
+    [state, setDay, setViewMode, setColumnMode, setSearchQuery, selectAppointment, openModal, closeModal, toggleWaitlist],
   );
 
   return <AgendaContext.Provider value={ctx}>{children}</AgendaContext.Provider>;

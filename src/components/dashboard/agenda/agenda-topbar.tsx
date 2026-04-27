@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, CalendarPlus, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarPlus, Search, ListChecks } from "lucide-react";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { useAgenda } from "./agenda-provider";
 import { todayInTz, getTzParts, tzLocalToUtc } from "@/lib/agenda/time-utils";
@@ -42,7 +42,7 @@ function formatHumanDate(dayISO: string, timezone: string): string {
 }
 
 export function AgendaTopbar() {
-  const { state, setDay, setViewMode, setSearchQuery } = useAgenda();
+  const { state, setDay, setViewMode, setSearchQuery, toggleWaitlist } = useAgenda();
   const { open: openNew } = useNewAppointmentDialog();
 
   const today = todayInTz(state.timezone);
@@ -137,6 +137,20 @@ export function AgendaTopbar() {
           onChange={(e) => setSearchQuery(e.target.value)}
         />
       </div>
+
+      <button
+        type="button"
+        onClick={() => toggleWaitlist()}
+        className={`${styles.waitlistToggleBtn} ${state.waitlistOpen ? styles.active : ""}`}
+        aria-label="Lista de espera"
+        aria-pressed={state.waitlistOpen}
+        title="Lista de espera"
+      >
+        <ListChecks size={14} />
+        {state.waitlistCount > 0 && (
+          <span className={styles.waitlistToggleCount}>{state.waitlistCount}</span>
+        )}
+      </button>
 
       <button
         type="button"
