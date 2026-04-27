@@ -269,18 +269,67 @@ export function ClinicLayoutClient({
   /* ─── Acciones sobre elementos ─── */
 
   const addElement = useCallback(
-    (type: string, col: number, row: number) => {
+    async (type: string, col: number, row: number) => {
       const td = catalog.byKey.get(type);
       if (!td) return;
       const id = nextIdRef.current++;
+
+      // Para sillones (isChair): si hay un Resource(CHAIR) existente sin
+      // colocar en el layout, lo reusamos. Si no, creamos uno nuevo en la
+      // agenda automáticamente — 1 source of truth.
+      let resourceId: string | null = null;
+      let chairName: string | null = null;
+      if (td.isChair) {
+        const placed = new Set(
+          elements.filter((e) => e.resourceId).map((e) => e.resourceId!),
+        );
+        const free = liveChairs.find((c) => !placed.has(c.id));
+        if (free) {
+          resourceId = free.id;
+          chairName = free.name;
+        } else {
+          // Crea Resource nuevo en la agenda.
+          try {
+            const proposed = `Consultorio ${liveChairs.length + 1}`;
+            const res = await fetch("/api/agenda/resources", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: proposed, kind: "CHAIR" }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              const created = data.resource;
+              if (created?.id) {
+                resourceId = created.id;
+                chairName = created.name;
+                setChairsState((prev) => [
+                  ...prev,
+                  {
+                    id: created.id,
+                    name: created.name,
+                    color: created.color ?? null,
+                    orderIndex: created.orderIndex ?? prev.length,
+                  },
+                ]);
+                toast.success(`Sillón "${created.name}" creado en la agenda`);
+              }
+            } else {
+              toast.error("No se pudo crear el Resource en la agenda");
+            }
+          } catch {
+            toast.error("Error al crear Resource");
+          }
+        }
+      }
+
       const elem: LayoutElement = {
         id,
         type,
         col,
         row,
         rotation: 0,
-        resourceId: null,
-        name: td.isChair ? "Consultorio" : null,
+        resourceId,
+        name: chairName ?? (td.isChair ? "Consultorio" : null),
       };
       const snap = elements;
       const next = [...snap, elem];
@@ -289,7 +338,7 @@ export function ClinicLayoutClient({
       setSelectedId(id);
       markDirty();
     },
-    [catalog, elements, pushHistory, markDirty],
+    [catalog, elements, liveChairs, pushHistory, markDirty],
   );
 
   const updateElement = useCallback(
@@ -304,15 +353,51 @@ export function ClinicLayoutClient({
   );
 
   const deleteElement = useCallback(
-    (id: number) => {
+    async (id: number) => {
+      const elem = elements.find((e) => e.id === id);
+      if (!elem) return;
+
+      // Si es un sillón con Resource asociado, ofrecemos también borrar el
+      // Resource en la agenda (no solo quitarlo del canvas).
+      let alsoDeleteResource = false;
+      if (elem.resourceId) {
+        const chair = liveChairs.find((c) => c.id === elem.resourceId);
+        const chairName = chair?.name ?? "este sillón";
+        alsoDeleteResource = window.confirm(
+          `Vas a quitar "${chairName}" del layout. ¿Eliminar también el Resource de la agenda?\n\n` +
+            `Aceptar = borrar de layout Y de agenda (irreversible).\n` +
+            `Cancelar = solo quitar del layout (el sillón sigue en la agenda).`,
+        );
+      }
+
       const snap = elements;
       const next = snap.filter((e) => e.id !== id);
       pushHistory(snap);
       setElements(next);
       if (selectedId === id) setSelectedId(null);
       markDirty();
+
+      if (alsoDeleteResource && elem.resourceId) {
+        try {
+          const res = await fetch(`/api/agenda/resources/${elem.resourceId}`, {
+            method: "DELETE",
+          });
+          if (res.ok) {
+            setChairsState((prev) => prev.filter((c) => c.id !== elem.resourceId));
+            toast.success("Sillón eliminado del layout y de la agenda");
+          } else if (res.status === 409) {
+            toast.error(
+              "No se pudo eliminar de la agenda: hay citas asociadas. Quitado solo del layout.",
+            );
+          } else {
+            toast.error("No se pudo eliminar de la agenda. Quitado solo del layout.");
+          }
+        } catch {
+          toast.error("Error al eliminar Resource. Quitado solo del layout.");
+        }
+      }
     },
-    [elements, selectedId, pushHistory, markDirty],
+    [elements, liveChairs, selectedId, pushHistory, markDirty],
   );
 
   const duplicateElement = useCallback(
