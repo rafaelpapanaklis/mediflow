@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useCallback, useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Plus, Printer, Edit } from "lucide-react";
 import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
 import { ageFromDob, fmtMXN } from "@/lib/format";
 import { HeroCard } from "@/components/dashboard/patient-detail/hero-card";
 import { QuickNav } from "@/components/dashboard/patient-detail/quick-nav";
 import { SideCards } from "@/components/dashboard/patient-detail/side-cards";
+import { ConsultBar } from "@/components/dashboard/patient-detail/consult-bar";
+import { SoapEditorInline, type SoapDraft } from "@/components/dashboard/patient-detail/soap-editor-inline";
 import patientDetailStyles from "@/components/dashboard/patient-detail/patient-detail.module.css";
 import { DentalForm }          from "@/components/clinical/dental-form";
 import { NutritionForm }       from "@/components/clinical/nutrition-form";
@@ -94,7 +96,10 @@ export function PatientDetailClient({
   doctors, currentUser, specialty, totalPaid, totalBalance, totalPlan, treatments, portalUrl,
 }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [tab, setTab]         = useState("resumen");
+  const [consultPaused, setConsultPaused] = useState(false);
+  const [consultClosed, setConsultClosed] = useState(false);
   const [records, setRecords] = useState(initialRecords);
   const [showEdit, setShowEdit] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -310,6 +315,41 @@ export function PatientDetailClient({
     facturacion: invoices.length,
   };
 
+  // ─── Consulta activa (audit Opción C ajustes 2 y 5) ─────────────
+  const consultAppointmentId = searchParams.get("appointment");
+  const activeAppointment = useMemo(
+    () =>
+      consultAppointmentId && !consultClosed
+        ? appointments.find((a: any) => a.id === consultAppointmentId) ?? null
+        : null,
+    [consultAppointmentId, consultClosed, appointments],
+  );
+  const isConsultActive = activeAppointment !== null;
+
+  // Borrador SOAP local (commit 4: solo UI; commit 6 wire al endpoint)
+  const [soapDraft, setSoapDraft] = useState<SoapDraft>({
+    subjective: "",
+    objective: "",
+    assessment: "",
+    plan: "",
+    attachments: [],
+  });
+
+  const handleEndConsult = useCallback(() => {
+    // En commit 6 esto llama PATCH /api/appointments/[id]/complete
+    setConsultClosed(true);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("appointment");
+    const qs = params.toString();
+    router.replace(qs ? `?${qs}` : window.location.pathname);
+    toast.success("Consulta finalizada (mock — wire en commit 6)");
+  }, [searchParams, router]);
+
+  const consultDoctorName =
+    activeAppointment?.doctor?.firstName
+      ? `Dr/a. ${activeAppointment.doctor.firstName} ${activeAppointment.doctor.lastName ?? ""}`.trim()
+      : null;
+
   return (
     <div style={{ padding: "20px 28px 28px", maxWidth: 1400, margin: "0 auto" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-3)", marginBottom: 12 }}>
@@ -379,6 +419,46 @@ export function PatientDetailClient({
         />
 
         <div className={patientDetailStyles.mainColumn}>
+          {/* Sticky context bar + SOAP editor (audit Opción C ajustes 2 y 5) */}
+          {isConsultActive && activeAppointment && (
+            <>
+              <ConsultBar
+                patientName={fullName}
+                resourceName={activeAppointment.room ?? null}
+                doctorName={consultDoctorName}
+                startedAt={activeAppointment.startedAt ?? activeAppointment.startsAt}
+                paused={consultPaused}
+                onPause={() => setConsultPaused((v) => !v)}
+                onComplete={handleEndConsult}
+                onClose={handleEndConsult}
+              />
+              <SoapEditorInline
+                appointment={{
+                  id: activeAppointment.id,
+                  patientName: fullName,
+                  type: activeAppointment.type,
+                }}
+                initialDraft={soapDraft}
+                onSaveDraft={async (d) => {
+                  setSoapDraft(d);
+                  // commit 6: PATCH /api/clinical-notes/[id]
+                }}
+                onComplete={async (d) => {
+                  setSoapDraft(d);
+                  handleEndConsult();
+                }}
+                onAttach={async (file) => {
+                  // commit 6: POST /api/xrays + POST /api/clinical-notes/[id]/attach
+                  return {
+                    id: `local-${Date.now()}`,
+                    name: file.name,
+                    mime: file.type,
+                  };
+                }}
+              />
+            </>
+          )}
+
           {/* Tabs */}
           <div className="tabs-new" style={{ marginBottom: 16, overflowX: "auto" }}>
             {TABS.map(t => (

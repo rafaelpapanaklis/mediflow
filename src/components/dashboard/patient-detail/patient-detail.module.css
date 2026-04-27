@@ -450,3 +450,344 @@
   font-size: 12px; color: var(--text-3);
   padding: 6px 0;
 }
+
+/* ─────── CONSULT BAR (sticky) ─────── */
+.consultBar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 14px;
+  margin: -8px -8px 12px;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--brand) 14%, var(--bg-elev)),
+    color-mix(in srgb, var(--brand) 6%, var(--bg-elev)) 60%,
+    var(--bg-elev));
+  border: 1px solid var(--border-brand);
+  border-left: 4px solid var(--brand);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px -6px rgba(124,58,237,0.25);
+  font-family: var(--font-sora, "Sora", sans-serif);
+}
+.consultPulse {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--brand);
+  flex-shrink: 0;
+  animation: consultPulse 1.6s ease-out infinite;
+}
+@keyframes consultPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(124,58,237,0.55); }
+  70%  { box-shadow: 0 0 0 9px rgba(124,58,237,0); }
+  100% { box-shadow: 0 0 0 0 rgba(124,58,237,0); }
+}
+.consultStatus {
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--brand);
+}
+.consultDivider { width: 1px; height: 16px; background: var(--border-soft); flex-shrink: 0; }
+.consultName {
+  font-size: 13px; font-weight: 700;
+  color: var(--text-1);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+.consultMeta {
+  font-size: 11px;
+  color: var(--text-2);
+  font-family: var(--font-jetbrains-mono, ui-monospace, monospace);
+  white-space: nowrap;
+}
+.consultSpacer { flex: 1; }
+.consultSaveStatus {
+  font-size: 10px;
+  color: var(--text-3);
+  margin-right: 4px;
+  font-style: italic;
+}
+.consultTimer {
+  font-family: var(--font-jetbrains-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  font-size: 14px; font-weight: 600;
+  color: var(--text-1);
+  padding: 4px 10px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  letter-spacing: 0.04em;
+}
+.consultTimer.paused { color: var(--text-3); }
+.consultBtn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 11px;
+  font-size: 11px; font-weight: 600;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  color: var(--text-1);
+  cursor: pointer;
+  font-family: inherit;
+}
+.consultBtn:hover:not(:disabled) {
+  border-color: var(--border-brand);
+  background: var(--bg-hover);
+}
+.consultBtnComplete {
+  background: var(--brand); color: #fff;
+  border-color: var(--brand);
+  font-weight: 700;
+  box-shadow: 0 0 0 1px rgba(124,58,237,0.45), 0 4px 14px -4px rgba(124,58,237,0.4);
+}
+.consultBtnComplete:hover:not(:disabled) { background: #8b5cf6; color: #fff; }
+.consultClose {
+  width: 26px; height: 26px;
+  display: grid; place-items: center;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.consultClose:hover { color: var(--text-1); border-color: var(--border-strong); }
+
+/* ─────── SOAP EDITOR INLINE ─────── */
+.soapEditor {
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--brand) 4%, var(--bg-elev)) 0%,
+    var(--bg-elev) 30%);
+  border: 2px solid var(--brand);
+  border-radius: 12px;
+  margin-bottom: 16px;
+  font-family: var(--font-sora, "Sora", sans-serif);
+  box-shadow: 0 8px 24px -10px rgba(124,58,237,0.25);
+}
+.soapEditorHead {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.soapEditorTitleBlock { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.soapEditorChip {
+  display: inline-flex; align-items: center;
+  padding: 3px 9px;
+  font-size: 10px; font-weight: 700;
+  background: var(--brand-soft); color: var(--brand);
+  border: 1px solid var(--border-brand);
+  border-radius: 12px;
+  letter-spacing: 0.04em;
+}
+.soapEditorTitle {
+  font-size: 14px; font-weight: 700;
+  color: var(--text-1);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.soapEditorSub {
+  font-size: 11px; color: var(--text-3);
+  font-weight: 500;
+}
+
+.soapBody {
+  display: grid;
+  grid-template-columns: 1fr 240px;
+  gap: 14px;
+  padding: 14px 16px;
+}
+@media (max-width: 1024px) {
+  .soapBody { grid-template-columns: 1fr; }
+}
+
+.soapFields {
+  display: flex; flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.soapBlock { display: flex; flex-direction: column; gap: 4px; }
+.soapLabel {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 700;
+  color: var(--brand);
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+.soapLetter {
+  display: inline-grid; place-items: center;
+  width: 22px; height: 22px;
+  background: var(--brand);
+  color: #fff;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  font-family: var(--font-jetbrains-mono, ui-monospace, monospace);
+}
+.soapHint {
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+.soapInput {
+  width: 100%;
+  min-height: 60px;
+  padding: 9px 11px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-1);
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  resize: vertical;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.12s, box-shadow 0.12s;
+  overflow: hidden;
+}
+.soapInput:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+.soapInput::placeholder { color: var(--text-4); }
+
+.soapDock {
+  background: var(--bg-elev-2);
+  border: 1px dashed var(--border-soft);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex; flex-direction: column;
+  gap: 12px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.soapDock.dragActive {
+  border-color: var(--brand);
+  background: var(--brand-softer);
+}
+.dockSection { display: flex; flex-direction: column; gap: 6px; }
+.dockSectionLabel {
+  font-size: 9px; font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+.dockUploadBtn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 10px;
+  font-size: 11px; font-weight: 500;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  color: var(--text-1);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+.dockUploadBtn:hover:not(:disabled) {
+  border-color: var(--border-brand);
+  background: var(--brand-softer);
+}
+.dockUploadBtn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.dockAttachList {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-direction: column;
+  gap: 4px;
+}
+.dockAttach {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  font-size: 11px;
+  color: var(--text-1);
+}
+.dockAttach svg:first-child { color: var(--text-3); flex-shrink: 0; }
+.dockAttachName { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dockAttachRemove {
+  width: 20px; height: 20px;
+  display: grid; place-items: center;
+  background: transparent;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  border-radius: 4px;
+}
+.dockAttachRemove:hover { color: var(--danger); background: var(--danger-soft); }
+
+.dockTemplates {
+  display: flex; flex-wrap: wrap;
+  gap: 4px;
+}
+.dockTemplate {
+  padding: 4px 9px;
+  font-size: 10px; font-weight: 500;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: 0.01em;
+}
+.dockTemplate:hover {
+  background: var(--brand-softer);
+  border-color: var(--border-brand);
+  color: var(--brand);
+}
+.dockAiBtn {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 7px 10px;
+  font-size: 11px; font-weight: 600;
+  background: linear-gradient(135deg, var(--brand) 0%, #a855f7 100%);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: 0.02em;
+  width: 100%;
+}
+.dockAiBtn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.soapFoot {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  border-radius: 0 0 10px 10px;
+  gap: 8px;
+}
+.soapSavedLabel {
+  font-size: 11px;
+  color: var(--success);
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.soapFootActions { display: inline-flex; gap: 6px; }
+.soapBtn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px;
+  font-size: 12px; font-weight: 500;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  color: var(--text-1);
+  cursor: pointer;
+  font-family: inherit;
+}
+.soapBtn:hover:not(:disabled) {
+  border-color: var(--border-brand);
+  background: var(--bg-hover);
+}
+.soapBtn:disabled { opacity: 0.55; cursor: not-allowed; }
+.soapBtnPrimary {
+  background: var(--brand); color: #fff;
+  border-color: var(--brand);
+  font-weight: 700;
+  box-shadow: 0 0 0 1px rgba(124,58,237,0.45), 0 4px 14px -4px rgba(124,58,237,0.4);
+}
+.soapBtnPrimary:hover:not(:disabled) { background: #8b5cf6; color: #fff; }
