@@ -4,6 +4,14 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { loadClinicSession } from "@/lib/agenda/api-helpers";
 import { appointmentToDTO } from "@/lib/agenda/server";
+import {
+  changesToTreatments,
+  createOrUpdateSnapshot,
+  diffSnapshots,
+  ensureDentalCatalog,
+  findPreviousSnapshot,
+  readCurrentEntries,
+} from "@/lib/odontogram/snapshot";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +45,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   const existing = await prisma.appointment.findFirst({
     where: { id: params.id, clinicId: session.clinic.id },
-    select: { id: true, status: true, doctorId: true },
+    select: { id: true, status: true, doctorId: true, patientId: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -95,9 +103,51 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return appt;
   });
 
+  // ─── Snapshot odontograma + diff vs anterior + tratamientos sugeridos ───
+  // Se ejecuta DESPUÉS de marcar COMPLETED para no afectar el cierre si algo
+  // falla aquí (errores se loguean pero no rompen la respuesta principal).
+  let snapshotId: string | null = null;
+  let suggestedTreatments: Awaited<ReturnType<typeof changesToTreatments>> = [];
+  try {
+    await ensureDentalCatalog(session.clinic.id);
+    const currentEntries = await readCurrentEntries(existing.patientId);
+    const snap = await createOrUpdateSnapshot(
+      existing.patientId,
+      params.id,
+      currentEntries,
+    );
+    snapshotId = snap.id;
+
+    const prevEntries = await findPreviousSnapshot(
+      existing.patientId,
+      new Date(),
+      params.id,
+    );
+    if (prevEntries) {
+      const changes = diffSnapshots(prevEntries, currentEntries);
+      suggestedTreatments = await changesToTreatments(changes, session.clinic.id);
+    } else {
+      // Primera consulta: tratamos el snapshot completo como "todos los
+      // estados activos son tratamientos hechos hoy".
+      const changes = currentEntries
+        .filter((e) => e.state !== "SANO")
+        .map((e) => ({
+          toothNumber: e.toothNumber,
+          surface: e.surface,
+          prevState: null,
+          newState: e.state,
+        }));
+      suggestedTreatments = await changesToTreatments(changes, session.clinic.id);
+    }
+  } catch (err) {
+    console.error("[/api/appointments/:id/complete] snapshot/diff error", err);
+  }
+
   return NextResponse.json({
     appointment: appointmentToDTO(updated, session.clinic.category),
     clinicalNoteId: note?.id ?? null,
     signed: !!note && parsed.data.signNote !== false,
+    odontogramSnapshotId: snapshotId,
+    suggestedTreatments,
   });
 }
