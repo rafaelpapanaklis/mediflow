@@ -289,6 +289,7 @@ model Patient {
   prescriptions       Prescription[]
   waitlistEntries     WaitlistEntry[]
   odontogramEntries   OdontogramEntry[]
+  odontogramSnapshots OdontogramSnapshot[]
 
   @@unique([clinicId, patientNumber])
   @@map("patients")
@@ -311,6 +312,25 @@ model OdontogramEntry {
   @@unique([patientId, toothNumber, surface])
   @@index([patientId])
   @@map("odontogram_entries")
+}
+
+/// Snapshot inmutable del odontograma al cerrar una consulta. Permite
+/// reconstruir el estado dental en cualquier punto en el tiempo y diff'ear
+/// contra el snapshot anterior para detectar tratamientos hechos.
+/// `entries` es JSON: [{ toothNumber, surface, state, notes }, ...].
+model OdontogramSnapshot {
+  id            String      @id @default(cuid())
+  patientId     String
+  appointmentId String      @unique
+  snapshotAt    DateTime    @default(now())
+  entries       Json
+
+  patient       Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@index([patientId, snapshotAt])
+  @@map("odontogram_snapshots")
 }
 
 enum Gender {
@@ -379,8 +399,9 @@ model Appointment {
   doctor    User               @relation(fields: [doctorId], references: [id])
   resource         Resource?   @relation(fields: [resourceId],   references: [id], onDelete: SetNull)
   overriddenByUser User?       @relation("ApptOverriddenBy", fields: [overriddenBy], references: [id], onDelete: SetNull)
-  invoice   Invoice?
-  reminders WhatsAppReminder[]
+  invoice            Invoice?
+  odontogramSnapshot OdontogramSnapshot?
+  reminders          WhatsAppReminder[]
 
   @@index([clinicId, startsAt, endsAt, status])
   @@index([doctorId, startsAt])
