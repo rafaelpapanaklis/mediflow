@@ -501,8 +501,42 @@ export default function AIAssistantPage() {
             );
           })}
           {filteredConvs.length === 0 && (
-            <div style={{ padding: "30px 12px", fontSize: 12, color: "var(--text-3)", textAlign: "center" }}>
-              {search ? "Sin resultados" : "Aún no hay conversaciones."}
+            <div style={{ padding: "20px 12px" }}>
+              {search ? (
+                <div style={{ fontSize: 12, color: "var(--text-3)", textAlign: "center" }}>
+                  Sin resultados para "{search}"
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, textAlign: "center", padding: "16px 8px" }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: "var(--brand-softer)", border: "1px solid rgba(124,58,237,0.20)", display: "grid", placeItems: "center", color: "var(--brand)" }}>
+                    <Sparkles size={20} aria-hidden />
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
+                    Sin conversaciones aún
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "var(--text-3)", lineHeight: 1.5, maxWidth: 220 }}>
+                    Pregúntale a la IA sobre pacientes, agenda o cualquier dato de tu clínica.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={startNew}
+                    style={{
+                      marginTop: 4,
+                      display: "inline-flex", alignItems: "center", gap: 5,
+                      padding: "6px 12px",
+                      background: "var(--brand)",
+                      color: "#fff",
+                      border: "1px solid var(--brand)",
+                      borderRadius: 8,
+                      fontSize: 11.5, fontWeight: 600,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    <Plus size={11} aria-hidden /> Empezar
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
