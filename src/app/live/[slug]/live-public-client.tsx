@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Maximize2, Minimize2 } from "lucide-react";
+import { Maximize2, Minimize2, AlertCircle, Building2 } from "lucide-react";
 import { toScreen } from "@/lib/floor-plan/iso";
 import { getCatalogForClinic } from "@/lib/floor-plan/elements";
 import type {
@@ -63,7 +63,10 @@ export function LivePublicClient({
   showPatientNames: boolean;
 }) {
   const [data, setData] = useState<ApiResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  /** Estructura del error: kind ("schema_not_migrated" | "table_missing"
+   *  | "internal_error" | "timeout" | "network" | "parse"). hint para
+   *  mostrar mensaje accionable al admin de la clínica. */
+  const [error, setError] = useState<{ kind: string; hint?: string } | null>(null);
   const [viewTime, setViewTime] = useState<Date>(() => new Date());
   const [hover, setHover] = useState<HoverData | null>(null);
   const [now, setNow] = useState<Date>(() => new Date());
@@ -72,24 +75,37 @@ export function LivePublicClient({
 
   const catalog = getCatalogForClinic("DENTAL");
 
-  // Polling cada 30s
+  // Polling cada 30s con timeout de 10s por request (evita loading
+  // infinito si el endpoint queda colgado).
   useEffect(() => {
     let cancelled = false;
     const fetchAll = async () => {
+      const ac = new AbortController();
+      const timeoutId = setTimeout(() => ac.abort(), 10_000);
       try {
         const dateStr = new Date().toISOString().slice(0, 10);
         const res = await fetch(`/api/live/${slug}?date=${dateStr}`, {
           cache: "no-store",
+          signal: ac.signal,
         });
+        clearTimeout(timeoutId);
         if (!res.ok) {
           if (res.status === 401) {
             // Cookie legacy o expirada — recarga la página completa.
-            // El endpoint ya limpió cookies con maxAge=0; el page server
+            // El endpoint limpió cookies con maxAge=0; el page server
             // detectará la ausencia y mostrará el PasswordGate.
             window.location.replace(`/live/${slug}`);
             return;
           }
-          if (!cancelled) setError("error");
+          // Intentamos parsear el body para mostrar hint del server.
+          let kind = "internal_error";
+          let hint: string | undefined;
+          try {
+            const body = await res.json();
+            if (body?.error) kind = String(body.error);
+            if (body?.hint) hint = String(body.hint);
+          } catch {/* body no era JSON */}
+          if (!cancelled) setError({ kind, hint });
           return;
         }
         const json = (await res.json()) as ApiResponse;
@@ -97,8 +113,16 @@ export function LivePublicClient({
           setData(json);
           setError(null);
         }
-      } catch {
-        if (!cancelled) setError("error");
+      } catch (err) {
+        clearTimeout(timeoutId);
+        if (cancelled) return;
+        const isAbort = err instanceof DOMException && err.name === "AbortError";
+        setError({
+          kind: isAbort ? "timeout" : "network",
+          hint: isAbort
+            ? "El servidor tardó más de 10 segundos en responder."
+            : "No se pudo contactar el servidor. Verifica tu conexión.",
+        });
       }
     };
     fetchAll();
@@ -152,16 +176,62 @@ export function LivePublicClient({
     }));
   }, [data]);
 
-  // 401 ya hizo replace al page; no hace falta render terminal.
-  if (error === "error") {
+  // 401 ya hizo replace al page; el resto se muestra como UI accionable.
+  if (error) {
     return (
       <div className={liveStyles.errorWrap}>
-        No se pudo cargar la vista en vivo. Reintentando…
+        <div className={liveStyles.errorCard}>
+          <AlertCircle size={32} aria-hidden style={{ color: "#EF4444" }} />
+          <h1>{errorTitle(error.kind)}</h1>
+          <p>{error.hint ?? errorDefaultHint(error.kind)}</p>
+          {(error.kind === "schema_not_migrated" || error.kind === "table_missing") && (
+            <pre className={liveStyles.errorCode}>
+              ALTER TABLE &quot;clinics&quot;{"\n"}
+              {"  "}ADD COLUMN IF NOT EXISTS &quot;liveModeSlug&quot; TEXT,{"\n"}
+              {"  "}ADD COLUMN IF NOT EXISTS &quot;liveModePassword&quot; TEXT,{"\n"}
+              {"  "}ADD COLUMN IF NOT EXISTS &quot;liveModeEnabled&quot; BOOLEAN DEFAULT false,{"\n"}
+              {"  "}ADD COLUMN IF NOT EXISTS &quot;liveModeShowPatientNames&quot; BOOLEAN DEFAULT false;{"\n"}
+              {"\n"}
+              CREATE TABLE IF NOT EXISTS &quot;clinic_layouts&quot; (...);
+            </pre>
+          )}
+          <button
+            type="button"
+            className={liveStyles.errorBtn}
+            onClick={() => window.location.reload()}
+          >
+            Reintentar
+          </button>
+        </div>
       </div>
     );
   }
   if (!data) {
     return <div className={liveStyles.loadingWrap}>Cargando vista en vivo…</div>;
+  }
+  // Caso especial: clínica válida + endpoint OK pero sin layout/sillones.
+  // Mostramos UI de "configura tu layout primero" en lugar de canvas vacío.
+  if ((data.layout?.elements?.length ?? 0) === 0 && data.chairs.length === 0) {
+    return (
+      <div className={liveStyles.errorWrap}>
+        <div className={liveStyles.errorCard}>
+          <Building2 size={32} aria-hidden style={{ color: "#4A90E2" }} />
+          <h1>{clinicName} no tiene layout configurado</h1>
+          <p>
+            El owner de la clínica debe entrar a <code>/dashboard/clinic-layout</code>{" "}
+            y diseñar el plano (puede cargar el demo en 1 click). Mientras tanto, esta
+            vista pública se mantendrá vacía.
+          </p>
+          <button
+            type="button"
+            className={liveStyles.errorBtn}
+            onClick={() => window.location.reload()}
+          >
+            Refrescar
+          </button>
+        </div>
+      </div>
+    );
   }
 
   const elements = data.layout.elements;
@@ -307,4 +377,38 @@ export function LivePublicClient({
       <LiveTooltip data={hover} />
     </div>
   );
+}
+
+function errorTitle(kind: string): string {
+  switch (kind) {
+    case "schema_not_migrated":
+      return "Migración pendiente";
+    case "table_missing":
+      return "Tabla del schema faltante";
+    case "internal_error":
+      return "Error en el servidor";
+    case "timeout":
+      return "Tiempo agotado";
+    case "network":
+      return "Sin conexión";
+    case "disabled":
+      return "Vista pública deshabilitada";
+    case "not_found":
+      return "Esta vista no existe";
+    default:
+      return "Algo salió mal";
+  }
+}
+
+function errorDefaultHint(kind: string): string {
+  switch (kind) {
+    case "internal_error":
+      return "Reintenta en unos segundos. Si persiste, contacta al admin.";
+    case "timeout":
+      return "El servidor tardó más de 10 segundos. Reintenta.";
+    case "network":
+      return "No se pudo contactar el servidor. Verifica tu conexión.";
+    default:
+      return "Revisa la URL e inténtalo de nuevo.";
+  }
 }
