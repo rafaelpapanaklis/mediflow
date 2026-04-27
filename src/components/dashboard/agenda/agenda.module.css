@@ -1719,6 +1719,140 @@
   gap: 8px;
 }
 
+/* Validate banner inline (audit ajuste 8) */
+.validateBanner {
+  margin: 0;
+  background: color-mix(in srgb, var(--warning) 8%, var(--bg-elev));
+  border-bottom: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
+  padding: 10px 16px 12px;
+  font-family: var(--font-sora, "Sora", sans-serif);
+  flex-shrink: 0;
+}
+.validateBannerHead {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.validateBannerTitle {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12px; color: var(--warning);
+  font-weight: 500;
+}
+.validateBannerTitle strong {
+  font-weight: 700;
+  font-family: var(--font-jetbrains-mono, monospace);
+  font-size: 13px;
+}
+.validateBannerActions {
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.validateNotifyToggle {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--text-2);
+  cursor: pointer;
+  user-select: none;
+}
+.validateNotifyToggle input { accent-color: var(--success); }
+.validateBulkBtn {
+  padding: 6px 12px;
+  font-size: 11px; font-weight: 700;
+  background: var(--success); color: #fff;
+  border: 1px solid var(--success);
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: 0.02em;
+}
+.validateBulkBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--success) 92%, #000);
+}
+.validateBulkBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+.validateBannerClose {
+  width: 24px; height: 24px;
+  display: grid; place-items: center;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.validateBannerClose:hover { color: var(--text-1); }
+.validateRowList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.validateBannerRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 10px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+}
+.validateBannerRowMain {
+  display: flex; align-items: center; gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.validateBannerRowTime {
+  font-family: var(--font-jetbrains-mono, monospace);
+  font-weight: 700;
+  color: var(--text-2);
+}
+.validateBannerRowName {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.validateBannerRowDoctor {
+  display: inline-flex; align-items: center; gap: 4px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.validateBannerRowResource {
+  color: var(--text-3);
+  font-size: 11px;
+}
+.validateBannerRowReason {
+  color: var(--text-3);
+  font-size: 11px;
+}
+.validateBannerRowOverride {
+  color: var(--warning);
+  font-size: 11px;
+  font-style: italic;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.validateBannerRowActions {
+  display: inline-flex; gap: 4px;
+}
+.validateBannerActionBtn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 5px 9px;
+  font-size: 11px; font-weight: 600;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  color: var(--text-2);
+  cursor: pointer;
+  font-family: inherit;
+}
+.validateBannerActionBtn:hover {
+  border-color: var(--border-strong);
+  color: var(--text-1);
+}
+.validateBannerActionBtn.primary {
+  background: var(--success); color: #fff;
+  border-color: var(--success);
+}
+.validateBannerActionBtn.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--success) 92%, #000);
+}
+.validateBannerActionBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* Sub-toolbar stat clickeable */
 .subStat.clickable {
   cursor: pointer;

@@ -9,7 +9,7 @@ import { useAgenda } from "./agenda-provider";
 import { AgendaStatusPopover } from "./agenda-status-popover";
 import { formatSlotTime, timeToSlotIndex } from "@/lib/agenda/time-utils";
 import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
-import { patchAppointmentStatus } from "@/lib/agenda/mutations";
+import { batchValidateAppointments, patchAppointmentStatus } from "@/lib/agenda/mutations";
 import { nextLogicalStatus } from "@/lib/agenda/status-pipeline";
 import type { AppointmentDragData } from "@/lib/agenda/drag-utils";
 import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
@@ -93,12 +93,38 @@ export function AgendaAppointmentCard({
     selectAppointment(appointment.id);
   };
 
-  const nextStep = nextLogicalStatus(appointment.status);
+  // Audit ajuste 7: si la cita requiere validación, el botón inline muestra
+  // "Aprobar" y dispara batch-validate (que limpia requiresValidation +
+  // pone CONFIRMED). Para citas validadas, usa el flujo normal del pipeline.
+  const needsValidation =
+    appointment.requiresValidation && appointment.status === "SCHEDULED";
+  const nextStep = needsValidation
+    ? { status: "CONFIRMED" as AppointmentStatus, label: "Aprobar" }
+    : nextLogicalStatus(appointment.status);
 
   async function advanceStatus() {
     if (!nextStep || pendingNext) return;
     setPendingNext(true);
     const original = appointment;
+
+    if (needsValidation) {
+      dispatch({ type: "OPTIMISTIC_STATUS", id: appointment.id, status: "CONFIRMED" });
+      try {
+        const result = await batchValidateAppointments("confirm", [appointment.id]);
+        if (result.failed.length > 0) {
+          throw new Error(result.failed[0]?.error ?? "update_failed");
+        }
+        // Refrescar para sincronizar requiresValidation: false del server.
+        // (No tenemos REPLACE_APPOINTMENT con el shape completo aquí.)
+      } catch (err) {
+        dispatch({ type: "ROLLBACK_STATUS", original });
+        toast.error(err instanceof Error ? err.message : "No se pudo aprobar");
+      } finally {
+        setPendingNext(false);
+      }
+      return;
+    }
+
     dispatch({ type: "OPTIMISTIC_STATUS", id: appointment.id, status: nextStep.status });
     try {
       const updated = await patchAppointmentStatus(appointment.id, nextStep.status);

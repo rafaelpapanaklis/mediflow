@@ -26,7 +26,7 @@ import { AgendaListView } from "@/components/dashboard/agenda/agenda-list-view";
 import { AgendaMonthView } from "@/components/dashboard/agenda/agenda-month-view";
 import { AgendaWeekView } from "@/components/dashboard/agenda/agenda-week-view";
 import { AgendaResourcesModal } from "@/components/dashboard/agenda/agenda-resources-modal";
-import { AgendaValidateModal } from "@/components/dashboard/agenda/agenda-validate-modal";
+import { AgendaValidateBanner } from "@/components/dashboard/agenda/agenda-validate-banner";
 import { AgendaWaitlistSidebar } from "@/components/dashboard/agenda/agenda-waitlist-sidebar";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
@@ -401,6 +401,7 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
 
   const body = (
     <div className={styles.body}>
+      <AgendaValidateBanner />
       {state.viewMode === "list" ? (
         <AgendaListView />
       ) : state.viewMode === "month" ? (
@@ -461,7 +462,6 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
       </DragOverlapContext.Provider>
       <AgendaDetailPanel />
       <AgendaResourcesModal />
-      <AgendaValidateModal />
       {highlightId && <AgendaHighlightListener highlightId={highlightId} />}
     </div>
   );

@@ -40,6 +40,7 @@ interface AgendaContextValue {
   openModal: (key: AgendaModalKey) => void;
   closeModal: () => void;
   toggleWaitlist: (open?: boolean) => void;
+  togglePendingPanel: (open?: boolean) => void;
 }
 
 const AgendaContext = createContext<AgendaContextValue | null>(null);
@@ -124,14 +125,21 @@ export function AgendaProvider({
     });
   }, [state.waitlistOpen]);
 
+  const togglePendingPanel = useCallback((open?: boolean) => {
+    dispatch({
+      type: "TOGGLE_PENDING",
+      open: open ?? !state.pendingSectionOpen,
+    });
+  }, [state.pendingSectionOpen]);
+
   const ctx = useMemo<AgendaContextValue>(
     () => ({
       state, dispatch,
       setDay, setViewMode, setColumnMode,
       setSearchQuery, selectAppointment,
-      openModal, closeModal, toggleWaitlist,
+      openModal, closeModal, toggleWaitlist, togglePendingPanel,
     }),
-    [state, setDay, setViewMode, setColumnMode, setSearchQuery, selectAppointment, openModal, closeModal, toggleWaitlist],
+    [state, setDay, setViewMode, setColumnMode, setSearchQuery, selectAppointment, openModal, closeModal, toggleWaitlist, togglePendingPanel],
   );
 
   return <AgendaContext.Provider value={ctx}>{children}</AgendaContext.Provider>;

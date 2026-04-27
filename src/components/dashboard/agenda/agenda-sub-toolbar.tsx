@@ -11,7 +11,7 @@ const COLUMN_MODE_OPTIONS: Array<{ value: AgendaColumnMode; label: string }> = [
 ];
 
 export function AgendaSubToolbar() {
-  const { state, setColumnMode, openModal } = useAgenda();
+  const { state, setColumnMode, openModal, togglePendingPanel } = useAgenda();
 
   const visibleAppts = state.appointments.filter(
     (a) => a.status !== "CANCELLED" && a.status !== "NO_SHOW",
@@ -47,8 +47,9 @@ export function AgendaSubToolbar() {
               <button
                 type="button"
                 className={`${styles.subStat} ${styles.clickable} ${styles.warning}`}
-                onClick={() => openModal("validate")}
-                title="Validar citas pendientes"
+                onClick={() => togglePendingPanel()}
+                title="Mostrar / colapsar pendientes de validar"
+                aria-expanded={state.pendingSectionOpen}
               >
                 <strong>{pendingCount}</strong>
                 {`pendiente${pendingCount === 1 ? "" : "s"} validar`}
