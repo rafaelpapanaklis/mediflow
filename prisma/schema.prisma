@@ -288,9 +288,29 @@ model Patient {
   xrayAnalyses        XrayAnalysis[]
   prescriptions       Prescription[]
   waitlistEntries     WaitlistEntry[]
+  odontogramEntries   OdontogramEntry[]
 
   @@unique([clinicId, patientNumber])
   @@map("patients")
+}
+
+/// Estado por superficie del odontograma (32 dientes adultos / 5 superficies).
+/// `surface` null = estado aplicado al diente completo (corona, ausente, etc).
+model OdontogramEntry {
+  id          String   @id @default(cuid())
+  patientId   String
+  toothNumber Int       // FDI numbering (11-18, 21-28, 31-38, 41-48, etc.)
+  surface     String?   // M | D | V | L | O | null (full tooth)
+  state       String    // SANO | CARIES | RESINA | CORONA | ENDODONCIA | IMPLANTE | AUSENTE | EXTRACCION
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  patient     Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, toothNumber, surface])
+  @@index([patientId])
+  @@map("odontogram_entries")
 }
 
 enum Gender {
