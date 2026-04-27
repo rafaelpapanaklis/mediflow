@@ -117,6 +117,8 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<HistorySnapshot[]>([]);
   const [viewingSnapshotId, setViewingSnapshotId] = useState<string | null>(null);
+  const [expandedGroup, setExpandedGroup] = useState<ToothState | null>(null);
+  const [hoverGroup, setHoverGroup] = useState<ToothState | null>(null);
   const inflightRef = useRef<AbortController | null>(null);
 
   /** Fetch del historial de snapshots (lazy: solo al abrir el dropdown). */
@@ -184,6 +186,27 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
     for (const e of displayEntries) counts[e.state]++;
     return counts;
   }, [displayEntries]);
+
+  /** Map state → set de FDI únicos. Un diente puede tener varias superficies con
+   *  el mismo estado; solo lo contamos una vez. Mantiene orden por FDI ascendente. */
+  const groupsByState = useMemo(() => {
+    const map = new Map<ToothState, number[]>();
+    for (const e of displayEntries) {
+      if (e.state === "SANO") continue;
+      const arr = map.get(e.state) ?? [];
+      if (!arr.includes(e.toothNumber)) arr.push(e.toothNumber);
+      map.set(e.state, arr);
+    }
+    map.forEach((arr) => arr.sort((a, b) => a - b));
+    return map;
+  }, [displayEntries]);
+
+  /** Set de FDIs a destacar visualmente cuando se pasa hover sobre un grupo. */
+  const highlightedFdis = useMemo<Set<number>>(() => {
+    const target = hoverGroup ?? expandedGroup;
+    if (!target) return new Set();
+    return new Set(groupsByState.get(target) ?? []);
+  }, [hoverGroup, expandedGroup, groupsByState]);
 
   // Plan tratamiento sugerido (heurística)
   const plan = useMemo(() => {
@@ -631,6 +654,7 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
                       fullToothState={data?.fullToothState ?? null}
                       selected={selected.has(fdi)}
                       activeMode={activeMode}
+                      highlighted={highlightedFdis.has(fdi)}
                       onSurfaceClick={handleSurfaceClick(fdi)}
                       onToothClick={handleToothClick(fdi)}
                     />
@@ -650,6 +674,7 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
                       fullToothState={data?.fullToothState ?? null}
                       selected={selected.has(fdi)}
                       activeMode={activeMode}
+                      highlighted={highlightedFdis.has(fdi)}
                       onSurfaceClick={handleSurfaceClick(fdi)}
                       onToothClick={handleToothClick(fdi)}
                     />
@@ -660,24 +685,59 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
             </>
           )}
 
-          {/* Status footer */}
+          {/* Status footer agrupado por estado.
+           *  Hover → highlight de los dientes de ese grupo.
+           *  Click → expande para ver lista completa con preview vs. ver todos.
+           *  Última acción se muestra al final como contexto secundario. */}
           <div className={styles.statusFooter}>
-            <span className={styles.statusLabel}>Última acción</span>
-            {lastAction ? (
+            <span className={styles.statusLabel}>Resumen</span>
+            {summaryStates.map((st) => {
+              const fdis = groupsByState.get(st);
+              if (!fdis || fdis.length === 0) return null;
+              const isExpanded = expandedGroup === st;
+              const previewCount = 5;
+              const visibleFdis = isExpanded ? fdis : fdis.slice(0, previewCount);
+              const hasMore = !isExpanded && fdis.length > previewCount;
+              return (
+                <button
+                  key={st}
+                  type="button"
+                  className={`${styles.stateGroup} ${isExpanded ? styles.stateGroupOpen : ""}`}
+                  style={{ "--mf-status-color": STATE_COLOR[st] } as React.CSSProperties}
+                  onMouseEnter={() => setHoverGroup(st)}
+                  onMouseLeave={() => setHoverGroup(null)}
+                  onFocus={() => setHoverGroup(st)}
+                  onBlur={() => setHoverGroup(null)}
+                  onClick={() => setExpandedGroup((p) => (p === st ? null : st))}
+                  aria-expanded={isExpanded}
+                  title={`${STATE_LABEL[st]} — ${fdis.length} diente${fdis.length === 1 ? "" : "s"}`}
+                >
+                  <span className={styles.stateGroupDot} aria-hidden />
+                  <strong className={styles.stateGroupName}>{STATE_LABEL[st]}</strong>
+                  <span className={styles.stateGroupCount}>
+                    ({fdis.length} diente{fdis.length === 1 ? "" : "s"})
+                  </span>
+                  <span className={styles.stateGroupList}>
+                    {visibleFdis.map((fdi) => notationLabel(fdi, notation)).join(", ")}
+                    {hasMore && ` +${fdis.length - previewCount}`}
+                  </span>
+                </button>
+              );
+            })}
+            {groupsByState.size === 0 && (
+              <span className={styles.statusEmpty}>Sin marcas — boca sana</span>
+            )}
+            {lastAction && (
               <span
                 className={styles.statusPill}
                 style={{ "--mf-status-color": STATE_COLOR[lastAction.state] } as React.CSSProperties}
+                title="Última acción registrada"
               >
-                Diente {notationLabel(lastAction.fdi, notation)}
+                <span className={styles.statusPillIcon} aria-hidden>↳</span>
+                {notationLabel(lastAction.fdi, notation)}
                 {lastAction.surface ? ` · ${SURFACE_LABEL[lastAction.surface]}` : ""}
                 {" · "}
                 <strong>{STATE_LABEL[lastAction.state]}</strong>
-              </span>
-            ) : (
-              <span className={styles.statusEmpty}>
-                {activeMode
-                  ? `Modo activo: ${STATE_LABEL[activeMode]} — click en una superficie`
-                  : "Selecciona un estado y luego una superficie"}
               </span>
             )}
             <div className={styles.kbdHint}>

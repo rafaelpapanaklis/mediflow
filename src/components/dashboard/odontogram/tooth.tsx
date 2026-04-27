@@ -23,6 +23,8 @@ interface ToothProps {
   selected: boolean;
   /** Modo activo de la toolbar (para cursor crosshair). */
   activeMode: ToothState | null;
+  /** Si está siendo highlighted desde el footer agrupado (hover sobre grupo). */
+  highlighted?: boolean;
   onSurfaceClick: (surface: SurfaceKey, shiftKey: boolean) => void;
   onToothClick: (shiftKey: boolean) => void;
 }
@@ -36,6 +38,7 @@ export function Tooth({
   fullToothState,
   selected,
   activeMode,
+  highlighted = false,
   onSurfaceClick,
   onToothClick,
 }: ToothProps) {
@@ -51,6 +54,7 @@ export function Tooth({
   const cellClasses = [
     styles.tooth,
     selected ? styles.selected : "",
+    highlighted ? styles.highlighted : "",
     isCorona ? styles.hasCorona : "",
     isEndo ? styles.hasEndo : "",
     isImplant ? styles.hasImplant : "",
