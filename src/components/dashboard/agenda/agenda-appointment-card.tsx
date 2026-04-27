@@ -4,6 +4,7 @@ import { Video, Footprints, AlertTriangle } from "lucide-react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useAgenda } from "./agenda-provider";
+import { AgendaStatusPopover } from "./agenda-status-popover";
 import { formatSlotTime, timeToSlotIndex } from "@/lib/agenda/time-utils";
 import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
 import type { AppointmentDragData } from "@/lib/agenda/drag-utils";
@@ -136,6 +137,7 @@ export function AgendaAppointmentCard({
       {...listeners}
       {...attributes}
     >
+      <AgendaStatusPopover appointment={appointment} />
       <div className={styles.apptRow1}>
         {initials && (
           <span className={styles.apptDocAvatar} aria-hidden>

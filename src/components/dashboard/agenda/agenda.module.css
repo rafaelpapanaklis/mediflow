@@ -1393,3 +1393,84 @@
   font-size: 8px; font-weight: 700;
   font-family: var(--font-jetbrains-mono, monospace);
 }
+
+/* ─────── STATUS POPOVER (quick-change on card) ───────────────────── */
+.apptStatusTrigger {
+  position: absolute;
+  top: 2px; right: 2px;
+  width: 18px; height: 18px;
+  display: grid; place-items: center;
+  background: rgba(255,255,255,0.6);
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  color: var(--text-2);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+  z-index: 2;
+}
+.appt:hover .apptStatusTrigger,
+.appt.selected .apptStatusTrigger {
+  opacity: 1;
+}
+.apptStatusTrigger:hover {
+  background: var(--bg-elev);
+  color: var(--text-1);
+  border-color: var(--border-strong);
+}
+
+.statusPopover {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px -6px rgba(15,10,30,0.16);
+  padding: 6px;
+  z-index: 250;
+  min-width: 180px;
+  font-family: var(--font-sora, "Sora", sans-serif);
+}
+.statusPopoverTitle {
+  font-size: 9px; font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 4px 8px 6px;
+}
+.statusPopoverList {
+  display: flex; flex-direction: column;
+  gap: 2px;
+}
+.statusPopoverItem {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  font-size: 12px; font-weight: 500;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text-1);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+.statusPopoverItem:hover {
+  background: var(--bg-elev-2);
+}
+.statusPopoverItem.active {
+  background: color-mix(in srgb, var(--mf-status-color, var(--brand)) 12%, var(--bg-elev));
+  border-color: color-mix(in srgb, var(--mf-status-color, var(--brand)) 40%, transparent);
+  color: var(--mf-status-color, var(--brand));
+  font-weight: 600;
+}
+.statusPopoverItem:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.statusPopoverDot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.statusPopoverSpin {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-3);
+}
