@@ -613,6 +613,7 @@
 .sidebar-new {
   border-right: 1px solid var(--border-soft);
   background: rgba(10,10,15,0.6);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   padding: 14px 10px;
   display: flex;
@@ -731,6 +732,7 @@
   gap: clamp(10px, 1vw, 16px);
   padding: 0 clamp(12px, 1.5vw, 24px);
   background: rgba(10,10,15,0.6);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   position: sticky;
   top: 0;
@@ -931,6 +933,7 @@
   position: fixed;
   inset: 0;
   background: rgba(5,5,10,0.72);
+  -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
   display: grid;
   place-items: center;
@@ -1181,6 +1184,7 @@
 
 .glass-dark {
   background: rgba(17, 22, 49, 0.85);
+  -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(99, 102, 241, 0.15);
 }

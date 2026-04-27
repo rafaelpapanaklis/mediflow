@@ -3,7 +3,10 @@
 .live {
   display: grid;
   grid-template-rows: 86px 1fr 200px 28px;
+  /* TV de sala de espera + iOS Safari fullscreen sin barras: dvh
+     usa el viewport dinámico y evita que el bottom bar coma 80px. */
   height: 100vh;
+  height: 100dvh;
   background: radial-gradient(ellipse at 55% 40%, #EDF5FC 0%, #E2EEF8 60%, #D8E8F4 100%);
   color: #1A2540;
 }

@@ -28,7 +28,10 @@
 
   display: grid;
   grid-template-columns: 240px 380px 1fr;
+  /* Fallback 100vh para browsers viejos; 100dvh evita el bottom bar de
+     iOS Safari que comía 80px del viewport en mobile. */
   height: calc(100vh - 64px);
+  height: calc(100dvh - 64px);
   background: var(--bg);
   color: var(--text-1);
   font-family: var(--font-sora, "Sora", system-ui, sans-serif);

@@ -25,7 +25,9 @@
   display: grid;
   grid-template-columns: 280px 1fr 320px;
   grid-template-rows: 56px 1fr;
+  /* dvh evita el salto del bottom bar de Safari iOS. */
   height: calc(100vh - 64px);
+  height: calc(100dvh - 64px);
   background: var(--bg);
   color: var(--text-1);
   font-family: var(--font-sora, "Sora", system-ui, sans-serif);

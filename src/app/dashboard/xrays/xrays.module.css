@@ -26,7 +26,10 @@
   display: grid;
   grid-template-columns: 240px 1fr 340px;
   grid-template-rows: 56px 1fr;
+  /* Fallback 100vh; 100dvh evita salto cuando aparece el bottom bar
+     de Safari iOS al hacer scroll en mobile. */
   height: calc(100vh - 64px);
+  height: calc(100dvh - 64px);
   font-family: var(--font-sora, "Sora", system-ui, sans-serif);
   background: #faf9fc;
   color: var(--text-1);
