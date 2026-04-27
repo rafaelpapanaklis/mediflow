@@ -7,7 +7,7 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import {
   Home, Calendar, Users, MessageCircle, Inbox as InboxIcon,
   Stethoscope, Sparkles, FileImage, Camera, FlaskConical, Dumbbell, Footprints,
-  Activity, Gift, DoorOpen, Package,
+  Activity, Gift, DoorOpen, Package, Building2,
   CreditCard, BarChart3, UserCog, Globe, ClipboardList, Settings,
   ChevronDown, ChevronRight, Moon, Sun, LogOut, PanelLeftClose, PanelLeft,
   X, type LucideIcon,
@@ -120,12 +120,13 @@ const NAV_ITEMS: NavItemDef[] = [
     icon: Package, adminOnly: true,
     categories: ["DENTAL", "MEDICINE", "PODIATRY", "DERMATOLOGY", "AESTHETIC_MEDICINE"] },
 
-  { id: "billing",    section: "admin", label: "Facturación",    href: "/dashboard/billing",    icon: CreditCard },
-  { id: "reports",    section: "admin", label: "Reportes",       href: "/dashboard/reports",    icon: BarChart3 },
-  { id: "team",       section: "admin", label: "Equipo",         href: "/dashboard/team",       icon: UserCog },
-  { id: "landing",    section: "admin", label: "Página web",     href: "/dashboard/landing",    icon: Globe },
-  { id: "procedures", section: "admin", label: "Procedimientos", href: "/dashboard/procedures", icon: ClipboardList },
-  { id: "settings",   section: "admin", label: "Configuración",  href: "/dashboard/settings",   icon: Settings },
+  { id: "billing",        section: "admin", label: "Facturación",       href: "/dashboard/billing",       icon: CreditCard },
+  { id: "reports",        section: "admin", label: "Reportes",          href: "/dashboard/reports",       icon: BarChart3 },
+  { id: "team",           section: "admin", label: "Equipo",            href: "/dashboard/team",          icon: UserCog },
+  { id: "landing",        section: "admin", label: "Página web",        href: "/dashboard/landing",       icon: Globe },
+  { id: "procedures",     section: "admin", label: "Procedimientos",    href: "/dashboard/procedures",    icon: ClipboardList },
+  { id: "clinic-layout",  section: "admin", label: "Mi Clínica Visual", href: "/dashboard/clinic-layout", icon: Building2, adminOnly: true },
+  { id: "settings",       section: "admin", label: "Configuración",     href: "/dashboard/settings",      icon: Settings },
 ];
 
 // ═══════════════════════════════════════════════════════════════════
