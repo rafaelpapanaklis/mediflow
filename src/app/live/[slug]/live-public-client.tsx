@@ -16,6 +16,7 @@ import {
   LiveTimeline,
   type HoverData,
 } from "../../dashboard/clinic-layout/components/live-mode";
+import { WaitingRoom, type WaitingRoomEntry } from "../../dashboard/clinic-layout/components/waiting-room";
 import liveStyles from "./live-public.module.css";
 
 interface Chair {
@@ -41,6 +42,7 @@ interface ApiResponse {
     start: string;
     end: string;
   }>;
+  waitingRoom?: WaitingRoomEntry[];
 }
 
 const ORIG_X = 680;
@@ -242,6 +244,14 @@ export function LivePublicClient({
             appointments={appointments}
             showFullNames={showPatientNames}
           />
+          <div style={{ marginTop: 14 }}>
+            <WaitingRoom
+              waiting={data.waitingRoom ?? []}
+              appointments={appointments}
+              chairs={data.chairs}
+              enableSound={true}
+            />
+          </div>
         </aside>
       </div>
 

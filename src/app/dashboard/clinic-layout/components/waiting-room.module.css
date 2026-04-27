@@ -1,0 +1,173 @@
+/* Sala de espera + banner de llamado por turnos. */
+
+.wrap {
+  position: relative;
+  background: #fff;
+  border: 1px solid #E2ECF4;
+  border-radius: 12px;
+  overflow: hidden;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* ─── Banner de llamado ─── */
+.callBanner {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 90;
+  pointer-events: none;
+  animation: mfCallSlide 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes mfCallSlide {
+  from { opacity: 0; transform: translate(-50%, -16px) scale(0.92); }
+  to   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+.callBannerInner {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 28px;
+  background: linear-gradient(135deg, #4A90E2, #2A68C0);
+  color: #fff;
+  border-radius: 14px;
+  box-shadow: 0 16px 48px -10px rgba(74, 144, 226, 0.55);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  animation: mfCallPulse 1.6s ease-in-out infinite;
+}
+@keyframes mfCallPulse {
+  0%, 100% { box-shadow: 0 16px 48px -10px rgba(74, 144, 226, 0.55); }
+  50%      { box-shadow: 0 18px 60px -8px rgba(74, 144, 226, 0.85); }
+}
+.callPatient {
+  font-weight: 800;
+}
+.callArrow {
+  font-weight: 700;
+  opacity: 0.85;
+  font-size: 18px;
+}
+.callChair {
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.18);
+  padding: 4px 12px;
+  border-radius: 8px;
+}
+
+/* ─── Header ─── */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #E2ECF4;
+  background: #F8FAFC;
+}
+.headerTitle {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6B7A99;
+}
+.headerCount {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  background: #4A90E2;
+  color: #fff;
+  padding: 1px 7px;
+  border-radius: 999px;
+}
+.soundBtn {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 1px solid #E2ECF4;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #6B7A99;
+  font-family: inherit;
+}
+.soundBtn:hover { background: #E8F4F8; color: #4A90E2; border-color: #B4D2F0; }
+.soundBtn[aria-pressed="true"] {
+  background: #E8F4F8;
+  color: #4A90E2;
+  border-color: #B4D2F0;
+}
+
+/* ─── Lista ─── */
+.empty {
+  padding: 30px 16px;
+  text-align: center;
+  font-size: 12px;
+  color: #9AAAC0;
+  font-style: italic;
+}
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0;
+  display: flex;
+  flex-direction: column;
+}
+.item {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #F0F4F8;
+}
+.item:last-child { border-bottom: none; }
+.position {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 800;
+  color: #4A90E2;
+  text-align: center;
+  background: #E8F4F8;
+  border-radius: 5px;
+  padding: 2px 0;
+}
+.itemBody {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.itemPatient {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1A2540;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.itemMeta {
+  font-size: 10.5px;
+  color: #6B7A99;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.itemWait {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  color: #F59E0B;
+  font-weight: 700;
+  background: rgba(245, 158, 11, 0.1);
+  padding: 2px 7px;
+  border-radius: 999px;
+}

@@ -41,6 +41,7 @@ import {
   type HoverData,
 } from "./components/live-mode";
 import { SharePanel } from "./components/share-panel";
+import { WaitingRoom, type WaitingRoomEntry } from "./components/waiting-room";
 import { Share2 } from "lucide-react";
 import styles from "./clinic-layout.module.css";
 
@@ -105,6 +106,7 @@ export function ClinicLayoutClient({
   const [liveMode, setLiveMode] = useState(false);
   const [viewTime, setViewTime] = useState<Date>(() => new Date());
   const [appointments, setAppointments] = useState<LiveAppointment[]>([]);
+  const [waitingRoom, setWaitingRoom] = useState<WaitingRoomEntry[]>([]);
   const [hover, setHover] = useState<HoverData | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [liveConfig, setLiveConfig] = useState({
@@ -223,6 +225,7 @@ export function ClinicLayoutClient({
           }),
         );
         setAppointments(parsed);
+        setWaitingRoom((data.waitingRoom ?? []) as WaitingRoomEntry[]);
       } catch {/* silent */}
     };
     fetchAppointments();
@@ -877,13 +880,22 @@ export function ClinicLayoutClient({
         {/* ── Properties panel / Live status ── */}
         <aside className={styles.propertiesPanel}>
           {liveMode ? (
-            <LiveStatusPanel
-              elements={elements}
-              chairs={chairs}
-              viewTime={viewTime}
-              appointments={appointments}
-              showFullNames={clinic.liveModeShowPatientNames}
-            />
+            <>
+              <LiveStatusPanel
+                elements={elements}
+                chairs={chairs}
+                viewTime={viewTime}
+                appointments={appointments}
+                showFullNames={clinic.liveModeShowPatientNames}
+              />
+              <div style={{ marginTop: 14 }}>
+                <WaitingRoom
+                  waiting={waitingRoom}
+                  appointments={appointments}
+                  chairs={chairs}
+                />
+              </div>
+            </>
           ) : !selectedElement || !selectedType ? (
             <div className={styles.propEmpty}>
               <MousePointer2 size={36} aria-hidden className={styles.propEmptyIcon} />

@@ -67,7 +67,6 @@ export async function GET(req: NextRequest, { params }: Params) {
         clinicId: clinic.id,
         startsAt: { gte: dayStart, lte: dayEnd },
         status: { notIn: ["CANCELLED", "NO_SHOW"] },
-        resourceId: { not: null },
       },
       orderBy: { startsAt: "asc" },
       select: {
@@ -75,6 +74,7 @@ export async function GET(req: NextRequest, { params }: Params) {
         resourceId: true,
         startsAt: true,
         endsAt: true,
+        checkedInAt: true,
         type: true,
         status: true,
         notes: true,
@@ -84,32 +84,56 @@ export async function GET(req: NextRequest, { params }: Params) {
     }),
   ]);
 
-  // Privacy: si showPatientNames=false, devolver iniciales únicamente — el
-  // cliente nunca recibe el nombre completo (defensa en profundidad).
   const showFull = clinic.liveModeShowPatientNames;
-  const liveAppointments = appointments.map((a) => {
-    const fullName = `${a.patient?.firstName ?? ""} ${a.patient?.lastName ?? ""}`.trim() || "Paciente";
-    const initials =
-      fullName
+  const maskInitials = (full: string) => {
+    return (
+      full
         .split(/\s+/)
         .filter(Boolean)
         .slice(0, 2)
         .map((p) => p[0]?.toUpperCase() ?? "")
-        .join(".") + ".";
-    return {
-      id: a.id,
-      resourceId: a.resourceId,
-      patient: showFull ? fullName : initials,
-      // NO incluimos patientFull cuando privacy off para que el cliente
-      // no pueda exponerlo accidentalmente.
-      ...(showFull ? { patientFull: fullName } : {}),
-      treatment: a.type || a.notes || "Consulta",
-      doctor: `${a.doctor?.firstName ?? ""} ${a.doctor?.lastName ?? ""}`.trim() || "—",
-      start: a.startsAt.toISOString(),
-      end: a.endsAt.toISOString(),
-      status: a.status,
-    };
-  });
+        .join(".") + "."
+    );
+  };
+
+  // Privacy: si showPatientNames=false, devolver iniciales únicamente — el
+  // cliente nunca recibe el nombre completo (defensa en profundidad).
+  const liveAppointments = appointments
+    .filter((a) => a.resourceId)
+    .map((a) => {
+      const fullName = `${a.patient?.firstName ?? ""} ${a.patient?.lastName ?? ""}`.trim() || "Paciente";
+      return {
+        id: a.id,
+        resourceId: a.resourceId,
+        patient: showFull ? fullName : maskInitials(fullName),
+        ...(showFull ? { patientFull: fullName } : {}),
+        treatment: a.type || a.notes || "Consulta",
+        doctor: `${a.doctor?.firstName ?? ""} ${a.doctor?.lastName ?? ""}`.trim() || "—",
+        start: a.startsAt.toISOString(),
+        end: a.endsAt.toISOString(),
+        status: a.status,
+      };
+    });
+
+  // Sala de espera (pacientes CHECKED_IN sin sillón aún).
+  const waitingRoom = appointments
+    .filter((a) => a.status === "CHECKED_IN")
+    .sort((a, b) => {
+      const ta = a.checkedInAt?.getTime() ?? a.startsAt.getTime();
+      const tb = b.checkedInAt?.getTime() ?? b.startsAt.getTime();
+      return ta - tb;
+    })
+    .map((a) => {
+      const fullName = `${a.patient?.firstName ?? ""} ${a.patient?.lastName ?? ""}`.trim() || "Paciente";
+      return {
+        id: a.id,
+        patient: showFull ? fullName : maskInitials(fullName),
+        treatment: a.type || a.notes || "Consulta",
+        doctor: `${a.doctor?.firstName ?? ""} ${a.doctor?.lastName ?? ""}`.trim() || "—",
+        checkedInAt: a.checkedInAt?.toISOString() ?? null,
+        scheduledAt: a.startsAt.toISOString(),
+      };
+    });
 
   return NextResponse.json({
     clinic: {
@@ -123,5 +147,6 @@ export async function GET(req: NextRequest, { params }: Params) {
     },
     chairs,
     appointments: liveAppointments,
+    waitingRoom,
   });
 }
