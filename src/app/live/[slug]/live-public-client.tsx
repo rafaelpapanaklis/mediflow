@@ -1,7 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Maximize2, Minimize2, AlertCircle, Building2, Lock } from "lucide-react";
+import {
+  Maximize2,
+  Minimize2,
+  AlertCircle,
+  Building2,
+  Lock,
+  Plus,
+  Minus,
+  Crosshair,
+} from "lucide-react";
 import { toScreen } from "@/lib/floor-plan/iso";
 import { getCatalogForClinic } from "@/lib/floor-plan/elements";
 import type {
@@ -76,6 +85,52 @@ export function LivePublicClient({
   const [now, setNow] = useState<Date>(() => new Date());
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // ── Navegación del canvas: zoom + pan ──
+  const ZOOM_MIN = 0.4;
+  const ZOOM_MAX = 4;
+  const STORAGE_KEY = `mf:live-view:${slug}`;
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [spaceHeld, setSpaceHeld] = useState(false);
+  const panStartRef = useRef<{ mx: number; my: number; px: number; py: number } | null>(null);
+  const canvasWrapRef = useRef<HTMLDivElement>(null);
+
+  // Hidratar zoom/pan desde localStorage al montar (por slug).
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (typeof parsed.zoom === "number" && parsed.zoom >= ZOOM_MIN && parsed.zoom <= ZOOM_MAX) {
+        setZoom(parsed.zoom);
+      }
+      if (parsed.pan && typeof parsed.pan.x === "number" && typeof parsed.pan.y === "number") {
+        setPan(parsed.pan);
+      }
+    } catch {/* localStorage bloqueado o JSON inválido — defaults */}
+  }, [STORAGE_KEY]);
+
+  // Persistir zoom/pan con debounce 300ms.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      try {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ zoom, pan }));
+      } catch {/* quota / SecurityError — ignore */}
+    }, 300);
+    return () => clearTimeout(id);
+  }, [zoom, pan, STORAGE_KEY]);
+
+  const clampZoom = useCallback((z: number) => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z)), []);
+
+  const fitToScreen = useCallback(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, []);
+
+  const zoomIn = useCallback(() => setZoom((z) => clampZoom(z * 1.15)), [clampZoom]);
+  const zoomOut = useCallback(() => setZoom((z) => clampZoom(z / 1.15)), [clampZoom]);
 
   const catalog = getCatalogForClinic("DENTAL");
 
@@ -171,13 +226,122 @@ export function LivePublicClient({
     return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
 
-  const toggleFullscreen = () => {
+  const toggleFullscreen = useCallback(() => {
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     } else if (containerRef.current) {
       containerRef.current.requestFullscreen().catch(() => {});
     }
-  };
+  }, []);
+
+  // Wheel listener nativo (passive=false para poder preventDefault).
+  // React onWheel es passive por default y no podemos bloquear el scroll
+  // del page con preventDefault — por eso engancharlo a nivel native.
+  useEffect(() => {
+    const wrap = canvasWrapRef.current;
+    if (!wrap) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      // Zoom centrado en el punto del cursor: ajustamos pan para que la
+      // posición bajo el cursor permanezca estable al hacer zoom.
+      const rect = wrap.getBoundingClientRect();
+      const cx = e.clientX - rect.left - rect.width / 2;
+      const cy = e.clientY - rect.top - rect.height / 2;
+      setZoom((prevZoom) => {
+        const factor = e.deltaY > 0 ? 1 / 1.1 : 1.1;
+        const nextZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, prevZoom * factor));
+        if (nextZoom === prevZoom) return prevZoom;
+        const ratio = nextZoom / prevZoom;
+        setPan((p) => ({
+          x: cx - (cx - p.x) * ratio,
+          y: cy - (cy - p.y) * ratio,
+        }));
+        return nextZoom;
+      });
+    };
+    wrap.addEventListener("wheel", onWheel, { passive: false });
+    return () => wrap.removeEventListener("wheel", onWheel);
+  }, []);
+
+  // Pan: mousedown en el canvasWrap inicia drag. La barra espaciadora
+  // permite pan temporal sin necesidad de tool específica (cursor "grab").
+  const onCanvasMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      // Solo botón izquierdo. Ignoramos clicks sobre los botones
+      // flotantes (data-no-pan="true") y sobre las regiones AI que
+      // ya tienen sus propios handlers.
+      if (e.button !== 0) return;
+      const target = e.target as HTMLElement;
+      if (target.closest("[data-no-pan]")) return;
+      panStartRef.current = {
+        mx: e.clientX,
+        my: e.clientY,
+        px: pan.x,
+        py: pan.y,
+      };
+      setIsPanning(true);
+    },
+    [pan.x, pan.y],
+  );
+
+  // Listeners window para que el pan continúe aunque el cursor salga
+  // del canvasWrap o del fullscreen.
+  useEffect(() => {
+    if (!isPanning) return;
+    const onMove = (e: MouseEvent) => {
+      const ref = panStartRef.current;
+      if (!ref) return;
+      setPan({
+        x: ref.px + (e.clientX - ref.mx),
+        y: ref.py + (e.clientY - ref.my),
+      });
+    };
+    const onUp = () => {
+      panStartRef.current = null;
+      setIsPanning(false);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [isPanning]);
+
+  // Atajos de teclado: +/- zoom · 0 fit · F fullscreen · Espacio cursor grab.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      if (e.key === "+" || e.key === "=") {
+        e.preventDefault();
+        zoomIn();
+      } else if (e.key === "-" || e.key === "_") {
+        e.preventDefault();
+        zoomOut();
+      } else if (e.key === "0") {
+        e.preventDefault();
+        fitToScreen();
+      } else if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        toggleFullscreen();
+      } else if (e.code === "Space") {
+        if (!spaceHeld) setSpaceHeld(true);
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space") setSpaceHeld(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, [zoomIn, zoomOut, fitToScreen, toggleFullscreen, spaceHeld]);
+
+  const canvasCursor = isPanning ? "grabbing" : spaceHeld ? "grab" : "default";
 
   const appointments: LiveAppointment[] = useMemo(() => {
     if (!data) return [];
@@ -312,11 +476,21 @@ export function LivePublicClient({
       </header>
 
       <div className={liveStyles.body}>
-        <div className={liveStyles.canvasWrap}>
+        <div
+          className={liveStyles.canvasWrap}
+          ref={canvasWrapRef}
+          onMouseDown={onCanvasMouseDown}
+          style={{ cursor: canvasCursor }}
+        >
           <svg
             className={liveStyles.svgRoot}
             viewBox="0 0 1920 1080"
             preserveAspectRatio="xMidYMid meet"
+            style={{
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              transformOrigin: "center center",
+              transition: isPanning ? "none" : "transform 0.08s linear",
+            }}
           >
             {/* Floor tiles */}
             <g>
@@ -367,6 +541,50 @@ export function LivePublicClient({
               onHover={setHover}
             />
           </svg>
+
+          {/* Controles flotantes — esquina inferior derecha del canvas. */}
+          <div className={liveStyles.canvasControls} data-no-pan="true">
+            <button
+              type="button"
+              className={liveStyles.canvasCtrlBtn}
+              onClick={zoomIn}
+              disabled={zoom >= ZOOM_MAX}
+              title="Acercar (+)"
+              aria-label="Acercar"
+            >
+              <Plus size={15} aria-hidden />
+            </button>
+            <span className={liveStyles.canvasCtrlZoom}>{Math.round(zoom * 100)}%</span>
+            <button
+              type="button"
+              className={liveStyles.canvasCtrlBtn}
+              onClick={zoomOut}
+              disabled={zoom <= ZOOM_MIN}
+              title="Alejar (−)"
+              aria-label="Alejar"
+            >
+              <Minus size={15} aria-hidden />
+            </button>
+            <span className={liveStyles.canvasCtrlDivider} aria-hidden />
+            <button
+              type="button"
+              className={liveStyles.canvasCtrlBtn}
+              onClick={fitToScreen}
+              title="Ajustar a pantalla (0)"
+              aria-label="Ajustar a pantalla"
+            >
+              <Crosshair size={15} aria-hidden />
+            </button>
+            <button
+              type="button"
+              className={liveStyles.canvasCtrlBtn}
+              onClick={toggleFullscreen}
+              title={isFullscreen ? "Salir de pantalla completa (F)" : "Pantalla completa (F)"}
+              aria-label="Pantalla completa"
+            >
+              {isFullscreen ? <Minimize2 size={15} aria-hidden /> : <Maximize2 size={15} aria-hidden />}
+            </button>
+          </div>
         </div>
         <aside className={liveStyles.panel}>
           <LiveStatusPanel

@@ -147,11 +147,87 @@
 .canvasWrap {
   position: relative;
   overflow: hidden;
+  user-select: none;
+  touch-action: none;
 }
 .svgRoot {
   width: 100%;
   height: 100%;
   display: block;
+  pointer-events: auto;
+}
+
+/* ─── Controles flotantes (zoom + fit + fullscreen) ─── */
+.canvasControls {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(15, 25, 50, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 6px 24px -8px rgba(20, 40, 100, 0.18);
+  font-family: 'Inter', system-ui, sans-serif;
+  z-index: 5;
+  cursor: default;
+}
+.canvasCtrlBtn {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: #4A4560;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.canvasCtrlBtn:hover:not(:disabled) {
+  background: rgba(74, 144, 226, 0.12);
+  color: #2A68C0;
+}
+.canvasCtrlBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.canvasCtrlZoom {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #4A4560;
+  min-width: 36px;
+  text-align: center;
+  padding: 0 4px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.canvasCtrlDivider {
+  width: 1px;
+  height: 18px;
+  background: rgba(15, 25, 50, 0.12);
+  margin: 0 2px;
+}
+
+@media (min-width: 1920px) {
+  .canvasControls {
+    bottom: 24px;
+    right: 24px;
+    padding: 5px;
+    border-radius: 14px;
+  }
+  .canvasCtrlBtn {
+    width: 38px;
+    height: 38px;
+  }
+  .canvasCtrlZoom {
+    font-size: 13px;
+  }
 }
 .panel {
   background: #fff;
