@@ -9,6 +9,9 @@ import { AgendaColumn } from "@/components/dashboard/agenda/agenda-column";
 import { AgendaEmptyDay } from "@/components/dashboard/agenda/agenda-empty-day";
 import { AgendaHighlightListener } from "@/components/dashboard/agenda/agenda-highlight-listener";
 import { AgendaDetailPanel } from "@/components/dashboard/agenda/agenda-detail-panel";
+import { AgendaListView } from "@/components/dashboard/agenda/agenda-list-view";
+import { AgendaMonthView } from "@/components/dashboard/agenda/agenda-month-view";
+import { AgendaWeekView } from "@/components/dashboard/agenda/agenda-week-view";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import type { AgendaDayResponse } from "@/lib/agenda/types";
 import styles from "@/components/dashboard/agenda/agenda.module.css";
@@ -44,7 +47,13 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
       <AgendaTopbar />
       <AgendaSubToolbar />
       <div className={styles.body}>
-        {columns.length === 0 ? (
+        {state.viewMode === "list" ? (
+          <AgendaListView />
+        ) : state.viewMode === "month" ? (
+          <AgendaMonthView />
+        ) : state.viewMode === "week" ? (
+          <AgendaWeekView />
+        ) : columns.length === 0 ? (
           <AgendaEmptyDay />
         ) : (
           <div className={styles.scrollArea}>
