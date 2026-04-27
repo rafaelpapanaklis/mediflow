@@ -40,12 +40,17 @@ function buildWeekDays(refISO: string): WeekDay[] {
 }
 
 export function AgendaWeekView() {
-  const { state, setDay } = useAgenda();
+  const { state, setDay, setViewMode } = useAgenda();
 
   const days = useMemo(() => buildWeekDays(state.dayISO), [state.dayISO]);
   const today = todayInTz(state.timezone);
 
   const slotsTotal = ((state.dayEnd - state.dayStart) * 60) / state.slotMinutes;
+
+  function jumpToDay(iso: string) {
+    setDay(iso);
+    setViewMode("day");
+  }
 
   return (
     <div className={styles.scrollArea}>
@@ -71,16 +76,17 @@ export function AgendaWeekView() {
               .filter(Boolean)
               .join(" ");
             return (
-              <div
+              <button
                 key={d.iso}
+                type="button"
                 className={classes}
-                onClick={() => setDay(d.iso)}
-                role="button"
-                tabIndex={0}
+                onClick={() => jumpToDay(d.iso)}
+                aria-label={`Abrir vista día ${d.iso}`}
+                title={`Ver el día ${d.iso} en vista detallada`}
               >
                 <div className={styles.weekHeaderDow}>{d.dow}</div>
                 <div className={styles.weekHeaderDay}>{d.day}</div>
-              </div>
+              </button>
             );
           })}
         </div>

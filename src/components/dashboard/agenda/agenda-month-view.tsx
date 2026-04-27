@@ -37,10 +37,15 @@ function pad(n: number): string {
 }
 
 export function AgendaMonthView() {
-  const { state, setDay } = useAgenda();
+  const { state, setDay, setViewMode } = useAgenda();
 
   const cells = useMemo(() => buildMonthGrid(state.dayISO), [state.dayISO]);
   const today = todayInTz(state.timezone);
+
+  function jumpToDay(iso: string) {
+    setDay(iso);
+    setViewMode("day");
+  }
 
   const dayCounts = useMemo(() => {
     const map = new Map<string, number>();
@@ -76,16 +81,17 @@ export function AgendaMonthView() {
             <div
               key={c.iso}
               className={classes}
-              onClick={() => setDay(c.iso)}
+              onClick={() => jumpToDay(c.iso)}
               role="button"
               tabIndex={0}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  setDay(c.iso);
+                  jumpToDay(c.iso);
                 }
               }}
-              aria-label={`Día ${c.iso}`}
+              aria-label={`Abrir vista día ${c.iso}`}
+              title={`Ver el día ${c.iso} en vista detallada`}
             >
               <span className={styles.monthDayNum}>{c.day}</span>
               {count > 0 && (

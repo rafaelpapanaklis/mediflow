@@ -970,11 +970,12 @@
   gap: 4px;
   min-height: 70px;
   cursor: pointer;
-  transition: border-color 0.12s, transform 0.12s;
+  transition: border-color 0.12s, background 0.12s, transform 0.12s;
   font-family: var(--font-sora, "Sora", sans-serif);
 }
 .monthDay:hover {
   border-color: var(--border-brand);
+  background: var(--bg-elev-2);
 }
 .monthDay.outside {
   opacity: 0.42;
@@ -1014,15 +1015,23 @@
   display: flex; flex-direction: column; gap: 2px;
   align-items: center; justify-content: center;
   padding: 6px 4px;
+  border: none;
   border-right: 1px solid var(--border-soft);
   background: var(--bg-elev);
   height: var(--mf-agenda-col-h);
   min-width: 0;
   cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+  transition: background 0.12s;
 }
+.weekHeaderCell:hover { background: var(--bg-elev-2); }
 .weekHeaderCell:last-child { border-right: none; }
 .weekHeaderCell.today {
   background: var(--brand-softer);
+}
+.weekHeaderCell.today:hover {
+  background: color-mix(in srgb, var(--brand) 12%, var(--bg-elev));
 }
 .weekHeaderCell.active {
   border-bottom: 2px solid var(--brand);
