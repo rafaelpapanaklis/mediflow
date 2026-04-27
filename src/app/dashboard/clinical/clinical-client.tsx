@@ -121,7 +121,12 @@ function getInitials(p: { firstName: string; lastName: string }) {
 }
 
 export function ClinicalClient(props: Props) {
-  const { patients, selectedPatient, records, currentPatientId } = props;
+  // Defensa: si el server pasa props undefined por cualquier motivo,
+  // caemos a arrays/null vacíos para no crashear el render del cliente.
+  const patients = props.patients ?? [];
+  const selectedPatient = props.selectedPatient ?? null;
+  const records = props.records ?? [];
+  const currentPatientId = props.currentPatientId;
   const router = useRouter();
 
   const [draft, setDraft] = useState<SoapDraft>({ subjective: "", objective: "", assessment: "", plan: "" });
