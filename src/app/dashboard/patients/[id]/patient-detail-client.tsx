@@ -315,7 +315,7 @@ export function PatientDetailClient({
     facturacion: invoices.length,
   };
 
-  // ─── Consulta activa (audit Opción C ajustes 2 y 5) ─────────────
+  // ─── Consulta activa (audit Opción C ajustes 2, 5 y 6) ─────────────
   const consultAppointmentId = searchParams.get("appointment");
   const activeAppointment = useMemo(
     () =>
@@ -326,7 +326,7 @@ export function PatientDetailClient({
   );
   const isConsultActive = activeAppointment !== null;
 
-  // Borrador SOAP local (commit 4: solo UI; commit 6 wire al endpoint)
+  const [clinicalNoteId, setClinicalNoteId] = useState<string | null>(null);
   const [soapDraft, setSoapDraft] = useState<SoapDraft>({
     subjective: "",
     objective: "",
@@ -335,15 +335,155 @@ export function PatientDetailClient({
     attachments: [],
   });
 
-  const handleEndConsult = useCallback(() => {
-    // En commit 6 esto llama PATCH /api/appointments/[id]/complete
+  // Al activarse la consulta, crear (o reutilizar) el draft note en server.
+  useEffect(() => {
+    if (!isConsultActive || !activeAppointment) return;
+    if (clinicalNoteId) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch("/api/clinical-notes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            patientId: patient.id,
+            appointmentId: activeAppointment.id,
+            doctorId: activeAppointment.doctorId ?? undefined,
+          }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error ?? "create_failed");
+        }
+        const data = await res.json();
+        if (cancelled) return;
+        setClinicalNoteId(data.note.id);
+        // Hidrata el draft con cualquier contenido previo (por si recargó la página).
+        const note = data.note;
+        if (note.subjective || note.objective || note.assessment || note.plan) {
+          setSoapDraft((d) => ({
+            subjective: note.subjective ?? d.subjective,
+            objective: note.objective ?? d.objective,
+            assessment: note.assessment ?? d.assessment,
+            plan: note.plan ?? d.plan,
+            attachments: note.specialtyData?.attachments ?? d.attachments,
+          }));
+        }
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "No se pudo crear borrador",
+        );
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [isConsultActive, activeAppointment, clinicalNoteId, patient.id]);
+
+  const handleSaveDraft = useCallback(async (d: SoapDraft) => {
+    setSoapDraft(d);
+    if (!clinicalNoteId) return;
+    try {
+      await fetch(`/api/clinical-notes/${clinicalNoteId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subjective: d.subjective,
+          objective: d.objective,
+          assessment: d.assessment,
+          plan: d.plan,
+        }),
+      });
+    } catch {
+      /* el editor maneja su propio toast si fuera crítico; auto-save silencioso */
+    }
+  }, [clinicalNoteId]);
+
+  const handleAttach = useCallback(
+    async (file: File): Promise<{ id: string; name: string; mime: string } | null> => {
+      if (!clinicalNoteId) return null;
+      try {
+        // Subir vía /api/xrays (endpoint existente para uploads de paciente).
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("patientId", patient.id);
+        formData.append("category", file.type.startsWith("image/") ? "PHOTO_INTRAORAL" : "OTHER");
+        const upRes = await fetch("/api/xrays", { method: "POST", body: formData });
+        if (!upRes.ok) {
+          const body = await upRes.json().catch(() => ({}));
+          throw new Error(body.error ?? "upload_failed");
+        }
+        const uploaded = await upRes.json();
+
+        // Vincular a la nota.
+        const linkRes = await fetch(`/api/clinical-notes/${clinicalNoteId}/attach`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileId: uploaded.id }),
+        });
+        if (!linkRes.ok) {
+          const body = await linkRes.json().catch(() => ({}));
+          throw new Error(body.error ?? "attach_failed");
+        }
+        toast.success("Archivo adjunto");
+        return {
+          id: uploaded.id,
+          name: uploaded.name ?? file.name,
+          mime: uploaded.mimeType ?? file.type,
+        };
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "No se pudo adjuntar");
+        return null;
+      }
+    },
+    [clinicalNoteId, patient.id],
+  );
+
+  const handleEndConsult = useCallback(async () => {
+    if (!activeAppointment) {
+      setConsultClosed(true);
+      return;
+    }
+    try {
+      // Guarda el draft final si aún no se persistió (debounce pendiente).
+      if (clinicalNoteId) {
+        await fetch(`/api/clinical-notes/${clinicalNoteId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subjective: soapDraft.subjective,
+            objective: soapDraft.objective,
+            assessment: soapDraft.assessment,
+            plan: soapDraft.plan,
+          }),
+        });
+      }
+      // Completa cita + firma nota en una sola transacción server-side.
+      const res = await fetch(`/api/appointments/${activeAppointment.id}/complete`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clinicalNoteId: clinicalNoteId ?? undefined,
+          signNote: true,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "complete_failed");
+      }
+      toast.success("Consulta completada y firmada");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo completar");
+      return;
+    }
     setConsultClosed(true);
+    setClinicalNoteId(null);
     const params = new URLSearchParams(searchParams.toString());
     params.delete("appointment");
     const qs = params.toString();
     router.replace(qs ? `?${qs}` : window.location.pathname);
-    toast.success("Consulta finalizada (mock — wire en commit 6)");
-  }, [searchParams, router]);
+    router.refresh();
+  }, [activeAppointment, clinicalNoteId, soapDraft, searchParams, router]);
 
   const consultDoctorName =
     activeAppointment?.doctor?.firstName
@@ -439,22 +579,12 @@ export function PatientDetailClient({
                   type: activeAppointment.type,
                 }}
                 initialDraft={soapDraft}
-                onSaveDraft={async (d) => {
-                  setSoapDraft(d);
-                  // commit 6: PATCH /api/clinical-notes/[id]
-                }}
+                onSaveDraft={handleSaveDraft}
                 onComplete={async (d) => {
                   setSoapDraft(d);
-                  handleEndConsult();
+                  await handleEndConsult();
                 }}
-                onAttach={async (file) => {
-                  // commit 6: POST /api/xrays + POST /api/clinical-notes/[id]/attach
-                  return {
-                    id: `local-${Date.now()}`,
-                    name: file.name,
-                    mime: file.type,
-                  };
-                }}
+                onAttach={handleAttach}
               />
             </>
           )}

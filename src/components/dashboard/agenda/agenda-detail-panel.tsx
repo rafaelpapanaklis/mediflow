@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import * as Popover from "@radix-ui/react-popover";
 import { Pencil, MessageCircle, X, Play, AlertTriangle, MoreHorizontal, Check } from "lucide-react";
@@ -37,6 +38,7 @@ function patientInitials(name: string): string {
 
 export function AgendaDetailPanel() {
   const { state, selectAppointment, dispatch } = useAgenda();
+  const router = useRouter();
   const [pendingStatus, setPendingStatus] = useState<AppointmentStatus | null>(null);
   const [waSending, setWaSending] = useState(false);
   const [, startTransition] = useTransition();
@@ -259,7 +261,12 @@ export function AgendaDetailPanel() {
         <button
           type="button"
           className={`${styles.detailAction} ${styles.primary}`}
-          onClick={() => changeStatus("IN_PROGRESS")}
+          onClick={async () => {
+            await changeStatus("IN_PROGRESS");
+            // Audit Opción C ajuste 6: navegar al expediente con ?appointment
+            // para abrir SOAP editor inline + activar context bar.
+            router.push(`/dashboard/patients/${appt.patient.id}?appointment=${appt.id}`);
+          }}
           disabled={startDisabled}
         >
           <Play size={12} aria-hidden /> Iniciar consulta
