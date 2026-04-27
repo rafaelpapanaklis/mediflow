@@ -8,6 +8,7 @@ import toast from "react-hot-toast";
 import { CardNew }   from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface Props {
   connected:     boolean;
@@ -22,6 +23,7 @@ export function WhatsAppClient({
   connected: initConnected, phoneNumberId: initPhone,
   reminderMsg: initMsg, reminder24h: init24h, reminder1h: init1h, clinicName,
 }: Props) {
+  const askConfirm = useConfirm();
   const [connected,  setConnected]  = useState(initConnected);
   const [step,       setStep]       = useState<"intro" | "config" | "done">(initConnected ? "done" : "intro");
   const [loading,    setLoading]    = useState(false);
@@ -51,7 +53,12 @@ export function WhatsAppClient({
   }
 
   async function disconnect() {
-    if (!confirm("¿Desconectar WhatsApp? Se desactivarán los recordatorios.")) return;
+    if (!(await askConfirm({
+      title: "¿Desconectar WhatsApp?",
+      description: "Se desactivarán los recordatorios automáticos. Puedes reconectar en cualquier momento.",
+      variant: "warning",
+      confirmText: "Desconectar",
+    }))) return;
     setLoading(true);
     try {
       await fetch("/api/whatsapp/connect", { method: "DELETE" });

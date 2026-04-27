@@ -39,6 +39,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { NewPatientModal } from "@/components/dashboard/new-patient-modal";
 import styles from "./patients.module.css";
 
@@ -211,6 +212,7 @@ function computePages(current: number, total: number): Array<number | "..."> {
 
 export function PatientsClient({ doctors }: Props) {
   const router = useRouter();
+  const askConfirm = useConfirm();
 
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
@@ -461,7 +463,12 @@ export function PatientsClient({ doctors }: Props) {
 
   const bulkArchive = async () => {
     if (selected.size === 0) return;
-    if (!confirm(`¿Archivar ${selected.size} pacientes?`)) return;
+    if (!(await askConfirm({
+      title: `¿Archivar ${selected.size} ${selected.size === 1 ? "paciente" : "pacientes"}?`,
+      description: "Los pacientes archivados se ocultan de la lista activa pero conservan su historial clínico.",
+      variant: "warning",
+      confirmText: "Archivar",
+    }))) return;
     const ids = Array.from(selected);
     try {
       await Promise.all(

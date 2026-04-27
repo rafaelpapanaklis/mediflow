@@ -15,6 +15,7 @@ import { KpiCard }   from "@/components/ui/design-system/kpi-card";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { getApptColors } from "@/lib/appointment-colors";
 import toast from "react-hot-toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface Patient { id: string; firstName: string; lastName: string; patientNumber: string; phone?: string | null }
 interface Doctor  { id: string; firstName: string; lastName: string; role: string }
@@ -254,6 +255,7 @@ function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCance
 }
 
 export function AppointmentsClient({ appointments: initialAppts, patients, doctors, currentUserId, clinicId, waConnected }: Props) {
+  const askConfirm = useConfirm();
   const today = new Date();
   const [appts,       setAppts]       = useState<Appt[]>(initialAppts);
   const [view,        setView]        = useState<ViewMode>("month");
@@ -432,7 +434,13 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
 
   // FIX: Verify API response before removing from state
   async function deleteAppt(id: string) {
-    if (!confirm("¿Cancelar esta cita?")) return;
+    if (!(await askConfirm({
+      title: "¿Cancelar esta cita?",
+      description: "El paciente recibirá una notificación si tiene contacto registrado.",
+      variant: "warning",
+      confirmText: "Cancelar cita",
+      cancelText: "No, mantener",
+    }))) return;
     try {
       const res = await fetch(`/api/appointments/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Error al cancelar");

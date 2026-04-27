@@ -5,6 +5,7 @@ import { Plus, X, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface Booking {
   id: string;
@@ -15,6 +16,7 @@ interface Booking {
 }
 
 export function ResourcesClient({ initialBookings }: { initialBookings: Booking[] }) {
+  const askConfirm = useConfirm();
   const [bookings, setBookings] = useState<Booking[]>(initialBookings);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ resourceType: "", resourceName: "", startTime: "", endTime: "" });
@@ -59,7 +61,12 @@ export function ResourcesClient({ initialBookings }: { initialBookings: Booking[
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("¿Eliminar esta reserva?")) return;
+    if (!(await askConfirm({
+      title: "¿Eliminar reserva?",
+      description: "El recurso quedará disponible nuevamente para ese horario.",
+      variant: "danger",
+      confirmText: "Eliminar",
+    }))) return;
     try {
       await fetch(`/api/resources/${id}`, { method: "DELETE" });
       setBookings(prev => prev.filter(b => b.id !== id));

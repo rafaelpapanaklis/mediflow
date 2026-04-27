@@ -10,6 +10,7 @@ import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import toast from "react-hot-toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 type RoleTone = "success" | "info" | "warning" | "brand" | "neutral";
 const ROLE_TONE: Record<string, { tone: RoleTone; label: string }> = {
@@ -219,6 +220,7 @@ function MemberForm({
 interface Props { team: TeamMember[]; currentUserId: string; clinicName: string }
 
 export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Props) {
+  const askConfirm = useConfirm();
   const [team,       setTeam]       = useState<TeamMember[]>(initialTeam);
   const [showNew,    setShowNew]    = useState(false);
   const [editMember, setEditMember] = useState<TeamMember | null>(null);
@@ -307,7 +309,12 @@ export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Pro
 
   async function deleteMember(m: TeamMember) {
     if (m.id === currentUserId) { toast.error("No puedes eliminarte"); return; }
-    if (!confirm(`¿Eliminar a ${m.firstName} ${m.lastName}?`)) return;
+    if (!(await askConfirm({
+      title: `¿Eliminar a ${m.firstName} ${m.lastName}?`,
+      description: "Si tiene citas o registros, será desactivado en lugar de eliminado.",
+      variant: "danger",
+      confirmText: "Eliminar",
+    }))) return;
     try {
       const res = await fetch(`/api/team/${m.id}`, { method:"DELETE" });
       const data = await res.json();

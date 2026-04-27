@@ -5,6 +5,7 @@ import { Plus, X, Search, Dumbbell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface Exercise {
   id: string;
@@ -18,6 +19,7 @@ interface Exercise {
 }
 
 export function ExercisesClient({ initialExercises }: { initialExercises: Exercise[] }) {
+  const askConfirm = useConfirm();
   const [exercises, setExercises] = useState<Exercise[]>(initialExercises);
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
@@ -55,7 +57,12 @@ export function ExercisesClient({ initialExercises }: { initialExercises: Exerci
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("¿Eliminar este ejercicio?")) return;
+    if (!(await askConfirm({
+      title: "¿Eliminar ejercicio?",
+      description: "El ejercicio se quitará del catálogo. Esta acción no se puede deshacer.",
+      variant: "danger",
+      confirmText: "Eliminar",
+    }))) return;
     try {
       const res = await fetch(`/api/inventory/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Error al eliminar");

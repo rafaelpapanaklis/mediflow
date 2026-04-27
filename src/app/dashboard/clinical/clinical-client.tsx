@@ -28,6 +28,7 @@ import {
   findTemplateByShortcut,
   type SoapTemplate,
 } from "@/lib/clinical/soap-templates";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import styles from "./clinical.module.css";
 
 interface Patient {
@@ -128,6 +129,7 @@ export function ClinicalClient(props: Props) {
   const records = props.records ?? [];
   const currentPatientId = props.currentPatientId;
   const router = useRouter();
+  const askConfirm = useConfirm();
 
   const [draft, setDraft] = useState<SoapDraft>({ subjective: "", objective: "", assessment: "", plan: "" });
   const [collapsed, setCollapsed] = useState<Record<SoapKey, boolean>>({
@@ -169,7 +171,7 @@ export function ClinicalClient(props: Props) {
   // Apply template — escribe el contenido pre-escrito en los 4 campos S/O/A/P.
   // Si algún campo ya tiene contenido distinto al template y al placeholder,
   // pide confirmación antes de sobreescribir.
-  const applyTemplate = useCallback((tpl: SoapTemplate) => {
+  const applyTemplate = useCallback(async (tpl: SoapTemplate) => {
     const hasContent =
       (draft.subjective?.trim().length ?? 0) > 0 ||
       (draft.objective?.trim().length  ?? 0) > 0 ||
@@ -177,9 +179,12 @@ export function ClinicalClient(props: Props) {
       (draft.plan?.trim().length       ?? 0) > 0;
 
     if (hasContent) {
-      const ok = window.confirm(
-        `Esta nota ya tiene contenido. ¿Reemplazar con la plantilla "${tpl.name}"?`,
-      );
+      const ok = await askConfirm({
+        title: "¿Reemplazar contenido?",
+        description: `La nota actual tiene texto. La plantilla "${tpl.name}" lo sobrescribirá completamente.`,
+        variant: "warning",
+        confirmText: "Reemplazar",
+      });
       if (!ok) return;
     }
 
@@ -190,7 +195,7 @@ export function ClinicalClient(props: Props) {
       plan:       tpl.p,
     });
     toast.success(`Plantilla "${tpl.name}" cargada`);
-  }, [draft.subjective, draft.objective, draft.assessment, draft.plan]);
+  }, [draft.subjective, draft.objective, draft.assessment, draft.plan, askConfirm]);
 
   // Keyboard shortcuts ⇧1-9 for templates, Ctrl+S save, Ctrl+Enter sign
   useEffect(() => {
@@ -286,7 +291,12 @@ export function ClinicalClient(props: Props) {
       toast.error("La nota está vacía. Llena al menos S/O/A/P antes de firmar.");
       return;
     }
-    if (!confirm("¿Firmar y cerrar esta nota? Una vez firmada queda inalterable.")) return;
+    if (!(await askConfirm({
+      title: "¿Firmar y cerrar nota?",
+      description: "Una vez firmada queda inalterable y se registra como nota oficial en el expediente.",
+      variant: "warning",
+      confirmText: "Firmar y cerrar",
+    }))) return;
 
     setSigning(true);
     try {
@@ -310,7 +320,7 @@ export function ClinicalClient(props: Props) {
     } finally {
       setSigning(false);
     }
-  }, [selectedPatient, draft, icd10List, attachments, router]);
+  }, [selectedPatient, draft, icd10List, attachments, router, askConfirm]);
 
   const startRecording = useCallback(async () => {
     try {

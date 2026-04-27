@@ -24,6 +24,7 @@ import {
 import Link from "next/link";
 import toast from "react-hot-toast";
 import { toScreen, fromScreen, C as ISO_C } from "@/lib/floor-plan/iso";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { getCatalogForClinic } from "@/lib/floor-plan/elements";
 import type {
   ElementType,
@@ -85,6 +86,7 @@ export function ClinicLayoutClient({
   initialMetadata,
   chairs,
 }: Props) {
+  const askConfirm = useConfirm();
   const catalog = useMemo(() => getCatalogForClinic(clinic.category), [clinic.category]);
 
   const [elements, setElements] = useState<LayoutElement[]>(initialElements);
@@ -430,11 +432,14 @@ export function ClinicLayoutClient({
       if (elem.resourceId) {
         const chair = liveChairs.find((c) => c.id === elem.resourceId);
         const chairName = chair?.name ?? "este sillón";
-        alsoDeleteResource = window.confirm(
-          `Vas a quitar "${chairName}" del layout. ¿Eliminar también el Resource de la agenda?\n\n` +
-            `Aceptar = borrar de layout Y de agenda (irreversible).\n` +
-            `Cancelar = solo quitar del layout (el sillón sigue en la agenda).`,
-        );
+        alsoDeleteResource = await askConfirm({
+          title: `¿Eliminar "${chairName}" también de la agenda?`,
+          description:
+            "Confirmar elimina el sillón del layout Y del recurso de agenda (irreversible). Cancelar solo lo quita del layout y mantiene el sillón disponible en la agenda.",
+          variant: "danger",
+          confirmText: "Eliminar de ambos",
+          cancelText: "Solo del layout",
+        });
       }
 
       setElements((prev) => {

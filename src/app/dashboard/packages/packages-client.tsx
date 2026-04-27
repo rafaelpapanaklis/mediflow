@@ -5,6 +5,7 @@ import { Plus, X, Package, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface ServicePkg {
   id: string;
@@ -32,6 +33,7 @@ interface Redemption {
 type Tab = "paquetes" | "clientes";
 
 export function PackagesClient({ initialPackages, initialRedemptions }: { initialPackages: ServicePkg[]; initialRedemptions: Redemption[] }) {
+  const askConfirm = useConfirm();
   const [tab, setTab] = useState<Tab>("paquetes");
   const [packages, setPackages] = useState<ServicePkg[]>(initialPackages);
   const [redemptions, setRedemptions] = useState<Redemption[]>(initialRedemptions);
@@ -58,7 +60,12 @@ export function PackagesClient({ initialPackages, initialRedemptions }: { initia
   }
 
   async function handleDeletePackage(id: string) {
-    if (!confirm("¿Eliminar este paquete?")) return;
+    if (!(await askConfirm({
+      title: "¿Eliminar paquete?",
+      description: "El paquete se quitará del catálogo. Pacientes con redenciones activas no se ven afectados.",
+      variant: "danger",
+      confirmText: "Eliminar",
+    }))) return;
     try {
       const res = await fetch(`/api/packages/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Error al eliminar");

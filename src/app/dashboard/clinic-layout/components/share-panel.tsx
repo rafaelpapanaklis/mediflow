@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import shareStyles from "./share-panel.module.css";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface ShareConfig {
   enabled: boolean;
@@ -30,6 +31,7 @@ export function SharePanel({
   clinicName: string;
   onClose: () => void;
 }) {
+  const askConfirm = useConfirm();
   const [enabled, setEnabled] = useState(initial.enabled);
   const [slug, setSlug] = useState(initial.slug ?? slugify(clinicName));
   const [hasPassword, setHasPassword] = useState(initial.hasPassword);
@@ -89,7 +91,12 @@ export function SharePanel({
   };
 
   const removePassword = async () => {
-    if (!confirm("¿Quitar la contraseña? La URL quedará pública para cualquiera que la conozca.")) return;
+    if (!(await askConfirm({
+      title: "¿Quitar la contraseña?",
+      description: "La URL pública quedará accesible para cualquiera que la conozca, sin protección.",
+      variant: "warning",
+      confirmText: "Quitar contraseña",
+    }))) return;
     setSaving(true);
     try {
       const res = await fetch("/api/clinic-layout/live-config", {
