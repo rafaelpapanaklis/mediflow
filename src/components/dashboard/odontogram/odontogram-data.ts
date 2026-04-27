@@ -38,15 +38,16 @@ export const STATE_LABEL: Record<ToothState, string> = {
   EXTRACCION:  "Extracción",
 };
 
+/** Paleta del mockup (mockups/audit-and-redesign/odontograma-3d.html). */
 export const STATE_COLOR: Record<ToothState, string> = {
-  SANO:        "var(--bg-elev)",
-  CARIES:      "#dc2626",
-  RESINA:      "#2563eb",
-  CORONA:      "#b48a25",
-  ENDODONCIA:  "#dc2626",
-  IMPLANTE:    "#475569",
-  AUSENTE:     "#94a3b8",
-  EXTRACCION:  "#dc2626",
+  SANO:        "#94a3b8", // slate
+  CARIES:      "#dc2626", // red
+  RESINA:      "#3b82f6", // blue
+  CORONA:      "#d97706", // amber/orange
+  ENDODONCIA:  "#7c3aed", // brand purple
+  IMPLANTE:    "#059669", // green
+  AUSENTE:     "#94a3b8", // slate
+  EXTRACCION:  "#ef4444", // bright red
 };
 
 /** Estados ordenados para la toolbar (atajo 1-8). */

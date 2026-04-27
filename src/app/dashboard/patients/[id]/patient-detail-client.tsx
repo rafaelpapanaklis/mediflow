@@ -545,7 +545,11 @@ export function PatientDetailClient({
       />
 
       {/* Layout 3 columnas — audit Opción C ajuste 3 */}
-      <div className={patientDetailStyles.layout}>
+      <div
+        className={`${patientDetailStyles.layout} ${
+          tab === "odontograma" ? patientDetailStyles.layoutWide : ""
+        }`}
+      >
         <QuickNav
           activeTab={tab}
           onSelect={setTab}

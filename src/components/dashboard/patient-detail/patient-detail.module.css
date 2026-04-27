@@ -221,6 +221,12 @@
   gap: 16px;
   align-items: start;
 }
+/* Modifier para tabs que necesitan ancho completo (e.g. Odontograma con
+   16 dientes en 1 fila). Oculta el side-panel y libera 320px+gap. */
+.layoutWide {
+  grid-template-columns: 220px 1fr;
+}
+.layoutWide .sidePanel { display: none; }
 @media (max-width: 1280px) {
   .layout { grid-template-columns: 200px 1fr; }
   .sidePanel { display: none; }

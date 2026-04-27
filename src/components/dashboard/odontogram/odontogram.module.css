@@ -145,26 +145,32 @@
   border: 1px solid var(--border-soft);
   border-radius: 10px;
   padding: 14px;
+  /* Si el ancho disponible no alcanza para 16 dientes en 1 fila, scroll horizontal. */
+  overflow-x: auto;
+  overflow-y: visible;
 }
 .archLabel {
-  font-size: 9px; font-weight: 700;
+  font-size: 10px; font-weight: 600;
   color: var(--text-3);
-  letter-spacing: 0.08em; text-transform: uppercase;
+  letter-spacing: 0.12em; text-transform: uppercase;
   text-align: center;
-  margin: 4px 0;
-  font-family: var(--font-jetbrains-mono, monospace);
+  margin: 6px 0;
 }
+/* 16 dientes en 1 fila por arcada (mockup: nowrap, no wrap). */
 .arch {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: center;
-  gap: 4px;
-  padding: 8px 0;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 0;
+  min-width: max-content;
 }
 .archGap {
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--border-soft) 30%, var(--border-soft) 70%, transparent);
-  margin: 6px 0;
+  border: none;
+  border-top: 1px dashed var(--border-soft);
+  margin: 14px 0;
+  height: 0;
 }
 .loading {
   text-align: center;
@@ -173,75 +179,84 @@
   font-size: 12px;
 }
 
-/* ─────── TOOTH ─────── */
+/* ─────── TOOTH (replica mockup) ─────── */
 .tooth {
+  width: var(--mf-tooth-size);
   display: flex; flex-direction: column;
   align-items: center;
-  width: var(--mf-tooth-size);
+  gap: 4px;
+  padding: 4px 2px;
+  border-radius: 8px;
   position: relative;
   cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.12s;
 }
+.tooth:hover { background: rgba(124, 58, 237, 0.04); }
 .toothNum {
   font-family: var(--font-jetbrains-mono, monospace);
-  font-size: 9px;
-  font-weight: 700;
-  color: var(--text-3);
-  margin-bottom: 2px;
-  letter-spacing: 0.04em;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: 0.02em;
 }
 .toothSvg {
-  width: var(--mf-tooth-size);
-  height: var(--mf-tooth-size);
-  filter: drop-shadow(0 1px 2px rgba(15,10,30,0.05));
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  overflow: visible;
 }
 .toothBase {
   fill: var(--bg-elev);
-  stroke: var(--border-strong);
-  stroke-width: 0.8;
+  stroke: var(--text-3);
+  stroke-width: 1.2;
 }
 .surface {
   fill: var(--bg-elev);
-  stroke: rgba(15,10,30,0.12);
-  stroke-width: 0.5;
+  stroke: var(--text-3);
+  stroke-width: 0.8;
   cursor: pointer;
-  transition: fill 0.15s, stroke-width 0.12s;
+  transition: fill 0.12s, stroke 0.12s, stroke-width 0.12s;
 }
 .surface:hover {
   stroke: var(--brand);
-  stroke-width: 1.2;
+  stroke-width: 1.4;
 }
 .surfaceActive {
-  stroke: rgba(15,10,30,0.25);
+  stroke: rgba(15,10,30,0.4);
 }
 .letter {
-  font-family: var(--font-jetbrains-mono, monospace);
-  font-size: 7px;
-  font-weight: 700;
+  font-family: var(--font-sora, "Sora", sans-serif);
+  font-size: 9px;
+  font-weight: 600;
   fill: var(--text-3);
-  letter-spacing: 0.04em;
 }
 .letterOnActive { fill: #fff; }
 
 /* Selección multi */
-.tooth.selected .toothBase {
-  stroke: var(--brand);
-  stroke-width: 2;
-  stroke-dasharray: 4 2;
+.tooth.selected {
+  background: var(--brand-soft);
+  box-shadow: inset 0 0 0 1px var(--border-brand);
 }
 .tooth.selected .toothNum {
   color: var(--brand);
 }
 
-/* Overlays full-tooth */
+/* Overlays full-tooth — paleta del mockup */
 .ovCrown {
   fill: none;
-  stroke: #b48a25;
+  stroke: #d97706; /* corona = orange */
   stroke-width: 2.4;
   stroke-linejoin: round;
-  filter: drop-shadow(0 0 1.5px rgba(212, 175, 55, 0.55));
+  filter: drop-shadow(0 0 1.5px rgba(217,119,6,0.55));
 }
+.tooth.hasCorona .surface:not(.surfaceActive) {
+  fill: rgba(217,119,6,0.10);
+  stroke: #d97706;
+}
+.tooth.hasCorona .letter:not(.letterOnActive) { fill: #d97706; }
 .ovEndo {
-  stroke: #dc2626;
+  stroke: #7c3aed; /* endo = brand purple */
   stroke-width: 2;
   stroke-linecap: round;
   stroke-dasharray: 3 1.5;
@@ -253,13 +268,13 @@
   opacity: 0.85;
 }
 .ovExtract {
-  stroke: #dc2626;
+  stroke: #ef4444;
   stroke-width: 2.2;
   stroke-linecap: round;
 }
 .tooth.hasAusente .toothBase { fill: rgba(148, 163, 184, 0.18); }
-.tooth.hasAusente .surface { fill: rgba(148, 163, 184, 0.18) !important; pointer-events: none; }
-.tooth.hasAusente .letter { fill: var(--text-4); }
+.tooth.hasAusente .surface { fill: rgba(148, 163, 184, 0.18) !important; stroke: #94a3b8; pointer-events: none; }
+.tooth.hasAusente .letter { fill: #94a3b8; opacity: 0.4; }
 .tooth.hasImplant .surface { fill: var(--bg-elev) !important; }
 .tooth.hasImplant .letter { fill: var(--text-3); }
 
