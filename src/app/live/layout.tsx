@@ -7,16 +7,15 @@ export const metadata: Metadata = {
 
 /**
  * Layout standalone para /live/[slug]. NO incluye sidebar dashboard, NO
- * requiere auth, fullscreen-friendly para TV de sala de espera. Carga
- * la fuente Inter inline.
+ * requiere auth, fullscreen-friendly para TV de sala de espera. La página
+ * misma maneja su background — el wrapper queda neutral para que el
+ * toggle de tema (light/dark) lo controle vía CSS módulo.
  */
 export default function LiveLayout({ children }: { children: React.ReactNode }) {
   return (
     <div
       style={{
         minHeight: "100vh",
-        background: "#0F1A2E",
-        color: "#fff",
         fontFamily: "Inter, system-ui, sans-serif",
       }}
     >

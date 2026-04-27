@@ -417,3 +417,144 @@
   .panel { padding: 24px; font-size: 14px; }
   .footer { font-size: 12px; }
 }
+
+/* ─── DARK MODE — overrides ──────────────────────────────────────────
+   El toggle de la vista En Vivo añade `.dark` en <html>, así que
+   reusamos los selectores `:global(.dark)` que ya usa el resto del
+   proyecto. Pensado para TV de sala de espera: contrastes altos,
+   halos legibles, reloj y stats visibles. Ilustraciones a color
+   (sillón azul, planta verde) NO se tocan — solo canvas/UI. */
+:global(.dark) .live {
+  background: radial-gradient(ellipse at 55% 40%, #1A1630 0%, #121020 60%, #0B0815 100%);
+  color: #E8E8EC;
+}
+:global(.dark) .header {
+  background: #181530;
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+:global(.dark) .brandIcon {
+  background: linear-gradient(135deg, #818cf8, #a78bfa);
+  box-shadow: 0 6px 18px -6px rgba(129, 140, 248, 0.6);
+}
+:global(.dark) .clinicLogo {
+  background: #fff;
+  border-color: rgba(255, 255, 255, 0.10);
+  /* Logos de clínica: si tienen fondo blanco y son monocromos oscuros
+     no se ven en dark. Los dejamos como están — la mayoría son a color
+     con transparencia. Si aparece logo invisible, el owner subirá uno
+     adaptado. */
+}
+:global(.dark) .clinicName { color: #E8E8EC; }
+:global(.dark) .clinicCity { color: #A0A0AB; }
+:global(.dark) .liveBadge { color: #f87171; }
+:global(.dark) .liveBadge span { background: #f87171; }
+:global(.dark) .headerClockBlock {
+  background: rgba(129, 140, 248, 0.15);
+  border-color: rgba(129, 140, 248, 0.35);
+}
+:global(.dark) .headerClockBig { color: #E8E8EC; }
+:global(.dark) .headerClockSec { color: #A0A0AB; }
+:global(.dark) .fullscreenBtn {
+  background: #181530;
+  border-color: rgba(255, 255, 255, 0.10);
+  color: #A0A0AB;
+}
+:global(.dark) .fullscreenBtn:hover {
+  background: rgba(129, 140, 248, 0.15);
+  color: #818cf8;
+  border-color: rgba(129, 140, 248, 0.4);
+}
+
+:global(.dark) .canvasControls {
+  background: rgba(24, 21, 48, 0.85);
+  border-color: rgba(255, 255, 255, 0.10);
+  box-shadow: 0 6px 24px -8px rgba(0, 0, 0, 0.7);
+}
+:global(.dark) .canvasCtrlBtn { color: #A0A0AB; }
+:global(.dark) .canvasCtrlBtn:hover:not(:disabled) {
+  background: rgba(129, 140, 248, 0.18);
+  color: #818cf8;
+}
+:global(.dark) .canvasCtrlZoom { color: #E8E8EC; }
+:global(.dark) .canvasCtrlDivider { background: rgba(255, 255, 255, 0.12); }
+
+:global(.dark) .panel {
+  background: #181530;
+  border-left-color: rgba(255, 255, 255, 0.08);
+  color: #E8E8EC;
+}
+
+:global(.dark) .loadingWrap {
+  background: radial-gradient(ellipse at 55% 40%, #1A1630 0%, #121020 60%, #0B0815 100%);
+  color: #A0A0AB;
+}
+:global(.dark) .errorWrap {
+  background: radial-gradient(ellipse at 55% 40%, #1A1630 0%, #121020 60%, #0B0815 100%);
+}
+:global(.dark) .errorCard {
+  background: #181530;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 48px -16px rgba(0, 0, 0, 0.6);
+}
+:global(.dark) .errorCard h1 { color: #E8E8EC; }
+:global(.dark) .errorCard p { color: #A0A0AB; }
+:global(.dark) .errorCard p code {
+  background: rgba(129, 140, 248, 0.15);
+  color: #c4b5fd;
+}
+:global(.dark) .errorCode {
+  background: #0B0815;
+  color: #c4b5fd;
+}
+:global(.dark) .errorBtn {
+  background: #818cf8;
+  border-color: #818cf8;
+  box-shadow: 0 8px 22px -8px rgba(129, 140, 248, 0.55);
+}
+:global(.dark) .errorBtn:hover:not(:disabled) {
+  background: #a78bfa;
+}
+
+:global(.dark) .unlockCard {
+  background: #181530;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 48px -16px rgba(0, 0, 0, 0.6);
+}
+:global(.dark) .unlockCard h1 { color: #E8E8EC; }
+:global(.dark) .unlockCard p { color: #A0A0AB; }
+:global(.dark) .unlockIcon {
+  background: linear-gradient(135deg, #818cf8, #a78bfa);
+  box-shadow: 0 8px 22px -8px rgba(129, 140, 248, 0.55);
+}
+:global(.dark) .unlockInput {
+  background: #121020;
+  border-color: rgba(255, 255, 255, 0.10);
+  color: #E8E8EC;
+}
+:global(.dark) .unlockInput:focus {
+  background: #181530;
+  border-color: #818cf8;
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.18);
+}
+:global(.dark) .unlockError {
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #f87171;
+}
+
+:global(.dark) .footer {
+  background: #181530;
+  border-top-color: rgba(255, 255, 255, 0.08);
+  color: #6B6B78;
+}
+:global(.dark) .footer strong { color: #818cf8; }
+
+/* ─── Tiles del canvas en dark — más sutiles para que las ilustraciones
+       de muebles a color destaquen sin competencia visual ─── */
+:global(.dark) .tileA { fill: rgba(255, 255, 255, 0.025); }
+:global(.dark) .tileB { fill: rgba(255, 255, 255, 0.012); }
+.tileA { fill: rgba(255, 255, 255, 0.4); }
+.tileB { fill: rgba(232, 244, 250, 0.3); }
+:global(.dark) .tileStroke { stroke: rgba(129, 140, 248, 0.08); }
+.tileStroke { stroke: rgba(74, 144, 226, 0.06); }

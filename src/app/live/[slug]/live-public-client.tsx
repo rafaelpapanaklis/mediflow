@@ -10,6 +10,8 @@ import {
   Plus,
   Minus,
   Crosshair,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { toScreen } from "@/lib/floor-plan/iso";
 import { getCatalogForClinic } from "@/lib/floor-plan/elements";
@@ -90,6 +92,13 @@ export function LivePublicClient({
   const ZOOM_MIN = 0.4;
   const ZOOM_MAX = 4;
   const STORAGE_KEY = `mf:live-view:${slug}`;
+  const THEME_STORAGE_KEY = `live-theme-${slug}`;
+  // Tema light/dark de la vista En Vivo. Se aplica como clase `dark`
+  // sobre <html>, así reusamos los selectores `:global(.dark)` que
+  // ya tiene el resto del proyecto. Se persiste por slug — cada
+  // pantalla puede tener su propio modo (TV de sala oscura vs.
+  // recepción luminosa).
+  const [theme, setTheme] = useState<"light" | "dark">("light");
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
@@ -111,6 +120,32 @@ export function LivePublicClient({
       }
     } catch {/* localStorage bloqueado o JSON inválido — defaults */}
   }, [STORAGE_KEY]);
+
+  // Hidratar tema desde localStorage al montar y aplicarlo sobre <html>.
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+      const initial = stored === "dark" ? "dark" : "light";
+      setTheme(initial);
+      document.documentElement.classList.toggle("dark", initial === "dark");
+    } catch {/* localStorage bloqueado — light por default */}
+    // Limpieza: al desmontar /live (ej. usuario navega), removemos `dark`
+    // para no contaminar otras rutas en el mismo tab.
+    return () => {
+      document.documentElement.classList.remove("dark");
+    };
+  }, [THEME_STORAGE_KEY]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => {
+      const next = prev === "dark" ? "light" : "dark";
+      try {
+        window.localStorage.setItem(THEME_STORAGE_KEY, next);
+      } catch {/* quota / SecurityError — ignore */}
+      document.documentElement.classList.toggle("dark", next === "dark");
+      return next;
+    });
+  }, [THEME_STORAGE_KEY]);
 
   // Persistir zoom/pan con debounce 300ms.
   useEffect(() => {
@@ -500,12 +535,15 @@ export function LivePublicClient({
                   const B = toScreen(c + 1, r, ox, oy);
                   const Cc = toScreen(c + 1, r + 1, ox, oy);
                   const D = toScreen(c, r + 1, ox, oy);
+                  // Fill via CSS class para que el toggle dark mode pueda
+                  // swap-ear los colores sin tocar JSX. Inline `fill` ganaba
+                  // a la regla CSS y dejaba el grid blanco en dark.
+                  const tileClass = (c + r) % 2 === 0 ? liveStyles.tileA : liveStyles.tileB;
                   return (
                     <polygon
                       key={`t-${c}-${r}`}
+                      className={`${tileClass} ${liveStyles.tileStroke}`}
                       points={`${A[0]},${A[1]} ${B[0]},${B[1]} ${Cc[0]},${Cc[1]} ${D[0]},${D[1]}`}
-                      fill={(c + r) % 2 === 0 ? "rgba(255,255,255,0.4)" : "rgba(232,244,250,0.3)"}
-                      stroke="rgba(74,144,226,0.06)"
                       strokeWidth={0.5}
                     />
                   );
@@ -574,6 +612,15 @@ export function LivePublicClient({
               aria-label="Ajustar a pantalla"
             >
               <Crosshair size={15} aria-hidden />
+            </button>
+            <button
+              type="button"
+              className={liveStyles.canvasCtrlBtn}
+              onClick={toggleTheme}
+              title={theme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+              aria-label="Cambiar tema"
+            >
+              {theme === "dark" ? <Sun size={15} aria-hidden /> : <Moon size={15} aria-hidden />}
             </button>
             <button
               type="button"
