@@ -17,38 +17,65 @@ export function AgendaSubToolbar() {
     (a) => a.status !== "CANCELLED" && a.status !== "NO_SHOW",
   ).length;
   const inSala = state.appointments.filter((a) => a.status === "CHECKED_IN").length;
-  const pendingCount = state.pendingValidation.length;
+  const pendingFromState = state.appointments.filter(
+    (a) => a.requiresValidation && a.status === "SCHEDULED",
+  ).length;
+  const pendingCount = Math.max(state.pendingValidation.length, pendingFromState);
 
   const isDay = state.viewMode === "day";
   const hasResources = state.resources.length > 0;
   const hasDoctors = state.doctors.some((d) => d.activeInAgenda);
 
-  const stats = (() => {
-    if (state.viewMode === "day") {
-      return [
-        { value: visibleAppts, label: `cita${visibleAppts === 1 ? "" : "s"} hoy` },
-        { value: inSala, label: "en sala" },
-        { value: pendingCount, label: `pendiente${pendingCount === 1 ? "" : "s"} validar` },
-      ];
-    }
-    if (state.viewMode === "week") {
-      return [{ value: visibleAppts, label: "citas esta semana" }];
-    }
-    if (state.viewMode === "month") {
-      return [{ value: visibleAppts, label: "citas en el mes" }];
-    }
-    return [{ value: visibleAppts, label: `cita${visibleAppts === 1 ? "" : "s"}` }];
-  })();
+  const isDayView = state.viewMode === "day";
+  const isWeekView = state.viewMode === "week";
+  const isMonthView = state.viewMode === "month";
 
   return (
     <div className={styles.subToolbar}>
       <div className={styles.subToolbarLeft}>
-        {stats.map((s, i) => (
-          <div key={i} className={styles.subStat}>
-            <strong>{s.value}</strong>
-            {s.label}
+        {isDayView ? (
+          <>
+            <div className={styles.subStat}>
+              <strong>{visibleAppts}</strong>
+              {`cita${visibleAppts === 1 ? "" : "s"} hoy`}
+            </div>
+            <div className={styles.subStat}>
+              <strong>{inSala}</strong>
+              en sala
+            </div>
+            {pendingCount > 0 ? (
+              <button
+                type="button"
+                className={`${styles.subStat} ${styles.clickable} ${styles.warning}`}
+                onClick={() => openModal("validate")}
+                title="Validar citas pendientes"
+              >
+                <strong>{pendingCount}</strong>
+                {`pendiente${pendingCount === 1 ? "" : "s"} validar`}
+              </button>
+            ) : (
+              <div className={styles.subStat}>
+                <strong>{pendingCount}</strong>
+                pendientes validar
+              </div>
+            )}
+          </>
+        ) : isWeekView ? (
+          <div className={styles.subStat}>
+            <strong>{visibleAppts}</strong>
+            citas esta semana
           </div>
-        ))}
+        ) : isMonthView ? (
+          <div className={styles.subStat}>
+            <strong>{visibleAppts}</strong>
+            citas en el mes
+          </div>
+        ) : (
+          <div className={styles.subStat}>
+            <strong>{visibleAppts}</strong>
+            {`cita${visibleAppts === 1 ? "" : "s"}`}
+          </div>
+        )}
       </div>
 
       <div className={styles.subToolbarRight}>

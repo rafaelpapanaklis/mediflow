@@ -44,6 +44,31 @@ export async function patchAppointmentStatus(
   return body.appointment;
 }
 
+/* ─────── Appointment batch validate ─────── */
+
+export interface BatchValidateResult {
+  processed: number;
+  failed: Array<{ id: string; error: string }>;
+}
+
+export async function batchValidateAppointments(
+  action: "confirm" | "reject",
+  appointmentIds: string[],
+  rejectReason?: string,
+): Promise<BatchValidateResult> {
+  const res = await fetch(`/api/appointments/batch-validate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action,
+      appointmentIds,
+      rejectReason,
+      notifyPatients: false,
+    }),
+  });
+  return jsonOrThrow<BatchValidateResult>(res);
+}
+
 /* ─────── Appointment reschedule (drag-to-reschedule M6) ─────── */
 
 export interface RescheduleAppointmentInput {
