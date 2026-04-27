@@ -116,6 +116,16 @@ model Clinic {
   agendaDayEnd        Int             @default(20)
   timezone            String          @default("America/Mexico_City")
 
+  // ── Mi Clínica Visual — vista pública en vivo ──
+  // Cada clínica puede compartir su modo "En Vivo" para mostrar en TV de
+  // sala de espera. URL pública: /live/<liveModeSlug>. Si liveModePassword
+  // está set, los visitantes deben ingresar el password una vez (cookie
+  // unlock 12h). showPatientNames=false → solo iniciales en halos (HIPAA).
+  liveModeSlug             String?  @unique
+  liveModePassword         String?  // bcrypt hash; null = sin protección
+  liveModeEnabled          Boolean  @default(false)
+  liveModeShowPatientNames Boolean  @default(false)
+
   users        User[]
   patients     Patient[]
   appointments Appointment[]
@@ -146,6 +156,7 @@ model Clinic {
   waitlistEntries      WaitlistEntry[]
   inboxThreads         InboxThread[]
   remindersList        Reminder[]
+  clinicLayout         ClinicLayout?
 
   @@map("clinics")
 }
@@ -1113,6 +1124,30 @@ enum ResourceKind {
   CHAIR
   ROOM
   EQUIPMENT
+}
+
+// ═══════════════════════════════════════════════════════════
+// Mi Clínica Visual — layout isométrico 2.5D de la clínica
+// ═══════════════════════════════════════════════════════════
+//
+// 1 layout por clínica. `elements` es un array JSON con:
+//   { id: number, type: string, col: number, row: number, rotation: 0|90|180|270, resourceId?: string }
+// Para tipos "chair" → resourceId apunta al Resource(kind=CHAIR) real;
+// el editor solo coloca/posiciona el sillón existente, no crea uno nuevo.
+// Para tipos non-chair (paredes, puertas, lavabos…) resourceId es null y el
+// id es local al layout.
+model ClinicLayout {
+  id        String   @id @default(cuid())
+  clinicId  String   @unique
+  name      String   @default("Layout principal") @db.VarChar(120)
+  elements  Json     @default("[]")
+  metadata  Json?    // { zoom, panOffset, lastEditAt, gridSize }
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clinic    Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@map("clinic_layouts")
 }
 
 /// Lista de espera de pacientes que quieren adelantar su cita
