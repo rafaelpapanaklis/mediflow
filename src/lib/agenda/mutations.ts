@@ -4,6 +4,8 @@ import type {
   ResourceDTO,
   DoctorColumnDTO,
   ResourceKind,
+  WaitlistEntryDTO,
+  WaitlistPriority,
 } from "./types";
 
 export interface ApiError {
@@ -143,4 +145,54 @@ export async function updateDoctor(
   });
   const body = await jsonOrThrow<DoctorPatchResponse>(res);
   return body.doctor;
+}
+
+/* ─────── Waitlist ─────── */
+
+export async function fetchWaitlist(): Promise<WaitlistEntryDTO[]> {
+  const res = await fetch(`/api/waitlist?status=active`, { cache: "no-store" });
+  const body = await jsonOrThrow<{ entries: WaitlistEntryDTO[] }>(res);
+  return body.entries;
+}
+
+export interface UpdateWaitlistInput {
+  status?: "PENDING" | "FULFILLED" | "DISCARDED";
+  appointmentId?: string;
+  priority?: WaitlistPriority;
+  reason?: string | null;
+  notes?: string | null;
+  preferredWindow?: string | null;
+}
+
+export async function updateWaitlist(
+  id: string,
+  input: UpdateWaitlistInput,
+): Promise<void> {
+  const res = await fetch(`/api/waitlist/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  await jsonOrThrow<{ entry: unknown }>(res);
+}
+
+export interface CreateWaitlistEntryInput {
+  patientId: string;
+  reason?: string | null;
+  priority?: WaitlistPriority;
+  preferredDoctorId?: string;
+  preferredWindow?: string;
+  notes?: string;
+}
+
+export async function createWaitlistEntry(
+  input: CreateWaitlistEntryInput,
+): Promise<WaitlistEntryDTO> {
+  const res = await fetch(`/api/waitlist`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const body = await jsonOrThrow<{ entry: WaitlistEntryDTO }>(res);
+  return body.entry;
 }
