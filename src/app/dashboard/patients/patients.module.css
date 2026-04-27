@@ -456,6 +456,50 @@
   color: #fff;
 }
 
+/* ─── Checkbox real (input type=checkbox) — usado por bulk select.
+       appearance:none + custom border/check para mantener look custom
+       sin perder accesibilidad nativa (Tab focus, Space toggle, anuncio
+       de estado a screen readers). ─── */
+.bulkCheckbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-elev);
+  cursor: pointer;
+  margin: 0;
+  display: inline-block;
+  vertical-align: middle;
+  position: relative;
+  opacity: 0.4;
+  transition: opacity 0.12s, background 0.12s, border-color 0.12s;
+}
+.table tbody tr:hover .bulkCheckbox,
+.rowSelected .bulkCheckbox { opacity: 1; }
+.bulkCheckbox:checked {
+  opacity: 1;
+  background: var(--brand);
+  border-color: var(--brand);
+}
+.bulkCheckbox:checked::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 0px;
+  width: 6px;
+  height: 11px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.bulkCheckbox:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
 /* Avatar + nombre */
 .patientCell {
   display: flex;

@@ -620,18 +620,22 @@ export function PatientsClient({ doctors }: Props) {
               />
               <div className={styles.dropdown}>
                 <div className={styles.dropdownLabel}>Mostrar columnas</div>
-                {ALL_COLUMNS.map((c) => (
-                  <label key={c.id} className={styles.dropdownItem}>
-                    <input
-                      type="checkbox"
-                      checked={columnsVisible.includes(c.id)}
-                      disabled={c.required}
-                      onChange={() => toggleColumn(c.id)}
-                    />
-                    <span>{c.label}</span>
-                    {c.required && <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--text-4)" }}>fija</span>}
-                  </label>
-                ))}
+                {ALL_COLUMNS.map((c) => {
+                  const inputId = `col-toggle-${c.id}`;
+                  return (
+                    <label key={c.id} htmlFor={inputId} className={styles.dropdownItem}>
+                      <input
+                        id={inputId}
+                        type="checkbox"
+                        checked={columnsVisible.includes(c.id)}
+                        disabled={c.required}
+                        onChange={() => toggleColumn(c.id)}
+                      />
+                      <span>{c.label}</span>
+                      {c.required && <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--text-4)" }}>fija</span>}
+                    </label>
+                  );
+                })}
               </div>
             </>
           )}
@@ -925,14 +929,15 @@ function PatientsTable({
         <thead>
           <tr>
             <th className={styles.colCheckbox}>
-              <span
-                className={`${styles.checkbox} ${allSelected ? styles.checkboxChecked : ""}`}
-                role="checkbox"
-                aria-checked={allSelected}
-                onClick={onToggleAll}
-              >
-                {allSelected && "✓"}
-              </span>
+              {/* Checkbox real (no <span role>): accesible por teclado
+                  con Tab + Space, anuncia estado a lectores de pantalla. */}
+              <input
+                type="checkbox"
+                className={styles.bulkCheckbox}
+                checked={allSelected}
+                onChange={onToggleAll}
+                aria-label="Seleccionar todos los pacientes"
+              />
             </th>
             {visibleCol("patient") && <SortHeader label="Paciente" col="name" sortCol={sortCol} sortDir={sortDir} onSort={onSort} />}
             {visibleCol("contact") && <th>Contacto</th>}
@@ -1019,14 +1024,20 @@ function PatientRowComp({
       style={{ cursor: "pointer" }}
     >
       <td className={styles.colCheckbox} data-no-row>
-        <span
-          className={`${styles.checkbox} ${isSelected ? styles.checkboxChecked : ""}`}
-          role="checkbox"
-          aria-checked={isSelected}
-          onClick={(e) => { e.stopPropagation(); onToggle(p.id, idx, e.shiftKey); }}
-        >
-          {isSelected && "✓"}
-        </span>
+        {/* Checkbox real con name accesible. onClick captura shiftKey
+            para multi-selección rango (mouse). Con teclado el toggle
+            es individual via Space, que es comportamiento estándar. */}
+        <input
+          type="checkbox"
+          className={styles.bulkCheckbox}
+          checked={isSelected}
+          onChange={() => { /* controlled — onClick maneja la lógica */ }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle(p.id, idx, e.shiftKey);
+          }}
+          aria-label={`Seleccionar paciente ${p.firstName} ${p.lastName}`}
+        />
       </td>
       {visibleCol("patient") && (
         <td>
