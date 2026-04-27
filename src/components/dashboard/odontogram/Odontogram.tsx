@@ -8,7 +8,9 @@ import {
   Keyboard,
   X,
   ChevronDown,
+  History,
 } from "lucide-react";
+import * as Popover from "@radix-ui/react-popover";
 import {
   FULL_TOOTH_STATES,
   LOWER_FDI,
@@ -67,6 +69,16 @@ interface LastAction {
   state: ToothState;
 }
 
+interface HistorySnapshot {
+  id: string;
+  appointmentId: string;
+  snapshotAt: string;
+  entries: ServerEntry[];
+  appointmentDate: string;
+  appointmentType: string | null;
+  doctorName: string | null;
+}
+
 /** Lee la respuesta de forma robusta: intenta JSON, cae a texto, nunca tira por
  *  "Unexpected end of JSON input" cuando el body está vacío o no es JSON válido
  *  (e.g. 500 con HTML, 503 con migración pendiente, 204 sin body). */
@@ -92,7 +104,7 @@ async function readErrorMessage(res: Response, fallback: string): Promise<string
   return `${fallback} (HTTP ${res.status})`;
 }
 
-export function Odontogram({ patientId, readOnly = false }: OdontogramProps) {
+export function Odontogram({ patientId, readOnly: readOnlyProp = false }: OdontogramProps) {
   const [entries, setEntries] = useState<ServerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeMode, setActiveMode] = useState<ToothState | null>(null);
@@ -102,7 +114,39 @@ export function Odontogram({ patientId, readOnly = false }: OdontogramProps) {
   const [lastAction, setLastAction] = useState<LastAction | null>(null);
   const [pending, setPending] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<HistorySnapshot[]>([]);
+  const [viewingSnapshotId, setViewingSnapshotId] = useState<string | null>(null);
   const inflightRef = useRef<AbortController | null>(null);
+
+  /** Fetch del historial de snapshots (lazy: solo al abrir el dropdown). */
+  const loadHistory = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/patients/${patientId}/odontogram-history`, { cache: "no-store" });
+      if (!res.ok) throw new Error(await readErrorMessage(res, "No se pudo cargar historial"));
+      const { data } = await safeJson<{ snapshots: HistorySnapshot[] }>(res);
+      setHistory(data?.snapshots ?? []);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error de historial");
+    }
+  }, [patientId]);
+
+  // Carga el historial la primera vez que se abre el popover.
+  useEffect(() => {
+    if (historyOpen && history.length === 0) void loadHistory();
+  }, [historyOpen, history.length, loadHistory]);
+
+  /** Cuando viewingSnapshotId !== null, mostramos las entries del snapshot
+   *  en lugar de las entries vivas. Toolbar deshabilitada (read-only forzado). */
+  const viewingSnapshot = useMemo(
+    () => (viewingSnapshotId ? history.find((s) => s.id === viewingSnapshotId) ?? null : null),
+    [viewingSnapshotId, history],
+  );
+  const displayEntries: ServerEntry[] = viewingSnapshot?.entries ?? entries;
+  const isHistoryView = viewingSnapshot !== null;
+  // Local readOnly = prop || isHistoryView; todas las callbacks aguas abajo
+  // que ya leen `readOnly` automáticamente respetan el modo histórico.
+  const readOnly = readOnlyProp || isHistoryView;
 
   // Inicial fetch
   useEffect(() => {
@@ -125,18 +169,21 @@ export function Odontogram({ patientId, readOnly = false }: OdontogramProps) {
     return () => { cancelled = true; };
   }, [patientId]);
 
-  // Map indexado para render
-  const teethMap = useMemo(() => entriesToMap(entries), [entries]);
+  // Map indexado para render (snapshot histórico tiene precedencia sobre live).
+  const teethMap = useMemo(
+    () => entriesToMap(displayEntries),
+    [displayEntries],
+  );
 
-  // Stats (count por estado)
+  // Stats (count por estado) — del snapshot actualmente mostrado.
   const stats = useMemo(() => {
     const counts: Record<ToothState, number> = {
       SANO: 0, CARIES: 0, RESINA: 0, CORONA: 0,
       ENDODONCIA: 0, IMPLANTE: 0, AUSENTE: 0, EXTRACCION: 0,
     };
-    for (const e of entries) counts[e.state]++;
+    for (const e of displayEntries) counts[e.state]++;
     return counts;
-  }, [entries]);
+  }, [displayEntries]);
 
   // Plan tratamiento sugerido (heurística)
   const plan = useMemo(() => {
@@ -368,6 +415,70 @@ export function Odontogram({ patientId, readOnly = false }: OdontogramProps) {
           ))}
         </ul>
         <div className={styles.summaryRight}>
+          {/* Historial de snapshots */}
+          <Popover.Root open={historyOpen} onOpenChange={setHistoryOpen}>
+            <Popover.Trigger asChild>
+              <button
+                type="button"
+                className={`${styles.planToggle} ${isHistoryView ? styles.open : ""}`}
+                aria-haspopup="menu"
+                aria-expanded={historyOpen}
+                title="Ver historial del odontograma"
+              >
+                <History size={11} aria-hidden />
+                Historial
+                <ChevronDown size={11} aria-hidden />
+              </button>
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Content align="end" sideOffset={6} className={styles.historyPopover}>
+                {history.length === 0 ? (
+                  <div className={styles.historyEmpty}>
+                    Aún no hay snapshots. Se crearán al cerrar consultas.
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className={`${styles.historyItem} ${!isHistoryView ? styles.active : ""}`}
+                      onClick={() => {
+                        setViewingSnapshotId(null);
+                        setHistoryOpen(false);
+                      }}
+                    >
+                      <span className={styles.historyItemLabel}>Estado actual</span>
+                      <span className={styles.historyItemDate}>vivo</span>
+                    </button>
+                    <div className={styles.historyDivider} aria-hidden />
+                    {history.map((s) => {
+                      const dt = new Date(s.snapshotAt);
+                      const dateLabel = new Intl.DateTimeFormat("es-MX", {
+                        day: "numeric", month: "short", year: "numeric",
+                      }).format(dt);
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          className={`${styles.historyItem} ${viewingSnapshotId === s.id ? styles.active : ""}`}
+                          onClick={() => {
+                            setViewingSnapshotId(s.id);
+                            setHistoryOpen(false);
+                          }}
+                        >
+                          <span className={styles.historyItemLabel}>
+                            {s.appointmentType ?? "Consulta"}
+                            {s.doctorName ? ` · ${s.doctorName}` : ""}
+                          </span>
+                          <span className={styles.historyItemDate}>{dateLabel}</span>
+                        </button>
+                      );
+                    })}
+                  </>
+                )}
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>
+
           <button
             type="button"
             className={`${styles.planToggle} ${planOpen ? styles.open : ""}`}
@@ -389,6 +500,30 @@ export function Odontogram({ patientId, readOnly = false }: OdontogramProps) {
           </button>
         </div>
       </header>
+
+      {/* Banner cuando se ve snapshot histórico (read-only). */}
+      {isHistoryView && viewingSnapshot && (
+        <div className={styles.historyBanner}>
+          <History size={12} aria-hidden />
+          <span>
+            Viendo snapshot del{" "}
+            <strong>
+              {new Intl.DateTimeFormat("es-MX", {
+                day: "numeric", month: "long", year: "numeric",
+              }).format(new Date(viewingSnapshot.snapshotAt))}
+            </strong>
+            {viewingSnapshot.doctorName ? ` · ${viewingSnapshot.doctorName}` : ""} ·
+            <em> read-only</em>
+          </span>
+          <button
+            type="button"
+            className={styles.historyBannerExit}
+            onClick={() => setViewingSnapshotId(null)}
+          >
+            <X size={11} aria-hidden /> Volver al actual
+          </button>
+        </div>
+      )}
       {planOpen && (
         <div id="odontogram-plan" className={styles.planPanel}>
           <ul className={styles.planList}>

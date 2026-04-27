@@ -271,6 +271,152 @@
   border-color: var(--brand);
   box-shadow: 0 0 0 3px var(--brand-soft);
 }
+
+/* ─────── TREATMENTS MODAL (post-firmar consulta) ─────── */
+.treatmentsModal {
+  width: 100%;
+  max-width: 720px;
+  background: var(--bg-elev);
+  border-radius: 12px;
+  display: flex; flex-direction: column;
+  max-height: 86vh;
+  overflow: hidden;
+  font-family: var(--font-sora, "Sora", sans-serif);
+}
+.treatmentsHead {
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.treatmentsTitle {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 14px; font-weight: 700;
+  color: var(--text-1);
+  margin: 0 0 4px;
+  letter-spacing: -0.01em;
+}
+.treatmentsTitle svg { color: var(--brand); }
+.treatmentsSub {
+  font-size: 11px; color: var(--text-3);
+  margin: 0;
+}
+.treatmentsBody {
+  padding: 12px 18px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+.treatmentsTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.treatmentsTable thead th {
+  text-align: left;
+  font-size: 9px; font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.treatmentsTable tbody td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--text-1);
+  vertical-align: middle;
+}
+.treatmentsTable tbody tr:last-child td { border-bottom: none; }
+.treatmentsName { font-weight: 600; color: var(--text-1); }
+.treatmentsSubtotalCell { font-weight: 700; text-align: right; }
+
+.treatmentsInput {
+  width: 100%;
+  padding: 5px 7px;
+  font-size: 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  color: var(--text-1);
+  font-family: inherit;
+  outline: none;
+}
+.treatmentsInput:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px var(--brand-soft);
+}
+
+.treatmentsRemove {
+  width: 24px; height: 24px;
+  display: grid; place-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.treatmentsRemove:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 25%, transparent);
+}
+
+.treatmentsTotals {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft);
+  display: flex; flex-direction: column;
+  gap: 4px;
+  align-items: stretch;
+}
+.treatmentsTotalsRow {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12px;
+  padding: 4px 0;
+  color: var(--text-2);
+}
+.treatmentsTotalsRow strong { font-weight: 700; color: var(--text-1); }
+.treatmentsTotalRow {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+  font-size: 14px;
+}
+.treatmentsTotalRow strong { color: var(--brand); font-size: 18px; }
+
+.treatmentsFoot {
+  display: flex; justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg);
+}
+.treatmentsCancel {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 8px 14px;
+  font-size: 12px; font-weight: 500;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  color: var(--text-2);
+  cursor: pointer;
+  font-family: inherit;
+}
+.treatmentsCancel:hover {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 25%, transparent);
+}
+.treatmentsCreate {
+  padding: 8px 18px;
+  font-size: 12px; font-weight: 700;
+  background: var(--brand);
+  color: #fff;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: 0.01em;
+  box-shadow: 0 0 0 1px rgba(124,58,237,0.45), 0 4px 14px -4px rgba(124,58,237,0.4);
+}
+.treatmentsCreate:hover:not(:disabled) { background: #8b5cf6; }
+.treatmentsCreate:disabled { opacity: 0.5; cursor: not-allowed; }
 @media (max-width: 1024px) {
   .mobileTabSelect { display: flex; }
 }

@@ -420,6 +420,101 @@
   border: 1px solid var(--border-soft);
   border-radius: 8px;
 }
+
+/* Historial popover */
+.historyPopover {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px -6px rgba(15,10,30,0.18);
+  padding: 4px;
+  z-index: 250;
+  min-width: 240px;
+  max-height: 320px;
+  overflow-y: auto;
+  font-family: var(--font-sora, "Sora", sans-serif);
+}
+.historyEmpty {
+  padding: 10px;
+  font-size: 11px; color: var(--text-3);
+  text-align: center;
+  font-style: italic;
+}
+.historyDivider {
+  height: 1px;
+  background: var(--border-soft);
+  margin: 4px 0;
+}
+.historyItem {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 11px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text-1);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  align-items: center;
+}
+.historyItem:hover { background: var(--bg-elev-2); }
+.historyItem.active {
+  background: var(--brand-soft);
+  color: var(--brand);
+  border-color: var(--border-brand);
+  font-weight: 600;
+}
+.historyItemLabel {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.historyItemDate {
+  font-family: var(--font-jetbrains-mono, monospace);
+  font-size: 10px;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.historyItem.active .historyItemDate { color: var(--brand); }
+
+/* Banner read-only cuando se ve snapshot histórico */
+.historyBanner {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 12px;
+  margin-bottom: 10px;
+  background: color-mix(in srgb, var(--info) 8%, var(--bg-elev));
+  border: 1px solid color-mix(in srgb, var(--info) 30%, transparent);
+  border-radius: 7px;
+  font-size: 11px;
+  color: var(--text-1);
+}
+.historyBanner svg { color: var(--info); flex-shrink: 0; }
+.historyBanner em {
+  font-style: normal;
+  color: var(--info);
+  font-weight: 700;
+  margin-left: 4px;
+}
+.historyBannerExit {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px;
+  font-size: 11px; font-weight: 500;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  color: var(--text-2);
+  cursor: pointer;
+  font-family: inherit;
+}
+.historyBannerExit:hover {
+  border-color: var(--border-brand);
+  color: var(--brand);
+}
 .planList {
   list-style: none;
   margin: 0; padding: 0;

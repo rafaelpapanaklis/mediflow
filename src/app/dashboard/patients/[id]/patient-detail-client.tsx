@@ -8,6 +8,7 @@ import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/util
 import { ageFromDob, fmtMXN } from "@/lib/format";
 import { Odontogram } from "@/components/dashboard/odontogram/Odontogram";
 import { HeroCard } from "@/components/dashboard/patient-detail/hero-card";
+import { TreatmentsModal, type SuggestedTreatment } from "@/components/dashboard/patient-detail/treatments-modal";
 import { QuickNav } from "@/components/dashboard/patient-detail/quick-nav";
 import { SideCards } from "@/components/dashboard/patient-detail/side-cards";
 import { ConsultBar } from "@/components/dashboard/patient-detail/consult-bar";
@@ -102,6 +103,11 @@ export function PatientDetailClient({
   const [tab, setTab]         = useState("resumen");
   const [consultPaused, setConsultPaused] = useState(false);
   const [consultClosed, setConsultClosed] = useState(false);
+  const [treatmentsModal, setTreatmentsModal] = useState<{
+    open: boolean;
+    appointmentId: string;
+    treatments: SuggestedTreatment[];
+  }>({ open: false, appointmentId: "", treatments: [] });
   const [records, setRecords] = useState(initialRecords);
   const [showEdit, setShowEdit] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -460,7 +466,8 @@ export function PatientDetailClient({
           }),
         });
       }
-      // Completa cita + firma nota en una sola transacción server-side.
+      // Completa cita + firma nota + crea snapshot odontograma + diff →
+      // suggestedTreatments en respuesta (transacción server-side).
       const res = await fetch(`/api/appointments/${activeAppointment.id}/complete`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -473,7 +480,17 @@ export function PatientDetailClient({
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error ?? "complete_failed");
       }
+      const data = await res.json().catch(() => ({}));
       toast.success("Consulta completada y firmada");
+      // Si el server detectó tratamientos, abrir el modal de facturación.
+      const suggested: SuggestedTreatment[] = data.suggestedTreatments ?? [];
+      if (suggested.length > 0) {
+        setTreatmentsModal({
+          open: true,
+          appointmentId: activeAppointment.id,
+          treatments: suggested,
+        });
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "No se pudo completar");
       return;
@@ -1261,6 +1278,18 @@ export function PatientDetailClient({
           onCharge={() => setTab("facturacion")}
         />
       </div>
+
+      {/* Treatments detected modal — post-firmar consulta */}
+      <TreatmentsModal
+        open={treatmentsModal.open}
+        appointmentId={treatmentsModal.appointmentId}
+        initialTreatments={treatmentsModal.treatments}
+        onClose={() => setTreatmentsModal((m) => ({ ...m, open: false }))}
+        onInvoiced={() => {
+          setTreatmentsModal((m) => ({ ...m, open: false }));
+          router.refresh();
+        }}
+      />
 
       {/* Edit patient modal */}
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
