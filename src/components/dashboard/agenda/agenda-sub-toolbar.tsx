@@ -21,7 +21,7 @@ export function AgendaSubToolbar() {
 
   const isDay = state.viewMode === "day";
   const hasResources = state.resources.length > 0;
-  const hasDoctors = state.doctors.length > 0;
+  const hasDoctors = state.doctors.some((d) => d.activeInAgenda);
 
   const stats = (() => {
     if (state.viewMode === "day") {

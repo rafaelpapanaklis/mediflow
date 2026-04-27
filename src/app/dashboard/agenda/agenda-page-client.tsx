@@ -127,7 +127,9 @@ function computeColumns(
   }
 
   if (state.columnMode === "doctor") {
-    return state.doctors.map((d) => {
+    return state.doctors
+      .filter((d) => d.activeInAgenda)
+      .map((d) => {
       const apptsHere = state.appointments.filter((a) => a.doctor?.id === d.id);
       return {
         key: `doctor:${d.id}`,

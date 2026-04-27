@@ -164,7 +164,14 @@ export async function fetchActiveDoctors(
 ): Promise<DoctorColumnDTO[]> {
   const users = await prisma.user.findMany({
     where: { clinicId, role: "DOCTOR", isActive: true },
-    select: { id: true, firstName: true, lastName: true, color: true },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      color: true,
+      avatarUrl: true,
+      agendaActive: true,
+    },
     orderBy: { firstName: "asc" },
   });
 
@@ -173,6 +180,8 @@ export async function fetchActiveDoctors(
     displayName: `${u.firstName} ${u.lastName}`.trim(),
     shortName: professionalShortName(u, category),
     color: u.color ?? null,
+    avatarUrl: u.avatarUrl ?? null,
+    activeInAgenda: u.agendaActive,
   }));
 }
 

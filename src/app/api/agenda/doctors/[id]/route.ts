@@ -11,8 +11,7 @@ const PatchSchema = z
       .string()
       .regex(/^#[0-9a-fA-F]{6,8}$/, "color must be a hex code")
       .optional(),
-    firstName: z.string().trim().min(1).max(120).optional(),
-    lastName: z.string().trim().min(1).max(120).optional(),
+    activeInAgenda: z.boolean().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, "no fields to update");
 
@@ -52,14 +51,14 @@ export async function PATCH(req: Request, { params }: Params) {
     where: { id: params.id },
     data: {
       ...(parsed.data.color !== undefined ? { color: parsed.data.color } : {}),
-      ...(parsed.data.firstName !== undefined ? { firstName: parsed.data.firstName } : {}),
-      ...(parsed.data.lastName !== undefined ? { lastName: parsed.data.lastName } : {}),
+      ...(parsed.data.activeInAgenda !== undefined
+        ? { agendaActive: parsed.data.activeInAgenda }
+        : {}),
     },
     select: {
       id: true,
-      firstName: true,
-      lastName: true,
       color: true,
+      agendaActive: true,
     },
   });
 

@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import toast from "react-hot-toast";
-import { Trash2, Plus, GripVertical, Info } from "lucide-react";
+import { Trash2, Plus, GripVertical } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useAgenda } from "./agenda-provider";
 import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
@@ -402,70 +402,70 @@ function DoctorsPanel() {
 
   return (
     <>
-      <div
-        className={styles.detailAlerts}
-        style={{ margin: "0 0 10px", borderColor: "var(--border-soft)", background: "var(--bg-elev-2)" }}
-      >
-        <div
-          className={styles.detailAlertsTitle}
-          style={{ color: "var(--text-2)" }}
-        >
-          <Info size={12} aria-hidden /> Crear doctores
+      {state.doctors.length === 0 ? (
+        <div className={styles.modalEmpty}>
+          No hay doctores en esta clínica.{" "}
+          <a className={styles.modalLink} href="/dashboard/team">
+            Invítalos desde Equipo →
+          </a>
         </div>
-        <div className={styles.detailAlertsContent}>
-          Para añadir un doctor, invítalo desde la sección Equipo. Aquí solo
-          puedes editar nombre y color.
-        </div>
-      </div>
-      {state.doctors.length === 0 && (
-        <div className={styles.modalEmpty}>No hay doctores configurados.</div>
+      ) : (
+        <>
+          {state.doctors.map((d) => (
+            <DoctorRow key={d.id} doctor={d} />
+          ))}
+          <a className={styles.modalHelperLink} href="/dashboard/team">
+            Para invitar nuevos doctores ve a Equipo →
+          </a>
+        </>
       )}
-      {state.doctors.map((d) => (
-        <DoctorRow key={d.id} doctor={d} />
-      ))}
     </>
   );
 }
 
 function DoctorRow({ doctor }: { doctor: DoctorColumnDTO }) {
   const { dispatch } = useAgenda();
-  const [name, setName] = useState(doctor.shortName);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [savingActive, setSavingActive] = useState(false);
   const color = doctorColorFor(doctor.id, doctor.color);
 
-  async function commit(patch: Partial<DoctorColumnDTO>) {
+  async function setColor(nextColor: string) {
     const original = doctor;
-    const optimistic: DoctorColumnDTO = {
-      ...doctor,
-      shortName: name,
-      displayName: name,
-      ...patch,
-    };
+    const optimistic: DoctorColumnDTO = { ...doctor, color: nextColor };
     dispatch({ type: "UPSERT_DOCTOR", doctor: optimistic });
-
     try {
-      const apiPatch: { color?: string; firstName?: string } = {};
-      if (patch.color !== undefined && patch.color !== null) {
-        apiPatch.color = patch.color;
-      }
-      if (patch.shortName !== undefined && patch.shortName !== null) {
-        apiPatch.firstName = patch.shortName.replace(/^Dr\.\s*/, "");
-      } else if (name !== doctor.shortName) {
-        apiPatch.firstName = name.replace(/^Dr\.\s*/, "");
-      }
-
-      if (Object.keys(apiPatch).length === 0) return;
-
-      await updateDoctor(doctor.id, apiPatch);
-      toast.success("Doctor actualizado");
+      await updateDoctor(doctor.id, { color: nextColor });
+      toast.success("Color actualizado");
     } catch (err) {
       dispatch({ type: "UPSERT_DOCTOR", doctor: original });
-      setName(original.shortName);
       const reason =
         (err as { reason?: string; error?: string })?.reason ??
         (err as { error?: string })?.error ??
         "No se pudo guardar";
       toast.error(reason);
+    }
+  }
+
+  async function toggleActive() {
+    if (savingActive) return;
+    const original = doctor;
+    const next = !doctor.activeInAgenda;
+    setSavingActive(true);
+    dispatch({
+      type: "UPSERT_DOCTOR",
+      doctor: { ...doctor, activeInAgenda: next },
+    });
+    try {
+      await updateDoctor(doctor.id, { activeInAgenda: next });
+    } catch (err) {
+      dispatch({ type: "UPSERT_DOCTOR", doctor: original });
+      const reason =
+        (err as { reason?: string; error?: string })?.reason ??
+        (err as { error?: string })?.error ??
+        "No se pudo guardar";
+      toast.error(reason);
+    } finally {
+      setSavingActive(false);
     }
   }
 
@@ -476,7 +476,16 @@ function DoctorRow({ doctor }: { doctor: DoctorColumnDTO }) {
         style={{ background: color }}
         aria-hidden
       >
-        {doctorInitials(name)}
+        {doctor.avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={doctor.avatarUrl}
+            alt=""
+            style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }}
+          />
+        ) : (
+          doctorInitials(doctor.shortName)
+        )}
       </span>
       <span style={{ position: "relative" }}>
         <span
@@ -497,7 +506,7 @@ function DoctorRow({ doctor }: { doctor: DoctorColumnDTO }) {
                 }`}
                 style={{ background: c }}
                 onClick={() => {
-                  void commit({ color: c });
+                  void setColor(c);
                   setPickerOpen(false);
                 }}
                 role="button"
@@ -507,14 +516,22 @@ function DoctorRow({ doctor }: { doctor: DoctorColumnDTO }) {
           </div>
         )}
       </span>
-      <input
-        type="text"
-        className={styles.modalRowName}
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        onBlur={() => name !== doctor.shortName && void commit({})}
-      />
-      <span aria-hidden />
+      <span className={styles.modalDoctorName}>
+        <span className={styles.modalDoctorDisplayName}>{doctor.shortName}</span>
+        <span className={styles.modalDoctorFullName}>{doctor.displayName}</span>
+      </span>
+      <button
+        type="button"
+        className={`${styles.modalToggle} ${doctor.activeInAgenda ? styles.on : ""}`}
+        onClick={() => void toggleActive()}
+        role="switch"
+        aria-checked={doctor.activeInAgenda}
+        aria-label={doctor.activeInAgenda ? "Quitar de la agenda" : "Mostrar en la agenda"}
+        disabled={savingActive}
+        title={doctor.activeInAgenda ? "Activo en agenda" : "Inactivo en agenda"}
+      >
+        <span className={styles.modalToggleKnob} />
+      </button>
     </div>
   );
 }

@@ -1115,18 +1115,96 @@
 }
 .modalDoctorRow {
   display: grid;
-  grid-template-columns: 24px 22px 1fr auto;
+  grid-template-columns: 28px 22px 1fr auto;
   align-items: center;
-  gap: 8px;
-  padding: 8px;
+  gap: 10px;
+  padding: 8px 10px;
   border: 1px solid var(--border-soft);
   border-radius: 7px;
   background: var(--bg);
   margin-bottom: 4px;
 }
 .modalDoctorAvatar {
-  width: 24px; height: 24px;
+  width: 28px; height: 28px;
   border-radius: 50%;
   display: grid; place-items: center;
-  color: #fff; font-size: 10px; font-weight: 700;
+  color: #fff; font-size: 11px; font-weight: 700;
+  overflow: hidden;
+}
+.modalDoctorName {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.modalDoctorDisplayName {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-family: var(--font-sora, "Sora", sans-serif);
+}
+.modalDoctorFullName {
+  font-size: 10px;
+  color: var(--text-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ─────── Switch active/inactive ─────── */
+.modalToggle {
+  width: 32px; height: 18px;
+  border-radius: 999px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  position: relative;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s;
+}
+.modalToggleKnob {
+  position: absolute;
+  top: 1px; left: 1px;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--bg-elev);
+  box-shadow: 0 1px 2px rgba(15,10,30,0.15);
+  transition: transform 0.18s, background 0.18s;
+}
+.modalToggle.on {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+.modalToggle.on .modalToggleKnob {
+  transform: translateX(14px);
+  background: #fff;
+}
+.modalToggle:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ─────── Helper link bajo lista de doctores ─────── */
+.modalLink {
+  color: var(--brand);
+  text-decoration: none;
+  font-weight: 600;
+}
+.modalLink:hover { text-decoration: underline; }
+
+.modalHelperLink {
+  display: block;
+  margin-top: 8px;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: var(--brand);
+  text-align: center;
+  border: 1px dashed var(--border-soft);
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 500;
+}
+.modalHelperLink:hover {
+  border-color: var(--border-brand);
+  background: var(--brand-softer);
 }

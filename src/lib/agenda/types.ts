@@ -44,7 +44,9 @@ export interface DoctorColumnDTO {
   displayName: string;
   shortName: string;
   avatarSeed?: string;
+  avatarUrl?: string | null;
   color: string | null;
+  activeInAgenda: boolean;
 }
 
 export interface WaitlistEntryDTO {

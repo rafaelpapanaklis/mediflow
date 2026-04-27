@@ -95,20 +95,18 @@ export async function reorderResources(orderedIds: string[]): Promise<void> {
   await jsonOrThrow<{ ok: true }>(res);
 }
 
-/* ─────── Doctor patch ─────── */
+/* ─────── Doctor patch (sólo color y activeInAgenda) ─────── */
 
 export interface UpdateDoctorInput {
   color?: string;
-  firstName?: string;
-  lastName?: string;
+  activeInAgenda?: boolean;
 }
 
 interface DoctorPatchResponse {
   doctor: {
     id: string;
-    firstName: string;
-    lastName: string;
     color: string;
+    agendaActive: boolean;
   };
 }
 

@@ -47,7 +47,7 @@ export function AgendaTopbar() {
 
   const today = todayInTz(state.timezone);
   const isToday = state.dayISO === today;
-  const doctorCount = state.doctors.length;
+  const doctorCount = state.doctors.filter((d) => d.activeInAgenda).length;
   const resourceCount = state.resources.length;
   const filtersActive =
     state.filters.doctorIds.length +

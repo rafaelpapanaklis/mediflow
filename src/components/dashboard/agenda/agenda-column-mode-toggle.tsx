@@ -12,7 +12,8 @@ const OPTIONS: Array<{ value: AgendaColumnMode; label: string }> = [
 export function AgendaColumnModeToggle() {
   const { state, setColumnMode } = useAgenda();
   const hasResources = state.resources.length > 0;
-  const hasDoctors = state.doctors.length > 1;
+  const activeDoctorCount = state.doctors.filter((d) => d.activeInAgenda).length;
+  const hasDoctors = activeDoctorCount > 1;
 
   const available = OPTIONS.filter((o) => {
     if (o.value === "resource") return hasResources;
