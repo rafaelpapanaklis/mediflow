@@ -35,11 +35,24 @@ export async function GET(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  // Si tiene password, requerir cookie unlock.
+  // Si tiene password, requerir cookie unlock. Si responde 401, limpia
+  // proactivamente cookies con paths legacy (los antiguos quedaban con
+  // path /live/<slug> y no llegaban al endpoint API). Esto fuerza al
+  // browser a olvidarlas y el siguiente reload del page mostrará el
+  // PasswordGate en vez de un loop.
   if (clinic.liveModePassword) {
     const cookie = cookies().get(liveCookieName(slug));
     if (cookie?.value !== "1") {
-      return NextResponse.json({ error: "locked" }, { status: 401 });
+      const res = NextResponse.json({ error: "locked" }, { status: 401 });
+      res.cookies.set(liveCookieName(slug), "", {
+        path: `/live/${slug}`,
+        maxAge: 0,
+      });
+      res.cookies.set(liveCookieName(slug), "", {
+        path: "/",
+        maxAge: 0,
+      });
+      return res;
     }
   }
 

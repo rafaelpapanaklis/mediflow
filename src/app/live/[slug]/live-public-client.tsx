@@ -82,7 +82,14 @@ export function LivePublicClient({
           cache: "no-store",
         });
         if (!res.ok) {
-          setError(res.status === 401 ? "locked" : "error");
+          if (res.status === 401) {
+            // Cookie legacy o expirada — recarga la página completa.
+            // El endpoint ya limpió cookies con maxAge=0; el page server
+            // detectará la ausencia y mostrará el PasswordGate.
+            window.location.replace(`/live/${slug}`);
+            return;
+          }
+          if (!cancelled) setError("error");
           return;
         }
         const json = (await res.json()) as ApiResponse;
@@ -145,10 +152,11 @@ export function LivePublicClient({
     }));
   }, [data]);
 
-  if (error === "locked") {
+  // 401 ya hizo replace al page; no hace falta render terminal.
+  if (error === "error") {
     return (
       <div className={liveStyles.errorWrap}>
-        Sesión expirada. Recarga la página para volver a ingresar.
+        No se pudo cargar la vista en vivo. Reintentando…
       </div>
     );
   }
