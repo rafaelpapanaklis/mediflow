@@ -232,6 +232,43 @@
 
 .mainColumn { min-width: 0; }
 
+/* Selector de sección sólo en mobile (<1024) cuando quick-nav está oculto */
+.mobileTabSelect {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 8px 10px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+}
+.mobileTabSelectLabel {
+  font-size: 9px; font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.08em; text-transform: uppercase;
+  flex-shrink: 0;
+}
+.mobileTabSelectInput {
+  flex: 1;
+  font-size: 12px; font-weight: 600;
+  background: var(--bg-elev);
+  color: var(--text-1);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.mobileTabSelectInput:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+@media (max-width: 1024px) {
+  .mobileTabSelect { display: flex; }
+}
+
 /* ─────── QUICK NAV ─────── */
 .quickNav {
   position: sticky;

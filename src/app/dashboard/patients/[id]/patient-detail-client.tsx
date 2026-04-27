@@ -589,21 +589,24 @@ export function PatientDetailClient({
             </>
           )}
 
-          {/* Tabs */}
-          <div className="tabs-new" style={{ marginBottom: 16, overflowX: "auto" }}>
-            {TABS.map(t => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTab(t.id)}
-                className={`tab-new ${tab === t.id ? "tab-new--active" : ""}`}
-              >
-                {t.label}
-                {tabCounts[t.id] !== undefined && (
-                  <span className="tab__count">{tabCounts[t.id]}</span>
-                )}
-              </button>
-            ))}
+          {/* Selector móvil — sólo visible <1024 (donde el quick-nav está oculto). */}
+          <div className={patientDetailStyles.mobileTabSelect}>
+            <label htmlFor="patient-section-select" className={patientDetailStyles.mobileTabSelectLabel}>
+              Sección
+            </label>
+            <select
+              id="patient-section-select"
+              value={tab}
+              onChange={(e) => setTab(e.target.value)}
+              className={patientDetailStyles.mobileTabSelectInput}
+            >
+              {TABS.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                  {tabCounts[t.id] !== undefined ? ` (${tabCounts[t.id]})` : ""}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
