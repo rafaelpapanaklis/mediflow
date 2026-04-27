@@ -778,13 +778,15 @@ export function ClinicLayoutClient({
         const B = toScreen(c + 1, r, ox, oy);
         const Cc = toScreen(c + 1, r + 1, ox, oy);
         const D = toScreen(c, r + 1, ox, oy);
-        const fill = (c + r) % 2 === 0 ? "rgba(255,255,255,0.4)" : "rgba(232,244,250,0.3)";
+        // Fill via CSS class para que dark mode pueda swap-ear los colores
+        // sin tocar el JSX. Inline `fill` ganaba a la regla CSS y dejaba
+        // el grid blanco en dark mode.
+        const tileClass = (c + r) % 2 === 0 ? styles.tileA : styles.tileB;
         cells.push(
           <polygon
             key={`t-${c}-${r}`}
-            className={styles.tile}
+            className={`${styles.tile} ${tileClass}`}
             points={`${A[0]},${A[1]} ${B[0]},${B[1]} ${Cc[0]},${Cc[1]} ${D[0]},${D[1]}`}
-            fill={fill}
           />,
         );
       }
