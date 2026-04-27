@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
 import { Plus, Search, Package, X, Trash2, Minus, Check } from "lucide-react";
 import toast from "react-hot-toast";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
@@ -8,6 +9,7 @@ import { CardNew }   from "@/components/ui/design-system/card-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { fmtMXN }    from "@/lib/format";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 const DENTAL_ICONS = [
   { id: "implante-plateado",  src: "/icons/dental/implante-plateado.png",  label: "Implante plateado"  },
@@ -146,20 +148,11 @@ function IconPicker({ selected, onSelect }: { selected: string; onSelect: (id: s
 }
 
 export function InventoryClient({ initialItems }: { initialItems: Item[]; specialty?: string }) {
+  const askConfirm = useConfirm();
   const [items, setItems]       = useState<Item[]>(initialItems);
   const [tab, setTab]           = useState<StatusTab>("todos");
   const [search, setSearch]     = useState("");
   const [showAdd, setShowAdd]   = useState(false);
-
-  // Esc cierra el modal — patrón consistente con resto del design system.
-  useEffect(() => {
-    if (!showAdd) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setShowAdd(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [showAdd]);
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
   const [editQty, setEditQty]   = useState<Record<string, string>>({});
   const [newItem, setNewItem] = useState({
@@ -265,7 +258,13 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
   }
 
   async function deleteItem(id: string) {
-    if (!confirm("¿Eliminar este artículo?")) return;
+    const item = items.find(i => i.id === id);
+    if (!(await askConfirm({
+      title: `¿Eliminar "${item?.name ?? "artículo"}"?`,
+      description: "El artículo se quitará del inventario. Esta acción no se puede deshacer.",
+      variant: "danger",
+      confirmText: "Eliminar",
+    }))) return;
     await fetch(`/api/inventory/${id}`, { method: "DELETE" });
     setItems(prev => prev.filter(i => i.id !== id));
     toast.success("Eliminado");
@@ -465,34 +464,51 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
         )}
       </CardNew>
 
-      {/* Modal agregar */}
-      {showAdd && (
-        // BUG FIX: el modal se cerraba solo "después de unos segundos".
-        // Causa: el patrón anterior usaba `onClick={() => setShowAdd(false)}`
-        // en el overlay con `e.stopPropagation()` en el modal interior.
-        // Eventos sintéticos de re-render (input focus/blur, select native
-        // picker dismiss, etc.) podían burlar el stopPropagation en algunos
-        // browsers. Reemplazado por el patrón robusto: solo cerrar si el
-        // click landed *directamente* sobre el overlay (target === currentTarget),
-        // sin importar lo que bubblee desde dentro.
-        <div
-          className="modal-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="inventory-add-title"
-          onClick={(e) => { if (e.target === e.currentTarget) setShowAdd(false); }}
-        >
-          <div className="modal">
+      {/* Modal agregar — Radix Dialog. ROOT CAUSE del bug auto-close:
+          el modal anterior usaba un <div className="modal-overlay"> inline
+          dentro del JSX de InventoryClient. Esto significa que vivía
+          dentro del árbol de componentes que re-renderiza cuando el
+          ActiveConsultProvider (en dashboard/layout.tsx) actualiza
+          `elapsedSeconds` cada 1s vía setInterval (cuando hay consulta
+          activa). El context value object no estaba memoizado, lo que
+          dispara re-render en consumidores; el JSX inline del modal se
+          re-evalúa, los handlers se recrean, y la combinación con el
+          <select> nativo + focus/blur del form provocaba que el evento
+          de mouseup llegara al overlay y disparara onClose.
+
+          Radix Dialog renderiza dentro de un Portal (fuera del árbol),
+          maneja focus trap + Esc + click outside con event handlers
+          que escuchan a nivel document con stopPropagation correcto, y
+          su estado interno está aislado de re-renders del padre.
+          Inmune al problema. */}
+      <Dialog.Root open={showAdd} onOpenChange={setShowAdd}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="modal-overlay" />
+          <Dialog.Content
+            className="modal"
+            aria-describedby={undefined}
+            style={{
+              position: "fixed",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              maxWidth: 540,
+              width: "calc(100vw - 32px)",
+              maxHeight: "90vh",
+              zIndex: 101,
+            }}
+          >
             <div className="modal__header">
-              <div id="inventory-add-title" className="modal__title">Nuevo artículo</div>
-              <button
-                onClick={() => setShowAdd(false)}
-                type="button"
-                className="btn-new btn-new--ghost btn-new--sm"
-                aria-label="Cerrar"
-              >
-                <X size={14} />
-              </button>
+              <Dialog.Title className="modal__title">Nuevo artículo</Dialog.Title>
+              <Dialog.Close asChild>
+                <button
+                  type="button"
+                  className="btn-new btn-new--ghost btn-new--sm"
+                  aria-label="Cerrar"
+                >
+                  <X size={14} />
+                </button>
+              </Dialog.Close>
             </div>
             <div className="modal__body">
               <div style={{ marginBottom: 22 }}>
@@ -597,12 +613,14 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
             </div>
 
             <div className="modal__footer">
-              <ButtonNew variant="ghost" type="button" onClick={() => setShowAdd(false)}>Cancelar</ButtonNew>
+              <Dialog.Close asChild>
+                <ButtonNew variant="ghost" type="button">Cancelar</ButtonNew>
+              </Dialog.Close>
               <ButtonNew variant="primary" onClick={addItem}>Agregar artículo</ButtonNew>
             </div>
-          </div>
-        </div>
-      )}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }
