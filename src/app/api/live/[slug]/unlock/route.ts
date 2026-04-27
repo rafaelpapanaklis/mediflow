@@ -45,11 +45,17 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "invalid_password" }, { status: 401 });
   }
 
+  // path: "/" para que el browser envíe el cookie tanto a /live/<slug>
+  // (page server) como a /api/live/<slug> (fetch del cliente). Si lo
+  // limitamos a /live/<slug>, el endpoint API nunca lo ve y retorna 401
+  // → cliente muestra "Sesión expirada" aunque acabamos de desbloquear.
+  // El name del cookie ya contiene el slug, así que múltiples clínicas
+  // mantienen sesiones independientes en el mismo dispositivo.
   cookies().set(liveCookieName(slug), "1", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    path: `/live/${slug}`,
+    path: "/",
     maxAge: LIVE_UNLOCK_TTL_HOURS * 3600,
   });
 
