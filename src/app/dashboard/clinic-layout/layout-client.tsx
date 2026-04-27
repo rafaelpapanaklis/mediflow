@@ -42,6 +42,7 @@ import {
 } from "./components/live-mode";
 import { SharePanel } from "./components/share-panel";
 import { WaitingRoom, type WaitingRoomEntry } from "./components/waiting-room";
+import { WelcomePrompt } from "./components/welcome-prompt";
 import { Share2 } from "lucide-react";
 import styles from "./clinic-layout.module.css";
 
@@ -115,6 +116,12 @@ export function ClinicLayoutClient({
     showPatientNames: clinic.liveModeShowPatientNames,
     hasPassword: false, // detectado al abrir share panel via PATCH response
   });
+  const [welcomeDismissed, setWelcomeDismissed] = useState(initialElements.length > 0);
+  const [chairsState, setChairsState] = useState<Chair[]>(chairs);
+  // En todo el render usamos `liveChairs` como source of truth (puede crecer
+  // tras seed-demo o creación al drag). El prop original `chairs` queda
+  // intacto para no perder referencias.
+  const liveChairs = chairsState;
 
   const nextIdRef = useRef<number>(
     Math.max(0, ...initialElements.map((e) => e.id)) + 1,
@@ -521,12 +528,12 @@ export function ClinicLayoutClient({
   );
   const availableChairs = useMemo(
     () =>
-      chairs.filter(
+      liveChairs.filter(
         (c) =>
           !usedChairIds.has(c.id) ||
           (selectedElement?.resourceId && selectedElement.resourceId === c.id),
       ),
-    [chairs, usedChairIds, selectedElement],
+    [liveChairs, usedChairIds, selectedElement],
   );
 
   const ox = ORIG_X + panOffset.x;
@@ -565,7 +572,7 @@ export function ClinicLayoutClient({
         const [sx, sy] = toScreen(el.col, el.row, ox, oy);
         const isSel = el.id === selectedId;
         const isMoving = el.id === movingId;
-        const chair = el.resourceId ? chairs.find((c) => c.id === el.resourceId) : null;
+        const chair = el.resourceId ? liveChairs.find((c) => c.id === el.resourceId) : null;
         const labelText = td.isChair ? chair?.name ?? el.name ?? "Consultorio" : null;
         return (
           <g
@@ -613,6 +620,33 @@ export function ClinicLayoutClient({
   };
 
   /* ─── Renders ─── */
+
+  // Welcome prompt cuando no hay layout previo (clínica nueva).
+  if (!welcomeDismissed) {
+    return (
+      <>
+        <div className={styles.mobileBlock}>
+          <div className={styles.mobileBlockIcon}>
+            <Monitor size={32} aria-hidden />
+          </div>
+          <h1>Abre en una computadora</h1>
+          <p>El editor requiere ≥ 1024 px de ancho.</p>
+        </div>
+        <div className={styles.welcomeWrap}>
+          <WelcomePrompt
+            onLoaded={(data) => {
+              const els = data.elements as LayoutElement[];
+              setElements(els);
+              setHistory([els]);
+              if (data.chairs.length > 0) setChairsState(data.chairs);
+              setWelcomeDismissed(true);
+              // No marca dirty: el server ya persistió.
+            }}
+          />
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -792,7 +826,7 @@ export function ClinicLayoutClient({
                     const placedChairs = t.isChair
                       ? elements.filter((e) => e.type === t.key && e.resourceId).length
                       : 0;
-                    const totalChairs = t.isChair ? chairs.length : 0;
+                    const totalChairs = t.isChair ? liveChairs.length : 0;
                     return (
                       <div
                         key={t.key}
@@ -859,7 +893,7 @@ export function ClinicLayoutClient({
           {liveMode && (
             <LiveTimeline
               elements={elements}
-              chairs={chairs}
+              chairs={liveChairs}
               viewTime={viewTime}
               appointments={appointments}
               onSeek={setViewTime}
@@ -883,7 +917,7 @@ export function ClinicLayoutClient({
             <>
               <LiveStatusPanel
                 elements={elements}
-                chairs={chairs}
+                chairs={liveChairs}
                 viewTime={viewTime}
                 appointments={appointments}
                 showFullNames={clinic.liveModeShowPatientNames}
@@ -892,7 +926,7 @@ export function ClinicLayoutClient({
                 <WaitingRoom
                   waiting={waitingRoom}
                   appointments={appointments}
-                  chairs={chairs}
+                  chairs={liveChairs}
                 />
               </div>
             </>
@@ -938,7 +972,7 @@ export function ClinicLayoutClient({
                     ))}
                   </select>
                   <div className={styles.propChairHint}>
-                    {chairs.length === 0 ? (
+                    {liveChairs.length === 0 ? (
                       <>No hay sillones registrados. <a href="/dashboard/team">Crea uno en Equipo →</a></>
                     ) : (
                       <>El sillón conecta este elemento con la agenda en modo En Vivo.</>

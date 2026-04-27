@@ -512,7 +512,13 @@
   box-shadow: 0 12px 32px -12px rgba(74, 144, 226, 0.55);
 }
 
+.welcomeWrap {
+  display: block;
+  height: 100vh;
+}
+
 @media (max-width: 1023px) {
   .page { display: none; }
+  .welcomeWrap { display: none; }
   .mobileBlock { display: flex; }
 }
