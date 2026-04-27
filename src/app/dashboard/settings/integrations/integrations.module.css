@@ -5,6 +5,19 @@
   padding: 24px 28px 48px;
   font-family: var(--font-sora, "Sora", sans-serif);
   color: var(--text-1, #0f172a);
+
+  --bg-soft: #f8fafc;
+  --status-ok-text: #047857;
+  --status-warn-text: #b45309;
+  --neutral-text: #475569;
+}
+
+/* ─── DARK MODE — overrides ─── */
+:global(.dark) .page {
+  --bg-soft: #1A1630;
+  --status-ok-text: #34d399;
+  --status-warn-text: #fbbf24;
+  --neutral-text: #94a3b8;
 }
 
 .header {
@@ -108,17 +121,17 @@
 }
 .statusOk {
   background: rgba(16, 185, 129, 0.10);
-  color: #047857;
+  color: var(--status-ok-text);
   border-color: rgba(16, 185, 129, 0.45);
 }
 .statusWarn {
   background: rgba(245, 158, 11, 0.10);
-  color: #b45309;
+  color: var(--status-warn-text);
   border-color: rgba(245, 158, 11, 0.45);
 }
 .statusOff {
   background: rgba(148, 163, 184, 0.12);
-  color: #475569;
+  color: var(--neutral-text);
   border-color: rgba(148, 163, 184, 0.4);
 }
 
@@ -149,7 +162,7 @@
 .cardFooter {
   padding: 12px 18px;
   border-top: 1px solid var(--border-soft);
-  background: var(--bg-soft, #f8fafc);
+  background: var(--bg-soft);
   display: flex;
   justify-content: flex-end;
 }
@@ -213,7 +226,7 @@
 }
 
 .webhookBlock {
-  background: var(--bg-soft, #f8fafc);
+  background: var(--bg-soft);
   border: 1px dashed var(--border-soft);
   border-radius: 8px;
   padding: 8px 11px;
@@ -244,7 +257,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 8px 11px;
-  background: var(--bg-soft, #f8fafc);
+  background: var(--bg-soft);
   border: 1px solid var(--border-soft);
   border-radius: 8px;
 }
@@ -260,7 +273,7 @@
   gap: 4px;
   font-size: 10.5px;
   font-weight: 600;
-  color: #047857;
+  color: var(--status-ok-text);
 }
 .envCheckOff {
   display: inline-flex;
@@ -268,7 +281,7 @@
   gap: 4px;
   font-size: 10.5px;
   font-weight: 600;
-  color: #b45309;
+  color: var(--status-warn-text);
 }
 
 .btnPrimary {

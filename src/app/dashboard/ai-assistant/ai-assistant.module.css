@@ -29,6 +29,23 @@
   font-size: 14px;
 }
 
+/* ─── DARK MODE — overrides ─── */
+:global(.dark) .page {
+  --brand-soft: rgba(124, 58, 237, 0.22);
+  --brand-softer: rgba(124, 58, 237, 0.10);
+  --bg: #0B0815;
+  --bg-elev: #121020;
+  --bg-elev-2: #1A1630;
+  --text-1: #E8E8EC;
+  --text-2: #A0A0AB;
+  --text-3: #6B6B78;
+  --border-soft: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --st-warning: #f59e0b;
+  --st-success: #10b981;
+  --st-danger: #ef4444;
+}
+
 /* ─── Sidebar conversaciones ───────────────────────────────── */
 .sidebar {
   background: var(--bg-elev);

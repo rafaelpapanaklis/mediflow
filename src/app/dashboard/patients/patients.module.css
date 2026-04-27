@@ -46,6 +46,43 @@
   min-height: 100vh;
 }
 
+/* ─── DARK MODE — overrides de tokens locales ───
+ * Los CSS modules redefinen tokens locales en .page para tener una
+ * paleta amplia (semantic + brand + bg scale). En dark, esos tokens
+ * deben adaptarse para mantener WCAG AA y consistencia. */
+:global(.dark) .page {
+  --brand-soft: rgba(124, 58, 237, 0.22);
+  --brand-softer: rgba(124, 58, 237, 0.10);
+  --border-brand: rgba(124, 58, 237, 0.5);
+  --bg: #0B0815;
+  --bg-elev: #121020;
+  --bg-elev-2: #1A1630;
+  --bg-hover: rgba(255, 255, 255, 0.04);
+  --bg-row-hover: rgba(124, 58, 237, 0.10);
+  --bg-row-selected: rgba(124, 58, 237, 0.20);
+  --text-1: #E8E8EC;
+  --text-2: #A0A0AB;
+  --text-3: #6B6B78;
+  --text-4: #45454F;
+  --border-soft: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --green: #10b981;
+  --green-soft: rgba(16, 185, 129, 0.20);
+  --orange: #f59e0b;
+  --orange-soft: rgba(245, 158, 11, 0.20);
+  --red: #ef4444;
+  --red-soft: rgba(239, 68, 68, 0.20);
+  --blue: #60a5fa;
+  --blue-soft: rgba(96, 165, 250, 0.20);
+  --pink: #f472b6;
+  --pink-soft: rgba(244, 114, 182, 0.20);
+  --cyan: #22d3ee;
+  --cyan-soft: rgba(34, 211, 238, 0.20);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.65);
+}
+
 .mono { font-family: var(--font-jetbrains-mono, "JetBrains Mono", ui-monospace, monospace); font-variant-numeric: tabular-nums; }
 
 /* ─── Hero stats (4 cards) ─── */

@@ -18,6 +18,18 @@
   color: var(--text-1);
 }
 
+/* ─── DARK MODE — overrides ─── */
+:global(.dark) .page {
+  --brand-soft: rgba(124, 58, 237, 0.20);
+  --brand-softer: rgba(124, 58, 237, 0.10);
+  --bg: #0B0815;
+  --bg-elev: #121020;
+  --border-soft: rgba(255, 255, 255, 0.08);
+  --text-1: #E8E8EC;
+  --text-2: #A0A0AB;
+  --text-3: #6B6B78;
+}
+
 .header { margin-bottom: 22px; display: flex; flex-direction: column; gap: 16px; }
 .titleRow { display: flex; align-items: center; gap: 14px; }
 .titleIcon {

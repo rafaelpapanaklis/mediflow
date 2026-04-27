@@ -32,6 +32,28 @@
   overflow: hidden;
 }
 
+/* ─── DARK MODE — overrides ─── */
+:global(.dark) .page {
+  --bg: #0B0815;
+  --bg-elev: #121020;
+  --bg-card: #181530;
+  --bg-input: #1A1630;
+  --text: #E8E8EC;
+  --text-2: #A0A0AB;
+  --text-3: #6B6B78;
+  --text-4: #45454F;
+  --border: rgba(255, 255, 255, 0.10);
+  --blue: #818cf8;
+  --blue-hover: #a78bfa;
+  --blue-lt: rgba(129, 140, 248, 0.15);
+  --green: #10b981;
+  --red: #ef4444;
+  --amber: #f59e0b;
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.7);
+}
+
 /* ─── Topbar ─── */
 .topbar {
   grid-column: 1 / -1;
