@@ -111,6 +111,30 @@ export async function fetchAppointmentsForDay(
   return rows.map((r) => appointmentToDTO(r, filter.clinicCategory));
 }
 
+export async function fetchAppointmentsForRange(
+  fromUtc: Date,
+  toUtc: Date,
+  filter: AgendaQueryFilter,
+): Promise<AgendaAppointmentDTO[]> {
+  const where: Prisma.AppointmentWhereInput = {
+    clinicId: filter.clinicId,
+    startsAt: { gte: fromUtc, lt: toUtc },
+  };
+
+  if (filter.doctorIdScope)      where.doctorId = filter.doctorIdScope;
+  else if (filter.doctorId)      where.doctorId = filter.doctorId;
+  if (filter.resourceId)         where.resourceId = filter.resourceId;
+  if (filter.statuses?.length)   where.status = { in: filter.statuses };
+
+  const rows = await prisma.appointment.findMany({
+    where,
+    include: APPT_INCLUDE,
+    orderBy: { startsAt: "asc" },
+  });
+
+  return rows.map((r) => appointmentToDTO(r, filter.clinicCategory));
+}
+
 export async function fetchPendingValidation(
   dateISO: string,
   config: ClinicTimeConfig,
@@ -140,7 +164,7 @@ export async function fetchActiveDoctors(
 ): Promise<DoctorColumnDTO[]> {
   const users = await prisma.user.findMany({
     where: { clinicId, role: "DOCTOR", isActive: true },
-    select: { id: true, firstName: true, lastName: true },
+    select: { id: true, firstName: true, lastName: true, color: true },
     orderBy: { firstName: "asc" },
   });
 
@@ -148,7 +172,7 @@ export async function fetchActiveDoctors(
     id: u.id,
     displayName: `${u.firstName} ${u.lastName}`.trim(),
     shortName: professionalShortName(u, category),
-    color: null,
+    color: u.color ?? null,
   }));
 }
 
