@@ -12,6 +12,7 @@ import { AgendaDetailPanel } from "@/components/dashboard/agenda/agenda-detail-p
 import { AgendaListView } from "@/components/dashboard/agenda/agenda-list-view";
 import { AgendaMonthView } from "@/components/dashboard/agenda/agenda-month-view";
 import { AgendaWeekView } from "@/components/dashboard/agenda/agenda-week-view";
+import { AgendaResourcesModal } from "@/components/dashboard/agenda/agenda-resources-modal";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import type { AgendaDayResponse } from "@/lib/agenda/types";
 import styles from "@/components/dashboard/agenda/agenda.module.css";
@@ -85,6 +86,7 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
         )}
       </div>
       <AgendaDetailPanel />
+      <AgendaResourcesModal />
       {highlightId && <AgendaHighlightListener highlightId={highlightId} />}
     </div>
   );

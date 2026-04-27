@@ -862,3 +862,230 @@
 .weekDayCol.today {
   background-color: color-mix(in srgb, var(--brand) 4%, transparent);
 }
+
+/* ─────── MODAL gestión recursos/doctores ─────────────────────────── */
+.modal {
+  width: 100%;
+  max-width: 560px;
+  background: var(--bg-elev);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  max-height: 80vh;
+  font-family: var(--font-sora, "Sora", sans-serif);
+}
+.modalHeader {
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.modalTitle {
+  font-size: 15px; font-weight: 700;
+  color: var(--text-1);
+  letter-spacing: -0.01em;
+  margin-bottom: 10px;
+}
+.modalTabs {
+  display: inline-flex;
+  background: var(--bg-elev-2);
+  border-radius: 7px;
+  padding: 2px;
+}
+.modalTab {
+  padding: 5px 14px;
+  font-size: 11px; font-weight: 500;
+  color: var(--text-2);
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.modalTab:hover { color: var(--text-1); }
+.modalTab.active {
+  background: var(--bg-elev);
+  color: var(--text-1);
+  box-shadow: 0 1px 3px rgba(15,10,30,0.08);
+}
+.modalBody {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 12px 18px 16px;
+}
+.modalEmpty {
+  text-align: center;
+  padding: 28px 8px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.modalRow {
+  display: grid;
+  grid-template-columns: 18px 22px 1fr 90px auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: var(--bg);
+  margin-bottom: 4px;
+  cursor: grab;
+}
+.modalRow:active { cursor: grabbing; }
+.modalRow.dragging {
+  opacity: 0.5;
+  border-style: dashed;
+}
+.modalDragHandle {
+  display: grid; place-items: center;
+  color: var(--text-4);
+  font-size: 14px;
+  user-select: none;
+}
+.modalSwatch {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--border-soft);
+  cursor: pointer;
+  position: relative;
+}
+.modalSwatchPicker {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 10;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  padding: 6px;
+  display: grid;
+  grid-template-columns: repeat(4, 18px);
+  gap: 4px;
+  box-shadow: 0 6px 16px rgba(15,10,30,0.12);
+}
+.modalSwatchOption {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+.modalSwatchOption.selected {
+  border-color: var(--text-1);
+  box-shadow: inset 0 0 0 2px var(--bg-elev);
+}
+.modalRowName {
+  background: transparent;
+  border: 1px solid transparent;
+  font-size: 12px; font-weight: 500;
+  color: var(--text-1);
+  padding: 4px 6px;
+  border-radius: 5px;
+  font-family: inherit;
+  width: 100%;
+  min-width: 0;
+}
+.modalRowName:hover, .modalRowName:focus {
+  border-color: var(--border-soft);
+  outline: none;
+  background: var(--bg-elev);
+}
+.modalKindSelect {
+  font-size: 11px; font-weight: 500;
+  padding: 4px 6px;
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  background: var(--bg-elev);
+  color: var(--text-2);
+  font-family: inherit;
+}
+.modalRowDelete {
+  width: 24px; height: 24px;
+  display: grid; place-items: center;
+  background: transparent;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  border-radius: 5px;
+}
+.modalRowDelete:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.modalAddBtn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 6px 10px;
+  font-size: 11px; font-weight: 500;
+  background: var(--bg-elev-2);
+  border: 1px dashed var(--border-soft);
+  border-radius: 6px;
+  color: var(--text-2);
+  cursor: pointer;
+  font-family: inherit;
+  margin-top: 6px;
+}
+.modalAddBtn:hover {
+  border-color: var(--border-brand);
+  color: var(--brand);
+  background: var(--brand-softer);
+}
+.modalAddForm {
+  display: grid;
+  grid-template-columns: 22px 1fr 90px auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--border-brand);
+  background: var(--brand-softer);
+  border-radius: 7px;
+  margin-top: 6px;
+}
+.modalAddInput {
+  font-size: 12px; font-weight: 500;
+  padding: 5px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  background: var(--bg-elev);
+  font-family: inherit;
+  width: 100%;
+  min-width: 0;
+}
+.modalAddInput:focus {
+  outline: none;
+  border-color: var(--border-brand);
+}
+.modalAddSave, .modalAddCancel {
+  padding: 5px 10px;
+  font-size: 11px; font-weight: 600;
+  border-radius: 5px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-1);
+  cursor: pointer;
+  font-family: inherit;
+}
+.modalAddSave {
+  background: var(--brand); color: #fff;
+  border-color: var(--brand);
+}
+.modalAddSave:hover { background: #8b5cf6; }
+.modalAddSave:disabled {
+  background: var(--bg-elev-2);
+  color: var(--text-4);
+  border-color: var(--border-soft);
+  cursor: not-allowed;
+}
+.modalDoctorRow {
+  display: grid;
+  grid-template-columns: 24px 22px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: var(--bg);
+  margin-bottom: 4px;
+}
+.modalDoctorAvatar {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  color: #fff; font-size: 10px; font-weight: 700;
+}
