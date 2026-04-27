@@ -8,6 +8,7 @@ import { ActiveConsultProvider } from "@/components/dashboard/active-consult-pro
 import { NewAppointmentProvider } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { NewPatientProvider } from "@/components/dashboard/new-patient/new-patient-provider";
 import { PatientContextBar } from "@/components/dashboard/patient-context-bar";
+import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 import { prisma } from "@/lib/prisma";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -54,6 +55,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <ActiveConsultProvider>
     <NewPatientProvider>
     <NewAppointmentProvider>
+    <ConfirmProvider>
     {/* Skip link — WCAG 2.4.1 Bypass Blocks. Oculto por defecto, visible
         al recibir focus por teclado para que usuarios de teclado/lectores
         salten la sidebar y la topbar. */}
@@ -100,6 +102,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </main>
       </div>
     </div>
+    </ConfirmProvider>
     </NewAppointmentProvider>
     </NewPatientProvider>
     </ActiveConsultProvider>
