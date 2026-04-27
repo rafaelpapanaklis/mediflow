@@ -40,6 +40,8 @@ import {
   LiveTimeline,
   type HoverData,
 } from "./components/live-mode";
+import { SharePanel } from "./components/share-panel";
+import { Share2 } from "lucide-react";
 import styles from "./clinic-layout.module.css";
 
 interface Chair {
@@ -104,6 +106,13 @@ export function ClinicLayoutClient({
   const [viewTime, setViewTime] = useState<Date>(() => new Date());
   const [appointments, setAppointments] = useState<LiveAppointment[]>([]);
   const [hover, setHover] = useState<HoverData | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [liveConfig, setLiveConfig] = useState({
+    enabled: clinic.liveModeEnabled,
+    slug: clinic.liveModeSlug,
+    showPatientNames: clinic.liveModeShowPatientNames,
+    hasPassword: false, // detectado al abrir share panel via PATCH response
+  });
 
   const nextIdRef = useRef<number>(
     Math.max(0, ...initialElements.map((e) => e.id)) + 1,
@@ -649,17 +658,25 @@ export function ClinicLayoutClient({
           </div>
 
           {liveMode && <LiveClock />}
-          {liveMode && clinic.liveModeEnabled && clinic.liveModeSlug && (
+          {liveMode && liveConfig.enabled && liveConfig.slug && (
             <Link
-              href={`/live/${clinic.liveModeSlug}`}
+              href={`/live/${liveConfig.slug}`}
               target="_blank"
               rel="noopener noreferrer"
               className={styles.toolbarBtn}
-              title="Abrir vista pública"
+              title="Abrir vista pública en nueva pestaña"
             >
-              <ExternalLink size={13} aria-hidden /> {clinic.liveModeSlug}
+              <ExternalLink size={13} aria-hidden /> {liveConfig.slug}
             </Link>
           )}
+          <button
+            type="button"
+            className={styles.toolbarBtn}
+            onClick={() => setShareOpen(true)}
+            title="Compartir vista en vivo"
+          >
+            <Share2 size={13} aria-hidden /> Compartir
+          </button>
 
           <span className={styles.spacer} />
 
@@ -848,6 +865,14 @@ export function ClinicLayoutClient({
           )}
         </div>
         <LiveTooltip data={hover} />
+
+        {shareOpen && (
+          <SharePanel
+            initial={liveConfig}
+            clinicName={clinic.name}
+            onClose={() => setShareOpen(false)}
+          />
+        )}
 
         {/* ── Properties panel / Live status ── */}
         <aside className={styles.propertiesPanel}>

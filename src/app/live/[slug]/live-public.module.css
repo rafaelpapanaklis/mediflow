@@ -1,0 +1,138 @@
+/* Vista pública /live/[slug] — fullscreen TV de sala de espera. */
+
+.live {
+  display: grid;
+  grid-template-rows: 64px 1fr 200px;
+  height: 100vh;
+  background: radial-gradient(ellipse at 55% 40%, #EDF5FC 0%, #E2EEF8 60%, #D8E8F4 100%);
+  color: #1A2540;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 24px;
+  background: #fff;
+  border-bottom: 1px solid #E2ECF4;
+  box-shadow: 0 1px 4px rgba(30, 60, 120, 0.06);
+}
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.brandIcon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #4A90E2, #2A68C0);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 800;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.35);
+}
+.clinicName {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.liveBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #EF4444;
+  text-transform: uppercase;
+  margin-top: 1px;
+}
+.liveBadge span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #EF4444;
+  animation: mfLivePulse 1.4s ease-in-out infinite;
+}
+@keyframes mfLivePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.15); }
+}
+.headerClock {
+  flex: 1;
+  text-align: center;
+  font-size: 32px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: #1A2540;
+}
+.headerRight {
+  display: flex;
+  gap: 6px;
+}
+.fullscreenBtn {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #E2ECF4;
+  border-radius: 10px;
+  background: #fff;
+  color: #6B7A99;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.fullscreenBtn:hover {
+  background: #E8F4F8;
+  color: #4A90E2;
+}
+
+.body {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  overflow: hidden;
+}
+.canvasWrap {
+  position: relative;
+  overflow: hidden;
+}
+.svgRoot {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.panel {
+  background: #fff;
+  border-left: 1px solid #E2ECF4;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.loadingWrap {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  color: #6B7A99;
+}
+.errorWrap {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  color: #fff;
+  text-align: center;
+  padding: 24px;
+}
+
+@media (min-width: 1920px) {
+  .header { padding: 0 36px; }
+  .headerClock { font-size: 40px; }
+  .clinicName { font-size: 20px; }
+  .body { grid-template-columns: 1fr 380px; }
+  .panel { padding: 24px; font-size: 14px; }
+}

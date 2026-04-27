@@ -1,0 +1,260 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Maximize2, Minimize2 } from "lucide-react";
+import { toScreen } from "@/lib/floor-plan/iso";
+import { getCatalogForClinic } from "@/lib/floor-plan/elements";
+import type {
+  LayoutElement,
+  LiveAppointment,
+} from "@/lib/floor-plan/elements";
+import { fmtHMS } from "@/lib/floor-plan/live-mode";
+import {
+  LiveOverlay,
+  LiveTooltip,
+  LiveStatusPanel,
+  LiveTimeline,
+  type HoverData,
+} from "../../dashboard/clinic-layout/components/live-mode";
+import liveStyles from "./live-public.module.css";
+
+interface Chair {
+  id: string;
+  name: string;
+  color: string | null;
+}
+
+interface ApiResponse {
+  clinic: { id: string; name: string; showPatientNames: boolean };
+  layout: {
+    elements: LayoutElement[];
+    metadata: { zoom?: number; panOffset?: { x: number; y: number } } | null;
+  };
+  chairs: Chair[];
+  appointments: Array<{
+    id: string;
+    resourceId: string;
+    patient: string;
+    patientFull?: string;
+    treatment: string;
+    doctor: string;
+    start: string;
+    end: string;
+  }>;
+}
+
+const ORIG_X = 680;
+const ORIG_Y = 260;
+
+export function LivePublicClient({
+  slug,
+  clinicName,
+  showPatientNames,
+}: {
+  slug: string;
+  clinicName: string;
+  showPatientNames: boolean;
+}) {
+  const [data, setData] = useState<ApiResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [viewTime, setViewTime] = useState<Date>(() => new Date());
+  const [hover, setHover] = useState<HoverData | null>(null);
+  const [now, setNow] = useState<Date>(() => new Date());
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const catalog = getCatalogForClinic("DENTAL");
+
+  // Polling cada 30s
+  useEffect(() => {
+    let cancelled = false;
+    const fetchAll = async () => {
+      try {
+        const dateStr = new Date().toISOString().slice(0, 10);
+        const res = await fetch(`/api/live/${slug}?date=${dateStr}`, {
+          cache: "no-store",
+        });
+        if (!res.ok) {
+          setError(res.status === 401 ? "locked" : "error");
+          return;
+        }
+        const json = (await res.json()) as ApiResponse;
+        if (!cancelled) {
+          setData(json);
+          setError(null);
+        }
+      } catch {
+        if (!cancelled) setError("error");
+      }
+    };
+    fetchAll();
+    const id = setInterval(fetchAll, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [slug]);
+
+  // Reloj cada segundo
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Auto-tick viewTime si cerca de now
+  useEffect(() => {
+    if (Math.abs(now.getTime() - viewTime.getTime()) < 90_000) {
+      setViewTime(now);
+    }
+  }, [now]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fullscreen API
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else if (containerRef.current) {
+      containerRef.current.requestFullscreen().catch(() => {});
+    }
+  };
+
+  const appointments: LiveAppointment[] = useMemo(() => {
+    if (!data) return [];
+    return data.appointments.map((a) => ({
+      id: a.id,
+      resourceId: a.resourceId,
+      patient: a.patient,
+      patientFull: a.patientFull,
+      treatment: a.treatment,
+      doctor: a.doctor,
+      start: new Date(a.start),
+      end: new Date(a.end),
+    }));
+  }, [data]);
+
+  if (error === "locked") {
+    return (
+      <div className={liveStyles.errorWrap}>
+        Sesión expirada. Recarga la página para volver a ingresar.
+      </div>
+    );
+  }
+  if (!data) {
+    return <div className={liveStyles.loadingWrap}>Cargando vista en vivo…</div>;
+  }
+
+  const elements = data.layout.elements;
+  const ox = ORIG_X;
+  const oy = ORIG_Y;
+
+  return (
+    <div ref={containerRef} className={liveStyles.live}>
+      <header className={liveStyles.header}>
+        <div className={liveStyles.headerLeft}>
+          <div className={liveStyles.brandIcon}>MF</div>
+          <div>
+            <div className={liveStyles.clinicName}>{clinicName}</div>
+            <div className={liveStyles.liveBadge}>
+              <span /> EN VIVO
+            </div>
+          </div>
+        </div>
+        <div className={liveStyles.headerClock}>{fmtHMS(now)}</div>
+        <div className={liveStyles.headerRight}>
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            className={liveStyles.fullscreenBtn}
+            title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+          >
+            {isFullscreen ? <Minimize2 size={16} aria-hidden /> : <Maximize2 size={16} aria-hidden />}
+          </button>
+        </div>
+      </header>
+
+      <div className={liveStyles.body}>
+        <div className={liveStyles.canvasWrap}>
+          <svg
+            className={liveStyles.svgRoot}
+            viewBox="0 0 1920 1080"
+            preserveAspectRatio="xMidYMid meet"
+          >
+            {/* Floor tiles */}
+            <g>
+              {Array.from({ length: 24 }).map((_, r) =>
+                Array.from({ length: 32 }).map((__, c) => {
+                  const A = toScreen(c, r, ox, oy);
+                  const B = toScreen(c + 1, r, ox, oy);
+                  const Cc = toScreen(c + 1, r + 1, ox, oy);
+                  const D = toScreen(c, r + 1, ox, oy);
+                  return (
+                    <polygon
+                      key={`t-${c}-${r}`}
+                      points={`${A[0]},${A[1]} ${B[0]},${B[1]} ${Cc[0]},${Cc[1]} ${D[0]},${D[1]}`}
+                      fill={(c + r) % 2 === 0 ? "rgba(255,255,255,0.4)" : "rgba(232,244,250,0.3)"}
+                      stroke="rgba(74,144,226,0.06)"
+                      strokeWidth={0.5}
+                    />
+                  );
+                }),
+              )}
+            </g>
+            {/* Elementos */}
+            <g>
+              {elements
+                .slice()
+                .sort((a, b) => a.col + a.row - (b.col + b.row))
+                .map((el) => {
+                  const td = catalog.byKey.get(el.type);
+                  if (!td) return null;
+                  const [sx, sy] = toScreen(el.col, el.row, ox, oy);
+                  return (
+                    <g
+                      key={el.id}
+                      transform={el.rotation ? `rotate(${el.rotation} ${sx} ${sy})` : undefined}
+                      dangerouslySetInnerHTML={{ __html: td.draw(sx, sy) }}
+                    />
+                  );
+                })}
+            </g>
+            {/* Halos En Vivo */}
+            <LiveOverlay
+              elements={elements}
+              ox={ox}
+              oy={oy}
+              viewTime={viewTime}
+              appointments={appointments}
+              showFullNames={showPatientNames}
+              onHover={setHover}
+            />
+          </svg>
+        </div>
+        <aside className={liveStyles.panel}>
+          <LiveStatusPanel
+            elements={elements}
+            chairs={data.chairs}
+            viewTime={viewTime}
+            appointments={appointments}
+            showFullNames={showPatientNames}
+          />
+        </aside>
+      </div>
+
+      <LiveTimeline
+        elements={elements}
+        chairs={data.chairs}
+        viewTime={viewTime}
+        appointments={appointments}
+        onSeek={setViewTime}
+        onResetNow={() => setViewTime(new Date())}
+      />
+
+      <LiveTooltip data={hover} />
+    </div>
+  );
+}
