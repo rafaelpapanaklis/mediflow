@@ -1,6 +1,5 @@
 "use client";
 
-import { Settings } from "lucide-react";
 import { useAgenda } from "./agenda-provider";
 import type { AgendaColumnMode } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
@@ -11,7 +10,7 @@ const COLUMN_MODE_OPTIONS: Array<{ value: AgendaColumnMode; label: string }> = [
 ];
 
 export function AgendaSubToolbar() {
-  const { state, setColumnMode, openModal, togglePendingPanel } = useAgenda();
+  const { state, setColumnMode, togglePendingPanel } = useAgenda();
 
   const visibleAppts = state.appointments.filter(
     (a) => a.status !== "CANCELLED" && a.status !== "NO_SHOW",
@@ -99,15 +98,6 @@ export function AgendaSubToolbar() {
             </div>
           </>
         )}
-        <button
-          type="button"
-          className={styles.gearBtn}
-          onClick={() => openModal("resources")}
-          aria-label="Gestionar sillones y doctores"
-          title="Gestionar sillones y doctores"
-        >
-          <Settings size={14} />
-        </button>
       </div>
     </div>
   );

@@ -22,42 +22,32 @@ const SWATCH_COLORS = [
   "#16a34a", "#dc2626", "#ca8a04", "#0d9488",
 ];
 
-type Tab = "resources" | "doctors";
-
+/**
+ * Audit ajuste 10: en lugar de un modal con 2 tabs, ahora hay 2 modales
+ * separados (Equipo y Recursos) accesibles desde botones distintos del topbar.
+ * El componente sigue siendo uno solo pero se renderiza en uno u otro modo
+ * según `state.modalOpen` ("team" → doctores, "resources" → sillones).
+ */
 export function AgendaResourcesModal() {
   const { state, closeModal } = useAgenda();
-  const [tab, setTab] = useState<Tab>("resources");
-
-  const open = state.modalOpen === "resources";
+  const open = state.modalOpen === "team" || state.modalOpen === "resources";
+  const isTeam = state.modalOpen === "team";
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && closeModal()}>
       <DialogContent className={styles.modal}>
         <div className={styles.modalHeader}>
-          <div className={styles.modalTitle}>Gestionar agenda</div>
-          <div role="tablist" className={styles.modalTabs}>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === "resources"}
-              className={`${styles.modalTab} ${tab === "resources" ? styles.active : ""}`}
-              onClick={() => setTab("resources")}
-            >
-              Sillones / Salas
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === "doctors"}
-              className={`${styles.modalTab} ${tab === "doctors" ? styles.active : ""}`}
-              onClick={() => setTab("doctors")}
-            >
-              Doctores
-            </button>
+          <div className={styles.modalTitle}>
+            {isTeam ? "Equipo" : "Sillones / Salas / Equipo"}
+          </div>
+          <div className={styles.modalSubtitle}>
+            {isTeam
+              ? "Doctores de la clínica que aparecen como columnas en la agenda."
+              : "Sillones, salas y equipos disponibles para asignar a citas."}
           </div>
         </div>
         <div className={styles.modalBody}>
-          {tab === "resources" ? <ResourcesPanel /> : <DoctorsPanel />}
+          {isTeam ? <DoctorsPanel /> : <ResourcesPanel />}
         </div>
       </DialogContent>
     </Dialog>

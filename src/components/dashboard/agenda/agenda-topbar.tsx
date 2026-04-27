@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
-import { ChevronLeft, ChevronRight, CalendarPlus, Search, ListChecks, ChevronDown, Check } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarPlus, Search, ListChecks, ChevronDown, Check, Users, Armchair } from "lucide-react";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { useAgenda } from "./agenda-provider";
 import { todayInTz, getTzParts, tzLocalToUtc } from "@/lib/agenda/time-utils";
@@ -48,7 +48,7 @@ function formatHumanDate(dayISO: string, timezone: string): string {
 }
 
 export function AgendaTopbar() {
-  const { state, setDay, setViewMode, setSearchQuery, toggleWaitlist } = useAgenda();
+  const { state, setDay, setViewMode, setSearchQuery, toggleWaitlist, openModal } = useAgenda();
   const { open: openNew } = useNewAppointmentDialog();
   const [moreViewsOpen, setMoreViewsOpen] = useState(false);
 
@@ -192,6 +192,26 @@ export function AgendaTopbar() {
         {state.waitlistCount > 0 && (
           <span className={styles.waitlistToggleCount}>{state.waitlistCount}</span>
         )}
+      </button>
+
+      <button
+        type="button"
+        onClick={() => openModal("team")}
+        className={styles.iconBtn}
+        aria-label="Gestionar equipo"
+        title="Equipo"
+      >
+        <Users size={14} />
+      </button>
+
+      <button
+        type="button"
+        onClick={() => openModal("resources")}
+        className={styles.iconBtn}
+        aria-label="Gestionar sillones / salas / equipos"
+        title="Recursos"
+      >
+        <Armchair size={14} />
       </button>
 
       <button
