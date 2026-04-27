@@ -1,201 +1,681 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Zap, AlertCircle, RotateCcw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  Sparkles,
+  Plus,
+  Search,
+  ChartLine,
+  Calendar,
+  Users,
+  Send,
+  Mic,
+  Paperclip,
+  Share2,
+  MoreHorizontal,
+  Download,
+  AlertCircle,
+  RotateCcw,
+  Stethoscope,
+  Pill,
+  FileText,
+  ClipboardList,
+  Receipt,
+  X,
+} from "lucide-react";
+import toast from "react-hot-toast";
+import styles from "./ai-assistant.module.css";
 
 interface Message {
+  id: string;
   role: "user" | "assistant";
   content: string;
+  timestamp: number;
+  streaming?: boolean;
 }
 
-interface UsageInfo {
-  used: number;
-  limit: number;
-  remaining: number;
+interface Conversation {
+  id: string;
+  title: string;
+  updatedAt: number;
+  messages: Message[];
+  group: "clinico" | "admin" | "pacientes";
 }
 
-// Quick prompt templates for common doctor needs
-const QUICK_PROMPTS = [
-  { label:"📝 Nota SOAP",         text:"Ayúdame a redactar una nota SOAP para un paciente con: " },
-  { label:"💊 Dosis medicamento",  text:"¿Cuál es la dosis estándar de " },
-  { label:"🔬 Diagnóstico diferencial", text:"Paciente con los siguientes síntomas, dame diagnóstico diferencial: " },
-  { label:"🧪 Estudios a pedir",   text:"¿Qué estudios de laboratorio y gabinete recomendarías para: " },
-  { label:"⚠️ Interacción meds",   text:"¿Hay interacción entre " },
+const SUGGESTIONS = [
+  {
+    icon: Stethoscope,
+    title: "Diagnóstico diferencial",
+    desc: "Paciente con síntomas X/Y/Z, dame DDx",
+    text: "Paciente con los siguientes síntomas, dame diagnóstico diferencial: ",
+  },
+  {
+    icon: Pill,
+    title: "Dosis de medicamento",
+    desc: "Verifica posología estándar",
+    text: "¿Cuál es la dosis estándar de ",
+  },
+  {
+    icon: FileText,
+    title: "Redactar SOAP",
+    desc: "Estructura una nota de evolución",
+    text: "Ayúdame a redactar una nota SOAP para un paciente con: ",
+  },
+  {
+    icon: ClipboardList,
+    title: "Estudios a pedir",
+    desc: "Lab y gabinete recomendados",
+    text: "¿Qué estudios de laboratorio y gabinete recomendarías para: ",
+  },
 ];
 
-export default function AIAssistantPage() {
-  const [messages,   setMessages]   = useState<Message[]>([]);
-  const [input,      setInput]      = useState("");
-  const [loading,    setLoading]    = useState(false);
-  const [usage,      setUsage]      = useState<UsageInfo | null>(null);
-  const [error,      setError]      = useState<string | null>(null);
-  const [limitHit,   setLimitHit]   = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
+const SLASH_COMMANDS = [
+  { cmd: "/paciente", name: "Buscar paciente", desc: "Cargar contexto de un paciente al chat", icon: Users },
+  { cmd: "/soap",     name: "Generar nota SOAP", desc: "Redacta SOAP a partir de los síntomas", icon: FileText },
+  { cmd: "/receta",   name: "Generar receta", desc: "Receta con dosis y duración", icon: Pill },
+  { cmd: "/odontograma", name: "Resumir odontograma", desc: "Estado dental + tratamientos", icon: ClipboardList },
+  { cmd: "/cotizar",  name: "Generar cotización", desc: "Procedimientos + costos sugeridos", icon: Receipt },
+];
 
+const QUICK_ACTIONS = [
+  { label: "/soap", icon: FileText },
+  { label: "Resumir historia", icon: ClipboardList },
+  { label: "Preguntar sobre xray", icon: Sparkles },
+  { label: "/receta", icon: Pill },
+  { label: "WhatsApp paciente", icon: Send },
+];
+
+const STORAGE_KEY = "mf:ai-conversations:v1";
+
+function loadConversations(): Conversation[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as Conversation[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveConversations(conversations: Conversation[]) {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
+  } catch {/* silent */}
+}
+
+function makeId() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function formatTime(ts: number): string {
+  const date = new Date(ts);
+  return new Intl.DateTimeFormat("es-MX", {
+    hour: "2-digit", minute: "2-digit",
+  }).format(date);
+}
+
+function formatRelative(ts: number): string {
+  const diff = Date.now() - ts;
+  const min = Math.floor(diff / 60_000);
+  if (min < 1) return "ahora";
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `hace ${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `hace ${d}d`;
+  return new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short" }).format(new Date(ts));
+}
+
+export default function AIAssistantPage() {
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [slashOpen, setSlashOpen] = useState(false);
+  const [slashIndex, setSlashIndex] = useState(0);
+  const [search, setSearch] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  // Hydrate from localStorage
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const stored = loadConversations();
+    setConversations(stored);
+    if (stored.length > 0) setActiveId(stored[0].id);
+  }, []);
+
+  // Persist on changes
+  useEffect(() => {
+    if (conversations.length > 0) saveConversations(conversations);
+  }, [conversations]);
+
+  const activeConv = useMemo(
+    () => conversations.find((c) => c.id === activeId) ?? null,
+    [conversations, activeId],
+  );
+  const messages = activeConv?.messages ?? [];
+
+  const filteredConvs = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return conversations;
+    return conversations.filter(
+      (c) =>
+        c.title.toLowerCase().includes(q) ||
+        c.messages.some((m) => m.content.toLowerCase().includes(q)),
+    );
+  }, [conversations, search]);
+
+  const grouped = useMemo(() => {
+    const groups: Record<Conversation["group"], Conversation[]> = {
+      clinico: [], admin: [], pacientes: [],
+    };
+    for (const c of filteredConvs) groups[c.group].push(c);
+    return groups;
+  }, [filteredConvs]);
+
+  // Scroll on new messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  async function sendMessage(text?: string) {
-    const msg = (text ?? input).trim();
-    if (!msg || loading || limitHit) return;
+  // Auto-expand textarea
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(240, el.scrollHeight)}px`;
+  }, [input]);
 
-    const newMessages: Message[] = [...messages, { role: "user", content: msg }];
-    setMessages(newMessages);
+  // Slash popover detection
+  useEffect(() => {
+    const open = input.startsWith("/") && !input.includes(" ");
+    setSlashOpen(open);
+    setSlashIndex(0);
+  }, [input]);
+
+  // Cmd/Ctrl + K → nueva conversación
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        startNew();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const startNew = useCallback(() => {
+    const newConv: Conversation = {
+      id: makeId(),
+      title: "Nueva conversación",
+      updatedAt: Date.now(),
+      messages: [],
+      group: "clinico",
+    };
+    setConversations((prev) => [newConv, ...prev]);
+    setActiveId(newConv.id);
+    setInput("");
+    setError(null);
+    setTimeout(() => textareaRef.current?.focus(), 50);
+  }, []);
+
+  const sendMessage = useCallback(async (textOverride?: string) => {
+    const text = (textOverride ?? input).trim();
+    if (!text || loading) return;
+
+    setError(null);
+
+    // Asegura que hay conversación activa
+    let convId = activeId;
+    if (!convId) {
+      const newConv: Conversation = {
+        id: makeId(),
+        title: text.slice(0, 60),
+        updatedAt: Date.now(),
+        messages: [],
+        group: "clinico",
+      };
+      setConversations((prev) => [newConv, ...prev]);
+      setActiveId(newConv.id);
+      convId = newConv.id;
+    }
+
+    const userMsg: Message = {
+      id: makeId(),
+      role: "user",
+      content: text,
+      timestamp: Date.now(),
+    };
+
+    const placeholderId = makeId();
+    setConversations((prev) =>
+      prev.map((c) => {
+        if (c.id !== convId) return c;
+        const isFirst = c.messages.length === 0;
+        return {
+          ...c,
+          title: isFirst ? text.slice(0, 60) : c.title,
+          updatedAt: Date.now(),
+          messages: [
+            ...c.messages,
+            userMsg,
+            { id: placeholderId, role: "assistant", content: "", timestamp: Date.now(), streaming: true },
+          ],
+        };
+      }),
+    );
+
     setInput("");
     setLoading(true);
-    setError(null);
 
     try {
       const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: msg,
-          conversationHistory: messages, // send full history for context
+          message: text,
+          conversationHistory: messages,
         }),
       });
-
       const data = await res.json();
-
-      if (res.status === 429) {
-        setLimitHit(true);
-        setError(data.error);
-        setMessages(prev => prev.slice(0, -1)); // remove last user message
-        return;
+      if (!res.ok) {
+        throw new Error(data.error ?? "Error al consultar IA");
       }
 
-      if (!res.ok) throw new Error(data.error ?? "Error");
-
-      setMessages([...newMessages, { role: "assistant", content: data.reply }]);
-      setUsage({ used: data.tokensUsed, limit: data.tokensLimit, remaining: data.tokensRemaining });
-
-    } catch (err: any) {
-      setError(err.message);
-      setMessages(prev => prev.slice(0, -1));
+      const reply = String(data.reply ?? "");
+      // Streaming visual: revela char por char
+      let revealed = "";
+      const chunkSize = Math.max(2, Math.ceil(reply.length / 80));
+      for (let i = 0; i < reply.length; i += chunkSize) {
+        revealed = reply.slice(0, i + chunkSize);
+        await new Promise((r) => setTimeout(r, 18));
+        setConversations((prev) =>
+          prev.map((c) => {
+            if (c.id !== convId) return c;
+            return {
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id === placeholderId ? { ...m, content: revealed, streaming: true } : m,
+              ),
+            };
+          }),
+        );
+      }
+      // Cierra streaming
+      setConversations((prev) =>
+        prev.map((c) => {
+          if (c.id !== convId) return c;
+          return {
+            ...c,
+            messages: c.messages.map((m) =>
+              m.id === placeholderId ? { ...m, content: reply, streaming: false } : m,
+            ),
+          };
+        }),
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Error al consultar IA";
+      setError(msg);
+      setConversations((prev) =>
+        prev.map((c) => {
+          if (c.id !== convId) return c;
+          return { ...c, messages: c.messages.filter((m) => m.id !== placeholderId) };
+        }),
+      );
     } finally {
       setLoading(false);
     }
-  }
+  }, [activeId, input, loading, messages]);
 
-  const usagePercent = usage ? Math.round(((usage.limit - usage.remaining) / usage.limit) * 100) : 0;
+  const handleKey = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (slashOpen) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSlashIndex((i) => Math.min(i + 1, SLASH_COMMANDS.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSlashIndex((i) => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const cmd = SLASH_COMMANDS[slashIndex];
+        if (cmd) setInput(`${cmd.cmd} `);
+        return;
+      }
+      if (e.key === "Escape") {
+        setSlashOpen(false);
+        return;
+      }
+    }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      void sendMessage();
+    }
+  }, [slashOpen, slashIndex, sendMessage]);
+
+  const toggleVoice = useCallback(async () => {
+    if (recording) {
+      recorderRef.current?.stop();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = async () => {
+        setRecording(false);
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const form = new FormData();
+        form.append("audio", blob, "voice.webm");
+        try {
+          const res = await fetch("/api/ai/transcribe", { method: "POST", body: form });
+          if (!res.ok) {
+            // Endpoint puede no existir todavía — degradación silenciosa
+            toast("Transcripción de voz pendiente de configurar", { icon: "🎙️" });
+            return;
+          }
+          const data = await res.json();
+          if (data.text) setInput((prev) => `${prev}${prev ? " " : ""}${data.text}`);
+        } catch {
+          toast("Error de transcripción", { icon: "⚠️" });
+        }
+      };
+      recorder.start();
+      recorderRef.current = recorder;
+      setRecording(true);
+    } catch {
+      toast.error("No se pudo acceder al micrófono");
+    }
+  }, [recording]);
+
+  const insertCommand = useCallback((cmd: string) => {
+    setInput((prev) => {
+      if (prev.startsWith("/")) return cmd;
+      return prev ? `${prev} ${cmd}` : `${cmd} `;
+    });
+    setSlashOpen(false);
+    textareaRef.current?.focus();
+  }, []);
 
   return (
-    <div className="flex flex-col h-full max-h-[calc(100vh-120px)]">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4 flex-shrink-0">
-        <div>
-          <h1 className="text-2xl font-extrabold flex items-center gap-2">
-            <Bot className="w-7 h-7 text-violet-600" /> Asistente IA Clínico
-          </h1>
-          <p className="text-base text-muted-foreground mt-0.5">Apoyo para diagnóstico, notas clínicas y medicamentos</p>
-        </div>
-        <button onClick={() => { setMessages([]); setError(null); setLimitHit(false); }}
-          className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border hover:bg-muted text-sm font-semibold transition-colors">
-          <RotateCcw className="w-4 h-4" /> Nueva consulta
-        </button>
-      </div>
-
-      {/* Token usage bar */}
-      {usage && (
-        <div className="bg-card border border-border rounded-xl px-4 py-3 mb-4 flex-shrink-0">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-semibold text-muted-foreground flex items-center gap-1.5">
-              <Zap className="w-4 h-4 text-violet-500" /> Uso mensual de IA
-            </span>
-            <span className="text-sm font-bold">{usage.remaining.toLocaleString()} tokens restantes</span>
+    <div className={styles.page}>
+      {/* ── Sidebar ── */}
+      <aside className={styles.sidebar}>
+        <div className={styles.sidebarHeader}>
+          <div className={styles.brandTitle}>
+            <span className={styles.brandIcon}><Sparkles size={14} aria-hidden /></span>
+            Asistente IA
           </div>
-          <div className="h-2 bg-muted rounded-full overflow-hidden">
-            <div className={`h-full rounded-full transition-all ${usagePercent > 80 ? "bg-rose-500" : usagePercent > 60 ? "bg-amber-500" : "bg-violet-500"}`}
-              style={{ width: `${usagePercent}%` }} />
-          </div>
-          <div className="text-xs text-muted-foreground mt-1">{usagePercent}% usado este mes</div>
-        </div>
-      )}
-
-      {/* Disclaimer */}
-      <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 rounded-xl px-4 py-3 mb-4 flex-shrink-0 text-sm text-amber-700 dark:text-amber-300">
-        <strong>⚕️ Aviso médico:</strong> Este asistente es un apoyo informativo. Sus sugerencias no reemplazan el criterio clínico ni la exploración física del paciente.
-      </div>
-
-      {/* Quick prompts */}
-      {messages.length === 0 && (
-        <div className="flex-shrink-0 mb-4">
-          <div className="text-sm font-bold text-muted-foreground mb-2">Consultas frecuentes:</div>
-          <div className="flex flex-wrap gap-2">
-            {QUICK_PROMPTS.map(p => (
-              <button key={p.label} onClick={() => setInput(p.text)}
-                className="text-sm bg-card border border-border rounded-xl px-3 py-2 hover:border-violet-400 hover:text-violet-600 transition-colors font-semibold">
-                {p.label}
-              </button>
-            ))}
+          <button type="button" className={styles.newConvBtn} onClick={startNew}>
+            <Plus size={13} aria-hidden /> Nueva conversación
+            <kbd>⌘K</kbd>
+          </button>
+          <div className={styles.searchWrap}>
+            <Search size={13} aria-hidden className={styles.searchIcon} />
+            <input
+              type="text"
+              className={styles.searchInput}
+              placeholder="Buscar conversaciones…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
         </div>
-      )}
 
-      {/* Chat messages */}
-      <div className="flex-1 overflow-y-auto bg-card border border-border rounded-2xl p-4 space-y-4 mb-4">
-        {messages.length === 0 && (
-          <div className="h-full flex flex-col items-center justify-center text-muted-foreground py-8">
-            <Bot className="w-16 h-16 mb-3 opacity-20" />
-            <div className="text-lg font-semibold">¿En qué te puedo ayudar hoy?</div>
-            <div className="text-sm mt-1 text-center max-w-xs">Pregúntame sobre diagnósticos, medicamentos, notas SOAP o cualquier consulta clínica.</div>
-          </div>
-        )}
-
-        {messages.map((msg, i) => (
-          <div key={i} className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${msg.role === "user" ? "bg-brand-600 text-white" : "bg-violet-100 dark:bg-violet-900/40 text-violet-600"}`}>
-              {msg.role === "user" ? <User className="w-5 h-5" /> : <Bot className="w-5 h-5" />}
+        <div className={styles.convList}>
+          {(["clinico", "admin", "pacientes"] as const).map((g) => {
+            const items = grouped[g];
+            if (items.length === 0) return null;
+            const Icon = g === "clinico" ? ChartLine : g === "admin" ? Calendar : Users;
+            const label = g === "clinico" ? "Clínico" : g === "admin" ? "Administrativo" : "Pacientes";
+            return (
+              <div key={g}>
+                <div className={styles.convGroupLabel}>
+                  <Icon size={11} aria-hidden /> {label}
+                </div>
+                {items.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className={`${styles.convItem} ${c.id === activeId ? styles.convItemActive : ""}`}
+                    onClick={() => setActiveId(c.id)}
+                  >
+                    <span className={styles.convItemTitle}>{c.title}</span>
+                    <span className={styles.convItemTime}>{formatRelative(c.updatedAt)}</span>
+                  </button>
+                ))}
+              </div>
+            );
+          })}
+          {filteredConvs.length === 0 && (
+            <div style={{ padding: "30px 12px", fontSize: 12, color: "var(--text-3)", textAlign: "center" }}>
+              {search ? "Sin resultados" : "Aún no hay conversaciones."}
             </div>
-            <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-base ${msg.role === "user" ? "bg-brand-600 text-white rounded-tr-sm" : "bg-muted/40 text-foreground rounded-tl-sm"}`}
-              style={{ whiteSpace:"pre-wrap", lineHeight:1.65 }}>
-              {msg.content}
+          )}
+        </div>
+
+        <div className={styles.userBlock}>
+          <div className={styles.userAvatar}>DR</div>
+          <div style={{ minWidth: 0 }}>
+            <div className={styles.userName}>Doctor</div>
+            <div className={styles.userRole}>Sesión activa · IA Claude</div>
+          </div>
+        </div>
+      </aside>
+
+      {/* ── Main chat ── */}
+      <main className={styles.main}>
+        <header className={styles.chatHeader}>
+          <div className={styles.chatHeaderInfo}>
+            <h1 className={styles.chatTitle}>
+              <Sparkles size={14} aria-hidden style={{ color: "var(--brand)" }} />
+              {activeConv?.title ?? "Asistente IA Clínico"}
+            </h1>
+            <div className={styles.chatMeta}>
+              claude-sonnet-4-6 · {messages.length} mensaje{messages.length === 1 ? "" : "s"}
             </div>
           </div>
-        ))}
+          <div className={styles.chatHeaderActions}>
+            <button type="button" className={styles.iconBtn} title="Compartir">
+              <Share2 size={14} aria-hidden />
+            </button>
+            <button type="button" className={styles.iconBtn} title="Exportar">
+              <Download size={14} aria-hidden />
+            </button>
+            <button
+              type="button"
+              className={styles.iconBtn}
+              title="Nueva conversación"
+              onClick={startNew}
+            >
+              <RotateCcw size={14} aria-hidden />
+            </button>
+            <button type="button" className={styles.iconBtn} title="Más">
+              <MoreHorizontal size={14} aria-hidden />
+            </button>
+          </div>
+        </header>
 
-        {loading && (
-          <div className="flex gap-3">
-            <div className="w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-900/40 text-violet-600 flex items-center justify-center flex-shrink-0">
-              <Bot className="w-5 h-5" />
+        <div className={styles.messagesScroll}>
+          <div className={styles.messagesInner}>
+            {messages.length === 0 ? (
+              <div className={styles.welcome}>
+                <div className={styles.welcomeIcon}><Sparkles size={26} aria-hidden /></div>
+                <h2 className={styles.welcomeTitle}>Asistente IA Clínico</h2>
+                <p className={styles.welcomeText}>
+                  Apoyo informativo para diagnósticos diferenciales, dosis, redacción de
+                  notas SOAP, recetas y revisiones rápidas. Sus sugerencias no reemplazan
+                  el criterio clínico.
+                </p>
+                <div className={styles.suggestionsGrid}>
+                  {SUGGESTIONS.map((s) => (
+                    <button
+                      key={s.title}
+                      type="button"
+                      className={styles.suggestion}
+                      onClick={() => setInput(s.text)}
+                    >
+                      <span className={styles.suggestionIcon}><s.icon size={14} aria-hidden /></span>
+                      <span className={styles.suggestionTitle}>{s.title}</span>
+                      <span className={styles.suggestionDesc}>{s.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              messages.map((m) => (
+                <div key={m.id} className={styles.message}>
+                  {m.role === "user" ? (
+                    <div className={styles.avatarUser}>DR</div>
+                  ) : (
+                    <div className={`${styles.avatarAssistant} ${m.streaming ? styles.streaming : ""}`}>
+                      <Sparkles size={14} aria-hidden />
+                    </div>
+                  )}
+                  <div className={styles.messageRow}>
+                    <div className={styles.messageMeta}>
+                      <span className={styles.messageName}>
+                        {m.role === "user" ? "Doctor" : "Asistente IA"}
+                      </span>
+                      <span className={styles.messageTimestamp}>{formatTime(m.timestamp)}</span>
+                      {m.role === "assistant" && (
+                        <span className={styles.modelBadge}>claude-sonnet-4-6</span>
+                      )}
+                    </div>
+                    <div className={`${styles.messageContent} ${m.streaming ? styles.streamingCursor : ""}`}>
+                      {m.content || (m.streaming ? "" : "—")}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+
+            {error && (
+              <div className={styles.errorBubble}>
+                <AlertCircle size={14} aria-hidden style={{ marginTop: 1, flexShrink: 0 }} />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
+        </div>
+
+        {/* ── Composer ── */}
+        <div className={styles.composerWrap}>
+          <div className={styles.composerInner}>
+            <div className={styles.quickActions}>
+              {QUICK_ACTIONS.map((qa) => (
+                <button
+                  key={qa.label}
+                  type="button"
+                  className={styles.quickAction}
+                  onClick={() => {
+                    if (qa.label.startsWith("/")) insertCommand(qa.label);
+                    else setInput((prev) => (prev ? `${prev} ${qa.label}` : qa.label));
+                  }}
+                >
+                  <qa.icon size={11} aria-hidden />
+                  {qa.label.startsWith("/") ? <code>{qa.label}</code> : qa.label}
+                </button>
+              ))}
             </div>
-            <div className="bg-muted/40 rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay:"0ms" }} />
-              <div className="w-2 h-2 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay:"150ms" }} />
-              <div className="w-2 h-2 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay:"300ms" }} />
+
+            <div className={styles.composerBox}>
+              {/* Slash popover */}
+              <div className={styles.slashPopover} data-open={slashOpen}>
+                {SLASH_COMMANDS.map((c, i) => (
+                  <button
+                    key={c.cmd}
+                    type="button"
+                    className={`${styles.slashItem} ${i === slashIndex ? styles.slashItemActive : ""}`}
+                    onMouseEnter={() => setSlashIndex(i)}
+                    onClick={() => insertCommand(c.cmd)}
+                  >
+                    <span className={styles.slashItemIcon}><c.icon size={13} aria-hidden /></span>
+                    <span className={styles.slashItemBody}>
+                      <span className={styles.slashItemCmd}>{c.cmd}</span>
+                      <span className={styles.slashItemName}>{c.name}</span>
+                      <span className={styles.slashItemDesc}>{c.desc}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <textarea
+                ref={textareaRef}
+                className={styles.composerTextarea}
+                placeholder="Pregúntame sobre un paciente, escribe / para comandos…"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKey}
+                disabled={loading}
+                rows={1}
+              />
+              <div className={styles.composerBar}>
+                <button type="button" className={styles.composerActionBtn} title="Adjuntar">
+                  <Paperclip size={15} aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.composerActionBtn} ${recording ? styles.recording : ""}`}
+                  onClick={toggleVoice}
+                  title={recording ? "Detener grabación" : "Voz"}
+                >
+                  <Mic size={15} aria-hidden />
+                </button>
+                {input && (
+                  <span className={styles.contextPill}>
+                    {input.slice(0, 24)}{input.length > 24 ? "…" : ""}
+                    <button
+                      type="button"
+                      className={styles.contextPillRemove}
+                      onClick={() => setInput("")}
+                    >
+                      <X size={10} aria-hidden />
+                    </button>
+                  </span>
+                )}
+                <span className={styles.composerBarSpacer} />
+                <button
+                  type="button"
+                  className={styles.sendBtn}
+                  onClick={() => sendMessage()}
+                  disabled={!input.trim() || loading}
+                  title="Enviar"
+                >
+                  <Send size={14} aria-hidden />
+                </button>
+              </div>
+            </div>
+
+            <div className={styles.composerHint}>
+              <kbd>↵</kbd> enviar · <kbd>⇧↵</kbd> nueva línea · <kbd>/</kbd> comandos · <kbd>⌘K</kbd> nuevo chat
             </div>
           </div>
-        )}
-
-        {error && (
-          <div className="flex items-start gap-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 rounded-xl px-4 py-3">
-            <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-rose-700 dark:text-rose-300">{error}</div>
-          </div>
-        )}
-
-        <div ref={bottomRef} />
-      </div>
-
-      {/* Input */}
-      <div className="flex-shrink-0 flex gap-3">
-        <textarea
-          className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-base placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-600/20 resize-none"
-          placeholder={limitHit ? "Límite mensual alcanzado" : "Escribe tu consulta clínica…"}
-          rows={2}
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          disabled={loading || limitHit}
-          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-        />
-        <button onClick={() => sendMessage()} disabled={!input.trim() || loading || limitHit}
-          className="w-12 h-auto rounded-xl bg-violet-600 hover:bg-violet-700 text-white flex items-center justify-center transition-colors disabled:opacity-40">
-          <Send className="w-5 h-5" />
-        </button>
-      </div>
-      <div className="text-xs text-muted-foreground mt-2 text-center">Enter para enviar · Shift+Enter para nueva línea</div>
+        </div>
+      </main>
     </div>
   );
 }
