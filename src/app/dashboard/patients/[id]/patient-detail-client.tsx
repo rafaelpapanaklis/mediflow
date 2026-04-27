@@ -7,6 +7,9 @@ import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Plus, Printer, Edit } 
 import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
 import { ageFromDob, fmtMXN } from "@/lib/format";
 import { HeroCard } from "@/components/dashboard/patient-detail/hero-card";
+import { QuickNav } from "@/components/dashboard/patient-detail/quick-nav";
+import { SideCards } from "@/components/dashboard/patient-detail/side-cards";
+import patientDetailStyles from "@/components/dashboard/patient-detail/patient-detail.module.css";
 import { DentalForm }          from "@/components/clinical/dental-form";
 import { NutritionForm }       from "@/components/clinical/nutrition-form";
 import { PsychologyForm }      from "@/components/clinical/psychology-form";
@@ -359,24 +362,41 @@ export function PatientDetailClient({
         onCharge={() => setTab("facturacion")}
       />
 
-      {/* Tabs */}
-      <div className="tabs-new" style={{ marginBottom: 16, overflowX: "auto" }}>
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={`tab-new ${tab === t.id ? "tab-new--active" : ""}`}
-          >
-            {t.label}
-            {tabCounts[t.id] !== undefined && (
-              <span className="tab__count">{tabCounts[t.id]}</span>
-            )}
-          </button>
-        ))}
-      </div>
+      {/* Layout 3 columnas — audit Opción C ajuste 3 */}
+      <div className={patientDetailStyles.layout}>
+        <QuickNav
+          activeTab={tab}
+          onSelect={setTab}
+          counts={{
+            historia: records.length,
+            evolucion: records.length,
+            radiografias: filesLoaded ? files.length : undefined,
+            tratamiento: treatments.length,
+            agenda: appointments.length,
+            facturacion: invoices.length,
+          }}
+          hasBalance={totalBalance > 0}
+        />
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div className={patientDetailStyles.mainColumn}>
+          {/* Tabs */}
+          <div className="tabs-new" style={{ marginBottom: 16, overflowX: "auto" }}>
+            {TABS.map(t => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTab(t.id)}
+                className={`tab-new ${tab === t.id ? "tab-new--active" : ""}`}
+              >
+                {t.label}
+                {tabCounts[t.id] !== undefined && (
+                  <span className="tab__count">{tabCounts[t.id]}</span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
           {/* ===== TAB: RESUMEN ===== */}
           {tab === "resumen" && (
@@ -994,74 +1014,30 @@ export function PatientDetailClient({
             </div>
           )}
 
-        </div>
-
-        {/* Right panel - Quick actions */}
-        <div className="w-52 flex-shrink-0 bg-card border-l border-border overflow-y-auto p-4 flex flex-col gap-3">
-          <div>
-            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2">Acciones rápidas</div>
-            <div className="space-y-1.5">
-              {[
-                { icon: "📅", label: "Agendar cita",        action: () => setShowNewAppt(true) },
-                { icon: "📝", label: "Nueva consulta",       action: () => setTab("expediente")  },
-                { icon: "📊", label: "Ver evolución",        action: () => setTab("evolucion")   },
-                { icon: "🩻", label: "Radiografías",          action: () => setTab("radiografias") },
-                { icon: "🦷", label: "Plan tratamiento",     action: () => setTab("tratamiento") },
-                { icon: "💳", label: "Ver facturación",      action: () => setTab("facturacion") },
-              ].map(btn => (
-                <button key={btn.label} onClick={btn.action}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold border border-border bg-card hover:bg-muted/50 transition-colors text-left">
-                  <span>{btn.icon}</span>
-                  {btn.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="border-t border-border pt-3">
-            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2">Finanzas</div>
-            <div className="space-y-1.5 text-xs mb-2">
-              <div className="flex justify-between"><span className="text-muted-foreground">Total plan</span><span className="font-bold">{formatCurrency(totalPlan)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Pagado</span><span className="font-bold text-emerald-600">{formatCurrency(totalPaid)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Pendiente</span><span className="font-bold text-rose-600">{formatCurrency(totalBalance)}</span></div>
-            </div>
-            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pctPaid}%` }} />
-            </div>
-            <div className="text-[10px] text-muted-foreground text-right mt-1">{pctPaid}% cubierto</div>
-          </div>
-
-          <div className="border-t border-border pt-3">
-            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2">Próxima cita</div>
-            {nextAppt ? (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-2.5">
-                <div className="text-xs font-extrabold text-brand-700">{formatDate(nextAppt.date)}</div>
-                <div className="text-[11px] text-foreground mt-0.5">{nextAppt.type}</div>
-                <div className="text-[10px] text-muted-foreground">{nextAppt.startTime}h</div>
-              </div>
-            ) : (
-              <button onClick={() => setShowNewAppt(true)} className="w-full text-xs text-brand-600 hover:underline text-left">Agendar primera cita →</button>
-            )}
-          </div>
-
-          <div className="border-t border-border pt-3">
-            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2">Alertas</div>
-            {patient.allergies?.length > 0 && (
-              <div className="flex items-start gap-1.5 bg-rose-50 border border-rose-200 rounded-lg p-2 mb-1.5">
-                <AlertTriangle className="w-3 h-3 text-rose-600 flex-shrink-0 mt-0.5" />
-                <span className="text-[10px] font-bold text-rose-700">Alergia: {patient.allergies.join(", ")}</span>
-              </div>
-            )}
-            {totalBalance > 0 && (
-              <div className="flex items-start gap-1.5 bg-amber-50 border border-amber-200 rounded-lg p-2">
-                <span className="text-[10px] font-bold text-amber-700">💰 Saldo pendiente: {formatCurrency(totalBalance)}</span>
-              </div>
-            )}
-            {patient.allergies?.length === 0 && totalBalance === 0 && (
-              <p className="text-[10px] text-muted-foreground">Sin alertas activas</p>
-            )}
           </div>
         </div>
+
+        <SideCards
+          nextAppointment={nextAppt ? {
+            date: nextAppt.date,
+            startTime: nextAppt.startTime ?? "",
+            type: nextAppt.type,
+            doctorName: nextAppt.doctor ? `Dr/a. ${nextAppt.doctor.firstName} ${nextAppt.doctor.lastName}` : undefined,
+          } : null}
+          finance={{
+            total: totalPlan,
+            paid: totalPaid,
+            balance: totalBalance,
+            pct: pctPaid,
+          }}
+          patientName={fullName}
+          patientPhone={patient.phone ?? null}
+          onReschedule={() => setTab("agenda")}
+          onCancelAppt={() => setTab("agenda")}
+          onCharge={() => setTab("facturacion")}
+        />
+      </div>
+
       {/* Edit patient modal */}
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
