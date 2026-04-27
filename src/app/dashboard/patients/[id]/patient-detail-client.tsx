@@ -13,6 +13,7 @@ import { QuickNav } from "@/components/dashboard/patient-detail/quick-nav";
 import { SideCards } from "@/components/dashboard/patient-detail/side-cards";
 import { ConsultBar } from "@/components/dashboard/patient-detail/consult-bar";
 import { SoapEditorInline, type SoapDraft } from "@/components/dashboard/patient-detail/soap-editor-inline";
+import { NoteDetailModal, type ClinicalNote } from "@/components/dashboard/patient-detail/note-detail-modal";
 import patientDetailStyles from "@/components/dashboard/patient-detail/patient-detail.module.css";
 import { DentalForm }          from "@/components/clinical/dental-form";
 import { NutritionForm }       from "@/components/clinical/nutrition-form";
@@ -103,6 +104,7 @@ export function PatientDetailClient({
   const [tab, setTab]         = useState("resumen");
   const [consultPaused, setConsultPaused] = useState(false);
   const [consultClosed, setConsultClosed] = useState(false);
+  const [noteDetailOpen, setNoteDetailOpen] = useState<ClinicalNote | null>(null);
   const [treatmentsModal, setTreatmentsModal] = useState<{
     open: boolean;
     appointmentId: string;
@@ -869,7 +871,11 @@ export function PatientDetailClient({
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {records.map((record, idx) => (
+                    {records.map((record, idx) => {
+                      const noteStatus: "DRAFT" | "SIGNED" =
+                        record.specialtyData?.status ?? "DRAFT";
+                      const isSigned = noteStatus === "SIGNED";
+                      return (
                       <div key={record.id} className="flex gap-3">
                         <div className="flex flex-col items-center">
                           <div className="w-7 h-7 rounded-full bg-blue-100 border-2 border-brand-500 flex items-center justify-center text-[9px] font-bold text-brand-700 flex-shrink-0 z-10">
@@ -877,10 +883,27 @@ export function PatientDetailClient({
                           </div>
                           {idx < records.length - 1 && <div className="w-px flex-1 bg-border mt-1" />}
                         </div>
-                        <div className="flex-1 bg-muted rounded-xl border border-border p-3 mb-1">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-[10px] text-muted-foreground">{formatDate(record.visitDate)}</span>
-                            <span className="text-[10px] font-bold text-brand-600">Dr/a. {record.doctor?.firstName} {record.doctor?.lastName}</span>
+                        <button
+                          type="button"
+                          onClick={() => setNoteDetailOpen(record as ClinicalNote)}
+                          className={`${patientDetailStyles.noteRow} flex-1 bg-muted rounded-xl border border-border p-3 mb-1 text-left w-full`}
+                          aria-label={`Ver detalle de consulta del ${formatDate(record.visitDate)}`}
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-muted-foreground">{formatDate(record.visitDate)}</span>
+                              <span
+                                className={`${patientDetailStyles.noteRowStatusBadge} ${
+                                  isSigned ? patientDetailStyles.signed : patientDetailStyles.draft
+                                }`}
+                              >
+                                {isSigned ? "Firmada" : "Borrador"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-brand-600">Dr/a. {record.doctor?.firstName} {record.doctor?.lastName}</span>
+                              <span className={patientDetailStyles.noteRowChevron} aria-hidden>›</span>
+                            </div>
                           </div>
                           {record.subjective && (
                             <p className="text-xs text-foreground mb-1.5 leading-relaxed">{record.subjective}</p>
@@ -918,9 +941,10 @@ export function PatientDetailClient({
                               ))}
                             </div>
                           )}
-                        </div>
+                        </button>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1338,6 +1362,18 @@ export function PatientDetailClient({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de detalle de nota SOAP — abre al hacer click en una row del
+       *  tab Evolución / Notas. */}
+      <NoteDetailModal
+        open={noteDetailOpen !== null}
+        note={noteDetailOpen}
+        onClose={() => setNoteDetailOpen(null)}
+        onUpdated={(updated) => {
+          setRecords((prev) => prev.map((r) => (r.id === updated.id ? { ...r, ...updated } : r)));
+          setNoteDetailOpen(null);
+        }}
+      />
     </div>
   );
 }
