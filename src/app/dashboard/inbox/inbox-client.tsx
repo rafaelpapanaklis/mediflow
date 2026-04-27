@@ -551,21 +551,22 @@ export function InboxClient() {
                 </div>
               </div>
               <div className={styles.detailHeaderActions}>
-                <button type="button" className={styles.iconBtn} title="Llamar">
+                <button type="button" className={styles.iconBtn} title="Llamar" aria-label="Llamar">
                   <Phone size={14} aria-hidden />
                 </button>
-                <button type="button" className={styles.iconBtn} title="Videollamada">
+                <button type="button" className={styles.iconBtn} title="Videollamada" aria-label="Iniciar videollamada">
                   <Video size={14} aria-hidden />
                 </button>
                 <button
                   type="button"
                   className={styles.iconBtn}
                   title="Archivar"
+                  aria-label="Archivar conversación"
                   onClick={archiveThread}
                 >
                   <Archive size={14} aria-hidden />
                 </button>
-                <button type="button" className={styles.iconBtn} title="Más">
+                <button type="button" className={styles.iconBtn} title="Más" aria-label="Más opciones">
                   <MoreHorizontal size={14} aria-hidden />
                 </button>
               </div>
@@ -678,13 +679,13 @@ export function InboxClient() {
                   disabled={sending}
                 />
                 <div className={styles.composerBar}>
-                  <button type="button" className={styles.composerActionBtn} title="Adjuntar">
+                  <button type="button" className={styles.composerActionBtn} title="Adjuntar" aria-label="Adjuntar archivo">
                     <Paperclip size={14} aria-hidden />
                   </button>
-                  <button type="button" className={styles.composerActionBtn} title="Emoji">
+                  <button type="button" className={styles.composerActionBtn} title="Emoji" aria-label="Insertar emoji">
                     <Smile size={14} aria-hidden />
                   </button>
-                  <button type="button" className={styles.composerActionBtn} title="Sugerir con IA">
+                  <button type="button" className={styles.composerActionBtn} title="Sugerir con IA" aria-label="Sugerir respuesta con IA">
                     <Sparkles size={14} aria-hidden />
                   </button>
                   <span className={styles.composerBarSpacer} />

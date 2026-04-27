@@ -1324,9 +1324,14 @@ function FilterDrawer({
   return (
     <>
       <div className={styles.drawerBackdrop} onClick={onClose} />
-      <aside className={styles.drawer} role="dialog" aria-modal="true">
+      <aside
+        className={styles.drawer}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="filter-drawer-title"
+      >
         <header className={styles.drawerHeader}>
-          <h3 className={styles.drawerTitle}>Filtros avanzados</h3>
+          <h3 id="filter-drawer-title" className={styles.drawerTitle}>Filtros avanzados</h3>
           <button type="button" className={`${styles.btn} ${styles.btnIcon}`} onClick={onClose} aria-label="Cerrar">
             <X size={14} aria-hidden />
           </button>

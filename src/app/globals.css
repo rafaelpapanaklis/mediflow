@@ -286,6 +286,31 @@
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground) / 0.7);
   }
+
+  /* Skip link — WCAG 2.4.1. Oculto fuera del viewport hasta recibir
+     focus por teclado, donde se renderiza como botón flotante arriba
+     izquierda con el color de marca. */
+  .mf-skip-link {
+    position: fixed;
+    top: -40px;
+    left: 12px;
+    z-index: 9999;
+    padding: 10px 16px;
+    background: var(--brand);
+    color: #fff;
+    font-weight: 700;
+    font-size: 13px;
+    border-radius: 8px;
+    text-decoration: none;
+    box-shadow: 0 6px 24px -4px rgba(124, 58, 237, 0.45);
+    transition: top 0.18s ease-out;
+  }
+  .mf-skip-link:focus,
+  .mf-skip-link:focus-visible {
+    top: 12px;
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+  }
 }
 
 @keyframes fadeUp {

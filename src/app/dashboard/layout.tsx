@@ -54,6 +54,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <ActiveConsultProvider>
     <NewPatientProvider>
     <NewAppointmentProvider>
+    {/* Skip link — WCAG 2.4.1 Bypass Blocks. Oculto por defecto, visible
+        al recibir focus por teclado para que usuarios de teclado/lectores
+        salten la sidebar y la topbar. */}
+    <a href="#main-content" className="mf-skip-link">
+      Saltar al contenido principal
+    </a>
     <div className="dashboard-shell flex min-h-screen font-sans">
       <Sidebar
         user={{
@@ -85,6 +91,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
         />
         <PatientContextBar />
         <main
+          id="main-content"
+          tabIndex={-1}
           className="flex-1 pt-20 lg:pt-6"
           style={{ padding: "clamp(12px, 1.5vw, 28px)", paddingTop: "clamp(16px, 2vw, 24px)" }}
         >

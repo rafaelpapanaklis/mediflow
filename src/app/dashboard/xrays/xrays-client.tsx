@@ -1164,15 +1164,27 @@ export function XraysClient({
 
                   <div className={styles.findingsList}>
                     {findings.map((f) => (
-                      <button
+                      // div + role="button" porque dentro hay sub-botones
+                      // Aceptar/Rechazar y los buttons no se anidan en HTML
+                      // válido. Mantenemos accesibilidad por teclado con
+                      // tabIndex y onKeyDown (Enter/Space).
+                      <div
                         key={f.id}
-                        type="button"
+                        role="button"
+                        tabIndex={0}
                         className={styles.finding}
                         data-highlighted={highlightedFindingId === f.id}
                         style={{ ["--mf-region-color" as never]: SEV_COLOR[f.severity] }}
                         onMouseEnter={() => setHighlightedFindingId(f.id)}
                         onMouseLeave={() => setHighlightedFindingId(null)}
                         onClick={() => setHighlightedFindingId(f.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setHighlightedFindingId(f.id);
+                          }
+                        }}
+                        aria-label={`Hallazgo F${f.id}: ${f.title}, severidad ${SEV_LABEL[f.severity]}`}
                       >
                         <span className={styles.findingIcon}>F{f.id}</span>
                         <div className={styles.findingBody}>
@@ -1188,22 +1200,26 @@ export function XraysClient({
                           </div>
                         </div>
                         <div className={styles.findingActions}>
-                          <span
+                          <button
+                            type="button"
                             className={styles.findingActionBtn}
                             title="Aceptar"
+                            aria-label={`Aceptar hallazgo: ${f.title}`}
                             onClick={(e) => { e.stopPropagation(); toast.success(`Aceptado: ${f.title}`); }}
                           >
                             <Check size={11} aria-hidden />
-                          </span>
-                          <span
+                          </button>
+                          <button
+                            type="button"
                             className={styles.findingActionBtn}
                             title="Rechazar"
+                            aria-label={`Rechazar hallazgo: ${f.title}`}
                             onClick={(e) => { e.stopPropagation(); toast(`Rechazado: ${f.title}`, { icon: "✕" }); }}
                           >
                             <XIcon size={11} aria-hidden />
-                          </span>
+                          </button>
                         </div>
-                      </button>
+                      </div>
                     ))}
                   </div>
 

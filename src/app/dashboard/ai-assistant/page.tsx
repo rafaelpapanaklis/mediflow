@@ -497,21 +497,22 @@ export default function AIAssistantPage() {
             </div>
           </div>
           <div className={styles.chatHeaderActions}>
-            <button type="button" className={styles.iconBtn} title="Compartir">
+            <button type="button" className={styles.iconBtn} title="Compartir" aria-label="Compartir conversación">
               <Share2 size={14} aria-hidden />
             </button>
-            <button type="button" className={styles.iconBtn} title="Exportar">
+            <button type="button" className={styles.iconBtn} title="Exportar" aria-label="Exportar conversación">
               <Download size={14} aria-hidden />
             </button>
             <button
               type="button"
               className={styles.iconBtn}
               title="Nueva conversación"
+              aria-label="Iniciar nueva conversación"
               onClick={startNew}
             >
               <RotateCcw size={14} aria-hidden />
             </button>
-            <button type="button" className={styles.iconBtn} title="Más">
+            <button type="button" className={styles.iconBtn} title="Más" aria-label="Más opciones">
               <MoreHorizontal size={14} aria-hidden />
             </button>
           </div>
@@ -634,7 +635,7 @@ export default function AIAssistantPage() {
                 rows={1}
               />
               <div className={styles.composerBar}>
-                <button type="button" className={styles.composerActionBtn} title="Adjuntar">
+                <button type="button" className={styles.composerActionBtn} title="Adjuntar" aria-label="Adjuntar archivo">
                   <Paperclip size={15} aria-hidden />
                 </button>
                 <button
@@ -642,6 +643,8 @@ export default function AIAssistantPage() {
                   className={`${styles.composerActionBtn} ${recording ? styles.recording : ""}`}
                   onClick={toggleVoice}
                   title={recording ? "Detener grabación" : "Voz"}
+                  aria-label={recording ? "Detener grabación de voz" : "Grabar mensaje de voz"}
+                  aria-pressed={recording}
                 >
                   <Mic size={15} aria-hidden />
                 </button>
@@ -652,6 +655,7 @@ export default function AIAssistantPage() {
                       type="button"
                       className={styles.contextPillRemove}
                       onClick={() => setInput("")}
+                      aria-label="Borrar texto"
                     >
                       <X size={10} aria-hidden />
                     </button>
@@ -664,6 +668,7 @@ export default function AIAssistantPage() {
                   onClick={() => sendMessage()}
                   disabled={!input.trim() || loading}
                   title="Enviar"
+                  aria-label="Enviar mensaje"
                 >
                   <Send size={14} aria-hidden />
                 </button>
