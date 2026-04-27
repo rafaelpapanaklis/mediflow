@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useTransition } from "react";
+import toast from "react-hot-toast";
 import { Pencil, MessageCircle, X, Play, AlertTriangle } from "lucide-react";
 import { useAgenda } from "./agenda-provider";
 import { formatSlotTime } from "@/lib/agenda/time-utils";
 import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
-import type { AppointmentStatus } from "@/lib/agenda/types";
+import { patchAppointmentStatus } from "@/lib/agenda/mutations";
+import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
 
 const STATUS_COLOR: Record<AppointmentStatus, string> = {
@@ -35,7 +37,10 @@ function patientInitials(name: string): string {
 }
 
 export function AgendaDetailPanel() {
-  const { state, selectAppointment } = useAgenda();
+  const { state, selectAppointment, dispatch } = useAgenda();
+  const [pendingStatus, setPendingStatus] = useState<AppointmentStatus | null>(null);
+  const [waSending, setWaSending] = useState(false);
+  const [, startTransition] = useTransition();
 
   const appt = useMemo(
     () =>
@@ -84,6 +89,60 @@ export function AgendaDetailPanel() {
     : appt.isWalkIn
     ? "Walk-in"
     : "Presencial";
+
+  async function changeStatus(target: AppointmentStatus) {
+    if (!appt) return;
+    if (appt.status === target) return;
+    if (pendingStatus) return;
+
+    const original: AgendaAppointmentDTO = appt;
+    setPendingStatus(target);
+    dispatch({ type: "OPTIMISTIC_STATUS", id: appt.id, status: target });
+
+    try {
+      const updated = await patchAppointmentStatus(appt.id, target);
+      startTransition(() => {
+        dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
+      });
+      toast.success("Estado actualizado");
+    } catch (err) {
+      dispatch({ type: "ROLLBACK_STATUS", original });
+      const reason =
+        (err as { reason?: string; error?: string })?.reason ??
+        (err as { error?: string })?.error ??
+        "No se pudo cambiar el estado";
+      toast.error(reason);
+    } finally {
+      setPendingStatus(null);
+    }
+  }
+
+  async function sendWhatsapp() {
+    if (!appt || waSending) return;
+    setWaSending(true);
+    try {
+      const res = await fetch("/api/whatsapp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ appointmentId: appt.id }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "No se pudo enviar WhatsApp");
+      }
+      toast.success("Recordatorio enviado");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo enviar WhatsApp");
+    } finally {
+      setWaSending(false);
+    }
+  }
+
+  const cancelDisabled =
+    pendingStatus !== null ||
+    appt.status === "CANCELLED" ||
+    appt.status === "COMPLETED";
+  const startDisabled = pendingStatus !== null || appt.status !== "CHECKED_IN";
 
   return (
     <aside
@@ -160,6 +219,7 @@ export function AgendaDetailPanel() {
       <div className={styles.detailStatusGrid}>
         {STATUS_OPTIONS.map((opt) => {
           const active = appt.status === opt.value;
+          const isPending = pendingStatus === opt.value;
           return (
             <button
               key={opt.value}
@@ -170,11 +230,11 @@ export function AgendaDetailPanel() {
                   "--mf-status-color": STATUS_COLOR[opt.value],
                 } as React.CSSProperties
               }
-              disabled
+              disabled={pendingStatus !== null && !isPending}
               aria-pressed={active}
-              title="Cambio de estado disponible próximamente"
+              onClick={() => changeStatus(opt.value)}
             >
-              {opt.label}
+              {isPending ? "…" : opt.label}
             </button>
           );
         })}
@@ -190,23 +250,36 @@ export function AgendaDetailPanel() {
       )}
 
       <div className={styles.detailActions}>
-        <button type="button" className={styles.detailAction} disabled>
+        <button
+          type="button"
+          className={styles.detailAction}
+          disabled
+          title="Edición disponible próximamente"
+        >
           <Pencil size={12} aria-hidden /> Editar
         </button>
-        <button type="button" className={styles.detailAction} disabled>
-          <MessageCircle size={12} aria-hidden /> WhatsApp
+        <button
+          type="button"
+          className={styles.detailAction}
+          onClick={sendWhatsapp}
+          disabled={waSending}
+        >
+          <MessageCircle size={12} aria-hidden />
+          {waSending ? "Enviando…" : "WhatsApp"}
         </button>
         <button
           type="button"
           className={`${styles.detailAction} ${styles.danger}`}
-          disabled
+          onClick={() => changeStatus("CANCELLED")}
+          disabled={cancelDisabled}
         >
           <X size={12} aria-hidden /> Cancelar
         </button>
         <button
           type="button"
           className={`${styles.detailAction} ${styles.primary}`}
-          disabled
+          onClick={() => changeStatus("IN_PROGRESS")}
+          disabled={startDisabled}
         >
           <Play size={12} aria-hidden /> Iniciar consulta
         </button>
