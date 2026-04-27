@@ -88,6 +88,17 @@ export const STATUS_LABELS: Record<ChairStatus, string> = {
   ocupado: "Ocupado",
 };
 
+/** Status de Appointment relevante al modo En Vivo. */
+export type LiveApptStatus =
+  | "PENDING"
+  | "SCHEDULED"
+  | "CONFIRMED"
+  | "CHECKED_IN"
+  | "IN_PROGRESS"
+  | "COMPLETED"
+  | "CANCELLED"
+  | "NO_SHOW";
+
 /** Cita normalizada para el modo En Vivo. */
 export interface LiveAppointment {
   id: string;
@@ -100,4 +111,6 @@ export interface LiveAppointment {
   doctor: string;
   start: Date;
   end: Date;
+  /** Estado del workflow. Decisivo para getChairStatus. */
+  status?: LiveApptStatus;
 }

@@ -8,11 +8,18 @@ import type { ChairStatus, LiveAppointment } from "./element-types";
 const PROXIMO_WINDOW_MIN = 30; // próxima cita en los siguientes 30 min
 
 /**
- * Calcula el estado de un sillón en un momento dado.
+ * Calcula el estado de un sillón en un momento dado, decidiendo por
+ * Appointment.status (no solo por tiempo). El "viewTime" sigue siendo
+ * relevante porque el timeline permite "viajar en el tiempo": cuando
+ * viewTime está cerca de now usamos status real; cuando se viaja al
+ * pasado/futuro caemos al cálculo por tiempo (el status real no aplica).
  *
- * - 'ocupado'  → cita activa (start ≤ viewTime < end)
- * - 'proximo'  → próxima cita comienza en menos de PROXIMO_WINDOW_MIN
- * - 'libre'    → cualquier otro caso
+ * - 'ocupado'  → hay appointment con status=IN_PROGRESS en este sillón
+ *                (sin importar la hora). Si viewTime ≠ now, fallback a
+ *                "cita cuyo rango contiene viewTime".
+ * - 'proximo'  → próxima cita SCHEDULED|CONFIRMED|CHECKED_IN comienza en
+ *                ≤ 30 min. El timeline también lo aplica al "viajar".
+ * - 'libre'    → otros.
  */
 export function getChairStatus(
   resourceId: string,
@@ -20,29 +27,58 @@ export function getChairStatus(
   appointments: LiveAppointment[],
 ): ChairStatus {
   const now = viewTime.getTime();
+  const isLive = Math.abs(Date.now() - now) < 90_000;
+
+  // Activa = status IN_PROGRESS si estamos en tiempo real, o por rango
+  // si el usuario viajó por timeline.
   for (const a of appointments) {
     if (a.resourceId !== resourceId) continue;
-    const s = a.start.getTime();
-    const e = a.end.getTime();
-    if (s <= now && now < e) return "ocupado";
+    if (isLive) {
+      if (a.status === "IN_PROGRESS") return "ocupado";
+    } else {
+      const s = a.start.getTime();
+      const e = a.end.getTime();
+      if (s <= now && now < e) return "ocupado";
+    }
   }
-  // ¿Próxima en 30 min?
+
+  // Próxima en ≤ 30 min con status válido (aún no iniciada).
+  const PROXIMA_STATUSES: ReadonlySet<string> = new Set([
+    "SCHEDULED",
+    "CONFIRMED",
+    "CHECKED_IN",
+    "PENDING",
+  ]);
   for (const a of appointments) {
     if (a.resourceId !== resourceId) continue;
     const s = a.start.getTime();
     const diffMin = (s - now) / 60_000;
-    if (diffMin > 0 && diffMin <= PROXIMO_WINDOW_MIN) return "proximo";
+    if (diffMin > 0 && diffMin <= PROXIMO_WINDOW_MIN) {
+      // Si tenemos status, exigimos que sea uno "futuro válido". Si no
+      // tenemos status (datos legacy), aceptamos.
+      if (!a.status || PROXIMA_STATUSES.has(a.status)) return "proximo";
+    }
   }
   return "libre";
 }
 
-/** Cita ACTIVA en este momento para el sillón, o null. */
+/**
+ * Cita ACTIVA en este momento para el sillón, o null. Decide por status
+ * IN_PROGRESS si estamos en vivo; si no, por rango temporal.
+ */
 export function getChairAppointment(
   resourceId: string,
   viewTime: Date,
   appointments: LiveAppointment[],
 ): LiveAppointment | null {
   const now = viewTime.getTime();
+  const isLive = Math.abs(Date.now() - now) < 90_000;
+
+  if (isLive) {
+    for (const a of appointments) {
+      if (a.resourceId === resourceId && a.status === "IN_PROGRESS") return a;
+    }
+  }
   for (const a of appointments) {
     if (a.resourceId !== resourceId) continue;
     if (a.start.getTime() <= now && now < a.end.getTime()) return a;

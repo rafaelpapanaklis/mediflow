@@ -41,6 +41,7 @@ interface ApiResponse {
     doctor: string;
     start: string;
     end: string;
+    status?: string;
   }>;
   waitingRoom?: WaitingRoomEntry[];
 }
@@ -136,6 +137,7 @@ export function LivePublicClient({
       doctor: a.doctor,
       start: new Date(a.start),
       end: new Date(a.end),
+      status: a.status as LiveAppointment["status"],
     }));
   }, [data]);
 

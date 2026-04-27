@@ -220,7 +220,7 @@ export function ClinicLayoutClient({
         const data = await res.json();
         if (cancelled) return;
         const parsed: LiveAppointment[] = (data.appointments ?? []).map(
-          (a: { id: string; resourceId: string; patient: string; patientFull?: string; treatment: string; doctor: string; start: string; end: string }) => ({
+          (a: { id: string; resourceId: string; patient: string; patientFull?: string; treatment: string; doctor: string; start: string; end: string; status?: string }) => ({
             id: a.id,
             resourceId: a.resourceId,
             patient: a.patient,
@@ -229,6 +229,7 @@ export function ClinicLayoutClient({
             doctor: a.doctor,
             start: new Date(a.start),
             end: new Date(a.end),
+            status: a.status as LiveAppointment["status"],
           }),
         );
         setAppointments(parsed);
