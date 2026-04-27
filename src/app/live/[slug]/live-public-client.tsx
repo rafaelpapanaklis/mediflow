@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Maximize2, Minimize2, AlertCircle, Building2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Maximize2, Minimize2, AlertCircle, Building2, Lock } from "lucide-react";
 import { toScreen } from "@/lib/floor-plan/iso";
 import { getCatalogForClinic } from "@/lib/floor-plan/elements";
 import type {
@@ -67,6 +67,10 @@ export function LivePublicClient({
    *  | "internal_error" | "timeout" | "network" | "parse"). hint para
    *  mostrar mensaje accionable al admin de la clínica. */
   const [error, setError] = useState<{ kind: string; hint?: string } | null>(null);
+  /** Cuando el endpoint responde 401 ("locked"), mostramos prompt inline
+   *  y paramos polling hasta que el usuario desbloquee. */
+  const [locked, setLocked] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [viewTime, setViewTime] = useState<Date>(() => new Date());
   const [hover, setHover] = useState<HoverData | null>(null);
   const [now, setNow] = useState<Date>(() => new Date());
@@ -75,9 +79,11 @@ export function LivePublicClient({
 
   const catalog = getCatalogForClinic("DENTAL");
 
-  // Polling cada 30s con timeout de 10s por request (evita loading
-  // infinito si el endpoint queda colgado).
+  // Polling cada 30s con timeout de 10s por request. Si `locked=true`
+  // NO se monta el polling — el cliente espera a que el usuario
+  // ingrese el password.
   useEffect(() => {
+    if (locked) return;
     let cancelled = false;
     const fetchAll = async () => {
       const ac = new AbortController();
@@ -91,10 +97,12 @@ export function LivePublicClient({
         clearTimeout(timeoutId);
         if (!res.ok) {
           if (res.status === 401) {
-            // Cookie legacy o expirada — recarga la página completa.
-            // El endpoint limpió cookies con maxAge=0; el page server
-            // detectará la ausencia y mostrará el PasswordGate.
-            window.location.replace(`/live/${slug}`);
+            // Cualquier 401 = sesión bloqueada. Mostramos prompt inline
+            // (sin reload) y paramos el polling hasta que desbloquee.
+            if (!cancelled) {
+              setLocked(true);
+              setError(null);
+            }
             return;
           }
           // Intentamos parsear el body para mostrar hint del server.
@@ -131,7 +139,17 @@ export function LivePublicClient({
       cancelled = true;
       clearInterval(id);
     };
-  }, [slug]);
+  }, [slug, locked, reloadKey]);
+
+  /** Llamado cuando el prompt de unlock recibe OK del server. Reanuda
+   *  el polling y limpia error/locked. reloadKey fuerza re-mount del
+   *  effect para que dispare un fetch inmediato. */
+  const handleUnlockSuccess = useCallback(() => {
+    setLocked(false);
+    setError(null);
+    setData(null); // muestra "Cargando…" mientras llega el primer fetch
+    setReloadKey((k) => k + 1);
+  }, []);
 
   // Reloj cada segundo
   useEffect(() => {
@@ -176,7 +194,16 @@ export function LivePublicClient({
     }));
   }, [data]);
 
-  // 401 ya hizo replace al page; el resto se muestra como UI accionable.
+  // 401 = locked: prompt inline para ingresar password.
+  if (locked) {
+    return (
+      <UnlockPrompt
+        slug={slug}
+        clinicName={clinicName}
+        onSuccess={handleUnlockSuccess}
+      />
+    );
+  }
   if (error) {
     return (
       <div className={liveStyles.errorWrap}>
@@ -375,6 +402,97 @@ export function LivePublicClient({
       </footer>
 
       <LiveTooltip data={hover} />
+    </div>
+  );
+}
+
+/**
+ * Prompt inline de desbloqueo. Se muestra cuando el endpoint devolvió
+ * 401 ("locked"). Hace POST a /api/live/<slug>/unlock; si el server
+ * responde OK, llama onSuccess para que el cliente reanude polling.
+ * No recarga la página — el cookie se setea por la respuesta y el
+ * próximo fetch del cliente lo envía.
+ */
+function UnlockPrompt({
+  slug,
+  clinicName,
+  onSuccess,
+}: {
+  slug: string;
+  clinicName: string;
+  onSuccess: () => void;
+}) {
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  const submit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!password.trim() || submitting) return;
+      setSubmitting(true);
+      setErrMsg(null);
+      try {
+        const res = await fetch(`/api/live/${slug}/unlock`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password }),
+          cache: "no-store",
+        });
+        if (res.status === 401) {
+          setErrMsg("Contraseña incorrecta");
+          return;
+        }
+        if (!res.ok) {
+          setErrMsg("No se pudo desbloquear. Reintenta.");
+          return;
+        }
+        // OK: el server seteó la cookie en la response; reanudamos
+        // polling sin reload para mejor UX.
+        onSuccess();
+      } catch {
+        setErrMsg("Error de red. Verifica tu conexión.");
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [password, submitting, slug, onSuccess],
+  );
+
+  return (
+    <div className={liveStyles.errorWrap}>
+      <form onSubmit={submit} className={liveStyles.unlockCard}>
+        <div className={liveStyles.unlockIcon}>
+          <Lock size={28} aria-hidden />
+        </div>
+        <h1>Esta vista requiere contraseña</h1>
+        <p>
+          {clinicName} habilitó protección por contraseña. Ingrésala una vez y
+          quedarás desbloqueado en este dispositivo por 12 horas.
+        </p>
+        <input
+          type="password"
+          autoFocus
+          autoComplete="current-password"
+          value={password}
+          onChange={(e) => {
+            setPassword(e.target.value);
+            if (errMsg) setErrMsg(null);
+          }}
+          placeholder="Contraseña"
+          className={liveStyles.unlockInput}
+          spellCheck={false}
+          disabled={submitting}
+        />
+        {errMsg && <span className={liveStyles.unlockError}>{errMsg}</span>}
+        <button
+          type="submit"
+          className={liveStyles.errorBtn}
+          disabled={!password.trim() || submitting}
+        >
+          {submitting ? "Desbloqueando…" : "Desbloquear"}
+        </button>
+      </form>
     </div>
   );
 }

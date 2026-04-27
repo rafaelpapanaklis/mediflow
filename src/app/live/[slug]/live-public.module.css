@@ -238,9 +238,79 @@
   box-shadow: 0 8px 22px -8px rgba(74, 144, 226, 0.55);
   transition: background 0.15s, transform 0.08s;
 }
-.errorBtn:hover {
+.errorBtn:hover:not(:disabled) {
   background: #2A68C0;
   transform: translateY(-1px);
+}
+.errorBtn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+/* ─── Unlock prompt inline ─── */
+.unlockCard {
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid #E2ECF4;
+  padding: 30px 28px 24px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 18px 48px -16px rgba(20, 40, 100, 0.18);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+}
+.unlockCard h1 {
+  font-size: 19px;
+  font-weight: 800;
+  color: #1A2540;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+.unlockCard p {
+  font-size: 13px;
+  color: #6B7A99;
+  margin: 0 0 4px;
+  line-height: 1.55;
+}
+.unlockIcon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #4A90E2, #2A68C0);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  margin: 0 auto 4px;
+  box-shadow: 0 8px 22px -8px rgba(74, 144, 226, 0.55);
+}
+.unlockInput {
+  width: 100%;
+  padding: 11px 14px;
+  font-size: 14px;
+  background: #F8FAFC;
+  border: 1px solid #E2ECF4;
+  border-radius: 10px;
+  color: #1A2540;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.unlockInput:focus {
+  border-color: #4A90E2;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.12);
+}
+.unlockInput:disabled { opacity: 0.6; }
+.unlockError {
+  font-size: 12px;
+  color: #EF4444;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin-top: 2px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .footer {
