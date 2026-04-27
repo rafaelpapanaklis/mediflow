@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Plus, Printer, Edit } from "lucide-react";
 import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
 import { ageFromDob, fmtMXN } from "@/lib/format";
+import { HeroCard } from "@/components/dashboard/patient-detail/hero-card";
 import { DentalForm }          from "@/components/clinical/dental-form";
 import { NutritionForm }       from "@/components/clinical/nutrition-form";
 import { PsychologyForm }      from "@/components/clinical/psychology-form";
@@ -307,110 +308,56 @@ export function PatientDetailClient({
   };
 
   return (
-    <div style={{ padding: "24px 28px", maxWidth: 1400, margin: "0 auto" }}>
-      {/* Breadcrumbs + quick actions */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
-        <Link href="/dashboard/patients" className="btn-new btn-new--ghost btn-new--sm">
-          <ArrowLeft size={14} />
-          Pacientes
+    <div style={{ padding: "20px 28px 28px", maxWidth: 1400, margin: "0 auto" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-3)", marginBottom: 12 }}>
+        <Link href="/dashboard/patients" style={{ color: "var(--text-3)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <ArrowLeft size={12} /> Pacientes
         </Link>
         <span style={{ color: "var(--text-4)" }}>/</span>
-        <span style={{ color: "var(--text-1)", fontWeight: 500, fontSize: 13 }}>{fullName}</span>
-
-        {patient.allergies?.length > 0 && (
-          <BadgeNew tone="danger" dot>Alergia: {patient.allergies[0]}</BadgeNew>
-        )}
-        {totalBalance > 0 && (
-          <BadgeNew tone="info" dot>Saldo: {formatCurrency(totalBalance)}</BadgeNew>
-        )}
-
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-          <ButtonNew variant="ghost" size="sm" onClick={() => setTab("expediente")}>
-            Nueva nota
-          </ButtonNew>
-          {portalLink ? (
-            <ButtonNew
-              variant="secondary"
-              size="sm"
-              onClick={() => { navigator.clipboard.writeText(portalLink); toast.success("Link copiado"); }}
-            >
-              Copiar portal
-            </ButtonNew>
-          ) : (
-            <ButtonNew variant="secondary" size="sm" onClick={generatePortalLink} disabled={generatingPortal}>
-              {generatingPortal ? "Generando…" : "Portal paciente"}
-            </ButtonNew>
-          )}
-          <ButtonNew variant="primary" size="sm" icon={<Plus size={12} />} onClick={() => setShowNewAppt(true)}>
-            Agendar cita
-          </ButtonNew>
-        </div>
+        <span style={{ color: "var(--text-1)", fontWeight: 500 }}>{fullName}</span>
       </div>
 
-      {/* Patient header card */}
-      <div className="card" style={{ marginBottom: 14 }}>
-        <div style={{ padding: 24, display: "flex", alignItems: "flex-start", gap: 20 }}>
-          <AvatarNew name={fullName} size="xl" />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
-              <h1 style={{ fontSize: 20, color: "var(--text-1)", fontWeight: 600, margin: 0, letterSpacing: "-0.02em" }}>{fullName}</h1>
-              <BadgeNew tone={patient.status === "ACTIVE" ? "success" : "neutral"} dot>
-                {patient.status === "ACTIVE" ? "Activo" : patient.status === "INACTIVE" ? "Inactivo" : "Archivado"}
-              </BadgeNew>
-              <span className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>#{patient.patientNumber}</span>
-              <button
-                onClick={() => setShowEdit(true)}
-                className="btn-new btn-new--ghost btn-new--sm"
-                type="button"
-                style={{ marginLeft: 4 }}
-              >
-                <Edit size={12} /> Editar
-              </button>
-            </div>
-
-            <div style={{ display: "flex", gap: 16, fontSize: 12, color: "var(--text-2)", flexWrap: "wrap", marginBottom: 10 }}>
-              {ageNum !== null && <span>{ageNum} años</span>}
-              <span>{genderLabel}</span>
-              {patient.phone && <span><Phone size={11} style={{ display: "inline", verticalAlign: -1, marginRight: 4 }} />{patient.phone}</span>}
-              {patient.email && <span><Mail size={11} style={{ display: "inline", verticalAlign: -1, marginRight: 4 }} />{patient.email}</span>}
-              {patient.bloodType && <span>Tipo: <strong className="mono" style={{ color: "var(--text-1)" }}>{patient.bloodType}</strong></span>}
-            </div>
-
-            {(patient.allergies?.length > 0 || patient.chronicConditions?.length > 0 || patient.currentMedications?.length > 0 || patient.tags?.length > 0) && (
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {patient.allergies?.map((a: string) => (
-                  <span key={`a-${a}`} className="tag-new" style={{ color: "#fca5a5", borderColor: "rgba(239,68,68,0.2)", background: "var(--danger-soft)" }}>🚨 {a}</span>
-                ))}
-                {patient.chronicConditions?.map((c: string) => (
-                  <span key={`c-${c}`} className="tag-new" style={{ color: "#fcd34d", borderColor: "rgba(245,158,11,0.2)", background: "var(--warning-soft)" }}>{c}</span>
-                ))}
-                {patient.currentMedications?.map((m: string) => (
-                  <span key={`m-${m}`} className="tag-new" style={{ color: "#c4b5fd", borderColor: "rgba(124,58,237,0.2)", background: "var(--brand-soft)" }}>💊 {m}</span>
-                ))}
-                {patient.tags?.map((t: string) => (
-                  <span key={`t-${t}`} className="tag-new">{t}</span>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Meta info grid */}
-        <div style={{ borderTop: "1px solid var(--border-soft)", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", padding: 18, gap: 20 }}>
-          {[
-            { label: "Última visita",      val: lastAppt ? formatDate(lastAppt.date) : "—",        sub: lastAppt?.type ?? "" },
-            { label: "Próxima cita",       val: nextAppt ? formatDate(nextAppt.date) : "—",        sub: nextAppt?.type ?? "", highlight: !!nextAppt },
-            { label: "Total tratamiento",  val: fmtMXN(totalPlan),                                 sub: `Pagado: ${fmtMXN(totalPaid)}` },
-            { label: "Visitas completadas", val: String(completedCount),                           sub: `${appointments.length} totales` },
-          ].map(s => (
-            <div key={s.label}>
-              <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>{s.label}</div>
-              <div style={{ color: s.highlight ? "#c4b5fd" : "var(--text-1)", fontSize: 14, fontWeight: 600 }}>{s.val}</div>
-              {s.sub && <div style={{ fontSize: 10, color: "var(--text-3)", marginTop: 2 }}>{s.sub}</div>}
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Hero card permanente — audit Opción C ajuste 1 */}
+      <HeroCard
+        patient={{
+          id: patient.id,
+          firstName: patient.firstName,
+          lastName: patient.lastName,
+          patientNumber: patient.patientNumber,
+          gender: patient.gender ?? "",
+          dob: patient.dob ?? null,
+          phone: patient.phone ?? null,
+          email: patient.email ?? null,
+          bloodType: patient.bloodType ?? null,
+          status: patient.status ?? "ACTIVE",
+          allergies: patient.allergies ?? [],
+          chronicConditions: patient.chronicConditions ?? [],
+          currentMedications: patient.currentMedications ?? [],
+        }}
+        nextAppointment={nextAppt ? {
+          id: nextAppt.id,
+          date: nextAppt.date,
+          startTime: nextAppt.startTime ?? "",
+          type: nextAppt.type,
+          doctorName: nextAppt.doctor ? `Dr/a. ${nextAppt.doctor.firstName} ${nextAppt.doctor.lastName}` : undefined,
+        } : null}
+        lastVisitDate={lastAppt?.date ?? null}
+        visitCount={completedCount}
+        pendingBalance={totalBalance}
+        portalUrl={portalLink}
+        onEdit={() => setShowEdit(true)}
+        onStartConsult={() => {
+          if (nextAppt) {
+            // En commit 6 esto creará el draft note + activará context bar.
+            router.push(`?appointment=${nextAppt.id}`);
+          }
+        }}
+        onReschedule={() => {
+          // Por ahora redirige al tab Citas; en una futura iteración abrir picker inline.
+          setTab("agenda");
+        }}
+        onCharge={() => setTab("facturacion")}
+      />
 
       {/* Tabs */}
       <div className="tabs-new" style={{ marginBottom: 16, overflowX: "auto" }}>
