@@ -66,6 +66,31 @@ interface LastAction {
   state: ToothState;
 }
 
+/** Lee la respuesta de forma robusta: intenta JSON, cae a texto, nunca tira por
+ *  "Unexpected end of JSON input" cuando el body está vacío o no es JSON válido
+ *  (e.g. 500 con HTML, 503 con migración pendiente, 204 sin body). */
+async function safeJson<T = unknown>(res: Response): Promise<{ data: T | null; raw: string | null }> {
+  let raw: string | null = null;
+  try {
+    raw = await res.text();
+    if (!raw) return { data: null, raw: null };
+    return { data: JSON.parse(raw) as T, raw };
+  } catch {
+    return { data: null, raw };
+  }
+}
+
+async function readErrorMessage(res: Response, fallback: string): Promise<string> {
+  const { data, raw } = await safeJson<{ error?: string; reason?: string; hint?: string }>(res);
+  if (data?.error) {
+    const hint = data.hint ? ` — ${data.hint}` : "";
+    return `${data.error}${hint}`;
+  }
+  if (data?.reason) return String(data.reason);
+  if (raw && raw.length > 0 && raw.length < 200) return raw;
+  return `${fallback} (HTTP ${res.status})`;
+}
+
 export function Odontogram({ patientId, readOnly = false }: OdontogramProps) {
   const [entries, setEntries] = useState<ServerEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,22 +106,20 @@ export function Odontogram({ patientId, readOnly = false }: OdontogramProps) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch(`/api/odontogram?patientId=${patientId}`, { cache: "no-store" })
-      .then(async (res) => {
-        if (!res.ok) throw new Error((await res.json()).error ?? "fetch_failed");
-        return res.json();
-      })
-      .then((data) => {
+    (async () => {
+      try {
+        const res = await fetch(`/api/odontogram?patientId=${patientId}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(await readErrorMessage(res, "No se pudo cargar"));
+        const { data } = await safeJson<{ entries: ServerEntry[] }>(res);
         if (cancelled) return;
-        setEntries(data.entries ?? []);
-      })
-      .catch((err) => {
+        setEntries(data?.entries ?? []);
+      } catch (err) {
         if (cancelled) return;
-        toast.error(err.message ?? "No se pudo cargar el odontograma");
-      })
-      .finally(() => {
+        toast.error(err instanceof Error ? err.message : "No se pudo cargar el odontograma");
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    })();
     return () => { cancelled = true; };
   }, [patientId]);
 
@@ -148,7 +171,7 @@ export function Odontogram({ patientId, readOnly = false }: OdontogramProps) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ patientId, toothNumber: fdi, surface }),
         });
-        if (!res.ok) throw new Error((await res.json()).error ?? "delete_failed");
+        if (!res.ok) throw new Error(await readErrorMessage(res, "No se pudo borrar"));
       } catch (err) {
         setEntries((es) => [...es, prev]); // rollback
         toast.error(err instanceof Error ? err.message : "Error al borrar");
@@ -180,8 +203,9 @@ export function Odontogram({ patientId, readOnly = false }: OdontogramProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ patientId, toothNumber: fdi, surface, state }),
       });
-      if (!res.ok) throw new Error((await res.json()).error ?? "upsert_failed");
-      const data = await res.json();
+      if (!res.ok) throw new Error(await readErrorMessage(res, "No se pudo guardar"));
+      const { data } = await safeJson<{ entry: ServerEntry }>(res);
+      if (!data?.entry) throw new Error("Respuesta vacía del servidor");
       // Reemplaza optimistic con respuesta real (sobre todo el id)
       setEntries((es) => {
         const without = es.filter((e) => e.id !== optimistic.id);
@@ -301,7 +325,7 @@ export function Odontogram({ patientId, readOnly = false }: OdontogramProps) {
     setPending(true);
     try {
       const res = await fetch(`/api/odontogram/reset?patientId=${patientId}`, { method: "POST" });
-      if (!res.ok) throw new Error((await res.json()).error ?? "reset_failed");
+      if (!res.ok) throw new Error(await readErrorMessage(res, "No se pudo reiniciar"));
       setEntries([]);
       setLastAction(null);
       toast.success("Odontograma reiniciado");
