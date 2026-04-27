@@ -43,24 +43,25 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
         {columns.length === 0 ? (
           <AgendaEmptyDay />
         ) : (
-          <div
-            className={styles.grid}
-            style={
-              {
-                "--mf-agenda-cols": columns.length,
-                "--mf-agenda-slot-min": state.slotMinutes,
-                "--mf-agenda-day-start": state.dayStart,
-                "--mf-agenda-day-end": state.dayEnd,
-              } as React.CSSProperties
-            }
-          >
-            <AgendaTimeAxis />
-            <div className={styles.columnsWrap}>
+          <div className={styles.scrollArea}>
+            <div
+              className={styles.scrollGrid}
+              style={
+                {
+                  "--mf-agenda-cols": columns.length,
+                  "--mf-agenda-slot-min": state.slotMinutes,
+                  "--mf-agenda-day-start": state.dayStart,
+                  "--mf-agenda-day-end": state.dayEnd,
+                } as React.CSSProperties
+              }
+            >
+              <div className={styles.cornerCell} aria-hidden />
               <div className={styles.columnsHeader}>
                 {columns.map((col) => (
                   <AgendaColumnHeader key={col.key} column={col} />
                 ))}
               </div>
+              <AgendaTimeAxis />
               <div className={styles.columnsBody}>
                 {columns.map((col) => (
                   <AgendaColumn key={col.key} column={col} />

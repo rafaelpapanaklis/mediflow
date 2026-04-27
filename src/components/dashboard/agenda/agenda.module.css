@@ -14,7 +14,15 @@
   overflow: hidden;
 }
 
-.grid {
+/* Único contenedor scrollable — abarca eje horario + columnas */
+.scrollArea {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Grid 2x2 dentro del scroll: corner | headers / axis | body */
+.scrollGrid {
   --mf-agenda-cols: 1;
   --mf-agenda-slot-min: 15;
   --mf-agenda-day-start: 8;
@@ -24,33 +32,33 @@
 
   display: grid;
   grid-template-columns: var(--mf-agenda-axis-w) 1fr;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: hidden;
+  grid-template-rows: 56px auto;
+  min-width: 100%;
 }
 
+/* Esquina superior-izquierda (vacía), sticky top + left */
+.cornerCell {
+  grid-row: 1;
+  grid-column: 1;
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 4;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-soft);
+  border-right: 1px solid var(--border-soft);
+}
+
+/* Eje horario — sticky left:0 dentro del scroll vertical compartido */
 .timeAxis {
+  grid-row: 2;
+  grid-column: 1;
   position: sticky;
   left: 0;
-  top: 0;
+  z-index: 2;
   background: var(--bg);
   border-right: 1px solid var(--border-soft);
-  display: flex;
-  flex-direction: column;
   user-select: none;
-  z-index: 2;
-}
-
-.timeAxisHeader {
-  height: 56px;
-  border-bottom: 1px solid var(--border-soft);
-  background: var(--bg);
-}
-
-.timeAxisBody {
-  flex: 1 1 auto;
-  overflow: hidden;
-  position: relative;
 }
 
 .timeAxisLabel {
@@ -67,38 +75,25 @@
   pointer-events: none;
 }
 
-.columnsWrap {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  overflow: hidden;
-}
-
+/* Cabecera de columnas — sticky top, scrollea horizontal junto con body */
 .columnsHeader {
+  grid-row: 1;
+  grid-column: 2;
   display: grid;
   grid-template-columns: repeat(var(--mf-agenda-cols), minmax(160px, 1fr));
-  height: 56px;
-  border-bottom: 1px solid var(--border-soft);
-  background: var(--bg);
   position: sticky;
   top: 0;
-  z-index: 2;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
+  z-index: 3;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-soft);
 }
 
-.columnsHeader::-webkit-scrollbar {
-  display: none;
-}
-
+/* Cuerpo de columnas */
 .columnsBody {
+  grid-row: 2;
+  grid-column: 2;
   display: grid;
   grid-template-columns: repeat(var(--mf-agenda-cols), minmax(160px, 1fr));
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-x: auto;
-  overflow-y: auto;
 }
 
 .columnHeader {
@@ -288,7 +283,7 @@
 }
 
 @media (max-width: 767.98px) {
-  .grid {
+  .scrollGrid {
     --mf-agenda-axis-w: 48px;
   }
   .columnsHeader,

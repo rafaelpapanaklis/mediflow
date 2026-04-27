@@ -17,23 +17,20 @@ export function AgendaTimeAxis() {
 
   return (
     <div className={styles.timeAxis} aria-hidden>
-      <div className={styles.timeAxisHeader} />
-      <div className={styles.timeAxisBody}>
-        {labels.map((h) => {
-          const slotsFromTop = (h - state.dayStart) * slotsPerHour;
-          return (
-            <div
-              key={h}
-              className={styles.timeAxisLabel}
-              style={{
-                top: `calc(${slotsFromTop} * ${slotHeightVar})`,
-              }}
-            >
-              {h.toString().padStart(2, "0")}:00
-            </div>
-          );
-        })}
-      </div>
+      {labels.map((h) => {
+        const slotsFromTop = (h - state.dayStart) * slotsPerHour;
+        return (
+          <div
+            key={h}
+            className={styles.timeAxisLabel}
+            style={{
+              top: `calc(${slotsFromTop} * ${slotHeightVar})`,
+            }}
+          >
+            {h.toString().padStart(2, "0")}:00
+          </div>
+        );
+      })}
     </div>
   );
 }
