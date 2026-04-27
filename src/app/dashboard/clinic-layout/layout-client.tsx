@@ -144,8 +144,8 @@ export function ClinicLayoutClient({
   // Flag para evitar múltiples drops async simultáneos.
   const dropInFlightRef = useRef<boolean>(false);
 
-  /** Cancela cualquier drag/move en curso sin commitear. Llamado por
-   *  Escape, onMouseLeave del SVG y unmount — evita ghosts colgando. */
+  /** Cancela TODO drag/move incluyendo el drag desde catálogo. Solo lo
+   *  llamamos en Escape y al unmount — eventos terminales del usuario. */
   const cancelDrag = useCallback(() => {
     if (rafIdRef.current !== null) {
       cancelAnimationFrame(rafIdRef.current);
@@ -156,6 +156,22 @@ export function ClinicLayoutClient({
     moveStartRef.current = null;
     setDragType(null);
     setDragGhost(null);
+    setMovingId(null);
+    setMovingPosition(null);
+  }, []);
+
+  /** Cancela SOLO move de elemento + pan en progreso. No toca dragType
+   *  porque el drag desde catálogo está manejado en window listener y
+   *  debe seguir vivo aunque el cursor salga del SVG. Llamado en
+   *  onMouseLeave del SVG. */
+  const cancelMoveOrPan = useCallback(() => {
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
+    pendingMouseRef.current = null;
+    panStartRef.current = null;
+    moveStartRef.current = null;
     setMovingId(null);
     setMovingPosition(null);
   }, []);
@@ -557,6 +573,10 @@ export function ClinicLayoutClient({
   const onSvgMouseDown = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
       if (e.button !== 0) return;
+      // Si hay un drag desde catálogo activo, no iniciar pan ni
+      // deselección — el window listener maneja el drop.
+      if (dragType) return;
+
       if (panMode) {
         panStartRef.current = {
           x: e.clientX,
@@ -566,18 +586,20 @@ export function ClinicLayoutClient({
         };
         return;
       }
-      // Click sobre el fondo deselecciona.
+      // Click sobre el fondo deselecciona (solo con tool select).
       const target = e.target as Element;
       if (!target.closest("[data-element-id]")) {
         setSelectedId(null);
       }
     },
-    [panMode, panOffset.x, panOffset.y],
+    [panMode, dragType, panOffset.x, panOffset.y],
   );
 
-  /** Mousemove throttled con requestAnimationFrame.
-   *  Sin esto, 60 eventos/seg mutaban state → 60 re-renders del SVG con
-   *  47 elementos cada uno → ghosting visual. Ahora máx 1 update/frame. */
+  /** Mousemove throttled con requestAnimationFrame para PAN y MOVE.
+   *  El drag desde el catálogo (dragType) NO se maneja aquí — vive en un
+   *  window listener (ver useEffect más abajo) para ser tool-agnostic:
+   *  funciona con cualquier herramienta (V/H) activa, sin que el botón
+   *  de mano interfiera con el drop. */
   const onSvgMouseMove = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
       const cx = e.clientX;
@@ -588,7 +610,8 @@ export function ClinicLayoutClient({
         rafIdRef.current = null;
         const last = pendingMouseRef.current;
         if (!last) return;
-        // Pan
+        // Pan (solo cuando hand tool activo Y el usuario inició drag en
+        // canvas vacío con mousedown).
         if (panMode && panStartRef.current) {
           const dx = (last.x - panStartRef.current.x) / zoom;
           const dy = (last.y - panStartRef.current.y) / zoom;
@@ -598,15 +621,8 @@ export function ClinicLayoutClient({
           });
           return;
         }
-        // Drag desde sidebar (ghost translúcido)
-        if (dragType) {
-          const g = eventToGrid(last.x, last.y);
-          if (g) setDragGhost({ col: g.col, row: g.row });
-          return;
-        }
         // Move de elemento existente — actualiza SOLO movingPosition,
-        // no toques `elements` hasta el mouseUp. Esto evita 60 fps de
-        // setElements + sort + autosave-effect.
+        // no toques `elements` hasta el mouseUp.
         if (movingId !== null && moveStartRef.current) {
           const g = eventToGrid(last.x, last.y);
           if (!g) return;
@@ -619,11 +635,11 @@ export function ClinicLayoutClient({
         }
       });
     },
-    [panMode, dragType, eventToGrid, movingId, zoom],
+    [panMode, eventToGrid, movingId, zoom],
   );
 
   const onSvgMouseUp = useCallback(
-    (e: React.MouseEvent<SVGSVGElement>) => {
+    (_e: React.MouseEvent<SVGSVGElement>) => {
       // Cancela cualquier RAF pendiente para que no procese eventos
       // posteriores al mouseUp.
       if (rafIdRef.current !== null) {
@@ -637,17 +653,9 @@ export function ClinicLayoutClient({
         markDirty();
         return;
       }
-      if (dragType) {
-        const g = eventToGrid(e.clientX, e.clientY);
-        // Limpiamos ghost y dragType ANTES de addElement (que puede ser
-        // async). Si addElement tarda, el ghost ya no aparece colgando.
-        setDragType(null);
-        setDragGhost(null);
-        if (g && g.col >= 0 && g.row >= 0 && g.col < GRID_COLS && g.row < GRID_ROWS) {
-          void addElement(dragType, g.col, g.row);
-        }
-        return;
-      }
+      // dragType (drag desde catálogo) se maneja en window listener —
+      // ver useEffect "drag from catalog". Aquí solo manejamos el move
+      // de elementos existentes.
       if (movingId !== null) {
         // Commitea la posición final al array `elements` con functional
         // setState. Solo aquí pagamos el re-render + autosave dirty.
@@ -664,13 +672,56 @@ export function ClinicLayoutClient({
         markDirty();
       }
     },
-    [panMode, dragType, eventToGrid, addElement, movingId, movingPosition, markDirty],
+    [panMode, movingId, movingPosition, markDirty],
   );
 
-  /** Cancela cualquier drag/move en curso sin commitear. Se llama cuando
-   *  el mouse sale del SVG o al presionar Escape — evita ghosts colgando.
-   *  Movido más arriba para que esté disponible en el useEffect de
-   *  keyboard shortcuts (Esc llama cancelDrag). */
+  /** Drag desde el catálogo (sidebar) → drop en cualquier parte.
+   *  Se monta como listeners de WINDOW cuando dragType cambia para que:
+   *  - El drop funcione con cualquier tool activa (V/H), porque no
+   *    depende del SVG handler que comparte branches con pan/move.
+   *  - El ghost se actualice incluso si el cursor entra/sale del SVG.
+   *  - El mouseup llegue garantizado, aunque el cursor caiga sobre un
+   *    elemento hijo o panel hermano. */
+  useEffect(() => {
+    if (!dragType) return;
+    const currentDragType = dragType;
+    let rafLocal: number | null = null;
+    let lastX = 0;
+    let lastY = 0;
+
+    const flush = () => {
+      rafLocal = null;
+      const g = eventToGrid(lastX, lastY);
+      if (g) setDragGhost({ col: g.col, row: g.row });
+    };
+    const onMove = (e: MouseEvent) => {
+      lastX = e.clientX;
+      lastY = e.clientY;
+      if (rafLocal !== null) return;
+      rafLocal = requestAnimationFrame(flush);
+    };
+    const onUp = (e: MouseEvent) => {
+      if (rafLocal !== null) {
+        cancelAnimationFrame(rafLocal);
+        rafLocal = null;
+      }
+      const g = eventToGrid(e.clientX, e.clientY);
+      // Limpia ghost ANTES del addElement async para evitar duplicados.
+      setDragType(null);
+      setDragGhost(null);
+      if (g && g.col >= 0 && g.row >= 0 && g.col < GRID_COLS && g.row < GRID_ROWS) {
+        void addElement(currentDragType, g.col, g.row);
+      }
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      if (rafLocal !== null) cancelAnimationFrame(rafLocal);
+    };
+  }, [dragType, eventToGrid, addElement]);
 
   const onElementMouseDown = useCallback(
     (e: React.MouseEvent, id: number) => {
@@ -1082,7 +1133,7 @@ export function ClinicLayoutClient({
             onMouseDown={onSvgMouseDown}
             onMouseMove={onSvgMouseMove}
             onMouseUp={onSvgMouseUp}
-            onMouseLeave={cancelDrag}
+            onMouseLeave={cancelMoveOrPan}
             onWheel={onSvgWheel}
           >
             <g>{renderGrid()}</g>
