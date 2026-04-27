@@ -8,7 +8,7 @@ import type {
   LayoutElement,
   LiveAppointment,
 } from "@/lib/floor-plan/elements";
-import { fmtHMS } from "@/lib/floor-plan/live-mode";
+import { fmtHM, fmtHMS } from "@/lib/floor-plan/live-mode";
 import {
   LiveOverlay,
   LiveTooltip,
@@ -26,7 +26,7 @@ interface Chair {
 }
 
 interface ApiResponse {
-  clinic: { id: string; name: string; showPatientNames: boolean };
+  clinic: { id: string; name: string; logoUrl?: string | null; city?: string | null; showPatientNames: boolean };
   layout: {
     elements: LayoutElement[];
     metadata: { zoom?: number; panOffset?: { x: number; y: number } } | null;
@@ -52,10 +52,14 @@ const ORIG_Y = 260;
 export function LivePublicClient({
   slug,
   clinicName,
+  logoUrl,
+  city,
   showPatientNames,
 }: {
   slug: string;
   clinicName: string;
+  logoUrl: string | null;
+  city: string | null;
   showPatientNames: boolean;
 }) {
   const [data, setData] = useState<ApiResponse | null>(null);
@@ -160,15 +164,36 @@ export function LivePublicClient({
     <div ref={containerRef} className={liveStyles.live}>
       <header className={liveStyles.header}>
         <div className={liveStyles.headerLeft}>
-          <div className={liveStyles.brandIcon}>MF</div>
-          <div>
+          {logoUrl ? (
+            <img
+              src={logoUrl}
+              alt={clinicName}
+              className={liveStyles.clinicLogo}
+            />
+          ) : (
+            <div className={liveStyles.brandIcon}>
+              {clinicName
+                .split(/\s+/)
+                .filter(Boolean)
+                .slice(0, 2)
+                .map((p) => p[0]?.toUpperCase() ?? "")
+                .join("")}
+            </div>
+          )}
+          <div className={liveStyles.headerClinicInfo}>
             <div className={liveStyles.clinicName}>{clinicName}</div>
-            <div className={liveStyles.liveBadge}>
-              <span /> EN VIVO
+            <div className={liveStyles.clinicMeta}>
+              <span className={liveStyles.liveBadge}>
+                <span /> EN VIVO
+              </span>
+              {city && <span className={liveStyles.clinicCity}>· {city}</span>}
             </div>
           </div>
         </div>
-        <div className={liveStyles.headerClock}>{fmtHMS(now)}</div>
+        <div className={liveStyles.headerClockBlock}>
+          <div className={liveStyles.headerClockBig}>{fmtHM(now)}</div>
+          <div className={liveStyles.headerClockSec}>{fmtHMS(now).slice(-2)}</div>
+        </div>
         <div className={liveStyles.headerRight}>
           <button
             type="button"
@@ -265,6 +290,11 @@ export function LivePublicClient({
         onSeek={setViewTime}
         onResetNow={() => setViewTime(new Date())}
       />
+
+      <footer className={liveStyles.footer}>
+        <span>Powered by</span>
+        <strong>MediFlow</strong>
+      </footer>
 
       <LiveTooltip data={hover} />
     </div>

@@ -2,7 +2,7 @@
 
 .live {
   display: grid;
-  grid-template-rows: 64px 1fr 200px;
+  grid-template-rows: 86px 1fr 200px 28px;
   height: 100vh;
   background: radial-gradient(ellipse at 55% 40%, #EDF5FC 0%, #E2EEF8 60%, #D8E8F4 100%);
   color: #1A2540;
@@ -11,8 +11,8 @@
 .header {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 0 24px;
+  gap: 20px;
+  padding: 0 28px;
   background: #fff;
   border-bottom: 1px solid #E2ECF4;
   box-shadow: 0 1px 4px rgba(30, 60, 120, 0.06);
@@ -20,35 +20,62 @@
 .headerLeft {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
 }
 .brandIcon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
   background: linear-gradient(135deg, #4A90E2, #2A68C0);
   display: grid;
   place-items: center;
   color: #fff;
   font-weight: 800;
-  font-size: 13px;
-  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.35);
+  font-size: 18px;
+  box-shadow: 0 6px 18px -6px rgba(74, 144, 226, 0.5);
+  flex-shrink: 0;
+  letter-spacing: -0.02em;
+}
+.clinicLogo {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  object-fit: cover;
+  background: #fff;
+  border: 1px solid #E2ECF4;
+  flex-shrink: 0;
+  box-shadow: 0 6px 18px -8px rgba(30, 60, 120, 0.18);
+}
+.headerClinicInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 .clinicName {
-  font-size: 16px;
+  font-size: 22px;
   font-weight: 800;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.clinicMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 .liveBadge {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.08em;
   color: #EF4444;
   text-transform: uppercase;
-  margin-top: 1px;
 }
 .liveBadge span {
   width: 8px;
@@ -61,14 +88,35 @@
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.5; transform: scale(1.15); }
 }
-.headerClock {
-  flex: 1;
-  text-align: center;
-  font-size: 32px;
+.clinicCity {
+  font-size: 11px;
+  color: #6B7A99;
+  font-weight: 600;
+}
+/* Reloj prominente — HH:MM dominante con segundos pequeños alineados. */
+.headerClockBlock {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 6px 18px;
+  background: #F0F7FA;
+  border: 1px solid #C8E4F4;
+  border-radius: 14px;
+}
+.headerClockBig {
+  font-size: 48px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.04em;
   color: #1A2540;
+  line-height: 1;
+}
+.headerClockSec {
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #6B7A99;
+  letter-spacing: -0.02em;
 }
 .headerRight {
   display: flex;
@@ -129,10 +177,31 @@
   padding: 24px;
 }
 
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #fff;
+  border-top: 1px solid #E2ECF4;
+  font-size: 10.5px;
+  color: #9AAAC0;
+  letter-spacing: 0.04em;
+}
+.footer strong {
+  color: #4A90E2;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
 @media (min-width: 1920px) {
-  .header { padding: 0 36px; }
-  .headerClock { font-size: 40px; }
-  .clinicName { font-size: 20px; }
+  .live { grid-template-rows: 100px 1fr 220px 32px; }
+  .header { padding: 0 40px; gap: 28px; }
+  .brandIcon, .clinicLogo { width: 68px; height: 68px; border-radius: 16px; font-size: 22px; }
+  .clinicName { font-size: 28px; }
+  .headerClockBig { font-size: 64px; }
+  .headerClockSec { font-size: 22px; }
   .body { grid-template-columns: 1fr 380px; }
   .panel { padding: 24px; font-size: 14px; }
+  .footer { font-size: 12px; }
 }

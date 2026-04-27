@@ -31,6 +31,8 @@ export default async function LivePublicPage({ params }: Props) {
     select: {
       id: true,
       name: true,
+      logoUrl: true,
+      city: true,
       liveModeEnabled: true,
       liveModePassword: true,
       liveModeShowPatientNames: true,
@@ -51,6 +53,8 @@ export default async function LivePublicPage({ params }: Props) {
     <LivePublicClient
       slug={slug}
       clinicName={clinic.name}
+      logoUrl={clinic.logoUrl ?? null}
+      city={clinic.city ?? null}
       showPatientNames={clinic.liveModeShowPatientNames}
     />
   );

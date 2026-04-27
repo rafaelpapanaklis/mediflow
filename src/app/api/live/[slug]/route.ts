@@ -24,6 +24,8 @@ export async function GET(req: NextRequest, { params }: Params) {
     select: {
       id: true,
       name: true,
+      logoUrl: true,
+      city: true,
       liveModeEnabled: true,
       liveModePassword: true,
       liveModeShowPatientNames: true,
@@ -139,6 +141,8 @@ export async function GET(req: NextRequest, { params }: Params) {
     clinic: {
       id: clinic.id,
       name: clinic.name,
+      logoUrl: clinic.logoUrl ?? null,
+      city: clinic.city ?? null,
       showPatientNames: showFull,
     },
     layout: {
