@@ -6,7 +6,8 @@
   border-radius: 14px;
   padding: 16px 18px;
   font-family: var(--font-sora, "Sora", sans-serif);
-  --mf-tooth-size: clamp(48px, 4.5vw, 64px);
+  /* Tamaño más compacto para que 16 dientes entren en 1 fila sin scroll. */
+  --mf-tooth-size: clamp(38px, 4vw, 56px);
 }
 
 /* Cuando hay un modo activo, el cursor sobre superficies es crosshair */
@@ -130,24 +131,20 @@
 }
 .resetBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* ─────── BODY: arches + sidebar ─────── */
+/* ─────── BODY: arches a ancho completo (sin sidebar) ─────── */
 .body {
-  display: grid;
-  grid-template-columns: 1fr 280px;
-  gap: 16px;
-}
-@media (max-width: 1024px) {
-  .body { grid-template-columns: 1fr; }
+  display: block;
+  width: 100%;
 }
 
 .arches {
   background: var(--bg);
   border: 1px solid var(--border-soft);
   border-radius: 10px;
-  padding: 14px;
-  /* Si el ancho disponible no alcanza para 16 dientes en 1 fila, scroll horizontal. */
-  overflow-x: auto;
-  overflow-y: visible;
+  padding: 14px 8px;
+  /* Sin slider horizontal: si en algún viewport no caben los 16 dientes,
+     reducir gap o tamaño en lugar de overflow. */
+  overflow: hidden;
 }
 .archLabel {
   font-size: 10px; font-weight: 600;
@@ -156,15 +153,15 @@
   text-align: center;
   margin: 6px 0;
 }
-/* 16 dientes en 1 fila por arcada (mockup: nowrap, no wrap). */
+/* 16 dientes en 1 fila por arcada. Gap pequeño para que entren en
+   contenedores estrechos sin necesidad de slider. */
 .arch {
   display: flex;
   flex-wrap: nowrap;
   justify-content: center;
   align-items: flex-start;
-  gap: 6px;
+  gap: 3px;
   padding: 4px 0;
-  min-width: max-content;
 }
 .archGap {
   border: none;
@@ -316,65 +313,123 @@
   font-size: 10px; color: var(--text-3);
 }
 
-/* ─────── SIDEBAR ─────── */
-.sidebar {
-  display: flex; flex-direction: column;
+/* ─────── SUMMARY HEADER (top) — stats pills + plan toggle + PDF ─────── */
+.summaryRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
 }
-.sideCard {
+.statsPills {
+  list-style: none;
+  margin: 0; padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.statPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px 3px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--mf-stat-color) 10%, var(--bg-elev));
+  border: 1px solid color-mix(in srgb, var(--mf-stat-color) 30%, transparent);
+  color: var(--mf-stat-color);
+  border-radius: 999px;
+  letter-spacing: 0.01em;
+}
+.statPill[data-zero="true"] {
+  background: var(--bg-elev);
+  border-color: var(--border-soft);
+  color: var(--text-3);
+}
+.statPillDot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.statPillLabel {
+  font-weight: 600;
+}
+.statPillCount {
+  font-family: var(--font-jetbrains-mono, monospace);
+  font-weight: 700;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  padding: 0 4px;
+  border-left: 1px solid currentColor;
+  margin-left: 2px;
+  opacity: 0.85;
+}
+.statPill[data-zero="true"] .statPillCount {
+  border-left-color: var(--border-soft);
+  opacity: 1;
+}
+
+.summaryRight {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.planToggle {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 5px 10px;
+  font-size: 11px; font-weight: 500;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  color: var(--text-1);
+  cursor: pointer;
+  font-family: inherit;
+}
+.planToggle:hover { border-color: var(--border-brand); }
+.planToggle.open { background: var(--brand-softer); border-color: var(--border-brand); color: var(--brand); }
+.planToggle.open svg { transform: rotate(180deg); }
+.planToggle svg { transition: transform 0.15s; }
+.planToggleCount {
+  font-family: var(--font-jetbrains-mono, monospace);
+  color: var(--text-3);
+  font-size: 10px;
+}
+.planToggle.open .planToggleCount { color: var(--brand); }
+
+.pdfBtn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 6px 11px;
+  font-size: 11px; font-weight: 600;
+  background: var(--brand);
+  color: #fff;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.pdfBtn:hover { background: #8b5cf6; }
+
+.planPanel {
+  margin-bottom: 12px;
+  padding: 10px 12px;
   background: var(--bg);
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
-  padding: 12px 14px;
+  border-radius: 8px;
 }
-.sideCardTitle {
-  font-size: 10px; font-weight: 700;
-  color: var(--text-3);
-  letter-spacing: 0.06em; text-transform: uppercase;
-  margin: 0 0 8px;
-}
-.statList {
+.planList {
   list-style: none;
   margin: 0; padding: 0;
   display: flex; flex-direction: column;
-  gap: 6px;
-}
-.statItem {
-  display: grid;
-  grid-template-columns: 12px 1fr auto;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  padding: 4px 0;
-  border-bottom: 1px solid var(--border-soft);
-}
-.statItem:last-child { border-bottom: none; }
-.statDot {
-  width: 10px; height: 10px;
-  border-radius: 50%;
-  border: 1px solid rgba(15,10,30,0.15);
-}
-.statLabel {
-  color: var(--text-2);
-}
-.statCount {
-  font-family: var(--font-jetbrains-mono, monospace);
-  font-weight: 700;
-  color: var(--text-1);
-  font-variant-numeric: tabular-nums;
-  font-size: 13px;
-}
-
-.planList {
-  list-style: none;
-  margin: 0 0 10px; padding: 0;
-  display: flex; flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 .planItem {
   font-size: 11px;
   color: var(--text-2);
-  padding: 6px 8px;
+  padding: 5px 8px;
   background: var(--bg-elev);
   border-left: 3px solid var(--border-soft);
   border-radius: 4px;
@@ -391,23 +446,8 @@
   color: color-mix(in srgb, var(--info) 80%, var(--text-1));
 }
 
-.pdfBtn {
-  width: 100%;
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  padding: 7px 12px;
-  font-size: 11px; font-weight: 600;
-  background: var(--brand);
-  color: #fff;
-  border: 1px solid var(--brand);
-  border-radius: 6px;
-  cursor: pointer;
-  font-family: inherit;
-}
-.pdfBtn:hover { background: #8b5cf6; }
-
 /* ─────── PRINT ─────── */
 @media print {
-  .toolbar, .sidebar, .statusFooter { display: none !important; }
-  .body { grid-template-columns: 1fr; }
-  .odontogram { border: none; }
+  .toolbar, .summaryRow, .planPanel, .statusFooter { display: none !important; }
+  .odontogram { border: none; padding: 0; }
 }

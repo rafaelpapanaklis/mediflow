@@ -7,6 +7,7 @@ import {
   FileDown,
   Keyboard,
   X,
+  ChevronDown,
 } from "lucide-react";
 import {
   FULL_TOOTH_STATES,
@@ -100,6 +101,7 @@ export function Odontogram({ patientId, readOnly = false }: OdontogramProps) {
   const [dentition, setDentition] = useState<"PERMANENTE" | "DECIDUA">("PERMANENTE");
   const [lastAction, setLastAction] = useState<LastAction | null>(null);
   const [pending, setPending] = useState(false);
+  const [planOpen, setPlanOpen] = useState(false);
   const inflightRef = useRef<AbortController | null>(null);
 
   // Inicial fetch
@@ -344,8 +346,61 @@ export function Odontogram({ patientId, readOnly = false }: OdontogramProps) {
 
   /* ─── Render ──────────────────────────────────────────── */
 
+  const summaryStates: ToothState[] = ["CARIES", "RESINA", "CORONA", "ENDODONCIA", "IMPLANTE", "AUSENTE", "EXTRACCION"];
+
   return (
     <div className={styles.odontogram} data-active-mode={activeMode ?? "none"}>
+      {/* Summary header — stats pills + plan collapsible + PDF (movido desde sidebar) */}
+      <header className={styles.summaryRow}>
+        <ul className={styles.statsPills} aria-label="Estado clínico">
+          {summaryStates.map((st) => (
+            <li
+              key={st}
+              className={styles.statPill}
+              style={{ "--mf-stat-color": STATE_COLOR[st] } as React.CSSProperties}
+              data-zero={stats[st] === 0 ? "true" : undefined}
+              title={`${STATE_LABEL[st]}: ${stats[st]}`}
+            >
+              <span className={styles.statPillDot} aria-hidden />
+              <span className={styles.statPillLabel}>{STATE_LABEL[st]}</span>
+              <span className={styles.statPillCount}>{stats[st]}</span>
+            </li>
+          ))}
+        </ul>
+        <div className={styles.summaryRight}>
+          <button
+            type="button"
+            className={`${styles.planToggle} ${planOpen ? styles.open : ""}`}
+            onClick={() => setPlanOpen((v) => !v)}
+            aria-expanded={planOpen}
+            aria-controls="odontogram-plan"
+          >
+            Plan sugerido
+            <span className={styles.planToggleCount}>({plan.length})</span>
+            <ChevronDown size={11} aria-hidden />
+          </button>
+          <button
+            type="button"
+            className={styles.pdfBtn}
+            onClick={handleGeneratePdf}
+            title="Generar plan de tratamiento PDF"
+          >
+            <FileDown size={12} aria-hidden /> Generar PDF
+          </button>
+        </div>
+      </header>
+      {planOpen && (
+        <div id="odontogram-plan" className={styles.planPanel}>
+          <ul className={styles.planList}>
+            {plan.map((p, i) => (
+              <li key={i} className={`${styles.planItem} ${styles[`tone-${p.tone}`] ?? ""}`}>
+                {p.label}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className={styles.toolbar}>
         <div className={styles.toolbarChips} role="toolbar" aria-label="Estados">
@@ -421,7 +476,7 @@ export function Odontogram({ patientId, readOnly = false }: OdontogramProps) {
         </div>
       </div>
 
-      {/* Body: arches + sidebar */}
+      {/* Stage: arches a ancho completo (sin sidebar). */}
       <div className={styles.body}>
         <div className={styles.arches}>
           {loading ? (
@@ -496,40 +551,6 @@ export function Odontogram({ patientId, readOnly = false }: OdontogramProps) {
             </div>
           </div>
         </div>
-
-        {/* Sidebar */}
-        <aside className={styles.sidebar} aria-label="Resumen del odontograma">
-          <section className={styles.sideCard}>
-            <h3 className={styles.sideCardTitle}>Estado clínico</h3>
-            <ul className={styles.statList}>
-              {(["CARIES", "RESINA", "CORONA", "ENDODONCIA", "IMPLANTE", "AUSENTE", "EXTRACCION"] as ToothState[]).map((st) => (
-                <li key={st} className={styles.statItem}>
-                  <span className={styles.statDot} style={{ background: STATE_COLOR[st] }} />
-                  <span className={styles.statLabel}>{STATE_LABEL[st]}</span>
-                  <span className={styles.statCount}>{stats[st]}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <section className={styles.sideCard}>
-            <h3 className={styles.sideCardTitle}>Plan tratamiento sugerido</h3>
-            <ul className={styles.planList}>
-              {plan.map((p, i) => (
-                <li key={i} className={`${styles.planItem} ${styles[`tone-${p.tone}`] ?? ""}`}>
-                  {p.label}
-                </li>
-              ))}
-            </ul>
-            <button
-              type="button"
-              className={styles.pdfBtn}
-              onClick={handleGeneratePdf}
-            >
-              <FileDown size={12} aria-hidden /> Generar plan PDF
-            </button>
-          </section>
-        </aside>
       </div>
     </div>
   );
