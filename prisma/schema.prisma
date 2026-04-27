@@ -30,7 +30,7 @@ model Clinic {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  // WhatsApp
+  // WhatsApp (legacy Meta Cloud API)
   waPhoneNumberId  String?
   waAccessToken    String?
   waConnected      Boolean @default(false)
@@ -38,6 +38,12 @@ model Clinic {
   waReminder24h    Boolean @default(true)
   waReminder1h     Boolean @default(false)
   waReminderMsg    String?
+
+  // Inbox unificado — Twilio Conversations + Postmark Inbound
+  twilioAccountSid     String?  // SID de la cuenta Twilio (admin la conecta en /settings/integrations)
+  twilioAuthToken      String?  // token (encrypted-at-rest en producción)
+  twilioWhatsappNumber String?  // E.164: "+5215512345678"
+  postmarkInboundEmail String?  // ej: clinica-abc@inbox.mediflow.app — único por clínica
 
   // Google Calendar — clinic-level shared calendar
   googleCalendarToken     String?   // access token of the admin who connected
@@ -138,6 +144,8 @@ model Clinic {
   prescriptions        Prescription[]
   resources            Resource[]
   waitlistEntries      WaitlistEntry[]
+  inboxThreads         InboxThread[]
+  remindersList        Reminder[]
 
   @@map("clinics")
 }
@@ -211,6 +219,10 @@ model User {
   apptsOverriddenBy   Appointment[]   @relation("ApptOverriddenBy")
   waitlistCreated     WaitlistEntry[] @relation("WaitlistCreatedBy")
   waitlistPreferred   WaitlistEntry[] @relation("WaitlistPreferredDoctor")
+  inboxAssigned       InboxThread[]   @relation("InboxAssignee")
+  inboxSent           InboxMessage[]
+  remindersCreated    Reminder[]      @relation("ReminderCreator")
+  remindersAssigned   Reminder[]      @relation("ReminderAssignee")
 
   @@unique([supabaseId, clinicId])
   @@index([supabaseId])
@@ -290,6 +302,8 @@ model Patient {
   waitlistEntries     WaitlistEntry[]
   odontogramEntries   OdontogramEntry[]
   odontogramSnapshots OdontogramSnapshot[]
+  inboxThreads        InboxThread[]
+  patientReminders    Reminder[]
 
   @@unique([clinicId, patientNumber])
   @@map("patients")
@@ -1127,4 +1141,110 @@ enum WaitlistPriority {
   LOW
   NORMAL
   HIGH
+}
+
+// ═══════════════════════════════════════════════════════════
+// Fase 6 — Inbox unificado (WhatsApp + Email + Form + Validation + Reminder)
+// ═══════════════════════════════════════════════════════════
+
+enum InboxChannel {
+  WHATSAPP
+  EMAIL
+  PORTAL_FORM
+  VALIDATION
+  REMINDER
+}
+
+enum InboxStatus {
+  UNREAD
+  READ
+  ARCHIVED
+  SNOOZED
+}
+
+enum MessageDirection {
+  IN
+  OUT
+}
+
+model InboxThread {
+  id            String        @id @default(cuid())
+  clinicId      String
+  channel       InboxChannel
+  /// ID en el sistema externo: Twilio Conversation SID, Postmark Message-ID, etc.
+  externalId    String?
+  patientId     String?
+  subject       String
+  status        InboxStatus   @default(UNREAD)
+  assignedToId  String?
+  snoozedUntil  DateTime?
+  lastMessageAt DateTime
+  tags          String[]      @default([])
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  clinic        Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient       Patient?      @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  assignedTo    User?         @relation("InboxAssignee", fields: [assignedToId], references: [id])
+  messages      InboxMessage[]
+  reminders     Reminder[]
+
+  @@index([clinicId, status, lastMessageAt(sort: Desc)])
+  @@index([clinicId, channel, lastMessageAt(sort: Desc)])
+  @@index([assignedToId, status])
+  @@index([snoozedUntil])
+  @@map("inbox_threads")
+}
+
+model InboxMessage {
+  id          String           @id @default(cuid())
+  threadId    String
+  direction   MessageDirection
+  body        String           @db.Text
+  attachments Json?            // [{ name, url, mime, size }]
+  sentAt      DateTime         @default(now())
+  sentById    String?
+  externalId  String?
+  /// true = nota interna del staff (no se envía al canal externo).
+  isInternal  Boolean          @default(false)
+
+  thread      InboxThread      @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sentBy      User?            @relation(fields: [sentById], references: [id])
+
+  @@index([threadId, sentAt])
+  @@map("inbox_messages")
+}
+
+enum ReminderStatus {
+  PENDING
+  DONE
+  DISMISSED
+}
+
+model Reminder {
+  id            String         @id @default(cuid())
+  clinicId      String
+  createdById   String
+  assignedToId  String
+  patientId     String?
+  threadId      String?
+  title         String
+  body          String?        @db.Text
+  dueAt         DateTime
+  status        ReminderStatus @default(PENDING)
+  completedAt   DateTime?
+  completedById String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  clinic        Clinic       @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  createdBy     User         @relation("ReminderCreator", fields: [createdById], references: [id])
+  assignedTo    User         @relation("ReminderAssignee", fields: [assignedToId], references: [id])
+  patient       Patient?     @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  thread        InboxThread? @relation(fields: [threadId], references: [id], onDelete: SetNull)
+
+  @@index([clinicId, status, dueAt])
+  @@index([assignedToId, status, dueAt])
+  @@index([dueAt])
+  @@map("reminders")
 }
