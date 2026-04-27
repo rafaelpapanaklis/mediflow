@@ -1,9 +1,12 @@
 "use client";
 
 import { Video, Footprints, AlertTriangle } from "lucide-react";
+import { useDraggable } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import { useAgenda } from "./agenda-provider";
 import { formatSlotTime, timeToSlotIndex } from "@/lib/agenda/time-utils";
 import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
+import type { AppointmentDragData } from "@/lib/agenda/drag-utils";
 import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
 
@@ -13,6 +16,8 @@ interface Props {
   slotMinutes: number;
   dayStart: number;
   timezone: string;
+  /** false en vistas que no soportan drag (mes, lista). */
+  draggable?: boolean;
 }
 
 const STATUS_COLOR: Record<AppointmentStatus, string> = {
@@ -31,11 +36,31 @@ export function AgendaAppointmentCard({
   slotMinutes,
   dayStart,
   timezone,
+  draggable = true,
 }: Props) {
   const { state, selectAppointment } = useAgenda();
 
   const config = { timezone, slotMinutes, dayStart, dayEnd: 24 };
   const startSlot = timeToSlotIndex(appointment.startsAt, dayISO, config);
+
+  const dragDisabled =
+    !draggable ||
+    appointment.status === "CANCELLED" ||
+    appointment.status === "COMPLETED" ||
+    appointment.status === "NO_SHOW";
+
+  const dragData: AppointmentDragData = {
+    kind: "appt",
+    appointmentId: appointment.id,
+  };
+
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({
+      id: `appt:${appointment.id}`,
+      data: dragData,
+      disabled: dragDisabled,
+    });
+
   if (startSlot < 0) return null;
 
   const startMs = new Date(appointment.startsAt).getTime();
@@ -67,6 +92,7 @@ export function AgendaAppointmentCard({
     compact ? styles.apptCompact : "",
     appointment.requiresValidation ? styles.apptPending : "",
     isSelected ? styles.selected : "",
+    isDragging ? styles.dragging : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -79,6 +105,7 @@ export function AgendaAppointmentCard({
 
   return (
     <div
+      ref={setNodeRef}
       data-appt-id={appointment.id}
       className={className}
       style={
@@ -88,6 +115,11 @@ export function AgendaAppointmentCard({
           "--mf-doc-color": docColor,
           "--mf-status-color": statusColor,
           minHeight: 22,
+          transform: CSS.Translate.toString(transform),
+          opacity: isDragging ? 0.4 : undefined,
+          zIndex: isDragging ? 50 : undefined,
+          cursor: dragDisabled ? "pointer" : isDragging ? "grabbing" : "grab",
+          touchAction: "none",
         } as React.CSSProperties
       }
       onClick={onClick}
@@ -101,6 +133,8 @@ export function AgendaAppointmentCard({
       }}
       aria-label={`Cita: ${appointment.patient.name} a las ${formatSlotTime(appointment.startsAt, timezone)}`}
       aria-selected={isSelected}
+      {...listeners}
+      {...attributes}
     >
       <div className={styles.apptRow1}>
         {initials && (

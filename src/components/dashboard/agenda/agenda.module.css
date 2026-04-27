@@ -649,6 +649,18 @@
   background-color: var(--bg-hover);
 }
 
+/* Drop highlight (drag-to-reschedule M6) */
+.column.dropOver,
+.weekDayCol.dropOver {
+  background-color: color-mix(in srgb, var(--brand) 6%, transparent);
+  outline: 1px dashed var(--brand);
+  outline-offset: -2px;
+}
+
+.appt.dragging {
+  box-shadow: 0 12px 28px -6px color-mix(in srgb, var(--mf-doc-color, var(--brand)) 50%, transparent);
+}
+
 .columnHourBand {
   position: absolute;
   left: 0;

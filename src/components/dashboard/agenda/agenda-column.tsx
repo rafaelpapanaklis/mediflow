@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useMemo, useRef } from "react";
+import { useDroppable } from "@dnd-kit/core";
 import { useAgenda } from "./agenda-provider";
 import { AgendaAppointmentCard } from "./agenda-appointment-card";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { slotIndexToUtc } from "@/lib/agenda/time-utils";
+import type { DroppableData } from "@/lib/agenda/drag-utils";
 import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 import type { AgendaColumnDescriptor } from "@/app/dashboard/agenda/agenda-page-client";
 import styles from "./agenda.module.css";
@@ -12,7 +14,42 @@ import styles from "./agenda.module.css";
 export function AgendaColumn({ column }: { column: AgendaColumnDescriptor }) {
   const { state } = useAgenda();
   const { open: openNewAppointment } = useNewAppointmentDialog();
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  const droppableData: DroppableData =
+    column.type === "doctor"
+      ? {
+          kind: "doctor-col",
+          columnKey: column.key,
+          doctorId: column.doctorId!,
+          resourceId: null,
+        }
+      : column.type === "resource"
+      ? {
+          kind: "resource-col",
+          columnKey: column.key,
+          doctorId: null,
+          resourceId: column.resourceId!,
+        }
+      : {
+          kind: "unified-col",
+          columnKey: column.key,
+          doctorId: null,
+          resourceId: null,
+        };
+
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `col:${column.key}`,
+    data: droppableData,
+  });
+
+  const setRefs = useCallback(
+    (el: HTMLDivElement | null) => {
+      ref.current = el;
+      setDropRef(el);
+    },
+    [setDropRef],
+  );
 
   const appointmentsHere = useMemo(() => {
     if (column.type === "unified") return state.appointments;
@@ -68,8 +105,8 @@ export function AgendaColumn({ column }: { column: AgendaColumnDescriptor }) {
 
   return (
     <div
-      ref={ref}
-      className={styles.column}
+      ref={setRefs}
+      className={`${styles.column} ${isOver ? styles.dropOver : ""}`}
       onClick={handleClick}
       role="grid"
       aria-label={`Columna ${column.title}`}

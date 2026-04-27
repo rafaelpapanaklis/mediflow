@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
+import { useDroppable } from "@dnd-kit/core";
 import { useAgenda } from "./agenda-provider";
 import { AgendaTimeAxis } from "./agenda-time-axis";
 import { AgendaAppointmentCard } from "./agenda-appointment-card";
 import { todayInTz } from "@/lib/agenda/time-utils";
+import type { DroppableData } from "@/lib/agenda/drag-utils";
 import styles from "./agenda.module.css";
 
 const WEEKDAYS_ES = ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"];
@@ -83,41 +85,71 @@ export function AgendaWeekView() {
         </div>
         <AgendaTimeAxis />
         <div className={styles.columnsBody}>
-          {days.map((d) => {
-            const dayAppointments =
-              d.iso === state.dayISO ? state.appointments : [];
-            const classes = [
-              styles.weekDayCol,
-              d.iso === today ? styles.today : "",
-            ]
-              .filter(Boolean)
-              .join(" ");
-            return (
-              <div
-                key={d.iso}
-                className={classes}
-                style={{
-                  height: `calc(${slotsTotal} * var(--mf-agenda-slot-h))`,
-                }}
-                onClick={() => setDay(d.iso)}
-                role="grid"
-                aria-label={`Día ${d.iso}`}
-              >
-                {dayAppointments.map((appt) => (
-                  <AgendaAppointmentCard
-                    key={appt.id}
-                    appointment={appt}
-                    dayISO={state.dayISO}
-                    slotMinutes={state.slotMinutes}
-                    dayStart={state.dayStart}
-                    timezone={state.timezone}
-                  />
-                ))}
-              </div>
-            );
-          })}
+          {days.map((d) => (
+            <WeekDayColumn
+              key={d.iso}
+              day={d}
+              isToday={d.iso === today}
+              slotsTotal={slotsTotal}
+              showAppointments={d.iso === state.dayISO}
+            />
+          ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+interface WeekDayColumnProps {
+  day: WeekDay;
+  isToday: boolean;
+  slotsTotal: number;
+  showAppointments: boolean;
+}
+
+function WeekDayColumn({ day, isToday, slotsTotal, showAppointments }: WeekDayColumnProps) {
+  const { state, setDay } = useAgenda();
+
+  const droppableData: DroppableData = {
+    kind: "day-col",
+    dayISO: day.iso,
+  };
+
+  const { setNodeRef, isOver } = useDroppable({
+    id: `day:${day.iso}`,
+    data: droppableData,
+  });
+
+  const classes = [
+    styles.weekDayCol,
+    isToday ? styles.today : "",
+    isOver ? styles.dropOver : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={classes}
+      style={{
+        height: `calc(${slotsTotal} * var(--mf-agenda-slot-h))`,
+      }}
+      onClick={() => setDay(day.iso)}
+      role="grid"
+      aria-label={`Día ${day.iso}`}
+    >
+      {showAppointments &&
+        state.appointments.map((appt) => (
+          <AgendaAppointmentCard
+            key={appt.id}
+            appointment={appt}
+            dayISO={state.dayISO}
+            slotMinutes={state.slotMinutes}
+            dayStart={state.dayStart}
+            timezone={state.timezone}
+          />
+        ))}
     </div>
   );
 }

@@ -42,6 +42,28 @@ export async function patchAppointmentStatus(
   return body.appointment;
 }
 
+/* ─────── Appointment reschedule (drag-to-reschedule M6) ─────── */
+
+export interface RescheduleAppointmentInput {
+  startsAt: string;
+  endsAt: string;
+  doctorId?: string;
+  resourceId?: string | null;
+}
+
+export async function rescheduleAppointment(
+  id: string,
+  input: RescheduleAppointmentInput,
+): Promise<AgendaAppointmentDTO> {
+  const res = await fetch(`/api/appointments/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const body = await jsonOrThrow<{ appointment: AgendaAppointmentDTO }>(res);
+  return body.appointment;
+}
+
 /* ─────── Resources CRUD ─────── */
 
 export interface CreateResourceInput {
