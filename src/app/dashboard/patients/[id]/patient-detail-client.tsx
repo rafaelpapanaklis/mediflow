@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Plus, Printer, Edit } from "lucide-react";
 import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
 import { ageFromDob, fmtMXN } from "@/lib/format";
+import { Odontogram } from "@/components/dashboard/odontogram/Odontogram";
 import { HeroCard } from "@/components/dashboard/patient-detail/hero-card";
 import { QuickNav } from "@/components/dashboard/patient-detail/quick-nav";
 import { SideCards } from "@/components/dashboard/patient-detail/side-cards";
@@ -55,6 +56,7 @@ const INV_STATUS: Record<string, { label: string; cls: string }> = {
 const TABS = [
   { id: "resumen",       label: "Resumen"             },
   { id: "historia",      label: "Historia clínica"     },
+  { id: "odontograma",   label: "Odontograma"          },
   { id: "expediente",    label: "Nueva consulta"       },
   { id: "evolucion",     label: "Evolución / Notas"    },
   { id: "radiografias",  label: "Radiografías"         },
@@ -778,6 +780,11 @@ export function PatientDetailClient({
                 </div>
               </div>
             </div>
+          )}
+
+          {/* ===== TAB: ODONTOGRAMA ===== */}
+          {tab === "odontograma" && (
+            <Odontogram patientId={patient.id} />
           )}
 
           {/* ===== TAB: NUEVA CONSULTA (specialty form) ===== */}

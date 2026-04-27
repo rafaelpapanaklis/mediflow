@@ -9,6 +9,7 @@ import {
   Pill,
   Calendar,
   CreditCard,
+  Bone,
   type LucideIcon,
 } from "lucide-react";
 import styles from "./patient-detail.module.css";
@@ -31,6 +32,7 @@ interface QuickNavProps {
   onSelect: (tabId: string) => void;
   counts: {
     historia?: number;
+    odontograma?: number;
     evolucion?: number;
     radiografias?: number;
     tratamiento?: number;
@@ -47,6 +49,7 @@ export function QuickNav({ activeTab, onSelect, counts, hasBalance }: QuickNavPr
       items: [
         { id: "resumen",      label: "Resumen",         icon: ClipboardList },
         { id: "historia",     label: "Historia clínica", icon: History, count: counts.historia },
+        { id: "odontograma",  label: "Odontograma",     icon: Bone, count: counts.odontograma },
         { id: "expediente",   label: "Nueva consulta",  icon: Stethoscope },
         { id: "evolucion",    label: "Notas SOAP",      icon: Activity, count: counts.evolucion },
         { id: "radiografias", label: "Radiografías",    icon: FileImage, count: counts.radiografias },
