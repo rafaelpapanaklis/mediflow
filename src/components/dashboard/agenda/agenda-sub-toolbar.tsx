@@ -1,5 +1,6 @@
 "use client";
 
+import { Settings } from "lucide-react";
 import { useAgenda } from "./agenda-provider";
 import type { AgendaColumnMode } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
@@ -20,14 +21,14 @@ export function AgendaSubToolbar() {
 
   const isDay = state.viewMode === "day";
   const hasResources = state.resources.length > 0;
-  const hasDoctorOption = state.doctors.length >= 1;
+  const hasDoctors = state.doctors.length > 0;
 
   const stats = (() => {
     if (state.viewMode === "day") {
       return [
         { value: visibleAppts, label: `cita${visibleAppts === 1 ? "" : "s"} hoy` },
-        ...(inSala > 0 ? [{ value: inSala, label: "en sala" }] : []),
-        ...(pendingCount > 0 ? [{ value: pendingCount, label: `pendiente${pendingCount === 1 ? "" : "s"} de validar` }] : []),
+        { value: inSala, label: "en sala" },
+        { value: pendingCount, label: `pendiente${pendingCount === 1 ? "" : "s"} validar` },
       ];
     }
     if (state.viewMode === "week") {
@@ -50,34 +51,36 @@ export function AgendaSubToolbar() {
         ))}
       </div>
 
-      {isDay && hasResources && hasDoctorOption && (
-        <div className={styles.subToolbarRight}>
-          <span className={styles.subToolbarLabel}>Vista</span>
-          <div role="tablist" aria-label="Agrupar por" className={styles.segment}>
-            {COLUMN_MODE_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                role="tab"
-                aria-selected={state.columnMode === opt.value}
-                className={`${styles.segmentBtn} ${state.columnMode === opt.value ? styles.active : ""}`}
-                onClick={() => setColumnMode(opt.value)}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            className={styles.gearBtn}
-            onClick={() => openModal("resources")}
-            aria-label="Gestionar sillones y doctores"
-            title="Gestionar sillones y doctores"
-          >
-            ⚙
-          </button>
-        </div>
-      )}
+      <div className={styles.subToolbarRight}>
+        {isDay && hasResources && hasDoctors && (
+          <>
+            <span className={styles.subToolbarLabel}>Vista</span>
+            <div role="tablist" aria-label="Agrupar por" className={styles.segment}>
+              {COLUMN_MODE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={state.columnMode === opt.value}
+                  className={`${styles.segmentBtn} ${state.columnMode === opt.value ? styles.active : ""}`}
+                  onClick={() => setColumnMode(opt.value)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+        <button
+          type="button"
+          className={styles.gearBtn}
+          onClick={() => openModal("resources")}
+          aria-label="Gestionar sillones y doctores"
+          title="Gestionar sillones y doctores"
+        >
+          <Settings size={14} />
+        </button>
+      </div>
     </div>
   );
 }

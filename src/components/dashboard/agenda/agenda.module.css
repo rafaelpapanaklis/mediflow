@@ -1,7 +1,7 @@
 .page {
   display: grid;
   grid-template-columns: 1fr var(--mf-detail-w, 320px);
-  grid-template-rows: var(--mf-topbar-h, 48px) var(--mf-subbar-h, 36px) 1fr;
+  grid-template-rows: auto var(--mf-subbar-h, 36px) 1fr;
   grid-template-areas:
     "topbar topbar"
     "sub    detail"
@@ -28,12 +28,14 @@
   grid-area: topbar;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 16px;
+  gap: 8px;
+  padding: 6px 12px;
+  min-height: 48px;
   background: var(--bg-elev);
   border-bottom: 1px solid var(--border-soft);
   box-shadow: 0 1px 2px rgba(15,10,30,0.02);
   flex-wrap: wrap;
+  row-gap: 6px;
 }
 .brand {
   display: flex; align-items: center; gap: 7px;
@@ -123,9 +125,14 @@
   padding: 1px 5px;
   border-radius: 8px;
 }
+.searchWrap {
+  position: relative;
+  flex: 0 1 200px;
+  min-width: 140px;
+}
 .searchBox {
-  width: 180px;
-  padding: 5px 9px;
+  width: 100%;
+  padding: 5px 9px 5px 24px;
   font-size: 11px;
   background: var(--bg-elev-2);
   border: 1px solid transparent;
@@ -139,6 +146,40 @@
   border-color: var(--border-brand);
 }
 .searchBox::placeholder { color: var(--text-4); }
+.searchIcon {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-3);
+  pointer-events: none;
+}
+
+.newApptBtn {
+  flex-shrink: 0;
+  padding: 5px 11px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--brand);
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: inherit;
+  box-shadow: 0 0 0 1px rgba(124,58,237,0.5), 0 4px 16px -4px rgba(124,58,237,0.4);
+}
+.newApptBtn:hover { background: #8b5cf6; }
+
+/* En viewports estrechos, ocultamos el datepicker (queda el chevrón + label + Hoy) */
+@media (max-width: 1180px) {
+  .datePicker { display: none; }
+}
+@media (max-width: 980px) {
+  .brand { display: none; }
+}
 
 /* ─────── SUB-TOOLBAR ────────────────────────────────────────────── */
 .subToolbar {

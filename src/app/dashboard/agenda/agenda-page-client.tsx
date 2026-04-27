@@ -7,6 +7,7 @@ import { AgendaTimeAxis } from "@/components/dashboard/agenda/agenda-time-axis";
 import { AgendaColumnHeader } from "@/components/dashboard/agenda/agenda-column-header";
 import { AgendaColumn } from "@/components/dashboard/agenda/agenda-column";
 import { AgendaEmptyDay } from "@/components/dashboard/agenda/agenda-empty-day";
+import { AgendaEmptyResources } from "@/components/dashboard/agenda/agenda-empty-resources";
 import { AgendaHighlightListener } from "@/components/dashboard/agenda/agenda-highlight-listener";
 import { AgendaDetailPanel } from "@/components/dashboard/agenda/agenda-detail-panel";
 import { AgendaListView } from "@/components/dashboard/agenda/agenda-list-view";
@@ -54,6 +55,9 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
           <AgendaMonthView />
         ) : state.viewMode === "week" ? (
           <AgendaWeekView />
+        ) : state.resources.length === 0 &&
+          (state.columnMode === "resource" || state.columnMode === "unified") ? (
+          <AgendaEmptyResources />
         ) : columns.length === 0 ? (
           <AgendaEmptyDay />
         ) : (

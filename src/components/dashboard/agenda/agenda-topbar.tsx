@@ -127,47 +127,21 @@ export function AgendaTopbar() {
         </button>
       </div>
 
-      <div style={{ position: "relative" }}>
-        <Search
-          size={11}
-          aria-hidden
-          style={{
-            position: "absolute",
-            left: 8,
-            top: "50%",
-            transform: "translateY(-50%)",
-            color: "var(--text-3)",
-            pointerEvents: "none",
-          }}
-        />
+      <div className={styles.searchWrap}>
+        <Search size={11} aria-hidden className={styles.searchIcon} />
         <input
           type="search"
           className={styles.searchBox}
           placeholder="Buscar paciente…"
           value={state.searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          style={{ paddingLeft: 24 }}
         />
       </div>
 
       <button
         type="button"
         onClick={() => openNew({})}
-        style={{
-          padding: "5px 11px",
-          fontSize: 11,
-          fontWeight: 500,
-          background: "var(--brand)",
-          color: "#fff",
-          border: "none",
-          borderRadius: 5,
-          cursor: "pointer",
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 5,
-          fontFamily: "inherit",
-          boxShadow: "0 0 0 1px rgba(124,58,237,0.5), 0 4px 16px -4px rgba(124,58,237,0.4)",
-        }}
+        className={styles.newApptBtn}
       >
         <CalendarPlus size={13} /> Nueva cita
       </button>
