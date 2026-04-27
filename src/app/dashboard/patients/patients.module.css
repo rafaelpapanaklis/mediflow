@@ -381,6 +381,15 @@
   border-radius: 14px;
   overflow: hidden;
 }
+/* En tablet/mobile la tabla tiene 7+ columnas que no caben.
+   Habilitamos scroll horizontal con un min-width del table para
+   forzar el overflow. La sticky checkbox (col 1) queda fija a la
+   izquierda para que el usuario sepa de qué fila está viendo
+   las acciones cuando hace scroll. */
+@media (max-width: 1024px) {
+  .tableWrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .table { min-width: 920px; }
+}
 .table {
   width: 100%;
   border-collapse: collapse;
