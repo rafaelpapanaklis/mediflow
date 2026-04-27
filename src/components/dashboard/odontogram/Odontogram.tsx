@@ -187,8 +187,7 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
     return counts;
   }, [displayEntries]);
 
-  /** Map state → set de FDI únicos. Un diente puede tener varias superficies con
-   *  el mismo estado; solo lo contamos una vez. Mantiene orden por FDI ascendente. */
+  /** Map state → array de FDIs únicos, en orden ascendente. */
   const groupsByState = useMemo(() => {
     const map = new Map<ToothState, number[]>();
     for (const e of displayEntries) {
@@ -198,6 +197,25 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
       map.set(e.state, arr);
     }
     map.forEach((arr) => arr.sort((a, b) => a - b));
+    return map;
+  }, [displayEntries]);
+
+  /** Map state → fdi → surfaces[] para enriquecer el footer con
+   *  detalle de superficie cuando el grupo tiene un solo diente
+   *  ej. "Caries (1 diente): 16 (oclusal)". */
+  const surfacesByStateAndFdi = useMemo(() => {
+    const map = new Map<ToothState, Map<number, SurfaceKey[]>>();
+    for (const e of displayEntries) {
+      if (e.state === "SANO" || e.surface === null) continue;
+      let inner = map.get(e.state);
+      if (!inner) {
+        inner = new Map();
+        map.set(e.state, inner);
+      }
+      const arr = inner.get(e.toothNumber) ?? [];
+      if (!arr.includes(e.surface)) arr.push(e.surface);
+      inner.set(e.toothNumber, arr);
+    }
     return map;
   }, [displayEntries]);
 
@@ -698,6 +716,22 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
               const previewCount = 5;
               const visibleFdis = isExpanded ? fdis : fdis.slice(0, previewCount);
               const hasMore = !isExpanded && fdis.length > previewCount;
+              const surfaceMap = surfacesByStateAndFdi.get(st);
+
+              /** Renderiza un FDI con superficie entre paréntesis si el
+               *  estado afecta a 1 sola superficie de ese diente.
+               *  Ej. "16 (oclusal)" o "12, 13, 21, 22" (sin superficie
+               *  cuando ya hay varios para no saturar el chip). */
+              const renderFdi = (fdi: number, includeSurface: boolean): string => {
+                const label = notationLabel(fdi, notation);
+                if (!includeSurface) return label;
+                const surfs = surfaceMap?.get(fdi);
+                if (surfs && surfs.length === 1) {
+                  return `${label} (${SURFACE_LABEL[surfs[0]].toLowerCase()})`;
+                }
+                return label;
+              };
+              const includeSurface = isExpanded || fdis.length === 1;
               return (
                 <button
                   key={st}
@@ -718,7 +752,7 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
                     ({fdis.length} diente{fdis.length === 1 ? "" : "s"})
                   </span>
                   <span className={styles.stateGroupList}>
-                    {visibleFdis.map((fdi) => notationLabel(fdi, notation)).join(", ")}
+                    {visibleFdis.map((fdi) => renderFdi(fdi, includeSurface)).join(", ")}
                     {hasMore && ` +${fdis.length - previewCount}`}
                   </span>
                 </button>
