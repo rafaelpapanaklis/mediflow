@@ -336,3 +336,81 @@
 }
 .saveBtn:hover:not(:disabled) { background: #2A68C0; }
 .saveBtn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* ─── DARK MODE — modal share panel ─── */
+:global(.dark) .backdrop { background: rgba(0, 0, 0, 0.65); }
+:global(.dark) .dialog {
+  background: #181530;
+  color: #E8E8EC;
+  box-shadow: 0 28px 80px -16px rgba(0, 0, 0, 0.7);
+}
+:global(.dark) .header { border-bottom-color: rgba(255, 255, 255, 0.08); }
+:global(.dark) .title { color: #E8E8EC; }
+:global(.dark) .subtitle { color: #A0A0AB; }
+:global(.dark) .closeBtn {
+  border-color: rgba(255, 255, 255, 0.10);
+  color: #A0A0AB;
+}
+:global(.dark) .closeBtn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #E8E8EC;
+}
+:global(.dark) .toggleLabel { color: #E8E8EC; }
+:global(.dark) .toggleHint { color: #A0A0AB; }
+:global(.dark) .fieldLabel { color: #A0A0AB; }
+:global(.dark) .fieldHint { color: #6B6B78; }
+:global(.dark) .slugInputWrap {
+  background: #121020;
+  border-color: rgba(255, 255, 255, 0.10);
+}
+:global(.dark) .slugPrefix {
+  background: #1A1630;
+  color: #6B6B78;
+  border-right-color: rgba(255, 255, 255, 0.08);
+}
+:global(.dark) .slugInput {
+  background: transparent;
+  color: #E8E8EC;
+}
+:global(.dark) .passwordInput {
+  background: #121020;
+  border-color: rgba(255, 255, 255, 0.10);
+  color: #E8E8EC;
+}
+:global(.dark) .passwordEye { color: #A0A0AB; }
+:global(.dark) .passwordEye:hover { background: rgba(255, 255, 255, 0.05); color: #E8E8EC; }
+:global(.dark) .previewBlock {
+  background: #1A1630;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+:global(.dark) .previewUrl code {
+  background: #121020;
+  border-color: rgba(255, 255, 255, 0.10);
+}
+:global(.dark) .previewBtn {
+  background: #181530;
+  border-color: rgba(255, 255, 255, 0.10);
+  color: #E8E8EC;
+}
+:global(.dark) .previewBtn:hover {
+  background: rgba(74, 144, 226, 0.18);
+  border-color: rgba(74, 144, 226, 0.4);
+}
+:global(.dark) .qrWrap {
+  background: #121020;
+  border-color: rgba(255, 255, 255, 0.10);
+}
+:global(.dark) .qrWrap svg { background: #fff; padding: 4px; border-radius: 4px; }
+:global(.dark) .qrLabel { color: #6B6B78; }
+:global(.dark) .footer {
+  background: #1A1630;
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+:global(.dark) .cancelBtn {
+  border-color: rgba(255, 255, 255, 0.10);
+  color: #A0A0AB;
+}
+:global(.dark) .cancelBtn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #E8E8EC;
+}

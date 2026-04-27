@@ -8,6 +8,25 @@
   overflow: hidden;
   font-family: 'Inter', system-ui, sans-serif;
 }
+:global(.dark) .wrap {
+  background: #121020;
+  border-color: rgba(255, 255, 255, 0.10);
+  color: #E8E8EC;
+}
+:global(.dark) .wrap .header {
+  background: #1A1630;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+:global(.dark) .wrap .item {
+  border-color: rgba(255, 255, 255, 0.06);
+}
+:global(.dark) .wrap .itemPatient { color: #E8E8EC; }
+:global(.dark) .wrap .itemMeta { color: #A0A0AB; }
+:global(.dark) .wrap .position {
+  background: rgba(124, 58, 237, 0.20);
+  color: #c4b5fd;
+}
+:global(.dark) .empty { color: #6B6B78; }
 
 /* ─── Banner de llamado ─── */
 .callBanner {

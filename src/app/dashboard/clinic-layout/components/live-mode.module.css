@@ -304,3 +304,39 @@
 .timelineSection {
   border-top: 1px solid #E2ECF4;
 }
+
+/* ─── DARK MODE — overrides ─── */
+:global(.dark) .clock {
+  background: rgba(124, 58, 237, 0.15);
+  border-color: rgba(124, 58, 237, 0.35);
+  color: #E8E8EC;
+}
+:global(.dark) .tooltip {
+  background: #181530;
+  color: #E8E8EC;
+  box-shadow: 0 14px 48px rgba(0, 0, 0, 0.6);
+}
+:global(.dark) .tooltipBadge { color: #A0A0AB; }
+:global(.dark) .tooltipPatient { color: #E8E8EC; }
+:global(.dark) .tooltipMeta { color: #A0A0AB; }
+:global(.dark) .tooltipBar { background: rgba(255, 255, 255, 0.06); }
+:global(.dark) .tooltipDoctor { color: #6B6B78; }
+
+:global(.dark) .statusEmpty { color: #6B6B78; }
+:global(.dark) .statusCardName { color: #E8E8EC; }
+:global(.dark) .statusPatient { color: #E8E8EC; }
+:global(.dark) .statusTreatment { color: #A0A0AB; }
+:global(.dark) .statusBar { background: rgba(255, 255, 255, 0.08); }
+:global(.dark) .statusFooter { color: #6B6B78; }
+
+:global(.dark) .timeline {
+  background: #121020;
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+:global(.dark) .timelineTitle { color: #A0A0AB; }
+:global(.dark) .timelineLegend { color: #6B6B78; }
+:global(.dark) .timelineHoursInner { color: #45454F; }
+:global(.dark) .timelineLabel { color: #A0A0AB; }
+:global(.dark) .timelineRail { background: rgba(255, 255, 255, 0.04); }
+:global(.dark) .timelineRail:hover { background: rgba(255, 255, 255, 0.06); }
+:global(.dark) .timelineSection { border-top-color: rgba(255, 255, 255, 0.08); }
