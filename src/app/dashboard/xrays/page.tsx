@@ -1,26 +1,16 @@
 export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
-import { FileCategory } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { XraysPatientsList } from "./patients-list-client";
 
 export const metadata: Metadata = { title: "Radiografías — MediFlow" };
 
-const XRAY_CATEGORIES: FileCategory[] = [
-  FileCategory.XRAY_PERIAPICAL,
-  FileCategory.XRAY_PANORAMIC,
-  FileCategory.XRAY_BITEWING,
-  FileCategory.XRAY_OCCLUSAL,
-];
-
 export default async function XraysPage() {
   const user = await getCurrentUser();
   const clinicId = user.clinicId;
 
-  // Pacientes activos. Conteo y última fecha se calculan luego con queries
-  // independientes para mantener types simples.
   const patients = await prisma.patient.findMany({
     where: { clinicId, status: "ACTIVE" },
     orderBy: { firstName: "asc" },
@@ -34,11 +24,20 @@ export default async function XraysPage() {
     },
   });
 
-  // Conteo de radiografías + última fecha por paciente. Una sola pasada.
-  const xrayFiles = await prisma.patientFile.findMany({
-    where: { clinicId, category: { in: XRAY_CATEGORIES } },
-    select: { patientId: true, createdAt: true },
-  });
+  // Conteo de radiografías + última fecha por paciente.
+  //
+  // Usamos $queryRaw con cast `category::text` para evitar
+  // "operator does not exist: text = FileCategory" cuando la columna
+  // patient_files.category quedó como TEXT en alguna DB legacy aunque
+  // schema.prisma la declare como enum FileCategory. El cast textual
+  // funciona en ambos casos (text vs enum) sin requerir migración
+  // urgente del tipo de columna.
+  const xrayFiles = await prisma.$queryRaw<Array<{ patientId: string | null; createdAt: Date }>>`
+    SELECT "patientId", "createdAt"
+    FROM patient_files
+    WHERE "clinicId" = ${clinicId}
+      AND category::text IN ('XRAY_PERIAPICAL', 'XRAY_PANORAMIC', 'XRAY_BITEWING', 'XRAY_OCCLUSAL')
+  `;
   const countByPatient = new Map<string, number>();
   const lastByPatient = new Map<string, Date>();
   for (const f of xrayFiles) {
