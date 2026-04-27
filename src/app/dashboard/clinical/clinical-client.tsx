@@ -23,6 +23,11 @@ import {
   Stethoscope,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import {
+  SOAP_TEMPLATES,
+  findTemplateByShortcut,
+  type SoapTemplate,
+} from "@/lib/clinical/soap-templates";
 import styles from "./clinical.module.css";
 
 interface Patient {
@@ -74,70 +79,7 @@ interface Icd10Entry {
   label: string;
 }
 
-interface Template {
-  name: string;
-  desc: string;
-  kbd: string;
-  fill: Partial<SoapDraft>;
-}
-
-const TEMPLATES: Template[] = [
-  {
-    name: "SOAP estándar",
-    desc: "Subjetivo · Objetivo · Análisis · Plan",
-    kbd: "⇧1",
-    fill: {
-      subjective: "Motivo de consulta:\nPadecimiento actual:\nAntecedentes relevantes:",
-      objective: "Signos vitales:\nExploración física:",
-      assessment: "Diagnóstico principal:\nDx diferenciales:",
-      plan: "Tratamiento:\nIndicaciones:\nSeguimiento:",
-    },
-  },
-  {
-    name: "Primera consulta",
-    desc: "Historia clínica completa",
-    kbd: "⇧2",
-    fill: {
-      subjective: "Antecedentes heredofamiliares:\nAntecedentes personales no patológicos:\nAntecedentes personales patológicos:\nMotivo de consulta:",
-      objective: "Signos vitales:\nExploración física por sistemas:",
-      assessment: "Diagnóstico principal:",
-      plan: "Plan de manejo inicial:",
-    },
-  },
-  {
-    name: "Post-extracción",
-    desc: "Indicaciones + analgesia",
-    kbd: "⇧3",
-    fill: {
-      subjective: "Paciente acude para extracción de pieza dental.",
-      objective: "Procedimiento realizado bajo anestesia local. Hemostasia adecuada.",
-      assessment: "Post-extracción dental.",
-      plan: "Ibuprofeno 400mg c/8h por 3 días.\nAplicar hielo local 20 min cada 2 horas las primeras 24h.\nDieta blanda 24-48h.\nNo enjuagues vigorosos en 24h.\nCita de revisión en 7 días.",
-    },
-  },
-  {
-    name: "Limpieza dental",
-    desc: "Profilaxis + recomendaciones",
-    kbd: "⇧4",
-    fill: {
-      subjective: "Paciente acude a limpieza dental de rutina.",
-      objective: "Higiene oral aceptable. Cálculo supragingival generalizado.",
-      assessment: "Profilaxis dental.",
-      plan: "Profilaxis con ultrasonido y pulido. Aplicación tópica de flúor.\nReforzar técnica de cepillado y uso de hilo dental.\nControl en 6 meses.",
-    },
-  },
-  {
-    name: "Endodoncia",
-    desc: "Tratamiento de conductos",
-    kbd: "⇧5",
-    fill: {
-      subjective: "Dolor pulpar referido.",
-      objective: "Pulpa vital con respuesta exagerada. Radiografía: lesión periapical.",
-      assessment: "Pulpitis irreversible.",
-      plan: "Tratamiento de conductos en 1-2 sesiones.\nAnalgesia post-operatoria: ibuprofeno 400mg c/8h x 3 días.\nRestauración definitiva en cita posterior.",
-    },
-  },
-];
+// Templates ahora viven en src/lib/clinical/soap-templates.ts
 
 const COMMON_ICD10: Icd10Entry[] = [
   { code: "K02.1", label: "Caries dental dentinaria" },
@@ -219,18 +161,33 @@ export function ClinicalClient(props: Props) {
     );
   }, [icdQuery]);
 
-  // Apply template
-  const applyTemplate = useCallback((tpl: Template) => {
-    setDraft((d) => ({
-      subjective: tpl.fill.subjective ?? d.subjective,
-      objective:  tpl.fill.objective  ?? d.objective,
-      assessment: tpl.fill.assessment ?? d.assessment,
-      plan:       tpl.fill.plan       ?? d.plan,
-    }));
-    toast.success(`Plantilla "${tpl.name}" cargada`);
-  }, []);
+  // Apply template — escribe el contenido pre-escrito en los 4 campos S/O/A/P.
+  // Si algún campo ya tiene contenido distinto al template y al placeholder,
+  // pide confirmación antes de sobreescribir.
+  const applyTemplate = useCallback((tpl: SoapTemplate) => {
+    const hasContent =
+      (draft.subjective?.trim().length ?? 0) > 0 ||
+      (draft.objective?.trim().length  ?? 0) > 0 ||
+      (draft.assessment?.trim().length ?? 0) > 0 ||
+      (draft.plan?.trim().length       ?? 0) > 0;
 
-  // Keyboard shortcuts ⇧1-5 for templates, Ctrl+S save, Ctrl+Enter sign
+    if (hasContent) {
+      const ok = window.confirm(
+        `Esta nota ya tiene contenido. ¿Reemplazar con la plantilla "${tpl.name}"?`,
+      );
+      if (!ok) return;
+    }
+
+    setDraft({
+      subjective: tpl.s,
+      objective:  tpl.o,
+      assessment: tpl.a,
+      plan:       tpl.p,
+    });
+    toast.success(`Plantilla "${tpl.name}" cargada`);
+  }, [draft.subjective, draft.objective, draft.assessment, draft.plan]);
+
+  // Keyboard shortcuts ⇧1-9 for templates, Ctrl+S save, Ctrl+Enter sign
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
@@ -246,10 +203,13 @@ export function ClinicalClient(props: Props) {
         }
         return;
       }
-      if (e.shiftKey && /^[1-5]$/.test(e.key)) {
-        const idx = parseInt(e.key, 10) - 1;
-        const tpl = TEMPLATES[idx];
-        if (tpl) applyTemplate(tpl);
+      if (e.shiftKey && /^[1-9]$/.test(e.key)) {
+        const n = parseInt(e.key, 10);
+        const tpl = findTemplateByShortcut(n);
+        if (tpl) {
+          e.preventDefault();
+          applyTemplate(tpl);
+        }
       }
     };
     window.addEventListener("keydown", handler);
@@ -519,16 +479,19 @@ export function ClinicalClient(props: Props) {
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: "var(--text-3)", textTransform: "uppercase", marginTop: 4 }}>
                 Plantillas SOAP
               </div>
-              {TEMPLATES.map((tpl) => (
+              {SOAP_TEMPLATES.map((tpl) => (
                 <button
-                  key={tpl.name}
+                  key={tpl.code}
                   type="button"
                   className={styles.templateCard}
                   onClick={() => applyTemplate(tpl)}
+                  title={tpl.desc}
                 >
                   <span className={styles.templateName}>
                     {tpl.name}
-                    <span className={styles.templateKbd}>{tpl.kbd}</span>
+                    {tpl.shortcut !== null && (
+                      <span className={styles.templateKbd}>⇧{tpl.shortcut}</span>
+                    )}
                   </span>
                   <span className={styles.templateDesc}>{tpl.desc}</span>
                 </button>
@@ -574,18 +537,25 @@ export function ClinicalClient(props: Props) {
         <div className={styles.editorScroll}>
           <div className={styles.editorInner}>
             {!selectedPatient && (
-              <div style={{ padding: "60px 20px", textAlign: "center", color: "var(--text-3)" }}>
-                <Stethoscope size={48} aria-hidden style={{ opacity: 0.3, marginBottom: 12 }} />
-                <h2 style={{ fontSize: 18, fontWeight: 700, color: "var(--text-1)", marginBottom: 6 }}>
-                  Selecciona un paciente
-                </h2>
-                <p style={{ fontSize: 13 }}>
-                  Usa el buscador del panel izquierdo para empezar una nota clínica.
-                </p>
+              <div
+                style={{
+                  padding: "12px 16px",
+                  marginBottom: 12,
+                  border: "1px dashed rgba(217,119,6,0.4)",
+                  background: "rgba(217,119,6,0.06)",
+                  borderRadius: 10,
+                  fontSize: 12.5,
+                  color: "var(--text-2)",
+                  lineHeight: 1.5,
+                }}
+              >
+                <strong style={{ color: "var(--st-warning)" }}>Sin paciente</strong> —
+                puedes escribir o aplicar plantillas, pero necesitas seleccionar
+                un paciente del panel izquierdo antes de guardar o firmar.
               </div>
             )}
 
-            {selectedPatient && (["subjective", "objective", "assessment", "plan"] as SoapKey[]).map((k) => {
+            {(["subjective", "objective", "assessment", "plan"] as SoapKey[]).map((k) => {
               const meta = SOAP_META[k];
               const value = draft[k];
               const isCollapsed = collapsed[k];
