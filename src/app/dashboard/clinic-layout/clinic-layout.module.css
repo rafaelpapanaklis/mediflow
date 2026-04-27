@@ -153,6 +153,55 @@
   font-weight: 600;
 }
 
+/* Tool toggle group estilo Figma — Select (V) / Hand (H). */
+.toolToggleGroup {
+  display: inline-flex;
+  background: var(--bg-input);
+  border: 1px solid #D0E0EE;
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+.toolToggleBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 9px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+}
+.toolToggleBtn:hover:not(:disabled) {
+  color: var(--text-1);
+}
+.toolToggleBtnActive {
+  background: #fff;
+  color: var(--blue);
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(30, 60, 120, 0.12);
+}
+.toolToggleBtn kbd {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(15, 25, 50, 0.06);
+  color: var(--text-3);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.toolToggleBtnActive kbd {
+  background: var(--blue-lt);
+  color: var(--blue);
+}
+
 /* Toggle Edición / En Vivo */
 .modeToggle {
   display: inline-flex;

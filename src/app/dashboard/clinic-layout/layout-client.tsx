@@ -492,8 +492,13 @@ export function ClinicLayoutClient({
         setPanMode(false);
         return;
       }
+      // Tool switching estilo Figma: V = select, H = hand (no toggle).
+      if (e.key === "v" || e.key === "V") {
+        setPanMode(false);
+        return;
+      }
       if (e.key === "h" || e.key === "H") {
-        setPanMode((v) => !v);
+        setPanMode(true);
         return;
       }
       if (selectedId === null) return;
@@ -966,17 +971,35 @@ export function ClinicLayoutClient({
               >
                 <Maximize2 size={13} aria-hidden /> 1:1
               </button>
-              <button
-                type="button"
-                className={`${styles.toolbarBtn} ${panMode ? styles.toolbarBtnPrimary : ""}`}
-                onClick={() => setPanMode((v) => !v)}
-                title="Modo manita (H)"
+              <div
+                className={styles.toolToggleGroup}
+                role="group"
+                aria-label="Herramienta activa"
               >
-                {panMode ? <Hand size={13} aria-hidden /> : <MousePointer2 size={13} aria-hidden />}
-              </button>
+                <button
+                  type="button"
+                  className={`${styles.toolToggleBtn} ${!panMode ? styles.toolToggleBtnActive : ""}`}
+                  onClick={() => setPanMode(false)}
+                  aria-pressed={!panMode}
+                  title="Seleccionar (V)"
+                >
+                  <MousePointer2 size={13} aria-hidden />
+                  <kbd>V</kbd>
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.toolToggleBtn} ${panMode ? styles.toolToggleBtnActive : ""}`}
+                  onClick={() => setPanMode(true)}
+                  aria-pressed={panMode}
+                  title="Mano / Pan (H)"
+                >
+                  <Hand size={13} aria-hidden />
+                  <kbd>H</kbd>
+                </button>
+              </div>
 
               <span className={styles.kbdHint}>
-                <kbd>R</kbd> rota · <kbd>Del</kbd> borra · <kbd>⌘Z</kbd> deshacer · <kbd>H</kbd> pan
+                <kbd>R</kbd> rota · <kbd>Del</kbd> borra · <kbd>⌘Z</kbd> deshacer
               </span>
             </>
           )}
