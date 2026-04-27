@@ -224,10 +224,35 @@ export function LivePublicClient({
       }
     };
     fetchAll();
-    const id = setInterval(fetchAll, 30_000);
+    // Polling con pausa cuando la pestaña está oculta. Para TV en sala
+    // de espera la pestaña suele estar siempre visible, pero si el
+    // usuario minimiza el browser o cambia de tab, dejamos de hacer
+    // requests innecesarios al server.
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    const startPolling = () => {
+      if (intervalId !== null) return;
+      intervalId = setInterval(fetchAll, 30_000);
+    };
+    const stopPolling = () => {
+      if (intervalId === null) return;
+      clearInterval(intervalId);
+      intervalId = null;
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        // Al volver a la pestaña, fetch inmediato + reanuda polling.
+        fetchAll();
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+    if (document.visibilityState === "visible") startPolling();
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       cancelled = true;
-      clearInterval(id);
+      stopPolling();
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [slug, locked, reloadKey]);
 

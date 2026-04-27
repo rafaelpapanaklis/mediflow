@@ -281,10 +281,25 @@ export function ClinicLayoutClient({
       } catch {/* silent */}
     };
     fetchAppointments();
-    const id = setInterval(fetchAppointments, 30_000);
+    // Pausa polling cuando la pestaña no está visible (el editor en
+    // background no necesita refetch de appointments).
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    const start = () => {
+      if (intervalId === null) intervalId = setInterval(fetchAppointments, 30_000);
+    };
+    const stop = () => {
+      if (intervalId !== null) { clearInterval(intervalId); intervalId = null; }
+    };
+    const onVis = () => {
+      if (document.visibilityState === "visible") { fetchAppointments(); start(); }
+      else stop();
+    };
+    if (document.visibilityState === "visible") start();
+    document.addEventListener("visibilitychange", onVis);
     return () => {
       cancelled = true;
-      clearInterval(id);
+      stop();
+      document.removeEventListener("visibilitychange", onVis);
     };
   }, [liveMode, viewTime]);
 
