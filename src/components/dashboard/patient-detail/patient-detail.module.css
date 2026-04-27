@@ -238,38 +238,62 @@
 
 .mainColumn { min-width: 0; }
 
-/* Selector de sección sólo en mobile (<1024) cuando quick-nav está oculto */
-.mobileTabSelect {
+/* Tab bar móvil — sticky horizontal scrollable. Sólo visible <1024
+   donde el quick-nav lateral está oculto. iOS-style: el usuario hace
+   swipe horizontal para descubrir secciones con counts/badges visibles. */
+.mobileTabBar {
   display: none;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  gap: 6px;
+  margin: 0 -16px 14px;
+  padding: 10px 16px;
+  background: var(--bg);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--border-soft);
+}
+.mobileTabBar::-webkit-scrollbar { display: none; }
+.mobileTabBtn {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 14px;
-  padding: 8px 10px;
+  gap: 5px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
   background: var(--bg-elev);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
-}
-.mobileTabSelectLabel {
-  font-size: 9px; font-weight: 700;
-  color: var(--text-3);
-  letter-spacing: 0.08em; text-transform: uppercase;
-  flex-shrink: 0;
-}
-.mobileTabSelectInput {
-  flex: 1;
-  font-size: 12px; font-weight: 600;
-  background: var(--bg-elev);
-  color: var(--text-1);
-  border: 1px solid var(--border-soft);
-  border-radius: 6px;
-  padding: 6px 8px;
-  font-family: inherit;
+  border-radius: 999px;
   cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  flex-shrink: 0;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
-.mobileTabSelectInput:focus {
-  outline: none;
+.mobileTabBtn:hover { background: var(--brand-softer); }
+.mobileTabBtnActive {
+  background: var(--brand);
   border-color: var(--brand);
-  box-shadow: 0 0 0 3px var(--brand-soft);
+  color: #fff;
+}
+.mobileTabBtnActive:hover { background: var(--brand); }
+.mobileTabCount {
+  font-family: var(--font-jetbrains-mono, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.22);
+  color: inherit;
+  min-width: 18px;
+  text-align: center;
+}
+.mobileTabBtn:not(.mobileTabBtnActive) .mobileTabCount {
+  background: var(--brand-soft);
+  color: var(--brand);
 }
 
 /* ─────── TREATMENTS MODAL (post-firmar consulta) ─────── */
@@ -418,7 +442,7 @@
 .treatmentsCreate:hover:not(:disabled) { background: #8b5cf6; }
 .treatmentsCreate:disabled { opacity: 0.5; cursor: not-allowed; }
 @media (max-width: 1024px) {
-  .mobileTabSelect { display: flex; }
+  .mobileTabBar { display: flex; }
 }
 
 /* ─────── QUICK NAV ─────── */

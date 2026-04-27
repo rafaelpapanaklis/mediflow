@@ -614,24 +614,38 @@ export function PatientDetailClient({
             </>
           )}
 
-          {/* Selector móvil — sólo visible <1024 (donde el quick-nav está oculto). */}
-          <div className={patientDetailStyles.mobileTabSelect}>
-            <label htmlFor="patient-section-select" className={patientDetailStyles.mobileTabSelectLabel}>
-              Sección
-            </label>
-            <select
-              id="patient-section-select"
-              value={tab}
-              onChange={(e) => setTab(e.target.value)}
-              className={patientDetailStyles.mobileTabSelectInput}
-            >
-              {TABS.map((t) => (
-                <option key={t.id} value={t.id}>
+          {/* Tab bar móvil sticky — sólo visible <1024 (donde el quick-nav
+              está oculto). Patrón iOS-style: scroll horizontal con buttons
+              tappables, sticky bajo el hero para que el usuario pueda
+              cambiar de sección sin scrollear arriba. */}
+          <div
+            className={patientDetailStyles.mobileTabBar}
+            role="tablist"
+            aria-label="Secciones del paciente"
+          >
+            {TABS.map((t) => {
+              const isActive = tab === t.id;
+              const count = tabCounts[t.id];
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  id={`patient-tab-${t.id}`}
+                  aria-selected={isActive}
+                  aria-controls={`patient-panel-${t.id}`}
+                  className={`${patientDetailStyles.mobileTabBtn} ${
+                    isActive ? patientDetailStyles.mobileTabBtnActive : ""
+                  }`}
+                  onClick={() => setTab(t.id)}
+                >
                   {t.label}
-                  {tabCounts[t.id] !== undefined ? ` (${tabCounts[t.id]})` : ""}
-                </option>
-              ))}
-            </select>
+                  {count !== undefined && count > 0 && (
+                    <span className={patientDetailStyles.mobileTabCount}>{count}</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
