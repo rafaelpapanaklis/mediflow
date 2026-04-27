@@ -5,12 +5,14 @@ export interface SidebarCounts {
   messagesUnread: number;
   clinicalDrafts: number;
   xraysUnanalyzed: number;
+  inboxUnread: number;
 }
 
 const ZERO: SidebarCounts = {
   messagesUnread: 0,
   clinicalDrafts: 0,
   xraysUnanalyzed: 0,
+  inboxUnread: 0,
 };
 
 const REVALIDATE_MS = 60_000;
@@ -44,6 +46,7 @@ export function useSidebarCounts(): SidebarCounts {
             messagesUnread: Number(data.messagesUnread ?? 0) | 0,
             clinicalDrafts: Number(data.clinicalDrafts ?? 0) | 0,
             xraysUnanalyzed: Number(data.xraysUnanalyzed ?? 0) | 0,
+            inboxUnread: Number(data.inboxUnread ?? 0) | 0,
           });
         })
         .catch((err) => {

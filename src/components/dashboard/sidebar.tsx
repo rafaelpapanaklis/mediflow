@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import {
-  Home, Calendar, Users, MessageCircle,
+  Home, Calendar, Users, MessageCircle, Inbox as InboxIcon,
   Stethoscope, Sparkles, FileImage, Camera, FlaskConical, Dumbbell, Footprints,
   Activity, Gift, DoorOpen, Package,
   CreditCard, BarChart3, UserCog, Globe, ClipboardList, Settings,
@@ -78,7 +78,7 @@ interface NavItemDef {
   icon: LucideIcon;
   categories?: ClinicCategory[];
   adminOnly?: boolean;
-  countKey?: "messagesUnread" | "clinicalDrafts" | "xraysUnanalyzed";
+  countKey?: "messagesUnread" | "clinicalDrafts" | "xraysUnanalyzed" | "inboxUnread";
   matchExact?: boolean;
 }
 
@@ -86,6 +86,7 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: "home",         section: "workspace", label: "Hoy",         href: "/dashboard",               icon: Home,          matchExact: true },
   { id: "appointments", section: "workspace", label: "Agenda",      href: "/dashboard/agenda",        icon: Calendar },
   { id: "patients",     section: "workspace", label: "Pacientes",   href: "/dashboard/patients",      icon: Users },
+  { id: "inbox",        section: "workspace", label: "Inbox",       href: "/dashboard/inbox",         icon: InboxIcon,     countKey: "inboxUnread" },
   { id: "messages",     section: "workspace", label: "Mensajes",    href: "/dashboard/whatsapp",      icon: MessageCircle, countKey: "messagesUnread" },
 
   { id: "clinical",     section: "clinico", label: "Expedientes",  href: "/dashboard/clinical",     icon: Stethoscope, countKey: "clinicalDrafts" },
