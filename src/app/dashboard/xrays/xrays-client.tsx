@@ -24,6 +24,7 @@ import {
   Eraser,
   X as XIcon,
   FileDown,
+  Menu,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import styles from "./xrays.module.css";
@@ -238,6 +239,18 @@ export function XraysClient({
   const [savingAnn, setSavingAnn] = useState(false);
   const drawingRef = useRef<boolean>(false);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Mobile drawer del timeline (lista de pacientes/historial). En desktop
+  // el aside está visible permanentemente; en mobile pasa a off-canvas.
+  const [mobileTimelineOpen, setMobileTimelineOpen] = useState(false);
+  useEffect(() => {
+    if (!mobileTimelineOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileTimelineOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileTimelineOpen]);
 
   const selectedPatient = useMemo(
     () => patients.find((p) => p.id === selectedPatientId) ?? null,
@@ -664,9 +677,31 @@ export function XraysClient({
   /* ─── Render ─── */
 
   return (
-    <div className={styles.page} data-active-mode="xrays">
+    <div
+      className={styles.page}
+      data-active-mode="xrays"
+      data-mobile-timeline-open={mobileTimelineOpen || undefined}
+    >
+      {/* Backdrop del drawer en mobile. */}
+      {mobileTimelineOpen && (
+        <button
+          type="button"
+          aria-label="Cerrar historial"
+          className={styles.mobileBackdrop}
+          onClick={() => setMobileTimelineOpen(false)}
+        />
+      )}
       {/* ── Topbar ── */}
       <div className={styles.topbar}>
+        {/* Hamburger sólo visible en mobile (oculto vía media query). */}
+        <button
+          type="button"
+          className={styles.mobileMenuBtn}
+          onClick={() => setMobileTimelineOpen(true)}
+          aria-label="Abrir historial de radiografías"
+        >
+          <Menu size={16} aria-hidden />
+        </button>
         <div className={styles.topbarTitle}>
           <span className={styles.topbarTitleIcon}><Sparkles size={14} aria-hidden /></span>
           Radiografías
@@ -732,8 +767,13 @@ export function XraysClient({
         />
       </div>
 
-      {/* ── Timeline lateral ── */}
-      <aside className={styles.timeline}>
+      {/* ── Timeline lateral (drawer en mobile) ── */}
+      <aside
+        className={styles.timeline}
+        role={mobileTimelineOpen ? "dialog" : undefined}
+        aria-modal={mobileTimelineOpen ? "true" : undefined}
+        aria-label="Historial de radiografías"
+      >
         <div className={styles.timelineHeader}>
           <span className={styles.timelineLabel}>Historial · {filteredFiles.length}</span>
           <div style={{ position: "relative" }}>
@@ -783,6 +823,8 @@ export function XraysClient({
                     } else {
                       setActiveFileId(f.id);
                     }
+                    // Cierra el drawer si estaba abierto en mobile.
+                    setMobileTimelineOpen(false);
                   }}
                   title={f.name}
                 >
@@ -815,33 +857,54 @@ export function XraysClient({
 
       {/* ── Visor central (DARK) ── */}
       <main className={styles.viewer}>
-        <div className={styles.viewerToolbar}>
-          {(["pan", "zoom", "rotate"] as Tool[]).map((t) => {
-            const Icon = t === "pan" ? Move : t === "zoom" ? ZoomIn : RotateCw;
+        <div className={styles.viewerToolbar} role="toolbar" aria-label="Herramientas del visor">
+          {/* Mapa de etiquetas humanas para tools — title críptico
+              ("pan", "zoom") + aria-label descriptivo. data-active y
+              aria-pressed comunican estado al lector de pantalla. */}
+          {(
+            [
+              { id: "pan", label: "Mover imagen" },
+              { id: "zoom", label: "Zoom" },
+              { id: "rotate", label: "Rotar 90°" },
+            ] as Array<{ id: Tool; label: string }>
+          ).map((t) => {
+            const Icon = t.id === "pan" ? Move : t.id === "zoom" ? ZoomIn : RotateCw;
+            const isActive = tool === t.id;
             return (
               <button
-                key={t}
+                key={t.id}
                 type="button"
                 className={styles.toolBtn}
-                data-active={tool === t}
-                onClick={() => setTool(t)}
-                title={t}
+                data-active={isActive}
+                aria-pressed={isActive}
+                onClick={() => setTool(t.id)}
+                title={t.label}
+                aria-label={t.label}
               >
                 <Icon size={15} aria-hidden />
               </button>
             );
           })}
           <span className={styles.toolDivider} />
-          {(["measure", "angle", "annotate"] as Tool[]).map((t) => {
-            const Icon = t === "measure" ? Ruler : t === "angle" ? Triangle : Pencil;
+          {(
+            [
+              { id: "measure", label: "Regla (medir distancia)" },
+              { id: "angle", label: "Ángulo" },
+              { id: "annotate", label: "Lápiz (anotar)" },
+            ] as Array<{ id: Tool; label: string }>
+          ).map((t) => {
+            const Icon = t.id === "measure" ? Ruler : t.id === "angle" ? Triangle : Pencil;
+            const isActive = tool === t.id;
             return (
               <button
-                key={t}
+                key={t.id}
                 type="button"
                 className={styles.toolBtn}
-                data-active={tool === t}
-                onClick={() => setTool(t)}
-                title={t}
+                data-active={isActive}
+                aria-pressed={isActive}
+                onClick={() => setTool(t.id)}
+                title={t.label}
+                aria-label={t.label}
               >
                 <Icon size={15} aria-hidden />
               </button>
@@ -852,12 +915,19 @@ export function XraysClient({
             type="button"
             className={styles.toolBtn}
             data-active={inverted}
+            aria-pressed={inverted}
             onClick={() => setInverted((v) => !v)}
             title="Invertir colores"
+            aria-label="Invertir colores"
           >
             <Contrast size={15} aria-hidden />
           </button>
-          <button type="button" className={styles.toolBtn} title="Voltear horizontal">
+          <button
+            type="button"
+            className={styles.toolBtn}
+            title="Voltear horizontal"
+            aria-label="Voltear horizontal"
+          >
             <FlipHorizontal size={15} aria-hidden />
           </button>
           <span className={styles.toolDivider} />
@@ -867,33 +937,44 @@ export function XraysClient({
             onClick={handleClearAnnotations}
             disabled={annotations.length === 0}
             title="Borrar todas las anotaciones"
+            aria-label="Borrar todas las anotaciones"
           >
             <Eraser size={15} aria-hidden />
           </button>
           <span className={styles.toolDivider} />
-          <span className={styles.toolSlider}>
+          <label className={styles.toolSlider}>
             Brillo
             <input
               type="range" min={50} max={150} value={brightness}
               onChange={(e) => setBrightness(Number(e.target.value))}
+              aria-label={`Brillo: ${brightness}%`}
+              aria-valuenow={brightness}
+              aria-valuemin={50}
+              aria-valuemax={150}
             />
             <strong style={{ fontFamily: "var(--font-jetbrains-mono, monospace)" }}>{brightness}%</strong>
-          </span>
-          <span className={styles.toolSlider}>
+          </label>
+          <label className={styles.toolSlider}>
             Contraste
             <input
               type="range" min={50} max={200} value={contrast}
               onChange={(e) => setContrast(Number(e.target.value))}
+              aria-label={`Contraste: ${contrast}%`}
+              aria-valuenow={contrast}
+              aria-valuemin={50}
+              aria-valuemax={200}
             />
             <strong style={{ fontFamily: "var(--font-jetbrains-mono, monospace)" }}>{contrast}%</strong>
-          </span>
+          </label>
           <span className={styles.toolSpacer} />
           <button
             type="button"
             className={`${styles.toolBtn} ${styles.toolBtnText}`}
             data-active={compareMode}
+            aria-pressed={compareMode}
             onClick={toggleCompare}
-            title="Modo compare"
+            title="Comparar dos radiografías lado a lado"
+            aria-label="Comparar dos radiografías lado a lado"
           >
             <GitCompareArrows size={13} aria-hidden /> Compare
           </button>
@@ -901,8 +982,10 @@ export function XraysClient({
             type="button"
             className={`${styles.toolBtn} ${styles.toolBtnText}`}
             data-active={aiVisible}
+            aria-pressed={aiVisible}
             onClick={() => setAiVisible((v) => !v)}
-            title="Mostrar/ocultar overlays IA"
+            title={aiVisible ? "Ocultar overlays de IA" : "Mostrar overlays de IA"}
+            aria-label={aiVisible ? "Ocultar overlays de IA" : "Mostrar overlays de IA"}
           >
             {aiVisible ? <Eye size={13} aria-hidden /> : <EyeOff size={13} aria-hidden />}
             IA

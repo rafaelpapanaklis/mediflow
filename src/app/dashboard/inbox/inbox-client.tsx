@@ -29,6 +29,8 @@ import {
   Phone,
   Video,
   X,
+  Menu,
+  ArrowLeft,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import styles from "./inbox.module.css";
@@ -137,6 +139,21 @@ export function InboxClient() {
   const [loadingList, setLoadingList] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Mobile drawer state — solo se usa <1024px. El sidebar de canales
+  // pasa a drawer izquierdo (off-canvas) y el detail panel a overlay
+  // full-screen cuando hay activeThread. Esc cierra cualquier overlay.
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (mobileSidebarOpen) setMobileSidebarOpen(false);
+      else if (activeThreadId && window.matchMedia("(max-width: 1023px)").matches) {
+        setActiveThreadId(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileSidebarOpen, activeThreadId]);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -285,6 +302,7 @@ export function InboxClient() {
     setActiveChannel(null);
     setActiveAssignee(null);
     setActiveThreadId(null);
+    setMobileSidebarOpen(false);
   }, []);
 
   const handleChannelClick = useCallback((ch: Channel) => {
@@ -292,6 +310,7 @@ export function InboxClient() {
     setActiveChannel((prev) => (prev === ch ? null : ch));
     setActiveAssignee(null);
     setActiveThreadId(null);
+    setMobileSidebarOpen(false);
   }, []);
 
   const handleAssigneeClick = useCallback((a: "me" | "unassigned") => {
@@ -299,6 +318,7 @@ export function InboxClient() {
     setActiveChannel(null);
     setActiveAssignee((prev) => (prev === a ? null : a));
     setActiveThreadId(null);
+    setMobileSidebarOpen(false);
   }, []);
 
   // Group messages por día para los dividers
@@ -332,9 +352,27 @@ export function InboxClient() {
   const channelMeta = activeThread ? CHANNEL_META[activeThread.channel] : null;
 
   return (
-    <div className={styles.page}>
-      {/* ─── Col 1: Sidebar ─── */}
-      <aside className={styles.sidebar}>
+    <div
+      className={styles.page}
+      data-mobile-sidebar-open={mobileSidebarOpen || undefined}
+      data-mobile-detail-open={activeThreadId ? "true" : undefined}
+    >
+      {/* Backdrop sólo aparece en mobile cuando el sidebar drawer está abierto. */}
+      {mobileSidebarOpen && (
+        <button
+          type="button"
+          aria-label="Cerrar panel"
+          className={styles.mobileBackdrop}
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+      {/* ─── Col 1: Sidebar (drawer en mobile) ─── */}
+      <aside
+        className={styles.sidebar}
+        role={mobileSidebarOpen ? "dialog" : undefined}
+        aria-modal={mobileSidebarOpen ? "true" : undefined}
+        aria-label="Canales y carpetas"
+      >
         <div className={styles.brandHeader}>
           <div className={styles.brandRow}>
             <span className={styles.brandIcon}><InboxIcon size={14} aria-hidden /></span>
@@ -418,6 +456,15 @@ export function InboxClient() {
       <section className={styles.threadCol}>
         <div className={styles.threadHeader}>
           <div className={styles.threadHeaderTitle}>
+            {/* Hamburger sólo en mobile (lo oculta el CSS con media query). */}
+            <button
+              type="button"
+              className={styles.mobileMenuBtn}
+              onClick={() => setMobileSidebarOpen(true)}
+              aria-label="Abrir canales y carpetas"
+            >
+              <Menu size={16} aria-hidden />
+            </button>
             <h2>{folderTitle}</h2>
             <span className={styles.threadCount}>
               {filteredThreads.length} {filteredThreads.length === 1 ? "thread" : "threads"}
@@ -531,6 +578,15 @@ export function InboxClient() {
         ) : (
           <>
             <header className={styles.detailHeader}>
+              {/* Back button sólo visible en mobile. Vuelve al thread list. */}
+              <button
+                type="button"
+                className={styles.mobileBackBtn}
+                onClick={() => setActiveThreadId(null)}
+                aria-label="Volver a la lista de conversaciones"
+              >
+                <ArrowLeft size={16} aria-hidden />
+              </button>
               <span className={styles.detailAvatar}>{getInitials(activePatient)}</span>
               <div className={styles.detailHeaderInfo}>
                 <h2 className={styles.detailName}>

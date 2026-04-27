@@ -28,6 +28,7 @@ import {
   ClipboardList,
   Receipt,
   X,
+  Menu,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import styles from "./ai-assistant.module.css";
@@ -144,6 +145,17 @@ export default function AIAssistantPage() {
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashIndex, setSlashIndex] = useState(0);
   const [search, setSearch] = useState("");
+  // Mobile drawer del sidebar (lista de conversaciones). En desktop el
+  // aside ya está visible permanentemente; en mobile pasa a off-canvas.
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  useEffect(() => {
+    if (!mobileSidebarOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileSidebarOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileSidebarOpen]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -419,9 +431,25 @@ export default function AIAssistantPage() {
   }, []);
 
   return (
-    <div className={styles.page}>
-      {/* ── Sidebar ── */}
-      <aside className={styles.sidebar}>
+    <div
+      className={styles.page}
+      data-mobile-sidebar-open={mobileSidebarOpen || undefined}
+    >
+      {mobileSidebarOpen && (
+        <button
+          type="button"
+          aria-label="Cerrar historial"
+          className={styles.mobileBackdrop}
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+      {/* ── Sidebar (drawer en mobile) ── */}
+      <aside
+        className={styles.sidebar}
+        role={mobileSidebarOpen ? "dialog" : undefined}
+        aria-modal={mobileSidebarOpen ? "true" : undefined}
+        aria-label="Historial de conversaciones"
+      >
         <div className={styles.sidebarHeader}>
           <div className={styles.brandTitle}>
             <span className={styles.brandIcon}><Sparkles size={14} aria-hidden /></span>
@@ -459,7 +487,11 @@ export default function AIAssistantPage() {
                     key={c.id}
                     type="button"
                     className={`${styles.convItem} ${c.id === activeId ? styles.convItemActive : ""}`}
-                    onClick={() => setActiveId(c.id)}
+                    onClick={() => {
+                      setActiveId(c.id);
+                      // Cierra el drawer en mobile al elegir una conversación.
+                      setMobileSidebarOpen(false);
+                    }}
                   >
                     <span className={styles.convItemTitle}>{c.title}</span>
                     <span className={styles.convItemTime}>{formatRelative(c.updatedAt)}</span>
@@ -487,6 +519,15 @@ export default function AIAssistantPage() {
       {/* ── Main chat ── */}
       <main className={styles.main}>
         <header className={styles.chatHeader}>
+          {/* Hamburger sólo visible en mobile. */}
+          <button
+            type="button"
+            className={styles.mobileMenuBtn}
+            onClick={() => setMobileSidebarOpen(true)}
+            aria-label="Abrir historial de conversaciones"
+          >
+            <Menu size={16} aria-hidden />
+          </button>
           <div className={styles.chatHeaderInfo}>
             <h1 className={styles.chatTitle}>
               <Sparkles size={14} aria-hidden style={{ color: "var(--brand)" }} />

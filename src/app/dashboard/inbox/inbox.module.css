@@ -724,7 +724,77 @@
   border-radius: 4px;
 }
 
+/* ─── Botones que sólo aparecen en mobile (drawer triggers + back) ─── */
+.mobileMenuBtn,
+.mobileBackBtn {
+  display: none;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+.mobileMenuBtn:hover,
+.mobileBackBtn:hover {
+  background: var(--brand-softer);
+  color: var(--brand);
+  border-color: var(--brand-soft);
+}
+.mobileBackdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  background: rgba(15, 10, 30, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: none;
+  cursor: pointer;
+}
+
+/* ─── Mobile drawers ─── */
 @media (max-width: 1023px) {
-  .page { grid-template-columns: 1fr; }
-  .sidebar, .threadCol { display: none; }
+  .page {
+    grid-template-columns: 1fr;
+    position: relative;
+  }
+  /* Sidebar de canales pasa a drawer izquierdo off-canvas. */
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: min(280px, 78vw);
+    z-index: 60;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease-out;
+    box-shadow: 4px 0 24px -4px rgba(15, 10, 30, 0.18);
+  }
+  .page[data-mobile-sidebar-open="true"] .sidebar {
+    transform: translateX(0);
+  }
+  .mobileBackdrop { display: block; }
+  /* Detail panel pasa a overlay full-screen cuando hay thread activo. */
+  .detailCol {
+    position: fixed;
+    top: 64px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    background: var(--bg-elev);
+    transform: translateX(100%);
+    transition: transform 0.22s ease-out;
+  }
+  .page[data-mobile-detail-open="true"] .detailCol {
+    transform: translateX(0);
+  }
+  /* En mobile sin thread activo, el detailCol queda fuera de pantalla
+     y el threadCol ocupa todo el viewport. */
+  .threadCol { display: flex; flex-direction: column; }
+  .mobileMenuBtn,
+  .mobileBackBtn { display: inline-flex; }
 }

@@ -829,8 +829,64 @@
 
 .uploadInput { display: none; }
 
+/* ─── Botones mobile-only (hamburger en topbar) ─── */
+.mobileMenuBtn {
+  display: none;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  background: var(--brand-softer);
+  border: 1px solid var(--brand-soft);
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--brand);
+  flex-shrink: 0;
+}
+.mobileMenuBtn:hover { background: var(--brand-soft); }
+.mobileBackdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  background: rgba(15, 10, 30, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: none;
+  cursor: pointer;
+}
+
 @media (max-width: 1023px) {
-  .page { grid-template-columns: 1fr; grid-template-rows: 56px auto 1fr auto; }
-  .timeline { display: none; }
-  .rightPanel { display: none; }
+  /* Layout colapsa a 1 col con stack vertical: topbar / viewer / rightPanel.
+     El timeline pasa a drawer izquierdo activado por el hamburger. */
+  .page {
+    grid-template-columns: 1fr;
+    grid-template-rows: 56px 1fr auto;
+  }
+  .timeline {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(280px, 80vw);
+    z-index: 60;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease-out;
+    box-shadow: 4px 0 24px -4px rgba(15, 10, 30, 0.25);
+  }
+  .page[data-mobile-timeline-open="true"] .timeline {
+    transform: translateX(0);
+  }
+  .page[data-mobile-timeline-open="true"] .mobileBackdrop {
+    display: block;
+  }
+  /* RightPanel (findings/notas) baja debajo del viewer en stack vertical.
+     El usuario hace scroll para ver hallazgos sin perder el contexto. */
+  .rightPanel {
+    border-left: none;
+    border-top: 1px solid var(--border-soft);
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+  .mobileMenuBtn { display: inline-flex; }
 }
