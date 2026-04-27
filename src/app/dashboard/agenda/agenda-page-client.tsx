@@ -2,6 +2,7 @@
 
 import { AgendaProvider } from "@/components/dashboard/agenda/agenda-provider";
 import { AgendaTopbar } from "@/components/dashboard/agenda/agenda-topbar";
+import { AgendaSubToolbar } from "@/components/dashboard/agenda/agenda-sub-toolbar";
 import { AgendaTimeAxis } from "@/components/dashboard/agenda/agenda-time-axis";
 import { AgendaColumnHeader } from "@/components/dashboard/agenda/agenda-column-header";
 import { AgendaColumn } from "@/components/dashboard/agenda/agenda-column";
@@ -37,8 +38,9 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
   const columns = computeColumns(state);
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${styles.detailClosed}`}>
       <AgendaTopbar />
+      <AgendaSubToolbar />
       <div className={styles.body}>
         {columns.length === 0 ? (
           <AgendaEmptyDay />

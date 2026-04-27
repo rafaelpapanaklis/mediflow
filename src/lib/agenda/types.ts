@@ -17,6 +17,10 @@ export type WaitlistPriority = "LOW" | "NORMAL" | "HIGH";
 
 export type AgendaColumnMode = "doctor" | "resource" | "unified";
 
+export type AgendaViewMode = "day" | "week" | "month" | "list";
+
+export type AgendaModalKey = "resources" | null;
+
 export interface AgendaAppointmentDTO extends HomeAppointmentDTO {
   resourceId: string | null;
   source: AppointmentSource;
@@ -144,6 +148,7 @@ export interface AgendaDragState {
 
 export interface AgendaStoreState {
   dayISO: string;
+  viewMode: AgendaViewMode;
   columnMode: AgendaColumnMode;
   filters: AgendaFilters;
   appointments: AgendaAppointmentDTO[];
@@ -160,6 +165,9 @@ export interface AgendaStoreState {
   waitlistOpen: boolean;
   pendingSectionOpen: boolean;
   selectedIds: string[];
+  selectedAppointmentId: string | null;
+  searchQuery: string;
+  modalOpen: AgendaModalKey;
 
   isLoading: boolean;
   error: string | null;

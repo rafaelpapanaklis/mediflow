@@ -16,20 +16,29 @@ import {
   buildInitialState,
   defaultColumnMode,
   loadStoredColumnMode,
+  loadStoredViewMode,
   persistColumnMode,
+  persistViewMode,
   type AgendaAction,
 } from "@/lib/agenda/store";
 import type {
   AgendaColumnMode,
   AgendaDayResponse,
+  AgendaModalKey,
   AgendaStoreState,
+  AgendaViewMode,
 } from "@/lib/agenda/types";
 
 interface AgendaContextValue {
   state: AgendaStoreState;
   dispatch: Dispatch<AgendaAction>;
   setDay: (dayISO: string) => void;
+  setViewMode: (mode: AgendaViewMode) => void;
   setColumnMode: (mode: AgendaColumnMode) => void;
+  setSearchQuery: (q: string) => void;
+  selectAppointment: (id: string | null) => void;
+  openModal: (key: AgendaModalKey) => void;
+  closeModal: () => void;
 }
 
 const AgendaContext = createContext<AgendaContextValue | null>(null);
@@ -56,13 +65,14 @@ export function AgendaProvider({
     null,
     () => {
       const base = buildInitialState(initialPayload, initialDayISO);
-      const stored = loadStoredColumnMode();
-      const mode = stored ?? defaultColumnMode(
+      const storedColumn = loadStoredColumnMode();
+      const columnMode = storedColumn ?? defaultColumnMode(
         clinicCategory,
         initialPayload.doctors,
         initialPayload.resources,
       );
-      return { ...base, columnMode: mode };
+      const storedView = loadStoredViewMode();
+      return { ...base, columnMode, viewMode: storedView ?? "day" };
     },
   );
 
@@ -80,14 +90,40 @@ export function AgendaProvider({
     [router, pathname, searchParams],
   );
 
+  const setViewMode = useCallback((mode: AgendaViewMode) => {
+    persistViewMode(mode);
+    dispatch({ type: "SET_VIEW_MODE", viewMode: mode });
+  }, []);
+
   const setColumnMode = useCallback((mode: AgendaColumnMode) => {
     persistColumnMode(mode);
     dispatch({ type: "SET_COLUMN_MODE", mode });
   }, []);
 
+  const setSearchQuery = useCallback((q: string) => {
+    dispatch({ type: "SET_SEARCH", query: q });
+  }, []);
+
+  const selectAppointment = useCallback((id: string | null) => {
+    dispatch({ type: "SET_SELECTED", id });
+  }, []);
+
+  const openModal = useCallback((key: AgendaModalKey) => {
+    dispatch({ type: "SET_MODAL", key });
+  }, []);
+
+  const closeModal = useCallback(() => {
+    dispatch({ type: "SET_MODAL", key: null });
+  }, []);
+
   const ctx = useMemo<AgendaContextValue>(
-    () => ({ state, dispatch, setDay, setColumnMode }),
-    [state, setDay, setColumnMode],
+    () => ({
+      state, dispatch,
+      setDay, setViewMode, setColumnMode,
+      setSearchQuery, selectAppointment,
+      openModal, closeModal,
+    }),
+    [state, setDay, setViewMode, setColumnMode, setSearchQuery, selectAppointment, openModal, closeModal],
   );
 
   return <AgendaContext.Provider value={ctx}>{children}</AgendaContext.Provider>;
