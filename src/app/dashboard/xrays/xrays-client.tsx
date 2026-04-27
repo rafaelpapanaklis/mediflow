@@ -76,6 +76,10 @@ interface Props {
   clinicId: string;
   aiUsed: number;
   aiLimit: number;
+  /** ID del paciente activo (forzado desde la ruta /xrays/[patientId]). */
+  initialPatientId?: string;
+  /** Si true, el viewer está bloqueado al paciente y no permite cambiar. */
+  lockedToPatient?: boolean;
 }
 
 const CATEGORIES = [
@@ -154,10 +158,12 @@ export function XraysClient({
   clinicId: _clinicId,
   aiUsed,
   aiLimit,
+  initialPatientId,
+  lockedToPatient = false,
 }: Props) {
   const [files, setFiles] = useState<PatientFile[]>(initialFiles);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(
-    initialFiles[0]?.patient.id ?? null,
+    initialPatientId ?? initialFiles[0]?.patient.id ?? null,
   );
   const [activeFileId, setActiveFileId] = useState<string | null>(initialFiles[0]?.id ?? null);
   const [compareFileId, setCompareFileId] = useState<string | null>(null);
@@ -378,24 +384,34 @@ export function XraysClient({
           <span className={styles.topbarTitleIcon}><Sparkles size={14} aria-hidden /></span>
           Radiografías
         </div>
-        <select
-          value={selectedPatientId ?? ""}
-          onChange={(e) => {
-            const id = e.target.value || null;
-            setSelectedPatientId(id);
-            const firstFile = files.find((f) => f.patient.id === id);
-            if (firstFile) setActiveFileId(firstFile.id);
-          }}
-          className={styles.topbarBtn}
-          style={{ minWidth: 200, fontFamily: "inherit" }}
-        >
-          <option value="">Todos los pacientes</option>
-          {patients.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.firstName} {p.lastName} · {p.patientNumber}
-            </option>
-          ))}
-        </select>
+        {lockedToPatient ? (
+          <a
+            href="/dashboard/xrays"
+            className={styles.topbarBtn}
+            title="Volver a la lista de pacientes"
+          >
+            ← Cambiar paciente
+          </a>
+        ) : (
+          <select
+            value={selectedPatientId ?? ""}
+            onChange={(e) => {
+              const id = e.target.value || null;
+              setSelectedPatientId(id);
+              const firstFile = files.find((f) => f.patient.id === id);
+              if (firstFile) setActiveFileId(firstFile.id);
+            }}
+            className={styles.topbarBtn}
+            style={{ minWidth: 200, fontFamily: "inherit" }}
+          >
+            <option value="">Todos los pacientes</option>
+            {patients.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.firstName} {p.lastName} · {p.patientNumber}
+              </option>
+            ))}
+          </select>
+        )}
         <div className={styles.topbarSpacer} />
         {selectedPatient && (
           <div className={styles.topbarPatient}>
