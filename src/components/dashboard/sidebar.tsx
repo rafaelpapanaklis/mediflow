@@ -121,6 +121,7 @@ const NAV_ITEMS: NavItemDef[] = [
     categories: ["DENTAL", "MEDICINE", "PODIATRY", "DERMATOLOGY", "AESTHETIC_MEDICINE"] },
 
   { id: "billing",        section: "admin", label: "Facturación",       href: "/dashboard/billing",       icon: CreditCard },
+  { id: "analytics",      section: "admin", label: "Analytics",         href: "/dashboard/analytics",     icon: BarChart3, adminOnly: true },
   { id: "reports",        section: "admin", label: "Reportes",          href: "/dashboard/reports",       icon: BarChart3 },
   { id: "team",           section: "admin", label: "Equipo",            href: "/dashboard/team",          icon: UserCog },
   { id: "landing",        section: "admin", label: "Página web",        href: "/dashboard/landing",       icon: Globe },
