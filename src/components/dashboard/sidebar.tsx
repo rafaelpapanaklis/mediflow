@@ -8,7 +8,7 @@ import {
   Home, Calendar, Users, MessageCircle, Inbox as InboxIcon,
   Stethoscope, Sparkles, FileImage, Camera, FlaskConical, Dumbbell, Footprints,
   Activity, Gift, DoorOpen, Package, Building2,
-  CreditCard, BarChart3, UserCog, Globe, ClipboardList, Settings,
+  CreditCard, BarChart3, Monitor, UserCog, Globe, ClipboardList, Settings,
   ChevronDown, ChevronRight, Moon, Sun, LogOut, PanelLeftClose, PanelLeft,
   X, type LucideIcon,
 } from "lucide-react";
@@ -122,6 +122,7 @@ const NAV_ITEMS: NavItemDef[] = [
 
   { id: "billing",        section: "admin", label: "Facturación",       href: "/dashboard/billing",       icon: CreditCard },
   { id: "analytics",      section: "admin", label: "Analytics",         href: "/dashboard/analytics",     icon: BarChart3, adminOnly: true },
+  { id: "tv-modes",       section: "admin", label: "Pantallas TV",      href: "/dashboard/tv-modes",      icon: Monitor, adminOnly: true },
   { id: "reports",        section: "admin", label: "Reportes",          href: "/dashboard/reports",       icon: BarChart3 },
   { id: "team",           section: "admin", label: "Equipo",            href: "/dashboard/team",          icon: UserCog },
   { id: "landing",        section: "admin", label: "Página web",        href: "/dashboard/landing",       icon: Globe },
