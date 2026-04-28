@@ -28,7 +28,7 @@ const TABS: TabDef[] = [
   { id: "doctors",      label: "Doctores",      href: "/dashboard/analytics/doctors",    icon: Stethoscope },
   { id: "procedures",   label: "Procedimientos",href: "/dashboard/analytics/procedures", icon: ListChecks },
   { id: "no-shows",     label: "No-shows",      href: "/dashboard/analytics/no-shows",   icon: AlertCircle },
-  { id: "waiting",      label: "Sala de espera",href: "/dashboard/analytics/waiting",    icon: Clock },
+  { id: "waiting",      label: "Sala de espera",href: "/dashboard/analytics/waiting-room",icon: Clock },
   { id: "costs",        label: "Costos & Margen",href:"/dashboard/analytics/costs",      icon: DollarSign },
   { id: "journey",      label: "Patient Journey",href:"/dashboard/analytics/journey",    icon: Route },
 ];
