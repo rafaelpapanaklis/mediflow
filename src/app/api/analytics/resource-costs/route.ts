@@ -4,6 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
+// Vercel Pro permite hasta 300s. 60s da cabecera mientras instrumentamos
+// el query — NO es la solución final, solo evita el corte abrupto a los 10s.
+export const maxDuration = 60;
 
 /**
  * GET /api/analytics/resource-costs?month=YYYY-MM
@@ -29,8 +32,10 @@ export const dynamic = "force-dynamic";
  * DELETE /api/analytics/resource-costs?resourceId=xxx
  */
 export async function GET(req: NextRequest) {
+  console.time("resource-costs:total");
   const user = await getCurrentUser();
   if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
+    console.timeEnd("resource-costs:total");
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
   const clinicId = user.clinicId;
@@ -42,6 +47,7 @@ export async function GET(req: NextRequest) {
   const monthEnd = new Date(ref.getFullYear(), ref.getMonth() + 1, 0, 23, 59, 59);
 
   // Sillones de la clínica (clinicId directo).
+  console.time("resource-costs:resources");
   const resources = await prisma.resource.findMany({
     where: { clinicId, kind: "CHAIR", isActive: true },
     select: {
@@ -52,6 +58,8 @@ export async function GET(req: NextRequest) {
     },
     orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
   });
+  console.timeEnd("resource-costs:resources");
+  console.log(`resource-costs:chair-count=${resources.length} clinicId=${clinicId}`);
 
   // Revenue por sillón en el mes — 1 sola query con JOIN + GROUP BY en
   // SQL. Antes hacíamos findMany sin LIMIT cargando todas las invoices
@@ -61,6 +69,7 @@ export async function GET(req: NextRequest) {
   const resourceIds = resources.map((r) => r.id);
   const revenueByResource = new Map<string, number>();
   if (resourceIds.length > 0) {
+    console.time("resource-costs:revenue");
     const rows = await prisma.$queryRaw<Array<{ resourceId: string; revenue: number }>>`
       SELECT a."resourceId" AS "resourceId",
              COALESCE(SUM(i.paid), 0)::float AS revenue
@@ -73,6 +82,8 @@ export async function GET(req: NextRequest) {
         AND a."resourceId" IN (${Prisma.join(resourceIds)})
       GROUP BY a."resourceId"
     `;
+    console.timeEnd("resource-costs:revenue");
+    console.log(`resource-costs:revenue-rows=${rows.length}`);
     for (const row of rows) {
       revenueByResource.set(row.resourceId, Number(row.revenue));
     }
@@ -99,6 +110,7 @@ export async function GET(req: NextRequest) {
     };
   });
 
+  console.timeEnd("resource-costs:total");
   return NextResponse.json({
     month: `${monthStart.getFullYear()}-${String(monthStart.getMonth() + 1).padStart(2, "0")}`,
     resources: rows,
