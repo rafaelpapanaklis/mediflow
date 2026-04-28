@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 
@@ -52,29 +53,29 @@ export async function GET(req: NextRequest) {
     orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
   });
 
-  // Revenue por sillón en el mes — sum de invoice.paid filtrado por
-  // appointment.resourceId. Invoice tiene clinicId directo + nested
-  // filter del appointment.
-  const invoices = await prisma.invoice.findMany({
-    where: {
-      clinicId,
-      status: { in: ["PAID", "PARTIAL"] },
-      appointment: {
-        startsAt: { gte: monthStart, lte: monthEnd },
-        resourceId: { not: null },
-      },
-    },
-    select: {
-      paid: true,
-      appointment: { select: { resourceId: true } },
-    },
-  });
-
+  // Revenue por sillón en el mes — 1 sola query con JOIN + GROUP BY en
+  // SQL. Antes hacíamos findMany sin LIMIT cargando todas las invoices
+  // pagadas del mes y agregábamos en JS → 503 timeout en preview.
+  // Multi-tenant: i.clinicId directo + restringimos a resourceIds que
+  // ya vienen filtrados por clinicId arriba (defense in depth).
+  const resourceIds = resources.map((r) => r.id);
   const revenueByResource = new Map<string, number>();
-  for (const inv of invoices) {
-    const rid = inv.appointment?.resourceId;
-    if (!rid) continue;
-    revenueByResource.set(rid, (revenueByResource.get(rid) ?? 0) + inv.paid);
+  if (resourceIds.length > 0) {
+    const rows = await prisma.$queryRaw<Array<{ resourceId: string; revenue: number }>>`
+      SELECT a."resourceId" AS "resourceId",
+             COALESCE(SUM(i.paid), 0)::float AS revenue
+      FROM invoices i
+      JOIN appointments a ON a.id = i."appointmentId"
+      WHERE i."clinicId" = ${clinicId}
+        AND i.status::text IN ('PAID', 'PARTIAL')
+        AND a."startsAt" >= ${monthStart}
+        AND a."startsAt" <= ${monthEnd}
+        AND a."resourceId" IN (${Prisma.join(resourceIds)})
+      GROUP BY a."resourceId"
+    `;
+    for (const row of rows) {
+      revenueByResource.set(row.resourceId, Number(row.revenue));
+    }
   }
 
   const rows = resources.map((r) => {
