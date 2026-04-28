@@ -71,34 +71,27 @@ export function DoctorsClient() {
     if (!data) return;
     setGeneratingPayroll(true);
     try {
-      // El endpoint de payroll PDF se agrega en push 4 (lo mantenemos
-      // como TODO aquí para no inflar push 2). Por ahora exportamos un
-      // CSV simple en el cliente para que la funcionalidad esté
-      // disponible end-to-end aunque sin formato PDF profesional.
-      const rows = data.doctors.map((d) => ({
-        Doctor: d.name,
-        Citas: d.apptsTotal,
-        Completadas: d.apptsCompleted,
-        "No-shows": d.apptsNoShow,
-        "Ingresos generados": d.revenueGenerated.toFixed(2),
-        "Tiempo prom. (min)": d.avgConsultMin ?? "",
-        Satisfacción: d.avgSatisfaction ?? "",
-      }));
-      const headers = Object.keys(rows[0] ?? {});
-      const csv = [
-        headers.join(","),
-        ...rows.map((r) => headers.map((h) => JSON.stringify(r[h as keyof typeof r] ?? "")).join(",")),
-      ].join("\n");
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      // Genera PDF profesional via /api/analytics/payroll-pdf con el
+      // mismo rango de fechas activo (no el de la query del cliente
+      // sino el server-side recalculado por preset). Para mantener
+      // consistencia, pasamos from/to explícitos derivados del preset.
+      const range = PRESETS.find((p) => p.id === preset)!.compute();
+      const params = new URLSearchParams({
+        from: range.from.toISOString(),
+        to: range.to.toISOString(),
+      });
+      const res = await fetch(`/api/analytics/payroll-pdf?${params}`);
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `nomina-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `nomina-${range.from.toISOString().slice(0, 10)}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success("CSV de nómina generado");
+      toast.success("PDF de nómina generado");
     } catch {
-      toast.error("Error al generar nómina");
+      toast.error("Error al generar PDF");
     } finally {
       setGeneratingPayroll(false);
     }
