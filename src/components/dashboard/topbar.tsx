@@ -8,6 +8,7 @@ import { CommandPalette } from "./command-palette";
 import { CommandPaletteHint } from "./command-palette-hint";
 import { KeyboardShortcutsPanel } from "./keyboard-shortcuts-panel";
 import { NotificationsPopover } from "./notifications-popover";
+import { InsightsPopover } from "./insights-popover";
 import { TrialPill } from "./trial-pill";
 import { WaitingRoomAlert } from "./waiting-room-alert";
 import { useCommandPalette } from "@/hooks/use-command-palette";
@@ -153,6 +154,10 @@ export function Topbar({
           )}
           {right}
           <CommandPaletteHint onClick={() => setPaletteOpen(true)} />
+          {/* Insights semanales — solo admin/owner ven analytics → solo
+              ellos reciben WeeklyInsight. El popover self-hides badge si
+              no hay unread. */}
+          {(userRole === "ADMIN" || userRole === "SUPER_ADMIN") && <InsightsPopover />}
           <NotificationsPopover />
         </div>
       </div>
