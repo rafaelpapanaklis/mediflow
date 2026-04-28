@@ -1,80 +1,36 @@
 export const dynamic = "force-dynamic";
+
+import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PatientsClient } from "./patients-client";
 
-const PAGE_SIZE = 50;
+export const metadata: Metadata = { title: "Pacientes — MediFlow" };
 
-export default async function PatientsPage({
-  searchParams,
-}: {
-  searchParams: { search?: string; page?: string; status?: string };
-}) {
-  const user   = await getCurrentUser();
-  const search = searchParams.search?.trim() ?? "";
-  const page   = Math.max(1, parseInt(searchParams.page ?? "1"));
-  const skip   = (page - 1) * PAGE_SIZE;
-  const statusFilter = searchParams.status ?? "all";
+/**
+ * /dashboard/patients — server component minimal.
+ * El cliente hace fetch a /api/patients?v=2 con todos los filtros y
+ * paginación. Aquí solo cargamos:
+ *  - currentUser para context (no sensitive).
+ *  - Lista de doctores de la clínica (filter "Doctor asignado").
+ */
+export default async function PatientsPage() {
+  const user = await getCurrentUser();
 
-  const statusWhere = statusFilter === "active"   ? { status: "ACTIVE" as const }
-                     : statusFilter === "inactive" ? { status: "INACTIVE" as const }
-                     : statusFilter === "archived" ? { status: "ARCHIVED" as const }
-                     : { status: { not: "ARCHIVED" as const } };
-
-  const where = {
-    clinicId: user.clinicId,
-    ...statusWhere,
-    ...(search ? {
-      OR: [
-        { firstName:     { contains: search, mode: "insensitive" as const } },
-        { lastName:      { contains: search, mode: "insensitive" as const } },
-        { phone:         { contains: search } },
-        { patientNumber: { contains: search } },
-      ],
-    } : {}),
-  };
-
-  const [patients, total, activeCount] = await Promise.all([
-    prisma.patient.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      skip,
-      take: PAGE_SIZE,
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        patientNumber: true,
-        phone: true,
-        email: true,
-        gender: true,
-        dob: true,
-        status: true,
-        createdAt: true,
-        tags: true,
-        _count: { select: { appointments: true, records: true } },
-        appointments: {
-          orderBy: { date: "desc" },
-          take: 1,
-          select: { date: true, status: true },
-        },
-      },
-    }),
-    prisma.patient.count({ where }),
-    prisma.patient.count({ where: { clinicId: user.clinicId, status: "ACTIVE" } }),
-  ]);
-
-  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const doctors = await prisma.user.findMany({
+    where: {
+      clinicId: user.clinicId,
+      isActive: true,
+      role: { in: ["DOCTOR", "ADMIN", "SUPER_ADMIN"] },
+    },
+    select: { id: true, firstName: true, lastName: true, color: true },
+    orderBy: { firstName: "asc" },
+  });
 
   return (
     <PatientsClient
-      patients={patients as any}
-      total={total}
-      activeCount={activeCount}
-      page={page}
-      totalPages={totalPages}
-      search={search}
-      statusFilter={statusFilter}
+      currentUser={{ id: user.id, role: user.role }}
+      doctors={doctors}
     />
   );
 }

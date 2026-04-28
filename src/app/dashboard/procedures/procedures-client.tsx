@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { formatCurrency } from "@/lib/utils";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import {
   Plus,
   Search,
@@ -63,6 +64,7 @@ const EMPTY_FORM: FormState = {
 };
 
 export function ProceduresClient({ initialProcedures }: Props) {
+  const askConfirm = useConfirm();
   const [procedures, setProcedures] = useState<Procedure[]>(initialProcedures);
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
@@ -204,8 +206,12 @@ export function ProceduresClient({ initialProcedures }: Props) {
   }
 
   async function handleDelete(p: Procedure) {
-    if (!confirm(`¿Eliminar "${p.name}"? Esta acción no se puede deshacer.`))
-      return;
+    if (!(await askConfirm({
+      title: `¿Eliminar "${p.name}"?`,
+      description: "Esta acción no se puede deshacer. El procedimiento dejará de aparecer en el catálogo de citas.",
+      variant: "danger",
+      confirmText: "Eliminar",
+    }))) return;
     try {
       const res = await fetch(`/api/procedures/${p.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();

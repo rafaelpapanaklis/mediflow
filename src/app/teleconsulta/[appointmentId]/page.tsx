@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { TeleconsultaClient } from "./teleconsulta-client";
+import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 
 export const metadata = { title: "Teleconsulta — MediFlow" };
 
@@ -10,7 +11,7 @@ export default async function TeleconsultaPage({ params, searchParams }: { param
     include: {
       patient: { select: { id: true, firstName: true, lastName: true } },
       doctor: { select: { id: true, firstName: true, lastName: true } },
-      clinic: { select: { name: true } },
+      clinic: { select: { name: true, timezone: true } },
     },
   });
   if (!appointment || appointment.mode !== "TELECONSULTATION") notFound();
@@ -28,7 +29,7 @@ export default async function TeleconsultaPage({ params, searchParams }: { param
       doctorName={`Dr/a. ${appointment.doctor.firstName} ${appointment.doctor.lastName}`}
       clinicName={appointment.clinic.name}
       appointmentType={appointment.type}
-      appointmentTime={appointment.startTime}
+      appointmentTime={timeHHMMInTz(appointment.startsAt, appointment.clinic.timezone)}
       paymentStatus={appointment.paymentStatus}
     />
   );

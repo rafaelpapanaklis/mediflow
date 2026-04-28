@@ -46,8 +46,22 @@ export function NotificationsPopover() {
   useEffect(() => {
     const ctrl = new AbortController();
     fetchActivity(ctrl.signal);
-    const interval = setInterval(() => fetchActivity(), 60_000);
-    return () => { clearInterval(interval); ctrl.abort(); };
+    // Pausa polling cuando la pestaña no está visible — el bell no
+    // necesita actualizarse si el usuario no está mirando.
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    const start = () => { if (intervalId === null) intervalId = setInterval(() => fetchActivity(), 60_000); };
+    const stop = () => { if (intervalId !== null) { clearInterval(intervalId); intervalId = null; } };
+    const onVis = () => {
+      if (document.visibilityState === "visible") { fetchActivity(); start(); }
+      else stop();
+    };
+    if (document.visibilityState === "visible") start();
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      stop();
+      ctrl.abort();
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, []);
 
   useEffect(() => {

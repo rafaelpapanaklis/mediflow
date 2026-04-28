@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { tzLocalToUtc } from "@/lib/agenda/time-utils";
+import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 
 // GET /api/public/availability?slug=my-clinic&date=2026-04-10&doctorId=xxx
 // No authentication required — public endpoint
@@ -14,7 +16,7 @@ export async function GET(req: NextRequest) {
   const clinic = await prisma.clinic.findUnique({
     where: { slug },
     select: {
-      id: true, name: true, slug: true, specialty: true,
+      id: true, name: true, slug: true, specialty: true, timezone: true,
       phone: true, address: true, city: true, logoUrl: true,
       schedules: {
         select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true },
@@ -81,22 +83,21 @@ export async function GET(req: NextRequest) {
     currentMins += 30;
   }
 
-  // Get booked slots for this date
-  // Use explicit UTC range that covers the full local day
-  const dateStart = new Date(y, m - 1, d, 0,  0,  0, 0);
-  const dateEnd   = new Date(y, m - 1, d, 23, 59, 59, 999);
+  // Get booked slots for this date — range en clinic.timezone
+  const dayStartUtc = tzLocalToUtc(dateStr, 0, 0, clinic.timezone);
+  const dayEndUtc = new Date(dayStartUtc.getTime() + 86_400_000);
 
   const booked = await prisma.appointment.findMany({
     where: {
       clinicId: clinic.id,
-      date:     { gte: dateStart, lte: dateEnd },
+      startsAt: { gte: dayStartUtc, lt: dayEndUtc },
       status:   { notIn: ["CANCELLED","NO_SHOW"] },
       ...(doctorId ? { doctorId } : {}),
     },
-    select: { startTime: true },
+    select: { startsAt: true },
   });
 
-  const bookedTimes = new Set(booked.map(b => b.startTime));
+  const bookedTimes = new Set(booked.map(b => timeHHMMInTz(b.startsAt, clinic.timezone)));
   const available   = slots.filter(s => !bookedTimes.has(s));
 
   return NextResponse.json({

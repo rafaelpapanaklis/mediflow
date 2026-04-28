@@ -10,8 +10,8 @@
     --bg-elev-2:     #F0EEF7;            /* nested light purple */
     --bg-hover:      rgba(124,58,237,0.04);
 
-    --border-soft:   rgba(15,10,30,0.08);
-    --border-strong: rgba(15,10,30,0.14);
+    --border-soft:   rgba(15,10,30,0.12);
+    --border-strong: rgba(15,10,30,0.20);
     --border-brand:  rgba(124,58,237,0.30);
 
     --brand:         #7c3aed;
@@ -35,6 +35,21 @@
     --radius-sm: 6px;
     --radius:    10px;
     --radius-lg: 14px;
+
+    /* ── Patient Context Bar (consulta activa) — brand tint neutro ── */
+    --consult-active-bg:     rgba(124,58,237,0.06);
+    --consult-active-border: rgba(124,58,237,0.25);
+    --consult-active-accent: var(--brand);
+    --consult-active-dot:    var(--success);
+
+    /* ── Alert stripes (alergias, advertencias críticas) ── */
+    --danger-soft-strong:    rgba(220,38,38,0.15);
+    --danger-border-strong:  rgba(220,38,38,0.35);
+    --warning-soft-strong:   rgba(217,119,6,0.15);
+    --warning-border-strong: rgba(217,119,6,0.35);
+
+    /* ── Interactive border (reservado v2.2+, no usar aún) ── */
+    --border-interactive:    rgba(15,10,30,0.28);
 
     /* ── Tailwind-compat HSL (light) ── */
     --background:        250 18% 97%;
@@ -97,6 +112,21 @@
     --info:         #3b82f6;
     --info-soft:    rgba(59,130,246,0.12);
 
+    /* ── Patient Context Bar (consulta activa) ── */
+    --consult-active-bg:     rgba(124,58,237,0.10);
+    --consult-active-border: rgba(124,58,237,0.30);
+    --consult-active-accent: #c4b5fd;
+    --consult-active-dot:    var(--success);
+
+    /* ── Alert stripes ── */
+    --danger-soft-strong:    rgba(239,68,68,0.18);
+    --danger-border-strong:  rgba(239,68,68,0.38);
+    --warning-soft-strong:   rgba(245,158,11,0.18);
+    --warning-border-strong: rgba(245,158,11,0.38);
+
+    /* ── Interactive border (reservado v2.2+) ── */
+    --border-interactive:    rgba(255,255,255,0.18);
+
     /* Tailwind-compat HSL (dark — space purple) */
     --background:        255 30% 6%;
     --foreground:        240 12% 92%;
@@ -127,8 +157,8 @@
     color: var(--text-1);
     background-image:
       radial-gradient(ellipse 1200px 600px at 50% -10%, rgba(124,58,237,0.05), transparent 70%),
-      linear-gradient(rgba(20,16,31,0.025) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(20,16,31,0.025) 1px, transparent 1px);
+      linear-gradient(rgba(20,16,31,0.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(20,16,31,0.055) 1px, transparent 1px);
     background-size: auto, 32px 32px, 32px 32px;
     background-attachment: fixed;
     font-size: 1rem;
@@ -162,6 +192,82 @@
   .dark .bg-rose-50       { background-color: rgb(136 19 55 / 0.3) !important; }
   .dark .bg-blue-50       { background-color: rgb(23 37 84 / 0.3)  !important; }
   .dark .bg-violet-50     { background-color: rgb(76 29 149 / 0.3) !important; }
+
+  /* ═══════════════════════════════════════════════════════════════
+     Focus visible — WCAG 2.1 SC 2.4.7 + 1.4.11
+     Solo aparece cuando se navega con teclado (no con click)
+     ═══════════════════════════════════════════════════════════════ */
+
+  :focus { outline: none; }
+
+  :focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+    border-radius: inherit;
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  [role="button"]:focus-visible,
+  [role="link"]:focus-visible,
+  [role="menuitem"]:focus-visible,
+  [role="option"]:focus-visible,
+  [role="tab"]:focus-visible,
+  [tabindex]:focus-visible,
+  summary:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.20);
+  }
+
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: none;
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.18);
+  }
+
+  .input-new:focus-visible {
+    outline: none;
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.18);
+  }
+
+  .btn-new:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 3px;
+    box-shadow:
+      0 0 0 4px rgba(124, 58, 237, 0.25),
+      inset 0 1px 0 rgba(255,255,255,0.15);
+  }
+
+  .btn-new--primary:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: -3px;
+    box-shadow:
+      0 0 0 2px var(--brand),
+      0 0 0 5px rgba(124, 58, 237, 0.40),
+      0 4px 16px -4px rgba(124,58,237,0.5);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :focus-visible {
+      box-shadow: 0 0 0 3px var(--brand);
+    }
+    .btn-new:focus-visible,
+    .btn-new--primary:focus-visible {
+      outline: 2px solid var(--brand);
+      outline-offset: 2px;
+      box-shadow: 0 0 0 3px var(--brand);
+    }
+    input:focus-visible,
+    textarea:focus-visible,
+    select:focus-visible,
+    .input-new:focus-visible {
+      box-shadow: 0 0 0 2px var(--brand);
+    }
+  }
 }
 
 @layer utilities {
@@ -179,6 +285,31 @@
   }
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground) / 0.7);
+  }
+
+  /* Skip link — WCAG 2.4.1. Oculto fuera del viewport hasta recibir
+     focus por teclado, donde se renderiza como botón flotante arriba
+     izquierda con el color de marca. */
+  .mf-skip-link {
+    position: fixed;
+    top: -40px;
+    left: 12px;
+    z-index: 9999;
+    padding: 10px 16px;
+    background: var(--brand);
+    color: #fff;
+    font-weight: 700;
+    font-size: 13px;
+    border-radius: 8px;
+    text-decoration: none;
+    box-shadow: 0 6px 24px -4px rgba(124, 58, 237, 0.45);
+    transition: top 0.18s ease-out;
+  }
+  .mf-skip-link:focus,
+  .mf-skip-link:focus-visible {
+    top: 12px;
+    outline: 2px solid #fff;
+    outline-offset: 2px;
   }
 }
 
@@ -482,6 +613,7 @@
 .sidebar-new {
   border-right: 1px solid var(--border-soft);
   background: rgba(10,10,15,0.6);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   padding: 14px 10px;
   display: flex;
@@ -600,6 +732,7 @@
   gap: clamp(10px, 1vw, 16px);
   padding: 0 clamp(12px, 1.5vw, 24px);
   background: rgba(10,10,15,0.6);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   position: sticky;
   top: 0;
@@ -800,6 +933,7 @@
   position: fixed;
   inset: 0;
   background: rgba(5,5,10,0.72);
+  -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
   display: grid;
   place-items: center;
@@ -1050,6 +1184,7 @@
 
 .glass-dark {
   background: rgba(17, 22, 49, 0.85);
+  -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(99, 102, 241, 0.15);
 }
@@ -1308,5 +1443,296 @@
   .landing-theme .ld-pulse,
   .landing-theme .ld-float {
     animation: none;
+  }
+}
+
+@keyframes cmdOverlayIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes cmdPanelIn {
+  from { opacity: 0; transform: translate(-50%, -4px) scale(0.98); }
+  to   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-cmd-palette-content],
+  [data-cmd-palette-overlay] {
+    animation: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Patient Context Bar — animaciones + responsive
+   ═══════════════════════════════════════════════════════════════════ */
+
+@keyframes mf-pulse-dot {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.55);
+  }
+  50% {
+    opacity: 0.75;
+    box-shadow: 0 0 0 5px rgba(16, 185, 129, 0);
+  }
+}
+
+@keyframes mf-pulse-dot-light {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.55);
+  }
+  50% {
+    opacity: 0.75;
+    box-shadow: 0 0 0 5px rgba(5, 150, 105, 0);
+  }
+}
+
+:root:not(.dark) .mf-pulse-dot {
+  animation: mf-pulse-dot-light 2s ease-in-out infinite;
+}
+.dark .mf-pulse-dot {
+  animation: mf-pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes mf-context-bar-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.mf-context-bar {
+  animation: mf-context-bar-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Context Bar responsive */
+@media (max-width: 639px) {
+  .mf-ctx-bar__status,
+  .mf-ctx-bar__sep,
+  .mf-ctx-bar__meta,
+  .mf-ctx-bar__allergy,
+  .mf-ctx-bar__actions-desktop {
+    display: none !important;
+  }
+  .mf-ctx-bar__actions-mobile {
+    display: block !important;
+  }
+}
+@media (min-width: 640px) and (max-width: 899px) {
+  .mf-ctx-bar__actions-desktop {
+    gap: 0 !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mf-pulse-dot { animation: none !important; }
+  .mf-context-bar { animation: none !important; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Sidebar v2 — animaciones
+   ═══════════════════════════════════════════════════════════════════ */
+
+.mf-sidebar-admin-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.mf-sidebar-admin-body[data-collapsed="true"] {
+  grid-template-rows: 0fr;
+}
+.mf-sidebar-admin-body > .mf-sidebar-admin-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.mf-sidebar-admin-chevron {
+  transition: transform 0.18s ease;
+}
+.mf-sidebar-admin-chevron[data-collapsed="true"] {
+  transform: rotate(-90deg);
+}
+
+@keyframes mf-sidebar-slide-in {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes mf-sidebar-overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.mf-sidebar-mobile-panel {
+  animation: mf-sidebar-slide-in 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.mf-sidebar-mobile-overlay {
+  animation: mf-sidebar-overlay-in 0.2s ease-out;
+}
+
+.mf-sidebar-item {
+  position: relative;
+}
+.mf-sidebar-item--active::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  width: 2px;
+  height: 16px;
+  margin-top: -8px;
+  background: var(--brand);
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(124, 58, 237, 0.6);
+}
+.mf-sidebar--collapsed .mf-sidebar-item--active::before {
+  left: -8px;
+}
+
+.mf-sidebar-item-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  box-shadow: 0 0 4px rgba(124, 58, 237, 0.6);
+}
+
+/* Dark/light override del color del item activo — WCAG AA */
+:root:not(.dark) .mf-sidebar-item--active {
+  color: #6d28d9 !important; /* brand-700, 5.23:1 sobre brand-soft light */
+}
+.dark .mf-sidebar-item--active {
+  color: #c4b5fd !important; /* violet-300, 8.54:1 sobre brand-soft dark */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mf-sidebar-admin-body,
+  .mf-sidebar-admin-chevron,
+  .mf-sidebar-mobile-panel,
+  .mf-sidebar-mobile-overlay {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Trial Pill — animaciones + tokens + responsive
+   ═══════════════════════════════════════════════════════════════════ */
+
+@keyframes mf-trial-pill-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes mf-trial-pill-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-2px); }
+}
+
+.mf-trial-pill {
+  animation: mf-trial-pill-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.mf-trial-pill[data-dismissing="true"] {
+  animation: mf-trial-pill-out 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes mf-trial-pill-nudge {
+  0%, 100% { transform: translateX(0); }
+  25%      { transform: translateX(-1px); }
+  75%      { transform: translateX(1px); }
+}
+.mf-trial-pill[data-urgency="critical"] {
+  animation:
+    mf-trial-pill-in 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    mf-trial-pill-nudge 0.4s ease-in-out 0.3s 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mf-trial-pill,
+  .mf-trial-pill[data-dismissing="true"],
+  .mf-trial-pill[data-urgency="critical"] {
+    animation: none !important;
+  }
+}
+
+/* ─── Trial Pill — colores accent por modo (WCAG AA en los 4 estados) ─── */
+:root:not(.dark) {
+  --trial-accent-calm:    #6d28d9;
+  --trial-accent-warning: #b45309;
+  --trial-accent-danger:  #b91c1c;
+}
+.dark {
+  --trial-accent-calm:    #c4b5fd;
+  --trial-accent-warning: #fbbf24;
+  --trial-accent-danger:  #f87171;
+}
+
+/* ─── Trial Pill — label responsive switches ─── */
+.mf-trial-pill__label-full { display: inline; }
+.mf-trial-pill__label-compact,
+.mf-trial-pill__label-min { display: none; }
+
+@media (max-width: 1023.98px) {
+  .mf-trial-pill__label-full { display: none !important; }
+  .mf-trial-pill__label-compact { display: inline !important; }
+  .mf-trial-pill__badge { display: none !important; }
+}
+
+@media (max-width: 639.98px) {
+  .mf-trial-pill__label-compact { display: none !important; }
+  .mf-trial-pill__label-min { display: inline !important; }
+  .mf-trial-pill { padding: 0 8px !important; gap: 4px !important; }
+}
+
+/* ─── Trial Pill — CTA mini responsive ─── */
+
+/* En mobile <640px: ocultar el CTA y el divider; pill queda solo con label min */
+@media (max-width: 639.98px) {
+  .mf-trial-pill__cta,
+  .mf-trial-pill__divider {
+    display: none !important;
+  }
+  .mf-trial-pill {
+    padding-right: 8px !important;
+  }
+}
+
+/* En tablet 640-1023px: CTA visible pero "Activar plan" label se oculta,
+   queda solo la flecha ↗ — más compacto */
+@media (min-width: 640px) and (max-width: 1023.98px) {
+  .mf-trial-pill__cta-label {
+    display: none !important;
+  }
+  .mf-trial-pill__cta {
+    padding: 0 8px !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   EmptyStateNew — fade-in al montar
+   ═══════════════════════════════════════════════════════════════════ */
+
+@keyframes mf-empty-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.mf-empty {
+  animation: mf-empty-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mf-empty {
+    animation: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Home por rol — grids responsive (Fase 3)
+   ═══════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 1023.98px) {
+  .mf-home-receptionist-grid,
+  .mf-home-doctor-grid,
+  .mf-home-admin-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
   }
 }

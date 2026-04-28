@@ -35,6 +35,16 @@ function csrfOriginMismatch(request: NextRequest): boolean {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Vista pública /live/<slug> y su endpoint /api/live/* viven fuera de
+  // toda lógica de auth. El acceso se controla por:
+  //   1. Clinic.liveModeEnabled (false → 404 desde la propia ruta).
+  //   2. Clinic.liveModePassword (cookie unlock httpOnly por clínica).
+  // El matcher de abajo ya excluye estos paths, pero dejamos un guard
+  // explícito para documentar la intención y prevenir regresiones.
+  if (pathname.startsWith("/live/") || pathname.startsWith("/api/live/")) {
+    return NextResponse.next();
+  }
+
   // CSRF check para mutaciones en /api/admin/* (session-cookie auth)
   if (pathname.startsWith("/api/admin") && UNSAFE_METHODS.has(request.method)) {
     if (csrfOriginMismatch(request)) {

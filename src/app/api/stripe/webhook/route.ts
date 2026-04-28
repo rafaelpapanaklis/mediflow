@@ -3,6 +3,7 @@ import getStripe from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
 import { createRoom, createMeetingToken } from "@/lib/daily";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
         include: {
           patient: { select: { id: true, firstName: true, lastName: true, phone: true } },
           doctor:  { select: { id: true, firstName: true, lastName: true, phone: true } },
-          clinic:  { select: { id: true, name: true, waConnected: true, waPhoneNumberId: true, waAccessToken: true, teleCommissionPct: true } },
+          clinic:  { select: { id: true, name: true, timezone: true, waConnected: true, waPhoneNumberId: true, waAccessToken: true, teleCommissionPct: true } },
         },
       });
 
@@ -61,10 +62,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ received: true });
       }
 
-      // Create Daily.co room + tokens
-      const [endH, endM] = appointment.endTime.split(":").map(Number);
-      const expiresAt = new Date(appointment.date);
-      expiresAt.setHours(endH + 1, endM, 0, 0);
+      // Create Daily.co room + tokens — sala expira 1h después de endsAt.
+      const expiresAt = new Date(appointment.endsAt.getTime() + 60 * 60_000);
 
       const room = await createRoom(appointmentId, expiresAt);
       const roomName = appointmentId.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 40);
@@ -82,9 +81,10 @@ export async function POST(req: NextRequest) {
       });
 
       // Format date for messages
-      const dateObj = new Date(appointment.date);
-      const fecha = dateObj.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
-      const hora = appointment.startTime;
+      const fecha = new Intl.DateTimeFormat("es-MX", {
+        timeZone: appointment.clinic.timezone, weekday: "long", day: "numeric", month: "long",
+      }).format(appointment.startsAt);
+      const hora = timeHHMMInTz(appointment.startsAt, appointment.clinic.timezone);
       const appUrl = process.env.NEXT_PUBLIC_APP_URL;
       const paymentAmount = (session.amount_total ?? 0) / 100;
       const commissionPct = appointment.clinic.teleCommissionPct ?? 10;

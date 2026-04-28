@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Sora, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "react-hot-toast";
+import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 import "./globals.css";
 
 const sora = Sora({ subsets: ["latin"], variable: "--font-sora", display: "swap" });
@@ -70,8 +71,39 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         `}} />
       </head>
       <body className={`${sora.variable} ${jetbrainsMono.variable} antialiased font-sans bg-background text-foreground`}>
-        <Toaster position="top-right" toastOptions={{ className: "text-sm font-medium" }} />
-        {children}
+        {/* Toaster centralizado: única posición (top-right), duraciones
+            consistentes (3s success/info, 5s error). Estilos globales
+            via className para que dark mode funcione automáticamente
+            con CSS variables del proyecto. */}
+        <Toaster
+          position="top-right"
+          gutter={8}
+          toastOptions={{
+            className: "text-sm font-medium",
+            duration: 3000,
+            success: { duration: 3000, iconTheme: { primary: "#10b981", secondary: "#fff" } },
+            error: { duration: 5000, iconTheme: { primary: "#ef4444", secondary: "#fff" } },
+            loading: { duration: Infinity },
+            style: {
+              borderRadius: "10px",
+              background: "var(--bg-elev)",
+              color: "var(--text-1)",
+              border: "1px solid var(--border-soft)",
+              boxShadow: "0 8px 24px -8px rgba(15,10,30,0.18)",
+              fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+              padding: "10px 14px",
+              fontSize: 13,
+            },
+          }}
+        />
+        {/* ConfirmProvider a nivel root para que /admin, /dashboard y
+            cualquier otra ruta autenticada puedan usar useConfirm().
+            Landing/auth pages no usan el hook → el provider está
+            montado pero idle, sin coste perceptible (un useState + un
+            <Dialog> Radix con open=false). */}
+        <ConfirmProvider>
+          {children}
+        </ConfirmProvider>
       </body>
     </html>
   );

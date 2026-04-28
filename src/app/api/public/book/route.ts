@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { createCalendarEvent, refreshAccessToken, getOrCreateClinicCalendar } from "@/lib/google-calendar";
 import { rateLimit } from "@/lib/rate-limit";
+import { tzLocalToUtc } from "@/lib/agenda/time-utils";
 
 export async function POST(req: NextRequest) {
   try {
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
   const clinic = await prisma.clinic.findUnique({
     where: { slug },
     select: {
-      id: true, name: true, phone: true,
+      id: true, name: true, phone: true, timezone: true,
       waConnected: true, waPhoneNumberId: true, waAccessToken: true,
       schedules: { select: { dayOfWeek: true, enabled: true, openTime: true, closeTime: true } },
     },
@@ -76,10 +77,6 @@ export async function POST(req: NextRequest) {
   if (slotMins < openH * 60 + openM || slotMins + 30 > closeH * 60 + closeM) {
     return NextResponse.json({ error: "El horario está fuera del horario de atención" }, { status: 400 });
   }
-
-  // ── Verify slot is available ──────────────────────────────────────────────
-  const dateStart = new Date(y, m - 1, d, 0, 0, 0, 0);
-  const dateEnd   = new Date(y, m - 1, d, 23, 59, 59, 999);
 
   // ── Calculate end time ─────────────────────────────────────────────────────
   const endMins = slotMins + 30;
@@ -119,13 +116,15 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Check conflict + create appointment in a transaction (prevent double-booking) ──
+  const startsAtBook = tzLocalToUtc(date, slotH, slotM, clinic.timezone);
+  const endsAtBook = new Date(startsAtBook.getTime() + 30 * 60_000);
+
   const appt = await prisma.$transaction(async (tx) => {
     const conflict = await tx.appointment.findFirst({
       where: {
         clinicId:  clinic.id,
         doctorId,
-        date:      { gte: dateStart, lte: dateEnd },
-        startTime,
+        startsAt:  startsAtBook,
         status:    { notIn: ["CANCELLED","NO_SHOW"] },
       },
     });
@@ -139,10 +138,8 @@ export async function POST(req: NextRequest) {
         patientId:   patient!.id,
         doctorId,
         type:        type?.trim() || "Consulta general",
-        date:        apptDate,
-        startTime,
-        endTime,
-        durationMins:30,
+        startsAt:    startsAtBook,
+        endsAt:      endsAtBook,
         status:      "PENDING",
         notes:       notes?.trim() || null,
       },
@@ -217,7 +214,7 @@ export async function POST(req: NextRequest) {
 
         const gcalEventId = await createCalendarEvent(token, clinicGcal.googleRefreshToken, {
           id: appt.id, type: type?.trim() || "Consulta general",
-          date, startTime, endTime,
+          startsAt: appt.startsAt, endsAt: appt.endsAt, clinicTimezone: clinic.timezone,
           patientName: `${firstName.trim()} ${lastName.trim()}`,
           clinicName: clinicGcal.name, clinicAddress: clinicGcal.address,
           notes: notes?.trim() || null,

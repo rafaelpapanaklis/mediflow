@@ -5,6 +5,7 @@ import { Plus, X, ChevronRight, Footprints } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface PipelineItem {
   id: string;
@@ -45,6 +46,7 @@ function getDaysInStage(createdAt: string): number {
 }
 
 export function OrthoticsClient({ initialItems }: { initialItems: PipelineItem[] }) {
+  const askConfirm = useConfirm();
   const [items, setItems] = useState<PipelineItem[]>(initialItems);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ patientName: "", type: "", notes: "" });
@@ -103,7 +105,12 @@ export function OrthoticsClient({ initialItems }: { initialItems: PipelineItem[]
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("¿Eliminar esta orden?")) return;
+    if (!(await askConfirm({
+      title: "¿Eliminar esta orden?",
+      description: "La orden de ortótica se quitará del pipeline.",
+      variant: "danger",
+      confirmText: "Eliminar",
+    }))) return;
     try {
       await fetch(`/api/inventory/${id}`, { method: "DELETE" });
       setItems(prev => prev.filter(i => i.id !== id));

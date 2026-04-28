@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { rateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
+import { dateISOInTz, timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,13 @@ export async function GET(req: NextRequest) {
   }
 
   const ci = { contains: q, mode: "insensitive" as const };
+
+  const clinicTz = await prisma.clinic.findUnique({
+    where: { id: ctx.clinicId },
+    select: { timezone: true },
+  });
+  const tz = clinicTz?.timezone ?? "America/Mexico_City";
+
   const [patients, appointments, invoices] = await Promise.all([
     prisma.patient.findMany({
       where: {
@@ -42,12 +50,12 @@ export async function GET(req: NextRequest) {
         ],
       },
       select: {
-        id: true, date: true, startTime: true, status: true,
+        id: true, startsAt: true, status: true,
         patient: { select: { firstName: true, lastName: true } },
         doctor:  { select: { firstName: true, lastName: true } },
       },
       take: 5,
-      orderBy: { date: "desc" },
+      orderBy: { startsAt: "desc" },
     }),
     prisma.invoice.findMany({
       where: {
@@ -77,8 +85,8 @@ export async function GET(req: NextRequest) {
     })),
     appointments: appointments.map(a => ({
       id: a.id,
-      date: a.date.toISOString(),
-      startTime: a.startTime,
+      date: dateISOInTz(a.startsAt, tz),
+      startTime: timeHHMMInTz(a.startsAt, tz),
       patientName: `${a.patient.firstName} ${a.patient.lastName}`,
       doctorName: `${a.doctor.firstName} ${a.doctor.lastName}`,
       status: a.status,

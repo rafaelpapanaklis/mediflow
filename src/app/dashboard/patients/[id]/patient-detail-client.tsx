@@ -1,11 +1,20 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useCallback, useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Plus, Printer, Edit } from "lucide-react";
 import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
 import { ageFromDob, fmtMXN } from "@/lib/format";
+import { Odontogram } from "@/components/dashboard/odontogram/Odontogram";
+import { HeroCard } from "@/components/dashboard/patient-detail/hero-card";
+import { TreatmentsModal, type SuggestedTreatment } from "@/components/dashboard/patient-detail/treatments-modal";
+import { QuickNav } from "@/components/dashboard/patient-detail/quick-nav";
+import { SideCards } from "@/components/dashboard/patient-detail/side-cards";
+import { ConsultBar } from "@/components/dashboard/patient-detail/consult-bar";
+import { SoapEditorInline, type SoapDraft } from "@/components/dashboard/patient-detail/soap-editor-inline";
+import { NoteDetailModal, type ClinicalNote } from "@/components/dashboard/patient-detail/note-detail-modal";
+import patientDetailStyles from "@/components/dashboard/patient-detail/patient-detail.module.css";
 import { DentalForm }          from "@/components/clinical/dental-form";
 import { NutritionForm }       from "@/components/clinical/nutrition-form";
 import { PsychologyForm }      from "@/components/clinical/psychology-form";
@@ -49,6 +58,7 @@ const INV_STATUS: Record<string, { label: string; cls: string }> = {
 const TABS = [
   { id: "resumen",       label: "Resumen"             },
   { id: "historia",      label: "Historia clínica"     },
+  { id: "odontograma",   label: "Odontograma"          },
   { id: "expediente",    label: "Nueva consulta"       },
   { id: "evolucion",     label: "Evolución / Notas"    },
   { id: "radiografias",  label: "Radiografías"         },
@@ -90,7 +100,16 @@ export function PatientDetailClient({
   doctors, currentUser, specialty, totalPaid, totalBalance, totalPlan, treatments, portalUrl,
 }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [tab, setTab]         = useState("resumen");
+  const [consultPaused, setConsultPaused] = useState(false);
+  const [consultClosed, setConsultClosed] = useState(false);
+  const [noteDetailOpen, setNoteDetailOpen] = useState<ClinicalNote | null>(null);
+  const [treatmentsModal, setTreatmentsModal] = useState<{
+    open: boolean;
+    appointmentId: string;
+    treatments: SuggestedTreatment[];
+  }>({ open: false, appointmentId: "", treatments: [] });
   const [records, setRecords] = useState(initialRecords);
   const [showEdit, setShowEdit] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -306,130 +325,330 @@ export function PatientDetailClient({
     facturacion: invoices.length,
   };
 
+  // ─── Consulta activa (audit Opción C ajustes 2, 5 y 6) ─────────────
+  const consultAppointmentId = searchParams.get("appointment");
+  const activeAppointment = useMemo(
+    () =>
+      consultAppointmentId && !consultClosed
+        ? appointments.find((a: any) => a.id === consultAppointmentId) ?? null
+        : null,
+    [consultAppointmentId, consultClosed, appointments],
+  );
+  const isConsultActive = activeAppointment !== null;
+
+  const [clinicalNoteId, setClinicalNoteId] = useState<string | null>(null);
+  const [soapDraft, setSoapDraft] = useState<SoapDraft>({
+    subjective: "",
+    objective: "",
+    assessment: "",
+    plan: "",
+    attachments: [],
+  });
+
+  // Al activarse la consulta, crear (o reutilizar) el draft note en server.
+  useEffect(() => {
+    if (!isConsultActive || !activeAppointment) return;
+    if (clinicalNoteId) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch("/api/clinical-notes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            patientId: patient.id,
+            appointmentId: activeAppointment.id,
+            doctorId: activeAppointment.doctorId ?? undefined,
+          }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error ?? "create_failed");
+        }
+        const data = await res.json();
+        if (cancelled) return;
+        setClinicalNoteId(data.note.id);
+        // Hidrata el draft con cualquier contenido previo (por si recargó la página).
+        const note = data.note;
+        if (note.subjective || note.objective || note.assessment || note.plan) {
+          setSoapDraft((d) => ({
+            subjective: note.subjective ?? d.subjective,
+            objective: note.objective ?? d.objective,
+            assessment: note.assessment ?? d.assessment,
+            plan: note.plan ?? d.plan,
+            attachments: note.specialtyData?.attachments ?? d.attachments,
+          }));
+        }
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "No se pudo crear borrador",
+        );
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [isConsultActive, activeAppointment, clinicalNoteId, patient.id]);
+
+  const handleSaveDraft = useCallback(async (d: SoapDraft) => {
+    setSoapDraft(d);
+    if (!clinicalNoteId) return;
+    try {
+      await fetch(`/api/clinical-notes/${clinicalNoteId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subjective: d.subjective,
+          objective: d.objective,
+          assessment: d.assessment,
+          plan: d.plan,
+        }),
+      });
+    } catch {
+      /* el editor maneja su propio toast si fuera crítico; auto-save silencioso */
+    }
+  }, [clinicalNoteId]);
+
+  const handleAttach = useCallback(
+    async (file: File): Promise<{ id: string; name: string; mime: string } | null> => {
+      if (!clinicalNoteId) return null;
+      try {
+        // Subir vía /api/xrays (endpoint existente para uploads de paciente).
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("patientId", patient.id);
+        formData.append("category", file.type.startsWith("image/") ? "PHOTO_INTRAORAL" : "OTHER");
+        const upRes = await fetch("/api/xrays", { method: "POST", body: formData });
+        if (!upRes.ok) {
+          const body = await upRes.json().catch(() => ({}));
+          throw new Error(body.error ?? "upload_failed");
+        }
+        const uploaded = await upRes.json();
+
+        // Vincular a la nota.
+        const linkRes = await fetch(`/api/clinical-notes/${clinicalNoteId}/attach`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileId: uploaded.id }),
+        });
+        if (!linkRes.ok) {
+          const body = await linkRes.json().catch(() => ({}));
+          throw new Error(body.error ?? "attach_failed");
+        }
+        toast.success("Archivo adjunto");
+        return {
+          id: uploaded.id,
+          name: uploaded.name ?? file.name,
+          mime: uploaded.mimeType ?? file.type,
+        };
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "No se pudo adjuntar");
+        return null;
+      }
+    },
+    [clinicalNoteId, patient.id],
+  );
+
+  const handleEndConsult = useCallback(async () => {
+    if (!activeAppointment) {
+      setConsultClosed(true);
+      return;
+    }
+    try {
+      // Guarda el draft final si aún no se persistió (debounce pendiente).
+      if (clinicalNoteId) {
+        await fetch(`/api/clinical-notes/${clinicalNoteId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subjective: soapDraft.subjective,
+            objective: soapDraft.objective,
+            assessment: soapDraft.assessment,
+            plan: soapDraft.plan,
+          }),
+        });
+      }
+      // Completa cita + firma nota + crea snapshot odontograma + diff →
+      // suggestedTreatments en respuesta (transacción server-side).
+      const res = await fetch(`/api/appointments/${activeAppointment.id}/complete`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clinicalNoteId: clinicalNoteId ?? undefined,
+          signNote: true,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "complete_failed");
+      }
+      const data = await res.json().catch(() => ({}));
+      toast.success("Consulta completada y firmada");
+      // Si el server detectó tratamientos, abrir el modal de facturación.
+      const suggested: SuggestedTreatment[] = data.suggestedTreatments ?? [];
+      if (suggested.length > 0) {
+        setTreatmentsModal({
+          open: true,
+          appointmentId: activeAppointment.id,
+          treatments: suggested,
+        });
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo completar");
+      return;
+    }
+    setConsultClosed(true);
+    setClinicalNoteId(null);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("appointment");
+    const qs = params.toString();
+    router.replace(qs ? `?${qs}` : window.location.pathname);
+    router.refresh();
+  }, [activeAppointment, clinicalNoteId, soapDraft, searchParams, router]);
+
+  const consultDoctorName =
+    activeAppointment?.doctor?.firstName
+      ? `Dr/a. ${activeAppointment.doctor.firstName} ${activeAppointment.doctor.lastName ?? ""}`.trim()
+      : null;
+
   return (
-    <div style={{ padding: "24px 28px", maxWidth: 1400, margin: "0 auto" }}>
-      {/* Breadcrumbs + quick actions */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
-        <Link href="/dashboard/patients" className="btn-new btn-new--ghost btn-new--sm">
-          <ArrowLeft size={14} />
-          Pacientes
+    <div style={{ padding: "20px 28px 28px", maxWidth: 1400, margin: "0 auto" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-3)", marginBottom: 12 }}>
+        <Link href="/dashboard/patients" style={{ color: "var(--text-3)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <ArrowLeft size={12} /> Pacientes
         </Link>
         <span style={{ color: "var(--text-4)" }}>/</span>
-        <span style={{ color: "var(--text-1)", fontWeight: 500, fontSize: 13 }}>{fullName}</span>
+        <span style={{ color: "var(--text-1)", fontWeight: 500 }}>{fullName}</span>
+      </div>
 
-        {patient.allergies?.length > 0 && (
-          <BadgeNew tone="danger" dot>Alergia: {patient.allergies[0]}</BadgeNew>
-        )}
-        {totalBalance > 0 && (
-          <BadgeNew tone="info" dot>Saldo: {formatCurrency(totalBalance)}</BadgeNew>
-        )}
+      {/* Hero card permanente — audit Opción C ajuste 1 */}
+      <HeroCard
+        patient={{
+          id: patient.id,
+          firstName: patient.firstName,
+          lastName: patient.lastName,
+          patientNumber: patient.patientNumber,
+          gender: patient.gender ?? "",
+          dob: patient.dob ?? null,
+          phone: patient.phone ?? null,
+          email: patient.email ?? null,
+          bloodType: patient.bloodType ?? null,
+          status: patient.status ?? "ACTIVE",
+          allergies: patient.allergies ?? [],
+          chronicConditions: patient.chronicConditions ?? [],
+          currentMedications: patient.currentMedications ?? [],
+        }}
+        nextAppointment={nextAppt ? {
+          id: nextAppt.id,
+          date: nextAppt.date,
+          startTime: nextAppt.startTime ?? "",
+          type: nextAppt.type,
+          doctorName: nextAppt.doctor ? `Dr/a. ${nextAppt.doctor.firstName} ${nextAppt.doctor.lastName}` : undefined,
+        } : null}
+        lastVisitDate={lastAppt?.date ?? null}
+        visitCount={completedCount}
+        pendingBalance={totalBalance}
+        portalUrl={portalLink}
+        onEdit={() => setShowEdit(true)}
+        onStartConsult={() => {
+          if (nextAppt) {
+            // En commit 6 esto creará el draft note + activará context bar.
+            router.push(`?appointment=${nextAppt.id}`);
+          }
+        }}
+        onReschedule={() => {
+          // Por ahora redirige al tab Citas; en una futura iteración abrir picker inline.
+          setTab("agenda");
+        }}
+        onCharge={() => setTab("facturacion")}
+      />
 
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-          <ButtonNew variant="ghost" size="sm" onClick={() => setTab("expediente")}>
-            Nueva nota
-          </ButtonNew>
-          {portalLink ? (
-            <ButtonNew
-              variant="secondary"
-              size="sm"
-              onClick={() => { navigator.clipboard.writeText(portalLink); toast.success("Link copiado"); }}
-            >
-              Copiar portal
-            </ButtonNew>
-          ) : (
-            <ButtonNew variant="secondary" size="sm" onClick={generatePortalLink} disabled={generatingPortal}>
-              {generatingPortal ? "Generando…" : "Portal paciente"}
-            </ButtonNew>
+      {/* Layout 3 columnas — audit Opción C ajuste 3 */}
+      <div
+        className={`${patientDetailStyles.layout} ${
+          tab === "odontograma" ? patientDetailStyles.layoutWide : ""
+        }`}
+      >
+        <QuickNav
+          activeTab={tab}
+          onSelect={setTab}
+          counts={{
+            historia: records.length,
+            evolucion: records.length,
+            radiografias: filesLoaded ? files.length : undefined,
+            tratamiento: treatments.length,
+            agenda: appointments.length,
+            facturacion: invoices.length,
+          }}
+          hasBalance={totalBalance > 0}
+        />
+
+        <div className={patientDetailStyles.mainColumn}>
+          {/* Sticky context bar + SOAP editor (audit Opción C ajustes 2 y 5) */}
+          {isConsultActive && activeAppointment && (
+            <>
+              <ConsultBar
+                patientName={fullName}
+                resourceName={activeAppointment.room ?? null}
+                doctorName={consultDoctorName}
+                startedAt={activeAppointment.startedAt ?? activeAppointment.startsAt}
+                paused={consultPaused}
+                onPause={() => setConsultPaused((v) => !v)}
+                onComplete={handleEndConsult}
+                onClose={handleEndConsult}
+              />
+              <SoapEditorInline
+                appointment={{
+                  id: activeAppointment.id,
+                  patientName: fullName,
+                  type: activeAppointment.type,
+                }}
+                initialDraft={soapDraft}
+                onSaveDraft={handleSaveDraft}
+                onComplete={async (d) => {
+                  setSoapDraft(d);
+                  await handleEndConsult();
+                }}
+                onAttach={handleAttach}
+              />
+            </>
           )}
-          <ButtonNew variant="primary" size="sm" icon={<Plus size={12} />} onClick={() => setShowNewAppt(true)}>
-            Agendar cita
-          </ButtonNew>
-        </div>
-      </div>
 
-      {/* Patient header card */}
-      <div className="card" style={{ marginBottom: 14 }}>
-        <div style={{ padding: 24, display: "flex", alignItems: "flex-start", gap: 20 }}>
-          <AvatarNew name={fullName} size="xl" />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
-              <h1 style={{ fontSize: 20, color: "var(--text-1)", fontWeight: 600, margin: 0, letterSpacing: "-0.02em" }}>{fullName}</h1>
-              <BadgeNew tone={patient.status === "ACTIVE" ? "success" : "neutral"} dot>
-                {patient.status === "ACTIVE" ? "Activo" : patient.status === "INACTIVE" ? "Inactivo" : "Archivado"}
-              </BadgeNew>
-              <span className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>#{patient.patientNumber}</span>
-              <button
-                onClick={() => setShowEdit(true)}
-                className="btn-new btn-new--ghost btn-new--sm"
-                type="button"
-                style={{ marginLeft: 4 }}
-              >
-                <Edit size={12} /> Editar
-              </button>
-            </div>
-
-            <div style={{ display: "flex", gap: 16, fontSize: 12, color: "var(--text-2)", flexWrap: "wrap", marginBottom: 10 }}>
-              {ageNum !== null && <span>{ageNum} años</span>}
-              <span>{genderLabel}</span>
-              {patient.phone && <span><Phone size={11} style={{ display: "inline", verticalAlign: -1, marginRight: 4 }} />{patient.phone}</span>}
-              {patient.email && <span><Mail size={11} style={{ display: "inline", verticalAlign: -1, marginRight: 4 }} />{patient.email}</span>}
-              {patient.bloodType && <span>Tipo: <strong className="mono" style={{ color: "var(--text-1)" }}>{patient.bloodType}</strong></span>}
-            </div>
-
-            {(patient.allergies?.length > 0 || patient.chronicConditions?.length > 0 || patient.currentMedications?.length > 0 || patient.tags?.length > 0) && (
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {patient.allergies?.map((a: string) => (
-                  <span key={`a-${a}`} className="tag-new" style={{ color: "#fca5a5", borderColor: "rgba(239,68,68,0.2)", background: "var(--danger-soft)" }}>🚨 {a}</span>
-                ))}
-                {patient.chronicConditions?.map((c: string) => (
-                  <span key={`c-${c}`} className="tag-new" style={{ color: "#fcd34d", borderColor: "rgba(245,158,11,0.2)", background: "var(--warning-soft)" }}>{c}</span>
-                ))}
-                {patient.currentMedications?.map((m: string) => (
-                  <span key={`m-${m}`} className="tag-new" style={{ color: "#c4b5fd", borderColor: "rgba(124,58,237,0.2)", background: "var(--brand-soft)" }}>💊 {m}</span>
-                ))}
-                {patient.tags?.map((t: string) => (
-                  <span key={`t-${t}`} className="tag-new">{t}</span>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Meta info grid */}
-        <div style={{ borderTop: "1px solid var(--border-soft)", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", padding: 18, gap: 20 }}>
-          {[
-            { label: "Última visita",      val: lastAppt ? formatDate(lastAppt.date) : "—",        sub: lastAppt?.type ?? "" },
-            { label: "Próxima cita",       val: nextAppt ? formatDate(nextAppt.date) : "—",        sub: nextAppt?.type ?? "", highlight: !!nextAppt },
-            { label: "Total tratamiento",  val: fmtMXN(totalPlan),                                 sub: `Pagado: ${fmtMXN(totalPaid)}` },
-            { label: "Visitas completadas", val: String(completedCount),                           sub: `${appointments.length} totales` },
-          ].map(s => (
-            <div key={s.label}>
-              <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>{s.label}</div>
-              <div style={{ color: s.highlight ? "#c4b5fd" : "var(--text-1)", fontSize: 14, fontWeight: 600 }}>{s.val}</div>
-              {s.sub && <div style={{ fontSize: 10, color: "var(--text-3)", marginTop: 2 }}>{s.sub}</div>}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="tabs-new" style={{ marginBottom: 16, overflowX: "auto" }}>
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={`tab-new ${tab === t.id ? "tab-new--active" : ""}`}
+          {/* Tab bar móvil sticky — sólo visible <1024 (donde el quick-nav
+              está oculto). Patrón iOS-style: scroll horizontal con buttons
+              tappables, sticky bajo el hero para que el usuario pueda
+              cambiar de sección sin scrollear arriba. */}
+          <div
+            className={patientDetailStyles.mobileTabBar}
+            role="tablist"
+            aria-label="Secciones del paciente"
           >
-            {t.label}
-            {tabCounts[t.id] !== undefined && (
-              <span className="tab__count">{tabCounts[t.id]}</span>
-            )}
-          </button>
-        ))}
-      </div>
+            {TABS.map((t) => {
+              const isActive = tab === t.id;
+              const count = tabCounts[t.id];
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  id={`patient-tab-${t.id}`}
+                  aria-selected={isActive}
+                  aria-controls={`patient-panel-${t.id}`}
+                  className={`${patientDetailStyles.mobileTabBtn} ${
+                    isActive ? patientDetailStyles.mobileTabBtnActive : ""
+                  }`}
+                  onClick={() => setTab(t.id)}
+                >
+                  {t.label}
+                  {count !== undefined && count > 0 && (
+                    <span className={patientDetailStyles.mobileTabCount}>{count}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
           {/* ===== TAB: RESUMEN ===== */}
           {tab === "resumen" && (
@@ -600,6 +819,11 @@ export function PatientDetailClient({
             </div>
           )}
 
+          {/* ===== TAB: ODONTOGRAMA ===== */}
+          {tab === "odontograma" && (
+            <Odontogram patientId={patient.id} />
+          )}
+
           {/* ===== TAB: NUEVA CONSULTA (specialty form) ===== */}
           {tab === "expediente" && (
             <div className="bg-card border border-border rounded-xl p-5">
@@ -661,7 +885,11 @@ export function PatientDetailClient({
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {records.map((record, idx) => (
+                    {records.map((record, idx) => {
+                      const noteStatus: "DRAFT" | "SIGNED" =
+                        record.specialtyData?.status ?? "DRAFT";
+                      const isSigned = noteStatus === "SIGNED";
+                      return (
                       <div key={record.id} className="flex gap-3">
                         <div className="flex flex-col items-center">
                           <div className="w-7 h-7 rounded-full bg-blue-100 border-2 border-brand-500 flex items-center justify-center text-[9px] font-bold text-brand-700 flex-shrink-0 z-10">
@@ -669,10 +897,27 @@ export function PatientDetailClient({
                           </div>
                           {idx < records.length - 1 && <div className="w-px flex-1 bg-border mt-1" />}
                         </div>
-                        <div className="flex-1 bg-muted rounded-xl border border-border p-3 mb-1">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-[10px] text-muted-foreground">{formatDate(record.visitDate)}</span>
-                            <span className="text-[10px] font-bold text-brand-600">Dr/a. {record.doctor?.firstName} {record.doctor?.lastName}</span>
+                        <button
+                          type="button"
+                          onClick={() => setNoteDetailOpen(record as ClinicalNote)}
+                          className={`${patientDetailStyles.noteRow} flex-1 bg-muted rounded-xl border border-border p-3 mb-1 text-left w-full`}
+                          aria-label={`Ver detalle de consulta del ${formatDate(record.visitDate)}`}
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-muted-foreground">{formatDate(record.visitDate)}</span>
+                              <span
+                                className={`${patientDetailStyles.noteRowStatusBadge} ${
+                                  isSigned ? patientDetailStyles.signed : patientDetailStyles.draft
+                                }`}
+                              >
+                                {isSigned ? "Firmada" : "Borrador"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-brand-600">Dr/a. {record.doctor?.firstName} {record.doctor?.lastName}</span>
+                              <span className={patientDetailStyles.noteRowChevron} aria-hidden>›</span>
+                            </div>
                           </div>
                           {record.subjective && (
                             <p className="text-xs text-foreground mb-1.5 leading-relaxed">{record.subjective}</p>
@@ -710,9 +955,10 @@ export function PatientDetailClient({
                               ))}
                             </div>
                           )}
-                        </div>
+                        </button>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1047,74 +1293,42 @@ export function PatientDetailClient({
             </div>
           )}
 
-        </div>
-
-        {/* Right panel - Quick actions */}
-        <div className="w-52 flex-shrink-0 bg-card border-l border-border overflow-y-auto p-4 flex flex-col gap-3">
-          <div>
-            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2">Acciones rápidas</div>
-            <div className="space-y-1.5">
-              {[
-                { icon: "📅", label: "Agendar cita",        action: () => setShowNewAppt(true) },
-                { icon: "📝", label: "Nueva consulta",       action: () => setTab("expediente")  },
-                { icon: "📊", label: "Ver evolución",        action: () => setTab("evolucion")   },
-                { icon: "🩻", label: "Radiografías",          action: () => setTab("radiografias") },
-                { icon: "🦷", label: "Plan tratamiento",     action: () => setTab("tratamiento") },
-                { icon: "💳", label: "Ver facturación",      action: () => setTab("facturacion") },
-              ].map(btn => (
-                <button key={btn.label} onClick={btn.action}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold border border-border bg-card hover:bg-muted/50 transition-colors text-left">
-                  <span>{btn.icon}</span>
-                  {btn.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="border-t border-border pt-3">
-            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2">Finanzas</div>
-            <div className="space-y-1.5 text-xs mb-2">
-              <div className="flex justify-between"><span className="text-muted-foreground">Total plan</span><span className="font-bold">{formatCurrency(totalPlan)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Pagado</span><span className="font-bold text-emerald-600">{formatCurrency(totalPaid)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Pendiente</span><span className="font-bold text-rose-600">{formatCurrency(totalBalance)}</span></div>
-            </div>
-            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pctPaid}%` }} />
-            </div>
-            <div className="text-[10px] text-muted-foreground text-right mt-1">{pctPaid}% cubierto</div>
-          </div>
-
-          <div className="border-t border-border pt-3">
-            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2">Próxima cita</div>
-            {nextAppt ? (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-2.5">
-                <div className="text-xs font-extrabold text-brand-700">{formatDate(nextAppt.date)}</div>
-                <div className="text-[11px] text-foreground mt-0.5">{nextAppt.type}</div>
-                <div className="text-[10px] text-muted-foreground">{nextAppt.startTime}h</div>
-              </div>
-            ) : (
-              <button onClick={() => setShowNewAppt(true)} className="w-full text-xs text-brand-600 hover:underline text-left">Agendar primera cita →</button>
-            )}
-          </div>
-
-          <div className="border-t border-border pt-3">
-            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2">Alertas</div>
-            {patient.allergies?.length > 0 && (
-              <div className="flex items-start gap-1.5 bg-rose-50 border border-rose-200 rounded-lg p-2 mb-1.5">
-                <AlertTriangle className="w-3 h-3 text-rose-600 flex-shrink-0 mt-0.5" />
-                <span className="text-[10px] font-bold text-rose-700">Alergia: {patient.allergies.join(", ")}</span>
-              </div>
-            )}
-            {totalBalance > 0 && (
-              <div className="flex items-start gap-1.5 bg-amber-50 border border-amber-200 rounded-lg p-2">
-                <span className="text-[10px] font-bold text-amber-700">💰 Saldo pendiente: {formatCurrency(totalBalance)}</span>
-              </div>
-            )}
-            {patient.allergies?.length === 0 && totalBalance === 0 && (
-              <p className="text-[10px] text-muted-foreground">Sin alertas activas</p>
-            )}
           </div>
         </div>
+
+        <SideCards
+          nextAppointment={nextAppt ? {
+            date: nextAppt.date,
+            startTime: nextAppt.startTime ?? "",
+            type: nextAppt.type,
+            doctorName: nextAppt.doctor ? `Dr/a. ${nextAppt.doctor.firstName} ${nextAppt.doctor.lastName}` : undefined,
+          } : null}
+          finance={{
+            total: totalPlan,
+            paid: totalPaid,
+            balance: totalBalance,
+            pct: pctPaid,
+          }}
+          patientName={fullName}
+          patientPhone={patient.phone ?? null}
+          onReschedule={() => setTab("agenda")}
+          onCancelAppt={() => setTab("agenda")}
+          onCharge={() => setTab("facturacion")}
+        />
+      </div>
+
+      {/* Treatments detected modal — post-firmar consulta */}
+      <TreatmentsModal
+        open={treatmentsModal.open}
+        appointmentId={treatmentsModal.appointmentId}
+        initialTreatments={treatmentsModal.treatments}
+        onClose={() => setTreatmentsModal((m) => ({ ...m, open: false }))}
+        onInvoiced={() => {
+          setTreatmentsModal((m) => ({ ...m, open: false }));
+          router.refresh();
+        }}
+      />
+
       {/* Edit patient modal */}
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
@@ -1162,6 +1376,18 @@ export function PatientDetailClient({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de detalle de nota SOAP — abre al hacer click en una row del
+       *  tab Evolución / Notas. */}
+      <NoteDetailModal
+        open={noteDetailOpen !== null}
+        note={noteDetailOpen}
+        onClose={() => setNoteDetailOpen(null)}
+        onUpdated={(updated) => {
+          setRecords((prev) => prev.map((r) => (r.id === updated.id ? { ...r, ...updated } : r)));
+          setNoteDetailOpen(null);
+        }}
+      />
     </div>
   );
 }

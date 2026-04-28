@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
+import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 
 async function getClinicId() {
   const supabase = createClient();
@@ -35,13 +36,13 @@ export async function POST(req: NextRequest) {
   if (!appt) return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 });
   if (!appt.patient.phone) return NextResponse.json({ error: "El paciente no tiene teléfono registrado" }, { status: 400 });
 
-  const date = new Date(appt.date).toLocaleDateString("es-MX", {
-    weekday: "long", day: "numeric", month: "long",
-  });
+  const date = new Intl.DateTimeFormat("es-MX", {
+    timeZone: clinic.timezone, weekday: "long", day: "numeric", month: "long",
+  }).format(appt.startsAt);
 
   // Bidirectional reminder — patient can reply CONFIRMAR or CANCELAR
   const defaultMsg = clinic.waReminderMsg ||
-    `Hola ${appt.patient.firstName} 👋, te recordamos que tienes una cita en *${clinic.name}* el *${date}* a las *${appt.startTime}h*.\n\nDr/a. ${appt.doctor.firstName} ${appt.doctor.lastName}\n\n✅ Responde *CONFIRMAR* para confirmar tu cita\n❌ Responde *CANCELAR* si no podrás asistir`;
+    `Hola ${appt.patient.firstName} 👋, te recordamos que tienes una cita en *${clinic.name}* el *${date}* a las *${timeHHMMInTz(appt.startsAt, clinic.timezone)}h*.\n\nDr/a. ${appt.doctor.firstName} ${appt.doctor.lastName}\n\n✅ Responde *CONFIRMAR* para confirmar tu cita\n❌ Responde *CANCELAR* si no podrás asistir`;
 
   try {
     await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, appt.patient.phone, defaultMsg);

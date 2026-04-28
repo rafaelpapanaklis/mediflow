@@ -4,7 +4,10 @@ import { getCurrentUser, getUserClinics } from "@/lib/auth";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
 import { GlobalAnnouncementBanner } from "@/components/dashboard/global-announcement-banner";
-import { TrialBanner } from "@/components/dashboard/trial-banner";
+import { ActiveConsultProvider } from "@/components/dashboard/active-consult-provider";
+import { NewAppointmentProvider } from "@/components/dashboard/new-appointment/new-appointment-provider";
+import { NewPatientProvider } from "@/components/dashboard/new-patient/new-patient-provider";
+import { PatientContextBar } from "@/components/dashboard/patient-context-bar";
 import { prisma } from "@/lib/prisma";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -48,6 +51,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (clinic.waConnected) onboardingCompleted.push("whatsapp");
 
   return (
+    <ActiveConsultProvider>
+    <NewPatientProvider>
+    <NewAppointmentProvider>
+    {/* Skip link — WCAG 2.4.1 Bypass Blocks. Oculto por defecto, visible
+        al recibir focus por teclado para que usuarios de teclado/lectores
+        salten la sidebar y la topbar. */}
+    <a href="#main-content" className="mf-skip-link">
+      Saltar al contenido principal
+    </a>
     <div className="dashboard-shell flex min-h-screen font-sans">
       <Sidebar
         user={{
@@ -71,10 +83,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <a href="/dashboard/suspended" className="underline hover:no-underline">Ver opciones de pago →</a>
           </div>
         )}
-        {isInTrial && trialEndsAt && <TrialBanner trialEndsAt={trialEndsAt} />}
         <GlobalAnnouncementBanner />
-        <Topbar crumbs={[clinic.name, "Dashboard"]} />
+        <Topbar
+          clinicName={clinic.name}
+          trialEndsAt={isInTrial ? trialEndsAt : null}
+          plan={clinic.plan as any}
+        />
+        <PatientContextBar />
         <main
+          id="main-content"
+          tabIndex={-1}
           className="flex-1 pt-20 lg:pt-6"
           style={{ padding: "clamp(12px, 1.5vw, 28px)", paddingTop: "clamp(16px, 2vw, 24px)" }}
         >
@@ -82,5 +100,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </main>
       </div>
     </div>
+    </NewAppointmentProvider>
+    </NewPatientProvider>
+    </ActiveConsultProvider>
   );
 }

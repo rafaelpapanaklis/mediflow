@@ -15,6 +15,9 @@ export async function PATCH(req: NextRequest) {
     "waReminderActive", "waReminder24h", "waReminder1h", "waReminderMsg",
     "recallActive", "recallMonths",
     "isPublic",
+    // Inbox integrations (Fase 6)
+    "twilioAccountSid", "twilioAuthToken", "twilioWhatsappNumber",
+    "postmarkInboundEmail",
   ];
 
   const data: Record<string, any> = {};

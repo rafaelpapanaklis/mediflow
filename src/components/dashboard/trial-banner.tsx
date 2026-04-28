@@ -1,3 +1,11 @@
+/**
+ * @deprecated Desde Fase 2.5 (2026-04). Reemplazado por <TrialPill />
+ * integrado en <Topbar />. Este componente NO se renderiza en
+ * `src/app/dashboard/layout.tsx` actual.
+ *
+ * Conservado temporalmente por si algún consumer lo importa. En Fase 2.7
+ * se puede eliminar tras verificar con `git grep TrialBanner`.
+ */
 import Link from "next/link";
 
 interface TrialBannerProps {

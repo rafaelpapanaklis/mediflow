@@ -1,0 +1,563 @@
+/* Vista pública /live/[slug] — fullscreen TV de sala de espera. */
+
+.live {
+  display: grid;
+  grid-template-rows: 86px 1fr 200px 28px;
+  /* TV de sala de espera + iOS Safari fullscreen sin barras: dvh
+     usa el viewport dinámico y evita que el bottom bar coma 80px. */
+  height: 100vh;
+  height: 100dvh;
+  background: radial-gradient(ellipse at 55% 40%, #EDF5FC 0%, #E2EEF8 60%, #D8E8F4 100%);
+  color: #1A2540;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 0 28px;
+  background: #fff;
+  border-bottom: 1px solid #E2ECF4;
+  box-shadow: 0 1px 4px rgba(30, 60, 120, 0.06);
+}
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+}
+.brandIcon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #4A90E2, #2A68C0);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 800;
+  font-size: 18px;
+  box-shadow: 0 6px 18px -6px rgba(74, 144, 226, 0.5);
+  flex-shrink: 0;
+  letter-spacing: -0.02em;
+}
+.clinicLogo {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  object-fit: cover;
+  background: #fff;
+  border: 1px solid #E2ECF4;
+  flex-shrink: 0;
+  box-shadow: 0 6px 18px -8px rgba(30, 60, 120, 0.18);
+}
+.headerClinicInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.clinicName {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.clinicMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.liveBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #EF4444;
+  text-transform: uppercase;
+}
+.liveBadge span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #EF4444;
+  animation: mfLivePulse 1.4s ease-in-out infinite;
+}
+@keyframes mfLivePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.15); }
+}
+.clinicCity {
+  font-size: 11px;
+  color: #6B7A99;
+  font-weight: 600;
+}
+/* Reloj prominente — HH:MM dominante con segundos pequeños alineados. */
+.headerClockBlock {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 6px 18px;
+  background: #F0F7FA;
+  border: 1px solid #C8E4F4;
+  border-radius: 14px;
+}
+.headerClockBig {
+  font-size: 48px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+  color: #1A2540;
+  line-height: 1;
+}
+.headerClockSec {
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #6B7A99;
+  letter-spacing: -0.02em;
+}
+.headerRight {
+  display: flex;
+  gap: 6px;
+}
+.fullscreenBtn {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #E2ECF4;
+  border-radius: 10px;
+  background: #fff;
+  color: #6B7A99;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.fullscreenBtn:hover {
+  background: #E8F4F8;
+  color: #4A90E2;
+}
+
+.body {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  overflow: hidden;
+}
+.canvasWrap {
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+  touch-action: none;
+}
+.svgRoot {
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: auto;
+}
+
+/* ─── Controles flotantes (zoom + fit + fullscreen) ─── */
+.canvasControls {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(15, 25, 50, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 6px 24px -8px rgba(20, 40, 100, 0.18);
+  font-family: 'Inter', system-ui, sans-serif;
+  z-index: 5;
+  cursor: default;
+}
+.canvasCtrlBtn {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: #4A4560;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.canvasCtrlBtn:hover:not(:disabled) {
+  background: rgba(74, 144, 226, 0.12);
+  color: #2A68C0;
+}
+.canvasCtrlBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.canvasCtrlZoom {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #4A4560;
+  min-width: 36px;
+  text-align: center;
+  padding: 0 4px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.canvasCtrlDivider {
+  width: 1px;
+  height: 18px;
+  background: rgba(15, 25, 50, 0.12);
+  margin: 0 2px;
+}
+
+@media (min-width: 1920px) {
+  .canvasControls {
+    bottom: 24px;
+    right: 24px;
+    padding: 5px;
+    border-radius: 14px;
+  }
+  .canvasCtrlBtn {
+    width: 38px;
+    height: 38px;
+  }
+  .canvasCtrlZoom {
+    font-size: 13px;
+  }
+}
+.panel {
+  background: #fff;
+  border-left: 1px solid #E2ECF4;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.loadingWrap {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  color: #6B7A99;
+  background: radial-gradient(ellipse at 55% 40%, #EDF5FC 0%, #E2EEF8 60%, #D8E8F4 100%);
+}
+.errorWrap {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 24px;
+  background: radial-gradient(ellipse at 55% 40%, #EDF5FC 0%, #E2EEF8 60%, #D8E8F4 100%);
+}
+.errorCard {
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid #E2ECF4;
+  padding: 32px 28px 24px;
+  max-width: 540px;
+  width: 100%;
+  box-shadow: 0 18px 48px -16px rgba(20, 40, 100, 0.18);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+}
+.errorCard h1 {
+  font-size: 20px;
+  font-weight: 800;
+  color: #1A2540;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+.errorCard p {
+  font-size: 13.5px;
+  color: #6B7A99;
+  margin: 0;
+  line-height: 1.55;
+}
+.errorCard p code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  background: #F0F6FB;
+  color: #4A90E2;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.errorCode {
+  background: #0F1A2E;
+  color: #C8E4F4;
+  padding: 14px 16px;
+  border-radius: 10px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  text-align: left;
+  white-space: pre-wrap;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: auto;
+}
+.errorBtn {
+  margin-top: 4px;
+  padding: 10px 22px;
+  background: #4A90E2;
+  color: #fff;
+  border: 1px solid #4A90E2;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: 0 8px 22px -8px rgba(74, 144, 226, 0.55);
+  transition: background 0.15s, transform 0.08s;
+}
+.errorBtn:hover:not(:disabled) {
+  background: #2A68C0;
+  transform: translateY(-1px);
+}
+.errorBtn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+/* ─── Unlock prompt inline ─── */
+.unlockCard {
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid #E2ECF4;
+  padding: 30px 28px 24px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 18px 48px -16px rgba(20, 40, 100, 0.18);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+}
+.unlockCard h1 {
+  font-size: 19px;
+  font-weight: 800;
+  color: #1A2540;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+.unlockCard p {
+  font-size: 13px;
+  color: #6B7A99;
+  margin: 0 0 4px;
+  line-height: 1.55;
+}
+.unlockIcon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #4A90E2, #2A68C0);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  margin: 0 auto 4px;
+  box-shadow: 0 8px 22px -8px rgba(74, 144, 226, 0.55);
+}
+.unlockInput {
+  width: 100%;
+  padding: 11px 14px;
+  font-size: 14px;
+  background: #F8FAFC;
+  border: 1px solid #E2ECF4;
+  border-radius: 10px;
+  color: #1A2540;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.unlockInput:focus {
+  border-color: #4A90E2;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.12);
+}
+.unlockInput:disabled { opacity: 0.6; }
+.unlockError {
+  font-size: 12px;
+  color: #EF4444;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin-top: 2px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #fff;
+  border-top: 1px solid #E2ECF4;
+  font-size: 10.5px;
+  color: #9AAAC0;
+  letter-spacing: 0.04em;
+}
+.footer strong {
+  color: #4A90E2;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+@media (min-width: 1920px) {
+  .live { grid-template-rows: 100px 1fr 220px 32px; }
+  .header { padding: 0 40px; gap: 28px; }
+  .brandIcon, .clinicLogo { width: 68px; height: 68px; border-radius: 16px; font-size: 22px; }
+  .clinicName { font-size: 28px; }
+  .headerClockBig { font-size: 64px; }
+  .headerClockSec { font-size: 22px; }
+  .body { grid-template-columns: 1fr 380px; }
+  .panel { padding: 24px; font-size: 14px; }
+  .footer { font-size: 12px; }
+}
+
+/* ─── DARK MODE — overrides ──────────────────────────────────────────
+   El toggle de la vista En Vivo añade `.dark` en <html>, así que
+   reusamos los selectores `:global(.dark)` que ya usa el resto del
+   proyecto. Pensado para TV de sala de espera: contrastes altos,
+   halos legibles, reloj y stats visibles. Ilustraciones a color
+   (sillón azul, planta verde) NO se tocan — solo canvas/UI. */
+:global(.dark) .live {
+  background: radial-gradient(ellipse at 55% 40%, #1A1630 0%, #121020 60%, #0B0815 100%);
+  color: #E8E8EC;
+}
+:global(.dark) .header {
+  background: #181530;
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+:global(.dark) .brandIcon {
+  background: linear-gradient(135deg, #818cf8, #a78bfa);
+  box-shadow: 0 6px 18px -6px rgba(129, 140, 248, 0.6);
+}
+:global(.dark) .clinicLogo {
+  background: #fff;
+  border-color: rgba(255, 255, 255, 0.10);
+  /* Logos de clínica: si tienen fondo blanco y son monocromos oscuros
+     no se ven en dark. Los dejamos como están — la mayoría son a color
+     con transparencia. Si aparece logo invisible, el owner subirá uno
+     adaptado. */
+}
+:global(.dark) .clinicName { color: #E8E8EC; }
+:global(.dark) .clinicCity { color: #A0A0AB; }
+:global(.dark) .liveBadge { color: #f87171; }
+:global(.dark) .liveBadge span { background: #f87171; }
+:global(.dark) .headerClockBlock {
+  background: rgba(129, 140, 248, 0.15);
+  border-color: rgba(129, 140, 248, 0.35);
+}
+:global(.dark) .headerClockBig { color: #E8E8EC; }
+:global(.dark) .headerClockSec { color: #A0A0AB; }
+:global(.dark) .fullscreenBtn {
+  background: #181530;
+  border-color: rgba(255, 255, 255, 0.10);
+  color: #A0A0AB;
+}
+:global(.dark) .fullscreenBtn:hover {
+  background: rgba(129, 140, 248, 0.15);
+  color: #818cf8;
+  border-color: rgba(129, 140, 248, 0.4);
+}
+
+:global(.dark) .canvasControls {
+  background: rgba(24, 21, 48, 0.85);
+  border-color: rgba(255, 255, 255, 0.10);
+  box-shadow: 0 6px 24px -8px rgba(0, 0, 0, 0.7);
+}
+:global(.dark) .canvasCtrlBtn { color: #A0A0AB; }
+:global(.dark) .canvasCtrlBtn:hover:not(:disabled) {
+  background: rgba(129, 140, 248, 0.18);
+  color: #818cf8;
+}
+:global(.dark) .canvasCtrlZoom { color: #E8E8EC; }
+:global(.dark) .canvasCtrlDivider { background: rgba(255, 255, 255, 0.12); }
+
+:global(.dark) .panel {
+  background: #181530;
+  border-left-color: rgba(255, 255, 255, 0.08);
+  color: #E8E8EC;
+}
+
+:global(.dark) .loadingWrap {
+  background: radial-gradient(ellipse at 55% 40%, #1A1630 0%, #121020 60%, #0B0815 100%);
+  color: #A0A0AB;
+}
+:global(.dark) .errorWrap {
+  background: radial-gradient(ellipse at 55% 40%, #1A1630 0%, #121020 60%, #0B0815 100%);
+}
+:global(.dark) .errorCard {
+  background: #181530;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 48px -16px rgba(0, 0, 0, 0.6);
+}
+:global(.dark) .errorCard h1 { color: #E8E8EC; }
+:global(.dark) .errorCard p { color: #A0A0AB; }
+:global(.dark) .errorCard p code {
+  background: rgba(129, 140, 248, 0.15);
+  color: #c4b5fd;
+}
+:global(.dark) .errorCode {
+  background: #0B0815;
+  color: #c4b5fd;
+}
+:global(.dark) .errorBtn {
+  background: #818cf8;
+  border-color: #818cf8;
+  box-shadow: 0 8px 22px -8px rgba(129, 140, 248, 0.55);
+}
+:global(.dark) .errorBtn:hover:not(:disabled) {
+  background: #a78bfa;
+}
+
+:global(.dark) .unlockCard {
+  background: #181530;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 48px -16px rgba(0, 0, 0, 0.6);
+}
+:global(.dark) .unlockCard h1 { color: #E8E8EC; }
+:global(.dark) .unlockCard p { color: #A0A0AB; }
+:global(.dark) .unlockIcon {
+  background: linear-gradient(135deg, #818cf8, #a78bfa);
+  box-shadow: 0 8px 22px -8px rgba(129, 140, 248, 0.55);
+}
+:global(.dark) .unlockInput {
+  background: #121020;
+  border-color: rgba(255, 255, 255, 0.10);
+  color: #E8E8EC;
+}
+:global(.dark) .unlockInput:focus {
+  background: #181530;
+  border-color: #818cf8;
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.18);
+}
+:global(.dark) .unlockError {
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #f87171;
+}
+
+:global(.dark) .footer {
+  background: #181530;
+  border-top-color: rgba(255, 255, 255, 0.08);
+  color: #6B6B78;
+}
+:global(.dark) .footer strong { color: #818cf8; }
+
+/* ─── Tiles del canvas en dark — más sutiles para que las ilustraciones
+       de muebles a color destaquen sin competencia visual ─── */
+:global(.dark) .tileA { fill: rgba(255, 255, 255, 0.025); }
+:global(.dark) .tileB { fill: rgba(255, 255, 255, 0.012); }
+.tileA { fill: rgba(255, 255, 255, 0.4); }
+.tileB { fill: rgba(232, 244, 250, 0.3); }
+:global(.dark) .tileStroke { stroke: rgba(129, 140, 248, 0.08); }
+.tileStroke { stroke: rgba(74, 144, 226, 0.06); }

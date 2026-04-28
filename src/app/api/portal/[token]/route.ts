@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
+import { dateISOInTz, timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 
 // GET /api/portal/[token] — public endpoint, no auth required
 // Returns patient's own data for the portal
@@ -15,10 +16,10 @@ export async function GET(req: NextRequest, { params }: { params: { token: strin
       appointments: {
         where: { status: { not: "CANCELLED" } },
         include: { doctor: { select: { firstName: true, lastName: true } } },
-        orderBy: { date: "desc" },
+        orderBy: { startsAt: "desc" },
         take: 20,
       },
-      clinic: { select: { name: true, phone: true, address: true, logoUrl: true } },
+      clinic: { select: { name: true, phone: true, address: true, logoUrl: true, timezone: true } },
     },
   });
 
@@ -46,9 +47,9 @@ export async function GET(req: NextRequest, { params }: { params: { token: strin
     },
     appointments: patient.appointments.map(a => ({
       type:      a.type,
-      date:      a.date,
-      startTime: a.startTime,
-      endTime:   a.endTime,
+      date:      dateISOInTz(a.startsAt, patient.clinic.timezone),
+      startTime: timeHHMMInTz(a.startsAt, patient.clinic.timezone),
+      endTime:   timeHHMMInTz(a.endsAt,   patient.clinic.timezone),
       status:    a.status,
       doctor:    `Dr/a. ${a.doctor.firstName} ${a.doctor.lastName}`,
       notes:     a.notes,

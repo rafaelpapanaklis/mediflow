@@ -34,7 +34,7 @@ export default async function ReportsPage() {
       safe(prisma.patient.count({ where: { clinicId, createdAt: { gte: r.start, lte: r.end } } }), 0)
     )),
     Promise.all(ranges.map(r =>
-      safe(prisma.appointment.count({ where: { clinicId, date: { gte: r.start, lte: r.end } } }), 0)
+      safe(prisma.appointment.count({ where: { clinicId, startsAt: { gte: r.start, lte: r.end } } }), 0)
     )),
     safe(prisma.appointment.groupBy({
       by: ["type"], where: { clinicId },

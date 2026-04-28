@@ -57,10 +57,10 @@ export function WalkInClient({ initialQueue }: { initialQueue: QueueItem[] }) {
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ patientName: "", service: "" });
 
-  // Auto-refresh every 30 seconds
+  // Auto-refresh cada 30s con pausa cuando la pestaña no está visible.
   useEffect(() => {
     const ctrl = new AbortController();
-    const interval = setInterval(async () => {
+    const fetchQueue = async () => {
       try {
         const res = await fetch("/api/walk-in", { signal: ctrl.signal });
         if (res.ok) {
@@ -68,8 +68,21 @@ export function WalkInClient({ initialQueue }: { initialQueue: QueueItem[] }) {
           if (Array.isArray(data) && !ctrl.signal.aborted) setQueue(data);
         }
       } catch { /* ignore */ }
-    }, 30000);
-    return () => { clearInterval(interval); ctrl.abort(); };
+    };
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    const start = () => { if (intervalId === null) intervalId = setInterval(fetchQueue, 30_000); };
+    const stop = () => { if (intervalId !== null) { clearInterval(intervalId); intervalId = null; } };
+    const onVis = () => {
+      if (document.visibilityState === "visible") { fetchQueue(); start(); }
+      else stop();
+    };
+    if (document.visibilityState === "visible") start();
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      stop();
+      ctrl.abort();
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, []);
 
   async function handleAdd() {

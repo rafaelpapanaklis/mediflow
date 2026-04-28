@@ -12,6 +12,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 const PLAN_PRICES: Record<string, number> = { BASIC: 49, PRO: 99, CLINIC: 249 };
 
@@ -19,6 +20,7 @@ interface Props { clinics: any[] }
 
 export function AdminClinicsClient({ clinics: initial }: Props) {
   const router = useRouter();
+  const askConfirm = useConfirm();
   const [clinics, setClinics] = useState(initial);
   const [search, setSearch]   = useState("");
   const [filter, setFilter]   = useState("all");
@@ -82,7 +84,12 @@ export function AdminClinicsClient({ clinics: initial }: Props) {
   }
 
   async function suspendClinic(clinicId: string) {
-    if (!confirm("¿Suspender esta clínica?")) return;
+    if (!(await askConfirm({
+      title: "¿Suspender esta clínica?",
+      description: "Los usuarios verán una pantalla de pago hasta que renueven su suscripción.",
+      variant: "warning",
+      confirmText: "Suspender",
+    }))) return;
     setLoading(clinicId);
     try {
       const past = new Date("2000-01-01");

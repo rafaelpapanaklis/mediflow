@@ -30,10 +30,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "El pago no ha sido confirmado" }, { status: 400 });
     }
 
-    // Calculate room expiration: appointment date + endTime + 1 hour
-    const [endH, endM] = appointment.endTime.split(":").map(Number);
-    const expiresAt = new Date(appointment.date);
-    expiresAt.setHours(endH + 1, endM, 0, 0);
+    // Calculate room expiration: 1h después de endsAt.
+    const expiresAt = new Date(appointment.endsAt.getTime() + 60 * 60_000);
 
     const room = await createRoom(appointmentId, expiresAt);
 

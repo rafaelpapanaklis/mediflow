@@ -1,0 +1,635 @@
+/* ─────── Odontogram component styles ────────────────────────────── */
+
+.odontogram {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  padding: 16px 18px;
+  font-family: var(--font-sora, "Sora", sans-serif);
+  /* Tamaño más compacto para que 16 dientes entren en 1 fila sin scroll. */
+  --mf-tooth-size: clamp(38px, 4vw, 56px);
+}
+
+/* Cuando hay un modo activo, el cursor sobre superficies es crosshair */
+.odontogram[data-active-mode]:not([data-active-mode="none"]) .surface {
+  cursor: crosshair;
+}
+
+/* ─────── TOOLBAR ─────── */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-soft);
+  margin-bottom: 14px;
+}
+.toolbarChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px 5px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  color: var(--text-1);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s, border-color 0.12s, transform 0.1s;
+}
+.chip:hover:not(:disabled) {
+  border-color: var(--mf-chip-color);
+  transform: translateY(-1px);
+}
+.chip:disabled { opacity: 0.55; cursor: not-allowed; }
+.chipActive {
+  background: color-mix(in srgb, var(--mf-chip-color) 14%, var(--bg-elev));
+  border-color: var(--mf-chip-color);
+  color: var(--mf-chip-color);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--mf-chip-color) 18%, transparent);
+}
+.chipDot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--mf-chip-color);
+  flex-shrink: 0;
+}
+.chipKbd {
+  font-family: var(--font-jetbrains-mono, monospace);
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg-elev-2);
+  color: var(--text-3);
+  font-weight: 600;
+  border: 1px solid var(--border-soft);
+}
+.chipActive .chipKbd { color: var(--mf-chip-color); border-color: currentColor; }
+
+.toolbarRight {
+  display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+}
+.segmented {
+  display: inline-flex;
+  background: var(--bg-elev-2);
+  border-radius: 6px;
+  padding: 2px;
+}
+.segmentedBtn {
+  padding: 4px 10px;
+  font-size: 11px; font-weight: 500;
+  background: transparent;
+  color: var(--text-2);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.segmentedBtn:hover:not(:disabled) { color: var(--text-1); }
+.segmentedBtn:disabled { opacity: 0.45; cursor: not-allowed; }
+.segmentedBtn.active {
+  background: var(--bg-elev);
+  color: var(--text-1);
+  box-shadow: 0 1px 2px rgba(15,10,30,0.06);
+  font-weight: 600;
+}
+.clearSelected {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 5px 9px;
+  font-size: 11px; font-weight: 500;
+  background: var(--brand-soft);
+  color: var(--brand);
+  border: 1px solid var(--border-brand);
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.resetBtn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 10px;
+  font-size: 11px; font-weight: 500;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  color: var(--text-2);
+  cursor: pointer;
+  font-family: inherit;
+}
+.resetBtn:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+.resetBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ─────── BODY: arches a ancho completo (sin sidebar) ─────── */
+.body {
+  display: block;
+  width: 100%;
+}
+
+.arches {
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 14px 8px;
+  /* Sin slider horizontal: si en algún viewport no caben los 16 dientes,
+     reducir gap o tamaño en lugar de overflow. */
+  overflow: hidden;
+}
+.archLabel {
+  font-size: 10px; font-weight: 600;
+  color: var(--text-3);
+  letter-spacing: 0.12em; text-transform: uppercase;
+  text-align: center;
+  margin: 6px 0;
+}
+/* 16 dientes en 1 fila por arcada. Gap pequeño para que entren en
+   contenedores estrechos sin necesidad de slider. */
+.arch {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 4px 0;
+}
+.archGap {
+  border: none;
+  border-top: 1px dashed var(--border-soft);
+  margin: 14px 0;
+  height: 0;
+}
+.loading {
+  text-align: center;
+  padding: 60px 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+/* ─────── TOOTH (replica mockup) ─────── */
+.tooth {
+  width: var(--mf-tooth-size);
+  display: flex; flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 2px;
+  border-radius: 8px;
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.12s;
+}
+.tooth:hover { background: rgba(124, 58, 237, 0.04); }
+.toothNum {
+  font-family: var(--font-jetbrains-mono, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: 0.02em;
+}
+.toothSvg {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  overflow: visible;
+}
+.toothBase {
+  fill: var(--bg-elev);
+  stroke: var(--text-3);
+  stroke-width: 1.2;
+}
+.surface {
+  fill: var(--bg-elev);
+  stroke: var(--text-3);
+  stroke-width: 0.8;
+  cursor: pointer;
+  transition: fill 0.12s, stroke 0.12s, stroke-width 0.12s;
+}
+.surface:hover {
+  stroke: var(--brand);
+  stroke-width: 1.4;
+}
+.surfaceActive {
+  stroke: rgba(15,10,30,0.4);
+}
+.letter {
+  font-family: var(--font-sora, "Sora", sans-serif);
+  font-size: 9px;
+  font-weight: 600;
+  fill: var(--text-3);
+}
+.letterOnActive { fill: #fff; }
+
+/* Selección multi */
+.tooth.selected {
+  background: var(--brand-soft);
+  box-shadow: inset 0 0 0 1px var(--border-brand);
+}
+.tooth.selected .toothNum {
+  color: var(--brand);
+}
+
+/* Highlight desde footer agrupado: pulso suave + glow ámbar para no chocar
+ *  con la selección multi. Sólo visual, no bloquea interacción. */
+.tooth.highlighted {
+  box-shadow:
+    0 0 0 2px rgba(245, 158, 11, 0.65),
+    0 0 14px rgba(245, 158, 11, 0.35);
+  animation: mfToothPulse 1.4s ease-in-out infinite;
+  z-index: 2;
+}
+.tooth.highlighted .toothNum {
+  color: #b45309;
+  font-weight: 800;
+}
+@keyframes mfToothPulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.55), 0 0 10px rgba(245, 158, 11, 0.25); }
+  50%      { box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.85), 0 0 18px rgba(245, 158, 11, 0.55); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tooth.highlighted { animation: none; }
+}
+
+/* Overlays full-tooth — paleta del mockup */
+.ovCrown {
+  fill: none;
+  stroke: #d97706; /* corona = orange */
+  stroke-width: 2.4;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 1.5px rgba(217,119,6,0.55));
+}
+.tooth.hasCorona .surface:not(.surfaceActive) {
+  fill: rgba(217,119,6,0.10);
+  stroke: #d97706;
+}
+.tooth.hasCorona .letter:not(.letterOnActive) { fill: #d97706; }
+.ovEndo {
+  stroke: #7c3aed; /* endo = brand purple */
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 3 1.5;
+}
+.ovAusenteX {
+  stroke: #94a3b8;
+  stroke-width: 2;
+  stroke-linecap: round;
+  opacity: 0.85;
+}
+.ovExtract {
+  stroke: #ef4444;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+.tooth.hasAusente .toothBase { fill: rgba(148, 163, 184, 0.18); }
+.tooth.hasAusente .surface { fill: rgba(148, 163, 184, 0.18) !important; stroke: #94a3b8; pointer-events: none; }
+.tooth.hasAusente .letter { fill: #94a3b8; opacity: 0.4; }
+.tooth.hasImplant .surface { fill: var(--bg-elev) !important; }
+.tooth.hasImplant .letter { fill: var(--text-3); }
+
+/* ─────── STATUS FOOTER (agrupado por estado) ─────── */
+.statusFooter {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.statusLabel {
+  font-size: 9px; font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.08em; text-transform: uppercase;
+  margin-right: 4px;
+}
+
+/* Cada chip es un grupo expansible. Hover destaca los dientes del grupo.
+ *  Click toggle expanded → muestra lista completa. */
+.stateGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  background: color-mix(in srgb, var(--mf-status-color) 8%, var(--bg-elev));
+  border: 1px solid color-mix(in srgb, var(--mf-status-color) 40%, var(--border-soft));
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text-1);
+  transition: background 0.12s, border-color 0.12s, transform 0.1s;
+  max-width: 100%;
+}
+.stateGroup:hover, .stateGroup:focus-visible {
+  background: color-mix(in srgb, var(--mf-status-color) 18%, var(--bg-elev));
+  border-color: var(--mf-status-color);
+  outline: none;
+}
+.stateGroupOpen {
+  background: color-mix(in srgb, var(--mf-status-color) 22%, var(--bg-elev));
+  border-color: var(--mf-status-color);
+}
+.stateGroupDot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--mf-status-color);
+  flex-shrink: 0;
+}
+.stateGroupName {
+  color: var(--mf-status-color);
+  font-weight: 700;
+}
+.stateGroupCount {
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 600;
+}
+.stateGroupList {
+  font-family: var(--font-jetbrains-mono, monospace);
+  font-size: 10.5px;
+  color: var(--text-2);
+  font-weight: 500;
+  /* Cuando está expandido permite que la lista crezca; cuando no, trunca con
+   *  preview de 5 dientes + "+N". */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+}
+.stateGroupOpen .stateGroupList {
+  white-space: normal;
+  max-width: 100%;
+}
+
+.statusPill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  font-size: 10.5px;
+  background: var(--bg-elev);
+  color: var(--mf-status-color);
+  border: 1px dashed color-mix(in srgb, var(--mf-status-color) 50%, var(--border-soft));
+  border-radius: 999px;
+  font-family: var(--font-jetbrains-mono, monospace);
+  font-weight: 500;
+  opacity: 0.8;
+}
+.statusPillIcon {
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.7;
+}
+.statusPill strong { font-weight: 700; }
+.statusEmpty {
+  font-size: 11px;
+  color: var(--text-3);
+  font-style: italic;
+}
+.kbdHint {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; color: var(--text-3);
+}
+
+/* ─────── SUMMARY HEADER (top) — stats pills + plan toggle + PDF ─────── */
+.summaryRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.statsPills {
+  list-style: none;
+  margin: 0; padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.statPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px 3px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--mf-stat-color) 10%, var(--bg-elev));
+  border: 1px solid color-mix(in srgb, var(--mf-stat-color) 30%, transparent);
+  color: var(--mf-stat-color);
+  border-radius: 999px;
+  letter-spacing: 0.01em;
+}
+.statPill[data-zero="true"] {
+  background: var(--bg-elev);
+  border-color: var(--border-soft);
+  color: var(--text-3);
+}
+.statPillDot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.statPillLabel {
+  font-weight: 600;
+}
+.statPillCount {
+  font-family: var(--font-jetbrains-mono, monospace);
+  font-weight: 700;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  padding: 0 4px;
+  border-left: 1px solid currentColor;
+  margin-left: 2px;
+  opacity: 0.85;
+}
+.statPill[data-zero="true"] .statPillCount {
+  border-left-color: var(--border-soft);
+  opacity: 1;
+}
+
+.summaryRight {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.planToggle {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 5px 10px;
+  font-size: 11px; font-weight: 500;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  color: var(--text-1);
+  cursor: pointer;
+  font-family: inherit;
+}
+.planToggle:hover { border-color: var(--border-brand); }
+.planToggle.open { background: var(--brand-softer); border-color: var(--border-brand); color: var(--brand); }
+.planToggle.open svg { transform: rotate(180deg); }
+.planToggle svg { transition: transform 0.15s; }
+.planToggleCount {
+  font-family: var(--font-jetbrains-mono, monospace);
+  color: var(--text-3);
+  font-size: 10px;
+}
+.planToggle.open .planToggleCount { color: var(--brand); }
+
+.pdfBtn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 6px 11px;
+  font-size: 11px; font-weight: 600;
+  background: var(--brand);
+  color: #fff;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.pdfBtn:hover { background: #8b5cf6; }
+
+.planPanel {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+}
+
+/* Historial popover */
+.historyPopover {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px -6px rgba(15,10,30,0.18);
+  padding: 4px;
+  z-index: 250;
+  min-width: 240px;
+  max-height: 320px;
+  overflow-y: auto;
+  font-family: var(--font-sora, "Sora", sans-serif);
+}
+.historyEmpty {
+  padding: 10px;
+  font-size: 11px; color: var(--text-3);
+  text-align: center;
+  font-style: italic;
+}
+.historyDivider {
+  height: 1px;
+  background: var(--border-soft);
+  margin: 4px 0;
+}
+.historyItem {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 11px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text-1);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  align-items: center;
+}
+.historyItem:hover { background: var(--bg-elev-2); }
+.historyItem.active {
+  background: var(--brand-soft);
+  color: var(--brand);
+  border-color: var(--border-brand);
+  font-weight: 600;
+}
+.historyItemLabel {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.historyItemDate {
+  font-family: var(--font-jetbrains-mono, monospace);
+  font-size: 10px;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.historyItem.active .historyItemDate { color: var(--brand); }
+
+/* Banner read-only cuando se ve snapshot histórico */
+.historyBanner {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 12px;
+  margin-bottom: 10px;
+  background: color-mix(in srgb, var(--info) 8%, var(--bg-elev));
+  border: 1px solid color-mix(in srgb, var(--info) 30%, transparent);
+  border-radius: 7px;
+  font-size: 11px;
+  color: var(--text-1);
+}
+.historyBanner svg { color: var(--info); flex-shrink: 0; }
+.historyBanner em {
+  font-style: normal;
+  color: var(--info);
+  font-weight: 700;
+  margin-left: 4px;
+}
+.historyBannerExit {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px;
+  font-size: 11px; font-weight: 500;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  color: var(--text-2);
+  cursor: pointer;
+  font-family: inherit;
+}
+.historyBannerExit:hover {
+  border-color: var(--border-brand);
+  color: var(--brand);
+}
+.planList {
+  list-style: none;
+  margin: 0; padding: 0;
+  display: flex; flex-direction: column;
+  gap: 5px;
+}
+.planItem {
+  font-size: 11px;
+  color: var(--text-2);
+  padding: 5px 8px;
+  background: var(--bg-elev);
+  border-left: 3px solid var(--border-soft);
+  border-radius: 4px;
+  line-height: 1.4;
+}
+.planItem.tone-warn {
+  border-left-color: var(--warning);
+  background: var(--warning-soft);
+  color: color-mix(in srgb, var(--warning) 80%, var(--text-1));
+}
+.planItem.tone-info {
+  border-left-color: var(--info);
+  background: var(--info-soft);
+  color: color-mix(in srgb, var(--info) 80%, var(--text-1));
+}
+
+/* ─────── PRINT ─────── */
+@media print {
+  .toolbar, .summaryRow, .planPanel, .statusFooter { display: none !important; }
+  .odontogram { border: none; padding: 0; }
+}

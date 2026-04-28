@@ -30,7 +30,7 @@ model Clinic {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  // WhatsApp
+  // WhatsApp (legacy Meta Cloud API)
   waPhoneNumberId  String?
   waAccessToken    String?
   waConnected      Boolean @default(false)
@@ -38,6 +38,12 @@ model Clinic {
   waReminder24h    Boolean @default(true)
   waReminder1h     Boolean @default(false)
   waReminderMsg    String?
+
+  // Inbox unificado — Twilio Conversations + Postmark Inbound
+  twilioAccountSid     String?  // SID de la cuenta Twilio (admin la conecta en /settings/integrations)
+  twilioAuthToken      String?  // token (encrypted-at-rest en producción)
+  twilioWhatsappNumber String?  // E.164: "+5215512345678"
+  postmarkInboundEmail String?  // ej: clinica-abc@inbox.mediflow.app — único por clínica
 
   // Google Calendar — clinic-level shared calendar
   googleCalendarToken     String?   // access token of the admin who connected
@@ -104,6 +110,22 @@ model Clinic {
   teleCommissionPct   Float    @default(15)
   dailyApiKey         String?
 
+  // Agenda config (Fase 4)
+  defaultSlotMinutes  Int             @default(15)
+  agendaDayStart      Int             @default(8)
+  agendaDayEnd        Int             @default(20)
+  timezone            String          @default("America/Mexico_City")
+
+  // ── Mi Clínica Visual — vista pública en vivo ──
+  // Cada clínica puede compartir su modo "En Vivo" para mostrar en TV de
+  // sala de espera. URL pública: /live/<liveModeSlug>. Si liveModePassword
+  // está set, los visitantes deben ingresar el password una vez (cookie
+  // unlock 12h). showPatientNames=false → solo iniciales en halos (HIPAA).
+  liveModeSlug             String?  @unique
+  liveModePassword         String?  // bcrypt hash; null = sin protección
+  liveModeEnabled          Boolean  @default(false)
+  liveModeShowPatientNames Boolean  @default(false)
+
   users        User[]
   patients     Patient[]
   appointments Appointment[]
@@ -130,6 +152,11 @@ model Clinic {
   xrayAnalyses         XrayAnalysis[]
   adminNotes           AdminClinicNote[]
   prescriptions        Prescription[]
+  resources            Resource[]
+  waitlistEntries      WaitlistEntry[]
+  inboxThreads         InboxThread[]
+  remindersList        Reminder[]
+  clinicLayout         ClinicLayout?
 
   @@map("clinics")
 }
@@ -174,6 +201,7 @@ model User {
   phone      String?
   isActive   Boolean  @default(true)
   color      String   @default("#3b82f6")
+  agendaActive Boolean @default(true)
   lastLogin  DateTime?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -199,6 +227,13 @@ model User {
   auditLogs           AuditLog[]
   adminNotesAuthored  AdminClinicNote[]
   prescriptions       Prescription[]
+  apptsOverriddenBy   Appointment[]   @relation("ApptOverriddenBy")
+  waitlistCreated     WaitlistEntry[] @relation("WaitlistCreatedBy")
+  waitlistPreferred   WaitlistEntry[] @relation("WaitlistPreferredDoctor")
+  inboxAssigned       InboxThread[]   @relation("InboxAssignee")
+  inboxSent           InboxMessage[]
+  remindersCreated    Reminder[]      @relation("ReminderCreator")
+  remindersAssigned   Reminder[]      @relation("ReminderAssignee")
 
   @@unique([supabaseId, clinicId])
   @@index([supabaseId])
@@ -275,9 +310,52 @@ model Patient {
   packageRedemptions  PackageRedemption[]
   xrayAnalyses        XrayAnalysis[]
   prescriptions       Prescription[]
+  waitlistEntries     WaitlistEntry[]
+  odontogramEntries   OdontogramEntry[]
+  odontogramSnapshots OdontogramSnapshot[]
+  inboxThreads        InboxThread[]
+  patientReminders    Reminder[]
 
   @@unique([clinicId, patientNumber])
   @@map("patients")
+}
+
+/// Estado por superficie del odontograma (32 dientes adultos / 5 superficies).
+/// `surface` null = estado aplicado al diente completo (corona, ausente, etc).
+model OdontogramEntry {
+  id          String   @id @default(cuid())
+  patientId   String
+  toothNumber Int       // FDI numbering (11-18, 21-28, 31-38, 41-48, etc.)
+  surface     String?   // M | D | V | L | O | null (full tooth)
+  state       String    // SANO | CARIES | RESINA | CORONA | ENDODONCIA | IMPLANTE | AUSENTE | EXTRACCION
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  patient     Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, toothNumber, surface])
+  @@index([patientId])
+  @@map("odontogram_entries")
+}
+
+/// Snapshot inmutable del odontograma al cerrar una consulta. Permite
+/// reconstruir el estado dental en cualquier punto en el tiempo y diff'ear
+/// contra el snapshot anterior para detectar tratamientos hechos.
+/// `entries` es JSON: [{ toothNumber, surface, state, notes }, ...].
+model OdontogramSnapshot {
+  id            String      @id @default(cuid())
+  patientId     String
+  appointmentId String      @unique
+  snapshotAt    DateTime    @default(now())
+  entries       Json
+
+  patient       Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@index([patientId, snapshotAt])
+  @@map("odontogram_snapshots")
 }
 
 enum Gender {
@@ -298,10 +376,22 @@ model Appointment {
   patientId             String
   doctorId              String
   type                  String
-  date                  DateTime
-  startTime             String
-  endTime               String
-  durationMins          Int               @default(30)
+  startsAt              DateTime          @db.Timestamptz(6)
+  endsAt                DateTime          @db.Timestamptz(6)
+
+  resourceId            String?
+
+  source                AppointmentSource @default(STAFF)
+  requiresValidation    Boolean           @default(false)
+
+  overrideReason        String?           @db.VarChar(500)
+  overriddenBy          String?
+  overriddenAt          DateTime?         @db.Timestamptz(6)
+
+  checkedInAt           DateTime?         @db.Timestamptz(6)
+  startedAt             DateTime?         @db.Timestamptz(6)
+  completedAt           DateTime?         @db.Timestamptz(6)
+
   room                  String?
   status                AppointmentStatus @default(PENDING)
   notes                 String?
@@ -332,9 +422,16 @@ model Appointment {
   clinic    Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   patient   Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
   doctor    User               @relation(fields: [doctorId], references: [id])
-  invoice   Invoice?
-  reminders WhatsAppReminder[]
+  resource         Resource?   @relation(fields: [resourceId],   references: [id], onDelete: SetNull)
+  overriddenByUser User?       @relation("ApptOverriddenBy", fields: [overriddenBy], references: [id], onDelete: SetNull)
+  invoice            Invoice?
+  odontogramSnapshot OdontogramSnapshot?
+  reminders          WhatsAppReminder[]
 
+  @@index([clinicId, startsAt, endsAt, status])
+  @@index([doctorId, startsAt])
+  @@index([resourceId, startsAt])
+  @@index([clinicId, requiresValidation])
   @@map("appointments")
 }
 
@@ -344,8 +441,11 @@ enum AppointmentMode {
 }
 
 enum AppointmentStatus {
+  /// @deprecated Use SCHEDULED. PENDING se mantiene por compat de datos legacy.
   PENDING
+  SCHEDULED
   CONFIRMED
+  CHECKED_IN
   IN_PROGRESS
   COMPLETED
   CANCELLED
@@ -532,6 +632,12 @@ model PatientFile {
   // Notas clínicas del doctor sobre este archivo (independientes de las notas de upload y del análisis IA)
   doctorNotes          String?   @db.Text
   doctorNotesUpdatedAt DateTime?
+
+  // Anotaciones del visor (regla, ángulo, lápiz). Array de
+  // { id, type: "ruler"|"angle"|"freehand", points: [{x,y}], label?, color? }
+  // Las coordenadas son relativas (0..1) al rect natural de la imagen para
+  // que el dibujo sea estable a cualquier zoom/tamaño de visor.
+  annotations          Json?
 
   patient      Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
   clinic       Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
@@ -982,4 +1088,204 @@ model Prescription {
   @@index([clinicId])
   @@index([patientId])
   @@map("prescriptions")
+}
+
+// ═══════════════════════════════════════════════════════════
+// Fase 4 — Agenda pro
+// ═══════════════════════════════════════════════════════════
+
+enum AppointmentSource {
+  STAFF
+  PATIENT_PORTAL
+  WEBSITE
+  WHATSAPP
+}
+
+/// Sillón / sala / equipo reservable.
+model Resource {
+  id              String        @id @default(cuid())
+  clinicId        String
+  name            String        @db.VarChar(120)
+  kind            ResourceKind  @default(CHAIR)
+  color           String?       @db.VarChar(9)
+  isActive        Boolean       @default(true)
+  orderIndex      Int           @default(0)
+
+  createdAt       DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime      @updatedAt      @db.Timestamptz(6)
+
+  clinic          Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  appointments    Appointment[]
+
+  @@index([clinicId, isActive, orderIndex])
+}
+
+enum ResourceKind {
+  CHAIR
+  ROOM
+  EQUIPMENT
+}
+
+// ═══════════════════════════════════════════════════════════
+// Mi Clínica Visual — layout isométrico 2.5D de la clínica
+// ═══════════════════════════════════════════════════════════
+//
+// 1 layout por clínica. `elements` es un array JSON con:
+//   { id: number, type: string, col: number, row: number, rotation: 0|90|180|270, resourceId?: string }
+// Para tipos "chair" → resourceId apunta al Resource(kind=CHAIR) real;
+// el editor solo coloca/posiciona el sillón existente, no crea uno nuevo.
+// Para tipos non-chair (paredes, puertas, lavabos…) resourceId es null y el
+// id es local al layout.
+model ClinicLayout {
+  id        String   @id @default(cuid())
+  clinicId  String   @unique
+  name      String   @default("Layout principal") @db.VarChar(120)
+  elements  Json     @default("[]")
+  metadata  Json?    // { zoom, panOffset, lastEditAt, gridSize }
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clinic    Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@map("clinic_layouts")
+}
+
+/// Lista de espera de pacientes que quieren adelantar su cita
+/// si surge un hueco.
+model WaitlistEntry {
+  id                      String            @id @default(cuid())
+  clinicId                String
+  patientId               String
+  createdByUserId         String
+  reason                  String?           @db.VarChar(200)
+  priority                WaitlistPriority  @default(NORMAL)
+  preferredDoctorId       String?
+  preferredWindow         String?           @db.VarChar(80)
+  notes                   String?           @db.VarChar(500)
+
+  resolvedAt              DateTime?         @db.Timestamptz(6)
+  resolvedAppointmentId   String?
+
+  createdAt               DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime          @updatedAt      @db.Timestamptz(6)
+
+  clinic                  Clinic            @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient                 Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  createdBy               User              @relation("WaitlistCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  preferredDoctor         User?             @relation("WaitlistPreferredDoctor", fields: [preferredDoctorId], references: [id], onDelete: SetNull)
+
+  @@index([clinicId, resolvedAt])
+  @@index([patientId])
+}
+
+enum WaitlistPriority {
+  LOW
+  NORMAL
+  HIGH
+}
+
+// ═══════════════════════════════════════════════════════════
+// Fase 6 — Inbox unificado (WhatsApp + Email + Form + Validation + Reminder)
+// ═══════════════════════════════════════════════════════════
+
+enum InboxChannel {
+  WHATSAPP
+  EMAIL
+  PORTAL_FORM
+  VALIDATION
+  REMINDER
+}
+
+enum InboxStatus {
+  UNREAD
+  READ
+  ARCHIVED
+  SNOOZED
+}
+
+enum MessageDirection {
+  IN
+  OUT
+}
+
+model InboxThread {
+  id            String        @id @default(cuid())
+  clinicId      String
+  channel       InboxChannel
+  /// ID en el sistema externo: Twilio Conversation SID, Postmark Message-ID, etc.
+  externalId    String?
+  patientId     String?
+  subject       String
+  status        InboxStatus   @default(UNREAD)
+  assignedToId  String?
+  snoozedUntil  DateTime?
+  lastMessageAt DateTime
+  tags          String[]      @default([])
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  clinic        Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient       Patient?      @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  assignedTo    User?         @relation("InboxAssignee", fields: [assignedToId], references: [id])
+  messages      InboxMessage[]
+  reminders     Reminder[]
+
+  @@index([clinicId, status, lastMessageAt(sort: Desc)])
+  @@index([clinicId, channel, lastMessageAt(sort: Desc)])
+  @@index([assignedToId, status])
+  @@index([snoozedUntil])
+  @@map("inbox_threads")
+}
+
+model InboxMessage {
+  id          String           @id @default(cuid())
+  threadId    String
+  direction   MessageDirection
+  body        String           @db.Text
+  attachments Json?            // [{ name, url, mime, size }]
+  sentAt      DateTime         @default(now())
+  sentById    String?
+  externalId  String?
+  /// true = nota interna del staff (no se envía al canal externo).
+  isInternal  Boolean          @default(false)
+
+  thread      InboxThread      @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sentBy      User?            @relation(fields: [sentById], references: [id])
+
+  @@index([threadId, sentAt])
+  @@map("inbox_messages")
+}
+
+enum ReminderStatus {
+  PENDING
+  DONE
+  DISMISSED
+}
+
+model Reminder {
+  id            String         @id @default(cuid())
+  clinicId      String
+  createdById   String
+  assignedToId  String
+  patientId     String?
+  threadId      String?
+  title         String
+  body          String?        @db.Text
+  dueAt         DateTime
+  status        ReminderStatus @default(PENDING)
+  completedAt   DateTime?
+  completedById String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  clinic        Clinic       @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  createdBy     User         @relation("ReminderCreator", fields: [createdById], references: [id])
+  assignedTo    User         @relation("ReminderAssignee", fields: [assignedToId], references: [id])
+  patient       Patient?     @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  thread        InboxThread? @relation(fields: [threadId], references: [id], onDelete: SetNull)
+
+  @@index([clinicId, status, dueAt])
+  @@index([assignedToId, status, dueAt])
+  @@index([dueAt])
+  @@map("reminders")
 }

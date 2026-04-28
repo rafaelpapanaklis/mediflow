@@ -11,6 +11,7 @@ import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { fmtMXN, fmtMXNdec, formatRelativeDate } from "@/lib/format";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 type Tone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
 const STATUS_BADGE: Record<string, { tone: Tone; label: string }> = {
@@ -41,6 +42,7 @@ interface Props {
 }
 
 export function BillingClient({ invoices: initial, patients, totalPaid, totalPending, totalOverdue, monthInvoices, clinic }: Props) {
+  const askConfirm = useConfirm();
   const router = useRouter();
   const [invoices, setInvoices] = useState(initial);
   const [search, setSearch]     = useState("");
@@ -152,7 +154,12 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
   }
 
   async function deleteDraft(invoiceId: string) {
-    if (!confirm("¿Eliminar esta factura borrador?")) return;
+    if (!(await askConfirm({
+      title: "¿Eliminar factura borrador?",
+      description: "El borrador se quitará permanentemente. No afecta facturas timbradas.",
+      variant: "danger",
+      confirmText: "Eliminar",
+    }))) return;
     try {
       const res = await fetch(`/api/invoices/${invoiceId}`, { method: "DELETE" });
       if (!res.ok) throw new Error((await res.json()).error);

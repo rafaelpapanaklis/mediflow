@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PatientPortalClient } from "./portal-client";
+import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-helpers";
 import type { Metadata } from "next";
 
 interface Props { params: { token: string } }
@@ -14,11 +15,11 @@ export default async function PatientPortalPage({ params }: Props) {
       clinic: {
         select: {
           id: true, name: true, logoUrl: true, phone: true,
-          specialty: true, address: true, city: true,
+          specialty: true, address: true, city: true, timezone: true,
         },
       },
       appointments: {
-        orderBy: { date: "desc" },
+        orderBy: { startsAt: "desc" },
         take: 20,
         include: {
           doctor: { select: { firstName: true, lastName: true, color: true } },
@@ -76,11 +77,16 @@ export default async function PatientPortalPage({ params }: Props) {
     updatedAt: patient.updatedAt.toISOString(),
     appointments: patient.appointments.map(a => ({
       ...a,
-      date: a.date instanceof Date ? a.date.toISOString() : String(a.date),
-      createdAt: a.createdAt.toISOString(),
-      updatedAt: a.updatedAt.toISOString(),
-      confirmedAt: a.confirmedAt?.toISOString() ?? null,
-      cancelledAt: a.cancelledAt?.toISOString() ?? null,
+      date:         dateISOInTz(a.startsAt, patient.clinic.timezone),
+      startTime:    timeHHMMInTz(a.startsAt, patient.clinic.timezone),
+      endTime:      timeHHMMInTz(a.endsAt,   patient.clinic.timezone),
+      durationMins: durationMinutes(a.startsAt, a.endsAt),
+      startsAt:     a.startsAt.toISOString(),
+      endsAt:       a.endsAt.toISOString(),
+      createdAt:    a.createdAt.toISOString(),
+      updatedAt:    a.updatedAt.toISOString(),
+      confirmedAt:  a.confirmedAt?.toISOString() ?? null,
+      cancelledAt:  a.cancelledAt?.toISOString() ?? null,
     })),
     records: patient.records.map(r => ({
       ...r,
