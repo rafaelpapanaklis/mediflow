@@ -105,8 +105,8 @@ export async function GET(req: NextRequest) {
     const sorted = [...totalByResource].sort((a, b) => a._count.id - b._count.id);
     const least = sorted[0];
     if (least && least.resourceId && totalAppts > 0) {
-      const r = await prisma.resource.findUnique({
-        where: { id: least.resourceId },
+      const r = await prisma.resource.findFirst({
+        where: { id: least.resourceId, clinicId },
         select: { id: true, name: true },
       });
       if (r) {
