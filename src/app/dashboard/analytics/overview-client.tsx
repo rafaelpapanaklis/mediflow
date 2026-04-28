@@ -136,32 +136,6 @@ export function OverviewClient({ data }: Props) {
           tone="brand"
         />
       </div>
-
-      <div
-        style={{
-          background: "var(--bg-elev)",
-          border: "1px solid var(--border-soft)",
-          borderRadius: 14,
-          padding: 20,
-          color: "var(--text-3)",
-          fontSize: 13,
-          lineHeight: 1.6,
-        }}
-      >
-        <strong style={{ color: "var(--text-2)", display: "block", marginBottom: 8 }}>
-          Próximamente en Analytics
-        </strong>
-        <ul style={{ margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 4 }}>
-          <li>Heatmap de ocupación por hora y día (tab Ocupación)</li>
-          <li>Tiempos promedio por procedimiento + benchmark IA (tab Procedimientos)</li>
-          <li>Ranking de doctores con cálculo de comisiones (tab Doctores)</li>
-          <li>Predicción de no-shows con IA (tab No-shows)</li>
-          <li>Tiempos de espera por hora del día (tab Sala de espera)</li>
-          <li>Margen real por sillón (tab Costos & Margen)</li>
-          <li>Patient journey con fricción por etapa (tab Patient Journey)</li>
-          <li>Insights semanales generados con IA cada domingo (notificaciones in-app)</li>
-        </ul>
-      </div>
     </AnalyticsLayout>
   );
 }
