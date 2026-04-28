@@ -13,26 +13,30 @@ export const STATUS_PIPELINE: AppointmentStatus[] = [
 ];
 
 export const STATUS_LABELS: Record<AppointmentStatus, string> = {
-  SCHEDULED:   "Programada",
-  CONFIRMED:   "Confirmada",
-  CHECKED_IN:  "Check-in",
-  IN_PROGRESS: "En consulta",
-  COMPLETED:   "Completada",
-  CANCELLED:   "Cancelada",
-  NO_SHOW:     "No vino",
+  SCHEDULED:    "Programada",
+  CONFIRMED:    "Confirmada",
+  CHECKED_IN:   "Check-in",
+  IN_CHAIR:     "En sillón",
+  IN_PROGRESS:  "En consulta",
+  COMPLETED:    "Completada",
+  CHECKED_OUT:  "Check-out",
+  CANCELLED:    "Cancelada",
+  NO_SHOW:      "No vino",
 };
 
 /**
  * Etiqueta para el botón de "siguiente estado" (acción, no estado).
  */
 export const NEXT_STATUS_ACTION_LABEL: Record<AppointmentStatus, string> = {
-  SCHEDULED:   "Programar",
-  CONFIRMED:   "Confirmar",
-  CHECKED_IN:  "Check-in",
-  IN_PROGRESS: "Iniciar consulta",
-  COMPLETED:   "Completar",
-  CANCELLED:   "",
-  NO_SHOW:     "",
+  SCHEDULED:    "Programar",
+  CONFIRMED:    "Confirmar",
+  CHECKED_IN:   "Check-in",
+  IN_CHAIR:     "Sentar en sillón",
+  IN_PROGRESS:  "Iniciar consulta",
+  COMPLETED:    "Completar",
+  CHECKED_OUT:  "Check-out",
+  CANCELLED:    "",
+  NO_SHOW:      "",
 };
 
 export interface NextStep {

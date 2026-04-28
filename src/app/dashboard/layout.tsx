@@ -88,6 +88,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           clinicName={clinic.name}
           trialEndsAt={isInTrial ? trialEndsAt : null}
           plan={clinic.plan as any}
+          userRole={user.role}
         />
         <PatientContextBar />
         <main

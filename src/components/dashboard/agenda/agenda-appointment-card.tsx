@@ -26,13 +26,15 @@ interface Props {
 }
 
 const STATUS_COLOR: Record<AppointmentStatus, string> = {
-  SCHEDULED:   "var(--warning)",
-  CONFIRMED:   "var(--info)",
-  CHECKED_IN:  "var(--brand)",
-  IN_PROGRESS: "var(--success)",
-  COMPLETED:   "var(--text-3)",
-  CANCELLED:   "var(--text-4)",
-  NO_SHOW:     "var(--danger)",
+  SCHEDULED:    "var(--warning)",
+  CONFIRMED:    "var(--info)",
+  CHECKED_IN:   "var(--brand)",
+  IN_CHAIR:     "var(--brand)",
+  IN_PROGRESS:  "var(--success)",
+  COMPLETED:    "var(--text-3)",
+  CHECKED_OUT:  "var(--text-3)",
+  CANCELLED:    "var(--text-4)",
+  NO_SHOW:      "var(--danger)",
 };
 
 export function AgendaAppointmentCard({

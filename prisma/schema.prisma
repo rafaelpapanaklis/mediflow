@@ -157,6 +157,9 @@ model Clinic {
   inboxThreads         InboxThread[]
   remindersList        Reminder[]
   clinicLayout         ClinicLayout?
+  // Analytics (Push 1)
+  weeklyInsights       WeeklyInsight[]
+  tvDisplays           TVDisplay[]
 
   @@map("clinics")
 }
@@ -427,6 +430,10 @@ model Appointment {
   invoice            Invoice?
   odontogramSnapshot OdontogramSnapshot?
   reminders          WhatsAppReminder[]
+  // Analytics relations (Push 1)
+  timeline           AppointmentTimeline?
+  noShowPrediction   NoShowPrediction?
+  satisfaction       PatientSatisfaction?
 
   @@index([clinicId, startsAt, endsAt, status])
   @@index([doctorId, startsAt])
@@ -446,8 +453,14 @@ enum AppointmentStatus {
   SCHEDULED
   CONFIRMED
   CHECKED_IN
+  // IN_CHAIR: paciente sentado en sillón listo para iniciar consulta. Usado
+  // para medir tiempos en AppointmentTimeline.inChairAt (Push 1 analytics).
+  IN_CHAIR
   IN_PROGRESS
   COMPLETED
+  // CHECKED_OUT: paciente salió. Cierra el ciclo de tiempos. Si no se marca,
+  // checkoutAt queda null y los reportes lo asumen igual a consultEndAt.
+  CHECKED_OUT
   CANCELLED
   NO_SHOW
 }
@@ -1116,6 +1129,7 @@ model Resource {
 
   clinic          Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointments    Appointment[]
+  cost            ResourceCost?
 
   @@index([clinicId, isActive, orderIndex])
 }
@@ -1288,4 +1302,120 @@ model Reminder {
   @@index([assignedToId, status, dueAt])
   @@index([dueAt])
   @@map("reminders")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Analytics & Insights — Push 1
+// ═══════════════════════════════════════════════════════════════════
+
+/// Línea de tiempo operativa de una cita. Capturamos timestamps en cada
+/// transición de status (CHECKED_IN → IN_CHAIR → IN_PROGRESS → COMPLETED →
+/// CHECKED_OUT) para alimentar reportes de ocupación, espera y journey.
+/// totalWaitMin = inChairAt - arrivedAt; totalConsultMin = consultEndAt -
+/// consultStartAt. Calculados en el endpoint que upserts el timeline.
+model AppointmentTimeline {
+  id              String      @id @default(cuid())
+  appointmentId   String      @unique
+  arrivedAt       DateTime?   @db.Timestamptz(6)
+  inChairAt       DateTime?   @db.Timestamptz(6)
+  consultStartAt  DateTime?   @db.Timestamptz(6)
+  consultEndAt    DateTime?   @db.Timestamptz(6)
+  checkoutAt      DateTime?   @db.Timestamptz(6)
+  totalWaitMin    Int?
+  totalConsultMin Int?
+  createdAt       DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime    @updatedAt      @db.Timestamptz(6)
+
+  appointment     Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([appointmentId])
+  @@map("appointment_timelines")
+}
+
+/// Costos mensuales por sillón/recurso para calcular margen real
+/// (renta + operativos vs ingresos generados por citas en ese sillón).
+/// Editado por admin desde el form en /dashboard/analytics → Costos.
+model ResourceCost {
+  id          String   @id @default(cuid())
+  resourceId  String   @unique
+  monthlyRent Decimal  @db.Decimal(10,2) @default(0)
+  monthlyOps  Decimal  @db.Decimal(10,2) @default(0)
+  notes       String?  @db.VarChar(500)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt      @db.Timestamptz(6)
+
+  resource    Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@map("resource_costs")
+}
+
+/// Predicción de no-show generada por IA (Claude) basada en factores:
+/// historial del paciente, día/hora, tipo procedimiento, tiempo desde
+/// última cita. Persistimos para que el badge de la agenda no recalcule
+/// cada render. Refresh manual o vía cron al crear cita.
+model NoShowPrediction {
+  id            String      @id @default(cuid())
+  appointmentId String      @unique
+  probability   Float       /// 0.0 a 1.0
+  factors       Json        /// Array de { label: string, weight: number, reason: string }
+  predictedAt   DateTime    @default(now()) @db.Timestamptz(6)
+
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([predictedAt])
+  @@map("no_show_predictions")
+}
+
+/// Resumen semanal generado por IA cada domingo 22:00 (cron). Bullets
+/// accionables comparando esta semana vs anterior. Notificación in-app
+/// (NO email). El usuario marca read=true al abrir el insight.
+model WeeklyInsight {
+  id        String   @id @default(cuid())
+  clinicId  String
+  weekStart DateTime @db.Timestamptz(6)
+  weekEnd   DateTime @db.Timestamptz(6)
+  summary   String   @db.VarChar(500)  /// 1-2 oraciones top-line
+  insights  Json                       /// Array de { tone, title, detail }
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  clinic    Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId, weekStart])
+  @@map("weekly_insights")
+}
+
+/// NPS post-cita 1-5. Capturado vía portal del paciente o link en
+/// recordatorio WA. Alimenta el promedio de satisfacción del doctor.
+model PatientSatisfaction {
+  id            String      @id @default(cuid())
+  appointmentId String      @unique
+  score         Int         /// 1-5
+  comment       String?     @db.VarChar(1000)
+  submittedAt   DateTime    @default(now()) @db.Timestamptz(6)
+
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([submittedAt])
+  @@map("patient_satisfactions")
+}
+
+/// Pantalla TV configurable. Cada clínica puede tener N pantallas
+/// con modos OPERATIONAL (halos), MARKETING (carousel + testimonios)
+/// o HYBRID (split). publicSlug es la URL pública que se carga en la TV.
+model TVDisplay {
+  id          String   @id @default(cuid())
+  clinicId    String
+  name        String   @db.VarChar(120)
+  mode        String   @db.VarChar(20)  /// OPERATIONAL | MARKETING | HYBRID
+  config      Json     /// promociones, testimonios, branding, etc.
+  publicSlug  String   @unique @db.VarChar(80)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt      @db.Timestamptz(6)
+
+  clinic      Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId, active])
+  @@map("tv_displays")
 }

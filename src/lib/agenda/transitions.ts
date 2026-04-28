@@ -30,10 +30,18 @@ const TRANSITIONS: Transition[] = [
   { from: "CONFIRMED",   to: "CHECKED_IN",  allowedRoles: FRONT_DESK },
   { from: "CONFIRMED",   to: "CANCELLED",   allowedRoles: FRONT_DESK },
   { from: "CONFIRMED",   to: "NO_SHOW",     allowedRoles: FRONT_DESK, predicate: noShowOk },
+  // Nuevas transiciones para analytics — capturan tiempos intermedios
+  // (sentar al paciente en sillón antes de iniciar consulta) y cierre
+  // explícito del ciclo (checkout). Optional pasos: si no se usa
+  // IN_CHAIR, CHECKED_IN puede ir directo a IN_PROGRESS.
+  { from: "CHECKED_IN",  to: "IN_CHAIR",    allowedRoles: FRONT_DESK },
   { from: "CHECKED_IN",  to: "IN_PROGRESS", allowedRoles: CLINICAL },
   { from: "CHECKED_IN",  to: "CANCELLED",   allowedRoles: FRONT_DESK },
+  { from: "IN_CHAIR",    to: "IN_PROGRESS", allowedRoles: CLINICAL },
+  { from: "IN_CHAIR",    to: "CANCELLED",   allowedRoles: FRONT_DESK },
   { from: "IN_PROGRESS", to: "COMPLETED",   allowedRoles: CLINICAL },
   { from: "IN_PROGRESS", to: "CANCELLED",   allowedRoles: ADMINS },
+  { from: "COMPLETED",   to: "CHECKED_OUT", allowedRoles: FRONT_DESK },
   { from: "CANCELLED",   to: "SCHEDULED",   allowedRoles: ADMINS },
   { from: "NO_SHOW",     to: "SCHEDULED",   allowedRoles: ADMINS },
 ];
@@ -89,8 +97,38 @@ export function sideEffectsOf(
     case "CHECKED_IN":  return { checkedInAt: now };
     case "IN_PROGRESS": return { startedAt: now };
     case "COMPLETED":   return { completedAt: now };
+    // IN_CHAIR / CHECKED_OUT no tienen columna directa en Appointment;
+    // sus timestamps viven en AppointmentTimeline (instrumentación
+    // separada en el endpoint PATCH para upsert del timeline).
     default:            return {};
   }
+}
+
+/**
+ * Mapping de status → campo del AppointmentTimeline. El endpoint PATCH
+ * status route llama upsertTimelineForStatus(appointmentId, status, now)
+ * para registrar el timestamp correspondiente, además del side effect
+ * en la columna de Appointment cuando aplica.
+ */
+export function timelineFieldFor(
+  status: AppointmentStatus,
+): keyof TimelineUpdate | null {
+  switch (status) {
+    case "CHECKED_IN":  return "arrivedAt";
+    case "IN_CHAIR":    return "inChairAt";
+    case "IN_PROGRESS": return "consultStartAt";
+    case "COMPLETED":   return "consultEndAt";
+    case "CHECKED_OUT": return "checkoutAt";
+    default:            return null;
+  }
+}
+
+interface TimelineUpdate {
+  arrivedAt: Date;
+  inChairAt: Date;
+  consultStartAt: Date;
+  consultEndAt: Date;
+  checkoutAt: Date;
 }
 
 export function canOverrideOverlap(role: UserRole): boolean {

@@ -8,7 +8,9 @@ import { CommandPalette } from "./command-palette";
 import { CommandPaletteHint } from "./command-palette-hint";
 import { KeyboardShortcutsPanel } from "./keyboard-shortcuts-panel";
 import { NotificationsPopover } from "./notifications-popover";
+import { InsightsPopover } from "./insights-popover";
 import { TrialPill } from "./trial-pill";
+import { WaitingRoomAlert } from "./waiting-room-alert";
 import { useCommandPalette } from "@/hooks/use-command-palette";
 import { useActiveConsult } from "@/hooks/use-active-consult";
 import { useGoToShortcuts, useCreateShortcuts } from "@/lib/command-palette/shortcuts";
@@ -49,11 +51,14 @@ function resolveCurrentLabel(pathname: string | null): string {
   return "Hoy";
 }
 
+type UserRole = "SUPER_ADMIN" | "ADMIN" | "DOCTOR" | "RECEPTIONIST" | "READONLY" | "ACCOUNTANT";
+
 type TopbarProps = {
   clinicName: string;
   right?: ReactNode;
   trialEndsAt?: Date | string | null;
   plan?: ClinicPlan;
+  userRole?: UserRole;
 };
 
 export function Topbar({
@@ -61,6 +66,7 @@ export function Topbar({
   right,
   trialEndsAt,
   plan,
+  userRole,
 }: TopbarProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -138,8 +144,20 @@ export function Topbar({
         )}
 
         <div className="hidden lg:flex" style={{ marginLeft: "auto", alignItems: "center", gap: 8 }}>
+          {/* Alert de tiempos de espera — solo recepcionista/admin que
+              monitorean la sala. El componente self-renders condicional
+              (null si no hay alertas activas), polea /api/analytics/waiting-room
+              cada 60s con visibility pause. Multi-tenant: el endpoint usa
+              clinicId desde getCurrentUser, no hay leak. */}
+          {(userRole === "RECEPTIONIST" || userRole === "ADMIN" || userRole === "SUPER_ADMIN") && (
+            <WaitingRoomAlert />
+          )}
           {right}
           <CommandPaletteHint onClick={() => setPaletteOpen(true)} />
+          {/* Insights semanales — solo admin/owner ven analytics → solo
+              ellos reciben WeeklyInsight. El popover self-hides badge si
+              no hay unread. */}
+          {(userRole === "ADMIN" || userRole === "SUPER_ADMIN") && <InsightsPopover />}
           <NotificationsPopover />
         </div>
       </div>

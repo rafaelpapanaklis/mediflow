@@ -8,23 +8,27 @@ import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types
 import styles from "./agenda.module.css";
 
 const STATUS_COLOR: Record<AppointmentStatus, string> = {
-  SCHEDULED:   "var(--warning)",
-  CONFIRMED:   "var(--info)",
-  CHECKED_IN:  "var(--brand)",
-  IN_PROGRESS: "var(--success)",
-  COMPLETED:   "var(--text-3)",
-  CANCELLED:   "var(--text-4)",
-  NO_SHOW:     "var(--danger)",
+  SCHEDULED:    "var(--warning)",
+  CONFIRMED:    "var(--info)",
+  CHECKED_IN:   "var(--brand)",
+  IN_CHAIR:     "var(--brand)",
+  IN_PROGRESS:  "var(--success)",
+  COMPLETED:    "var(--text-3)",
+  CHECKED_OUT:  "var(--text-3)",
+  CANCELLED:    "var(--text-4)",
+  NO_SHOW:      "var(--danger)",
 };
 
 const STATUS_LABEL: Record<AppointmentStatus, string> = {
-  SCHEDULED:   "Programada",
-  CONFIRMED:   "Confirmada",
-  CHECKED_IN:  "Llegó",
-  IN_PROGRESS: "En curso",
-  COMPLETED:   "Completada",
-  CANCELLED:   "Cancelada",
-  NO_SHOW:     "No asistió",
+  SCHEDULED:    "Programada",
+  CONFIRMED:    "Confirmada",
+  CHECKED_IN:   "Llegó",
+  IN_CHAIR:     "En sillón",
+  IN_PROGRESS:  "En curso",
+  COMPLETED:    "Completada",
+  CHECKED_OUT:  "Salió",
+  CANCELLED:    "Cancelada",
+  NO_SHOW:      "No asistió",
 };
 
 function formatDayHeading(dayISO: string, timezone: string): string {

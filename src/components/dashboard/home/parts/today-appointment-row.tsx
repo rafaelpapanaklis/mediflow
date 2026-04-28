@@ -10,23 +10,27 @@ import type { AppointmentDTO, AppointmentStatus } from "@/lib/home/types";
 import { formatShortTime } from "@/lib/home/greet";
 
 const STATUS_DOT: Record<AppointmentStatus, string> = {
-  SCHEDULED:   "var(--warning)",
-  CONFIRMED:   "var(--info)",
-  CHECKED_IN:  "var(--brand)",
-  IN_PROGRESS: "var(--success)",
-  COMPLETED:   "var(--text-3)",
-  NO_SHOW:     "var(--danger)",
-  CANCELLED:   "var(--text-4)",
+  SCHEDULED:    "var(--warning)",
+  CONFIRMED:    "var(--info)",
+  CHECKED_IN:   "var(--brand)",
+  IN_CHAIR:     "var(--brand)",
+  IN_PROGRESS:  "var(--success)",
+  COMPLETED:    "var(--text-3)",
+  CHECKED_OUT:  "var(--text-3)",
+  NO_SHOW:      "var(--danger)",
+  CANCELLED:    "var(--text-4)",
 };
 
 const STATUS_LABEL: Record<AppointmentStatus, string> = {
-  SCHEDULED:   "Programada",
-  CONFIRMED:   "Confirmada",
-  CHECKED_IN:  "En sala",
-  IN_PROGRESS: "En consulta",
-  COMPLETED:   "Completada",
-  NO_SHOW:     "No vino",
-  CANCELLED:   "Cancelada",
+  SCHEDULED:    "Programada",
+  CONFIRMED:    "Confirmada",
+  CHECKED_IN:   "En sala",
+  IN_CHAIR:     "En sillón",
+  IN_PROGRESS:  "En consulta",
+  COMPLETED:    "Completada",
+  CHECKED_OUT:  "Salió",
+  NO_SHOW:      "No vino",
+  CANCELLED:    "Cancelada",
 };
 
 interface Props {
