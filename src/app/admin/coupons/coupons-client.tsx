@@ -8,6 +8,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
 import { fmtMXN, formatRelativeDate } from "@/lib/format";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface Coupon {
   id: string;
@@ -24,6 +25,7 @@ interface Coupon {
 }
 
 export function CouponsClient({ initial }: { initial: Coupon[] }) {
+  const askConfirm = useConfirm();
   const [list, setList] = useState<Coupon[]>(initial);
   const [saving, setSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -89,7 +91,12 @@ export function CouponsClient({ initial }: { initial: Coupon[] }) {
   }
 
   async function remove(id: string) {
-    if (!confirm("¿Eliminar este cupón?")) return;
+    if (!(await askConfirm({
+      title: "¿Eliminar cupón?",
+      description: "El cupón dejará de funcionar inmediatamente. Las redenciones existentes no se afectan.",
+      variant: "danger",
+      confirmText: "Eliminar",
+    }))) return;
     try {
       const res = await fetch(`/api/admin/coupons/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();

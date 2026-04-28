@@ -7,6 +7,7 @@ import { CardNew }   from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { formatRelativeDate } from "@/lib/format";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface Announcement {
   id: string;
@@ -34,6 +35,7 @@ function typeTone(t: string): Tone {
 }
 
 export function AnnouncementsClient({ initial }: { initial: Announcement[] }) {
+  const askConfirm = useConfirm();
   const [list, setList] = useState<Announcement[]>(initial);
   const [saving, setSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -114,7 +116,12 @@ export function AnnouncementsClient({ initial }: { initial: Announcement[] }) {
   }
 
   async function remove(id: string) {
-    if (!confirm("¿Eliminar este anuncio?")) return;
+    if (!(await askConfirm({
+      title: "¿Eliminar anuncio?",
+      description: "El anuncio dejará de mostrarse a todas las clínicas inmediatamente.",
+      variant: "danger",
+      confirmText: "Eliminar",
+    }))) return;
     try {
       const res = await fetch(`/api/admin/announcements/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();

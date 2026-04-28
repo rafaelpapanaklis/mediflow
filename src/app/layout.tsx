@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Sora, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "react-hot-toast";
+import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 import "./globals.css";
 
 const sora = Sora({ subsets: ["latin"], variable: "--font-sora", display: "swap" });
@@ -95,7 +96,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             },
           }}
         />
-        {children}
+        {/* ConfirmProvider a nivel root para que /admin, /dashboard y
+            cualquier otra ruta autenticada puedan usar useConfirm().
+            Landing/auth pages no usan el hook → el provider está
+            montado pero idle, sin coste perceptible (un useState + un
+            <Dialog> Radix con open=false). */}
+        <ConfirmProvider>
+          {children}
+        </ConfirmProvider>
       </body>
     </html>
   );

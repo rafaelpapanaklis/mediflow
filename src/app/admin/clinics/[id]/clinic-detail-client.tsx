@@ -16,6 +16,7 @@ import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { fmtMXN, formatRelativeDate } from "@/lib/format";
 import type { TemplateChannel } from "@/lib/admin-templates";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface AdminNote {
   id: string;
@@ -54,6 +55,7 @@ export function AdminClinicDetailClient({
   stripeInstructions,
   totalClinicsInSystem,
 }: Props) {
+  const askConfirm = useConfirm();
   const [saving, setSaving]   = useState(false);
   const [note, setNote]       = useState("");
   const [notes, setNotes]     = useState<AdminNote[]>([]);
@@ -122,7 +124,12 @@ export function AdminClinicDetailClient({
   }
 
   async function suspendClinic() {
-    if (!confirm("¿Suspender esta clínica? El doctor verá una pantalla de pago.")) return;
+    if (!(await askConfirm({
+      title: "¿Suspender esta clínica?",
+      description: "El doctor verá una pantalla de pago hasta que renueve su suscripción.",
+      variant: "warning",
+      confirmText: "Suspender",
+    }))) return;
     setSaving(true);
     try {
       await fetch(`/api/admin/clinics/${clinic.id}`, {
@@ -161,7 +168,12 @@ export function AdminClinicDetailClient({
   }
 
   async function deleteNote(noteId: string) {
-    if (!confirm("¿Eliminar esta nota?")) return;
+    if (!(await askConfirm({
+      title: "¿Eliminar esta nota?",
+      description: "La nota se eliminará permanentemente del expediente admin.",
+      variant: "danger",
+      confirmText: "Eliminar",
+    }))) return;
     try {
       const res = await fetch(`/api/admin/clinics/${clinic.id}/notes/${noteId}`, { method: "DELETE" });
       if (!res.ok) throw new Error();

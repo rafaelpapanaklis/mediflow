@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import styles from "./xrays.module.css";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface Patient {
   id: string;
@@ -204,6 +205,7 @@ export function XraysClient({
   initialPatientId,
   lockedToPatient = false,
 }: Props) {
+  const askConfirm = useConfirm();
   const [files, setFiles] = useState<PatientFile[]>(initialFiles);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(
     initialPatientId ?? initialFiles[0]?.patient.id ?? null,
@@ -444,7 +446,12 @@ export function XraysClient({
 
   const handleDelete = useCallback(async () => {
     if (!activeFile) return;
-    if (!confirm(`¿Eliminar "${activeFile.name}"?`)) return;
+    if (!(await askConfirm({
+      title: `¿Eliminar "${activeFile.name}"?`,
+      description: "La radiografía y sus anotaciones se eliminan permanentemente del expediente del paciente.",
+      variant: "danger",
+      confirmText: "Eliminar",
+    }))) return;
     try {
       const res = await fetch(`/api/xrays/${activeFile.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
@@ -454,7 +461,7 @@ export function XraysClient({
     } catch {
       toast.error("Error al eliminar");
     }
-  }, [activeFile]);
+  }, [activeFile, askConfirm]);
 
   const handleSaveNotes = useCallback(async () => {
     if (!activeFile) return;
@@ -641,13 +648,18 @@ export function XraysClient({
     setZoom((z) => Math.max(0.25, Math.min(6, z * (delta > 0 ? 1.1 : 1 / 1.1))));
   }, [compareMode, tool]);
 
-  const handleClearAnnotations = useCallback(() => {
+  const handleClearAnnotations = useCallback(async () => {
     if (annotations.length === 0 && !drafting) return;
-    if (!confirm("¿Borrar todas las anotaciones de esta radiografía?")) return;
+    if (!(await askConfirm({
+      title: "¿Borrar todas las anotaciones?",
+      description: "Se eliminarán mediciones, ángulos y trazos manuales de esta radiografía.",
+      variant: "danger",
+      confirmText: "Borrar",
+    }))) return;
     setAnnotations([]);
     setDrafting(null);
     toast.success("Anotaciones borradas");
-  }, [annotations.length, drafting]);
+  }, [annotations.length, drafting, askConfirm]);
 
   const handleZoomBtn = useCallback((dir: "in" | "out" | "fit") => {
     if (dir === "fit") {
