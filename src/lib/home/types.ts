@@ -4,8 +4,10 @@ export type AppointmentStatus =
   | "SCHEDULED"
   | "CONFIRMED"
   | "CHECKED_IN"
+  | "IN_CHAIR"
   | "IN_PROGRESS"
   | "COMPLETED"
+  | "CHECKED_OUT"
   | "NO_SHOW"
   | "CANCELLED";
 

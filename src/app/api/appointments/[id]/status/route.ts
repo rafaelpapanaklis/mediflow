@@ -5,6 +5,7 @@ import { appointmentToDTO } from "@/lib/agenda/server";
 import {
   canTransition,
   sideEffectsOf,
+  timelineFieldFor,
 } from "@/lib/agenda/transitions";
 import type { StatusChangeInput } from "@/lib/agenda/types";
 
@@ -77,6 +78,43 @@ export async function PATCH(
     },
     include: APPT_INCLUDE,
   });
+
+  // Instrumentación de tiempos para analytics. Cada transición de status
+  // upsert el campo correspondiente del AppointmentTimeline. Si la cita
+  // recién entra al ciclo (no había timeline aún), creamos el row con
+  // appointmentId + el primer campo. En transiciones siguientes, update.
+  // Calculamos totalWaitMin/totalConsultMin cuando ambos extremos existen.
+  const timelineField = timelineFieldFor(body.status);
+  if (timelineField) {
+    const existing = await prisma.appointmentTimeline.findUnique({
+      where: { appointmentId: params.id },
+    });
+    const next = { ...(existing ?? {}), [timelineField]: now };
+    const totalWaitMin =
+      next.arrivedAt && next.inChairAt
+        ? Math.max(0, Math.round((next.inChairAt.getTime() - next.arrivedAt.getTime()) / 60_000))
+        : next.arrivedAt && next.consultStartAt
+          ? Math.max(0, Math.round((next.consultStartAt.getTime() - next.arrivedAt.getTime()) / 60_000))
+          : null;
+    const totalConsultMin =
+      next.consultStartAt && next.consultEndAt
+        ? Math.max(0, Math.round((next.consultEndAt.getTime() - next.consultStartAt.getTime()) / 60_000))
+        : null;
+    await prisma.appointmentTimeline.upsert({
+      where: { appointmentId: params.id },
+      create: {
+        appointmentId: params.id,
+        [timelineField]: now,
+        totalWaitMin,
+        totalConsultMin,
+      },
+      update: {
+        [timelineField]: now,
+        ...(totalWaitMin !== null ? { totalWaitMin } : {}),
+        ...(totalConsultMin !== null ? { totalConsultMin } : {}),
+      },
+    });
+  }
 
   return NextResponse.json(
     { appointment: appointmentToDTO(updated, session.clinic.category) },
