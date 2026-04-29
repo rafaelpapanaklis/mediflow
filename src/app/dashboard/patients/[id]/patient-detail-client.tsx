@@ -336,15 +336,26 @@ export function PatientDetailClient({
     setTab("evolucion");
   }
 
-  // Refresca la lista de facturas (saldo, status, pagos) tras registrar un pago.
-  // Usa el endpoint /api/patients/[id] que ya devuelve invoices con payments.
+  // Refresca tras una mutación de factura (cobrar, cancelar, reembolsar,
+  // marcar pagada, editar precio). Belt+suspenders:
+  //
+  // 1) Fetch con cache: "no-store" → invoices state local se actualiza
+  //    inmediato → totalPaid/totalBalance recomputan → HeroCard, SideCards
+  //    y KPIs reflejan el nuevo saldo en tiempo real, sin esperar el RSC.
+  //
+  // 2) router.refresh() → re-ejecuta el server component (combinado con
+  //    los revalidatePath que disparan los endpoints) para que un F5
+  //    manual también muestre fresh data y los props derivados del
+  //    server (totalPlan, primaryDoctor, etc.) queden en sync.
   async function refreshInvoices() {
     try {
-      const res = await fetch(`/api/patients/${patient.id}`);
-      if (!res.ok) return;
-      const data = await res.json();
-      if (Array.isArray(data?.invoices)) setInvoices(data.invoices);
-    } catch { /* silencioso — el toast ya confirmó el pago al usuario */ }
+      const res = await fetch(`/api/patients/${patient.id}`, { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data?.invoices)) setInvoices(data.invoices);
+      }
+    } catch { /* silencioso — el toast ya confirmó la acción al usuario */ }
+    router.refresh();
   }
 
   // Abre el PaymentModal con la primera factura cobrable. Si no hay ninguna

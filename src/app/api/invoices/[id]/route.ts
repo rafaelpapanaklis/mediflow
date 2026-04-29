@@ -63,6 +63,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/billing");
+  revalidatePath(`/dashboard/patients/${invoice.patientId}`);
   return NextResponse.json({ success: true });
 }
 
@@ -109,6 +110,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   });
 
   revalidatePath("/dashboard/billing");
+  revalidatePath(`/dashboard/patients/${invoice.patientId}`);
   return NextResponse.json(updated);
 }
 
@@ -127,6 +129,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       before: { status: invoice.status, invoiceNumber: invoice.invoiceNumber, total: invoice.total },
     });
     revalidatePath("/dashboard/billing");
+    revalidatePath(`/dashboard/patients/${invoice.patientId}`);
     return NextResponse.json({ success: true, cancelled: true });
   }
   if (invoice.paid > 0) {
@@ -140,5 +143,6 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     before: { status: invoice.status, invoiceNumber: invoice.invoiceNumber },
   });
   revalidatePath("/dashboard/billing");
+  revalidatePath(`/dashboard/patients/${invoice.patientId}`);
   return NextResponse.json({ success: true });
 }

@@ -56,5 +56,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   });
 
   revalidatePath("/dashboard/billing");
+  revalidatePath(`/dashboard/patients/${invoice.patientId}`);
   return NextResponse.json({ success: true });
 }
