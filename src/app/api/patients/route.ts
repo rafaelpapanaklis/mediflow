@@ -487,6 +487,8 @@ export async function POST(req: NextRequest) {
       curp:        body.curp ? String(body.curp).toUpperCase().trim() : null,
       curpStatus,
       passportNo:  body.passportNo ? String(body.passportNo).trim() : null,
+      familyHistory:                  body.familyHistory ?? null,
+      personalNonPathologicalHistory: body.personalNonPathologicalHistory ?? null,
     },
   });
 

@@ -33,6 +33,9 @@ export const patientSchema = z.object({
   curp:               z.string().max(18).optional().nullable(),
   curpStatus:         z.enum(["COMPLETE","PENDING","FOREIGN"]).optional(),
   passportNo:         z.string().max(20).optional().nullable(),
+  // NOM-004 antecedentes
+  familyHistory:                   z.string().optional().nullable(),
+  personalNonPathologicalHistory:  z.string().optional().nullable(),
 });
 
 export const appointmentSchema = z.object({

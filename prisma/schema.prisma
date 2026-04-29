@@ -291,6 +291,10 @@ model Patient {
   curpStatus  CurpStatus  @default(PENDING)
   passportNo  String?     @db.VarChar(20)
 
+  // NOM-004 antecedentes (Compliance Fase A)
+  familyHistory                   String?  @db.Text
+  personalNonPathologicalHistory  String?  @db.Text
+
   // Datos fiscales para CFDI
   rfcPaciente      String?
   regimenFiscalPac String?

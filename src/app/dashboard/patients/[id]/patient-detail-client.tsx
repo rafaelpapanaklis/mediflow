@@ -121,6 +121,9 @@ export function PatientDetailClient({
     curp:        patient.curp ?? "",
     curpStatus:  (patient.curpStatus ?? "PENDING") as "COMPLETE" | "PENDING" | "FOREIGN",
     passportNo:  patient.passportNo ?? "",
+    // NOM-004 antecedentes
+    familyHistory:                   patient.familyHistory ?? "",
+    personalNonPathologicalHistory:  patient.personalNonPathologicalHistory ?? "",
   });
   const [editSaving, setEditSaving] = useState(false);
   const [showNewAppt, setShowNewAppt] = useState(false);
@@ -811,6 +814,18 @@ export function PatientDetailClient({
                       <span className="text-xs font-semibold">{patient.insuranceProvider ?? "Sin seguro"}</span>
                       {patient.insurancePolicy && <span className="text-xs text-muted-foreground ml-2">Póliza: {patient.insurancePolicy}</span>}
                     </div>
+                    {patient.familyHistory && (
+                      <div className="py-1.5 border-b border-slate-50">
+                        <div className="text-xs text-muted-foreground mb-1">Antecedentes heredofamiliares</div>
+                        <p className="text-xs whitespace-pre-wrap">{patient.familyHistory}</p>
+                      </div>
+                    )}
+                    {patient.personalNonPathologicalHistory && (
+                      <div className="py-1.5 border-b border-slate-50">
+                        <div className="text-xs text-muted-foreground mb-1">Antecedentes personales no patológicos</div>
+                        <p className="text-xs whitespace-pre-wrap">{patient.personalNonPathologicalHistory}</p>
+                      </div>
+                    )}
                   </div>
                   {patient.notes && (
                     <div className="mt-4 p-3 bg-muted/30 rounded-xl">
@@ -1400,6 +1415,26 @@ export function PatientDetailClient({
             <div className="space-y-1.5"><Label>Notas</Label>
               <textarea className="flex min-h-[60px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground resize-none"
                 value={editForm.notes} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} />
+            </div>
+
+            {/* NOM-004 — Antecedentes */}
+            <div className="space-y-1.5">
+              <Label>Antecedentes heredofamiliares</Label>
+              <textarea
+                className="flex min-h-[64px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground resize-y"
+                placeholder="Madre con DM2, padre HTA, hermano cardiopatía isquémica…"
+                value={editForm.familyHistory}
+                onChange={e => setEditForm(f => ({ ...f, familyHistory: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Antecedentes personales no patológicos</Label>
+              <textarea
+                className="flex min-h-[64px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground resize-y"
+                placeholder="Alimentación, higiene, alcohol, tabaco, ejercicio, vivienda…"
+                value={editForm.personalNonPathologicalHistory}
+                onChange={e => setEditForm(f => ({ ...f, personalNonPathologicalHistory: e.target.value }))}
+              />
             </div>
           </div>
           <DialogFooter>
