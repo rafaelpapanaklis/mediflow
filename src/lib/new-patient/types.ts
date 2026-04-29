@@ -9,17 +9,3 @@ export interface NewPatientContextValue {
   open: (params?: OpenNewPatientParams) => void;
   close: () => void;
 }
-
-export interface NewPatientFormData {
-  firstName: string;
-  lastName: string;
-  phone: string;
-  email: string;
-  dob: string;
-  gender: "F" | "M" | "O" | "";
-  isChild: boolean;
-  // NOM-024 identificación
-  curp: string;
-  curpStatus: "COMPLETE" | "PENDING" | "FOREIGN";
-  passportNo: string;
-}
