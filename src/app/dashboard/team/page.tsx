@@ -3,18 +3,18 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { redirect } from "next/navigation";
 import { TeamClient } from "./team-client";
+import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 
 export const metadata: Metadata = { title: "Equipo — MediFlow" };
 
 export default async function TeamPage() {
   const user = await getCurrentUser();
-
-  // Only admins can access this page
-  if (user.role !== "ADMIN" && user.role !== "SUPER_ADMIN") {
-    redirect("/dashboard");
-  }
+  // Reemplaza el gate ADMIN/SUPER_ADMIN por el permiso UI granular.
+  // El boton "Permisos" del modal queda gated por isSuperAdmin en el
+  // cliente, así un ADMIN puede ver/editar el equipo pero no asignar
+  // permisos granulares.
+  requirePermissionOrRedirect(user, "team.view");
 
   const team = await prisma.user.findMany({
     where: { clinicId: user.clinicId },

@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ReportsClient } from "./reports-client";
+import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 
 export const metadata: Metadata = { title: "Reportes — MediFlow" };
 
@@ -13,6 +14,7 @@ async function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
 
 export default async function ReportsPage() {
   const user      = await getCurrentUser();
+  requirePermissionOrRedirect(user, "reports.view");
   const clinicId  = user.clinicId;
   const now       = new Date();
 

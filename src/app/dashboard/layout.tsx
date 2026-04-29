@@ -68,6 +68,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           email:     user.email,
           role:      user.role,
           color:     user.color ?? "#7c3aed",
+          permissionsOverride: (user as any).permissionsOverride ?? [],
         }}
         clinicName={clinic.name}
         clinicId={clinic.id}

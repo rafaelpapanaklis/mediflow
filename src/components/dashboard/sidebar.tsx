@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useSidebarCounts } from "@/hooks/use-sidebar-counts";
 import { useActiveConsult } from "@/hooks/use-active-consult";
+import { hasPermission, type PermissionKey } from "@/lib/auth/permissions";
 
 // ═══════════════════════════════════════════════════════════════════
 // Tipos
@@ -46,6 +47,10 @@ export interface SidebarUser {
   color?: string;
   id?: string;
   avatarUrl?: string | null;
+  // Override granular del set default del role. Si vacío se usan los
+  // defaults; si tiene keys, esas reemplazan al default. El sidebar lo
+  // pasa a hasPermission(user, item.permission) para filtrar dinámicamente.
+  permissionsOverride?: string[];
 }
 
 export interface SidebarClinicRef {
@@ -80,20 +85,26 @@ interface NavItemDef {
   adminOnly?: boolean;
   countKey?: "messagesUnread" | "clinicalDrafts" | "xraysUnanalyzed" | "inboxUnread";
   matchExact?: boolean;
+  // Permiso UI requerido para que el item aparezca. Si está vacío, el item
+  // se muestra siempre (asumiendo que pasa `categories` y `adminOnly`).
+  // Cuando está, se evalúa con hasPermission(user, permission) — el set
+  // efectivo viene de role default + permissionsOverride.
+  permission?: PermissionKey;
 }
 
 const NAV_ITEMS: NavItemDef[] = [
-  { id: "home",         section: "workspace", label: "Hoy",         href: "/dashboard",               icon: Home,          matchExact: true },
-  { id: "appointments", section: "workspace", label: "Agenda",      href: "/dashboard/agenda",        icon: Calendar },
-  { id: "patients",     section: "workspace", label: "Pacientes",   href: "/dashboard/patients",      icon: Users },
-  { id: "inbox",        section: "workspace", label: "Inbox",       href: "/dashboard/inbox",         icon: InboxIcon,     countKey: "inboxUnread" },
-  { id: "messages",     section: "workspace", label: "Mensajes",    href: "/dashboard/whatsapp",      icon: MessageCircle, countKey: "messagesUnread" },
+  { id: "home",         section: "workspace", label: "Hoy",         href: "/dashboard",               icon: Home,          matchExact: true, permission: "today.view" },
+  { id: "appointments", section: "workspace", label: "Agenda",      href: "/dashboard/agenda",        icon: Calendar,      permission: "agenda.view" },
+  { id: "patients",     section: "workspace", label: "Pacientes",   href: "/dashboard/patients",      icon: Users,         permission: "patients.view" },
+  { id: "inbox",        section: "workspace", label: "Inbox",       href: "/dashboard/inbox",         icon: InboxIcon,     countKey: "inboxUnread",   permission: "inbox.view" },
+  { id: "messages",     section: "workspace", label: "Mensajes",    href: "/dashboard/whatsapp",      icon: MessageCircle, countKey: "messagesUnread", permission: "whatsapp.view" },
 
-  { id: "clinical",     section: "clinico", label: "Expedientes",  href: "/dashboard/clinical",     icon: Stethoscope, countKey: "clinicalDrafts" },
+  { id: "clinical",     section: "clinico", label: "Expedientes",  href: "/dashboard/clinical",     icon: Stethoscope, countKey: "clinicalDrafts", permission: "medicalRecord.view" },
   { id: "ai",           section: "clinico", label: "IA asistente", href: "/dashboard/ai-assistant", icon: Sparkles },
   { id: "xrays",        section: "clinico", label: "Radiografías", href: "/dashboard/xrays",
     icon: FileImage, countKey: "xraysUnanalyzed",
-    categories: ["DENTAL", "MEDICINE", "PODIATRY"] },
+    categories: ["DENTAL", "MEDICINE", "PODIATRY"],
+    permission: "xrays.view" },
   { id: "before-after", section: "clinico", label: "Antes/Después", href: "/dashboard/before-after",
     icon: Camera,
     categories: ["DERMATOLOGY", "AESTHETIC_MEDICINE", "BEAUTY_CENTER", "HAIR_RESTORATION", "LASER_HAIR_REMOVAL"] },
@@ -107,7 +118,7 @@ const NAV_ITEMS: NavItemDef[] = [
     icon: Footprints,
     categories: ["PODIATRY"] },
 
-  { id: "treatments",   section: "catalogo", label: "Tratamientos", href: "/dashboard/treatments", icon: Activity },
+  { id: "treatments",   section: "catalogo", label: "Tratamientos", href: "/dashboard/treatments", icon: Activity, permission: "treatments.view" },
   { id: "packages",     section: "catalogo", label: "Paquetes",     href: "/dashboard/packages",
     icon: Gift, adminOnly: true,
     categories: ["AESTHETIC_MEDICINE", "BEAUTY_CENTER", "DERMATOLOGY", "HAIR_RESTORATION",
@@ -115,20 +126,22 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: "resources",    section: "catalogo", label: "Recursos",     href: "/dashboard/resources",
     icon: DoorOpen, adminOnly: true,
     categories: ["SPA", "MASSAGE", "BEAUTY_CENTER", "DENTAL", "MEDICINE",
-                 "AESTHETIC_MEDICINE", "PHYSIOTHERAPY"] },
+                 "AESTHETIC_MEDICINE", "PHYSIOTHERAPY"],
+    permission: "resources.view" },
   { id: "inventory",    section: "catalogo", label: "Inventario",   href: "/dashboard/inventory",
     icon: Package, adminOnly: true,
-    categories: ["DENTAL", "MEDICINE", "PODIATRY", "DERMATOLOGY", "AESTHETIC_MEDICINE"] },
+    categories: ["DENTAL", "MEDICINE", "PODIATRY", "DERMATOLOGY", "AESTHETIC_MEDICINE"],
+    permission: "inventory.view" },
 
-  { id: "billing",        section: "admin", label: "Facturación",       href: "/dashboard/billing",       icon: CreditCard },
-  { id: "analytics",      section: "admin", label: "Analytics",         href: "/dashboard/analytics",     icon: BarChart3, adminOnly: true },
-  { id: "tv-modes",       section: "admin", label: "Pantallas TV",      href: "/dashboard/tv-modes",      icon: Monitor, adminOnly: true },
-  { id: "reports",        section: "admin", label: "Reportes",          href: "/dashboard/reports",       icon: BarChart3 },
-  { id: "team",           section: "admin", label: "Equipo",            href: "/dashboard/team",          icon: UserCog },
-  { id: "landing",        section: "admin", label: "Página web",        href: "/dashboard/landing",       icon: Globe },
-  { id: "procedures",     section: "admin", label: "Procedimientos",    href: "/dashboard/procedures",    icon: ClipboardList },
-  { id: "clinic-layout",  section: "admin", label: "Mi Clínica Visual", href: "/dashboard/clinic-layout", icon: Building2, adminOnly: true },
-  { id: "settings",       section: "admin", label: "Configuración",     href: "/dashboard/settings",      icon: Settings },
+  { id: "billing",        section: "admin", label: "Facturación",       href: "/dashboard/billing",       icon: CreditCard,     permission: "billing.view" },
+  { id: "analytics",      section: "admin", label: "Analytics",         href: "/dashboard/analytics",     icon: BarChart3, adminOnly: true, permission: "analytics.view" },
+  { id: "tv-modes",       section: "admin", label: "Pantallas TV",      href: "/dashboard/tv-modes",      icon: Monitor, adminOnly: true, permission: "tvModes.view" },
+  { id: "reports",        section: "admin", label: "Reportes",          href: "/dashboard/reports",       icon: BarChart3,     permission: "reports.view" },
+  { id: "team",           section: "admin", label: "Equipo",            href: "/dashboard/team",          icon: UserCog,        permission: "team.view" },
+  { id: "landing",        section: "admin", label: "Página web",        href: "/dashboard/landing",       icon: Globe,          permission: "landing.view" },
+  { id: "procedures",     section: "admin", label: "Procedimientos",    href: "/dashboard/procedures",    icon: ClipboardList,  permission: "procedures.view" },
+  { id: "clinic-layout",  section: "admin", label: "Mi Clínica Visual", href: "/dashboard/clinic-layout", icon: Building2, adminOnly: true, permission: "clinicLayout.view" },
+  { id: "settings",       section: "admin", label: "Configuración",     href: "/dashboard/settings",      icon: Settings,       permission: "settings.view" },
 ];
 
 // ═══════════════════════════════════════════════════════════════════
@@ -166,10 +179,25 @@ function isActivePath(pathname: string | null, href: string, matchExact?: boolea
   return pathname === href || pathname.startsWith(href + "/");
 }
 
-function shouldShowItem(item: NavItemDef, role: UserRole, category: ClinicCategory): boolean {
-  if (item.adminOnly && role !== "SUPER_ADMIN" && role !== "ADMIN") return false;
+function shouldShowItem(item: NavItemDef, user: SidebarUser, category: ClinicCategory): boolean {
+  if (item.adminOnly && user.role !== "SUPER_ADMIN" && user.role !== "ADMIN") return false;
   if (item.categories && item.categories.length > 0) {
     if (!item.categories.includes(category)) return false;
+  }
+  // Permission gating: SUPER_ADMIN ve todo (mantiene el comportamiento previo).
+  // Para los demás, si el item declara `permission`, exigimos que el set
+  // efectivo (default del role + override) lo incluya. Items sin `permission`
+  // se siguen mostrando — útil para áreas que aún no migraron al sistema.
+  if (item.permission && user.role !== "SUPER_ADMIN") {
+    // Convertimos a la shape que hasPermission espera para la capa 2.
+    // El cast a Role coincide porque UserRole y Prisma.Role tienen los
+    // mismos valores excepto ACCOUNTANT (UI-only, no en DB) que cae
+    // como readonly por seguridad.
+    const userForPerm = {
+      role: (user.role === "ACCOUNTANT" ? "READONLY" : user.role) as any,
+      permissionsOverride: user.permissionsOverride ?? [],
+    };
+    if (!hasPermission(userForPerm, item.permission)) return false;
   }
   return true;
 }
@@ -232,9 +260,12 @@ export function Sidebar(props: SidebarProps) {
 
   const visibleItems = useMemo(() => {
     return NAV_ITEMS.filter((item) =>
-      shouldShowItem(item, props.user.role, props.clinicCategory),
+      shouldShowItem(item, props.user, props.clinicCategory),
     );
-  }, [props.user.role, props.clinicCategory]);
+    // Necesitamos depender del array completo (override puede cambiar tras
+    // un guardado en /dashboard/team). props.user es el objeto referencial
+    // que cambia cuando el layout re-renderiza con datos frescos.
+  }, [props.user, props.clinicCategory]);
 
   const itemsBySection = useMemo(() => {
     const map: Record<Section, NavItemDef[]> = {

@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { OverviewClient } from "./overview-client";
+import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 
 export const metadata: Metadata = { title: "Analytics — MediFlow" };
 
@@ -11,6 +12,7 @@ const MIN_APPTS_FOR_INSIGHTS = 30;
 
 export default async function AnalyticsOverviewPage() {
   const user = await getCurrentUser();
+  requirePermissionOrRedirect(user, "analytics.view");
   const clinicId = user.clinicId;
 
   // Solo admin/owner ven analytics.
