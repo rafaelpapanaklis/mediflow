@@ -14,6 +14,7 @@ import { SideCards } from "@/components/dashboard/patient-detail/side-cards";
 import { ConsultBar } from "@/components/dashboard/patient-detail/consult-bar";
 import { SoapEditorInline, type SoapDraft } from "@/components/dashboard/patient-detail/soap-editor-inline";
 import { NoteDetailModal, type ClinicalNote } from "@/components/dashboard/patient-detail/note-detail-modal";
+import { HistoriaTimeline } from "@/components/dashboard/patient-detail/historia-timeline";
 import patientDetailStyles from "@/components/dashboard/patient-detail/patient-detail.module.css";
 import { DentalForm }          from "@/components/clinical/dental-form";
 import { NutritionForm }       from "@/components/clinical/nutrition-form";
@@ -29,6 +30,7 @@ import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { PaymentModal, type PaymentInvoice } from "@/components/dashboard/billing/payment-modal";
+import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
 
 const SPECIALTY_MAP: Record<string, string> = {
   dental: "dental", odontologia: "dental", odontología: "dental",
@@ -874,80 +876,19 @@ export function PatientDetailClient({
           {/* ===== TAB: HISTORIA CLINICA ===== */}
           {tab === "historia" && (
             <div className="bg-card border border-border rounded-xl p-5">
-              <h2 className="text-sm font-bold mb-4">Historia clínica completa</h2>
-              <div className="grid grid-cols-2 gap-6 text-sm">
-                <div>
-                  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-3">Datos personales</h3>
-                  <div className="space-y-2">
-                    {[
-                      { label: "Nombre completo", val: `${patient.firstName} ${patient.lastName}` },
-                      { label: "Fecha de nacimiento", val: patient.dob ? formatDate(patient.dob) : "—" },
-                      { label: "Género", val: patient.gender === "M" ? "Masculino" : patient.gender === "F" ? "Femenino" : "Otro" },
-                      { label: "Teléfono", val: patient.phone ?? "—" },
-                      { label: "Email", val: patient.email ?? "—" },
-                      { label: "Dirección", val: patient.address ?? "—" },
-                      { label: "Tipo de sangre", val: patient.bloodType ?? "No registrado" },
-                    ].map(r => (
-                      <div key={r.label} className="flex justify-between py-1.5 border-b border-slate-50 text-xs">
-                        <span className="text-muted-foreground">{r.label}</span>
-                        <span className="font-semibold">{r.val}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-3">Antecedentes médicos</h3>
-                  <div className="space-y-2">
-                    <div className="py-1.5 border-b border-slate-50">
-                      <div className="text-xs text-muted-foreground mb-1">Enfermedades crónicas</div>
-                      <div className="flex flex-wrap gap-1">
-                        {patient.chronicConditions?.length > 0
-                          ? patient.chronicConditions.map((c: string) => <span key={c} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">{c}</span>)
-                          : <span className="text-xs font-semibold">Ninguna</span>}
-                      </div>
-                    </div>
-                    <div className="py-1.5 border-b border-slate-50">
-                      <div className="text-xs text-muted-foreground mb-1">Alergias</div>
-                      <div className="flex flex-wrap gap-1">
-                        {patient.allergies?.length > 0
-                          ? patient.allergies.map((a: string) => <span key={a} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700">🚨 {a}</span>)
-                          : <span className="text-xs font-semibold">Ninguna</span>}
-                      </div>
-                    </div>
-                    <div className="py-1.5 border-b border-slate-50">
-                      <div className="text-xs text-muted-foreground mb-1">Medicamentos actuales</div>
-                      <div className="flex flex-wrap gap-1">
-                        {patient.currentMedications?.length > 0
-                          ? patient.currentMedications.map((m: string) => <span key={m} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700">💊 {m}</span>)
-                          : <span className="text-xs font-semibold">Ninguno</span>}
-                      </div>
-                    </div>
-                    <div className="py-1.5 border-b border-slate-50">
-                      <div className="text-xs text-muted-foreground mb-1">Seguro médico</div>
-                      <span className="text-xs font-semibold">{patient.insuranceProvider ?? "Sin seguro"}</span>
-                      {patient.insurancePolicy && <span className="text-xs text-muted-foreground ml-2">Póliza: {patient.insurancePolicy}</span>}
-                    </div>
-                    {patient.familyHistory && (
-                      <div className="py-1.5 border-b border-slate-50">
-                        <div className="text-xs text-muted-foreground mb-1">Antecedentes heredofamiliares</div>
-                        <p className="text-xs whitespace-pre-wrap">{patient.familyHistory}</p>
-                      </div>
-                    )}
-                    {patient.personalNonPathologicalHistory && (
-                      <div className="py-1.5 border-b border-slate-50">
-                        <div className="text-xs text-muted-foreground mb-1">Antecedentes personales no patológicos</div>
-                        <p className="text-xs whitespace-pre-wrap">{patient.personalNonPathologicalHistory}</p>
-                      </div>
-                    )}
-                  </div>
-                  {patient.notes && (
-                    <div className="mt-4 p-3 bg-muted/30 rounded-xl">
-                      <div className="text-xs font-bold text-muted-foreground mb-1">Notas clínicas</div>
-                      <p className="text-xs">{patient.notes}</p>
-                    </div>
-                  )}
-                </div>
+              <div className="flex items-baseline justify-between mb-4">
+                <h2 className="text-sm font-bold">Historia clínica</h2>
+                <p className="text-xs text-muted-foreground">
+                  Timeline cronológica de todos los eventos clínicos del paciente.
+                </p>
               </div>
+              <HistoriaTimeline
+                patientId={patient.id}
+                onOpenSoap={(recordId) => {
+                  const record = records.find((r) => r.id === recordId);
+                  if (record) setNoteDetailOpen(record as ClinicalNote);
+                }}
+              />
             </div>
           )}
 
