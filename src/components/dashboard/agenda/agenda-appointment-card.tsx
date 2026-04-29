@@ -80,6 +80,23 @@ export function AgendaAppointmentCard({
 
   const compact = slotsSpan <= 1.5;
 
+  // Estado temporal: pasada (endsAt < now), en curso (start <= now < end),
+  // futura (resto). Se actualiza con el tiempo via state.dayISO change y
+  // re-renders naturales (no hay setInterval — basta con que el usuario
+  // navegue/refresque). El visual diferenciado se aplica solo si el
+  // status no es ya terminal (COMPLETED / CHECKED_OUT / NO_SHOW /
+  // CANCELLED) — esos ya tienen color propio en STATUS_COLOR.
+  const now = Date.now();
+  const isTerminal =
+    appointment.status === "COMPLETED" ||
+    appointment.status === "CHECKED_OUT" ||
+    appointment.status === "NO_SHOW" ||
+    appointment.status === "CANCELLED";
+  const isInProgress =
+    !isTerminal && startMs <= now && now < endMs;
+  const isPast =
+    !isTerminal && !isInProgress && endMs <= now;
+
   const doctorMeta = appointment.doctor
     ? state.doctors.find((d) => d.id === appointment.doctor!.id) ?? null
     : null;
@@ -149,6 +166,8 @@ export function AgendaAppointmentCard({
     appointment.requiresValidation ? styles.apptPending : "",
     isSelected ? styles.selected : "",
     isDragging ? styles.dragging : "",
+    isPast ? styles.apptPast : "",
+    isInProgress ? styles.apptInProgress : "",
   ]
     .filter(Boolean)
     .join(" ");
