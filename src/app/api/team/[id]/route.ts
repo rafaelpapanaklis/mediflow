@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { logMutation } from "@/lib/audit";
 
 function getAdminClient() {
   return createAdminClient(
@@ -78,6 +79,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     },
   });
 
+  await logMutation({
+    req,
+    clinicId: ctx!.clinicId,
+    userId: ctx!.userId,
+    entityType: "user",
+    entityId: params.id,
+    action: "update",
+    before: member as any,
+    after: updated as any,
+  });
+
   return NextResponse.json(updated);
 }
 
@@ -102,10 +114,24 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   // If doctor has appointments/records, deactivate instead of delete
   if (member._count.appointments > 0 || member._count.records > 0) {
     await prisma.user.updateMany({ where: { id: params.id, clinicId: ctx!.clinicId }, data: { isActive: false } });
+    await logMutation({
+      req, clinicId: ctx!.clinicId, userId: ctx!.userId,
+      entityType: "user", entityId: params.id, action: "delete",
+      before: { firstName: member.firstName, lastName: member.lastName, email: member.email, role: member.role, deactivated: true },
+    });
     return NextResponse.json({ deactivated: true, message: "Doctor desactivado (tiene registros históricos)" });
   }
 
-  // No records — safe to delete
+  // No records — safe to delete. Loggeamos ANTES del delete porque después
+  // el FK desde audit_logs no encontraría el user (aunque el userId del
+  // audit es el ADMIN actor, el entityId es el user borrado y eso no tiene
+  // FK; el log queda persistido sin problema).
+  await logMutation({
+    req, clinicId: ctx!.clinicId, userId: ctx!.userId,
+    entityType: "user", entityId: params.id, action: "delete",
+    before: { firstName: member.firstName, lastName: member.lastName, email: member.email, role: member.role, hardDelete: true },
+  });
+
   const supabaseAdmin = getAdminClient();
   await supabaseAdmin.auth.admin.deleteUser(member.supabaseId);
   await prisma.user.deleteMany({ where: { id: params.id, clinicId: ctx!.clinicId } });

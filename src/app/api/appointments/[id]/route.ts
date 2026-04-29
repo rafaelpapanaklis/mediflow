@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { logMutation } from "@/lib/audit";
 import {
   loadClinicSession,
   requireRole,
@@ -136,6 +137,17 @@ export async function PATCH(
 
     // TODO(M3.b): if body.notifyPatient → trigger WA notification (waConnected).
 
+    await logMutation({
+      req,
+      clinicId: session.clinic.id,
+      userId: session.user.id,
+      entityType: "appointment",
+      entityId: params.id,
+      action: "update",
+      before: { startsAt: existing.startsAt, endsAt: existing.endsAt, doctorId: existing.doctorId, resourceId: existing.resourceId, type: existing.type, status: existing.status },
+      after: { startsAt: updated.startsAt, endsAt: updated.endsAt, doctorId: updated.doctorId, resourceId: updated.resourceId, type: updated.type, status: updated.status },
+    });
+
     return NextResponse.json(
       { appointment: appointmentToDTO(updated, session.clinic.category) },
     );
@@ -177,7 +189,7 @@ export async function PATCH(
 // ═════════════════════════════════════════════════════════════════
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } },
 ) {
   const session = await loadClinicSession();
@@ -192,7 +204,7 @@ export async function DELETE(
 
   const existing = await prisma.appointment.findFirst({
     where: { id: params.id, clinicId: session.clinic.id },
-    select: { id: true, status: true },
+    select: { id: true, status: true, patientId: true, doctorId: true, startsAt: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -204,6 +216,16 @@ export async function DELETE(
   await prisma.appointment.update({
     where: { id: params.id },
     data: { status: "CANCELLED" },
+  });
+
+  await logMutation({
+    req,
+    clinicId: session.clinic.id,
+    userId: session.user.id,
+    entityType: "appointment",
+    entityId: params.id,
+    action: "delete",
+    before: { status: existing.status, patientId: existing.patientId, doctorId: existing.doctorId, startsAt: existing.startsAt },
   });
 
   return NextResponse.json({ ok: true });

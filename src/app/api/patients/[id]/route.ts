@@ -3,6 +3,7 @@ import { getAuthContext, buildPatientWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { patientSchema } from "@/lib/validations";
 import { validateCurpRecord } from "@/lib/validators/curp";
+import { logMutation } from "@/lib/audit";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -56,6 +57,18 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       },
     });
     const updated = await prisma.patient.findUnique({ where: { id: params.id } });
+
+    await logMutation({
+      req,
+      clinicId: ctx.clinicId,
+      userId: ctx.userId,
+      entityType: "patient",
+      entityId: params.id,
+      action: "update",
+      before: exists as any,
+      after: updated as any,
+    });
+
     return NextResponse.json(updated);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 });
@@ -69,9 +82,28 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   // Only admins can archive patients
   if (!ctx.isAdmin) return NextResponse.json({ error: "Solo administradores pueden archivar pacientes" }, { status: 403 });
 
+  // Capturamos before para audit log
+  const beforeArchive = await prisma.patient.findFirst({
+    where: { id: params.id, clinicId: ctx.clinicId },
+    select: { firstName: true, lastName: true, status: true },
+  });
+
   await prisma.patient.updateMany({
     where: { id: params.id, clinicId: ctx.clinicId },
     data:  { status: "ARCHIVED" },
   });
+
+  if (beforeArchive) {
+    await logMutation({
+      req,
+      clinicId: ctx.clinicId,
+      userId: ctx.userId,
+      entityType: "patient",
+      entityId: params.id,
+      action: "delete",
+      before: beforeArchive as any,
+    });
+  }
+
   return NextResponse.json({ success: true });
 }

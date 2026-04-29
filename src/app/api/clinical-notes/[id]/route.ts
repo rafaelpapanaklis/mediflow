@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
+import { logMutation } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -87,6 +88,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     };
   }
 
+  // Capturamos before-state completo (los campos que pueden cambiar) para
+  // diff confiable. La query existing arriba no incluye SOAP fields.
+  const beforeState = await prisma.medicalRecord.findUnique({
+    where: { id: params.id },
+    select: { subjective: true, objective: true, assessment: true, plan: true, specialtyData: true },
+  });
+
   const updated = await prisma.medicalRecord.update({
     where: { id: params.id },
     data,
@@ -101,6 +109,17 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       specialtyData: true,
       updatedAt: true,
     },
+  });
+
+  await logMutation({
+    req,
+    clinicId: dbUser.clinicId,
+    userId: dbUser.id,
+    entityType: "record",
+    entityId: params.id,
+    action: "update",
+    before: beforeState as any,
+    after: { subjective: updated.subjective, objective: updated.objective, assessment: updated.assessment, plan: updated.plan, specialtyData: updated.specialtyData },
   });
 
   return NextResponse.json({ note: updated });

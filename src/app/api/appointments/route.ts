@@ -20,6 +20,7 @@ import {
   todayInTz,
 } from "@/lib/agenda/time-utils";
 import { canOverrideOverlap } from "@/lib/agenda/transitions";
+import { logMutation } from "@/lib/audit";
 import type {
   AgendaDayResponse,
   AppointmentConflictError,
@@ -199,6 +200,16 @@ export async function POST(req: NextRequest) {
 
     // TODO(M3.b): notifyPatient via WhatsApp si body.notifyPatient
     //             y session.clinic.waConnected.
+
+    await logMutation({
+      req,
+      clinicId: session.clinic.id,
+      userId: session.user.id,
+      entityType: "appointment",
+      entityId: created.id,
+      action: "create",
+      after: { patientId: created.patientId, doctorId: created.doctorId, startsAt: created.startsAt, type: created.type, status: created.status },
+    });
 
     return NextResponse.json(
       { appointment: appointmentToDTO(created, session.clinic.category) },

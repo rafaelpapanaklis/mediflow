@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getAuthContext, buildPatientWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { validateCurpRecord, type CurpStatusValue } from "@/lib/validators/curp";
+import { logMutation } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -490,6 +491,16 @@ export async function POST(req: NextRequest) {
       familyHistory:                  body.familyHistory ?? null,
       personalNonPathologicalHistory: body.personalNonPathologicalHistory ?? null,
     },
+  });
+
+  await logMutation({
+    req,
+    clinicId: ctx.clinicId,
+    userId: ctx.userId,
+    entityType: "patient",
+    entityId: patient.id,
+    action: "create",
+    after: { firstName: patient.firstName, lastName: patient.lastName, patientNumber: patient.patientNumber },
   });
 
   revalidatePath("/dashboard/patients");

@@ -3,6 +3,7 @@ import { randomBytes } from "crypto";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { logMutation } from "@/lib/audit";
 
 function buildVerifyUrl(req: NextRequest, id: string) {
   const proto = req.headers.get("x-forwarded-proto") ?? "https";
@@ -62,6 +63,16 @@ export async function POST(req: NextRequest) {
   const updated = await prisma.prescription.update({
     where: { id: created.id },
     data: { verifyUrl },
+  });
+
+  await logMutation({
+    req,
+    clinicId: ctx.clinicId,
+    userId: ctx.userId,
+    entityType: "prescription",
+    entityId: updated.id,
+    action: "create",
+    after: { patientId: updated.patientId, medicalRecordId: updated.medicalRecordId, qrCode: updated.qrCode, medicationsCount: Array.isArray(medications) ? medications.length : 0 },
   });
 
   revalidatePath("/dashboard/clinical");

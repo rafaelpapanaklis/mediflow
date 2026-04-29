@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
+import { logAudit, logMutation, extractAuditMeta } from "@/lib/audit";
 
 const recordSchema = z.object({
   patientId:     z.string().min(1),
@@ -44,6 +45,24 @@ export async function GET(req: NextRequest) {
     take: limit,
     skip,
   });
+
+  // NOM-024 — bitácora de lectura del expediente. Una entrada por request,
+  // referenciando el patientId. No loggeamos cada record individual para
+  // evitar inflar la tabla; el contexto (qué records se devolvieron) se
+  // puede derivar reproduciendo el query con el mismo timestamp.
+  if (patientId) {
+    const { ipAddress, userAgent } = extractAuditMeta(req);
+    await logAudit({
+      clinicId:   dbUser.clinicId,
+      userId:     dbUser.id,
+      entityType: "record",
+      entityId:   patientId,
+      action:     "view",
+      changes:    { count: { before: null, after: records.length } },
+      ipAddress, userAgent,
+    });
+  }
+
   return NextResponse.json(records);
 }
 
@@ -78,5 +97,16 @@ export async function POST(req: NextRequest) {
       isPrivate:     parsed.data.isPrivate ?? false,
     },
   });
+
+  await logMutation({
+    req,
+    clinicId: dbUser.clinicId,
+    userId: dbUser.id,
+    entityType: "record",
+    entityId: record.id,
+    action: "create",
+    after: { patientId: record.patientId, doctorId: record.doctorId, isPrivate: record.isPrivate },
+  });
+
   return NextResponse.json(record, { status: 201 });
 }

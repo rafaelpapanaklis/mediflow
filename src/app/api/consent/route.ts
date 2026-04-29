@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { randomBytes } from "crypto";
+import { logMutation } from "@/lib/audit";
 
 const CONSENT_TEMPLATES: Record<string, string> = {
   "Extracción simple": `CONSENTIMIENTO INFORMADO PARA EXTRACCIÓN DENTAL
@@ -127,6 +128,16 @@ export async function POST(req: NextRequest) {
       token,
       expiresAt,
     },
+  });
+
+  await logMutation({
+    req,
+    clinicId: ctx.clinicId,
+    userId: ctx.userId,
+    entityType: "consent",
+    entityId: form.id,
+    action: "create",
+    after: { patientId: form.patientId, procedure: form.procedure },
   });
 
   const signUrl = `${process.env.NEXT_PUBLIC_APP_URL}/consentimiento/${token}`;
