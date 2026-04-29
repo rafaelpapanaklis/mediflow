@@ -1112,6 +1112,8 @@ model ProcedureCatalog {
   clinicId     String
   name         String
   code         String?  // SAT code for CFDI
+  /// NOM-024 — código clínico CIE-9-MC del procedimiento (separado del SAT)
+  cieCode      String?  @db.VarChar(8)
   category     String   // "general", "dental", "aesthetic", etc.
   basePrice    Float
   duration     Int?     // minutes
@@ -1120,8 +1122,23 @@ model ProcedureCatalog {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   clinic       Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  cie9         Cie9Code? @relation(fields: [cieCode], references: [code])
   @@index([clinicId, isActive])
+  @@index([cieCode])
   @@map("procedure_catalog")
+}
+
+/// Catálogo CIE-9-MC OMS. Tabla GLOBAL. Seed inicial vía
+/// POST /api/admin/seed-cie9 con TOP ~100 procedimientos comunes.
+model Cie9Code {
+  code        String @id @db.VarChar(8)
+  description String @db.VarChar(500)
+  category    String @db.VarChar(120)
+
+  procedures ProcedureCatalog[]
+
+  @@index([category])
+  @@map("cie9_codes")
 }
 
 // ── Super-admin internal notes per clinic ─────────────────────────────
