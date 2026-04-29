@@ -390,6 +390,51 @@ export function PatientDetailClient({
     }
   }
 
+  // Pre-puebla apptForm con sugerencias inteligentes y abre el form inline
+  // de "Nueva cita" en el tab Agenda. Usado por el botón "Reagendar/Agendar
+  // próxima" del HeroCard.
+  function openNextAppointment() {
+    const lastApptDoctorId = appointments.find((a: any) => a.doctor?.id)?.doctor?.id;
+    const suggestedDoctorId =
+      lastApptDoctorId ??
+      (patient as any).primaryDoctorId ??
+      currentUser.id;
+    // +1 mes desde hoy a la misma hora 09:00
+    const next = new Date();
+    next.setMonth(next.getMonth() + 1);
+    const date = next.toISOString().split("T")[0];
+    setApptForm({
+      doctorId: suggestedDoctorId,
+      type: "Consulta general",
+      date,
+      startTime: "09:00",
+      endTime: "09:30",
+      notes: "",
+    });
+    setTab("agenda");
+    setShowNewAppt(true);
+  }
+
+  // Archivar paciente (soft delete) — endpoint DELETE /api/patients/[id]
+  // marca status=ARCHIVED. Multi-tenant + admin-only ya verificado en el endpoint.
+  async function archivePatient() {
+    if (!confirm(`¿Archivar a ${patient.firstName} ${patient.lastName}? Quedará oculto en la lista pero podrás reactivarlo.`)) return;
+    try {
+      const res = await fetch(`/api/patients/${patient.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error((await res.json()).error);
+      toast.success("Paciente archivado");
+      router.push("/dashboard/patients");
+    } catch (err: any) {
+      toast.error(err.message ?? "Error al archivar");
+    }
+  }
+
+  // Descarga el expediente en formato HL7 CDA R2 (NOM-024). El endpoint
+  // gatea por permission medicalRecord.read; si el rol no califica → 403.
+  function exportPatientCda() {
+    window.location.href = `/api/patients/${patient.id}/export-cda`;
+  }
+
   const fullName = `${patient.firstName} ${patient.lastName}`;
   const ageNum = ageFromDob(patient.dob);
   const genderLabel = patient.gender === "M" ? "Masculino" : patient.gender === "F" ? "Femenino" : "Otro";
@@ -632,11 +677,10 @@ export function PatientDetailClient({
             router.push(`?appointment=${nextAppt.id}`);
           }
         }}
-        onReschedule={() => {
-          // Por ahora redirige al tab Citas; en una futura iteración abrir picker inline.
-          setTab("agenda");
-        }}
+        onReschedule={openNextAppointment}
         onCharge={openChargeForFirstUnpaid}
+        onArchive={archivePatient}
+        onExportCda={exportPatientCda}
       />
 
       {/* Layout 3 columnas — audit Opción C ajuste 3 */}
@@ -1404,7 +1448,7 @@ export function PatientDetailClient({
           }}
           patientName={fullName}
           patientPhone={patient.phone ?? null}
-          onReschedule={() => setTab("agenda")}
+          onReschedule={openNextAppointment}
           onCancelAppt={() => setTab("agenda")}
           onCharge={openChargeForFirstUnpaid}
         />
