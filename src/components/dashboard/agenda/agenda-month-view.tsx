@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { useAgenda } from "./agenda-provider";
 import { getTzParts, todayInTz } from "@/lib/agenda/time-utils";
+import { doctorColorFor } from "@/lib/agenda/doctor-color";
 import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
 
@@ -125,26 +126,35 @@ export function AgendaMonthView() {
                   </span>
                 )}
               </div>
-              {preview.map((a) => (
-                <button
-                  key={a.id}
-                  type="button"
-                  onClick={(e) => handleApptClick(e, a.id)}
-                  className={styles.monthDayPreview}
-                  style={{
-                    border: 0,
-                    background: "transparent",
-                    padding: 0,
-                    textAlign: "left",
-                    cursor: "pointer",
-                    width: "100%",
-                  }}
-                  title={`${fmtHHMMInTz(a.startsAt, state.timezone)} · ${a.patient.name}${a.reason ? ` — ${a.reason}` : ""}`}
-                >
-                  {fmtHHMMInTz(a.startsAt, state.timezone)} {a.patient.name}
-                  {a.reason ? ` · ${a.reason}` : ""}
-                </button>
-              ))}
+              {preview.map((a) => {
+                const docMeta = a.doctor
+                  ? state.doctors.find((d) => d.id === a.doctor!.id) ?? null
+                  : null;
+                const docColor = a.doctor
+                  ? doctorColorFor(a.doctor.id, docMeta?.color ?? null)
+                  : "var(--brand)";
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={(e) => handleApptClick(e, a.id)}
+                    className={styles.monthDayPreview}
+                    style={{
+                      border: 0,
+                      borderLeft: `3px solid ${docColor}`,
+                      background: "transparent",
+                      padding: "0 0 0 5px",
+                      textAlign: "left",
+                      cursor: "pointer",
+                      width: "100%",
+                    }}
+                    title={`${fmtHHMMInTz(a.startsAt, state.timezone)} · ${a.patient.name}${a.reason ? ` — ${a.reason}` : ""}`}
+                  >
+                    {fmtHHMMInTz(a.startsAt, state.timezone)} {a.patient.name}
+                    {a.reason ? ` · ${a.reason}` : ""}
+                  </button>
+                );
+              })}
               {more > 0 && (
                 <div className={styles.monthDayPreview} style={{ fontWeight: 600 }}>
                   +{more} más

@@ -949,10 +949,10 @@
   gap: 12px;
   padding: 8px 10px;
   border: 1px solid var(--border-soft);
-  border-left: 4px solid var(--mf-status-color, var(--brand));
+  border-left: 4px solid var(--mf-doc-color, var(--brand));
   border-radius: 7px;
   margin-bottom: 4px;
-  background: var(--bg-elev);
+  background: color-mix(in srgb, var(--mf-doc-color, var(--brand)) 5%, var(--bg-elev));
   cursor: pointer;
   transition: box-shadow 0.12s, transform 0.12s, border-color 0.12s;
   font-family: var(--font-sora, "Sora", sans-serif);
