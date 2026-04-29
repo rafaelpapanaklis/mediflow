@@ -20,12 +20,18 @@ import {
   Hand,
   MousePointer2,
   ExternalLink,
+  Sparkles,
+  Sun,
+  Sunrise,
+  Sunset,
+  Moon,
 } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import { toScreen, fromScreen, C as ISO_C } from "@/lib/floor-plan/iso";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { getCatalogForClinic } from "@/lib/floor-plan/elements";
+import { OPENABLE_TYPES } from "@/lib/floor-plan/element-types";
 import type {
   ElementType,
   LayoutElement,
@@ -44,7 +50,9 @@ import {
 import { SharePanel } from "./components/share-panel";
 import { WaitingRoom, type WaitingRoomEntry } from "./components/waiting-room";
 import { WelcomePrompt } from "./components/welcome-prompt";
+import { OptimizerModal } from "./components/optimizer-modal";
 import { Share2 } from "lucide-react";
+import { getChairStatus } from "@/lib/floor-plan/live-mode";
 import styles from "./clinic-layout.module.css";
 
 interface Chair {
@@ -112,6 +120,23 @@ export function ClinicLayoutClient({
   const [waitingRoom, setWaitingRoom] = useState<WaitingRoomEntry[]>([]);
   const [hover, setHover] = useState<HoverData | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
+  const [showOptimizer, setShowOptimizer] = useState(false);
+
+  // v2: animaciones puerta/gabinete + iluminación dinámica
+  /**
+   * IDs de elementos (puertas/gabinetes) actualmente "abiertos". Click sobre
+   * un OPENABLE_TYPE alterna su estado. No se persiste — es estado puramente
+   * visual de la sesión, complemento al modo Edición.
+   */
+  const [openIds, setOpenIds] = useState<Set<number>>(() => new Set());
+  /** Hora del filtro de iluminación (0–23). Inicia en la hora real; el
+   *  pill del topbar la avanza 3h en cada click para previsualizar. */
+  const [lightingHour, setLightingHour] = useState<number>(() => new Date().getHours());
+  /** Hover sobre un elemento del canvas (modo Edición) — produce un tooltip
+   *  con el label del tipo. Se desactiva durante panMode y dragType. */
+  const [elementHover, setElementHover] = useState<
+    { id: number; cx: number; topY: number; label: string; isOpen: boolean } | null
+  >(null);
   const [liveConfig, setLiveConfig] = useState({
     enabled: clinic.liveModeEnabled,
     slug: clinic.liveModeSlug,
@@ -266,11 +291,12 @@ export function ClinicLayoutClient({
         const data = await res.json();
         if (cancelled) return;
         const parsed: LiveAppointment[] = (data.appointments ?? []).map(
-          (a: { id: string; resourceId: string; patient: string; patientFull?: string; treatment: string; doctor: string; start: string; end: string; status?: string }) => ({
+          (a: { id: string; resourceId: string; patient: string; patientFull?: string; patientId?: string; treatment: string; doctor: string; start: string; end: string; status?: string }) => ({
             id: a.id,
             resourceId: a.resourceId,
             patient: a.patient,
             patientFull: a.patientFull,
+            patientId: a.patientId,
             treatment: a.treatment,
             doctor: a.doctor,
             start: new Date(a.start),
@@ -324,8 +350,25 @@ export function ClinicLayoutClient({
       setDragType(null);
       setPanMode(false);
       setViewTime(new Date());
+      setElementHover(null);
     }
   }, [liveMode]);
+
+  // Mantener `lightingHour` sincronizado con la hora real cada minuto, salvo
+  // que el usuario haya avanzado manualmente vía pill (caso en que dejamos
+  // su preview tal cual hasta que vuelva a la hora real con doble click —
+  // por ahora un click adelanta 3h y eventualmente recorre las 24h).
+  useEffect(() => {
+    const id = setInterval(() => {
+      setLightingHour((h) => {
+        const real = new Date().getHours();
+        // Si el usuario está en la hora real, mantenla actualizada;
+        // si está previsualizando otra hora, no toques.
+        return h === real || Math.abs(h - real) <= 1 ? real : h;
+      });
+    }, 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   /* ─── Acciones sobre elementos ─── */
 
@@ -685,14 +728,26 @@ export function ClinicLayoutClient({
           setElements((prev) =>
             prev.map((el) => (el.id === id ? { ...el, col: finalPos.col, row: finalPos.row } : el)),
           );
+          markDirty();
+        } else {
+          // mouseDown + mouseUp sin movimiento → click. Si el tipo es
+          // OPENABLE (puerta/gabinete/puerta_bano), alternar isOpen.
+          const elem = elements.find((e) => e.id === id);
+          if (elem && OPENABLE_TYPES.has(elem.type)) {
+            setOpenIds((prev) => {
+              const next = new Set(prev);
+              if (next.has(id)) next.delete(id);
+              else next.add(id);
+              return next;
+            });
+          }
         }
         moveStartRef.current = null;
         setMovingId(null);
         setMovingPosition(null);
-        markDirty();
       }
     },
-    [panMode, movingId, movingPosition, markDirty],
+    [panMode, movingId, movingPosition, elements, markDirty],
   );
 
   /** Drag desde el catálogo (sidebar) → drop en cualquier parte.
@@ -839,16 +894,42 @@ export function ClinicLayoutClient({
       const isSel = el.id === selectedId;
       const chair = el.resourceId ? liveChairs.find((c) => c.id === el.resourceId) : null;
       const labelText = td.isChair ? chair?.name ?? el.name ?? "Consultorio" : null;
+      // Opts dinámicos para draw():
+      // - isOpen: el id está en openIds (puertas/gabinetes click-toggleable)
+      // - isOccupied: solo en modo En Vivo, sólo sillones, ocupados ahora
+      const isOpen = openIds.has(el.id);
+      const isOccupied =
+        liveMode &&
+        td.isChair &&
+        !!el.resourceId &&
+        getChairStatus(el.resourceId, viewTime, appointments) === "ocupado";
+      // Centro y top para el tooltip de hover (en coordenadas de pantalla).
+      const cx = sx + ((td.w - td.h) * ISO_C) / 2;
+      const topY = sy - (td.h + 1) * ISO_C * 0.9;
+      const showHoverTip = !panMode && !dragType && !liveMode;
       return (
         <g
           key={el.id}
           data-element-id={el.id}
           className={isMoving ? styles.elementMoving : undefined}
           onMouseDown={(e) => onElementMouseDown(e, el.id)}
+          onMouseEnter={() => {
+            if (!showHoverTip) return;
+            setElementHover({
+              id: el.id,
+              cx,
+              topY,
+              label: td.label,
+              isOpen,
+            });
+          }}
+          onMouseLeave={() => {
+            setElementHover((h) => (h?.id === el.id ? null : h));
+          }}
           style={{ cursor: panMode ? "inherit" : "move" }}
           transform={el.rotation !== 0 ? `rotate(${el.rotation} ${sx} ${sy})` : undefined}
         >
-          <g dangerouslySetInnerHTML={{ __html: td.draw(sx, sy) }} />
+          <g dangerouslySetInnerHTML={{ __html: td.draw(sx, sy, { isOpen, isOccupied }) }} />
           {labelText && (
             <text x={sx + 20} y={sy - 64} className={styles.chairLabel} textAnchor="middle">
               {labelText}
@@ -879,10 +960,35 @@ export function ClinicLayoutClient({
     return (
       <g
         className={styles.ghostElement}
-        dangerouslySetInnerHTML={{ __html: td.draw(sx, sy) }}
+        dangerouslySetInnerHTML={{ __html: td.draw(sx, sy, {}) }}
       />
     );
   };
+
+  /** Filtro feColorMatrix para iluminación dinámica según `lightingHour`.
+   *  6-9h dorado · 9-17h neutro · 17-20h ámbar cálido · 20-6h azul frío. */
+  const lightingMatrix = useMemo(() => {
+    const h = lightingHour;
+    if (h >= 6 && h < 9) {
+      return "1.06 0.04 0 0 0.02  0 0.98 0 0 0  0 0 0.82 0 0  0 0 0 1 0";
+    }
+    if (h >= 17 && h < 20) {
+      return "1.10 0.08 0 0 0.04  0 0.93 0 0 0  0 0 0.68 0 0  0 0 0 1 0";
+    }
+    if (h >= 20 || h < 6) {
+      return "0.82 0 0 0 0  0 0.88 0 0 0  0 0 1.08 0 0.04  0 0 0 1 0";
+    }
+    return null;
+  }, [lightingHour]);
+
+  /** Etiqueta + ícono + color del pill de iluminación en el topbar. */
+  const lightingMeta = useMemo(() => {
+    const h = lightingHour;
+    if (h >= 6 && h < 9) return { label: "Mañana", color: "#F59E0B", Icon: Sunrise };
+    if (h >= 9 && h < 17) return { label: "Día", color: "#4A90E2", Icon: Sun };
+    if (h >= 17 && h < 20) return { label: "Tarde", color: "#EA580C", Icon: Sunset };
+    return { label: "Noche", color: "#6366F1", Icon: Moon };
+  }, [lightingHour]);
 
   /* ─── Renders ─── */
 
@@ -960,6 +1066,16 @@ export function ClinicLayoutClient({
           </div>
 
           {liveMode && <LiveClock />}
+          {liveMode && (
+            <button
+              type="button"
+              className={styles.optimizerBtn}
+              onClick={() => setShowOptimizer(true)}
+              title="Sugerencias de IA para reorganizar la agenda del día"
+            >
+              <Sparkles size={13} aria-hidden /> Optimizar con IA
+            </button>
+          )}
           {liveMode && liveConfig.enabled && liveConfig.slug && (
             <Link
               href={`/live/${liveConfig.slug}`}
@@ -978,6 +1094,21 @@ export function ClinicLayoutClient({
             title="Compartir vista en vivo"
           >
             <Share2 size={13} aria-hidden /> Compartir
+          </button>
+          {/* Pill de iluminación dinámica — click avanza 3 horas y previsualiza
+              el filtro feColorMatrix sobre el canvas. */}
+          <button
+            type="button"
+            className={styles.lightingPill}
+            onClick={() => setLightingHour((h) => (h + 3) % 24)}
+            title="Simulación de iluminación — click para avanzar 3 h"
+            style={{ color: lightingMeta.color }}
+          >
+            <lightingMeta.Icon size={13} aria-hidden />
+            <span>{lightingMeta.label}</span>
+            <span className={styles.lightingHourTxt}>
+              {String(lightingHour).padStart(2, "0")}:00
+            </span>
           </button>
 
           <span className={styles.spacer} />
@@ -1158,9 +1289,50 @@ export function ClinicLayoutClient({
             onMouseLeave={cancelMoveOrPan}
             onWheel={onSvgWheel}
           >
+            <defs>
+              {lightingMatrix && (
+                <filter
+                  id="mfLighting"
+                  x="0%"
+                  y="0%"
+                  width="100%"
+                  height="100%"
+                  colorInterpolationFilters="sRGB"
+                >
+                  <feColorMatrix type="matrix" values={lightingMatrix} />
+                </filter>
+              )}
+            </defs>
             <g>{renderGrid()}</g>
-            <g>{renderElements()}</g>
-            <g>{renderGhost()}</g>
+            <g filter={lightingMatrix ? "url(#mfLighting)" : undefined}>
+              {renderElements()}
+              {renderGhost()}
+            </g>
+            {/* Tooltip flotante sobre el elemento hovereado (modo Edición). */}
+            {elementHover && (
+              <g pointerEvents="none">
+                <rect
+                  x={elementHover.cx - 44}
+                  y={elementHover.topY - 22}
+                  width={88}
+                  height={18}
+                  rx={5}
+                  fill="rgba(20,40,80,0.86)"
+                />
+                <text
+                  x={elementHover.cx}
+                  y={elementHover.topY - 9}
+                  textAnchor="middle"
+                  fontFamily="Inter, system-ui, sans-serif"
+                  fontSize={10}
+                  fontWeight={700}
+                  fill="white"
+                >
+                  {elementHover.label}
+                  {elementHover.isOpen ? " · abierto" : ""}
+                </text>
+              </g>
+            )}
             {liveMode && (
               <LiveOverlay
                 elements={elements}
@@ -1194,6 +1366,14 @@ export function ClinicLayoutClient({
           />
         )}
 
+        {showOptimizer && (
+          <OptimizerModal
+            appointments={appointments}
+            chairs={liveChairs.map((c) => ({ id: c.id, name: c.name }))}
+            onClose={() => setShowOptimizer(false)}
+          />
+        )}
+
         {/* ── Properties panel / Live status ── */}
         <aside className={styles.propertiesPanel}>
           {liveMode ? (
@@ -1204,6 +1384,18 @@ export function ClinicLayoutClient({
                 viewTime={viewTime}
                 appointments={appointments}
                 showFullNames={clinic.liveModeShowPatientNames}
+                onOpenOdontogram={(apt) => {
+                  // Sin patientId no podemos navegar al expediente — la ruta
+                  // /dashboard/patients/[id] requiere ese segmento.
+                  if (!apt.patientId) {
+                    toast.error(
+                      "El expediente no está disponible para esta cita aún.",
+                    );
+                    return;
+                  }
+                  // Abrir en pestaña nueva para no salir del modo En Vivo.
+                  window.open(`/dashboard/patients/${apt.patientId}`, "_blank", "noopener,noreferrer");
+                }}
               />
               <div style={{ marginTop: 14 }}>
                 <WaitingRoom

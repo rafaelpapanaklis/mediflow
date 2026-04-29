@@ -20,6 +20,21 @@ export type ElementCategoryGroup =
   | "mobiliario"
   | "bano";
 
+/** Opciones de render para `draw()`. */
+export interface DrawOpts {
+  /** true → puerta/gabinete dibujado abierto; ignorado por tipos no openables. */
+  isOpen?: boolean;
+  /** true → sillón se reclina y enciende lámpara (modo En Vivo, ocupado). */
+  isOccupied?: boolean;
+}
+
+/** Tipos que responden a click con toggle open/close (ver layout-client). */
+export const OPENABLE_TYPES: ReadonlySet<string> = new Set([
+  "puerta",
+  "puerta_bano",
+  "gabinete",
+]);
+
 /** Definición estática del catálogo (geometría isométrica + icono SVG). */
 export interface ElementType {
   /** ID único del tipo (e.g. "sillon", "wall_h"). */
@@ -32,8 +47,12 @@ export interface ElementType {
   w: number;
   /** Profundidad en unidades de fila del grid. */
   h: number;
-  /** Función que produce el SVG del elemento posicionado en (ox, oy). */
-  draw: (ox: number, oy: number) => string;
+  /**
+   * Función que produce el SVG del elemento posicionado en (ox, oy).
+   * `opts` es opcional — la mayoría de tipos lo ignora; sólo puertas,
+   * gabinetes y sillón dental varían según `isOpen` / `isOccupied`.
+   */
+  draw: (ox: number, oy: number, opts?: DrawOpts) => string;
   /** SVG inline 40×40 para el sidebar y previews. */
   icon: string;
   /** Si true, este tipo solo puede instanciarse 1 vez por Resource(kind=CHAIR). */
@@ -107,6 +126,8 @@ export interface LiveAppointment {
   /** Nombre del paciente — completo o iniciales según privacy. */
   patient: string;
   patientFull?: string;
+  /** ID estable del paciente — permite abrir su expediente/odontograma desde live. */
+  patientId?: string;
   treatment: string;
   doctor: string;
   start: Date;
