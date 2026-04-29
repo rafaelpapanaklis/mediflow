@@ -5,10 +5,16 @@ import { useDroppable } from "@dnd-kit/core";
 import { useAgenda } from "./agenda-provider";
 import { AgendaTimeAxis } from "./agenda-time-axis";
 import { AgendaAppointmentCard } from "./agenda-appointment-card";
-import { todayInTz } from "@/lib/agenda/time-utils";
+import { getTzParts, todayInTz } from "@/lib/agenda/time-utils";
 import { useDragOverlap } from "@/app/dashboard/agenda/agenda-page-client";
+import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 import type { DroppableData } from "@/lib/agenda/drag-utils";
 import styles from "./agenda.module.css";
+
+function dateKeyInTz(iso: string, timezone: string): string {
+  const p = getTzParts(new Date(iso), timezone);
+  return `${p.year}-${p.month.toString().padStart(2, "0")}-${p.day.toString().padStart(2, "0")}`;
+}
 
 const WEEKDAYS_ES = ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"];
 
@@ -98,7 +104,6 @@ export function AgendaWeekView() {
               day={d}
               isToday={d.iso === today}
               slotsTotal={slotsTotal}
-              showAppointments={d.iso === state.dayISO}
             />
           ))}
         </div>
@@ -111,11 +116,17 @@ interface WeekDayColumnProps {
   day: WeekDay;
   isToday: boolean;
   slotsTotal: number;
-  showAppointments: boolean;
 }
 
-function WeekDayColumn({ day, isToday, slotsTotal, showAppointments }: WeekDayColumnProps) {
+function WeekDayColumn({ day, isToday, slotsTotal }: WeekDayColumnProps) {
   const { state, setDay } = useAgenda();
+
+  // Filtramos las citas del rango (cargadas por el provider) que caen
+  // exactamente en este día, en el timezone de la clínica.
+  const dayAppts = useMemo<AgendaAppointmentDTO[]>(
+    () => state.appointments.filter((a) => dateKeyInTz(a.startsAt, state.timezone) === day.iso),
+    [state.appointments, day.iso, state.timezone],
+  );
 
   const droppableData: DroppableData = {
     kind: "day-col",
@@ -156,17 +167,16 @@ function WeekDayColumn({ day, isToday, slotsTotal, showAppointments }: WeekDayCo
       role="grid"
       aria-label={`Día ${day.iso}`}
     >
-      {showAppointments &&
-        state.appointments.map((appt) => (
-          <AgendaAppointmentCard
-            key={appt.id}
-            appointment={appt}
-            dayISO={state.dayISO}
-            slotMinutes={state.slotMinutes}
-            dayStart={state.dayStart}
-            timezone={state.timezone}
-          />
-        ))}
+      {dayAppts.map((appt) => (
+        <AgendaAppointmentCard
+          key={appt.id}
+          appointment={appt}
+          dayISO={day.iso}
+          slotMinutes={state.slotMinutes}
+          dayStart={state.dayStart}
+          timezone={state.timezone}
+        />
+      ))}
     </div>
   );
 }

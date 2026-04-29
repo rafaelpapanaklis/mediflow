@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useAgenda } from "./agenda-provider";
 import { getTzParts, todayInTz } from "@/lib/agenda/time-utils";
 import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
@@ -52,38 +52,12 @@ export function AgendaMonthView() {
 
   const cells = useMemo(() => buildMonthGrid(state.dayISO), [state.dayISO]);
   const today = todayInTz(state.timezone);
-  const fromISO = cells[0].iso;
-  const toISO = cells[cells.length - 1].iso;
 
-  // Cargamos appointments para el grid completo (42 días). Mantenemos
-  // state.appointments del store sin tocar — ese es el día activo y lo
-  // usan vista día/semana/lista. El mes maneja su propio cache local.
-  const [monthAppts, setMonthAppts] = useState<AgendaAppointmentDTO[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    const ctrl = new AbortController();
-    setLoading(true);
-    fetch(`/api/agenda/range?from=${fromISO}&to=${toISO}`, { signal: ctrl.signal })
-      .then(async (r) => {
-        if (!r.ok) throw new Error("range_failed");
-        return r.json();
-      })
-      .then((data: { appointments: AgendaAppointmentDTO[] }) => {
-        setMonthAppts(data.appointments ?? []);
-        setLoading(false);
-      })
-      .catch((e) => {
-        if (e?.name === "AbortError") return;
-        setLoading(false);
-      });
-    return () => ctrl.abort();
-  }, [fromISO, toISO]);
-
-  // Agrupamos por día (en clinic timezone) para counts + preview.
+  // El provider ya cargó state.appointments con el rango del grid (42
+  // días) cuando viewMode === "month". Solo agrupamos por día.
   const byDay = useMemo(() => {
     const map = new Map<string, AgendaAppointmentDTO[]>();
-    for (const a of monthAppts) {
+    for (const a of state.appointments) {
       if (a.status === "CANCELLED") continue;
       const key = dateKeyInTz(a.startsAt, state.timezone);
       const arr = map.get(key);
@@ -92,7 +66,7 @@ export function AgendaMonthView() {
     }
     map.forEach((arr) => arr.sort((x, y) => x.startsAt.localeCompare(y.startsAt)));
     return map;
-  }, [monthAppts, state.timezone]);
+  }, [state.appointments, state.timezone]);
 
   function jumpToDay(iso: string) {
     setDay(iso);
@@ -113,7 +87,7 @@ export function AgendaMonthView() {
           </div>
         ))}
       </div>
-      <div className={styles.monthGrid} aria-busy={loading || undefined}>
+      <div className={styles.monthGrid}>
         {cells.map((c) => {
           const appts = byDay.get(c.iso) ?? [];
           const count = appts.length;

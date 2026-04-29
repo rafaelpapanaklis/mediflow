@@ -31,6 +31,7 @@ export type AgendaAction =
   | { type: "ROLLBACK_STATUS"; original: AgendaAppointmentDTO }
   | { type: "REPLACE_APPOINTMENT"; appointment: AgendaAppointmentDTO }
   | { type: "REMOVE_APPOINTMENT"; id: string }
+  | { type: "SET_APPOINTMENTS"; appointments: AgendaAppointmentDTO[] }
   | { type: "UPSERT_RESOURCE"; resource: ResourceDTO }
   | { type: "REMOVE_RESOURCE"; id: string }
   | { type: "REORDER_RESOURCES"; orderedIds: string[] }
@@ -98,6 +99,8 @@ export function agendaReducer(
       return { ...state, columnMode: action.mode };
     case "SET_FILTERS":
       return { ...state, filters: action.filters };
+    case "SET_APPOINTMENTS":
+      return { ...state, appointments: action.appointments, isLoading: false, error: null };
     case "SET_SEARCH":
       return { ...state, searchQuery: action.query };
     case "SET_SELECTED":
