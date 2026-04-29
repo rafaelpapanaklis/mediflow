@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   X,
-  FileDown,
+  Printer,
+  Download,
   CheckCircle2,
   Save,
   Paperclip,
@@ -188,14 +189,17 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
     }
   }, [note, draft, onUpdated, onClose]);
 
+  const handlePrint = useCallback(() => {
+    window.print();
+  }, []);
+
   const handleDownloadPdf = useCallback(async () => {
     if (!note) return;
     setDownloading(true);
     try {
       const res = await fetch(`/api/clinical-notes/${note.id}/pdf`);
       if (!res.ok) {
-        // Si no hay endpoint todavía, fallback a window.print().
-        window.print();
+        toast.error("No se pudo generar el PDF");
         return;
       }
       const blob = await res.blob();
@@ -206,7 +210,7 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      window.print();
+      toast.error("Error al descargar el PDF");
     } finally {
       setDownloading(false);
     }
@@ -387,11 +391,20 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
               </span>
               <button
                 type="button"
+                className={styles.noteBtnSecondary}
+                onClick={handlePrint}
+                disabled={downloading}
+              >
+                <Printer size={12} aria-hidden />
+                Imprimir
+              </button>
+              <button
+                type="button"
                 className={styles.noteBtnPrimary}
                 onClick={handleDownloadPdf}
                 disabled={downloading}
               >
-                <FileDown size={12} aria-hidden />
+                <Download size={12} aria-hidden />
                 {downloading ? "Generando…" : "Descargar PDF"}
               </button>
             </>
