@@ -7,8 +7,26 @@ import {
   fetchWaitlistCount,
 } from "@/lib/agenda/server";
 import { isValidDateISO, tzLocalToUtc } from "@/lib/agenda/time-utils";
+import type { AppointmentStatus } from "@/lib/agenda/types";
 
 export const dynamic = "force-dynamic";
+
+const VALID_STATUSES: AppointmentStatus[] = [
+  "SCHEDULED",
+  "CONFIRMED",
+  "CHECKED_IN",
+  "IN_CHAIR",
+  "IN_PROGRESS",
+  "COMPLETED",
+  "CHECKED_OUT",
+  "CANCELLED",
+  "NO_SHOW",
+];
+
+function parseList(raw: string | null): string[] {
+  if (!raw) return [];
+  return raw.split(",").map((s) => s.trim()).filter(Boolean);
+}
 
 export async function GET(req: Request) {
   const session = await loadClinicSession();
@@ -39,11 +57,22 @@ export async function GET(req: Request) {
   const doctorIdScope =
     session.user.role === "DOCTOR" ? session.user.id : undefined;
 
+  // Filtros opcionales (query params comma-separated).
+  const doctorIds = parseList(url.searchParams.get("doctorIds"));
+  const resourceIds = parseList(url.searchParams.get("resourceIds"));
+  const statusesRaw = parseList(url.searchParams.get("statuses"));
+  const statuses = statusesRaw.filter((s): s is AppointmentStatus =>
+    (VALID_STATUSES as string[]).includes(s),
+  );
+
   const [appointments, doctors, resources, waitlistCount] = await Promise.all([
     fetchAppointmentsForRange(fromUtc, toUtc, {
       clinicId: session.clinic.id,
       clinicCategory: session.clinic.category,
       doctorIdScope,
+      doctorIds: doctorIds.length > 0 ? doctorIds : undefined,
+      resourceIds: resourceIds.length > 0 ? resourceIds : undefined,
+      statuses: statuses.length > 0 ? statuses : undefined,
     }),
     fetchActiveDoctors(session.clinic.id, session.clinic.category),
     fetchResources(session.clinic.id),

@@ -81,7 +81,9 @@ export interface AgendaQueryFilter {
   clinicCategory: ClinicCategory;
   doctorIdScope?: string;
   doctorId?: string;
+  doctorIds?: string[];
   resourceId?: string;
+  resourceIds?: string[];
   statuses?: AppointmentStatus[];
 }
 
@@ -97,10 +99,18 @@ export async function fetchAppointmentsForDay(
     startsAt: { gte: range.startUtc, lt: range.endUtc },
   };
 
-  if (filter.doctorIdScope)      where.doctorId = filter.doctorIdScope;
-  else if (filter.doctorId)      where.doctorId = filter.doctorId;
-  if (filter.resourceId)         where.resourceId = filter.resourceId;
-  if (filter.statuses?.length)   where.status = { in: filter.statuses };
+  // doctorIdScope (rol DOCTOR) tiene prioridad. Si no, aceptamos
+  // doctorIds (multi-select) o doctorId (single, legacy).
+  if (filter.doctorIdScope) {
+    where.doctorId = filter.doctorIdScope;
+  } else if (filter.doctorIds?.length) {
+    where.doctorId = { in: filter.doctorIds };
+  } else if (filter.doctorId) {
+    where.doctorId = filter.doctorId;
+  }
+  if (filter.resourceIds?.length)     where.resourceId = { in: filter.resourceIds };
+  else if (filter.resourceId)         where.resourceId = filter.resourceId;
+  if (filter.statuses?.length)        where.status = { in: filter.statuses };
 
   const rows = await prisma.appointment.findMany({
     where,
@@ -121,10 +131,16 @@ export async function fetchAppointmentsForRange(
     startsAt: { gte: fromUtc, lt: toUtc },
   };
 
-  if (filter.doctorIdScope)      where.doctorId = filter.doctorIdScope;
-  else if (filter.doctorId)      where.doctorId = filter.doctorId;
-  if (filter.resourceId)         where.resourceId = filter.resourceId;
-  if (filter.statuses?.length)   where.status = { in: filter.statuses };
+  if (filter.doctorIdScope) {
+    where.doctorId = filter.doctorIdScope;
+  } else if (filter.doctorIds?.length) {
+    where.doctorId = { in: filter.doctorIds };
+  } else if (filter.doctorId) {
+    where.doctorId = filter.doctorId;
+  }
+  if (filter.resourceIds?.length)     where.resourceId = { in: filter.resourceIds };
+  else if (filter.resourceId)         where.resourceId = filter.resourceId;
+  if (filter.statuses?.length)        where.status = { in: filter.statuses };
 
   const rows = await prisma.appointment.findMany({
     where,
