@@ -114,11 +114,22 @@ export async function GET(req: NextRequest, { params }: Params) {
       },
       orderBy: { issuedAt: "desc" },
     }) : Promise.resolve([]),
-    wantXray ? prisma.xrayAnalysis.findMany({
-      where: { clinicId: user.clinicId, patientId: params.id, ...dateRange<"createdAt">("createdAt") },
-      select: { id: true, createdAt: true, summary: true, severity: true },
+    wantXray ? prisma.patientFile.findMany({
+      // Coherente con la pestaña "Radiografías" (/api/xrays). Filtramos a
+      // categorías XRAY_* para excluir fotos intraorales/consents/etc.
+      // El xrayAnalysis (1:1 opcional) enriquece el summary cuando existe.
+      where: {
+        clinicId: user.clinicId,
+        patientId: params.id,
+        category: { in: ["XRAY_PERIAPICAL", "XRAY_PANORAMIC", "XRAY_BITEWING", "XRAY_OCCLUSAL"] },
+        ...dateRange<"createdAt">("createdAt"),
+      },
+      select: {
+        id: true, createdAt: true, name: true, category: true, toothNumber: true,
+        xrayAnalysis: { select: { summary: true, severity: true } },
+      },
       orderBy: { createdAt: "desc" },
-    }).catch(() => []) : Promise.resolve([]),
+    }) : Promise.resolve([]),
     wantTreatment ? prisma.treatmentPlan.findMany({
       where: { clinicId: user.clinicId, patientId: params.id, ...dateRange<"startDate">("startDate") },
       select: {
@@ -197,15 +208,23 @@ export async function GET(req: NextRequest, { params }: Params) {
     });
   }
 
+  const CAT_LABEL: Record<string, string> = {
+    XRAY_PERIAPICAL: "Periapical",
+    XRAY_PANORAMIC: "Panorámica",
+    XRAY_BITEWING: "Bitewing",
+    XRAY_OCCLUSAL: "Oclusal",
+  };
   for (const x of xrayRows) {
+    const aiSummary = x.xrayAnalysis?.summary?.trim();
+    const fallback = `${CAT_LABEL[x.category] ?? "Radiografía"}${x.toothNumber ? ` · pieza #${x.toothNumber}` : ""} · ${x.name}`;
     events.push({
       id: `xray-${x.id}`,
       type: "xray",
       date: x.createdAt.toISOString(),
       title: "Radiografía",
-      summary: (x.summary ?? "Imagen radiográfica").slice(0, 140),
+      summary: (aiSummary ?? fallback).slice(0, 140),
       doctorName: null,
-      meta: { entityId: x.id, severity: x.severity },
+      meta: { entityId: x.id, severity: x.xrayAnalysis?.severity ?? null, hasAnalysis: !!aiSummary },
     });
   }
 
