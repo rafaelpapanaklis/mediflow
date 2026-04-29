@@ -2,7 +2,8 @@
 
 import { useMemo } from "react";
 import { useAgenda } from "./agenda-provider";
-import { todayInTz } from "@/lib/agenda/time-utils";
+import { getTzParts, todayInTz } from "@/lib/agenda/time-utils";
+import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
 
 const WEEKDAYS_ES = ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"];
@@ -12,6 +13,10 @@ interface MonthCell {
   day: number;
   month: number;
   outside: boolean;
+}
+
+function pad(n: number): string {
+  return n.toString().padStart(2, "0");
 }
 
 function buildMonthGrid(refISO: string): MonthCell[] {
@@ -32,30 +37,46 @@ function buildMonthGrid(refISO: string): MonthCell[] {
   return cells;
 }
 
-function pad(n: number): string {
-  return n.toString().padStart(2, "0");
+function dateKeyInTz(iso: string, timezone: string): string {
+  const p = getTzParts(new Date(iso), timezone);
+  return `${p.year}-${pad(p.month)}-${pad(p.day)}`;
+}
+
+function fmtHHMMInTz(iso: string, timezone: string): string {
+  const p = getTzParts(new Date(iso), timezone);
+  return `${pad(p.hour)}:${pad(p.minute)}`;
 }
 
 export function AgendaMonthView() {
-  const { state, setDay, setViewMode } = useAgenda();
+  const { state, setDay, setViewMode, selectAppointment } = useAgenda();
 
   const cells = useMemo(() => buildMonthGrid(state.dayISO), [state.dayISO]);
   const today = todayInTz(state.timezone);
+
+  // El provider ya cargó state.appointments con el rango del grid (42
+  // días) cuando viewMode === "month". Solo agrupamos por día.
+  const byDay = useMemo(() => {
+    const map = new Map<string, AgendaAppointmentDTO[]>();
+    for (const a of state.appointments) {
+      if (a.status === "CANCELLED") continue;
+      const key = dateKeyInTz(a.startsAt, state.timezone);
+      const arr = map.get(key);
+      if (arr) arr.push(a);
+      else map.set(key, [a]);
+    }
+    map.forEach((arr) => arr.sort((x, y) => x.startsAt.localeCompare(y.startsAt)));
+    return map;
+  }, [state.appointments, state.timezone]);
 
   function jumpToDay(iso: string) {
     setDay(iso);
     setViewMode("day");
   }
 
-  const dayCounts = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const a of state.appointments) {
-      if (a.status === "CANCELLED") continue;
-      const k = state.dayISO;
-      map.set(k, (map.get(k) ?? 0) + 1);
-    }
-    return map;
-  }, [state.appointments, state.dayISO]);
+  function handleApptClick(e: React.MouseEvent, id: string) {
+    e.stopPropagation();
+    selectAppointment(id);
+  }
 
   return (
     <div className={styles.monthView}>
@@ -68,7 +89,10 @@ export function AgendaMonthView() {
       </div>
       <div className={styles.monthGrid}>
         {cells.map((c) => {
-          const count = dayCounts.get(c.iso) ?? 0;
+          const appts = byDay.get(c.iso) ?? [];
+          const count = appts.length;
+          const preview = appts.slice(0, 5);
+          const more = Math.max(0, count - preview.length);
           const classes = [
             styles.monthDay,
             c.outside ? styles.outside : "",
@@ -90,14 +114,41 @@ export function AgendaMonthView() {
                   jumpToDay(c.iso);
                 }
               }}
-              aria-label={`Abrir vista día ${c.iso}`}
+              aria-label={`Abrir vista día ${c.iso}, ${count} cita${count === 1 ? "" : "s"}`}
               title={`Ver el día ${c.iso} en vista detallada`}
             >
-              <span className={styles.monthDayNum}>{c.day}</span>
-              {count > 0 && (
-                <span className={styles.monthDayBadge}>
-                  {count} cita{count === 1 ? "" : "s"}
-                </span>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
+                <span className={styles.monthDayNum}>{c.day}</span>
+                {count > 0 && (
+                  <span className={styles.monthDayBadge}>
+                    {count} cita{count === 1 ? "" : "s"}
+                  </span>
+                )}
+              </div>
+              {preview.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={(e) => handleApptClick(e, a.id)}
+                  className={styles.monthDayPreview}
+                  style={{
+                    border: 0,
+                    background: "transparent",
+                    padding: 0,
+                    textAlign: "left",
+                    cursor: "pointer",
+                    width: "100%",
+                  }}
+                  title={`${fmtHHMMInTz(a.startsAt, state.timezone)} · ${a.patient.name}${a.reason ? ` — ${a.reason}` : ""}`}
+                >
+                  {fmtHHMMInTz(a.startsAt, state.timezone)} {a.patient.name}
+                  {a.reason ? ` · ${a.reason}` : ""}
+                </button>
+              ))}
+              {more > 0 && (
+                <div className={styles.monthDayPreview} style={{ fontWeight: 600 }}>
+                  +{more} más
+                </div>
               )}
             </div>
           );

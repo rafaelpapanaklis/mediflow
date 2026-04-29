@@ -69,7 +69,10 @@ async function v2Handler(
   const visitTo = sp.get("visitTo");
   const sortParam = sp.get("sort") ?? "createdAt:desc";
   const limit = Math.min(Math.max(parseInt(sp.get("limit") ?? "30", 10) || 30, 1), 100);
-  const cursor = sp.get("cursor");
+  // Página 1-indexed. El cliente envía ?page=N — antes el endpoint solo
+  // soportaba cursor (`?cursor=<id>`), nunca leía page → cualquier click
+  // en "Siguiente" devolvía la misma primera página.
+  const page = Math.max(1, parseInt(sp.get("page") ?? "1", 10) || 1);
 
   const status = statusRaw
     ? (statusRaw.toUpperCase() as PatientStatus)
@@ -137,12 +140,18 @@ async function v2Handler(
     return [{ createdAt: "desc" }];
   })();
 
-  const useCursor =
-    !quickPostFetch &&
-    !visitFromDate &&
-    !visitToDate &&
-    !["balance", "lastVisit", "nextAppointment"].includes(sortCol) &&
-    hasDebt !== "false";
+  // Si el sort/filter requiere post-fetch (balance, debt, lastVisit, etc.)
+  // necesitamos todos los rows que matchean el WHERE para ordenar/contar
+  // bien antes de paginar. 5000 cubre 99% de las clínicas; las grandes
+  // pueden subir el límite si es necesario.
+  const needsPostFetch =
+    !!quickPostFetch ||
+    !!visitFromDate ||
+    !!visitToDate ||
+    ["balance", "lastVisit", "nextAppointment"].includes(sortCol) ||
+    hasDebt === "false";
+  const dbFetchTake = needsPostFetch ? 5000 : limit;
+  const dbFetchSkip = needsPostFetch ? 0 : (page - 1) * limit;
 
   /* ─── 1ª query: lista + relaciones ─── */
   const queryArgs: Prisma.PatientFindManyArgs = {
@@ -171,8 +180,8 @@ async function v2Handler(
         select: { balance: true },
       },
     },
-    take: useCursor ? limit + 1 : 1000,
-    ...(useCursor && cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    take: dbFetchTake,
+    skip: dbFetchSkip,
   };
 
   let rawPatients: Array<Prisma.PatientGetPayload<{
@@ -360,30 +369,32 @@ async function v2Handler(
     });
   }
 
+  // Cuando hay post-fetch (sort/filter no DB), `filtered` es el set
+  // completo: el total es filtered.length y la página se rebana acá.
+  // Cuando NO hay post-fetch, ya pedimos a la DB con skip+take correctos:
+  // `filtered` ya es la página, y el total viene del count() abajo.
+  let total: number;
   let pageSlice: typeof filtered;
-  let nextCursor: string | null = null;
-  let hasMore = false;
-  if (useCursor) {
-    const overshoot = filtered.length > limit;
-    pageSlice = overshoot ? filtered.slice(0, limit) : filtered;
-    nextCursor = overshoot ? pageSlice[pageSlice.length - 1].id : null;
-    hasMore = overshoot;
+  if (needsPostFetch) {
+    total = filtered.length;
+    const skip = (page - 1) * limit;
+    pageSlice = filtered.slice(skip, skip + limit);
   } else {
-    if (cursor) {
-      const idx = filtered.findIndex((p) => p.id === cursor);
-      if (idx >= 0) filtered = filtered.slice(idx + 1);
-    }
-    pageSlice = filtered.slice(0, limit);
-    hasMore = filtered.length > limit;
-    nextCursor = hasMore ? pageSlice[pageSlice.length - 1].id : null;
+    pageSlice = filtered;
+    total = await prisma.patient.count({ where });
   }
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const hasMore = page < totalPages;
 
   return NextResponse.json({
     patients: pageSlice,
-    total: stats.total,
+    total,
+    page,
+    pageSize: limit,
+    totalPages,
     stats,
     hasMore,
-    nextCursor,
+    nextCursor: null,
   });
 }
 
