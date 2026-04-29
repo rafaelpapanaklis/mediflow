@@ -43,7 +43,7 @@ function formatHumanDate(dayISO: string, timezone: string): string {
 }
 
 export function AgendaTopbar() {
-  const { state, setDay, setViewMode, setSearchQuery, toggleWaitlist, openModal } = useAgenda();
+  const { state, setDay, setViewMode, setSearchQuery, toggleWaitlist, openModal, prefetchView } = useAgenda();
   const { open: openNew } = useNewAppointmentDialog();
 
   const today = todayInTz(state.timezone);
@@ -71,6 +71,8 @@ export function AgendaTopbar() {
             aria-selected={state.viewMode === t.value}
             className={`${styles.viewTab} ${state.viewMode === t.value ? styles.active : ""}`}
             onClick={() => setViewMode(t.value)}
+            onMouseEnter={() => state.viewMode !== t.value && prefetchView(t.value)}
+            onFocus={() => state.viewMode !== t.value && prefetchView(t.value)}
           >
             {t.label}
           </button>
