@@ -28,6 +28,7 @@ import { Label } from "@/components/ui/label";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { PaymentModal, type PaymentInvoice } from "@/components/dashboard/billing/payment-modal";
 
 const SPECIALTY_MAP: Record<string, string> = {
   dental: "dental", odontologia: "dental", odontología: "dental",
@@ -96,8 +97,8 @@ interface Props {
 }
 
 export function PatientDetailClient({
-  patient, records: initialRecords, appointments, invoices,
-  doctors, currentUser, specialty, totalPaid, totalBalance, totalPlan, treatments, portalUrl,
+  patient, records: initialRecords, appointments, invoices: initialInvoices,
+  doctors, currentUser, specialty, totalPaid: initialPaid, totalBalance: initialBalance, totalPlan, treatments, portalUrl,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -111,6 +112,13 @@ export function PatientDetailClient({
     treatments: SuggestedTreatment[];
   }>({ open: false, appointmentId: "", treatments: [] });
   const [records, setRecords] = useState(initialRecords);
+  // Invoices estado local para refrescar tras registrar pago sin recargar la página entera.
+  const [invoices, setInvoices]     = useState<any[]>(initialInvoices);
+  const [invoiceDetail, setInvoiceDetail] = useState<any | null>(null);
+  const [paymentFor, setPaymentFor] = useState<PaymentInvoice | null>(null);
+  // Recalculados sobre el invoices state local — se mantienen en sync tras pagos.
+  const totalPaid    = invoices.reduce((s: number, i: any) => s + (i.paid    ?? 0), 0);
+  const totalBalance = invoices.reduce((s: number, i: any) => s + (i.balance ?? 0), 0);
   const [showEdit, setShowEdit] = useState(false);
   const [editForm, setEditForm] = useState({
     firstName: patient.firstName, lastName: patient.lastName,
@@ -215,6 +223,32 @@ export function PatientDetailClient({
 
   const detectedSpecialty = detectSpecialty(specialty);
 
+  // Auto-abrir PaymentModal cuando llegamos con ?charge=1 (de patient-context-bar,
+  // patient-context-end-modal o command-palette). Limpia el query param tras abrir.
+  useEffect(() => {
+    if (searchParams.get("charge") !== "1") return;
+    const billable = invoices.filter((i: any) =>
+      i.balance > 0 && i.status !== "DRAFT" && i.status !== "CANCELLED",
+    );
+    if (billable.length === 1) {
+      const inv = billable[0];
+      setPaymentFor({
+        id: inv.id, invoiceNumber: inv.invoiceNumber,
+        total: inv.total, paid: inv.paid, balance: inv.balance, status: inv.status,
+        patientName: `${patient.firstName} ${patient.lastName}`,
+      });
+    } else if (billable.length > 1) {
+      setTab("facturacion");
+    } else {
+      toast("Sin facturas con saldo pendiente", { icon: "ℹ️" });
+    }
+    // Limpia ?charge=1 para que un refresh no reabra el modal.
+    const url = new URL(window.location.href);
+    url.searchParams.delete("charge");
+    router.replace(url.pathname + url.search);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.get("charge")]);
+
   const [evolutionPlans, setEvolutionPlans] = useState<any[]>([]);
   useEffect(() => {
     fetch(`/api/treatments?patientId=${patient.id}`)
@@ -298,6 +332,41 @@ export function PatientDetailClient({
     setRecords(prev => [record, ...prev]);
     toast.success("Expediente guardado");
     setTab("evolucion");
+  }
+
+  // Refresca la lista de facturas (saldo, status, pagos) tras registrar un pago.
+  // Usa el endpoint /api/patients/[id] que ya devuelve invoices con payments.
+  async function refreshInvoices() {
+    try {
+      const res = await fetch(`/api/patients/${patient.id}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (Array.isArray(data?.invoices)) setInvoices(data.invoices);
+    } catch { /* silencioso — el toast ya confirmó el pago al usuario */ }
+  }
+
+  // Abre el PaymentModal con la primera factura cobrable. Si no hay ninguna
+  // cobrable o hay >1 con saldo, redirige al tab Facturación para que el
+  // usuario elija cuál cobrar.
+  function openChargeForFirstUnpaid() {
+    const billable = invoices.filter((i: any) =>
+      i.balance > 0 && i.status !== "DRAFT" && i.status !== "CANCELLED",
+    );
+    if (billable.length === 1) {
+      const inv = billable[0];
+      setPaymentFor({
+        id: inv.id, invoiceNumber: inv.invoiceNumber,
+        total: inv.total, paid: inv.paid, balance: inv.balance, status: inv.status,
+        patientName: `${patient.firstName} ${patient.lastName}`,
+      });
+    } else {
+      setTab("facturacion");
+      if (billable.length === 0) {
+        toast("Sin facturas con saldo pendiente", { icon: "ℹ️" });
+      } else {
+        toast(`${billable.length} facturas con saldo — selecciona una`, { icon: "ℹ️" });
+      }
+    }
   }
 
   async function createAppointment(e: React.FormEvent) {
@@ -567,7 +636,7 @@ export function PatientDetailClient({
           // Por ahora redirige al tab Citas; en una futura iteración abrir picker inline.
           setTab("agenda");
         }}
-        onCharge={() => setTab("facturacion")}
+        onCharge={openChargeForFirstUnpaid}
       />
 
       {/* Layout 3 columnas — audit Opción C ajuste 3 */}
@@ -1280,8 +1349,9 @@ export function PatientDetailClient({
 
           {tab === "facturacion" && (
             <div className="bg-card border border-border rounded-xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-border">
+              <div className="px-5 py-4 border-b border-border flex items-center justify-between">
                 <h2 className="text-sm font-bold">Facturación</h2>
+                <span className="text-[10px] text-muted-foreground">Haz click en una factura para ver detalle</span>
               </div>
               <table className="w-full text-xs">
                 <thead>
@@ -1297,7 +1367,11 @@ export function PatientDetailClient({
                   ) : invoices.map(inv => {
                     const s = INV_STATUS[inv.status] ?? INV_STATUS.PENDING;
                     return (
-                      <tr key={inv.id} className="border-b border-border/50 hover:bg-muted/20">
+                      <tr
+                        key={inv.id}
+                        onClick={() => setInvoiceDetail(inv)}
+                        className="border-b border-border/50 hover:bg-muted/20 cursor-pointer"
+                      >
                         <td className="px-4 py-2 font-mono font-bold">{inv.invoiceNumber}</td>
                         <td className="px-4 py-2 text-muted-foreground">{formatDate(inv.createdAt)}</td>
                         <td className="px-4 py-2 font-bold">{formatCurrency(inv.total)}</td>
@@ -1332,7 +1406,7 @@ export function PatientDetailClient({
           patientPhone={patient.phone ?? null}
           onReschedule={() => setTab("agenda")}
           onCancelAppt={() => setTab("agenda")}
-          onCharge={() => setTab("facturacion")}
+          onCharge={openChargeForFirstUnpaid}
         />
       </div>
 
@@ -1472,6 +1546,139 @@ export function PatientDetailClient({
         onUpdated={(updated) => {
           setRecords((prev) => prev.map((r) => (r.id === updated.id ? { ...r, ...updated } : r)));
           setNoteDetailOpen(null);
+        }}
+      />
+
+      {/* Detalle de factura — se abre al click en row de la tabla Facturación.
+       *  Acciones disponibles dependen del status. */}
+      <Dialog open={invoiceDetail !== null} onOpenChange={(o) => { if (!o) setInvoiceDetail(null); }}>
+        <DialogContent className="max-w-lg">
+          {invoiceDetail && (() => {
+            const inv = invoiceDetail;
+            const s = INV_STATUS[inv.status] ?? INV_STATUS.PENDING;
+            const isCancellable = (inv.status === "PENDING" || inv.status === "PARTIAL") && inv.paid === 0;
+            const canCharge = (inv.status === "PENDING" || inv.status === "PARTIAL") && inv.balance > 0;
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="text-foreground font-bold flex items-center gap-3">
+                    <span className="font-mono">{inv.invoiceNumber}</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.cls}`}>{s.label}</span>
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="px-6 py-4 space-y-4">
+                  <div className="bg-muted/30 border border-border rounded-lg p-3 text-xs space-y-1.5">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Fecha</span><span>{formatDate(inv.createdAt)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-bold">{formatCurrency(inv.total)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Pagado</span><span className="text-emerald-600 font-bold">{formatCurrency(inv.paid)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Saldo</span><span className="text-rose-600 font-bold">{formatCurrency(inv.balance)}</span></div>
+                    {inv.paymentMethod && (
+                      <div className="flex justify-between"><span className="text-muted-foreground">Método</span><span className="capitalize">{inv.paymentMethod}</span></div>
+                    )}
+                    {inv.cfdiUuid && (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-muted-foreground">CFDI</span>
+                        <span className="font-mono text-[10px] truncate">{inv.cfdiUuid}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {Array.isArray(inv.items) && inv.items.length > 0 && (
+                    <div>
+                      <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide mb-1.5">Conceptos</h3>
+                      <div className="bg-card border border-border rounded-lg divide-y divide-border">
+                        {inv.items.map((it: any, i: number) => (
+                          <div key={i} className="px-3 py-2 flex items-center justify-between text-xs">
+                            <div className="min-w-0">
+                              <div className="font-medium truncate">{it.description ?? it.name ?? `Concepto ${i + 1}`}</div>
+                              {(it.quantity ?? 1) !== 1 && (
+                                <div className="text-[10px] text-muted-foreground">{it.quantity} × {formatCurrency(it.unitPrice ?? 0)}</div>
+                              )}
+                            </div>
+                            <div className="font-mono font-bold">{formatCurrency(it.total ?? 0)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {Array.isArray(inv.payments) && inv.payments.length > 0 && (
+                    <div>
+                      <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide mb-1.5">Pagos registrados</h3>
+                      <div className="bg-card border border-border rounded-lg divide-y divide-border">
+                        {inv.payments.map((p: any) => (
+                          <div key={p.id} className="px-3 py-2 flex items-center justify-between text-xs">
+                            <div>
+                              <div className="capitalize font-medium">{p.method ?? "—"}</div>
+                              <div className="text-[10px] text-muted-foreground">{formatDate(p.paidAt)} {p.reference ? `· ${p.reference}` : ""}</div>
+                            </div>
+                            <div className="font-mono font-bold text-emerald-600">{formatCurrency(p.amount)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <DialogFooter className="flex flex-wrap gap-2">
+                  {canCharge && (
+                    <Button onClick={() => {
+                      setPaymentFor({
+                        id: inv.id, invoiceNumber: inv.invoiceNumber,
+                        total: inv.total, paid: inv.paid, balance: inv.balance, status: inv.status,
+                        patientName: `${patient.firstName} ${patient.lastName}`,
+                      });
+                      setInvoiceDetail(null);
+                    }}>
+                      Cobrar pago · {formatCurrency(inv.balance)}
+                    </Button>
+                  )}
+                  {isCancellable && (
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        if (!confirm(`¿Cancelar factura ${inv.invoiceNumber}? No podrá registrar pagos después.`)) return;
+                        try {
+                          const res = await fetch(`/api/invoices/${inv.id}`, { method: "DELETE" });
+                          if (!res.ok) throw new Error((await res.json()).error);
+                          toast.success("Factura cancelada");
+                          setInvoiceDetail(null);
+                          await refreshInvoices();
+                        } catch (err: any) { toast.error(err.message ?? "Error al cancelar"); }
+                      }}
+                    >
+                      Cancelar factura
+                    </Button>
+                  )}
+                  <Button variant="outline" onClick={() => window.print()}>
+                    <Printer size={13} aria-hidden /> Imprimir
+                  </Button>
+                  {inv.cfdiUuid && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        navigator.clipboard.writeText(inv.cfdiUuid).catch(() => {});
+                        toast.success("UUID copiado al portapapeles");
+                      }}
+                    >
+                      Copiar UUID CFDI
+                    </Button>
+                  )}
+                  <Button variant="ghost" onClick={() => setInvoiceDetail(null)}>Cerrar</Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* PaymentModal compartido — invocado desde HeroCard, SideCards, o detalle de factura. */}
+      <PaymentModal
+        open={paymentFor !== null}
+        invoice={paymentFor}
+        onClose={() => setPaymentFor(null)}
+        onSuccess={async () => {
+          setPaymentFor(null);
+          await refreshInvoices();
         }}
       />
     </div>
