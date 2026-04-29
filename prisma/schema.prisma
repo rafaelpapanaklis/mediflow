@@ -390,6 +390,41 @@ enum CurpStatus {
   FOREIGN
 }
 
+/// Solicitud ARCO (Acceso, Rectificación, Cancelación, Oposición) bajo
+/// LFPDPPP. clinicId puede ser null si la solicitud llega del aviso
+/// público (sin paciente identificado). Si patientId viene, validamos
+/// que pertenezca a una clínica y heredamos clinicId.
+model ArcoRequest {
+  id            String      @id @default(cuid())
+  clinicId      String?
+  patientId     String?
+  type          ArcoType
+  reason        String      @db.Text
+  email         String      @db.VarChar(200)
+  status        ArcoStatus  @default(PENDING)
+  resolvedAt    DateTime?   @db.Timestamptz(6)
+  resolvedNotes String?     @db.Text
+  createdAt     DateTime    @default(now()) @db.Timestamptz(6)
+
+  @@index([clinicId, status])
+  @@index([email])
+  @@map("arco_requests")
+}
+
+enum ArcoType {
+  ACCESS
+  RECTIFICATION
+  CANCELLATION
+  OPPOSITION
+}
+
+enum ArcoStatus {
+  PENDING
+  IN_PROGRESS
+  RESOLVED
+  REJECTED
+}
+
 enum PatientStatus {
   ACTIVE
   INACTIVE
