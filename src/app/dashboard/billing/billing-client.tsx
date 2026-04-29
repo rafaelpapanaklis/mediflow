@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus, CheckCircle2, Clock, AlertCircle, FileText, Search, X,
@@ -12,6 +12,8 @@ import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { fmtMXN, fmtMXNdec, formatRelativeDate } from "@/lib/format";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { PaymentModal, type PaymentInvoice } from "@/components/dashboard/billing/payment-modal";
+import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
 
 type Tone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
 const STATUS_BADGE: Record<string, { tone: Tone; label: string }> = {
@@ -41,6 +43,10 @@ interface Props {
   clinic:        { facturApiEnabled: boolean; rfcEmisor: string | null };
 }
 
+function patientNameOf(inv: any): string {
+  return `${inv.patient?.firstName ?? ""} ${inv.patient?.lastName ?? ""}`.trim() || "—";
+}
+
 export function BillingClient({ invoices: initial, patients, totalPaid, totalPending, totalOverdue, monthInvoices, clinic }: Props) {
   const askConfirm = useConfirm();
   const router = useRouter();
@@ -48,19 +54,21 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
   const [search, setSearch]     = useState("");
   const [status, setStatus]     = useState<string>("all");
 
+  // Sync local state cuando router.refresh() trae props nuevos del server.
+  // useState(initial) solo toma el valor en mount, así que sin esto las
+  // mutaciones pierden la actualización después de un router.refresh().
+  useEffect(() => { setInvoices(initial); }, [initial]);
+
   // Modals
-  const [showNew, setShowNew]     = useState(false);
-  const [payFor, setPayFor]       = useState<any | null>(null);
-  const [cfdiFor, setCfdiFor]     = useState<any | null>(null);
+  const [showNew, setShowNew]                     = useState(false);
+  const [paymentInvoice, setPaymentInvoice]       = useState<(PaymentInvoice & { _patientName?: string }) | null>(null);
+  const [detailInvoice, setDetailInvoice]         = useState<any | null>(null);
+  const [cfdiFor, setCfdiFor]                     = useState<any | null>(null);
 
   // New invoice form
   const [form, setForm] = useState({ patientId: "", description: "", quantity: "1", unitPrice: "", notes: "" });
   const setF = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
   const [loadingNew, setLoadingNew] = useState(false);
-
-  // Payment form
-  const [payAmount, setPayAmount] = useState("");
-  const [payMethod, setPayMethod] = useState("CASH");
 
   // CFDI form
   const [cfdiLoading, setCfdiLoading] = useState(false);
@@ -85,6 +93,13 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
       return name.includes(q) || (inv.invoiceNumber ?? "").toLowerCase().includes(q);
     });
   }, [invoices, search, status]);
+
+  // Refresh tras una mutación de factura. router.refresh() re-corre el server
+  // component con los revalidatePath que dispararon los endpoints; el
+  // useEffect arriba propaga el prop nuevo al state local.
+  function refresh() {
+    router.refresh();
+  }
 
   async function createInvoice() {
     if (!form.patientId || !form.description || !form.unitPrice) {
@@ -111,30 +126,11 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
       toast.success(`Factura ${inv.invoiceNumber} creada`);
       setShowNew(false);
       setForm({ patientId: "", description: "", quantity: "1", unitPrice: "", notes: "" });
+      refresh();
     } catch (err: any) {
       toast.error(err.message ?? "Error al crear factura");
     } finally {
       setLoadingNew(false);
-    }
-  }
-
-  async function registerPayment() {
-    if (!payFor) return;
-    const amount = Number(payAmount);
-    if (!amount || amount <= 0) { toast.error("Monto inválido"); return; }
-    try {
-      const res = await fetch(`/api/invoices/${payFor.id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount, method: payMethod }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error);
-      toast.success("Pago registrado");
-      setPayFor(null);
-      setPayAmount("");
-      router.refresh();
-    } catch (err: any) {
-      toast.error(err.message ?? "Error");
     }
   }
 
@@ -148,6 +144,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
       if (!res.ok) throw new Error((await res.json()).error);
       setInvoices(prev => prev.map(i => i.id === invoiceId ? { ...i, status: "PENDING" } : i));
       toast.success("Factura confirmada — ya puedes registrar pagos");
+      refresh();
     } catch (err: any) {
       toast.error(err.message ?? "Error al confirmar factura");
     }
@@ -165,6 +162,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
       if (!res.ok) throw new Error((await res.json()).error);
       setInvoices(prev => prev.filter(i => i.id !== invoiceId));
       toast.success("Factura borrador eliminada");
+      refresh();
     } catch (err: any) {
       toast.error(err.message ?? "Error");
     }
@@ -208,6 +206,15 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
     }
   }
 
+  function openPaymentForRow(e: React.MouseEvent, inv: any) {
+    e.stopPropagation();  // no abrir el detalle si se cliqueó "Registrar pago"
+    setPaymentInvoice({
+      id: inv.id, invoiceNumber: inv.invoiceNumber,
+      total: inv.total, paid: inv.paid, balance: inv.balance, status: inv.status,
+      patientName: patientNameOf(inv),
+    });
+  }
+
   const newFormTotal = (Number(form.quantity) || 1) * (Number(form.unitPrice) || 0);
 
   return (
@@ -217,7 +224,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
         <div>
           <h1 style={{ fontSize: "clamp(16px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>Facturación</h1>
           <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
-            Gestión de facturas y pagos · {invoices.length} facturas
+            Gestión de facturas y pagos · {invoices.length} facturas · click en una fila para ver detalle
           </p>
         </div>
         <ButtonNew variant="primary" icon={<Plus size={14} />} onClick={() => setShowNew(true)}>
@@ -281,11 +288,15 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
             <tbody>
               {filtered.map(inv => {
                 const badge = STATUS_BADGE[inv.status] ?? STATUS_BADGE.PENDING;
-                const fullName = `${inv.patient?.firstName ?? ""} ${inv.patient?.lastName ?? "—"}`;
+                const fullName = patientNameOf(inv);
                 const isDraft = inv.status === "DRAFT";
                 const canPay  = !["PAID", "CANCELLED"].includes(inv.status) && !isDraft;
                 return (
-                  <tr key={inv.id}>
+                  <tr
+                    key={inv.id}
+                    onClick={() => setDetailInvoice(inv)}
+                    style={{ cursor: "pointer" }}
+                  >
                     <td className="mono" style={{ color: "var(--text-2)" }}>
                       {isDraft && "📝 "}{inv.invoiceNumber}
                     </td>
@@ -310,7 +321,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                     <td>
                       <BadgeNew tone={badge.tone} dot>{badge.label}</BadgeNew>
                     </td>
-                    <td>
+                    <td onClick={(e) => e.stopPropagation()}>
                       {inv.cfdiUuid ? (
                         <BadgeNew tone="success">Timbrado</BadgeNew>
                       ) : clinic.facturApiEnabled ? (
@@ -325,7 +336,10 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                         <span style={{ fontSize: 10, color: "var(--text-4)" }}>SAT no configurado</span>
                       )}
                     </td>
-                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                    <td
+                      style={{ textAlign: "right", whiteSpace: "nowrap" }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       {isDraft ? (
                         <span style={{ display: "inline-flex", gap: 6 }}>
                           <button type="button" onClick={() => confirmDraft(inv.id)} className="btn-new btn-new--ghost btn-new--sm" style={{ color: "var(--success)" }}>
@@ -338,7 +352,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                       ) : canPay ? (
                         <button
                           type="button"
-                          onClick={() => { setPayFor(inv); setPayAmount(String(inv.balance)); }}
+                          onClick={(e) => openPaymentForRow(e, inv)}
                           className="btn-new btn-new--ghost btn-new--sm"
                         >
                           Registrar pago
@@ -353,7 +367,8 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
         )}
       </CardNew>
 
-      {/* Modal: Nueva factura */}
+      {/* Modal: Nueva factura — sigue siendo custom porque tiene flujo de
+       *  selección de paciente y conceptos que no aplica al PaymentModal. */}
       {showNew && (
         <div className="modal-overlay" onClick={() => setShowNew(false)}>
           <div className="modal modal--wide" onClick={e => e.stopPropagation()}>
@@ -420,52 +435,29 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
         </div>
       )}
 
-      {/* Modal: Registrar pago */}
-      {payFor && (
-        <div className="modal-overlay" onClick={() => setPayFor(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal__header">
-              <div className="modal__title">Registrar pago — {payFor.invoiceNumber}</div>
-              <button onClick={() => setPayFor(null)} type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label="Cerrar">
-                <X size={14} />
-              </button>
-            </div>
-            <div className="modal__body">
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 18 }}>
-                <div>
-                  <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Total factura</div>
-                  <div className="mono" style={{ color: "var(--text-1)", fontWeight: 600 }}>{fmtMXNdec(payFor.total)}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Saldo pendiente</div>
-                  <div className="mono" style={{ color: "var(--warning)", fontWeight: 600 }}>{fmtMXNdec(payFor.balance)}</div>
-                </div>
-              </div>
+      {/* Detalle de factura — mismo componente que en /dashboard/patients/[id]
+       *  Acciones: Cobrar, Marcar pagada, Editar precio, Aplicar descuento,
+       *  Cancelar, Reembolsar, Imprimir, Copiar UUID. */}
+      <InvoiceDetailModal
+        open={detailInvoice !== null}
+        invoice={detailInvoice}
+        patientName={detailInvoice ? patientNameOf(detailInvoice) : ""}
+        onClose={() => setDetailInvoice(null)}
+        onMutated={refresh}
+      />
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
-                <div className="field-new">
-                  <label className="field-new__label">Monto <span className="req">*</span></label>
-                  <input type="number" min={0} className="input-new" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
-                </div>
-                <div className="field-new">
-                  <label className="field-new__label">Método</label>
-                  <select className="input-new" value={payMethod} onChange={e => setPayMethod(e.target.value)}>
-                    <option value="CASH">Efectivo</option>
-                    <option value="CARD">Tarjeta</option>
-                    <option value="TRANSFER">Transferencia</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-            <div className="modal__footer">
-              <ButtonNew variant="ghost" type="button" onClick={() => setPayFor(null)}>Cancelar</ButtonNew>
-              <ButtonNew variant="primary" onClick={registerPayment}>Registrar pago</ButtonNew>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* PaymentModal compartido — atajo "Registrar pago" inline en cada row. */}
+      <PaymentModal
+        open={paymentInvoice !== null}
+        invoice={paymentInvoice}
+        onClose={() => setPaymentInvoice(null)}
+        onSuccess={() => {
+          setPaymentInvoice(null);
+          refresh();
+        }}
+      />
 
-      {/* Modal: Timbrar CFDI */}
+      {/* Modal: Timbrar CFDI — flujo SAT específico, no se reemplaza. */}
       {cfdiFor && !cfdiFor.cfdiUuid && (
         <div className="modal-overlay" onClick={() => setCfdiFor(null)}>
           <div className="modal modal--wide" onClick={e => e.stopPropagation()}>

@@ -18,6 +18,8 @@ import {
   Pill,
   HeartPulse,
   FileSignature,
+  Archive,
+  Download,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { ageFromDob } from "@/lib/format";
@@ -55,6 +57,9 @@ export interface HeroCardProps {
   onStartConsult: () => void;
   onReschedule: () => void;
   onCharge: () => void;
+  // Acciones extra del menú "...". Opcionales por compat con otros usos del HeroCard.
+  onArchive?: () => void;
+  onExportCda?: () => void;
 }
 
 function fmtShortDate(iso: string): string {
@@ -79,6 +84,8 @@ export function HeroCard({
   onStartConsult,
   onReschedule,
   onCharge,
+  onArchive,
+  onExportCda,
 }: HeroCardProps) {
   const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -179,9 +186,9 @@ export function HeroCard({
             type="button"
             className={styles.btn}
             onClick={onReschedule}
-            disabled={!hasNextAppt}
+            title={hasNextAppt ? "Reagendar la próxima cita" : "Agendar próxima cita"}
           >
-            <CalendarClock size={13} aria-hidden /> Reagendar próxima
+            <CalendarClock size={13} aria-hidden /> {hasNextAppt ? "Reagendar próxima" : "Agendar próxima"}
           </button>
           <button
             type="button"
@@ -262,6 +269,30 @@ export function HeroCard({
                 >
                   <Calendar size={12} aria-hidden /> Ver en agenda
                 </button>
+                {onExportCda && (
+                  <button
+                    type="button"
+                    className={styles.heroMenuItem}
+                    onClick={() => {
+                      setMoreOpen(false);
+                      onExportCda();
+                    }}
+                  >
+                    <Download size={12} aria-hidden /> Exportar CDA HL7
+                  </button>
+                )}
+                {onArchive && (
+                  <button
+                    type="button"
+                    className={styles.heroMenuItem}
+                    onClick={() => {
+                      setMoreOpen(false);
+                      onArchive();
+                    }}
+                  >
+                    <Archive size={12} aria-hidden /> Archivar paciente
+                  </button>
+                )}
               </Popover.Content>
             </Popover.Portal>
           </Popover.Root>

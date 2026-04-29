@@ -1,0 +1,100 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
+import { readActiveClinicCookie } from "@/lib/active-clinic";
+import { logMutation } from "@/lib/audit";
+
+async function getCtx() {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const activeClinicId = readActiveClinicCookie();
+  if (activeClinicId) {
+    const u = await prisma.user.findFirst({ where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true } });
+    if (u) return { clinicId: u.clinicId, userId: u.id };
+  }
+  const dbUser = await prisma.user.findFirst({ where: { supabaseId: user.id, isActive: true }, orderBy: { createdAt: "asc" } });
+  return dbUser ? { clinicId: dbUser.clinicId, userId: dbUser.id } : null;
+}
+
+// POST /api/invoices/[id]/edit-price — body { total?: number; discount?: number }
+//
+// Permite ajustar el precio total o aplicar/cambiar el descuento de una
+// factura ANTES de cobrar. Solo si paid==0 y status PENDING. (PARTIAL ya
+// tiene pagos parciales registrados — modificar precio rompería el balance.)
+//
+// Endpoint dedicado en lugar de extender el PATCH existente para no
+// interferir con el flujo de items/notes/status que ya gestiona PATCH.
+export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const ctx = await getCtx();
+  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { clinicId } = ctx;
+
+  const body = await req.json().catch(() => ({}));
+  const totalIn    = body?.total    !== undefined ? Number(body.total)    : undefined;
+  const discountIn = body?.discount !== undefined ? Number(body.discount) : undefined;
+
+  if (totalIn === undefined && discountIn === undefined) {
+    return NextResponse.json({ error: "Falta total o discount" }, { status: 400 });
+  }
+  if (totalIn !== undefined && (!isFinite(totalIn) || totalIn < 0)) {
+    return NextResponse.json({ error: "Total inválido" }, { status: 400 });
+  }
+  if (discountIn !== undefined && (!isFinite(discountIn) || discountIn < 0)) {
+    return NextResponse.json({ error: "Descuento inválido" }, { status: 400 });
+  }
+
+  const invoice = await prisma.invoice.findFirst({ where: { id: params.id, clinicId } });
+  if (!invoice) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
+  if (invoice.paid > 0) {
+    return NextResponse.json({ error: "No se puede modificar una factura con pagos registrados" }, { status: 400 });
+  }
+  if (invoice.status === "CANCELLED" || invoice.status === "PAID") {
+    return NextResponse.json({ error: "No se puede modificar una factura cerrada" }, { status: 400 });
+  }
+
+  // Cálculo: el invoice tiene subtotal y discount → total. Mantenemos
+  // coherencia recalculando lo que cambia.
+  let newSubtotal = invoice.subtotal;
+  let newDiscount = invoice.discount;
+  let newTotal    = invoice.total;
+
+  if (totalIn !== undefined) {
+    // Si edita total directo, conservamos discount actual y derivamos subtotal.
+    newTotal    = totalIn;
+    newDiscount = discountIn !== undefined ? discountIn : invoice.discount;
+    newSubtotal = newTotal + newDiscount;
+  } else if (discountIn !== undefined) {
+    // Solo discount → recalcular total = subtotal - discount.
+    newDiscount = discountIn;
+    if (newDiscount > invoice.subtotal) {
+      return NextResponse.json({ error: "El descuento excede el subtotal" }, { status: 400 });
+    }
+    newTotal    = invoice.subtotal - newDiscount;
+    newSubtotal = invoice.subtotal;
+  }
+
+  const newBalance = newTotal - invoice.paid;
+
+  await prisma.invoice.updateMany({
+    where: { id: params.id, clinicId },
+    data: {
+      subtotal: newSubtotal,
+      discount: newDiscount,
+      total:    newTotal,
+      balance:  Math.max(0, newBalance),
+    },
+  });
+
+  await logMutation({
+    req, clinicId, userId: ctx.userId,
+    entityType: "invoice", entityId: params.id, action: "update",
+    before: { subtotal: invoice.subtotal, discount: invoice.discount, total: invoice.total, balance: invoice.balance },
+    after:  { subtotal: newSubtotal, discount: newDiscount, total: newTotal, balance: Math.max(0, newBalance) },
+  });
+
+  revalidatePath("/dashboard/billing");
+  revalidatePath(`/dashboard/patients/${invoice.patientId}`);
+  return NextResponse.json({ success: true });
+}
