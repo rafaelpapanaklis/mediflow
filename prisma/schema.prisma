@@ -163,6 +163,8 @@ model Clinic {
   // Analytics (Push 1)
   weeklyInsights       WeeklyInsight[]
   tvDisplays           TVDisplay[]
+  // Compliance Fase C
+  referrals            Referral[]
 
   @@map("clinics")
 }
@@ -214,6 +216,7 @@ model User {
 
   // Firma electrónica avanzada FIEL/SAT (Compliance Fase C)
   signatureCert       DoctorSignatureCert?
+  referralsAuthored   Referral[]
   color      String   @default("#3b82f6")
   agendaActive Boolean @default(true)
   lastLogin  DateTime?
@@ -338,6 +341,7 @@ model Patient {
   odontogramSnapshots OdontogramSnapshot[]
   inboxThreads        InboxThread[]
   patientReminders    Reminder[]
+  referrals           Referral[]
 
   @@unique([clinicId, patientNumber])
   @@map("patients")
@@ -440,6 +444,53 @@ enum SignedDocType {
   MEDICAL_RECORD
   CONSENT
   OTHER
+}
+
+/// NOM-024 — referencia y contrarreferencia entre clínicas.
+/// La referencia (OUTGOING) la emite la clínica origen; la
+/// contrarreferencia (INCOMING) llega como respuesta cuando la clínica
+/// destino devuelve al paciente con notas.
+///
+/// Multi-tenant: clinicId es la clínica que crea/posee el registro
+/// (origen para OUTGOING, receptor para INCOMING).
+model Referral {
+  id                  String          @id @default(cuid())
+  clinicId            String
+  patientId           String
+  fromDoctorId        String
+  toClinicName        String          @db.VarChar(200)
+  toClinicClues       String?         @db.VarChar(11)
+  toDoctorName        String?         @db.VarChar(200)
+  toSpecialty         String?         @db.VarChar(100)
+  reason              String          @db.Text
+  clinicalSummary     String          @db.Text
+  relevantDiagnoses   Json?
+  type                ReferralType
+  status              ReferralStatus  @default(SENT)
+  sentAt              DateTime        @default(now()) @db.Timestamptz(6)
+  respondedAt         DateTime?       @db.Timestamptz(6)
+  response            String?         @db.Text
+
+  clinic     Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  fromDoctor User     @relation(fields: [fromDoctorId], references: [id])
+
+  @@index([clinicId, status])
+  @@index([patientId])
+  @@map("referrals")
+}
+
+enum ReferralType {
+  OUTGOING
+  INCOMING
+}
+
+enum ReferralStatus {
+  SENT
+  ACCEPTED
+  REJECTED
+  RESPONDED
+  CANCELLED
 }
 
 /// Solicitud ARCO (Acceso, Rectificación, Cancelación, Oposición) bajo
