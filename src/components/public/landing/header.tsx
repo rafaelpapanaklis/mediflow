@@ -5,7 +5,15 @@ import { useEffect, useState } from "react";
 import { Logo } from "./primitives/logo";
 import { SpecialtiesDropdown } from "./specialties-dropdown";
 
-export function Header() {
+interface HeaderProps {
+  // Cuando el visitante ya tiene sesión Supabase activa, el header muestra
+  // "Ir al dashboard" en vez de los CTA de login/signup. Lo decide el server
+  // component padre (src/app/page.tsx) llamando getSession() — no metemos
+  // un fetch client-side para evitar un flash en cada carga.
+  isLoggedIn?: boolean;
+}
+
+export function Header({ isLoggedIn = false }: HeaderProps) {
   const [mode, setMode] = useState<"dark" | "light">("dark");
   const [mounted, setMounted] = useState(false);
 
@@ -73,23 +81,42 @@ export function Header() {
           >
             {mode === "dark" ? "🌙" : "☀"}
           </button>
-          <Link href="/login" style={{ color: "var(--ld-fg-muted)", textDecoration: "none" }}>
-            Iniciar sesión
-          </Link>
-          <Link
-            href="/signup"
-            style={{
-              padding: "8px 14px",
-              borderRadius: 8,
-              background: "linear-gradient(180deg, #8b5cf6, #7c3aed)",
-              color: "#fff",
-              fontWeight: 500,
-              textDecoration: "none",
-              boxShadow: "0 4px 12px rgba(124,58,237,0.3)",
-            }}
-          >
-            Prueba gratis →
-          </Link>
+          {isLoggedIn ? (
+            <Link
+              href="/dashboard"
+              style={{
+                padding: "8px 14px",
+                borderRadius: 8,
+                background: "linear-gradient(180deg, #8b5cf6, #7c3aed)",
+                color: "#fff",
+                fontWeight: 500,
+                textDecoration: "none",
+                boxShadow: "0 4px 12px rgba(124,58,237,0.3)",
+              }}
+            >
+              Ir al dashboard →
+            </Link>
+          ) : (
+            <>
+              <Link href="/login" style={{ color: "var(--ld-fg-muted)", textDecoration: "none" }}>
+                Iniciar sesión
+              </Link>
+              <Link
+                href="/signup"
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 8,
+                  background: "linear-gradient(180deg, #8b5cf6, #7c3aed)",
+                  color: "#fff",
+                  fontWeight: 500,
+                  textDecoration: "none",
+                  boxShadow: "0 4px 12px rgba(124,58,237,0.3)",
+                }}
+              >
+                Prueba gratis →
+              </Link>
+            </>
+          )}
         </div>
       </div>
 

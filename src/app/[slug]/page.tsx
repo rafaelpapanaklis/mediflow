@@ -13,6 +13,7 @@ import {
   medicalBusinessLd,
   SITE_URL,
 } from "@/lib/seo";
+import { getSession } from "@/lib/auth";
 
 const CATEGORY_HIGHLIGHTS: Record<string, string[]> = {
   DENTAL: ["Odontograma digital", "Radiografías", "Plan de tratamiento por pieza", "Evaluación periodontal"],
@@ -34,6 +35,11 @@ const CATEGORY_HIGHLIGHTS: Record<string, string[]> = {
   PODIATRY: ["Riesgo pie diabético", "Pipeline de ortesis", "Evaluación biomecánica"],
   OTHER: ["Expediente clínico digital", "Agenda inteligente", "Facturación integrada"],
 };
+
+// Antes generateStaticParams permitía pre-render de los 17 specialty slugs.
+// Ahora la página llama getSession() (lee cookies) → debe ser dynamic per
+// request. Las cookies invalidan el SSG; force-dynamic lo hace explícito.
+export const dynamic = "force-dynamic";
 
 /** Slugs reservados top-level que [slug] nunca intenta resolver. */
 const NON_SPECIALTY_RESERVED = [
@@ -81,6 +87,13 @@ export default async function ClinicLandingPage({ params }: Props) {
   // 2) Specialty landing (Claude Design)
   const specialty = getSpecialty(params.slug);
   if (specialty) {
+    // Detecta sesión activa para que el SpecNav muestre "Ir al dashboard"
+    // en lugar de Iniciar sesión / Prueba gratis. La página deja de ser
+    // estática (force-dynamic implícito vía cookies()), pero el SEO no
+    // se afecta: bots sin cookies caen en isLoggedIn=false como antes.
+    const user = await getSession();
+    const isLoggedIn = user !== null && user !== undefined;
+
     const url = `${SITE_URL}/${specialty.slug}`;
     const ldBlocks: object[] = [
       softwareApplicationLd({
@@ -105,7 +118,7 @@ export default async function ClinicLandingPage({ params }: Props) {
             dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
           />
         ))}
-        <SpecialtyPage slug={specialty.slug} />
+        <SpecialtyPage slug={specialty.slug} isLoggedIn={isLoggedIn} />
       </>
     );
   }
