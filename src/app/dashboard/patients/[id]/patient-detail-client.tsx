@@ -3,7 +3,7 @@
 import { useCallback, useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Plus, Printer, Edit } from "lucide-react";
+import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Plus, Printer, Edit, Download } from "lucide-react";
 import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
 import { ageFromDob, fmtMXN } from "@/lib/format";
 import { Odontogram } from "@/components/dashboard/odontogram/Odontogram";
@@ -14,12 +14,14 @@ import { SideCards } from "@/components/dashboard/patient-detail/side-cards";
 import { ConsultBar } from "@/components/dashboard/patient-detail/consult-bar";
 import { SoapEditorInline, type SoapDraft } from "@/components/dashboard/patient-detail/soap-editor-inline";
 import { NoteDetailModal, type ClinicalNote } from "@/components/dashboard/patient-detail/note-detail-modal";
+import { HistoriaTimeline } from "@/components/dashboard/patient-detail/historia-timeline";
 import patientDetailStyles from "@/components/dashboard/patient-detail/patient-detail.module.css";
 import { DentalForm }          from "@/components/clinical/dental-form";
 import { NutritionForm }       from "@/components/clinical/nutrition-form";
 import { PsychologyForm }      from "@/components/clinical/psychology-form";
 import { GeneralMedicineForm } from "@/components/clinical/medicine-form";
 import { EvolutionChart, TreatmentTimeline } from "@/components/clinical/shared";
+import { ReferralsTab } from "@/components/dashboard/patients/referrals-tab";
 import toast from "react-hot-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -29,15 +31,12 @@ import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 
-const SPECIALTY_MAP: Record<string, string> = {
-  dental: "dental", odontologia: "dental", odontología: "dental",
-  nutrition: "nutrition", nutricion: "nutrition", nutrición: "nutrition",
-  psychology: "psychology", psicologia: "psychology", psicología: "psychology",
-};
-function detectSpecialty(raw: string) {
-  const lower = raw.toLowerCase();
-  for (const [k, v] of Object.entries(SPECIALTY_MAP)) if (lower.includes(k)) return v;
-  return "medicine";
+// MediFlow es DENTAL — el form de "Nueva consulta" siempre usa DentalForm.
+// El parámetro `specialty` viene del Clinic.specialty (legacy) y se ignora.
+// Si en el futuro MediFlow expande a otras specialties, restaurar la
+// lógica de detección y los renders condicionales abajo.
+function detectSpecialty(_raw: string) {
+  return "dental";
 }
 
 const APPT_STATUS: Record<string, { label: string; cls: string }> = {
@@ -63,6 +62,7 @@ const TABS = [
   { id: "evolucion",     label: "Evolución / Notas"    },
   { id: "radiografias",  label: "Radiografías"         },
   { id: "tratamiento",   label: "Plan de tratamiento"  },
+  { id: "referencias",   label: "Referencias"          },
   { id: "agenda",        label: "Citas"                },
   { id: "facturacion",   label: "Facturación"          },
 ];
@@ -526,6 +526,17 @@ export function PatientDetailClient({
         </Link>
         <span style={{ color: "var(--text-4)" }}>/</span>
         <span style={{ color: "var(--text-1)", fontWeight: 500 }}>{fullName}</span>
+        {/* NOM-024 — exportar expediente HL7 CDA R2. La API gate por
+            permission medicalRecord.read; si el rol no califica devuelve
+            403 (mejor mostrar y dejar al server gatear que duplicar lógica). */}
+        <button
+          type="button"
+          onClick={() => { window.location.href = `/api/patients/${patient.id}/export-cda`; }}
+          className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded-md border border-border bg-card hover:bg-muted text-foreground"
+          title="Exportar expediente en formato HL7 CDA R2 (NOM-024)"
+        >
+          <Download size={11} aria-hidden /> Exportar CDA HL7
+        </button>
       </div>
 
       {/* Hero card permanente — audit Opción C ajuste 1 */}
@@ -761,80 +772,23 @@ export function PatientDetailClient({
           {/* ===== TAB: HISTORIA CLINICA ===== */}
           {tab === "historia" && (
             <div className="bg-card border border-border rounded-xl p-5">
-              <h2 className="text-sm font-bold mb-4">Historia clínica completa</h2>
-              <div className="grid grid-cols-2 gap-6 text-sm">
-                <div>
-                  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-3">Datos personales</h3>
-                  <div className="space-y-2">
-                    {[
-                      { label: "Nombre completo", val: `${patient.firstName} ${patient.lastName}` },
-                      { label: "Fecha de nacimiento", val: patient.dob ? formatDate(patient.dob) : "—" },
-                      { label: "Género", val: patient.gender === "M" ? "Masculino" : patient.gender === "F" ? "Femenino" : "Otro" },
-                      { label: "Teléfono", val: patient.phone ?? "—" },
-                      { label: "Email", val: patient.email ?? "—" },
-                      { label: "Dirección", val: patient.address ?? "—" },
-                      { label: "Tipo de sangre", val: patient.bloodType ?? "No registrado" },
-                    ].map(r => (
-                      <div key={r.label} className="flex justify-between py-1.5 border-b border-slate-50 text-xs">
-                        <span className="text-muted-foreground">{r.label}</span>
-                        <span className="font-semibold">{r.val}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-3">Antecedentes médicos</h3>
-                  <div className="space-y-2">
-                    <div className="py-1.5 border-b border-slate-50">
-                      <div className="text-xs text-muted-foreground mb-1">Enfermedades crónicas</div>
-                      <div className="flex flex-wrap gap-1">
-                        {patient.chronicConditions?.length > 0
-                          ? patient.chronicConditions.map((c: string) => <span key={c} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">{c}</span>)
-                          : <span className="text-xs font-semibold">Ninguna</span>}
-                      </div>
-                    </div>
-                    <div className="py-1.5 border-b border-slate-50">
-                      <div className="text-xs text-muted-foreground mb-1">Alergias</div>
-                      <div className="flex flex-wrap gap-1">
-                        {patient.allergies?.length > 0
-                          ? patient.allergies.map((a: string) => <span key={a} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700">🚨 {a}</span>)
-                          : <span className="text-xs font-semibold">Ninguna</span>}
-                      </div>
-                    </div>
-                    <div className="py-1.5 border-b border-slate-50">
-                      <div className="text-xs text-muted-foreground mb-1">Medicamentos actuales</div>
-                      <div className="flex flex-wrap gap-1">
-                        {patient.currentMedications?.length > 0
-                          ? patient.currentMedications.map((m: string) => <span key={m} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700">💊 {m}</span>)
-                          : <span className="text-xs font-semibold">Ninguno</span>}
-                      </div>
-                    </div>
-                    <div className="py-1.5 border-b border-slate-50">
-                      <div className="text-xs text-muted-foreground mb-1">Seguro médico</div>
-                      <span className="text-xs font-semibold">{patient.insuranceProvider ?? "Sin seguro"}</span>
-                      {patient.insurancePolicy && <span className="text-xs text-muted-foreground ml-2">Póliza: {patient.insurancePolicy}</span>}
-                    </div>
-                    {patient.familyHistory && (
-                      <div className="py-1.5 border-b border-slate-50">
-                        <div className="text-xs text-muted-foreground mb-1">Antecedentes heredofamiliares</div>
-                        <p className="text-xs whitespace-pre-wrap">{patient.familyHistory}</p>
-                      </div>
-                    )}
-                    {patient.personalNonPathologicalHistory && (
-                      <div className="py-1.5 border-b border-slate-50">
-                        <div className="text-xs text-muted-foreground mb-1">Antecedentes personales no patológicos</div>
-                        <p className="text-xs whitespace-pre-wrap">{patient.personalNonPathologicalHistory}</p>
-                      </div>
-                    )}
-                  </div>
-                  {patient.notes && (
-                    <div className="mt-4 p-3 bg-muted/30 rounded-xl">
-                      <div className="text-xs font-bold text-muted-foreground mb-1">Notas clínicas</div>
-                      <p className="text-xs">{patient.notes}</p>
-                    </div>
-                  )}
-                </div>
+              <div className="flex items-baseline justify-between mb-4">
+                <h2 className="text-sm font-bold">Historia clínica</h2>
+                <p className="text-xs text-muted-foreground">
+                  Timeline cronológica de todos los eventos clínicos del paciente.
+                </p>
               </div>
+              <HistoriaTimeline
+                patientId={patient.id}
+                onOpenSoap={(recordId) => {
+                  const record = records.find((r) => r.id === recordId);
+                  if (record) setNoteDetailOpen(record as ClinicalNote);
+                }}
+                onOpenXray={(fileId) => router.push(`/dashboard/xrays/${patient.id}?fileId=${fileId}`)}
+                onOpenAppointment={() => setTab("agenda")}
+                onOpenTreatment={() => setTab("tratamiento")}
+                onOpenReferral={() => setTab("referencias")}
+              />
             </div>
           )}
 
@@ -950,9 +904,11 @@ export function PatientDetailClient({
                           {/* Specialty badges */}
                           {record.specialtyData?.procedures?.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-2">
-                              {record.specialtyData.procedures.map((p: string) => (
-                                <span key={p} className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">{p}</span>
-                              ))}
+                              {record.specialtyData.procedures.map((p: any) => {
+                                const label = typeof p === "string" ? p : (p?.name ?? "Procedimiento");
+                                const key = typeof p === "string" ? p : (p?.id ?? label);
+                                return <span key={key} className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">{label}</span>;
+                              })}
                             </div>
                           )}
                           {record.specialtyData?.scales && (
@@ -1046,6 +1002,11 @@ export function PatientDetailClient({
           )}
 
           {/* ===== TAB: CITAS ===== */}
+          {/* ===== TAB: REFERENCIAS ===== */}
+          {tab === "referencias" && (
+            <ReferralsTab patientId={patient.id} />
+          )}
+
           {tab === "agenda" && (
             <div className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="flex items-center justify-between px-5 py-4 border-b border-border">
@@ -1151,20 +1112,38 @@ export function PatientDetailClient({
                   const isImage = f.mimeType?.startsWith("image/");
                   const result  = analyses[f.id];
                   const isExp   = expandedFile === f.id;
+                  const openInViewer = () =>
+                    router.push(`/dashboard/xrays/${patient.id}?fileId=${f.id}`);
 
                   return (
                     <div key={f.id} className="bg-card border border-border rounded-xl overflow-hidden">
                       <div className="flex gap-4 p-4">
-                        {/* Thumbnail */}
+                        {/* Thumbnail (click → visor con anotaciones) */}
                         {isImage && (
-                          <div className="w-32 h-24 bg-black rounded-lg overflow-hidden flex-shrink-0 relative">
+                          <button
+                            type="button"
+                            onClick={openInViewer}
+                            className="w-32 h-24 bg-black rounded-lg overflow-hidden flex-shrink-0 relative cursor-pointer hover:opacity-90 transition-opacity group"
+                            aria-label={`Abrir ${f.name} en visor con anotaciones`}
+                          >
                             <img src={f.url} alt={f.name} className="w-full h-full object-cover opacity-90" />
-                          </div>
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/40 transition-colors">
+                              <span className="text-white text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity">
+                                Abrir visor
+                              </span>
+                            </div>
+                          </button>
                         )}
                         {/* Info */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-sm font-bold truncate">{f.name}</span>
+                            <button
+                              type="button"
+                              onClick={openInViewer}
+                              className="text-sm font-bold truncate hover:text-brand-600 hover:underline text-left"
+                            >
+                              {f.name}
+                            </button>
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
                               {FILE_CAT_LABELS[f.category] ?? f.category}
                             </span>
@@ -1177,9 +1156,19 @@ export function PatientDetailClient({
                           {f.notes && <p className="text-xs text-muted-foreground mt-1">{f.notes}</p>}
 
                           {/* Action buttons */}
-                          <div className="flex gap-2 mt-3">
+                          <div className="flex gap-2 mt-3 flex-wrap">
                             {isImage && (
                               <button
+                                type="button"
+                                onClick={openInViewer}
+                                className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-card text-foreground border border-border hover:bg-muted/50 transition-colors"
+                              >
+                                <span>🔍</span> Abrir en visor
+                              </button>
+                            )}
+                            {isImage && (
+                              <button
+                                type="button"
                                 onClick={() => analyzeFile(f.id)}
                                 disabled={analyzing === f.id}
                                 className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${
@@ -1199,6 +1188,7 @@ export function PatientDetailClient({
                             )}
                             {result && (
                               <button
+                                type="button"
                                 onClick={() => setExpandedFile(isExp ? null : f.id)}
                                 className="text-xs font-semibold text-muted-foreground border border-border px-3 py-1.5 rounded-lg hover:bg-muted/50"
                               >

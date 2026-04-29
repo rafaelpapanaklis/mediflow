@@ -1,10 +1,18 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import toast from "react-hot-toast";
 
-interface Props { open: boolean; onClose: () => void; onCreated: (patient: any) => void; }
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  onCreated: (patient: any) => void;
+  /** Pre-fill helpers para abrir desde combobox de búsqueda. */
+  initialName?: string;
+  initialPhone?: string;
+  initialEmail?: string;
+}
 
 const emptyForm = {
   firstName: "", lastName: "", email: "", phone: "", gender: "OTHER",
@@ -15,10 +23,32 @@ const emptyForm = {
 
 const CURP_RE = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
 
-export function NewPatientModal({ open, onClose, onCreated }: Props) {
+function splitName(full: string): { firstName: string; lastName: string } {
+  const parts = full.trim().split(/\s+/);
+  if (parts.length <= 1) return { firstName: parts[0] ?? "", lastName: "" };
+  return {
+    firstName: parts.slice(0, -1).join(" "),
+    lastName: parts[parts.length - 1],
+  };
+}
+
+export function NewPatientModal({ open, onClose, onCreated, initialName, initialPhone, initialEmail }: Props) {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const set = (k: string, v: string | boolean) => setForm(f => ({ ...f, [k]: v }));
+
+  useEffect(() => {
+    if (!open) return;
+    const next = { ...emptyForm };
+    if (initialName) {
+      const { firstName, lastName } = splitName(initialName);
+      next.firstName = firstName;
+      next.lastName = lastName;
+    }
+    if (initialPhone) next.phone = initialPhone;
+    if (initialEmail) next.email = initialEmail;
+    setForm(next);
+  }, [open, initialName, initialPhone, initialEmail]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

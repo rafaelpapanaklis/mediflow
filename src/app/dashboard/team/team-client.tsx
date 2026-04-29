@@ -31,9 +31,20 @@ const ROLES = [
   { value:"ADMIN",        label:"Administrador", icon:"🛡️", desc:"Acceso completo"        },
   { value:"RECEPTIONIST", label:"Recepcionista", icon:"📋", desc:"Agenda y citas"          },
 ];
+// MediFlow es DENTAL — solo specialties dentales en el selector del
+// equipo. Si el SaaS expande a multi-specialty, restaurar la lista
+// general aquí.
 const SPECIALTIES = [
-  "Medicina General","Odontología","Psicología","Nutrición","Dermatología",
-  "Pediatría","Ginecología","Ortopedia","Cardiología","Otra",
+  "Odontología General",
+  "Ortodoncia",
+  "Endodoncia",
+  "Periodoncia",
+  "Cirugía Maxilofacial",
+  "Implantología",
+  "Odontopediatría",
+  "Prostodoncia",
+  "Estética Dental",
+  "Otra",
 ];
 
 interface FormState {

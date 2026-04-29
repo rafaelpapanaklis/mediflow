@@ -11,9 +11,10 @@ export const metadata: Metadata = { title: "Radiografías · paciente — MediFl
 
 interface Props {
   params: { patientId: string };
+  searchParams: { fileId?: string };
 }
 
-export default async function XraysPatientPage({ params }: Props) {
+export default async function XraysPatientPage({ params, searchParams }: Props) {
   const user = await getCurrentUser();
   const clinicId = user.clinicId;
 
@@ -63,6 +64,7 @@ export default async function XraysPatientPage({ params }: Props) {
       aiUsed={aiUsed}
       aiLimit={aiLimit}
       initialPatientId={patient.id}
+      initialFileId={searchParams.fileId}
       lockedToPatient
     />
   );

@@ -82,9 +82,11 @@ function DentalRecordDetail({ data, record }: { data: any; record: any }) {
         <div>
           <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-2">Procedimientos realizados</div>
           <div className="flex flex-wrap gap-1.5">
-            {data.procedures.map((p: string) => (
-              <span key={p} className="text-xs font-semibold px-2.5 py-1 rounded-full bg-brand-600/15 text-brand-700 border border-brand-200">{p}</span>
-            ))}
+            {data.procedures.map((p: any) => {
+              const label = typeof p === "string" ? p : (p?.name ?? "Procedimiento");
+              const key = typeof p === "string" ? p : (p?.id ?? label);
+              return <span key={key} className="text-xs font-semibold px-2.5 py-1 rounded-full bg-brand-600/15 text-brand-700 border border-brand-200">{label}</span>;
+            })}
           </div>
         </div>
       )}

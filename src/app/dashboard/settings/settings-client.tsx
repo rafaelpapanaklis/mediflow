@@ -10,16 +10,12 @@ import { createClient } from "@/lib/supabase/client";
 import toast from "react-hot-toast";
 
 const DAYS        = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
+// MediFlow es DENTAL — solo categorías dentales en el selector de
+// clínica. La lista completa de categorías legacy queda en el enum
+// ClinicCategory de Prisma para no romper datos históricos.
 const CATEGORIES = [
-  { id:"DENTAL", label:"Odontología" }, { id:"MEDICINE", label:"Medicina General" },
-  { id:"NUTRITION", label:"Nutrición" }, { id:"PSYCHOLOGY", label:"Psicología" },
-  { id:"DERMATOLOGY", label:"Dermatología" }, { id:"AESTHETIC_MEDICINE", label:"Medicina Estética" },
-  { id:"HAIR_RESTORATION", label:"Clínicas Capilares" }, { id:"BEAUTY_CENTER", label:"Centros de Estética" },
-  { id:"BROW_LASH", label:"Cejas y Pestañas" }, { id:"MASSAGE", label:"Masajes" },
-  { id:"LASER_HAIR_REMOVAL", label:"Depilación Láser" }, { id:"HAIR_SALON", label:"Peluquerías" },
-  { id:"ALTERNATIVE_MEDICINE", label:"Medicina Alternativa" }, { id:"NAIL_SALON", label:"Uñas" },
-  { id:"SPA", label:"Spas" }, { id:"PHYSIOTHERAPY", label:"Fisioterapia" },
-  { id:"PODIATRY", label:"Podología" }, { id:"OTHER", label:"Otra" },
+  { id:"DENTAL", label:"Odontología" },
+  { id:"OTHER",  label:"Otra" },
 ];
 const REGIMENES   = [
   { clave:"601", desc:"General de Ley Personas Morales" },
