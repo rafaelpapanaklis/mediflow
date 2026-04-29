@@ -178,7 +178,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       title: "Cita completada",
       summary: a.type ?? "Consulta",
       doctorName: a.doctor ? `Dr/a. ${a.doctor.firstName} ${a.doctor.lastName}` : null,
-      meta: { status: a.status },
+      meta: { entityId: a.id, status: a.status },
     });
   }
 
@@ -205,7 +205,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       title: "Radiografía",
       summary: (x.summary ?? "Imagen radiográfica").slice(0, 140),
       doctorName: null,
-      meta: { severity: x.severity },
+      meta: { entityId: x.id, severity: x.severity },
     });
   }
 
@@ -217,7 +217,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       title: "Plan de tratamiento",
       summary: t.name,
       doctorName: t.doctor ? `Dr/a. ${t.doctor.firstName} ${t.doctor.lastName}` : null,
-      meta: { status: t.status },
+      meta: { entityId: t.id, status: t.status },
     });
   }
 
@@ -230,7 +230,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       title: r.type === "OUTGOING" ? "Referencia enviada" : "Contrarreferencia recibida",
       summary: `${direction} ${r.toClinicName}${r.toSpecialty ? ` (${r.toSpecialty})` : ""} — ${r.reason.slice(0, 80)}`,
       doctorName: r.fromDoctor ? `Dr/a. ${r.fromDoctor.firstName} ${r.fromDoctor.lastName}` : null,
-      meta: { status: r.status, type: r.type },
+      meta: { entityId: r.id, status: r.status, type: r.type },
     });
   }
 

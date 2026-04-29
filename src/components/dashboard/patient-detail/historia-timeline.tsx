@@ -36,6 +36,10 @@ interface TimelineEvent {
 interface Props {
   patientId: string;
   onOpenSoap?: (recordId: string) => void;
+  onOpenXray?: (entityId: string) => void;
+  onOpenAppointment?: (entityId: string) => void;
+  onOpenTreatment?: (entityId: string) => void;
+  onOpenReferral?: (entityId: string) => void;
 }
 
 const TYPE_META: Record<TimelineEventType, { label: string; icon: React.ElementType; bg: string; fg: string; border: string }> = {
@@ -82,7 +86,14 @@ function exactDate(dateStr: string): string {
   });
 }
 
-export function HistoriaTimeline({ patientId, onOpenSoap }: Props) {
+export function HistoriaTimeline({
+  patientId,
+  onOpenSoap,
+  onOpenXray,
+  onOpenAppointment,
+  onOpenTreatment,
+  onOpenReferral,
+}: Props) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -140,12 +151,31 @@ export function HistoriaTimeline({ patientId, onOpenSoap }: Props) {
   }
 
   function handleClickEvent(e: TimelineEvent) {
-    if (e.type === "soap" && onOpenSoap && typeof e.meta?.recordId === "string") {
-      onOpenSoap(e.meta.recordId);
+    const entityId = typeof e.meta?.entityId === "string" ? e.meta.entityId : null;
+    const recordId = typeof e.meta?.recordId === "string" ? e.meta.recordId : null;
+
+    if (e.type === "soap" && onOpenSoap && recordId) {
+      onOpenSoap(recordId);
       return;
     }
-    if (e.type === "diagnosis" && onOpenSoap && typeof e.meta?.recordId === "string") {
-      onOpenSoap(e.meta.recordId);
+    if (e.type === "diagnosis" && onOpenSoap && recordId) {
+      onOpenSoap(recordId);
+      return;
+    }
+    if (e.type === "xray" && onOpenXray && entityId) {
+      onOpenXray(entityId);
+      return;
+    }
+    if (e.type === "appointment" && onOpenAppointment && entityId) {
+      onOpenAppointment(entityId);
+      return;
+    }
+    if (e.type === "treatment" && onOpenTreatment && entityId) {
+      onOpenTreatment(entityId);
+      return;
+    }
+    if (e.type === "referral" && onOpenReferral && entityId) {
+      onOpenReferral(entityId);
       return;
     }
     if (e.link) {
@@ -223,7 +253,15 @@ export function HistoriaTimeline({ patientId, onOpenSoap }: Props) {
           {filtered.map((e) => {
             const meta = TYPE_META[e.type];
             const Icon = meta.icon;
-            const clickable = e.type === "soap" || e.type === "diagnosis" || !!e.link;
+            const hasEntity = typeof e.meta?.entityId === "string";
+            const clickable =
+              (e.type === "soap" && !!onOpenSoap) ||
+              (e.type === "diagnosis" && !!onOpenSoap) ||
+              (e.type === "xray" && !!onOpenXray && hasEntity) ||
+              (e.type === "appointment" && !!onOpenAppointment && hasEntity) ||
+              (e.type === "treatment" && !!onOpenTreatment && hasEntity) ||
+              (e.type === "referral" && !!onOpenReferral && hasEntity) ||
+              !!e.link;
             return (
               <li key={e.id} className="relative pl-6">
                 {/* Dot */}

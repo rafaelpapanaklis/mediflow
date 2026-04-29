@@ -784,6 +784,10 @@ export function PatientDetailClient({
                   const record = records.find((r) => r.id === recordId);
                   if (record) setNoteDetailOpen(record as ClinicalNote);
                 }}
+                onOpenXray={() => setTab("radiografias")}
+                onOpenAppointment={() => setTab("agenda")}
+                onOpenTreatment={() => setTab("tratamiento")}
+                onOpenReferral={() => setTab("referencias")}
               />
             </div>
           )}
