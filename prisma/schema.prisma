@@ -1190,10 +1190,49 @@ model Prescription {
   patient       Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
   doctor        User          @relation(fields: [doctorId], references: [id])
   clinic        Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  // NOM-024 (Compliance Fase B) — items estructurados con FK a CUMS.
+  // El JSON `medications` legacy queda intacto para datos históricos.
+  items         PrescriptionItem[]
 
   @@index([clinicId])
   @@index([patientId])
   @@map("prescriptions")
+}
+
+/// Catálogo CUMS (Cuadro Único de Medicamentos del Sector Salud).
+/// Tabla GLOBAL (sin clinicId) — es estándar público SSA.
+model CumsItem {
+  clave             String  @id @db.VarChar(20)
+  descripcion       String  @db.VarChar(500)
+  presentacion      String  @db.VarChar(200)
+  formaFarmaceutica String? @db.VarChar(100)
+  grupoTerapeutico  String? @db.VarChar(200)
+  cofeprisGroup     String? @db.VarChar(20)
+
+  prescriptions PrescriptionItem[]
+
+  @@index([cofeprisGroup])
+  @@index([grupoTerapeutico])
+  @@map("cums_items")
+}
+
+/// Item de receta — un medicamento con dosage/duration/quantity.
+/// Multi-tenant via relation prescription.clinicId.
+model PrescriptionItem {
+  id             String   @id @default(cuid())
+  prescriptionId String
+  cumsKey        String   @db.VarChar(20)
+  dosage         String   @db.VarChar(200)
+  duration       String?  @db.VarChar(100)
+  quantity       String?  @db.VarChar(50)
+  notes          String?  @db.Text
+  createdAt      DateTime @default(now())
+
+  prescription Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  cums         CumsItem     @relation(fields: [cumsKey],        references: [clave])
+
+  @@index([prescriptionId])
+  @@map("prescription_items")
 }
 
 // ═══════════════════════════════════════════════════════════
