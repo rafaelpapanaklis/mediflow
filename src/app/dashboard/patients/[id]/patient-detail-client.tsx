@@ -963,9 +963,11 @@ export function PatientDetailClient({
                           {/* Specialty badges */}
                           {record.specialtyData?.procedures?.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-2">
-                              {record.specialtyData.procedures.map((p: string) => (
-                                <span key={p} className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">{p}</span>
-                              ))}
+                              {record.specialtyData.procedures.map((p: any) => {
+                                const label = typeof p === "string" ? p : (p?.name ?? "Procedimiento");
+                                const key = typeof p === "string" ? p : (p?.id ?? label);
+                                return <span key={key} className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">{label}</span>;
+                              })}
                             </div>
                           )}
                           {record.specialtyData?.scales && (
