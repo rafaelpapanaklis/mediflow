@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Clock, ExternalLink } from "lucide-react";
+import { Clock, ExternalLink, FileText } from "lucide-react";
 import { toScreen } from "@/lib/floor-plan/iso";
 import {
   STATUS_COLORS,
@@ -235,12 +235,19 @@ export function LiveStatusPanel({
   viewTime,
   appointments,
   showFullNames,
+  onOpenOdontogram,
 }: {
   elements: LayoutElement[];
   chairs: ChairInfo[];
   viewTime: Date;
   appointments: LiveAppointment[];
   showFullNames: boolean;
+  /**
+   * Si está presente, cada tarjeta con cita activa muestra un botón "Abrir
+   * odontograma". El consumer recibe la cita (incluye `patientId` cuando el
+   * backend lo hidrata) y decide cómo navegar — modal, link o tab nuevo.
+   */
+  onOpenOdontogram?: (apt: LiveAppointment) => void;
 }) {
   const placedChairs = useMemo(
     () =>
@@ -294,6 +301,16 @@ export function LiveStatusPanel({
                   <div className={liveStyles.statusFooter}>
                     {apt.doctor} · {fmtHM(apt.start)}–{fmtHM(apt.end)}
                   </div>
+                  {onOpenOdontogram && (
+                    <button
+                      type="button"
+                      className={liveStyles.statusOdontogramBtn}
+                      onClick={() => onOpenOdontogram(apt)}
+                      title="Abrir expediente / odontograma"
+                    >
+                      <FileText size={11} aria-hidden /> Odontograma
+                    </button>
+                  )}
                 </>
               ) : next ? (
                 <>
