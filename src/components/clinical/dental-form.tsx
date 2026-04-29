@@ -1,10 +1,12 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
+import { FileText } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { formatCurrency } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { TreatmentTimeline } from "@/components/clinical/shared";
+import { PrescriptionModal } from "@/components/clinical/shared/prescription-modal";
 
 interface CatalogProcedure { id: string; name: string; basePrice: number; category: string }
 interface SelectedProcedure { id: string; name: string; price: number; quantity: number }
@@ -48,6 +50,12 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
   const [selectedProcs, setSelectedProcs] = useState<SelectedProcedure[]>([]);
   const [procSearch, setProcSearch] = useState("");
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null);
+
+  // Receta NOM-024 — abre PrescriptionModal con el medical record id
+  // recién guardado. Reemplaza el grid inline de medications legacy.
+  const [rxOpen, setRxOpen] = useState(false);
+  const [rxRecordId, setRxRecordId] = useState<string | null>(null);
+  const [rxResult, setRxResult] = useState<{ id: string; verifyUrl: string } | null>(null);
 
   // Load procedure catalog on mount
   useEffect(() => {
@@ -115,7 +123,6 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
     hygieneInstructions: [] as string[],
     xrays:       "",
     nextVisit:   "",
-    medications: [{ drug: "", dose: "", duration: "" }],
   });
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
 
@@ -175,14 +182,15 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
           autoInvoice: selectedProcs.length > 0,
           specialtyData: {
             type: "dental", odontogram,
-            procedures: selectedProcs, // now array of {id, name, price, quantity}
+            procedures: selectedProcs, // array of {id, name, price, quantity}
             proceduresTotal,
             periodontal: form.periodontal,
             occlusal: form.occlusal,
             tmj: form.tmj,
             hygieneInstructions: form.hygieneInstructions,
             xrays: form.xrays, nextVisit: form.nextVisit,
-            medications: form.medications.filter(m => m.drug),
+            // medications JSON legacy removidas — ahora se manejan vía
+            // /api/prescriptions con FK a CUMS desde PrescriptionModal.
           },
         }),
       });
@@ -195,6 +203,35 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
         toast.success("Expediente dental guardado");
       }
     } catch (err: any) { toast.error(err.message ?? "Error al guardar"); } finally { setSaving(false); }
+  }
+
+  /**
+   * Para crear una receta NOM-024 necesitamos el medicalRecordId. El user
+   * puede haber editado SOAP sin guardar todavía — guardamos el record
+   * primero (mismo patrón que cardiology/pediatrics) y abrimos el modal
+   * con el id resultante. PrescriptionModal hace su propio POST a
+   * /api/prescriptions con FK a CUMS + firma opcional.
+   */
+  async function openPrescriptionModal() {
+    try {
+      const res = await fetch("/api/clinical", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patientId,
+          subjective: form.subjective, objective: form.objective,
+          assessment: form.assessment, plan: form.plan,
+          autoInvoice: false, // no creamos factura aquí — se hace en handleSave
+          specialtyData: { type: "dental" },
+        }),
+      });
+      if (!res.ok) throw new Error("No se pudo guardar el expediente");
+      const record = await res.json();
+      setRxRecordId(record.id);
+      setRxOpen(true);
+      onSaved(record);
+    } catch (err: any) {
+      toast.error(err.message ?? "Error al preparar receta");
+    }
   }
 
   function getSurfaceColor(num: number, surface: Surface): string {
@@ -763,26 +800,32 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
         )}
       </CardNew>
 
-      {/* PRESCRIPCIÓN */}
+      {/* PRESCRIPCIÓN — NOM-024 con CUMS + firma electrónica opcional */}
       <CardNew
-        title="💊 Prescripción médica"
+        title="💊 Receta médica"
         action={(
-          <button type="button" className="text-xs font-semibold text-brand-600 hover:underline"
-            onClick={() => set("medications", [...form.medications, { drug:"", dose:"", duration:"" }])}>+ Agregar</button>
+          <ButtonNew
+            size="sm"
+            variant="ghost"
+            icon={<FileText size={14} />}
+            onClick={openPrescriptionModal}
+          >
+            Crear receta
+          </ButtonNew>
         )}
       >
-        <div className="space-y-2">
-          {form.medications.map((med, i) => (
-            <div key={i} className="grid grid-cols-3 gap-2">
-              <input className="input-new" placeholder="Medicamento" value={med.drug}
-                onChange={e => { const m = [...form.medications]; m[i].drug = e.target.value; set("medications", m); }} />
-              <input className="input-new" placeholder="Dosis (ej. 500mg c/8h)" value={med.dose}
-                onChange={e => { const m = [...form.medications]; m[i].dose = e.target.value; set("medications", m); }} />
-              <input className="input-new" placeholder="Duración (ej. 7 días)" value={med.duration}
-                onChange={e => { const m = [...form.medications]; m[i].duration = e.target.value; set("medications", m); }} />
-            </div>
-          ))}
-        </div>
+        <p className="text-xs text-muted-foreground">
+          Las recetas se crean con FK al catálogo CUMS (Sector Salud) y vigencia
+          legal según grupo COFEPRIS. Firma electrónica con FIEL/SAT opcional.
+        </p>
+        {rxResult && (
+          <div className="mt-3 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs">
+            ✓ Receta creada.{" "}
+            <a href={rxResult.verifyUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-700 font-semibold hover:underline">
+              Ver receta verificable
+            </a>
+          </div>
+        )}
       </CardNew>
 
       {/* DIAGNÓSTICO Y PLAN */}
@@ -819,6 +862,16 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
           {saving ? "Guardando…" : "Guardar consulta"}
         </ButtonNew>
       </div>
+
+      {rxRecordId && (
+        <PrescriptionModal
+          open={rxOpen}
+          patientId={patientId}
+          medicalRecordId={rxRecordId}
+          onClose={() => setRxOpen(false)}
+          onCreated={(rx) => setRxResult(rx)}
+        />
+      )}
     </form>
   );
 }
