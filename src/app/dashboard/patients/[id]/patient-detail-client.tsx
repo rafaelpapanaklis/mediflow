@@ -30,15 +30,12 @@ import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 
-const SPECIALTY_MAP: Record<string, string> = {
-  dental: "dental", odontologia: "dental", odontología: "dental",
-  nutrition: "nutrition", nutricion: "nutrition", nutrición: "nutrition",
-  psychology: "psychology", psicologia: "psychology", psicología: "psychology",
-};
-function detectSpecialty(raw: string) {
-  const lower = raw.toLowerCase();
-  for (const [k, v] of Object.entries(SPECIALTY_MAP)) if (lower.includes(k)) return v;
-  return "medicine";
+// MediFlow es DENTAL — el form de "Nueva consulta" siempre usa DentalForm.
+// El parámetro `specialty` viene del Clinic.specialty (legacy) y se ignora.
+// Si en el futuro MediFlow expande a otras specialties, restaurar la
+// lógica de detección y los renders condicionales abajo.
+function detectSpecialty(_raw: string) {
+  return "dental";
 }
 
 const APPT_STATUS: Record<string, { label: string; cls: string }> = {
