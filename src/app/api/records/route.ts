@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logAudit, logMutation, extractAuditMeta } from "@/lib/audit";
+import { hasPermission } from "@/lib/auth/permissions";
 
 const recordSchema = z.object({
   patientId:     z.string().min(1),
@@ -32,6 +33,10 @@ async function getDbUser() {
 export async function GET(req: NextRequest) {
   const dbUser = await getDbUser();
   if (!dbUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // NOM-024: solo DOCTOR/ADMIN/SUPER_ADMIN ven el expediente clínico.
+  if (!hasPermission(dbUser.role, "medicalRecord.read")) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
   const { searchParams } = new URL(req.url);
   const patientId = searchParams.get("patientId");
   const limit = Math.min(Math.max(parseInt(searchParams.get("limit") ?? "200"), 1), 500);
@@ -69,6 +74,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const dbUser = await getDbUser();
   if (!dbUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!hasPermission(dbUser.role, "medicalRecord.create")) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
 
   const body = await req.json();
   const parsed = recordSchema.safeParse(body);

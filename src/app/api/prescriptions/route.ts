@@ -4,6 +4,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { logMutation } from "@/lib/audit";
+import { hasPermission } from "@/lib/auth/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,9 @@ function expiresForCofeprisGroup(group?: string | null, base: Date = new Date())
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!hasPermission(ctx.role as "DOCTOR" | "ADMIN" | "SUPER_ADMIN" | "RECEPTIONIST" | "READONLY", "prescription.read")) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
   const patientId = req.nextUrl.searchParams.get("patientId");
   if (!patientId) return NextResponse.json({ error: "patientId required" }, { status: 400 });
 
@@ -72,6 +76,9 @@ interface PrescriptionItemBody {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!hasPermission(ctx.role as "DOCTOR" | "ADMIN" | "SUPER_ADMIN" | "RECEPTIONIST" | "READONLY", "prescription.create")) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
 
   const body = await req.json();
   const { medicalRecordId, patientId, items, indications, cofeprisGroup, cofeprisFolio, expiresAt: expiresAtOverride } = body;
