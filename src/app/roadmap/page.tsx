@@ -2,6 +2,10 @@ import type { Metadata } from "next";
 import { Header } from "@/components/public/landing/header";
 import { Footer } from "@/components/public/landing/footer";
 import { ROADMAP, STATUS_META, type RoadmapStatus } from "@/lib/roadmap";
+import { getSession } from "@/lib/auth";
+
+// Lee cookies via getSession → ya no es estática.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Roadmap — MediFlow",
@@ -10,7 +14,11 @@ export const metadata: Metadata = {
 
 const ORDER: RoadmapStatus[] = ["launched", "in_progress", "planned"];
 
-export default function RoadmapPage() {
+export default async function RoadmapPage() {
+  // Mismo patrón que la landing principal: el Header decide CTA según sesión.
+  const user = await getSession();
+  const isLoggedIn = user !== null && user !== undefined;
+
   const grouped = ORDER.map(status => ({
     status,
     items: ROADMAP.filter(r => r.status === status),
@@ -18,7 +26,7 @@ export default function RoadmapPage() {
 
   return (
     <div className="min-h-screen bg-[#0B0F1E] text-white">
-      <Header />
+      <Header isLoggedIn={isLoggedIn} />
       <main className="max-w-5xl mx-auto px-6 py-16">
         <div className="text-center mb-14">
           <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight mb-4">

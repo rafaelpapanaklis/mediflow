@@ -6,9 +6,13 @@ import { SpecialtiesDropdown } from "../specialties-dropdown";
 
 interface SpecNavProps {
   currentSlug: string;
+  // Cuando el visitante ya está logueado, el server lo decide y nos pasa
+  // este flag — mostramos un solo CTA "Ir al dashboard" en vez de los dos
+  // links de login/signup. Mismo patrón que el Header del landing.
+  isLoggedIn?: boolean;
 }
 
-export function SpecNav({ currentSlug }: SpecNavProps) {
+export function SpecNav({ currentSlug, isLoggedIn = false }: SpecNavProps) {
   return (
     <div
       style={{
@@ -59,31 +63,51 @@ export function SpecNav({ currentSlug }: SpecNavProps) {
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 13 }}>
-          <Link
-            href="/login"
-            style={{
-              color: "var(--ld-fg-muted, var(--fg-muted))",
-              cursor: "pointer",
-              textDecoration: "none",
-            }}
-          >
-            Iniciar sesión
-          </Link>
-          <Link
-            href="/signup"
-            style={{
-              padding: "8px 14px",
-              borderRadius: 8,
-              background: "linear-gradient(180deg, #8b5cf6, #7c3aed)",
-              color: "white",
-              fontWeight: 500,
-              cursor: "pointer",
-              boxShadow: "0 4px 12px rgba(124,58,237,0.3)",
-              textDecoration: "none",
-            }}
-          >
-            Prueba gratis →
-          </Link>
+          {isLoggedIn ? (
+            <Link
+              href="/dashboard"
+              style={{
+                padding: "8px 14px",
+                borderRadius: 8,
+                background: "linear-gradient(180deg, #8b5cf6, #7c3aed)",
+                color: "white",
+                fontWeight: 500,
+                cursor: "pointer",
+                boxShadow: "0 4px 12px rgba(124,58,237,0.3)",
+                textDecoration: "none",
+              }}
+            >
+              Ir al dashboard →
+            </Link>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                style={{
+                  color: "var(--ld-fg-muted, var(--fg-muted))",
+                  cursor: "pointer",
+                  textDecoration: "none",
+                }}
+              >
+                Iniciar sesión
+              </Link>
+              <Link
+                href="/signup"
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 8,
+                  background: "linear-gradient(180deg, #8b5cf6, #7c3aed)",
+                  color: "white",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  boxShadow: "0 4px 12px rgba(124,58,237,0.3)",
+                  textDecoration: "none",
+                }}
+              >
+                Prueba gratis →
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -11,7 +11,7 @@ import { SpecPricing } from "./spec-pricing";
 import { SpecRelated } from "./spec-related";
 import { SpecTestimonial } from "./spec-testimonial";
 
-export function SpecialtyPage({ slug }: { slug: string }) {
+export function SpecialtyPage({ slug, isLoggedIn = false }: { slug: string; isLoggedIn?: boolean }) {
   const spec = getSpecialty(slug);
   if (!spec) notFound();
   return (
@@ -20,7 +20,7 @@ export function SpecialtyPage({ slug }: { slug: string }) {
       data-mode="dark"
       style={{ minHeight: "100vh" }}
     >
-      <SpecNav currentSlug={slug} />
+      <SpecNav currentSlug={slug} isLoggedIn={isLoggedIn} />
       <SpecHero spec={spec} />
       <SpecFeatures spec={spec} />
       <SpecMockupShowcase spec={spec} />
