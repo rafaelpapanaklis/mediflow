@@ -8,6 +8,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import type {
   NewPatientFormData,
 } from "@/lib/new-patient/types";
+import { validateCURP } from "@/lib/validators/curp";
 
 interface Props {
   isOpen: boolean;
@@ -26,6 +27,10 @@ const EMPTY: NewPatientFormData = {
   dob: "",
   gender: "",
   isChild: false,
+  // NOM-024
+  curp: "",
+  curpStatus: "PENDING",
+  passportNo: "",
 };
 
 function splitName(full: string): { firstName: string; lastName: string } {
@@ -77,6 +82,14 @@ export function NewPatientDialog({
     if (form.phone && !/^[\d\s+\-()]{7,20}$/.test(form.phone)) {
       next.phone = "Teléfono inválido";
     }
+    // NOM-024
+    if (form.curpStatus === "COMPLETE") {
+      if (!form.curp.trim()) next.curp = "Requerido";
+      else if (!validateCURP(form.curp)) next.curp = "Formato inválido";
+    }
+    if (form.curpStatus === "FOREIGN" && !form.passportNo.trim()) {
+      next.passportNo = "Requerido";
+    }
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -97,6 +110,9 @@ export function NewPatientDialog({
           dob: form.dob || null,
           gender: form.gender || null,
           isChild: form.isChild,
+          curp:        form.curpStatus === "COMPLETE" ? form.curp.toUpperCase() : null,
+          curpStatus:  form.curpStatus,
+          passportNo:  form.curpStatus === "FOREIGN" ? form.passportNo.trim() : null,
         }),
       });
 
@@ -213,6 +229,69 @@ export function NewPatientDialog({
                 Es menor de edad
               </span>
             </label>
+
+            {/* NOM-024 — Identificación oficial */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 4 }}>
+              <span style={sectionLabelStyle}>Identificación oficial</span>
+              <div style={{ display: "flex", gap: 6 }}>
+                {([
+                  { id: "COMPLETE", label: "Tengo CURP" },
+                  { id: "PENDING",  label: "No la tengo ahora" },
+                  { id: "FOREIGN",  label: "Extranjero" },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => update("curpStatus", opt.id)}
+                    aria-pressed={form.curpStatus === opt.id}
+                    style={{
+                      flex: 1,
+                      padding: "8px 10px",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      borderRadius: 8,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                      background: form.curpStatus === opt.id ? "var(--brand)" : "var(--bg-elev)",
+                      color: form.curpStatus === opt.id ? "#fff" : "var(--text-2)",
+                      border: `1px solid ${form.curpStatus === opt.id ? "var(--brand)" : "var(--border-soft)"}`,
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              {form.curpStatus === "COMPLETE" && (
+                <Field label="CURP*" error={errors.curp}>
+                  <input
+                    type="text"
+                    className="input-new"
+                    style={{ fontFamily: "var(--font-jetbrains-mono, monospace)", textTransform: "uppercase", letterSpacing: "0.04em" }}
+                    placeholder="GOPA850623HDFRRR03"
+                    maxLength={18}
+                    value={form.curp}
+                    onChange={(e) => update("curp", e.target.value.toUpperCase())}
+                  />
+                </Field>
+              )}
+              {form.curpStatus === "FOREIGN" && (
+                <Field label="Pasaporte*" error={errors.passportNo}>
+                  <input
+                    type="text"
+                    className="input-new"
+                    placeholder="A12345678"
+                    maxLength={20}
+                    value={form.passportNo}
+                    onChange={(e) => update("passportNo", e.target.value.trim())}
+                  />
+                </Field>
+              )}
+              {form.curpStatus === "PENDING" && (
+                <span style={{ fontSize: 11, color: "var(--text-3)" }}>
+                  Marca como pendiente. Recordá pedirle el CURP al paciente en la primera visita.
+                </span>
+              )}
+            </div>
           </div>
 
           <footer style={footerStyle}>
@@ -340,6 +419,14 @@ const checkboxRowStyle: React.CSSProperties = {
   alignItems: "center",
   gap: 8,
   cursor: "pointer",
+};
+
+const sectionLabelStyle: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 500,
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+  color: "var(--text-3)",
 };
 
 const footerStyle: React.CSSProperties = {

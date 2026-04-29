@@ -18,4 +18,8 @@ export interface NewPatientFormData {
   dob: string;
   gender: "F" | "M" | "O" | "";
   isChild: boolean;
+  // NOM-024 identificación
+  curp: string;
+  curpStatus: "COMPLETE" | "PENDING" | "FOREIGN";
+  passportNo: string;
 }
