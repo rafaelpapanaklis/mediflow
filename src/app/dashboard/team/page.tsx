@@ -22,6 +22,9 @@ export default async function TeamPage() {
       id: true, firstName: true, lastName: true, email: true,
       role: true, specialty: true, color: true, avatarUrl: true,
       phone: true, isActive: true, createdAt: true, services: true,
+      // Override granular del set default del role — visible solo en el
+      // modal de Permisos del SUPER_ADMIN.
+      permissionsOverride: true,
       _count: {
         select: {
           appointments: { where: { status: { not: "CANCELLED" } } },
@@ -36,6 +39,7 @@ export default async function TeamPage() {
     <TeamClient
       team={team as any}
       currentUserId={user.id}
+      currentUserRole={user.role}
       clinicName={user.clinic.name}
     />
   );

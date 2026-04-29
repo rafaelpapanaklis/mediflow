@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Plus, X, Edit, UserCheck, UserX, Trash2, Copy, Check, Stethoscope, Shield, Users as UsersIcon } from "lucide-react";
+import { Plus, X, Edit, UserCheck, UserX, Trash2, Copy, Check, Stethoscope, Shield, ShieldCheck, Users as UsersIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
@@ -11,6 +11,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import toast from "react-hot-toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { PermissionsModal } from "@/components/dashboard/team/permissions-modal";
 
 type RoleTone = "success" | "info" | "warning" | "brand" | "neutral";
 const ROLE_TONE: Record<string, { tone: RoleTone; label: string }> = {
@@ -64,6 +65,7 @@ interface TeamMember {
   cedulaProfesional?: string | null;
   especialidad?: string | null;
   cedulaEspecialidad?: string | null;
+  permissionsOverride?: string[];
   _count: { appointments: number; records: number };
 }
 
@@ -272,17 +274,21 @@ function MemberForm({
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
-interface Props { team: TeamMember[]; currentUserId: string; clinicName: string }
+interface Props { team: TeamMember[]; currentUserId: string; currentUserRole: string; clinicName: string }
 
-export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Props) {
+export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, clinicName }: Props) {
   const askConfirm = useConfirm();
   const [team,       setTeam]       = useState<TeamMember[]>(initialTeam);
   const [showNew,    setShowNew]    = useState(false);
   const [editMember, setEditMember] = useState<TeamMember | null>(null);
+  // Member cuyo modal de permisos está abierto. Solo SUPER_ADMIN puede abrirlo.
+  const [permsMember, setPermsMember] = useState<TeamMember | null>(null);
   const [loading,    setLoading]    = useState(false);
   const [filter,     setFilter]     = useState<"active"|"all"|"inactive">("active");
   const [tempPass,   setTempPass]   = useState<string | null>(null);
   const [copied,     setCopied]     = useState(false);
+
+  const isSuperAdmin = currentUserRole === "SUPER_ADMIN";
 
   const usedColors = team.map(m => m.color);
   const nextColor  = DOCTOR_COLORS.find(c => !usedColors.includes(c)) ?? DOCTOR_COLORS[0];
@@ -567,10 +573,24 @@ export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Pro
                   </div>
 
                   {/* Actions */}
-                  <div style={{ display: "flex", gap: 6, marginTop: 14, justifyContent: "center" }}>
+                  <div style={{ display: "flex", gap: 6, marginTop: 14, justifyContent: "center", flexWrap: "wrap" }}>
                     <ButtonNew size="sm" variant="secondary" icon={<Edit size={12} />} onClick={() => openEdit(m)}>
                       Editar
                     </ButtonNew>
+                    {/* Permisos: solo visible para SUPER_ADMIN, y NO sobre otros
+                     *  SUPER_ADMIN (defensa contra lock-out cruzado en endpoint).
+                     *  Sobre el propio user igual lo permitimos — útil para
+                     *  un super que quiera bajarse permisos de prueba. */}
+                    {isSuperAdmin && m.role !== "SUPER_ADMIN" && (
+                      <ButtonNew
+                        size="sm"
+                        variant="secondary"
+                        icon={<ShieldCheck size={12} />}
+                        onClick={() => setPermsMember(m)}
+                      >
+                        Permisos
+                      </ButtonNew>
+                    )}
                     {m.id !== currentUserId && (
                       <>
                         <button
@@ -642,6 +662,19 @@ export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Pro
           </div>
         </div>
       )}
+
+      {/* Permisos granulares — solo SUPER_ADMIN. El modal ya gatea su propia
+       *  lógica (toggle "usar default", agrupado por categoría, validación). */}
+      <PermissionsModal
+        open={permsMember !== null}
+        member={permsMember}
+        onClose={() => setPermsMember(null)}
+        onSaved={(memberId, newOverride) => {
+          setTeam(prev => prev.map(m =>
+            m.id === memberId ? { ...m, permissionsOverride: newOverride } : m,
+          ));
+        }}
+      />
     </div>
   );
 }
