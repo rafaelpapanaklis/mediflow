@@ -344,6 +344,9 @@ model Patient {
   referrals           Referral[]
 
   @@unique([clinicId, patientNumber])
+  @@index([clinicId, status])
+  @@index([clinicId, createdAt(sort: Desc)])
+  @@index([primaryDoctorId])
   @@map("patients")
 }
 
@@ -651,6 +654,8 @@ model MedicalRecord {
   // El campo `diagnoses Json?` legacy queda intacto para datos históricos.
   diagnoses_v2 MedicalRecordDiagnosis[]
 
+  @@index([clinicId, patientId, visitDate(sort: Desc)])
+  @@index([clinicId, doctorId])
   @@map("medical_records")
 }
 
@@ -711,6 +716,7 @@ model TreatmentPlan {
   doctor   User               @relation(fields: [doctorId], references: [id])
   sessions TreatmentSession[]
 
+  @@index([clinicId, patientId, status])
   @@map("treatment_plans")
 }
 
@@ -724,6 +730,7 @@ model TreatmentSession {
 
   treatment TreatmentPlan @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
 
+  @@index([treatmentId])
   @@map("treatment_sessions")
 }
 
@@ -783,6 +790,8 @@ model Invoice {
   payments    Payment[]
 
   @@unique([clinicId, invoiceNumber])
+  @@index([clinicId, status, createdAt(sort: Desc)])
+  @@index([patientId])
   @@map("invoices")
 }
 
@@ -806,6 +815,7 @@ model Payment {
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
+  @@index([invoiceId])
   @@map("payments")
 }
 
@@ -852,6 +862,8 @@ model PatientFile {
   clinic       Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   xrayAnalysis XrayAnalysis?
 
+  @@index([clinicId, patientId, createdAt(sort: Desc)])
+  @@index([patientId, category])
   @@map("patient_files")
 }
 
@@ -1316,6 +1328,8 @@ model Prescription {
 
   @@index([clinicId])
   @@index([patientId])
+  @@index([medicalRecordId])
+  @@index([clinicId, issuedAt(sort: Desc)])
   @@map("prescriptions")
 }
 
