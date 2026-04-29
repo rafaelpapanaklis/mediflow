@@ -40,12 +40,19 @@ interface FormState {
   firstName: string; lastName: string; email: string;
   role: string; specialty: string; color: string;
   phone: string; services: string[];
+  // NOM-024
+  cedulaProfesional: string;
+  especialidad: string;
+  cedulaEspecialidad: string;
 }
 interface TeamMember {
   id: string; firstName: string; lastName: string; email: string;
   role: string; specialty: string | null; color: string; services: string[];
   avatarUrl: string | null; phone: string | null;
   isActive: boolean; createdAt: string;
+  cedulaProfesional?: string | null;
+  especialidad?: string | null;
+  cedulaEspecialidad?: string | null;
   _count: { appointments: number; records: number };
 }
 
@@ -187,6 +194,43 @@ function MemberForm({
         )}
       </div>
 
+      {/* NOM-024 — Datos del médico */}
+      <div className="space-y-3 pt-1">
+        <Label className="text-base font-semibold">Identificación profesional (NOM-024)</Label>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-sm text-muted-foreground">Cédula profesional</Label>
+            <input
+              className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base font-mono focus:outline-none"
+              placeholder="1234567"
+              maxLength={15}
+              value={form.cedulaProfesional}
+              onChange={e => set("cedulaProfesional", e.target.value.trim())}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm text-muted-foreground">Cédula de especialidad</Label>
+            <input
+              className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base font-mono focus:outline-none"
+              placeholder="Si tiene"
+              maxLength={15}
+              value={form.cedulaEspecialidad}
+              onChange={e => set("cedulaEspecialidad", e.target.value.trim())}
+            />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-sm text-muted-foreground">Especialidad oficial (NOM-024)</Label>
+          <input
+            className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
+            placeholder="Ej. Odontología, Pediatría — texto formal para recetas"
+            maxLength={100}
+            value={form.especialidad}
+            onChange={e => set("especialidad", e.target.value)}
+          />
+        </div>
+      </div>
+
       {/* Color */}
       <div className="space-y-2">
         <Label className="text-base font-semibold">Color en agenda</Label>
@@ -235,6 +279,7 @@ export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Pro
   const emptyForm = (): FormState => ({
     firstName:"", lastName:"", email:"", role:"DOCTOR",
     specialty:"", color: nextColor, phone:"", services:[],
+    cedulaProfesional: "", especialidad: "", cedulaEspecialidad: "",
   });
 
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -334,6 +379,9 @@ export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Pro
       firstName: m.firstName, lastName: m.lastName, email: m.email,
       role: m.role, specialty: m.specialty ?? "", color: m.color,
       phone: m.phone ?? "", services: m.services ?? [],
+      cedulaProfesional:  m.cedulaProfesional  ?? "",
+      especialidad:       m.especialidad       ?? "",
+      cedulaEspecialidad: m.cedulaEspecialidad ?? "",
     });
     setEditMember(m);
   }

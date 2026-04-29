@@ -29,6 +29,10 @@ export const patientSchema = z.object({
   currentMedications: z.array(z.string()).default([]),
   tags:               z.array(z.string()).default([]),
   notes:              z.string().optional(),
+  // NOM-024 identificación
+  curp:               z.string().max(18).optional().nullable(),
+  curpStatus:         z.enum(["COMPLETE","PENDING","FOREIGN"]).optional(),
+  passportNo:         z.string().max(20).optional().nullable(),
 });
 
 export const appointmentSchema = z.object({

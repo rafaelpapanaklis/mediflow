@@ -72,7 +72,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
     try {
       const res = await fetch("/api/clinic", {
         method: "PATCH", headers: { "Content-Type":"application/json" },
-        body: JSON.stringify({ name:clinic.name, city:clinic.city, phone:clinic.phone, email:clinic.email, address:clinic.address, description:clinic.description, isPublic, category:clinic.category })
+        body: JSON.stringify({ name:clinic.name, city:clinic.city, phone:clinic.phone, email:clinic.email, address:clinic.address, description:clinic.description, isPublic, category:clinic.category, clues:clinic.clues })
       });
       if (!res.ok) throw new Error();
       toast.success("Datos de la clínica actualizados");
@@ -234,6 +234,19 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           </div>
           <div className="space-y-1.5"><Label>Teléfono</Label><Input value={clinic.phone ?? ""} onChange={e => setClinic((c: any) => ({ ...c, phone: e.target.value }))} /></div>
           <div className="space-y-1.5"><Label>Email de contacto</Label><Input type="email" value={clinic.email ?? ""} onChange={e => setClinic((c: any) => ({ ...c, email: e.target.value }))} /></div>
+          {/* NOM-024 — CLUES Sector Salud */}
+          <div className="space-y-1.5">
+            <Label>CLUES (Sector Salud)</Label>
+            <Input
+              maxLength={11}
+              placeholder="11 caracteres oficiales — opcional"
+              value={clinic.clues ?? ""}
+              onChange={e => setClinic((c: any) => ({ ...c, clues: e.target.value.toUpperCase().trim() }))}
+            />
+            <div className="text-[11px] text-muted-foreground">
+              Clave Única de Establecimientos de Salud. Requerida para reportes oficiales NOM-024.
+            </div>
+          </div>
           <div className="space-y-1.5">
             <Label>Descripción corta (visible en el directorio)</Label>
             <textarea

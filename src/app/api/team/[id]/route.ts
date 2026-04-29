@@ -71,6 +71,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       ...(body.role       !== undefined && { role:       body.role       }),
       ...(body.isActive   !== undefined && { isActive:   body.isActive   }),
       ...(body.services   !== undefined && { services:   body.services   }),
+      // NOM-024 — datos del médico
+      ...(body.cedulaProfesional  !== undefined && { cedulaProfesional:  body.cedulaProfesional  || null }),
+      ...(body.especialidad       !== undefined && { especialidad:       body.especialidad       || null }),
+      ...(body.cedulaEspecialidad !== undefined && { cedulaEspecialidad: body.cedulaEspecialidad || null }),
     },
   });
 

@@ -59,6 +59,9 @@ model Clinic {
   cpEmisor          String?
   facturApiEnabled  Boolean @default(false)
 
+  // Identificación NOM-024 — CLUES Sector Salud (Compliance Fase A)
+  clues             String?  @db.VarChar(11)
+
   // Subscription / Billing
   subscriptionStatus   String?   // active, trialing, past_due, cancelled
   subscriptionId       String?   // legacy — Stripe/MP subscription ID
@@ -203,6 +206,11 @@ model User {
   avatarUrl  String?
   phone      String?
   isActive   Boolean  @default(true)
+
+  // Identificación NOM-024 (Compliance Fase A) — médicos
+  cedulaProfesional   String?  @db.VarChar(15)
+  especialidad        String?  @db.VarChar(100)
+  cedulaEspecialidad  String?  @db.VarChar(15)
   color      String   @default("#3b82f6")
   agendaActive Boolean @default(true)
   lastLogin  DateTime?
@@ -277,6 +285,11 @@ model Patient {
   // Portal del paciente
   portalToken       String?   @unique
   portalTokenExpiry DateTime?
+
+  // Identificación NOM-024 (Compliance Fase A)
+  curp        String?     @db.VarChar(18)
+  curpStatus  CurpStatus  @default(PENDING)
+  passportNo  String?     @db.VarChar(20)
 
   // Datos fiscales para CFDI
   rfcPaciente      String?
@@ -365,6 +378,12 @@ enum Gender {
   M
   F
   OTHER
+}
+
+enum CurpStatus {
+  COMPLETE
+  PENDING
+  FOREIGN
 }
 
 enum PatientStatus {

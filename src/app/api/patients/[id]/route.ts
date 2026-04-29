@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, buildPatientWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { patientSchema } from "@/lib/validations";
+import { validateCurpRecord } from "@/lib/validators/curp";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -33,6 +34,17 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   try {
     const body = await req.json();
     const data = patientSchema.parse(body);
+
+    // NOM-024 — validar coherencia curp/curpStatus/passportNo si vienen.
+    if (data.curpStatus !== undefined) {
+      const check = validateCurpRecord({
+        curp: data.curp ?? null,
+        curpStatus: data.curpStatus,
+        passportNo: data.passportNo ?? null,
+      });
+      if (check.ok === false) return NextResponse.json({ error: check.error }, { status: 400 });
+    }
+
     await prisma.patient.update({
       where: { id: params.id },
       data: {
@@ -40,6 +52,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         dob:    data.dob    ? new Date(data.dob) : undefined,
         email:  data.email  || undefined,
         gender: (data.gender ?? "OTHER") as any,
+        curp:   data.curp ? data.curp.toUpperCase().trim() : data.curp,
       },
     });
     const updated = await prisma.patient.findUnique({ where: { id: params.id } });

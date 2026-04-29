@@ -117,6 +117,10 @@ export function PatientDetailClient({
     email: patient.email ?? "", phone: patient.phone ?? "",
     gender: patient.gender ?? "OTHER", dob: patient.dob ? new Date(patient.dob).toISOString().split("T")[0] : "",
     address: patient.address ?? "", allergies: (patient.allergies ?? []).join(", "), notes: patient.notes ?? "",
+    // NOM-024
+    curp:        patient.curp ?? "",
+    curpStatus:  (patient.curpStatus ?? "PENDING") as "COMPLETE" | "PENDING" | "FOREIGN",
+    passportNo:  patient.passportNo ?? "",
   });
   const [editSaving, setEditSaving] = useState(false);
   const [showNewAppt, setShowNewAppt] = useState(false);
@@ -1351,6 +1355,47 @@ export function PatientDetailClient({
               </div>
             </div>
             <div className="space-y-1.5"><Label>Dirección</Label><Input value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} /></div>
+
+            {/* NOM-024 — Identificación oficial */}
+            <div className="space-y-1.5">
+              <Label>Identificación oficial</Label>
+              <div className="flex gap-2">
+                {(["COMPLETE","PENDING","FOREIGN"] as const).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setEditForm(f => ({ ...f, curpStatus: s }))}
+                    className={`flex-1 px-3 py-1.5 text-xs rounded-lg border ${editForm.curpStatus === s ? "bg-brand-600 text-white border-brand-600" : "bg-card text-foreground border-border"}`}
+                  >
+                    {s === "COMPLETE" ? "Tengo CURP" : s === "PENDING" ? "No la tengo" : "Extranjero"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {editForm.curpStatus === "COMPLETE" && (
+              <div className="space-y-1.5">
+                <Label>CURP *</Label>
+                <Input
+                  className="font-mono uppercase tracking-wide"
+                  maxLength={18}
+                  value={editForm.curp}
+                  onChange={e => setEditForm(f => ({ ...f, curp: e.target.value.toUpperCase() }))}
+                  placeholder="GOPA850623HDFRRR03"
+                />
+              </div>
+            )}
+            {editForm.curpStatus === "FOREIGN" && (
+              <div className="space-y-1.5">
+                <Label>Pasaporte *</Label>
+                <Input
+                  maxLength={20}
+                  value={editForm.passportNo}
+                  onChange={e => setEditForm(f => ({ ...f, passportNo: e.target.value.trim() }))}
+                  placeholder="A12345678"
+                />
+              </div>
+            )}
+
             <div className="space-y-1.5"><Label>Alergias (separadas por comas)</Label><Input value={editForm.allergies} onChange={e => setEditForm(f => ({ ...f, allergies: e.target.value }))} /></div>
             <div className="space-y-1.5"><Label>Notas</Label>
               <textarea className="flex min-h-[60px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground resize-none"
@@ -1364,7 +1409,13 @@ export function PatientDetailClient({
               try {
                 const res = await fetch(`/api/patients/${patient.id}`, {
                   method: "PUT", headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ ...editForm, allergies: editForm.allergies ? editForm.allergies.split(",").map((s: string) => s.trim()).filter(Boolean) : [] }),
+                  body: JSON.stringify({
+                    ...editForm,
+                    allergies: editForm.allergies ? editForm.allergies.split(",").map((s: string) => s.trim()).filter(Boolean) : [],
+                    curp:        editForm.curpStatus === "COMPLETE" ? editForm.curp.toUpperCase() : null,
+                    curpStatus:  editForm.curpStatus,
+                    passportNo:  editForm.curpStatus === "FOREIGN" ? editForm.passportNo : null,
+                  }),
                 });
                 if (!res.ok) throw new Error((await res.json()).error);
                 toast.success("Paciente actualizado");
