@@ -784,7 +784,7 @@ export function PatientDetailClient({
                   const record = records.find((r) => r.id === recordId);
                   if (record) setNoteDetailOpen(record as ClinicalNote);
                 }}
-                onOpenXray={() => setTab("radiografias")}
+                onOpenXray={(fileId) => router.push(`/dashboard/xrays/${patient.id}?fileId=${fileId}`)}
                 onOpenAppointment={() => setTab("agenda")}
                 onOpenTreatment={() => setTab("tratamiento")}
                 onOpenReferral={() => setTab("referencias")}
@@ -1112,20 +1112,38 @@ export function PatientDetailClient({
                   const isImage = f.mimeType?.startsWith("image/");
                   const result  = analyses[f.id];
                   const isExp   = expandedFile === f.id;
+                  const openInViewer = () =>
+                    router.push(`/dashboard/xrays/${patient.id}?fileId=${f.id}`);
 
                   return (
                     <div key={f.id} className="bg-card border border-border rounded-xl overflow-hidden">
                       <div className="flex gap-4 p-4">
-                        {/* Thumbnail */}
+                        {/* Thumbnail (click → visor con anotaciones) */}
                         {isImage && (
-                          <div className="w-32 h-24 bg-black rounded-lg overflow-hidden flex-shrink-0 relative">
+                          <button
+                            type="button"
+                            onClick={openInViewer}
+                            className="w-32 h-24 bg-black rounded-lg overflow-hidden flex-shrink-0 relative cursor-pointer hover:opacity-90 transition-opacity group"
+                            aria-label={`Abrir ${f.name} en visor con anotaciones`}
+                          >
                             <img src={f.url} alt={f.name} className="w-full h-full object-cover opacity-90" />
-                          </div>
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/40 transition-colors">
+                              <span className="text-white text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity">
+                                Abrir visor
+                              </span>
+                            </div>
+                          </button>
                         )}
                         {/* Info */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-sm font-bold truncate">{f.name}</span>
+                            <button
+                              type="button"
+                              onClick={openInViewer}
+                              className="text-sm font-bold truncate hover:text-brand-600 hover:underline text-left"
+                            >
+                              {f.name}
+                            </button>
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
                               {FILE_CAT_LABELS[f.category] ?? f.category}
                             </span>
@@ -1138,9 +1156,19 @@ export function PatientDetailClient({
                           {f.notes && <p className="text-xs text-muted-foreground mt-1">{f.notes}</p>}
 
                           {/* Action buttons */}
-                          <div className="flex gap-2 mt-3">
+                          <div className="flex gap-2 mt-3 flex-wrap">
                             {isImage && (
                               <button
+                                type="button"
+                                onClick={openInViewer}
+                                className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-card text-foreground border border-border hover:bg-muted/50 transition-colors"
+                              >
+                                <span>🔍</span> Abrir en visor
+                              </button>
+                            )}
+                            {isImage && (
+                              <button
+                                type="button"
                                 onClick={() => analyzeFile(f.id)}
                                 disabled={analyzing === f.id}
                                 className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${
@@ -1160,6 +1188,7 @@ export function PatientDetailClient({
                             )}
                             {result && (
                               <button
+                                type="button"
                                 onClick={() => setExpandedFile(isExp ? null : f.id)}
                                 className="text-xs font-semibold text-muted-foreground border border-border px-3 py-1.5 rounded-lg hover:bg-muted/50"
                               >

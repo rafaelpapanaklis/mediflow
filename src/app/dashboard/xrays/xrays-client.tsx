@@ -81,6 +81,8 @@ interface Props {
   aiLimit: number;
   /** ID del paciente activo (forzado desde la ruta /xrays/[patientId]). */
   initialPatientId?: string;
+  /** ID del archivo activo. Si se pasa, abre directamente esa radiografía. */
+  initialFileId?: string;
   /** Si true, el viewer está bloqueado al paciente y no permite cambiar. */
   lockedToPatient?: boolean;
 }
@@ -203,6 +205,7 @@ export function XraysClient({
   aiUsed,
   aiLimit,
   initialPatientId,
+  initialFileId,
   lockedToPatient = false,
 }: Props) {
   const askConfirm = useConfirm();
@@ -210,7 +213,11 @@ export function XraysClient({
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(
     initialPatientId ?? initialFiles[0]?.patient.id ?? null,
   );
-  const [activeFileId, setActiveFileId] = useState<string | null>(initialFiles[0]?.id ?? null);
+  const [activeFileId, setActiveFileId] = useState<string | null>(
+    (initialFileId && initialFiles.some((f) => f.id === initialFileId))
+      ? initialFileId
+      : (initialFiles[0]?.id ?? null),
+  );
   const [compareFileId, setCompareFileId] = useState<string | null>(null);
   const [compareMode, setCompareMode] = useState(false);
   const [tab, setTab] = useState<Tab>("ai");
