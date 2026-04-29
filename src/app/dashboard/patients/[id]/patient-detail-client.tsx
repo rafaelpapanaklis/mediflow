@@ -1534,127 +1534,17 @@ export function PatientDetailClient({
         }}
       />
 
-      {/* Detalle de factura — se abre al click en row de la tabla Facturación.
-       *  Acciones disponibles dependen del status. */}
-      <Dialog open={invoiceDetail !== null} onOpenChange={(o) => { if (!o) setInvoiceDetail(null); }}>
-        <DialogContent className="max-w-lg">
-          {invoiceDetail && (() => {
-            const inv = invoiceDetail;
-            const s = INV_STATUS[inv.status] ?? INV_STATUS.PENDING;
-            const isCancellable = (inv.status === "PENDING" || inv.status === "PARTIAL") && inv.paid === 0;
-            const canCharge = (inv.status === "PENDING" || inv.status === "PARTIAL") && inv.balance > 0;
-            return (
-              <>
-                <DialogHeader>
-                  <DialogTitle className="text-foreground font-bold flex items-center gap-3">
-                    <span className="font-mono">{inv.invoiceNumber}</span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.cls}`}>{s.label}</span>
-                  </DialogTitle>
-                </DialogHeader>
-                <div className="px-6 py-4 space-y-4">
-                  <div className="bg-muted/30 border border-border rounded-lg p-3 text-xs space-y-1.5">
-                    <div className="flex justify-between"><span className="text-muted-foreground">Fecha</span><span>{formatDate(inv.createdAt)}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-bold">{formatCurrency(inv.total)}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Pagado</span><span className="text-emerald-600 font-bold">{formatCurrency(inv.paid)}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Saldo</span><span className="text-rose-600 font-bold">{formatCurrency(inv.balance)}</span></div>
-                    {inv.paymentMethod && (
-                      <div className="flex justify-between"><span className="text-muted-foreground">Método</span><span className="capitalize">{inv.paymentMethod}</span></div>
-                    )}
-                    {inv.cfdiUuid && (
-                      <div className="flex justify-between gap-2">
-                        <span className="text-muted-foreground">CFDI</span>
-                        <span className="font-mono text-[10px] truncate">{inv.cfdiUuid}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {Array.isArray(inv.items) && inv.items.length > 0 && (
-                    <div>
-                      <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide mb-1.5">Conceptos</h3>
-                      <div className="bg-card border border-border rounded-lg divide-y divide-border">
-                        {inv.items.map((it: any, i: number) => (
-                          <div key={i} className="px-3 py-2 flex items-center justify-between text-xs">
-                            <div className="min-w-0">
-                              <div className="font-medium truncate">{it.description ?? it.name ?? `Concepto ${i + 1}`}</div>
-                              {(it.quantity ?? 1) !== 1 && (
-                                <div className="text-[10px] text-muted-foreground">{it.quantity} × {formatCurrency(it.unitPrice ?? 0)}</div>
-                              )}
-                            </div>
-                            <div className="font-mono font-bold">{formatCurrency(it.total ?? 0)}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {Array.isArray(inv.payments) && inv.payments.length > 0 && (
-                    <div>
-                      <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide mb-1.5">Pagos registrados</h3>
-                      <div className="bg-card border border-border rounded-lg divide-y divide-border">
-                        {inv.payments.map((p: any) => (
-                          <div key={p.id} className="px-3 py-2 flex items-center justify-between text-xs">
-                            <div>
-                              <div className="capitalize font-medium">{p.method ?? "—"}</div>
-                              <div className="text-[10px] text-muted-foreground">{formatDate(p.paidAt)} {p.reference ? `· ${p.reference}` : ""}</div>
-                            </div>
-                            <div className="font-mono font-bold text-emerald-600">{formatCurrency(p.amount)}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <DialogFooter className="flex flex-wrap gap-2">
-                  {canCharge && (
-                    <Button onClick={() => {
-                      setPaymentFor({
-                        id: inv.id, invoiceNumber: inv.invoiceNumber,
-                        total: inv.total, paid: inv.paid, balance: inv.balance, status: inv.status,
-                        patientName: `${patient.firstName} ${patient.lastName}`,
-                      });
-                      setInvoiceDetail(null);
-                    }}>
-                      Cobrar pago · {formatCurrency(inv.balance)}
-                    </Button>
-                  )}
-                  {isCancellable && (
-                    <Button
-                      variant="outline"
-                      onClick={async () => {
-                        if (!confirm(`¿Cancelar factura ${inv.invoiceNumber}? No podrá registrar pagos después.`)) return;
-                        try {
-                          const res = await fetch(`/api/invoices/${inv.id}`, { method: "DELETE" });
-                          if (!res.ok) throw new Error((await res.json()).error);
-                          toast.success("Factura cancelada");
-                          setInvoiceDetail(null);
-                          await refreshInvoices();
-                        } catch (err: any) { toast.error(err.message ?? "Error al cancelar"); }
-                      }}
-                    >
-                      Cancelar factura
-                    </Button>
-                  )}
-                  <Button variant="outline" onClick={() => window.print()}>
-                    <Printer size={13} aria-hidden /> Imprimir
-                  </Button>
-                  {inv.cfdiUuid && (
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        navigator.clipboard.writeText(inv.cfdiUuid).catch(() => {});
-                        toast.success("UUID copiado al portapapeles");
-                      }}
-                    >
-                      Copiar UUID CFDI
-                    </Button>
-                  )}
-                  <Button variant="ghost" onClick={() => setInvoiceDetail(null)}>Cerrar</Button>
-                </DialogFooter>
-              </>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
+      {/* Detalle de factura — componente extraído con acciones completas según
+       *  status: Cobrar (PaymentModal), Marcar pagada, Editar precio, Aplicar
+       *  descuento, Cancelar, Reembolsar, Imprimir, Copiar UUID. Multi-tenant
+       *  via /api/invoices/[id]/{cancel,refund,mark-paid,edit-price}. */}
+      <InvoiceDetailModal
+        open={invoiceDetail !== null}
+        invoice={invoiceDetail}
+        patientName={`${patient.firstName} ${patient.lastName}`}
+        onClose={() => setInvoiceDetail(null)}
+        onMutated={refreshInvoices}
+      />
 
       {/* PaymentModal compartido — invocado desde HeroCard, SideCards, o detalle de factura. */}
       <PaymentModal

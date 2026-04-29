@@ -91,7 +91,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md bg-card text-foreground border border-border">
         <DialogHeader>
           <DialogTitle className="text-foreground font-bold">Registrar pago</DialogTitle>
         </DialogHeader>
