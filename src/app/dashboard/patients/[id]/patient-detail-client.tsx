@@ -3,7 +3,7 @@
 import { useCallback, useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Plus, Printer, Edit } from "lucide-react";
+import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Plus, Printer, Edit, Download } from "lucide-react";
 import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
 import { ageFromDob, fmtMXN } from "@/lib/format";
 import { Odontogram } from "@/components/dashboard/odontogram/Odontogram";
@@ -20,6 +20,7 @@ import { NutritionForm }       from "@/components/clinical/nutrition-form";
 import { PsychologyForm }      from "@/components/clinical/psychology-form";
 import { GeneralMedicineForm } from "@/components/clinical/medicine-form";
 import { EvolutionChart, TreatmentTimeline } from "@/components/clinical/shared";
+import { ReferralsTab } from "@/components/dashboard/patients/referrals-tab";
 import toast from "react-hot-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -63,6 +64,7 @@ const TABS = [
   { id: "evolucion",     label: "Evolución / Notas"    },
   { id: "radiografias",  label: "Radiografías"         },
   { id: "tratamiento",   label: "Plan de tratamiento"  },
+  { id: "referencias",   label: "Referencias"          },
   { id: "agenda",        label: "Citas"                },
   { id: "facturacion",   label: "Facturación"          },
 ];
@@ -526,6 +528,17 @@ export function PatientDetailClient({
         </Link>
         <span style={{ color: "var(--text-4)" }}>/</span>
         <span style={{ color: "var(--text-1)", fontWeight: 500 }}>{fullName}</span>
+        {/* NOM-024 — exportar expediente HL7 CDA R2. La API gate por
+            permission medicalRecord.read; si el rol no califica devuelve
+            403 (mejor mostrar y dejar al server gatear que duplicar lógica). */}
+        <button
+          type="button"
+          onClick={() => { window.location.href = `/api/patients/${patient.id}/export-cda`; }}
+          className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded-md border border-border bg-card hover:bg-muted text-foreground"
+          title="Exportar expediente en formato HL7 CDA R2 (NOM-024)"
+        >
+          <Download size={11} aria-hidden /> Exportar CDA HL7
+        </button>
       </div>
 
       {/* Hero card permanente — audit Opción C ajuste 1 */}
@@ -1046,6 +1059,11 @@ export function PatientDetailClient({
           )}
 
           {/* ===== TAB: CITAS ===== */}
+          {/* ===== TAB: REFERENCIAS ===== */}
+          {tab === "referencias" && (
+            <ReferralsTab patientId={patient.id} />
+          )}
+
           {tab === "agenda" && (
             <div className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="flex items-center justify-between px-5 py-4 border-b border-border">
