@@ -126,6 +126,64 @@
   padding: 1px 5px;
   border-radius: 8px;
 }
+.filterPill.active {
+  border-color: var(--brand);
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+.filterPillWrap { position: relative; }
+.filterPanel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 220px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  padding: 6px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.filterPanelEmpty {
+  padding: 12px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.filterPanelOption {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: var(--text-1);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+.filterPanelOption:hover { background: var(--bg-elev-2); }
+.filterPanelOption input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--brand);
+}
+.filterClearBtn {
+  font-size: 10px;
+  color: var(--text-3);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 4px 8px;
+  border-radius: 5px;
+}
+.filterClearBtn:hover {
+  color: var(--brand);
+  background: var(--brand-soft);
+}
 .searchWrap {
   position: relative;
   flex: 0 1 200px;

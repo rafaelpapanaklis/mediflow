@@ -3,6 +3,7 @@
 import { ChevronLeft, ChevronRight, CalendarPlus, Search, ListChecks, Users, Armchair } from "lucide-react";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { useAgenda } from "./agenda-provider";
+import { AgendaFilterPills } from "./agenda-filter-pills";
 import { todayInTz, getTzParts, tzLocalToUtc } from "@/lib/agenda/time-utils";
 import type { AgendaViewMode } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
@@ -47,12 +48,6 @@ export function AgendaTopbar() {
 
   const today = todayInTz(state.timezone);
   const isToday = state.dayISO === today;
-  const doctorCount = state.doctors.filter((d) => d.activeInAgenda).length;
-  const resourceCount = state.resources.length;
-  const filtersActive =
-    state.filters.doctorIds.length +
-    state.filters.resourceIds.length +
-    state.filters.statuses.length;
 
   return (
     <header className={styles.topbar}>
@@ -115,17 +110,7 @@ export function AgendaTopbar() {
 
       <div className={styles.topbarSpacer} />
 
-      <div className={styles.filtersRow}>
-        <button type="button" className={styles.filterPill}>
-          Doctores <span className={styles.filterPillCount}>{doctorCount}</span> ▾
-        </button>
-        <button type="button" className={styles.filterPill}>
-          Sillones <span className={styles.filterPillCount}>{resourceCount}</span> ▾
-        </button>
-        <button type="button" className={styles.filterPill}>
-          Estado{filtersActive > 0 ? <span className={styles.filterPillCount}>{filtersActive}</span> : null} ▾
-        </button>
-      </div>
+      <AgendaFilterPills />
 
       <div className={styles.searchWrap}>
         <Search size={11} aria-hidden className={styles.searchIcon} />

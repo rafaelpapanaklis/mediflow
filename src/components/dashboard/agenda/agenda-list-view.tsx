@@ -2,10 +2,15 @@
 
 import { useMemo } from "react";
 import { useAgenda } from "./agenda-provider";
-import { formatSlotTime } from "@/lib/agenda/time-utils";
+import { formatSlotTime, getTzParts } from "@/lib/agenda/time-utils";
 import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
 import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
+
+function dateKeyInTz(iso: string, timezone: string): string {
+  const p = getTzParts(new Date(iso), timezone);
+  return `${p.year}-${p.month.toString().padStart(2, "0")}-${p.day.toString().padStart(2, "0")}`;
+}
 
 const STATUS_COLOR: Record<AppointmentStatus, string> = {
   SCHEDULED:    "var(--warning)",
@@ -45,30 +50,47 @@ function formatDayHeading(dayISO: string, timezone: string): string {
 export function AgendaListView() {
   const { state } = useAgenda();
 
-  const sorted = useMemo(() => {
-    return [...state.appointments].sort(
-      (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
+  // Agrupamos por día (en clinic timezone) y ordenamos cronológicamente.
+  const groups = useMemo(() => {
+    const map = new Map<string, AgendaAppointmentDTO[]>();
+    for (const a of state.appointments) {
+      const key = dateKeyInTz(a.startsAt, state.timezone);
+      const arr = map.get(key);
+      if (arr) arr.push(a);
+      else map.set(key, [a]);
+    }
+    map.forEach((arr) =>
+      arr.sort((x, y) => new Date(x.startsAt).getTime() - new Date(y.startsAt).getTime()),
     );
-  }, [state.appointments]);
+    const ordered: Array<{ dayISO: string; appts: AgendaAppointmentDTO[] }> = [];
+    map.forEach((appts, dayISO) => ordered.push({ dayISO, appts }));
+    ordered.sort((a, b) => a.dayISO.localeCompare(b.dayISO));
+    return ordered;
+  }, [state.appointments, state.timezone]);
 
-  if (sorted.length === 0) {
+  if (groups.length === 0) {
     return (
       <div className={styles.listView}>
-        <div className={styles.listEmpty}>No hay citas para esta fecha.</div>
+        <div className={styles.listEmpty}>No hay citas en el rango seleccionado.</div>
       </div>
     );
   }
 
   return (
     <div className={styles.listView} role="list">
-      <div className={styles.listGroup}>
-        <div className={styles.listGroupHeader}>
-          {formatDayHeading(state.dayISO, state.timezone)}
+      {groups.map((g) => (
+        <div key={g.dayISO} className={styles.listGroup}>
+          <div className={styles.listGroupHeader}>
+            {formatDayHeading(g.dayISO, state.timezone)}
+            <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.7 }}>
+              · {g.appts.length} cita{g.appts.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          {g.appts.map((a) => (
+            <ListRow key={a.id} appointment={a} />
+          ))}
         </div>
-        {sorted.map((a) => (
-          <ListRow key={a.id} appointment={a} />
-        ))}
-      </div>
+      ))}
     </div>
   );
 }
