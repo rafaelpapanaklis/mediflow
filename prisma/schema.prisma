@@ -211,6 +211,9 @@ model User {
   cedulaProfesional   String?  @db.VarChar(15)
   especialidad        String?  @db.VarChar(100)
   cedulaEspecialidad  String?  @db.VarChar(15)
+
+  // Firma electrónica avanzada FIEL/SAT (Compliance Fase C)
+  signatureCert       DoctorSignatureCert?
   color      String   @default("#3b82f6")
   agendaActive Boolean @default(true)
   lastLogin  DateTime?
@@ -388,6 +391,55 @@ enum CurpStatus {
   COMPLETE
   PENDING
   FOREIGN
+}
+
+/// Certificado FIEL/e.firma del SAT del médico — para firma electrónica
+/// avanzada de recetas/notas. Multi-tenant via User.clinicId.
+model DoctorSignatureCert {
+  id             String    @id @default(cuid())
+  userId         String    @unique
+  cerFileUrl     String    @db.Text
+  keyFileUrl     String    @db.Text
+  keyEncIv       String    @db.VarChar(48)
+  keyEncAuthTag  String    @db.VarChar(48)
+  cerSerial      String    @db.VarChar(60)
+  cerIssuer      String    @db.VarChar(200)
+  validFrom      DateTime  @db.Timestamptz(6)
+  validUntil     DateTime  @db.Timestamptz(6)
+  rfc            String    @db.VarChar(13)
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([rfc])
+  @@map("doctor_signature_certs")
+}
+
+/// Documento firmado electrónicamente — receta, nota clínica o consent.
+/// docId es FK polimórfica (no enforced) al documento original.
+/// clinicId siempre presente para scope multi-tenant.
+model SignedDocument {
+  id           String         @id @default(cuid())
+  clinicId     String
+  docType      SignedDocType
+  docId        String
+  signerUserId String
+  sha256       String         @db.VarChar(64)
+  signature    String         @db.Text
+  tsaTimestamp String?        @db.Text
+  signedAt     DateTime       @default(now()) @db.Timestamptz(6)
+
+  @@index([clinicId, docType])
+  @@index([docId])
+  @@map("signed_documents")
+}
+
+enum SignedDocType {
+  PRESCRIPTION
+  MEDICAL_RECORD
+  CONSENT
+  OTHER
 }
 
 /// Solicitud ARCO (Acceso, Rectificación, Cancelación, Oposición) bajo
