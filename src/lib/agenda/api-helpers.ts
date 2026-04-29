@@ -21,6 +21,7 @@ export interface ClinicSession {
     agendaDayStart: number;
     agendaDayEnd: number;
     waConnected: boolean;
+    trialEndsAt: Date | null;
   };
   timeConfig: ClinicTimeConfig;
 }
@@ -48,6 +49,7 @@ export async function loadClinicSession(): Promise<ClinicSession | NextResponse>
       agendaDayStart: true,
       agendaDayEnd: true,
       waConnected: true,
+      trialEndsAt: true,
     },
   });
 
