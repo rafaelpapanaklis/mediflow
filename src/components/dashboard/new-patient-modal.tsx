@@ -9,7 +9,11 @@ interface Props { open: boolean; onClose: () => void; onCreated: (patient: any) 
 const emptyForm = {
   firstName: "", lastName: "", email: "", phone: "", gender: "OTHER",
   dob: "", address: "", allergies: "", notes: "", isChild: false,
+  // NOM-024
+  curp: "", curpStatus: "PENDING" as "COMPLETE" | "PENDING" | "FOREIGN", passportNo: "",
 };
+
+const CURP_RE = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
 
 export function NewPatientModal({ open, onClose, onCreated }: Props) {
   const [loading, setLoading] = useState(false);
@@ -19,6 +23,14 @@ export function NewPatientModal({ open, onClose, onCreated }: Props) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.firstName || !form.lastName) { toast.error("Nombre y apellido requeridos"); return; }
+    if (form.curpStatus === "COMPLETE") {
+      if (!form.curp) { toast.error("CURP requerido (o marca 'no la tengo' / 'extranjero')"); return; }
+      if (!CURP_RE.test(form.curp.toUpperCase())) { toast.error("CURP con formato inválido"); return; }
+    }
+    if (form.curpStatus === "FOREIGN" && !form.passportNo) {
+      toast.error("Pasaporte requerido para pacientes extranjeros");
+      return;
+    }
     setLoading(true);
     try {
       const dupeCheck = await fetch(`/api/patients?search=${encodeURIComponent(form.firstName + " " + form.lastName)}`);
@@ -36,6 +48,9 @@ export function NewPatientModal({ open, onClose, onCreated }: Props) {
           ...form,
           isChild: form.isChild,
           allergies: form.allergies ? form.allergies.split(",").map(s => s.trim()).filter(Boolean) : [],
+          curp:        form.curpStatus === "COMPLETE" ? form.curp.toUpperCase() : null,
+          curpStatus:  form.curpStatus,
+          passportNo:  form.curpStatus === "FOREIGN" ? form.passportNo : null,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
@@ -90,6 +105,63 @@ export function NewPatientModal({ open, onClose, onCreated }: Props) {
                   </select>
                 </div>
               </div>
+            </div>
+
+            {/* Sección: Identificación oficial — NOM-024 */}
+            <div style={{ marginBottom: 22 }}>
+              <div className="form-section__title">
+                Identificación oficial
+                <span className="form-section__rule" />
+              </div>
+              <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                {([
+                  { id: "COMPLETE", label: "Tengo CURP" },
+                  { id: "PENDING",  label: "No la tengo ahora" },
+                  { id: "FOREIGN",  label: "Extranjero" },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => set("curpStatus", opt.id)}
+                    className={`btn-new ${form.curpStatus === opt.id ? "btn-new--primary" : "btn-new--secondary"}`}
+                    style={{ flex: 1, justifyContent: "center", fontSize: 12 }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              {form.curpStatus === "COMPLETE" && (
+                <div className="field-new">
+                  <label className="field-new__label">
+                    CURP <span className="req">*</span>
+                  </label>
+                  <input
+                    className="input-new"
+                    style={{ fontFamily: "var(--font-jetbrains-mono, monospace)", textTransform: "uppercase", letterSpacing: "0.04em" }}
+                    placeholder="GOPA850623HDFRRR03"
+                    maxLength={18}
+                    value={form.curp}
+                    onChange={(e) => set("curp", e.target.value.toUpperCase())}
+                  />
+                </div>
+              )}
+              {form.curpStatus === "FOREIGN" && (
+                <div className="field-new">
+                  <label className="field-new__label">Pasaporte <span className="req">*</span></label>
+                  <input
+                    className="input-new"
+                    placeholder="A12345678"
+                    maxLength={20}
+                    value={form.passportNo}
+                    onChange={(e) => set("passportNo", e.target.value.trim())}
+                  />
+                </div>
+              )}
+              {form.curpStatus === "PENDING" && (
+                <div style={{ fontSize: 11, color: "var(--text-3)", padding: "6px 4px" }}>
+                  Marca como pendiente. Recordá pedirle el CURP al paciente en la primera visita.
+                </div>
+              )}
             </div>
 
             {/* Sección: Contacto */}

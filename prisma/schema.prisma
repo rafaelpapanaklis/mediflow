@@ -59,6 +59,9 @@ model Clinic {
   cpEmisor          String?
   facturApiEnabled  Boolean @default(false)
 
+  // Identificación NOM-024 — CLUES Sector Salud (Compliance Fase A)
+  clues             String?  @db.VarChar(11)
+
   // Subscription / Billing
   subscriptionStatus   String?   // active, trialing, past_due, cancelled
   subscriptionId       String?   // legacy — Stripe/MP subscription ID
@@ -160,6 +163,8 @@ model Clinic {
   // Analytics (Push 1)
   weeklyInsights       WeeklyInsight[]
   tvDisplays           TVDisplay[]
+  // Compliance Fase C
+  referrals            Referral[]
 
   @@map("clinics")
 }
@@ -203,6 +208,15 @@ model User {
   avatarUrl  String?
   phone      String?
   isActive   Boolean  @default(true)
+
+  // Identificación NOM-024 (Compliance Fase A) — médicos
+  cedulaProfesional   String?  @db.VarChar(15)
+  especialidad        String?  @db.VarChar(100)
+  cedulaEspecialidad  String?  @db.VarChar(15)
+
+  // Firma electrónica avanzada FIEL/SAT (Compliance Fase C)
+  signatureCert       DoctorSignatureCert?
+  referralsAuthored   Referral[]
   color      String   @default("#3b82f6")
   agendaActive Boolean @default(true)
   lastLogin  DateTime?
@@ -278,6 +292,15 @@ model Patient {
   portalToken       String?   @unique
   portalTokenExpiry DateTime?
 
+  // Identificación NOM-024 (Compliance Fase A)
+  curp        String?     @db.VarChar(18)
+  curpStatus  CurpStatus  @default(PENDING)
+  passportNo  String?     @db.VarChar(20)
+
+  // NOM-004 antecedentes (Compliance Fase A)
+  familyHistory                   String?  @db.Text
+  personalNonPathologicalHistory  String?  @db.Text
+
   // Datos fiscales para CFDI
   rfcPaciente      String?
   regimenFiscalPac String?
@@ -318,6 +341,7 @@ model Patient {
   odontogramSnapshots OdontogramSnapshot[]
   inboxThreads        InboxThread[]
   patientReminders    Reminder[]
+  referrals           Referral[]
 
   @@unique([clinicId, patientNumber])
   @@map("patients")
@@ -365,6 +389,143 @@ enum Gender {
   M
   F
   OTHER
+}
+
+enum CurpStatus {
+  COMPLETE
+  PENDING
+  FOREIGN
+}
+
+/// Certificado FIEL/e.firma del SAT del médico — para firma electrónica
+/// avanzada de recetas/notas. Multi-tenant via User.clinicId.
+model DoctorSignatureCert {
+  id             String    @id @default(cuid())
+  userId         String    @unique
+  cerFileUrl     String    @db.Text
+  keyFileUrl     String    @db.Text
+  keyEncIv       String    @db.VarChar(48)
+  keyEncAuthTag  String    @db.VarChar(48)
+  cerSerial      String    @db.VarChar(60)
+  cerIssuer      String    @db.VarChar(200)
+  validFrom      DateTime  @db.Timestamptz(6)
+  validUntil     DateTime  @db.Timestamptz(6)
+  rfc            String    @db.VarChar(13)
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([rfc])
+  @@map("doctor_signature_certs")
+}
+
+/// Documento firmado electrónicamente — receta, nota clínica o consent.
+/// docId es FK polimórfica (no enforced) al documento original.
+/// clinicId siempre presente para scope multi-tenant.
+model SignedDocument {
+  id           String         @id @default(cuid())
+  clinicId     String
+  docType      SignedDocType
+  docId        String
+  signerUserId String
+  sha256       String         @db.VarChar(64)
+  signature    String         @db.Text
+  tsaTimestamp String?        @db.Text
+  signedAt     DateTime       @default(now()) @db.Timestamptz(6)
+
+  @@index([clinicId, docType])
+  @@index([docId])
+  @@map("signed_documents")
+}
+
+enum SignedDocType {
+  PRESCRIPTION
+  MEDICAL_RECORD
+  CONSENT
+  OTHER
+}
+
+/// NOM-024 — referencia y contrarreferencia entre clínicas.
+/// La referencia (OUTGOING) la emite la clínica origen; la
+/// contrarreferencia (INCOMING) llega como respuesta cuando la clínica
+/// destino devuelve al paciente con notas.
+///
+/// Multi-tenant: clinicId es la clínica que crea/posee el registro
+/// (origen para OUTGOING, receptor para INCOMING).
+model Referral {
+  id                  String          @id @default(cuid())
+  clinicId            String
+  patientId           String
+  fromDoctorId        String
+  toClinicName        String          @db.VarChar(200)
+  toClinicClues       String?         @db.VarChar(11)
+  toDoctorName        String?         @db.VarChar(200)
+  toSpecialty         String?         @db.VarChar(100)
+  reason              String          @db.Text
+  clinicalSummary     String          @db.Text
+  relevantDiagnoses   Json?
+  type                ReferralType
+  status              ReferralStatus  @default(SENT)
+  sentAt              DateTime        @default(now()) @db.Timestamptz(6)
+  respondedAt         DateTime?       @db.Timestamptz(6)
+  response            String?         @db.Text
+
+  clinic     Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  fromDoctor User     @relation(fields: [fromDoctorId], references: [id])
+
+  @@index([clinicId, status])
+  @@index([patientId])
+  @@map("referrals")
+}
+
+enum ReferralType {
+  OUTGOING
+  INCOMING
+}
+
+enum ReferralStatus {
+  SENT
+  ACCEPTED
+  REJECTED
+  RESPONDED
+  CANCELLED
+}
+
+/// Solicitud ARCO (Acceso, Rectificación, Cancelación, Oposición) bajo
+/// LFPDPPP. clinicId puede ser null si la solicitud llega del aviso
+/// público (sin paciente identificado). Si patientId viene, validamos
+/// que pertenezca a una clínica y heredamos clinicId.
+model ArcoRequest {
+  id            String      @id @default(cuid())
+  clinicId      String?
+  patientId     String?
+  type          ArcoType
+  reason        String      @db.Text
+  email         String      @db.VarChar(200)
+  status        ArcoStatus  @default(PENDING)
+  resolvedAt    DateTime?   @db.Timestamptz(6)
+  resolvedNotes String?     @db.Text
+  createdAt     DateTime    @default(now()) @db.Timestamptz(6)
+
+  @@index([clinicId, status])
+  @@index([email])
+  @@map("arco_requests")
+}
+
+enum ArcoType {
+  ACCESS
+  RECTIFICATION
+  CANCELLATION
+  OPPOSITION
+}
+
+enum ArcoStatus {
+  PENDING
+  IN_PROGRESS
+  RESOLVED
+  REJECTED
 }
 
 enum PatientStatus {
@@ -486,8 +647,43 @@ model MedicalRecord {
   patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
   doctor  User    @relation(fields: [doctorId], references: [id])
   prescriptions Prescription[]
+  // NOM-024 (Compliance Fase B) — diagnósticos estructurados con FK a CIE-10.
+  // El campo `diagnoses Json?` legacy queda intacto para datos históricos.
+  diagnoses_v2 MedicalRecordDiagnosis[]
 
   @@map("medical_records")
+}
+
+/// Catálogo CIE-10 OMS. Tabla GLOBAL (sin clinicId) — es estándar público.
+/// Seed inicial vía POST /api/admin/seed-cie10 con TOP ~200 códigos comunes.
+model Cie10Code {
+  code        String  @id @db.VarChar(8)
+  description String  @db.VarChar(500)
+  chapter     String  @db.VarChar(120)
+
+  diagnoses MedicalRecordDiagnosis[]
+
+  @@index([chapter])
+  @@map("cie10_codes")
+}
+
+/// Diagnóstico estructurado dentro de un MedicalRecord. Permite múltiples
+/// dx por consulta + un primario (isPrimary). Multi-tenant via relation
+/// medicalRecord.clinicId.
+model MedicalRecordDiagnosis {
+  id              String   @id @default(cuid())
+  medicalRecordId String
+  cie10Code       String   @db.VarChar(8)
+  isPrimary       Boolean  @default(false)
+  note            String?  @db.VarChar(500)
+  createdAt       DateTime @default(now())
+
+  medicalRecord MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
+  cie10         Cie10Code     @relation(fields: [cie10Code],       references: [code])
+
+  @@index([medicalRecordId])
+  @@index([cie10Code])
+  @@map("medical_record_diagnoses")
 }
 
 // ── IDEA 2: Treatment Plans ────────────────────────────────────────────────
@@ -1019,6 +1215,8 @@ model ProcedureCatalog {
   clinicId     String
   name         String
   code         String?  // SAT code for CFDI
+  /// NOM-024 — código clínico CIE-9-MC del procedimiento (separado del SAT)
+  cieCode      String?  @db.VarChar(8)
   category     String   // "general", "dental", "aesthetic", etc.
   basePrice    Float
   duration     Int?     // minutes
@@ -1027,8 +1225,23 @@ model ProcedureCatalog {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   clinic       Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  cie9         Cie9Code? @relation(fields: [cieCode], references: [code])
   @@index([clinicId, isActive])
+  @@index([cieCode])
   @@map("procedure_catalog")
+}
+
+/// Catálogo CIE-9-MC OMS. Tabla GLOBAL. Seed inicial vía
+/// POST /api/admin/seed-cie9 con TOP ~100 procedimientos comunes.
+model Cie9Code {
+  code        String @id @db.VarChar(8)
+  description String @db.VarChar(500)
+  category    String @db.VarChar(120)
+
+  procedures ProcedureCatalog[]
+
+  @@index([category])
+  @@map("cie9_codes")
 }
 
 // ── Super-admin internal notes per clinic ─────────────────────────────
@@ -1097,10 +1310,49 @@ model Prescription {
   patient       Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
   doctor        User          @relation(fields: [doctorId], references: [id])
   clinic        Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  // NOM-024 (Compliance Fase B) — items estructurados con FK a CUMS.
+  // El JSON `medications` legacy queda intacto para datos históricos.
+  items         PrescriptionItem[]
 
   @@index([clinicId])
   @@index([patientId])
   @@map("prescriptions")
+}
+
+/// Catálogo CUMS (Cuadro Único de Medicamentos del Sector Salud).
+/// Tabla GLOBAL (sin clinicId) — es estándar público SSA.
+model CumsItem {
+  clave             String  @id @db.VarChar(20)
+  descripcion       String  @db.VarChar(500)
+  presentacion      String  @db.VarChar(200)
+  formaFarmaceutica String? @db.VarChar(100)
+  grupoTerapeutico  String? @db.VarChar(200)
+  cofeprisGroup     String? @db.VarChar(20)
+
+  prescriptions PrescriptionItem[]
+
+  @@index([cofeprisGroup])
+  @@index([grupoTerapeutico])
+  @@map("cums_items")
+}
+
+/// Item de receta — un medicamento con dosage/duration/quantity.
+/// Multi-tenant via relation prescription.clinicId.
+model PrescriptionItem {
+  id             String   @id @default(cuid())
+  prescriptionId String
+  cumsKey        String   @db.VarChar(20)
+  dosage         String   @db.VarChar(200)
+  duration       String?  @db.VarChar(100)
+  quantity       String?  @db.VarChar(50)
+  notes          String?  @db.Text
+  createdAt      DateTime @default(now())
+
+  prescription Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  cums         CumsItem     @relation(fields: [cumsKey],        references: [clave])
+
+  @@index([prescriptionId])
+  @@map("prescription_items")
 }
 
 // ═══════════════════════════════════════════════════════════

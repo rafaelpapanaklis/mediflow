@@ -34,6 +34,11 @@ export async function PATCH(req: NextRequest) {
     data.landingActive = Boolean(body.isPublic);
   }
   if (body.category    !== undefined) data.category    = body.category;
+  // NOM-024: CLUES Sector Salud (11 chars). Trim y null si vacío.
+  if (body.clues       !== undefined) {
+    const clues = typeof body.clues === "string" ? body.clues.trim() : "";
+    data.clues = clues.length === 0 ? null : clues.slice(0, 11);
+  }
 
   const updated = await prisma.clinic.update({
     where: { id: dbUser.clinicId },

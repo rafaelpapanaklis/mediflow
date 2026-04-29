@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
+import { logAudit, logMutation, extractAuditMeta } from "@/lib/audit";
+import { hasPermission } from "@/lib/auth/permissions";
 
 const recordSchema = z.object({
   patientId:     z.string().min(1),
@@ -31,6 +33,10 @@ async function getDbUser() {
 export async function GET(req: NextRequest) {
   const dbUser = await getDbUser();
   if (!dbUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // NOM-024: solo DOCTOR/ADMIN/SUPER_ADMIN ven el expediente clínico.
+  if (!hasPermission(dbUser.role, "medicalRecord.read")) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
   const { searchParams } = new URL(req.url);
   const patientId = searchParams.get("patientId");
   const limit = Math.min(Math.max(parseInt(searchParams.get("limit") ?? "200"), 1), 500);
@@ -44,12 +50,33 @@ export async function GET(req: NextRequest) {
     take: limit,
     skip,
   });
+
+  // NOM-024 — bitácora de lectura del expediente. Una entrada por request,
+  // referenciando el patientId. No loggeamos cada record individual para
+  // evitar inflar la tabla; el contexto (qué records se devolvieron) se
+  // puede derivar reproduciendo el query con el mismo timestamp.
+  if (patientId) {
+    const { ipAddress, userAgent } = extractAuditMeta(req);
+    await logAudit({
+      clinicId:   dbUser.clinicId,
+      userId:     dbUser.id,
+      entityType: "record",
+      entityId:   patientId,
+      action:     "view",
+      changes:    { count: { before: null, after: records.length } },
+      ipAddress, userAgent,
+    });
+  }
+
   return NextResponse.json(records);
 }
 
 export async function POST(req: NextRequest) {
   const dbUser = await getDbUser();
   if (!dbUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!hasPermission(dbUser.role, "medicalRecord.create")) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
 
   const body = await req.json();
   const parsed = recordSchema.safeParse(body);
@@ -78,5 +105,16 @@ export async function POST(req: NextRequest) {
       isPrivate:     parsed.data.isPrivate ?? false,
     },
   });
+
+  await logMutation({
+    req,
+    clinicId: dbUser.clinicId,
+    userId: dbUser.id,
+    entityType: "record",
+    entityId: record.id,
+    action: "create",
+    after: { patientId: record.patientId, doctorId: record.doctorId, isPrivate: record.isPrivate },
+  });
+
   return NextResponse.json(record, { status: 201 });
 }

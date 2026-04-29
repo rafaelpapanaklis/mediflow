@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { logMutation } from "@/lib/audit";
 
 const DOCTOR_COLORS = [
   "#3b82f6","#7c3aed","#059669","#e11d48","#d97706",
@@ -28,6 +29,7 @@ export async function GET(req: NextRequest) {
       id: true, firstName: true, lastName: true, email: true,
       role: true, specialty: true, color: true, services: true,
       avatarUrl: true, phone: true, isActive: true, createdAt: true,
+      cedulaProfesional: true, especialidad: true, cedulaEspecialidad: true,
       _count: {
         select: {
           appointments: { where: { status: { not: "CANCELLED" } } },
@@ -47,7 +49,8 @@ export async function POST(req: NextRequest) {
   if (err) return err;
 
   const body = await req.json();
-  const { email, firstName, lastName, role, specialty, color, phone, services } = body;
+  const { email, firstName, lastName, role, specialty, color, phone, services,
+          cedulaProfesional, especialidad, cedulaEspecialidad } = body;
 
   if (!firstName?.trim() || !lastName?.trim() || !email?.trim()) {
     return NextResponse.json({ error: "Nombre, apellido y email son requeridos" }, { status: 400 });
@@ -98,7 +101,20 @@ export async function POST(req: NextRequest) {
       phone:      phone || null,
       services:   services ?? [],
       isActive:   true,
+      cedulaProfesional:  cedulaProfesional?.trim() || null,
+      especialidad:       especialidad?.trim() || null,
+      cedulaEspecialidad: cedulaEspecialidad?.trim() || null,
     },
+  });
+
+  await logMutation({
+    req,
+    clinicId: ctx!.clinicId,
+    userId: ctx!.userId,
+    entityType: "user",
+    entityId: newUser.id,
+    action: "create",
+    after: { firstName: newUser.firstName, lastName: newUser.lastName, email: newUser.email, role: newUser.role, especialidad: newUser.especialidad },
   });
 
   return NextResponse.json({

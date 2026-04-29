@@ -3,6 +3,8 @@ import { Prisma, PatientStatus, Gender } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { getAuthContext, buildPatientWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { validateCurpRecord, type CurpStatusValue } from "@/lib/validators/curp";
+import { logMutation } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -456,6 +458,15 @@ export async function POST(req: NextRequest) {
   const count = await prisma.patient.count({ where: { clinicId: ctx.clinicId } });
   const patientNumber = `P${String(count + 1).padStart(4, "0")}`;
 
+  // NOM-024 identificación: validar coherencia curp/curpStatus/passportNo.
+  const curpStatusRaw = body.curpStatus ?? "PENDING";
+  const curpStatus: CurpStatusValue =
+    curpStatusRaw === "COMPLETE" || curpStatusRaw === "FOREIGN" ? curpStatusRaw : "PENDING";
+  const curpCheck = validateCurpRecord({ curp: body.curp, curpStatus, passportNo: body.passportNo });
+  if (curpCheck.ok === false) {
+    return NextResponse.json({ error: curpCheck.error }, { status: 400 });
+  }
+
   const patient = await prisma.patient.create({
     data: {
       clinicId: ctx.clinicId,
@@ -474,7 +485,22 @@ export async function POST(req: NextRequest) {
       tags: body.tags ?? [],
       isChild: body.isChild ?? false,
       primaryDoctorId: body.primaryDoctorId ?? (ctx.isDoctor ? ctx.userId : null),
+      curp:        body.curp ? String(body.curp).toUpperCase().trim() : null,
+      curpStatus,
+      passportNo:  body.passportNo ? String(body.passportNo).trim() : null,
+      familyHistory:                  body.familyHistory ?? null,
+      personalNonPathologicalHistory: body.personalNonPathologicalHistory ?? null,
     },
+  });
+
+  await logMutation({
+    req,
+    clinicId: ctx.clinicId,
+    userId: ctx.userId,
+    entityType: "patient",
+    entityId: patient.id,
+    action: "create",
+    after: { firstName: patient.firstName, lastName: patient.lastName, patientNumber: patient.patientNumber },
   });
 
   revalidatePath("/dashboard/patients");
