@@ -363,6 +363,32 @@ export async function POST(req: NextRequest) {
   };
   const errors: SeedError[] = [];
 
+  // Counter compartido para invoiceNumber. Inicializa lazy desde el max
+  // numérico REAL de invoiceNumbers de la clínica (escanea todos los rows,
+  // extrae sus dígitos, toma el max). No depende de lex sort ni de
+  // orderBy invoiceNumber desc — esos rompían cuando hay mezcla de
+  // formatos o cuando invoices recién creadas en stage 6 no se leían en
+  // el findFirst de stage 7. Un solo counter compartido por request
+  // evita colisiones entre stage 6 (invoices regulares) y stage 7
+  // (invoices de planes de tratamiento).
+  let _invSeq: number | null = null;
+  const nextInvoiceNumber = async (): Promise<string> => {
+    if (_invSeq === null) {
+      const all = await prisma.invoice.findMany({
+        where: { clinicId: clinic.id },
+        select: { invoiceNumber: true },
+      });
+      const maxN = all.reduce((m, inv) => {
+        const digits = inv.invoiceNumber.replace(/\D/g, "");
+        const n = digits ? parseInt(digits, 10) : 0;
+        return Number.isFinite(n) && n > m ? n : m;
+      }, 0);
+      _invSeq = maxN;
+    }
+    _invSeq += 1;
+    return `F-${String(_invSeq).padStart(6, "0")}`;
+  };
+
   // ── Base data ────────────────────────────────────────────────────────
   const [doctors, resources, cumsAll, cieAll] = await Promise.all([
     prisma.user.findMany({
@@ -763,14 +789,6 @@ export async function POST(req: NextRequest) {
     stats.invoices.existing = existing;
 
     if (existing === 0 && demoAppts.length > 0) {
-      const lastInvoice = await prisma.invoice.findFirst({
-        where: { clinicId: clinic.id },
-        orderBy: { invoiceNumber: "desc" },
-        select: { invoiceNumber: true },
-      });
-      const lastInvNum = lastInvoice?.invoiceNumber ? parseInt(lastInvoice.invoiceNumber.replace(/\D/g, ""), 10) : 0;
-      let invSeq = Number.isFinite(lastInvNum) ? lastInvNum + 1 : 1;
-
       for (const a of demoAppts) {
         try {
           let probTiene = 0;
@@ -797,7 +815,7 @@ export async function POST(req: NextRequest) {
           else if (payProfile === "PARTIAL") paid = Math.round(total * randFloat(0.30, 0.70, 2));
           const balance = total - paid;
           const status: "PAID" | "PARTIAL" | "PENDING" = paid >= total ? "PAID" : paid > 0 ? "PARTIAL" : "PENDING";
-          const invoiceNumber = `F-${String(invSeq++).padStart(6, "0")}`;
+          const invoiceNumber = await nextInvoiceNumber();
 
           const invoice = await prisma.invoice.create({
             data: {
@@ -874,13 +892,6 @@ export async function POST(req: NextRequest) {
 
       const planPatients = pickN(allDemoPatients, 15);
       let planIdx = 0;
-      const lastInvoice = await prisma.invoice.findFirst({
-        where: { clinicId: clinic.id },
-        orderBy: { invoiceNumber: "desc" },
-        select: { invoiceNumber: true },
-      });
-      const lastInvNum = lastInvoice?.invoiceNumber ? parseInt(lastInvoice.invoiceNumber.replace(/\D/g, ""), 10) : 0;
-      let invSeq = Number.isFinite(lastInvNum) ? lastInvNum + 1 : 1;
 
       for (const planType of TREATMENT_PLAN_TYPES) {
         for (let k = 0; k < planType.count; k++) {
@@ -952,7 +963,7 @@ export async function POST(req: NextRequest) {
               if (sessionCost === 0) continue;
 
               try {
-                const invNumber = `F-${String(invSeq++).padStart(6, "0")}`;
+                const invNumber = await nextInvoiceNumber();
                 const isPaid = isCompleted && chance(0.5);
                 const paidAmt = isPaid ? sessionCost : (isCompleted && chance(0.3) ? Math.round(sessionCost * randFloat(0.4, 0.7, 2)) : 0);
                 const invStatus: "PAID" | "PARTIAL" | "PENDING" = paidAmt >= sessionCost ? "PAID" : paidAmt > 0 ? "PARTIAL" : "PENDING";
