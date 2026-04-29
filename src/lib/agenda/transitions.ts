@@ -23,25 +23,52 @@ function noShowOk(now: Date, start: Date): string | null {
 }
 
 const TRANSITIONS: Transition[] = [
+  // ── SCHEDULED ────────────────────────────────────────────────────
   { from: "SCHEDULED",   to: "CONFIRMED",   allowedRoles: FRONT_DESK },
+  { from: "SCHEDULED",   to: "CHECKED_IN",  allowedRoles: FRONT_DESK },
   { from: "SCHEDULED",   to: "CANCELLED",   allowedRoles: FRONT_DESK },
   { from: "SCHEDULED",   to: "NO_SHOW",     allowedRoles: FRONT_DESK, predicate: noShowOk },
-  { from: "SCHEDULED",   to: "CHECKED_IN",  allowedRoles: FRONT_DESK },
+
+  // ── CONFIRMED ────────────────────────────────────────────────────
   { from: "CONFIRMED",   to: "CHECKED_IN",  allowedRoles: FRONT_DESK },
+  // Atajos clínicos: si el paciente ya está esperando o el doctor empieza
+  // sin pasar por check-in formal, permitimos IN_CHAIR / IN_PROGRESS
+  // directo. Cubre el flujo "el paciente entra y el doctor lo empieza
+  // a atender de una". El timeline registra los timestamps que falten
+  // como null, no rompe analytics.
+  { from: "CONFIRMED",   to: "IN_CHAIR",    allowedRoles: CLINICAL },
+  { from: "CONFIRMED",   to: "IN_PROGRESS", allowedRoles: CLINICAL },
   { from: "CONFIRMED",   to: "CANCELLED",   allowedRoles: FRONT_DESK },
   { from: "CONFIRMED",   to: "NO_SHOW",     allowedRoles: FRONT_DESK, predicate: noShowOk },
-  // Nuevas transiciones para analytics — capturan tiempos intermedios
+
+  // ── CHECKED_IN ───────────────────────────────────────────────────
+  // Transiciones para analytics — capturan tiempos intermedios
   // (sentar al paciente en sillón antes de iniciar consulta) y cierre
-  // explícito del ciclo (checkout). Optional pasos: si no se usa
-  // IN_CHAIR, CHECKED_IN puede ir directo a IN_PROGRESS.
+  // explícito del ciclo (checkout). Si no se usa IN_CHAIR, CHECKED_IN
+  // puede ir directo a IN_PROGRESS.
   { from: "CHECKED_IN",  to: "IN_CHAIR",    allowedRoles: FRONT_DESK },
   { from: "CHECKED_IN",  to: "IN_PROGRESS", allowedRoles: CLINICAL },
   { from: "CHECKED_IN",  to: "CANCELLED",   allowedRoles: FRONT_DESK },
+
+  // ── IN_CHAIR ─────────────────────────────────────────────────────
   { from: "IN_CHAIR",    to: "IN_PROGRESS", allowedRoles: CLINICAL },
+  // Atajo: si el doctor ya terminó sin haber entrado en IN_PROGRESS
+  // formalmente (ej. consulta de 5 min en sillón), permitimos COMPLETED
+  // directo. Mejor que forzar al doctor a clickear 2 estados.
+  { from: "IN_CHAIR",    to: "COMPLETED",   allowedRoles: CLINICAL },
   { from: "IN_CHAIR",    to: "CANCELLED",   allowedRoles: FRONT_DESK },
+
+  // ── IN_PROGRESS ──────────────────────────────────────────────────
   { from: "IN_PROGRESS", to: "COMPLETED",   allowedRoles: CLINICAL },
+  // Alias: marcar checkout directo cierra el ciclo (COMPLETED + checkout
+  // en un solo click).
+  { from: "IN_PROGRESS", to: "CHECKED_OUT", allowedRoles: CLINICAL },
   { from: "IN_PROGRESS", to: "CANCELLED",   allowedRoles: ADMINS },
+
+  // ── COMPLETED ────────────────────────────────────────────────────
   { from: "COMPLETED",   to: "CHECKED_OUT", allowedRoles: FRONT_DESK },
+
+  // ── CANCELLED / NO_SHOW (terminales con escape) ──────────────────
   { from: "CANCELLED",   to: "SCHEDULED",   allowedRoles: ADMINS },
   { from: "NO_SHOW",     to: "SCHEDULED",   allowedRoles: ADMINS },
 ];
