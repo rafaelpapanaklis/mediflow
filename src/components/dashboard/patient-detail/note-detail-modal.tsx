@@ -13,6 +13,20 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import styles from "./patient-detail.module.css";
+import { Cie10Selector } from "@/components/dashboard/clinical/cie10-selector";
+
+interface Cie10Code {
+  code: string;
+  description: string;
+  chapter: string;
+}
+interface Diagnosis {
+  id: string;
+  cie10Code: string;
+  isPrimary: boolean;
+  note: string | null;
+  cie10?: Cie10Code;
+}
 
 interface NoteAttachment {
   id: string;
@@ -68,6 +82,8 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
   const [saving, setSaving] = useState(false);
   const [signing, setSigning] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  // NOM-024 — diagnósticos estructurados con FK a CIE-10.
+  const [dxs, setDxs] = useState<Diagnosis[]>([]);
 
   // Resync local state cuando se cambia de nota.
   useEffect(() => {
@@ -78,6 +94,49 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
       assessment: note.assessment ?? "",
       plan: note.plan ?? "",
     });
+    // Carga diagnósticos estructurados desde el endpoint nuevo.
+    let cancelled = false;
+    fetch(`/api/medical-records/${note.id}/diagnoses`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled && d?.diagnoses) setDxs(d.diagnoses); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [note]);
+
+  const reloadDxs = useCallback(async () => {
+    if (!note) return;
+    const res = await fetch(`/api/medical-records/${note.id}/diagnoses`);
+    if (res.ok) {
+      const d = await res.json();
+      setDxs(d.diagnoses ?? []);
+    }
+  }, [note]);
+
+  const handleAddDx = useCallback(async (input: { cie10Code: string; isPrimary: boolean; note?: string }) => {
+    if (!note) return;
+    const res = await fetch(`/api/medical-records/${note.id}/diagnoses`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error ?? "No se pudo agregar el diagnóstico");
+      return;
+    }
+    await reloadDxs();
+  }, [note, reloadDxs]);
+
+  const handleRemoveDx = useCallback(async (dxId: string) => {
+    if (!note) return;
+    const res = await fetch(`/api/medical-records/${note.id}/diagnoses/${dxId}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) {
+      toast.error("No se pudo eliminar el diagnóstico");
+      return;
+    }
+    setDxs((prev) => prev.filter((d) => d.id !== dxId));
   }, [note]);
 
   // Cierre con Escape (no interfiere si se está escribiendo en textarea).
@@ -276,19 +335,40 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
             </section>
           )}
 
-          {/* ICD-10 */}
-          {icd10.length > 0 && (
-            <section className={styles.noteSection}>
-              <h3 className={styles.noteSectionTitle}>Diagnósticos ICD-10</h3>
-              <ul className={styles.noteIcdList}>
-                {icd10.map((c) => (
-                  <li key={c.code}>
-                    <code>{c.code}</code> — {c.label}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+          {/* CIE-10 estructurados (NOM-024) */}
+          <section className={styles.noteSection}>
+            <h3 className={styles.noteSectionTitle}>Diagnósticos CIE-10 (NOM-024)</h3>
+            {isSigned ? (
+              dxs.length > 0 ? (
+                <ul className={styles.noteIcdList}>
+                  {dxs.map((d) => (
+                    <li key={d.id}>
+                      {d.isPrimary && <span style={{ color: "#7c3aed", fontWeight: 700 }}>★ </span>}
+                      <code>{d.cie10Code}</code> — {d.cie10?.description ?? ""}
+                      {d.note && <span style={{ color: "var(--text-3)", marginLeft: 6 }}>· {d.note}</span>}
+                    </li>
+                  ))}
+                </ul>
+              ) : icd10.length > 0 ? (
+                <ul className={styles.noteIcdList}>
+                  {icd10.map((c) => (
+                    <li key={c.code}>
+                      <code>{c.code}</code> — {c.label}
+                      <span style={{ marginLeft: 6, fontSize: 10, color: "var(--text-4)" }}>(legacy)</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p style={{ fontSize: 12, color: "var(--text-3)" }}>Sin diagnósticos.</p>
+              )
+            ) : (
+              <Cie10Selector
+                diagnoses={dxs}
+                onAdd={handleAddDx}
+                onRemove={handleRemoveDx}
+              />
+            )}
+          </section>
 
           {!isSigned && (
             <div className={styles.noteDraftHint}>
