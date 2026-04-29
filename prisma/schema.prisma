@@ -544,8 +544,43 @@ model MedicalRecord {
   patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
   doctor  User    @relation(fields: [doctorId], references: [id])
   prescriptions Prescription[]
+  // NOM-024 (Compliance Fase B) — diagnósticos estructurados con FK a CIE-10.
+  // El campo `diagnoses Json?` legacy queda intacto para datos históricos.
+  diagnoses_v2 MedicalRecordDiagnosis[]
 
   @@map("medical_records")
+}
+
+/// Catálogo CIE-10 OMS. Tabla GLOBAL (sin clinicId) — es estándar público.
+/// Seed inicial vía POST /api/admin/seed-cie10 con TOP ~200 códigos comunes.
+model Cie10Code {
+  code        String  @id @db.VarChar(8)
+  description String  @db.VarChar(500)
+  chapter     String  @db.VarChar(120)
+
+  diagnoses MedicalRecordDiagnosis[]
+
+  @@index([chapter])
+  @@map("cie10_codes")
+}
+
+/// Diagnóstico estructurado dentro de un MedicalRecord. Permite múltiples
+/// dx por consulta + un primario (isPrimary). Multi-tenant via relation
+/// medicalRecord.clinicId.
+model MedicalRecordDiagnosis {
+  id              String   @id @default(cuid())
+  medicalRecordId String
+  cie10Code       String   @db.VarChar(8)
+  isPrimary       Boolean  @default(false)
+  note            String?  @db.VarChar(500)
+  createdAt       DateTime @default(now())
+
+  medicalRecord MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
+  cie10         Cie10Code     @relation(fields: [cie10Code],       references: [code])
+
+  @@index([medicalRecordId])
+  @@index([cie10Code])
+  @@map("medical_record_diagnoses")
 }
 
 // ── IDEA 2: Treatment Plans ────────────────────────────────────────────────

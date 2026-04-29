@@ -59,5 +59,10 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     data:  { signedAt: new Date(), signatureUrl },
   });
 
+  // NO audit-log a tabla audit_logs aquí: el firmante es el paciente
+  // (no autenticado contra users) y AuditLog tiene FK estricta a userId.
+  // El timestamp de la firma ya queda persistido en consent_forms.signedAt
+  // y la creación del form sí está auditada en POST /api/consent.
+
   return NextResponse.json({ success: true });
 }
