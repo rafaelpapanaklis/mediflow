@@ -4,7 +4,23 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import * as Popover from "@radix-ui/react-popover";
-import { Pencil, MessageCircle, X, Play, AlertTriangle, MoreHorizontal, Check } from "lucide-react";
+import {
+  Pencil,
+  MessageCircle,
+  X,
+  Play,
+  AlertTriangle,
+  MoreHorizontal,
+  Check,
+  FileText,
+  DollarSign,
+  Calendar,
+  LogIn,
+  Armchair,
+  CheckCircle2,
+  LogOut,
+  type LucideIcon,
+} from "lucide-react";
 import { useAgenda } from "./agenda-provider";
 import { formatSlotTime } from "@/lib/agenda/time-utils";
 import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
@@ -16,8 +32,28 @@ import {
   offRailsStatuses,
   pipelinePosition,
 } from "@/lib/agenda/status-pipeline";
+import { possibleTransitions } from "@/lib/agenda/transitions";
 import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
+
+interface ActionDef {
+  status: AppointmentStatus;
+  label: string;
+  icon: LucideIcon;
+  variant?: "primary" | "danger" | undefined;
+}
+
+const STATUS_ACTIONS: Record<AppointmentStatus, ActionDef> = {
+  SCHEDULED:    { status: "SCHEDULED",    label: "Reagendar",       icon: Calendar },
+  CONFIRMED:    { status: "CONFIRMED",    label: "Confirmar",       icon: CheckCircle2 },
+  CHECKED_IN:   { status: "CHECKED_IN",   label: "Check-in",        icon: LogIn },
+  IN_CHAIR:     { status: "IN_CHAIR",     label: "Pasar a sillón",  icon: Armchair },
+  IN_PROGRESS:  { status: "IN_PROGRESS",  label: "Iniciar consulta", icon: Play, variant: "primary" },
+  COMPLETED:    { status: "COMPLETED",    label: "Marcar completada", icon: CheckCircle2, variant: "primary" },
+  CHECKED_OUT:  { status: "CHECKED_OUT",  label: "Marcar checkout", icon: LogOut },
+  CANCELLED:    { status: "CANCELLED",    label: "Cancelar",        icon: X, variant: "danger" },
+  NO_SHOW:      { status: "NO_SHOW",      label: "Marcar no-show",  icon: AlertTriangle, variant: "danger" },
+};
 
 const STATUS_COLOR: Record<AppointmentStatus, string> = {
   SCHEDULED:    "var(--warning)",
@@ -141,11 +177,18 @@ export function AgendaDetailPanel() {
     }
   }
 
-  const cancelDisabled =
-    pendingStatus !== null ||
-    appt.status === "CANCELLED" ||
-    appt.status === "COMPLETED";
-  const startDisabled = pendingStatus !== null || appt.status !== "CHECKED_IN";
+  // Targets válidos desde el status actual (estructural, ignora rol — el
+  // server enforcea rol con 409 si no aplica). Renderizamos un botón por
+  // cada target válido. Esto reemplaza el "Iniciar consulta" hard-coded
+  // que solo aceptaba CHECKED_IN como origen y bloqueaba el flow
+  // CONFIRMED → IN_PROGRESS reportado por el usuario.
+  const validTargets = possibleTransitions(appt.status);
+  const primaryActions = validTargets.filter(
+    (s) => s !== "CANCELLED" && s !== "NO_SHOW",
+  );
+  const dangerActions = validTargets.filter(
+    (s) => s === "CANCELLED" || s === "NO_SHOW",
+  );
 
   return (
     <aside
@@ -235,13 +278,41 @@ export function AgendaDetailPanel() {
       )}
 
       <div className={styles.detailActions}>
+        {/* Acciones de transición de status (filtradas por matriz). */}
+        {primaryActions.map((target) => {
+          const def = STATUS_ACTIONS[target];
+          const Icon = def.icon;
+          const isPrimary = def.variant === "primary";
+          // Cuando se inicia consulta (IN_PROGRESS), navegamos al
+          // expediente con ?appointment=... para abrir SOAP editor.
+          const onClickAction = async () => {
+            await changeStatus(target);
+            if (target === "IN_PROGRESS") {
+              router.push(`/dashboard/patients/${appt.patient.id}?appointment=${appt.id}`);
+            }
+          };
+          return (
+            <button
+              key={target}
+              type="button"
+              className={`${styles.detailAction} ${isPrimary ? styles.primary : ""}`}
+              onClick={onClickAction}
+              disabled={pendingStatus !== null}
+              title={def.label}
+            >
+              <Icon size={12} aria-hidden />
+              {pendingStatus === target ? "…" : def.label}
+            </button>
+          );
+        })}
+        {/* Acciones permanentes (no dependen del status). */}
         <button
           type="button"
           className={styles.detailAction}
-          disabled
-          title="Edición disponible próximamente"
+          onClick={() => router.push(`/dashboard/patients/${appt.patient.id}`)}
+          title="Abrir expediente del paciente"
         >
-          <Pencil size={12} aria-hidden /> Editar
+          <FileText size={12} aria-hidden /> Expediente
         </button>
         <button
           type="button"
@@ -252,27 +323,42 @@ export function AgendaDetailPanel() {
           <MessageCircle size={12} aria-hidden />
           {waSending ? "Enviando…" : "WhatsApp"}
         </button>
+        {(appt.status === "COMPLETED" || appt.status === "CHECKED_OUT") && (
+          <button
+            type="button"
+            className={styles.detailAction}
+            onClick={() => router.push(`/dashboard/patients/${appt.patient.id}?tab=facturacion&appointment=${appt.id}`)}
+            title="Cobrar / facturar la cita"
+          >
+            <DollarSign size={12} aria-hidden /> Cobrar
+          </button>
+        )}
         <button
           type="button"
-          className={`${styles.detailAction} ${styles.danger}`}
-          onClick={() => changeStatus("CANCELLED")}
-          disabled={cancelDisabled}
+          className={styles.detailAction}
+          disabled
+          title="Edición disponible próximamente"
         >
-          <X size={12} aria-hidden /> Cancelar
+          <Pencil size={12} aria-hidden /> Editar
         </button>
-        <button
-          type="button"
-          className={`${styles.detailAction} ${styles.primary}`}
-          onClick={async () => {
-            await changeStatus("IN_PROGRESS");
-            // Audit Opción C ajuste 6: navegar al expediente con ?appointment
-            // para abrir SOAP editor inline + activar context bar.
-            router.push(`/dashboard/patients/${appt.patient.id}?appointment=${appt.id}`);
-          }}
-          disabled={startDisabled}
-        >
-          <Play size={12} aria-hidden /> Iniciar consulta
-        </button>
+        {/* Acciones destructivas al final. */}
+        {dangerActions.map((target) => {
+          const def = STATUS_ACTIONS[target];
+          const Icon = def.icon;
+          return (
+            <button
+              key={target}
+              type="button"
+              className={`${styles.detailAction} ${styles.danger}`}
+              onClick={() => changeStatus(target)}
+              disabled={pendingStatus !== null}
+              title={def.label}
+            >
+              <Icon size={12} aria-hidden />
+              {pendingStatus === target ? "…" : def.label}
+            </button>
+          );
+        })}
       </div>
     </aside>
   );

@@ -116,6 +116,17 @@ export function availableTransitions(
   }).map((t) => t.to);
 }
 
+/**
+ * Lista de targets válidos desde un status, ignorando rol y predicates.
+ * Usado por la UI del panel detail para filtrar visualmente botones.
+ * El server (PATCH /api/appointments/[id]/status) sigue validando rol +
+ * predicates con canTransition; si el usuario no tiene permiso, recibe 409
+ * y la UI muestra el toast de error.
+ */
+export function possibleTransitions(from: AppointmentStatus): AppointmentStatus[] {
+  return TRANSITIONS.filter((t) => t.from === from).map((t) => t.to);
+}
+
 export function sideEffectsOf(
   to: AppointmentStatus,
   now: Date,
