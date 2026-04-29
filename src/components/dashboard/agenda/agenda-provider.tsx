@@ -7,6 +7,7 @@ import {
   useEffect,
   useMemo,
   useReducer,
+  useRef,
   type Dispatch,
   type ReactNode,
 } from "react";
@@ -131,7 +132,24 @@ export function AgendaProvider({
   const filterDoctorIdsKey = state.filters.doctorIds.join(",");
   const filterResourceIdsKey = state.filters.resourceIds.join(",");
   const filterStatusesKey = state.filters.statuses.join(",");
+  const initialFetchSkipped = useRef(false);
   useEffect(() => {
+    // Skip primer mount cuando los datos del SSR ya cubren la vista actual
+    // (caso común: viewMode='day' + dayISO===initialDayISO). Evita un
+    // round-trip duplicado /api/agenda/range justo después de la SSR.
+    if (
+      !initialFetchSkipped.current &&
+      state.viewMode === "day" &&
+      state.dayISO === initialDayISO &&
+      state.filters.doctorIds.length === 0 &&
+      state.filters.resourceIds.length === 0 &&
+      state.filters.statuses.length === 0
+    ) {
+      initialFetchSkipped.current = true;
+      return;
+    }
+    initialFetchSkipped.current = true;
+
     const ctrl = new AbortController();
     const range = rangeForView(state.dayISO, state.viewMode);
     const params = new URLSearchParams();
