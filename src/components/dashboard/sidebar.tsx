@@ -9,7 +9,7 @@ import {
   Stethoscope, Sparkles, FileImage, Camera, FlaskConical, Dumbbell, Footprints,
   Activity, Gift, DoorOpen, Package, Building2,
   CreditCard, BarChart3, Monitor, UserCog, Globe, ClipboardList, Settings,
-  ShoppingBag,
+  ShoppingBag, Baby,
   ChevronDown, ChevronRight, Moon, Sun, LogOut, PanelLeftClose, PanelLeft,
   X, type LucideIcon,
 } from "lucide-react";
@@ -73,13 +73,20 @@ export interface SidebarProps {
   trialEndsAt?: Date | string | null;
   /** True si el trial está vigente (futuro Y sin sub activa). */
   isInTrial?: boolean;
+  /**
+   * True si la clínica tiene al menos un módulo de especialidad activo
+   * o está en trial. Determinado server-side en el layout vía
+   * hasAnyActiveSpecialtyModule(clinicId). Si false, el grupo
+   * "Especialidades" se oculta del sidebar.
+   */
+  hasSpecialtyAccess?: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════════════
 // Nav items
 // ═══════════════════════════════════════════════════════════════════
 
-type Section = "workspace" | "clinico" | "catalogo" | "admin";
+type Section = "workspace" | "clinico" | "catalogo" | "specialties" | "admin";
 
 interface NavItemDef {
   id: string;
@@ -124,6 +131,15 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: "orthotics",    section: "clinico", label: "Ortesis",       href: "/dashboard/orthotics",
     icon: Footprints,
     categories: ["PODIATRY"] },
+
+  // Especialidades — sub-items por módulo del marketplace. La sección
+  // entera se oculta en runtime si la clínica no tiene ningún módulo
+  // de especialidad activo (ver hasSpecialtyAccess en el layout).
+  // Categorías: solo DENTAL/MEDICINE pueden tener pacientes pediátricos.
+  { id: "pediatrics",   section: "specialties", label: "Odontopediatría", href: "/dashboard/specialties/pediatrics",
+    icon: Baby,
+    categories: ["DENTAL", "MEDICINE"],
+    permission: "specialties.pediatrics" },
 
   { id: "treatments",   section: "catalogo", label: "Tratamientos", href: "/dashboard/treatments", icon: Activity, permission: "treatments.view" },
   { id: "packages",     section: "catalogo", label: "Paquetes",     href: "/dashboard/packages",
@@ -276,7 +292,7 @@ export function Sidebar(props: SidebarProps) {
 
   const itemsBySection = useMemo(() => {
     const map: Record<Section, NavItemDef[]> = {
-      workspace: [], clinico: [], catalogo: [], admin: [],
+      workspace: [], clinico: [], catalogo: [], specialties: [], admin: [],
     };
     visibleItems.forEach((it) => map[it.section].push(it));
     return map;
@@ -496,6 +512,13 @@ export function Sidebar(props: SidebarProps) {
           </>
         )}
 
+        {props.hasSpecialtyAccess && itemsBySection.specialties.length > 0 && (
+          <>
+            {renderSectionLabel("Especialidades")}
+            {itemsBySection.specialties.map((it) => renderItem(it))}
+          </>
+        )}
+
         {itemsBySection.admin.length > 0 && !collapsed && (
           <AdminSection
             expanded={adminExpanded}
@@ -503,6 +526,13 @@ export function Sidebar(props: SidebarProps) {
             items={itemsBySection.admin}
             renderItem={renderItem}
           />
+        )}
+
+        {props.hasSpecialtyAccess && collapsed && itemsBySection.specialties.length > 0 && (
+          <>
+            <div style={{ height: 8 }} />
+            {itemsBySection.specialties.map((it) => renderItem(it))}
+          </>
         )}
 
         {itemsBySection.admin.length > 0 && collapsed && (

@@ -10,6 +10,7 @@ import { NewAppointmentProvider } from "@/components/dashboard/new-appointment/n
 import { NewPatientProvider } from "@/components/dashboard/new-patient/new-patient-provider";
 import { PatientContextBar } from "@/components/dashboard/patient-context-bar";
 import { prisma } from "@/lib/prisma";
+import { hasAnyActiveSpecialtyModule } from "@/lib/marketplace/access-control";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
@@ -23,6 +24,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
     (clinic as any).subscriptionStatus === "active" ||
     (clinic as any).subscriptionStatus === "paid";
   const isInTrial = !!trialEndsAt && trialEndsAt > now && !subscriptionActive;
+
+  // Marketplace specialties — gate del grupo "Especialidades" del sidebar.
+  // True si la clínica tiene al menos un módulo de especialidad activo
+  // (status='active' + currentPeriodEnd > NOW) o está en trial vigente.
+  const hasSpecialtyAccess = await hasAnyActiveSpecialtyModule(clinic.id);
 
   const counts = await prisma.$queryRaw<[{ doctors: bigint; patients: bigint; appts: bigint; records: bigint; invoices: bigint; schedules: bigint }]>`
     SELECT
@@ -82,6 +88,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         onboardingCompleted={onboardingCompleted}
         trialEndsAt={trialEndsAt}
         isInTrial={isInTrial}
+        hasSpecialtyAccess={hasSpecialtyAccess}
       />
       <div className="flex min-h-screen flex-1 flex-col lg:max-h-screen lg:overflow-y-auto">
         {isSuspended && (

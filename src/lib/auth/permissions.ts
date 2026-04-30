@@ -134,6 +134,11 @@ export const ALL_PERMISSIONS = {
   // Marketplace — todos los roles ven por default (es el catálogo de módulos
   // de la clínica). Comprar es admin-only y se valida en server actions.
   "marketplace.view":     "Ver marketplace de módulos",
+  // Especialidades — gating de páginas dedicadas de los módulos del
+  // marketplace. La visibilidad real ADEMÁS exige el módulo activo en
+  // ClinicModule (canAccessModule). Estas keys solo cubren la dimensión
+  // de "tiene permiso UI"; el módulo se valida server-side.
+  "specialties.pediatrics": "Ver Odontopediatría",
 } as const;
 
 export type PermissionKey = keyof typeof ALL_PERMISSIONS;
@@ -159,6 +164,7 @@ export const PERMISSION_GROUPS: { title: string; keys: PermissionKey[] }[] = [
   { title: "Equipo",         keys: ["team.view", "team.edit"] },
   { title: "Configuración",  keys: ["settings.view", "settings.edit", "landing.view", "landing.edit", "procedures.view", "procedures.edit", "clinicLayout.view", "clinicLayout.edit"] },
   { title: "Marketplace",    keys: ["marketplace.view"] },
+  { title: "Especialidades", keys: ["specialties.pediatrics"] },
 ];
 
 /**
@@ -178,6 +184,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     "treatments.view",
     "inbox.view", "inbox.send",
     "marketplace.view",
+    "specialties.pediatrics",
   ],
   RECEPTIONIST: [
     "today.view",
@@ -188,6 +195,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     "whatsapp.view", "whatsapp.send",
     "treatments.view", "resources.view", "inventory.view",
     "marketplace.view",
+    "specialties.pediatrics",
   ],
   // READONLY: solo *.view excepto medical/prescription/xrays
   READONLY: ALL_PERMISSION_KEYS.filter((k) =>
