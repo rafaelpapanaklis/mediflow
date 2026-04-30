@@ -30,6 +30,15 @@ import { Label } from "@/components/ui/label";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
+import dynamicImport from "next/dynamic";
+import type { PediatricsTabData } from "@/components/patient-detail/pediatrics/PediatricsTab";
+
+// Pediatrics — lazy load del módulo. Solo carga el bundle cuando el doctor
+// abre la pestaña, evitando inflar el bundle del paciente cuando no aplica.
+const PediatricsTab = dynamicImport(
+  () => import("@/components/patient-detail/pediatrics/PediatricsTab").then((m) => ({ default: m.PediatricsTab })),
+  { ssr: false, loading: () => <div className="text-xs text-muted-foreground p-4">Cargando módulo de pediatría…</div> },
+);
 
 // MediFlow es DENTAL — el form de "Nueva consulta" siempre usa DentalForm.
 // El parámetro `specialty` viene del Clinic.specialty (legacy) y se ignora.
@@ -54,7 +63,7 @@ const INV_STATUS: Record<string, { label: string; cls: string }> = {
   OVERDUE: { label: "Vencido",   cls: "bg-rose-50 text-rose-700 border border-rose-200"   },
 };
 
-const TABS = [
+const TABS_BASE = [
   { id: "resumen",       label: "Resumen"             },
   { id: "historia",      label: "Historia clínica"     },
   { id: "odontograma",   label: "Odontograma"          },
@@ -66,6 +75,15 @@ const TABS = [
   { id: "agenda",        label: "Citas"                },
   { id: "facturacion",   label: "Facturación"          },
 ];
+
+function buildTabs(showPediatrics: boolean) {
+  if (!showPediatrics) return TABS_BASE;
+  // Insertar "Pediatría" entre "Historia clínica" y "Odontograma"
+  // según spec §1.2.
+  const out = [...TABS_BASE];
+  out.splice(2, 0, { id: "pediatria", label: "Pediatría" });
+  return out;
+}
 
 const SEV_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   alta:        { bg: "bg-rose-50 border-rose-200",    text: "text-rose-700",    label: "Prioridad alta"  },
@@ -93,15 +111,20 @@ interface Props {
   totalPlan:    number;
   treatments:   any[];
   portalUrl?:   string | null;
+  pediatricsData?: PediatricsTabData | null;
 }
 
 export function PatientDetailClient({
   patient, records: initialRecords, appointments, invoices,
   doctors, currentUser, specialty, totalPaid, totalBalance, totalPlan, treatments, portalUrl,
+  pediatricsData,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [tab, setTab]         = useState("resumen");
+  const showPediatrics = Boolean(pediatricsData);
+  const tabs = useMemo(() => buildTabs(showPediatrics), [showPediatrics]);
+  const initialTab = searchParams.get("tab") === "pediatria" && showPediatrics ? "pediatria" : "resumen";
+  const [tab, setTab]         = useState(initialTab);
   const [consultPaused, setConsultPaused] = useState(false);
   const [consultClosed, setConsultClosed] = useState(false);
   const [noteDetailOpen, setNoteDetailOpen] = useState<ClinicalNote | null>(null);
@@ -581,6 +604,31 @@ export function PatientDetailClient({
         onCharge={() => setTab("facturacion")}
       />
 
+      {/* Pediatrics — chips informativos cuando aplica el módulo (spec §1.3) */}
+      {pediatricsData && (
+        <div className="flex flex-wrap items-center gap-2 px-1 -mt-2 mb-2">
+          <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700 dark:border-violet-700 dark:bg-violet-950 dark:text-violet-200">
+            <span className="font-mono">{pediatricsData.ageFormatted}</span>
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold capitalize">
+            Dentición {pediatricsData.dentition}
+          </span>
+          {pediatricsData.latestCambra ? (
+            <span className={`cambra-chip cambra-chip--${pediatricsData.latestCambra.category}`}>
+              <span className="cambra-chip__dot" aria-hidden />
+              CAMBRA {pediatricsData.latestCambra.category}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setTab("pediatria")}
+            className="ml-auto text-xs font-semibold text-violet-700 hover:underline dark:text-violet-200"
+          >
+            Ir a Pediatría →
+          </button>
+        </div>
+      )}
+
       {/* Layout 3 columnas — audit Opción C ajuste 3 */}
       <div
         className={`${patientDetailStyles.layout} ${
@@ -597,8 +645,10 @@ export function PatientDetailClient({
             tratamiento: treatments.length,
             agenda: appointments.length,
             facturacion: invoices.length,
+            pediatria: pediatricsData?.pendingConsents.length ?? 0,
           }}
           hasBalance={totalBalance > 0}
+          showPediatrics={showPediatrics}
         />
 
         <div className={patientDetailStyles.mainColumn}>
@@ -641,7 +691,7 @@ export function PatientDetailClient({
             role="tablist"
             aria-label="Secciones del paciente"
           >
-            {TABS.map((t) => {
+            {tabs.map((t) => {
               const isActive = tab === t.id;
               const count = tabCounts[t.id];
               return (
@@ -790,6 +840,11 @@ export function PatientDetailClient({
                 onOpenReferral={() => setTab("referencias")}
               />
             </div>
+          )}
+
+          {/* ===== TAB: PEDIATRÍA ===== */}
+          {tab === "pediatria" && pediatricsData && (
+            <PediatricsTab data={pediatricsData} />
           )}
 
           {/* ===== TAB: ODONTOGRAMA ===== */}

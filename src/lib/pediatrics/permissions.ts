@@ -12,7 +12,7 @@ export type PediatricsContext = {
   cutoffYears?: number;
 };
 
-const ELIGIBLE_CATEGORIES = new Set(["DENTAL_CLINIC", "MEDICINE"]);
+const ELIGIBLE_CATEGORIES = new Set(["DENTAL", "MEDICINE"]);
 
 /**
  * Predicado puro: la pestaña Pediatría se muestra cuando todos los

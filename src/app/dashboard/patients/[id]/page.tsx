@@ -7,6 +7,10 @@ import { PatientDetailClient } from "./patient-detail-client";
 import { PatientContextPanel } from "@/components/dashboard/patient-context";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-helpers";
+import { canAccessModule } from "@/lib/marketplace/access-control";
+import { isPediatric, calculateAge } from "@/lib/pediatrics/age";
+import { classifyDentition } from "@/lib/pediatrics/dentition";
+import type { PediatricsTabData } from "@/components/patient-detail/pediatrics/PediatricsTab";
 
 export default async function PatientDetailPage({ params }: { params: { id: string } }) {
   const user = await getCurrentUser();
@@ -49,6 +53,115 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   const portalUrl = patient.portalToken
     ? `${process.env.NEXT_PUBLIC_APP_URL}/portal/${patient.portalToken}`
     : null;
+
+  // ── Pediatrics module gating ─────────────────────────────────────────────
+  // Visible cuando: módulo PEDIATRICS activo en la clínica + categoría
+  // DENTAL_CLINIC|MEDICINE + paciente con DOB + paciente <14 años.
+  const pediatricsEligible =
+    isPediatric(patient.dob, 14) &&
+    (user.clinic.category === "DENTAL" || user.clinic.category === "MEDICINE");
+
+  let pediatricsData: PediatricsTabData | null = null;
+  if (pediatricsEligible) {
+    const access = await canAccessModule(user.clinicId, "PEDIATRICS");
+    if (access.hasAccess) {
+      const dob = patient.dob!;
+      const age = calculateAge(dob);
+      const [
+        record,
+        guardiansList,
+        behaviorHistory,
+        latestCambra,
+        oralHabits,
+        eruptionRecords,
+        sealants,
+        maintainers,
+        fluorideHistory,
+        pendingConsents,
+      ] = await Promise.all([
+        prisma.pediatricRecord.findUnique({
+          where: { patientId: patient.id },
+          include: { primaryGuardian: true },
+        }),
+        prisma.guardian.findMany({
+          where: { patientId: patient.id, clinicId: user.clinicId, deletedAt: null },
+          orderBy: { principal: "desc" },
+        }),
+        prisma.behaviorAssessment.findMany({
+          where: { patientId: patient.id, clinicId: user.clinicId, deletedAt: null },
+          orderBy: { recordedAt: "desc" },
+          take: 50,
+        }),
+        prisma.cariesRiskAssessment.findFirst({
+          where: { patientId: patient.id, clinicId: user.clinicId, deletedAt: null },
+          orderBy: { scoredAt: "desc" },
+        }),
+        prisma.oralHabit.findMany({
+          where: { patientId: patient.id, clinicId: user.clinicId, deletedAt: null },
+          orderBy: { startedAt: "desc" },
+        }),
+        prisma.eruptionRecord.findMany({
+          where: { patientId: patient.id, clinicId: user.clinicId, deletedAt: null },
+        }),
+        prisma.sealant.findMany({
+          where: { patientId: patient.id, clinicId: user.clinicId, deletedAt: null },
+        }),
+        prisma.spaceMaintainer.findMany({
+          where: { patientId: patient.id, clinicId: user.clinicId, deletedAt: null },
+          orderBy: { placedAt: "desc" },
+        }),
+        prisma.fluorideApplication.findMany({
+          where: { patientId: patient.id, clinicId: user.clinicId, deletedAt: null },
+          orderBy: { appliedAt: "desc" },
+          take: 30,
+        }),
+        prisma.pediatricConsent.findMany({
+          where: {
+            patientId: patient.id,
+            clinicId: user.clinicId,
+            deletedAt: null,
+            revokedAt: null,
+            guardianSignedAt: null,
+          },
+          include: { guardian: true },
+        }),
+      ]);
+
+      const eruptedPermanent = eruptionRecords.filter((r) => r.toothFdi >= 11 && r.toothFdi <= 48).length;
+      const dentition = classifyDentition({ ageDecimal: age.decimal, eruptedPermanent });
+      const primaryGuardian =
+        record?.primaryGuardian ?? guardiansList.find((g) => g.principal) ?? guardiansList[0] ?? null;
+
+      const futureAppt = patient.appointments.find(
+        (a) => a.startsAt > new Date() && (a.status === "PENDING" || a.status === "CONFIRMED"),
+      );
+      const nextAppointmentLabel = futureAppt
+        ? `${futureAppt.type} · ${futureAppt.startsAt.toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}`
+        : undefined;
+
+      pediatricsData = {
+        patientId: patient.id,
+        patientName: `${patient.firstName} ${patient.lastName}`,
+        patientDob: dob,
+        ageFormatted: age.formatted,
+        ageMonths: age.totalMonths,
+        dentition,
+        primaryGuardian,
+        guardiansCount: guardiansList.length,
+        allergies: patient.allergies,
+        conditions: patient.chronicConditions,
+        latestCambra,
+        behaviorHistory,
+        oralHabits,
+        eruptionRecords,
+        sealants,
+        maintainers,
+        fluorideHistory,
+        pendingConsents,
+        nextAppointmentLabel,
+      };
+    }
+  }
 
   const totalPaid    = patient.invoices.reduce((s, i) => s + i.paid, 0);
   const totalBalance = patient.invoices.reduce((s, i) => s + i.balance, 0);
@@ -122,6 +235,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           totalBalance={totalBalance}
           totalPlan={totalPlan}
           portalUrl={portalUrl}
+          pediatricsData={pediatricsData}
         />
       </ErrorBoundary>
     </div>

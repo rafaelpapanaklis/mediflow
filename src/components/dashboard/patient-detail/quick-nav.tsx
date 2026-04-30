@@ -10,6 +10,7 @@ import {
   Calendar,
   CreditCard,
   Bone,
+  Baby,
   type LucideIcon,
 } from "lucide-react";
 import styles from "./patient-detail.module.css";
@@ -38,24 +39,30 @@ interface QuickNavProps {
     tratamiento?: number;
     agenda?: number;
     facturacion?: number;
+    pediatria?: number;
   };
   hasBalance: boolean;
+  showPediatrics?: boolean;
 }
 
-export function QuickNav({ activeTab, onSelect, counts, hasBalance }: QuickNavProps) {
+export function QuickNav({ activeTab, onSelect, counts, hasBalance, showPediatrics }: QuickNavProps) {
+  const clinicItems: NavItem[] = [
+    { id: "resumen",      label: "Resumen",         icon: ClipboardList },
+    { id: "historia",     label: "Historia clínica", icon: History, count: counts.historia },
+  ];
+  if (showPediatrics) {
+    clinicItems.push({ id: "pediatria", label: "Pediatría", icon: Baby, count: counts.pediatria, badgeTone: "brand" });
+  }
+  clinicItems.push(
+    { id: "odontograma",  label: "Odontograma",     icon: Bone, count: counts.odontograma },
+    { id: "expediente",   label: "Nueva consulta",  icon: Stethoscope },
+    { id: "evolucion",    label: "Notas SOAP",      icon: Activity, count: counts.evolucion },
+    { id: "radiografias", label: "Radiografías",    icon: FileImage, count: counts.radiografias },
+    { id: "tratamiento",  label: "Plan tratamiento", icon: Pill, count: counts.tratamiento },
+  );
+
   const sections: NavSection[] = [
-    {
-      label: "Clínico",
-      items: [
-        { id: "resumen",      label: "Resumen",         icon: ClipboardList },
-        { id: "historia",     label: "Historia clínica", icon: History, count: counts.historia },
-        { id: "odontograma",  label: "Odontograma",     icon: Bone, count: counts.odontograma },
-        { id: "expediente",   label: "Nueva consulta",  icon: Stethoscope },
-        { id: "evolucion",    label: "Notas SOAP",      icon: Activity, count: counts.evolucion },
-        { id: "radiografias", label: "Radiografías",    icon: FileImage, count: counts.radiografias },
-        { id: "tratamiento",  label: "Plan tratamiento", icon: Pill, count: counts.tratamiento },
-      ],
-    },
+    { label: "Clínico", items: clinicItems },
     {
       label: "Administrativo",
       items: [
