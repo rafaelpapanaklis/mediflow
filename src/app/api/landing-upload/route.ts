@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { validateMagicNumber } from "@/lib/validate-upload";
+import { BUCKETS } from "@/lib/storage";
 
 function getAdminSupabase() {
   return createAdmin(
@@ -11,6 +12,9 @@ function getAdminSupabase() {
   );
 }
 
+// Las imágenes de la landing pública de cada clínica viven en un bucket
+// PÚBLICO separado (CLINIC_PUBLIC). El bucket clínico (PATIENT_FILES) está
+// privado y sólo se accede con signed URLs de TTL corto.
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -40,7 +44,7 @@ export async function POST(req: NextRequest) {
   if (magicError) return NextResponse.json({ error: magicError }, { status: 400 });
 
   const { error } = await supabase.storage
-    .from("patient-files")
+    .from(BUCKETS.CLINIC_PUBLIC)
     .upload(path, bytes, { contentType: file.type, upsert: false });
 
   if (error) {
@@ -48,9 +52,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Error al subir imagen" }, { status: 500 });
   }
 
-  const { data: signedData, error: signedError } = await supabase.storage.from("patient-files").createSignedUrl(path, 3600);
-  if (signedError || !signedData?.signedUrl) {
+  // Public URL — la landing es pública e indexable, no usa signed URLs.
+  const { data: publicData } = supabase.storage.from(BUCKETS.CLINIC_PUBLIC).getPublicUrl(path);
+  if (!publicData?.publicUrl) {
     return NextResponse.json({ error: "Error generando URL" }, { status: 500 });
   }
-  return NextResponse.json({ url: signedData.signedUrl });
+  return NextResponse.json({ url: publicData.publicUrl });
 }

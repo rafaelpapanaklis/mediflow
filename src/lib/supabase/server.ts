@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { env } from "@/env";
 
 // Sesión persistente tipo Gmail/Slack: la cookie de auth vive 30 días y se
 // renueva en cada request (rolling). Si el usuario no entra durante 30 días,
@@ -9,8 +10,8 @@ const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 export function createClient() {
   const cookieStore = cookies();
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     {
       cookies: {
         get(name: string) { return cookieStore.get(name)?.value; },

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdmin } from "@supabase/supabase-js";
-import { toPublicFileUrl } from "@/lib/storage";
+import { BUCKETS, signMaybeUrl } from "@/lib/storage";
 
 function getAdminSupabase() {
   return createAdmin(
@@ -25,7 +25,16 @@ export async function GET(req: NextRequest) {
     orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json(files.map(f => ({ ...f, url: toPublicFileUrl(f.url) })));
+  // Firma cada URL on-demand (TTL 5 min). Acepta tanto paths nuevos como
+  // URLs legacy guardadas antes de la migración a bucket privado.
+  const signed = await Promise.all(
+    files.map(async (f) => ({
+      ...f,
+      url: await signMaybeUrl(f.url).catch(() => ""),
+    })),
+  );
+
+  return NextResponse.json(signed);
 }
 
 // POST /api/xrays — multipart form upload
@@ -71,7 +80,7 @@ export async function POST(req: NextRequest) {
   if (magicError) return NextResponse.json({ error: magicError }, { status: 400 });
 
   const { error: uploadError } = await supabase.storage
-    .from("patient-files")
+    .from(BUCKETS.PATIENT_FILES)
     .upload(path, bytes, { contentType: file.type, upsert: false });
 
   if (uploadError) {
@@ -79,21 +88,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Error al subir archivo" }, { status: 500 });
   }
 
-  const { data: publicData } = supabase.storage
-    .from("patient-files")
-    .getPublicUrl(path);
-
-  if (!publicData?.publicUrl) {
-    return NextResponse.json({ error: "Error generando URL" }, { status: 500 });
-  }
-
+  // Persistimos SOLO el path interno del bucket (no la URL completa). La
+  // signed URL se genera bajo demanda en cada request de lectura.
   const record = await prisma.patientFile.create({
     data: {
       patientId,
       clinicId:   ctx.clinicId,
       uploadedBy: ctx.userId,
       name:       file.name,
-      url:        publicData.publicUrl,
+      url:        path,
       size:       file.size,
       mimeType:   file.type,
       category:   category as any,
@@ -103,5 +106,8 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  return NextResponse.json(record, { status: 201 });
+  // Devolvemos al cliente la URL ya firmada para que pueda mostrar el
+  // archivo de inmediato sin un GET extra.
+  const signedUrl = await signMaybeUrl(path).catch(() => "");
+  return NextResponse.json({ ...record, url: signedUrl }, { status: 201 });
 }

@@ -4,6 +4,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { logAudit } from "@/lib/audit";
+import { BUCKETS, extractStoragePath } from "@/lib/storage";
 
 /* ═══════════════════════════════════════════════════════════════════ */
 /*  PATCH — actualiza las notas clínicas del doctor sobre el archivo   */
@@ -78,17 +79,17 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   });
   if (!file) return NextResponse.json({ error: "Archivo no encontrado" }, { status: 404 });
 
-  // Delete from Supabase Storage
+  // Delete from Supabase Storage. file.url puede ser un path nuevo o una
+  // URL legacy — extractStoragePath maneja ambos formatos.
   try {
     const supabase = createAdmin(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
       { auth: { persistSession: false } }
     );
-    const urlPath = new URL(file.url).pathname;
-    const storagePath = urlPath.split("/patient-files/").pop();
+    const storagePath = extractStoragePath(file.url, BUCKETS.PATIENT_FILES);
     if (storagePath) {
-      await supabase.storage.from("patient-files").remove([storagePath]);
+      await supabase.storage.from(BUCKETS.PATIENT_FILES).remove([storagePath]);
     }
   } catch (e) {
     console.error("Storage delete error (non-fatal):", e);
