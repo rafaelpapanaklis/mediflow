@@ -1691,3 +1691,34 @@ model TVDisplay {
   @@index([clinicId, active])
   @@map("tv_displays")
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Bug Audit — registros de auditoría de seguridad/perf/calidad.
+// Tabla global (no multi-tenant), solo SUPER_ADMIN puede invocarla
+// desde /dashboard/admin/bug-audit. RLS habilitada en SQL para
+// bloquear acceso directo a la DB sin service role.
+// ═══════════════════════════════════════════════════════════════════
+
+model BugAuditRun {
+  id          String   @id
+  runAt       DateTime @default(now()) @db.Timestamptz(6)
+  triggeredBy String
+  duration_ms Int?
+  status      String
+  summary     Json
+  items       Json
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([runAt(sort: Desc)])
+  @@map("bug_audit_runs")
+}
+
+model BugAuditDismissed {
+  id           String   @id
+  fingerprint  String   @unique
+  reason       String?
+  dismissedBy  String
+  dismissedAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("bug_audit_dismissed")
+}
