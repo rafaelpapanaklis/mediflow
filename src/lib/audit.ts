@@ -1,7 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import type { NextRequest } from "next/server";
 
-export type AuditAction = "create" | "update" | "delete" | "view" | "XRAY_NOTES_UPDATED" | "FILE_NOTES_UPDATED";
+export type AuditAction =
+  | "create" | "update" | "delete" | "view"
+  | "XRAY_NOTES_UPDATED" | "FILE_NOTES_UPDATED"
+  // Reset de contraseña por SUPER_ADMIN. NO incluye el password (ni hash)
+  // en el log — solo la acción y el target.
+  | "password_reset";
 export type AuditEntityType =
   | "patient"
   | "appointment"

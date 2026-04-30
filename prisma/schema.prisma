@@ -235,6 +235,12 @@ model User {
   stripeOnboarded     Boolean  @default(false)
   teleconsultPrice    Float?
 
+  // Override granular del set default del role. Array de keys de permiso
+  // ("agenda.view", "patients.edit", ...). Si está vacío se aplica el
+  // default del role; si tiene keys, esas REEMPLAZAN al default. Gestión
+  // por SUPER_ADMIN desde /dashboard/team. Ver src/lib/auth/permissions.ts.
+  permissionsOverride String[] @default([])
+
   clinic          Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointments    Appointment[]
   records         MedicalRecord[]

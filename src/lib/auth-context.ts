@@ -10,6 +10,10 @@ export interface AuthContext {
   color:        string;
   clinic:       any;
   user:         any;
+  // Override granular del default del role. Siempre presente como string[]
+  // (vacío si no hay override). Endpoints lo usan con
+  // denyIfMissingPermission(ctx, "billing.refund").
+  permissionsOverride: string[];
   clinicCategory: string; // ClinicCategory enum value
   // Role helpers
   isSuperAdmin: boolean;  // Platform owner — global access
@@ -64,13 +68,21 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     const isDoctor       = finalUser.role === "DOCTOR";
     const isReceptionist = finalUser.role === "RECEPTIONIST";
 
+    // Normalizamos permissionsOverride a [] si Prisma client viejo (deploy
+    // cacheado) no devuelve el campo. Sin esto, ctx.user.permissionsOverride
+    // sería undefined y denyIfMissingPermission caería al default del rol
+    // ignorando el override real en DB.
+    const permissionsOverride: string[] =
+      ((finalUser as any).permissionsOverride as string[] | null | undefined) ?? [];
+
     return {
       userId:         finalUser.id,
       clinicId:       finalUser.clinicId,
       role:           finalUser.role,
       color:          finalUser.color ?? "#3b82f6",
       clinic:         finalUser.clinic,
-      user:           finalUser,
+      user:           { ...finalUser, permissionsOverride },
+      permissionsOverride,
       clinicCategory: (finalUser.clinic as any).category ?? "OTHER",
       isSuperAdmin,
       isAdmin,

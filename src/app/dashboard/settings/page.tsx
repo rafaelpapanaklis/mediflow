@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { SettingsClient } from "./settings-client";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 
 export const metadata: Metadata = { title: "Configuración — MediFlow" };
 
@@ -14,6 +15,7 @@ interface Props {
 
 export default async function SettingsPage({ searchParams }: Props) {
   const user = await getCurrentUser();
+  requirePermissionOrRedirect(user, "settings.view");
 
   const clinic = await prisma.clinic.findUnique({
     where:   { id: user.clinicId },

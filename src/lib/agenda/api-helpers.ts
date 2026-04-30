@@ -11,6 +11,10 @@ export interface ClinicSession {
     role: Role;
     clinicId: string;
     displayName: string;
+    // Override granular del set default del role. Necesario para que los
+    // endpoints de agenda puedan llamar denyIfMissingPermission(session.user, ...)
+    // con el set efectivo correcto. Vacío = aplicar default del role.
+    permissionsOverride: string[];
   };
   clinic: {
     id: string;
@@ -68,6 +72,7 @@ export async function loadClinicSession(): Promise<ClinicSession | NextResponse>
       role: user.role,
       clinicId: user.clinicId,
       displayName,
+      permissionsOverride: user.permissionsOverride ?? [],
     },
     clinic,
     timeConfig: {

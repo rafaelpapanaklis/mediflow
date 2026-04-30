@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Plus, X, Edit, UserCheck, UserX, Trash2, Copy, Check, Stethoscope, Shield, Users as UsersIcon } from "lucide-react";
+import { Plus, X, Edit, UserCheck, UserX, Trash2, Copy, Check, Stethoscope, Shield, ShieldCheck, Users as UsersIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
@@ -11,6 +11,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import toast from "react-hot-toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { PermissionsModal } from "@/components/dashboard/team/permissions-modal";
 
 type RoleTone = "success" | "info" | "warning" | "brand" | "neutral";
 const ROLE_TONE: Record<string, { tone: RoleTone; label: string }> = {
@@ -64,6 +65,7 @@ interface TeamMember {
   cedulaProfesional?: string | null;
   especialidad?: string | null;
   cedulaEspecialidad?: string | null;
+  permissionsOverride?: string[];
   _count: { appointments: number; records: number };
 }
 
@@ -73,7 +75,7 @@ interface TeamMember {
 // as a new component type on every render and unmounts/remounts the inputs,
 // causing focus loss on every keystroke. Defined outside, it is stable.
 function MemberForm({
-  form, setForm, onSubmit, onCancel, loading, isEdit,
+  form, setForm, onSubmit, onCancel, loading, isEdit, onResetPassword,
 }: {
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
@@ -81,6 +83,11 @@ function MemberForm({
   onCancel: () => void;
   loading: boolean;
   isEdit: boolean;
+  // Cuando viene definido, el form muestra un botón secundario "Resetear
+  // contraseña" debajo. El padre lo provee solo en modo edit y solo si el
+  // current user es SUPER_ADMIN editando a un non-SUPER_ADMIN. La logica
+  // de confirm + POST + display del tempPassword vive en TeamClient.
+  onResetPassword?: () => void;
 }) {
   const [svcInput, setSvcInput] = useState("");
 
@@ -260,6 +267,29 @@ function MemberForm({
         )}
       </div>
 
+      {/* Reset password — solo visible cuando el padre nos lo pasa (SUPER_ADMIN
+       *  editando a un miembro non-SUPER_ADMIN). El click delega la confirmación
+       *  + el POST a TeamClient, que también maneja la visualización del
+       *  tempPassword en el banner de arriba. */}
+      {isEdit && onResetPassword && (
+        <div className="border-t border-border pt-4 mt-2">
+          <Label className="text-base font-semibold">Acceso del usuario</Label>
+          <p className="text-sm text-muted-foreground mt-1 mb-3">
+            Resetear la contraseña genera una nueva contraseña temporal.
+            La actual deja de funcionar.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onResetPassword}
+            disabled={loading}
+            className="w-full h-11 text-base"
+          >
+            Resetear contraseña
+          </Button>
+        </div>
+      )}
+
       {/* Buttons */}
       <div className="flex gap-3 pt-2">
         <Button variant="outline" onClick={onCancel} className="flex-1 h-12 text-base">Cancelar</Button>
@@ -272,17 +302,26 @@ function MemberForm({
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
-interface Props { team: TeamMember[]; currentUserId: string; clinicName: string }
+interface Props { team: TeamMember[]; currentUserId: string; currentUserRole: string; clinicName: string }
 
-export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Props) {
+export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, clinicName }: Props) {
   const askConfirm = useConfirm();
   const [team,       setTeam]       = useState<TeamMember[]>(initialTeam);
   const [showNew,    setShowNew]    = useState(false);
   const [editMember, setEditMember] = useState<TeamMember | null>(null);
+  // Member cuyo modal de permisos está abierto. Solo SUPER_ADMIN puede abrirlo.
+  const [permsMember, setPermsMember] = useState<TeamMember | null>(null);
   const [loading,    setLoading]    = useState(false);
   const [filter,     setFilter]     = useState<"active"|"all"|"inactive">("active");
   const [tempPass,   setTempPass]   = useState<string | null>(null);
+  // Diferencia el mensaje del banner según el origen: "create" tras invitar
+  // un nuevo miembro, "reset" tras resetear password existente. null = sin
+  // banner. Cambiar de origen no resetea tempPass — siempre van juntos.
+  const [tempPassMode, setTempPassMode] = useState<"create" | "reset" | null>(null);
+  const [tempPassFor, setTempPassFor] = useState<string>("");
   const [copied,     setCopied]     = useState(false);
+
+  const isSuperAdmin = currentUserRole === "SUPER_ADMIN";
 
   const usedColors = team.map(m => m.color);
   const nextColor  = DOCTOR_COLORS.find(c => !usedColors.includes(c)) ?? DOCTOR_COLORS[0];
@@ -320,6 +359,8 @@ export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Pro
       if (!res.ok) throw new Error(data.error);
       setTeam(prev => [...prev, { ...data, _count:{ appointments:0, records:0 } }]);
       setTempPass(data.tempPassword ?? null);
+      setTempPassMode(data.tempPassword ? "create" : null);
+      setTempPassFor(`${data.firstName} ${data.lastName}`);
       setShowNew(false);
       setForm(emptyForm());
       toast.success(`✅ Doctor ${data.firstName} ${data.lastName} creado`);
@@ -361,6 +402,39 @@ export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Pro
       setTeam(prev => prev.map(t => t.id === m.id ? { ...t, isActive: !m.isActive } : t));
       toast.success(m.isActive ? "Doctor desactivado" : "Doctor reactivado");
     } catch { toast.error("Error"); }
+  }
+
+  // Reset de contraseña vía Supabase Admin API. Solo SUPER_ADMIN, target
+  // non-SUPER_ADMIN. La verificación real vive en el endpoint server-side
+  // (defensa en profundidad) — aquí gateamos la UI para no exponer el botón
+  // a quien no debería verlo.
+  async function resetPassword(m: TeamMember) {
+    if (!isSuperAdmin) return;
+    if (m.role === "SUPER_ADMIN") {
+      toast.error("No se puede resetear contraseña de un SUPER_ADMIN");
+      return;
+    }
+    if (!(await askConfirm({
+      title: `¿Resetear contraseña de ${m.firstName} ${m.lastName}?`,
+      description: "Se genera una contraseña temporal nueva. La actual deja de funcionar al instante. Tendrás que entregársela al usuario por canal seguro — solo se muestra una vez.",
+      variant: "danger",
+      confirmText: "Resetear contraseña",
+    }))) return;
+
+    try {
+      const res = await fetch(`/api/team/${m.id}/reset-password`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error al resetear contraseña");
+      // Cerramos el modal de edit y mostramos el banner amarillo de tempPassword
+      // (mismo componente que se usa cuando se crea un doctor nuevo).
+      setEditMember(null);
+      setTempPass(data.tempPassword ?? null);
+      setTempPassMode(data.tempPassword ? "reset" : null);
+      setTempPassFor(`${m.firstName} ${m.lastName}`);
+      toast.success(`Contraseña reseteada para ${m.firstName} ${m.lastName}`);
+    } catch (err: any) {
+      toast.error(err.message ?? "Error al resetear contraseña");
+    }
   }
 
   async function deleteMember(m: TeamMember) {
@@ -421,7 +495,9 @@ export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Pro
         </ButtonNew>
       </div>
 
-      {/* Temp password banner */}
+      {/* Temp password banner — sirve para create (alta de miembro) y para
+       *  reset (SUPER_ADMIN reseteando password). Mismo bloque visual, copy
+       *  diferenciado segun tempPassMode. La password se ve UNA vez. */}
       {tempPass && (
         <div style={{
           background: "var(--warning-soft)",
@@ -432,10 +508,14 @@ export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Pro
           <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: "#fcd34d", marginBottom: 4 }}>
-                Doctor creado — contraseña temporal
+                {tempPassMode === "reset"
+                  ? `Contraseña reseteada${tempPassFor ? ` — ${tempPassFor}` : ""}`
+                  : `Doctor creado — contraseña temporal`}
               </div>
               <div style={{ fontSize: 11, color: "#fcd34d", opacity: 0.8, marginBottom: 10 }}>
-                Comparte esta contraseña con el doctor. Puede cambiarla en Configuración → Seguridad.
+                {tempPassMode === "reset"
+                  ? "Comparte esta contraseña con el usuario por canal seguro. La anterior ya no funciona. Solo se muestra una vez — si la pierdes, hay que resetear de nuevo."
+                  : "Comparte esta contraseña con el doctor. Puede cambiarla en Configuración → Seguridad."}
               </div>
               <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                 <code className="mono" style={{
@@ -452,7 +532,7 @@ export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Pro
               </div>
             </div>
             <button
-              onClick={() => setTempPass(null)}
+              onClick={() => { setTempPass(null); setTempPassMode(null); setTempPassFor(""); }}
               type="button"
               className="btn-new btn-new--ghost btn-new--sm"
               aria-label="Cerrar"
@@ -567,10 +647,24 @@ export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Pro
                   </div>
 
                   {/* Actions */}
-                  <div style={{ display: "flex", gap: 6, marginTop: 14, justifyContent: "center" }}>
+                  <div style={{ display: "flex", gap: 6, marginTop: 14, justifyContent: "center", flexWrap: "wrap" }}>
                     <ButtonNew size="sm" variant="secondary" icon={<Edit size={12} />} onClick={() => openEdit(m)}>
                       Editar
                     </ButtonNew>
+                    {/* Permisos: solo visible para SUPER_ADMIN, y NO sobre otros
+                     *  SUPER_ADMIN (defensa contra lock-out cruzado en endpoint).
+                     *  Sobre el propio user igual lo permitimos — útil para
+                     *  un super que quiera bajarse permisos de prueba. */}
+                    {isSuperAdmin && m.role !== "SUPER_ADMIN" && (
+                      <ButtonNew
+                        size="sm"
+                        variant="secondary"
+                        icon={<ShieldCheck size={12} />}
+                        onClick={() => setPermsMember(m)}
+                      >
+                        Permisos
+                      </ButtonNew>
+                    )}
                     {m.id !== currentUserId && (
                       <>
                         <button
@@ -638,10 +732,30 @@ export function TeamClient({ team: initialTeam, currentUserId, clinicName }: Pro
               form={form} setForm={setForm}
               onSubmit={updateDoctor} onCancel={() => setEditMember(null)}
               loading={loading} isEdit={true}
+              // Reset password solo aparece cuando el actor es SUPER_ADMIN
+              // y el target NO es SUPER_ADMIN. El backend valida lo mismo.
+              onResetPassword={
+                isSuperAdmin && editMember.role !== "SUPER_ADMIN"
+                  ? () => resetPassword(editMember)
+                  : undefined
+              }
             />
           </div>
         </div>
       )}
+
+      {/* Permisos granulares — solo SUPER_ADMIN. El modal ya gatea su propia
+       *  lógica (toggle "usar default", agrupado por categoría, validación). */}
+      <PermissionsModal
+        open={permsMember !== null}
+        member={permsMember}
+        onClose={() => setPermsMember(null)}
+        onSaved={(memberId, newOverride) => {
+          setTeam(prev => prev.map(m =>
+            m.id === memberId ? { ...m, permissionsOverride: newOverride } : m,
+          ));
+        }}
+      />
     </div>
   );
 }

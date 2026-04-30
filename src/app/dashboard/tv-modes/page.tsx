@@ -3,13 +3,12 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
 import { TvModesClient } from "./tv-modes-client";
+import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 
 export const metadata: Metadata = { title: "Pantallas TV — MediFlow" };
 
 export default async function TvModesPage() {
   const user = await getCurrentUser();
-  if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
-    return <div style={{ padding: 32, color: "var(--text-3)" }}>Solo admin.</div>;
-  }
+  requirePermissionOrRedirect(user, "tvModes.view");
   return <TvModesClient />;
 }
