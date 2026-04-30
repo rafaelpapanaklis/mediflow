@@ -12,7 +12,10 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 
-const moduleIdSchema = z.string().cuid({ message: "moduleId inválido" });
+// Validamos solo "string no vacío" — el seed creó IDs como UUIDs
+// (gen_random_uuid()::text), no CUIDs, aunque el schema dice @default(cuid()).
+// La integridad referencial la garantiza Prisma vía findUnique abajo.
+const moduleIdSchema = z.string().min(1, { message: "moduleId requerido" });
 
 export interface CartActionResult {
   ok: boolean;
