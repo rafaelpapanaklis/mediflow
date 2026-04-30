@@ -7,6 +7,14 @@ const config: Config = {
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
+  // Safelist: las clases de icono del marketplace vienen de BD (Module.iconBg
+  // y Module.iconColor son strings poblados por el seed, ver prisma/seed.ts).
+  // Tailwind purga lo que no aparece literal en el source — sin safelist, los
+  // íconos quedarían sin color en producción.
+  safelist: [
+    { pattern: /^bg-(blue|cyan|violet|pink|red|orange|purple|green|fuchsia)-50$/ },
+    { pattern: /^text-(blue|cyan|violet|pink|red|orange|purple|green|fuchsia)-600$/ },
+  ],
   theme: {
     extend: {
       fontFamily: {

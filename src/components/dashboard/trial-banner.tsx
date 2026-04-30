@@ -1,74 +1,113 @@
 /**
- * @deprecated Desde Fase 2.5 (2026-04). Reemplazado por <TrialPill />
- * integrado en <Topbar />. Este componente NO se renderiza en
- * `src/app/dashboard/layout.tsx` actual.
+ * TrialBanner — banner persistente arriba del contenido del dashboard
+ * que comunica el estado del trial y empuja al marketplace.
  *
- * Conservado temporalmente por si algún consumer lo importa. En Fase 2.7
- * se puede eliminar tras verificar con `git grep TrialBanner`.
+ * Tres estados de urgencia según `daysLeft`:
+ *   - morado (>7 días)  — promocional, "Prueba activa"
+ *   - amarillo (4–7 días) — recordatorio, "X días restantes"
+ *   - rojo (1–3 días)    — urgente, "Tu prueba termina en X días"
+ *
+ * NO se renderiza si el trial ya expiró — eso lo maneja el bloqueo
+ * post-trial (Sprint 4). Sin trialEndsAt válido tampoco renderiza.
+ *
+ * Server Component: lee solo props, sin estado. La pill compacta del
+ * topbar (TrialPill) sigue funcionando en paralelo.
+ *
+ * Props:
+ *   - trialEndsAt: fecha de fin del trial (Date | null)
+ *   - isInTrial: si la clínica está actualmente en trial (false oculta)
  */
 import Link from "next/link";
+import { AlertTriangle, ArrowRight, Clock, PartyPopper } from "lucide-react";
 
 interface TrialBannerProps {
-  trialEndsAt: Date;
+  trialEndsAt: Date | string | null | undefined;
+  isInTrial: boolean;
 }
 
-function formatFecha(d: Date) {
-  return d.toLocaleDateString("es-MX", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
+export function TrialBanner({ trialEndsAt, isInTrial }: TrialBannerProps) {
+  if (!isInTrial || !trialEndsAt) return null;
 
-export function TrialBanner({ trialEndsAt }: TrialBannerProps) {
-  const now = new Date();
-  const end = new Date(trialEndsAt);
+  const end = trialEndsAt instanceof Date ? trialEndsAt : new Date(trialEndsAt);
+  if (Number.isNaN(end.getTime())) return null;
+
+  const now    = new Date();
   const msLeft = end.getTime() - now.getTime();
-  const daysLeft = Math.max(0, Math.ceil(msLeft / 86_400_000));
-  const warning = daysLeft <= 3;
+  if (msLeft <= 0) return null; // expirado — sprint 4
 
-  const bg = warning
-    ? "linear-gradient(90deg, rgba(245,158,11,0.2), rgba(251,191,36,0.2))"
-    : "linear-gradient(90deg, rgba(124,58,237,0.2), rgba(168,85,247,0.2))";
-  const borderColor = warning ? "rgba(245,158,11,0.35)" : "rgba(124,58,237,0.3)";
-  const linkColor   = warning ? "#fbbf24" : "var(--brand, #7c3aed)";
+  const daysLeft = Math.max(1, Math.ceil(msLeft / 86_400_000));
 
-  const icon = warning ? "⏰" : "🎉";
-  const label = warning ? "Tu prueba termina pronto" : "Prueba gratis activa";
+  const isUrgent  = daysLeft <= 3;
+  const isWarning = daysLeft > 3 && daysLeft <= 7;
 
+  if (isUrgent) {
+    return (
+      <div className="flex-shrink-0 bg-gradient-to-r from-red-600 via-rose-600 to-red-600 text-white px-6 py-3 flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur flex items-center justify-center flex-shrink-0">
+            <AlertTriangle className="w-4 h-4" strokeWidth={2.5} aria-hidden />
+          </div>
+          <div>
+            <div className="text-sm font-semibold">
+              ¡Tu prueba termina en {daysLeft} día{daysLeft !== 1 ? "s" : ""}!
+            </div>
+            <div className="text-xs text-white/85">
+              Compra los módulos que necesitas antes de perder el acceso · Tus datos se mantendrán
+            </div>
+          </div>
+        </div>
+        <Link
+          href="/dashboard/marketplace"
+          className="bg-white text-red-700 hover:bg-red-50 font-semibold px-4 py-2 rounded-lg text-sm transition-colors flex items-center gap-1.5 flex-shrink-0"
+        >
+          Elegir módulos ahora
+          <ArrowRight className="w-4 h-4" aria-hidden />
+        </Link>
+      </div>
+    );
+  }
+
+  if (isWarning) {
+    return (
+      <div className="flex-shrink-0 bg-gradient-to-r from-amber-500 to-orange-500 text-white px-6 py-3 flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur flex items-center justify-center flex-shrink-0">
+            <Clock className="w-4 h-4" strokeWidth={2.5} aria-hidden />
+          </div>
+          <div className="text-sm font-medium">
+            <strong>{daysLeft} días</strong> restantes en tu prueba gratuita · No olvides activar los módulos que más uses
+          </div>
+        </div>
+        <Link
+          href="/dashboard/marketplace"
+          className="bg-white/15 backdrop-blur hover:bg-white/25 font-medium px-3 py-1.5 rounded-md text-sm transition-colors flex-shrink-0"
+        >
+          Elegir mis módulos
+        </Link>
+      </div>
+    );
+  }
+
+  // >7 días — estado promocional (morado)
   return (
-    <div
-      className="flex-shrink-0"
-      style={{
-        background: bg,
-        borderBottom: `1px solid ${borderColor}`,
-        padding: "10px 20px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 12,
-        fontSize: 13,
-        color: "var(--text-1, #e8e8ec)",
-        flexWrap: "wrap",
-      }}
-    >
-      <span aria-hidden="true">{icon}</span>
-      <span>
-        {label} —{" "}
-        <strong>
-          {daysLeft === 0
-            ? "termina hoy"
-            : daysLeft === 1
-              ? "1 día restante"
-              : `${daysLeft} días restantes`}
-        </strong>{" "}
-        <span style={{ opacity: 0.7 }}>(termina el {formatFecha(end)})</span>
-      </span>
+    <div className="flex-shrink-0 bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 text-white px-6 py-3 flex items-center justify-between gap-4 flex-wrap">
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-lg bg-white/15 backdrop-blur flex items-center justify-center flex-shrink-0">
+          <PartyPopper className="w-4 h-4 text-amber-200" strokeWidth={2.5} aria-hidden />
+        </div>
+        <div>
+          <div className="text-sm font-semibold">Prueba gratis · Acceso completo a todos los módulos</div>
+          <div className="text-xs text-white/85">
+            Te quedan <strong className="text-white">{daysLeft} días</strong> · Sin tarjeta · Sin compromiso
+          </div>
+        </div>
+      </div>
       <Link
-        href="/dashboard/settings?tab=subscription"
-        style={{ color: linkColor, fontWeight: 600, textDecoration: "none" }}
+        href="/dashboard/marketplace"
+        className="bg-white/15 backdrop-blur hover:bg-white/25 font-medium px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-1.5 flex-shrink-0"
       >
-        Ver detalles →
+        Elegir mis módulos
+        <ArrowRight className="w-3.5 h-3.5" aria-hidden />
       </Link>
     </div>
   );

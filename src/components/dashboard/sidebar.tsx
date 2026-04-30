@@ -9,12 +9,14 @@ import {
   Stethoscope, Sparkles, FileImage, Camera, FlaskConical, Dumbbell, Footprints,
   Activity, Gift, DoorOpen, Package, Building2,
   CreditCard, BarChart3, Monitor, UserCog, Globe, ClipboardList, Settings,
+  ShoppingBag,
   ChevronDown, ChevronRight, Moon, Sun, LogOut, PanelLeftClose, PanelLeft,
   X, type LucideIcon,
 } from "lucide-react";
 import { useSidebarCounts } from "@/hooks/use-sidebar-counts";
 import { useActiveConsult } from "@/hooks/use-active-consult";
 import { hasPermission, type PermissionKey } from "@/lib/auth/permissions";
+import { TrialSidebarStatus } from "@/components/dashboard/trial-sidebar-status";
 
 // ═══════════════════════════════════════════════════════════════════
 // Tipos
@@ -67,6 +69,10 @@ export interface SidebarProps {
   clinicCategory: ClinicCategory;
   allClinics?: SidebarClinicRef[];
   onboardingCompleted?: string[];
+  /** Para el mini-status de trial. Null si la clínica nunca tuvo trial. */
+  trialEndsAt?: Date | string | null;
+  /** True si el trial está vigente (futuro Y sin sub activa). */
+  isInTrial?: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -98,6 +104,7 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: "patients",     section: "workspace", label: "Pacientes",   href: "/dashboard/patients",      icon: Users,         permission: "patients.view" },
   { id: "inbox",        section: "workspace", label: "Inbox",       href: "/dashboard/inbox",         icon: InboxIcon,     countKey: "inboxUnread",   permission: "inbox.view" },
   { id: "messages",     section: "workspace", label: "Mensajes",    href: "/dashboard/whatsapp",      icon: MessageCircle, countKey: "messagesUnread", permission: "whatsapp.view" },
+  { id: "marketplace",  section: "workspace", label: "Marketplace", href: "/dashboard/marketplace",   icon: ShoppingBag,   permission: "marketplace.view" },
 
   { id: "clinical",     section: "clinico", label: "Expedientes",  href: "/dashboard/clinical",     icon: Stethoscope, countKey: "clinicalDrafts", permission: "medicalRecord.view" },
   { id: "ai",           section: "clinico", label: "IA asistente", href: "/dashboard/ai-assistant", icon: Sparkles },
@@ -451,6 +458,14 @@ export function Sidebar(props: SidebarProps) {
         plan={props.plan}
         allClinics={props.allClinics ?? []}
       />
+
+      {props.trialEndsAt !== undefined && (
+        <TrialSidebarStatus
+          trialEndsAt={props.trialEndsAt}
+          isInTrial={props.isInTrial ?? false}
+          collapsed={collapsed}
+        />
+      )}
 
       <nav
         aria-label="Navegación principal"

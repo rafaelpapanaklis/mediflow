@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { getCurrentUser, getUserClinics } from "@/lib/auth";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
+import { TrialBanner } from "@/components/dashboard/trial-banner";
 import { GlobalAnnouncementBanner } from "@/components/dashboard/global-announcement-banner";
 import { ActiveConsultProvider } from "@/components/dashboard/active-consult-provider";
 import { NewAppointmentProvider } from "@/components/dashboard/new-appointment/new-appointment-provider";
@@ -79,6 +80,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
         clinicCategory={(clinic as any).category ?? "OTHER"}
         allClinics={allClinics}
         onboardingCompleted={onboardingCompleted}
+        trialEndsAt={trialEndsAt}
+        isInTrial={isInTrial}
       />
       <div className="flex min-h-screen flex-1 flex-col lg:max-h-screen lg:overflow-y-auto">
         {isSuspended && (
@@ -94,6 +97,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           plan={clinic.plan as any}
           userRole={user.role}
         />
+        <TrialBanner trialEndsAt={trialEndsAt} isInTrial={isInTrial} />
         <PatientContextBar />
         <main
           id="main-content"

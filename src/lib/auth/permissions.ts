@@ -131,6 +131,9 @@ export const ALL_PERMISSIONS = {
   "procedures.edit":      "Editar procedimientos",
   "clinicLayout.view":    "Ver Mi Clínica Visual",
   "clinicLayout.edit":    "Editar Mi Clínica Visual",
+  // Marketplace — todos los roles ven por default (es el catálogo de módulos
+  // de la clínica). Comprar es admin-only y se valida en server actions.
+  "marketplace.view":     "Ver marketplace de módulos",
 } as const;
 
 export type PermissionKey = keyof typeof ALL_PERMISSIONS;
@@ -155,6 +158,7 @@ export const PERMISSION_GROUPS: { title: string; keys: PermissionKey[] }[] = [
   { title: "Reportes y TV",  keys: ["analytics.view", "reports.view", "tvModes.view", "tvModes.edit"] },
   { title: "Equipo",         keys: ["team.view", "team.edit"] },
   { title: "Configuración",  keys: ["settings.view", "settings.edit", "landing.view", "landing.edit", "procedures.view", "procedures.edit", "clinicLayout.view", "clinicLayout.edit"] },
+  { title: "Marketplace",    keys: ["marketplace.view"] },
 ];
 
 /**
@@ -173,6 +177,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     "xrays.view", "xrays.upload", "xrays.analyze",
     "treatments.view",
     "inbox.view", "inbox.send",
+    "marketplace.view",
   ],
   RECEPTIONIST: [
     "today.view",
@@ -182,6 +187,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     "inbox.view", "inbox.send",
     "whatsapp.view", "whatsapp.send",
     "treatments.view", "resources.view", "inventory.view",
+    "marketplace.view",
   ],
   // READONLY: solo *.view excepto medical/prescription/xrays
   READONLY: ALL_PERMISSION_KEYS.filter((k) =>
