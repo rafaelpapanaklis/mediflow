@@ -49,13 +49,22 @@ export interface PediatricsTabData {
   nextAppointmentLabel?: string;
 }
 
+export type PediatricsTabVariant = "embedded" | "full-page";
+
 export interface PediatricsTabProps {
   data: PediatricsTabData;
   initialTab?: PediatricsTabKey;
+  /**
+   * - `embedded` (default): vista dentro del detalle de paciente; usa el
+   *   ancho compartido de la pestaña.
+   * - `full-page`: vista en página dedicada (/dashboard/specialties/pediatrics/[id]),
+   *   max-w 1280px y paddings holgados.
+   */
+  variant?: PediatricsTabVariant;
 }
 
 export function PediatricsTab(props: PediatricsTabProps) {
-  const { data, initialTab } = props;
+  const { data, initialTab, variant = "embedded" } = props;
   const [activeTab, setActiveTab] = useState<PediatricsTabKey>(initialTab ?? "summary");
   const [franklOpen, setFranklOpen] = useState(false);
   const [cambraOpen, setCambraOpen] = useState(false);
@@ -76,7 +85,7 @@ export function PediatricsTab(props: PediatricsTabProps) {
   };
 
   return (
-    <div className="pedi-shell">
+    <div className={`pedi-shell ${variant === "full-page" ? "pedi-shell--full-page" : ""}`}>
       <PediatricsContextStrip
         ageFormatted={data.ageFormatted}
         dentition={data.dentition}

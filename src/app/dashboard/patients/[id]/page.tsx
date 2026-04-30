@@ -8,9 +8,9 @@ import { PatientContextPanel } from "@/components/dashboard/patient-context";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-helpers";
 import { canAccessModule } from "@/lib/marketplace/access-control";
-import { isPediatric, calculateAge } from "@/lib/pediatrics/age";
-import { classifyDentition } from "@/lib/pediatrics/dentition";
+import { isPediatric } from "@/lib/pediatrics/age";
 import { PEDIATRICS_MODULE_KEY, DEFAULT_PEDIATRICS_CUTOFF_YEARS } from "@/lib/pediatrics/permissions";
+import { loadPediatricsData } from "@/lib/pediatrics/load-data";
 import type { PediatricsTabData } from "@/components/patient-detail/pediatrics/PediatricsTab";
 
 export default async function PatientDetailPage({ params }: { params: { id: string } }) {
@@ -56,8 +56,11 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     : null;
 
   // ── Pediatrics module gating ─────────────────────────────────────────────
-  // Visible cuando: módulo PEDIATRICS activo en la clínica + categoría
-  // DENTAL_CLINIC|MEDICINE + paciente con DOB + paciente <14 años.
+  // Visible cuando: módulo activo en la clínica + categoría DENTAL|MEDICINE
+  // + paciente con DOB + edad < cutoff (default 18, LGDNNA). El gate de
+  // categoría/edad se evalúa aquí; el de módulo via canAccessModule. La
+  // carga de datos vive en loadPediatricsData() para reutilizarse en
+  // /dashboard/specialties/pediatrics/[id].
   const pediatricsEligible =
     isPediatric(patient.dob, DEFAULT_PEDIATRICS_CUTOFF_YEARS) &&
     (user.clinic.category === "DENTAL" || user.clinic.category === "MEDICINE");
@@ -66,101 +69,10 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   if (pediatricsEligible) {
     const access = await canAccessModule(user.clinicId, PEDIATRICS_MODULE_KEY);
     if (access.hasAccess) {
-      const dob = patient.dob!;
-      const age = calculateAge(dob);
-      const [
-        record,
-        guardiansList,
-        behaviorHistory,
-        latestCambra,
-        oralHabits,
-        eruptionRecords,
-        sealants,
-        maintainers,
-        fluorideHistory,
-        pendingConsents,
-      ] = await Promise.all([
-        prisma.pediatricRecord.findUnique({
-          where: { patientId: patient.id },
-          include: { primaryGuardian: true },
-        }),
-        prisma.guardian.findMany({
-          where: { patientId: patient.id, clinicId: user.clinicId, deletedAt: null },
-          orderBy: { principal: "desc" },
-        }),
-        prisma.behaviorAssessment.findMany({
-          where: { patientId: patient.id, clinicId: user.clinicId, deletedAt: null },
-          orderBy: { recordedAt: "desc" },
-          take: 50,
-        }),
-        prisma.cariesRiskAssessment.findFirst({
-          where: { patientId: patient.id, clinicId: user.clinicId, deletedAt: null },
-          orderBy: { scoredAt: "desc" },
-        }),
-        prisma.oralHabit.findMany({
-          where: { patientId: patient.id, clinicId: user.clinicId, deletedAt: null },
-          orderBy: { startedAt: "desc" },
-        }),
-        prisma.eruptionRecord.findMany({
-          where: { patientId: patient.id, clinicId: user.clinicId, deletedAt: null },
-        }),
-        prisma.sealant.findMany({
-          where: { patientId: patient.id, clinicId: user.clinicId, deletedAt: null },
-        }),
-        prisma.spaceMaintainer.findMany({
-          where: { patientId: patient.id, clinicId: user.clinicId, deletedAt: null },
-          orderBy: { placedAt: "desc" },
-        }),
-        prisma.fluorideApplication.findMany({
-          where: { patientId: patient.id, clinicId: user.clinicId, deletedAt: null },
-          orderBy: { appliedAt: "desc" },
-          take: 30,
-        }),
-        prisma.pediatricConsent.findMany({
-          where: {
-            patientId: patient.id,
-            clinicId: user.clinicId,
-            deletedAt: null,
-            revokedAt: null,
-            guardianSignedAt: null,
-          },
-          include: { guardian: true },
-        }),
-      ]);
-
-      const eruptedPermanent = eruptionRecords.filter((r) => r.toothFdi >= 11 && r.toothFdi <= 48).length;
-      const dentition = classifyDentition({ ageDecimal: age.decimal, eruptedPermanent });
-      const primaryGuardian =
-        record?.primaryGuardian ?? guardiansList.find((g) => g.principal) ?? guardiansList[0] ?? null;
-
-      const futureAppt = patient.appointments.find(
-        (a) => a.startsAt > new Date() && (a.status === "PENDING" || a.status === "CONFIRMED"),
-      );
-      const nextAppointmentLabel = futureAppt
-        ? `${futureAppt.type} · ${futureAppt.startsAt.toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}`
-        : undefined;
-
-      pediatricsData = {
+      pediatricsData = await loadPediatricsData({
+        clinicId: user.clinicId,
         patientId: patient.id,
-        patientName: `${patient.firstName} ${patient.lastName}`,
-        patientDob: dob,
-        ageFormatted: age.formatted,
-        ageMonths: age.totalMonths,
-        dentition,
-        primaryGuardian,
-        guardiansCount: guardiansList.length,
-        allergies: patient.allergies,
-        conditions: patient.chronicConditions,
-        latestCambra,
-        behaviorHistory,
-        oralHabits,
-        eruptionRecords,
-        sealants,
-        maintainers,
-        fluorideHistory,
-        pendingConsents,
-        nextAppointmentLabel,
-      };
+      });
     }
   }
 
