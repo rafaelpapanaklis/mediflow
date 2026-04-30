@@ -6,7 +6,7 @@ import { env } from "@/env";
 import { BUCKETS } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 600;
+export const maxDuration = 300;
 
 /**
  * GET /api/cron/db-export
