@@ -26,7 +26,14 @@ model Clinic {
   isPublic    Boolean   @default(false)
   description String?
   plan        Plan      @default(PRO)
-  trialEndsAt DateTime?
+  // Trial — 14 días desde creación. trialStartedAt agregado en Sprint 1
+  // marketplace; antes derivábamos de createdAt. trialEndsAt pasa a NOT NULL
+  // tras backfill de la migración marketplace_foundation.
+  trialStartedAt   DateTime @default(now()) @map("trial_started_at")
+  trialEndsAt      DateTime
+  trialNotified7d  Boolean  @default(false) @map("trial_notified_7d")
+  trialNotified3d  Boolean  @default(false) @map("trial_notified_3d")
+  trialNotified1d  Boolean  @default(false) @map("trial_notified_1d")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -165,6 +172,12 @@ model Clinic {
   tvDisplays           TVDisplay[]
   // Compliance Fase C
   referrals            Referral[]
+  // Marketplace de módulos (Sprint 1) — 1:N con módulos comprados,
+  // logs de uso, órdenes de checkout y 1:1 con carrito persistente.
+  clinicModules        ClinicModule[]
+  moduleUsageLogs      ModuleUsageLog[]
+  orders               Order[]
+  cart                 Cart?
 
   @@map("clinics")
 }
@@ -1734,4 +1747,128 @@ model BugAuditDismissed {
   dismissedAt  DateTime @default(now()) @db.Timestamptz(6)
 
   @@map("bug_audit_dismissed")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Marketplace de módulos (Sprint 1)
+//
+// Modelo de monetización por módulo: cada clínica activa N módulos a
+// $229–$399/mes. Trial de 14 días desbloquea TODO; post-trial sólo los
+// módulos con ClinicModule.status='active' y currentPeriodEnd futuro.
+// La tabla Order es de marketplace (compras de módulos), distinta de
+// SubscriptionInvoice (billing anual de la clínica completa).
+// ═══════════════════════════════════════════════════════════════════
+
+/// Catálogo de módulos disponibles para venta. Tabla GLOBAL (sin
+/// clinicId). Seed canónico en prisma/seed.ts. iconKey es el nombre
+/// del icono de lucide-react que usa la UI del marketplace.
+model Module {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  name            String
+  category        String
+  description     String   @db.Text
+  iconKey         String   @map("icon_key")
+  iconBg          String   @map("icon_bg")
+  iconColor       String   @map("icon_color")
+  features        String[]
+  priceMxnMonthly Int      @map("price_mxn_monthly")
+  isCore          Boolean  @default(false) @map("is_core")
+  dependsOn       String[] @map("depends_on")
+  sortOrder       Int      @default(0) @map("sort_order")
+  isActive        Boolean  @default(true) @map("is_active")
+
+  clinicModules   ClinicModule[]
+
+  @@map("modules")
+}
+
+/// Relación clínica-módulo activo. Un Stripe Subscription por módulo
+/// (decisión de Sprint 1: 1:1 con stripeSubscriptionId). Estados:
+///   active — pagado y vigente
+///   trial — periodo de prueba post-compra individual (futuro, ignorar)
+///   paused — pago falló, pendiente de retry
+///   cancelled — cancelado por el usuario o admin
+model ClinicModule {
+  id                   String    @id @default(cuid())
+  clinicId             String    @map("clinic_id")
+  moduleId             String    @map("module_id")
+  status               String
+  billingCycle         String    @map("billing_cycle")
+  activatedAt          DateTime  @default(now()) @map("activated_at")
+  currentPeriodStart   DateTime  @map("current_period_start")
+  currentPeriodEnd     DateTime  @map("current_period_end")
+  cancelledAt          DateTime? @map("cancelled_at")
+  stripeSubscriptionId String?   @unique @map("stripe_subscription_id")
+  paypalSubscriptionId String?   @unique @map("paypal_subscription_id")
+  paymentMethod        String    @map("payment_method")
+  pricePaidMxn         Int       @map("price_paid_mxn")
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  module Module @relation(fields: [moduleId], references: [id])
+
+  @@unique([clinicId, moduleId])
+  @@index([clinicId])
+  @@index([currentPeriodEnd])
+  @@map("clinic_modules")
+}
+
+/// Log de uso por módulo — alimenta sugerencias post-trial.
+model ModuleUsageLog {
+  id        String   @id @default(cuid())
+  clinicId  String   @map("clinic_id")
+  moduleKey String   @map("module_key")
+  action    String
+  userId    String?  @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId, moduleKey])
+  @@index([createdAt])
+  @@map("module_usage_logs")
+}
+
+/// Orden de checkout. Una orden puede contener N módulos. Snapshot de
+/// montos al momento de la compra (no se recalcula). cfdiId/cfdiUuid se
+/// llenan tras emisión vía FacturAPI en el webhook del pago.
+model Order {
+  id                  String    @id @default(cuid())
+  clinicId            String    @map("clinic_id")
+  status              String
+  paymentMethod       String    @map("payment_method")
+  billingCycle        String    @map("billing_cycle")
+  moduleIds           String[]  @map("module_ids")
+  subtotalMxn         Int       @map("subtotal_mxn")
+  annualBonusMxn      Int       @default(0) @map("annual_bonus_mxn")
+  volumeDiscountPct   Int       @default(0) @map("volume_discount_pct")
+  volumeDiscountMxn   Int       @default(0) @map("volume_discount_mxn")
+  taxMxn              Int       @map("tax_mxn")
+  totalMxn            Int       @map("total_mxn")
+  speiReference       String?   @unique @map("spei_reference")
+  stripePaymentIntent String?   @map("stripe_payment_intent")
+  paypalOrderId       String?   @map("paypal_order_id")
+  cfdiId              String?   @map("cfdi_id")
+  cfdiUuid            String?   @map("cfdi_uuid")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  paidAt              DateTime? @map("paid_at")
+
+  clinic Clinic @relation(fields: [clinicId], references: [id])
+
+  @@index([clinicId])
+  @@index([status])
+  @@map("orders")
+}
+
+/// Carrito persistente — opción B del brief. Una clínica = un carrito.
+/// moduleIds es array de Module.id; el cliente decide billingCycle al
+/// hacer checkout (no se persiste aquí).
+model Cart {
+  clinicId  String   @id @map("clinic_id")
+  moduleIds String[] @map("module_ids")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@map("carts")
 }
