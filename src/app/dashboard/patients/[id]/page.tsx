@@ -10,7 +10,7 @@ import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { isPediatric, calculateAge } from "@/lib/pediatrics/age";
 import { classifyDentition } from "@/lib/pediatrics/dentition";
-import { PEDIATRICS_MODULE_KEY } from "@/lib/pediatrics/permissions";
+import { PEDIATRICS_MODULE_KEY, DEFAULT_PEDIATRICS_CUTOFF_YEARS } from "@/lib/pediatrics/permissions";
 import type { PediatricsTabData } from "@/components/patient-detail/pediatrics/PediatricsTab";
 
 export default async function PatientDetailPage({ params }: { params: { id: string } }) {
@@ -59,7 +59,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   // Visible cuando: módulo PEDIATRICS activo en la clínica + categoría
   // DENTAL_CLINIC|MEDICINE + paciente con DOB + paciente <14 años.
   const pediatricsEligible =
-    isPediatric(patient.dob, 14) &&
+    isPediatric(patient.dob, DEFAULT_PEDIATRICS_CUTOFF_YEARS) &&
     (user.clinic.category === "DENTAL" || user.clinic.category === "MEDICINE");
 
   let pediatricsData: PediatricsTabData | null = null;

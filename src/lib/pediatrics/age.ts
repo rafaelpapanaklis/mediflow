@@ -45,7 +45,14 @@ export function calculateAge(dateOfBirth: Date, refDate: Date = new Date()): Age
   };
 }
 
-export function isPediatric(dateOfBirth: Date | null, cutoffYears: number = 14): boolean {
+/**
+ * Predicado puro: paciente cuenta como pediátrico si tiene DOB y la
+ * edad decimal es menor al cutoff. El default 18 alinea con LGDNNA y
+ * con la obligación de consentimiento parental bajo LFPDPPP. Override
+ * via `cutoffYears` si la clínica lo configura distinto en
+ * `PediatricRecord.cutoffOverrideYears`.
+ */
+export function isPediatric(dateOfBirth: Date | null, cutoffYears: number = 18): boolean {
   if (!dateOfBirth) return false;
   const { decimal } = calculateAge(dateOfBirth);
   return decimal < cutoffYears;

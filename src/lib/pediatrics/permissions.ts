@@ -8,7 +8,16 @@ import { isPediatric } from "./age";
  * AQUÍ propagaría a canAccessModule, gating de UI y server actions.
  */
 export const PEDIATRICS_MODULE_KEY = "pediatric-dentistry";
-export const DEFAULT_PEDIATRICS_CUTOFF_YEARS = 14;
+
+/**
+ * Cutoff de edad para considerar a un paciente como pediátrico. Se usa
+ * en gating de UI (tab "Pediatría") y en validación del wizard de
+ * onboarding. Incluye adolescentes hasta mayoría de edad legal mexicana
+ * (LGDNNA art. 5 — Ley General de los Derechos de Niñas, Niños y
+ * Adolescentes), porque el consentimiento parental sigue siendo
+ * obligatorio bajo LFPDPPP hasta los 18.
+ */
+export const DEFAULT_PEDIATRICS_CUTOFF_YEARS = 18;
 
 export type PediatricsContext = {
   clinicCategory: string;

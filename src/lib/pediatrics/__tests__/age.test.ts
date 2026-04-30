@@ -45,26 +45,41 @@ describe("calculateAge", () => {
 });
 
 describe("isPediatric", () => {
-  it("Mateo (4a 7m) es pediátrico con cutoff default 14", () => {
-    assert.equal(isPediatric(new Date("2021-09-18"), 14), true);
+  it("Mateo (4a 7m) es pediátrico con default 18 (LGDNNA)", () => {
+    assert.equal(isPediatric(new Date("2021-09-18")), true);
   });
 
-  it("Diego (12a 11m) sigue siendo pediátrico con cutoff 14", () => {
+  it("Diego (12a 11m) sigue siendo pediátrico con default 18", () => {
     const dob = new Date("2013-05-30");
-    assert.equal(isPediatric(dob, 14), true);
+    assert.equal(isPediatric(dob), true);
   });
 
-  it("paciente de 14a 1m NO es pediátrico con cutoff 14", () => {
-    const dob = new Date("2012-03-30");
-    assert.equal(isPediatric(dob, 14), false);
+  it("adolescente de 16a 0m es pediátrico con default 18 (LFPDPPP requiere tutor)", () => {
+    const dob = new Date("2010-04-30");
+    assert.equal(isPediatric(dob), true);
+  });
+
+  it("adolescente de 17a 11m sigue siendo pediátrico con default 18", () => {
+    const dob = new Date("2008-05-15");
+    assert.equal(isPediatric(dob), true);
+  });
+
+  it("mayor de 18a 1m NO es pediátrico con default 18", () => {
+    const dob = new Date("2008-03-30");
+    assert.equal(isPediatric(dob), false);
   });
 
   it("dob null nunca es pediátrico", () => {
-    assert.equal(isPediatric(null, 14), false);
+    assert.equal(isPediatric(null), false);
   });
 
-  it("respeta cutoff override de 16", () => {
-    const dob = new Date("2011-04-30");
-    assert.equal(isPediatric(dob, 16), true);
+  it("respeta cutoff override de 14 (clínica con política más estricta)", () => {
+    const dob = new Date("2010-04-30");
+    assert.equal(isPediatric(dob, 14), false);
+  });
+
+  it("respeta cutoff override de 21 (uso adolescente extendido)", () => {
+    const dob = new Date("2007-04-30");
+    assert.equal(isPediatric(dob, 21), true);
   });
 });
