@@ -2002,11 +2002,68 @@
 .ped-habits-timeline__label-name   { font-weight: 600; }
 .ped-habits-timeline__label-status { font-size: 10px; color: var(--text-2); text-transform: capitalize; }
 
+/* Odontograma --------------------------------------------------- */
+.ped-odontogram {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  padding: 18px;
+}
+.ped-odontogram__toolbar {
+  display: inline-flex;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 2px;
+  margin-bottom: 18px;
+  gap: 2px;
+}
+.ped-odontogram__tab {
+  border: none;
+  background: transparent;
+  padding: 6px 14px;
+  font-size: 12px; font-weight: 600;
+  color: var(--text-2);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 150ms ease-out, color 150ms ease-out;
+}
+.ped-odontogram__tab.is-active { background: var(--brand); color: #fff; }
+.ped-odontogram__tab:not(.is-active):hover { background: var(--bg-elev-2); color: var(--text-1); }
+.ped-odontogram__tab:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+.ped-odontogram__quadrants { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.ped-odontogram__row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; justify-content: center; }
+.ped-odontogram__separator {
+  width: 100%; max-width: 480px;
+  height: 1px;
+  background: var(--border-soft);
+}
+.ped-odontogram__midline {
+  width: 1px;
+  height: 32px;
+  background: var(--brand);
+  opacity: 0.5;
+  margin: 0 6px;
+}
+.ped-odontogram__hint { margin-top: 12px; font-size: 11px; color: var(--text-2); text-align: center; }
+
+.ped-tooth {
+  display: inline-grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: transform 150ms ease-out, box-shadow 150ms ease-out;
+}
+.ped-tooth:hover { transform: scale(1.08); filter: drop-shadow(0 0 12px var(--brand)); }
+.ped-tooth:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 8px; }
+
 /* Animaciones reducidas */
 @media (prefers-reduced-motion: reduce) {
   .drawer, .drawer-overlay,
   .cambra-chip--extremo, .eruption-needle, .tooth--saved,
-  .drawer__spinner {
+  .drawer__spinner, .ped-tooth {
     animation: none !important;
     transition: none !important;
   }
