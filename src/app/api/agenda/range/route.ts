@@ -6,7 +6,8 @@ import {
   fetchResources,
   fetchWaitlistCount,
 } from "@/lib/agenda/server";
-import { isValidDateISO, tzLocalToUtc } from "@/lib/agenda/time-utils";
+import { isValidDateISO } from "@/lib/agenda/time-utils";
+import { calendarRangeUtc } from "@/lib/agenda/date-ranges";
 import type { AppointmentStatus } from "@/lib/agenda/types";
 
 export const dynamic = "force-dynamic";
@@ -47,12 +48,13 @@ export async function GET(req: Request) {
   }
 
   const tz = session.clinic.timezone;
-  const fromUtc = tzLocalToUtc(fromISO, session.clinic.agendaDayStart, 0, tz);
-  // toISO es exclusivo: avanzamos un día y usamos dayStart=0
-  const [ty, tm, td] = toISO.split("-").map((n) => parseInt(n, 10));
-  const nextISO = new Date(Date.UTC(ty, tm - 1, td + 1));
-  const nextISOStr = `${nextISO.getUTCFullYear()}-${String(nextISO.getUTCMonth() + 1).padStart(2, "0")}-${String(nextISO.getUTCDate()).padStart(2, "0")}`;
-  const toUtc = tzLocalToUtc(nextISOStr, session.clinic.agendaDayStart, 0, tz);
+  // Usamos el helper centralizado de día calendario en tz: el rango es
+  // `[fromISO 00:00 tz, toISO+1 00:00 tz)`. Esto garantiza que una cita
+  // a las 23:59 hora local pertenezca al día calendario local
+  // correspondiente, no al día UTC. Idéntica semántica a la SSR de
+  // /dashboard/agenda y al provider del cliente — sin esto los
+  // contadores y el render se desincronizan.
+  const { fromUtc, toUtc } = calendarRangeUtc(fromISO, toISO, tz);
 
   const doctorIdScope =
     session.user.role === "DOCTOR" ? session.user.id : undefined;

@@ -498,9 +498,39 @@ function computeColumns(
   }
 
   if (state.columnMode === "doctor") {
-    return state.doctors
-      .filter((d) => d.activeInAgenda)
-      .map((d) => {
+    // Columnas para doctores explícitamente activos en agenda.
+    const activeDoctors = state.doctors.filter((d) => d.activeInAgenda);
+    const renderedIds = new Set(activeDoctors.map((d) => d.id));
+
+    // Doctores con citas hoy pero que NO están marcados como activos en
+    // agenda (o que no aparecen en state.doctors). Sin esta unión, una
+    // cita queda silenciosamente oculta cuando el doctor fue desactivado
+    // pero todavía tiene citas — es la causa raíz observada de la
+    // vista Día vacía aunque el contador muestre N citas.
+    const orphanIds = new Set<string>();
+    for (const a of state.appointments) {
+      const id = a.doctor?.id;
+      if (id && !renderedIds.has(id)) orphanIds.add(id);
+    }
+
+    const orphanDoctors = Array.from(orphanIds).map((id) => {
+      const known = state.doctors.find((d) => d.id === id);
+      if (known) return known;
+      // El doctor no está en state.doctors (ej. role != DOCTOR o
+      // isActive=false). Construimos un descriptor mínimo a partir del
+      // shortName que viene en la cita.
+      const fromAppt = state.appointments.find((a) => a.doctor?.id === id)?.doctor;
+      return {
+        id,
+        displayName: fromAppt?.shortName ?? "Profesional",
+        shortName: fromAppt?.shortName ?? "Profesional",
+        color: null,
+        avatarUrl: null,
+        activeInAgenda: false,
+      };
+    });
+
+    return [...activeDoctors, ...orphanDoctors].map((d) => {
       const apptsHere = state.appointments.filter((a) => a.doctor?.id === d.id);
       return {
         key: `doctor:${d.id}`,

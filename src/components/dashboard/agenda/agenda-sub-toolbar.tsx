@@ -1,6 +1,8 @@
 "use client";
 
+import { useMemo } from "react";
 import { useAgenda } from "./agenda-provider";
+import { calendarDayISO } from "@/lib/agenda/date-ranges";
 import type { AgendaColumnMode } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
 
@@ -12,11 +14,25 @@ const COLUMN_MODE_OPTIONS: Array<{ value: AgendaColumnMode; label: string }> = [
 export function AgendaSubToolbar() {
   const { state, setColumnMode, togglePendingPanel } = useAgenda();
 
-  const visibleAppts = state.appointments.filter(
+  const isDayView = state.viewMode === "day";
+
+  // Para vista Día el contador debe reflejar SOLO las citas del día
+  // calendario en tz (lo que efectivamente se renderiza en la columna).
+  // Para semana/mes/lista contamos todas las del rango cargado. Antes
+  // las tres vistas usaban state.appointments.length sobre rangos
+  // distintos y los contadores no encajaban entre sí (Bug B).
+  const scopedAppts = useMemo(() => {
+    if (!isDayView) return state.appointments;
+    return state.appointments.filter(
+      (a) => calendarDayISO(a.startsAt, state.timezone) === state.dayISO,
+    );
+  }, [isDayView, state.appointments, state.dayISO, state.timezone]);
+
+  const visibleAppts = scopedAppts.filter(
     (a) => a.status !== "CANCELLED" && a.status !== "NO_SHOW",
   ).length;
-  const inSala = state.appointments.filter((a) => a.status === "CHECKED_IN").length;
-  const pendingFromState = state.appointments.filter(
+  const inSala = scopedAppts.filter((a) => a.status === "CHECKED_IN").length;
+  const pendingFromState = scopedAppts.filter(
     (a) => a.requiresValidation && a.status === "SCHEDULED",
   ).length;
   const pendingCount = Math.max(state.pendingValidation.length, pendingFromState);
@@ -25,7 +41,6 @@ export function AgendaSubToolbar() {
   const hasResources = state.resources.length > 0;
   const hasDoctors = state.doctors.some((d) => d.activeInAgenda);
 
-  const isDayView = state.viewMode === "day";
   const isWeekView = state.viewMode === "week";
   const isMonthView = state.viewMode === "month";
 

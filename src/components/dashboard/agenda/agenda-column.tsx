@@ -5,7 +5,8 @@ import { useDroppable } from "@dnd-kit/core";
 import { useAgenda } from "./agenda-provider";
 import { AgendaAppointmentCard } from "./agenda-appointment-card";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
-import { slotIndexToUtc } from "@/lib/agenda/time-utils";
+import { getTzParts, slotIndexToUtc } from "@/lib/agenda/time-utils";
+import { calendarDayISO } from "@/lib/agenda/date-ranges";
 import type { DroppableData } from "@/lib/agenda/drag-utils";
 import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 import {
@@ -57,15 +58,43 @@ export function AgendaColumn({ column }: { column: AgendaColumnDescriptor }) {
   );
 
   const appointmentsHere = useMemo(() => {
-    if (column.type === "unified") return state.appointments;
+    // En la vista Día solo mostramos las citas cuyo día calendario en
+    // tz coincide con state.dayISO. El rango fetch ya está acotado, pero
+    // aplicamos el filtro defensivamente para que cualquier residuo
+    // entre transiciones (ej. cache stale al cambiar de día) no
+    // contamine la columna.
+    const sameDay = state.appointments.filter(
+      (a) => calendarDayISO(a.startsAt, state.timezone) === state.dayISO,
+    );
+    if (column.type === "unified") return sameDay;
     if (column.type === "doctor") {
-      return state.appointments.filter((a) => a.doctor?.id === column.doctorId);
+      return sameDay.filter((a) => a.doctor?.id === column.doctorId);
     }
-    return state.appointments.filter((a) => a.resourceId === column.resourceId);
-  }, [state.appointments, column]);
+    return sameDay.filter((a) => a.resourceId === column.resourceId);
+  }, [state.appointments, state.dayISO, state.timezone, column]);
 
-  const slotsTotal =
+  // Slots base = horario de trabajo configurado. Si hay citas fuera de
+  // horario (ej. emergencia a las 23:55), extendemos el alto para que
+  // queden visibles en lugar de quedar clipped fuera del DOM.
+  const baseSlotsTotal =
     ((state.dayEnd - state.dayStart) * 60) / state.slotMinutes;
+  const slotsTotal = useMemo(() => {
+    let maxSlot = baseSlotsTotal;
+    for (const a of appointmentsHere) {
+      const endIso = a.endsAt ?? a.startsAt;
+      const endParts = getTzParts(new Date(endIso), state.timezone);
+      // Solo consideramos cita que termina en el mismo día calendario;
+      // si cruza medianoche (raro), tomamos el final del día visible.
+      const endsToday =
+        calendarDayISO(endIso, state.timezone) === state.dayISO;
+      const endSlot = endsToday
+        ? ((endParts.hour - state.dayStart) * 60 + endParts.minute) /
+          state.slotMinutes
+        : (24 - state.dayStart) * 60 / state.slotMinutes;
+      if (endSlot > maxSlot) maxSlot = Math.ceil(endSlot);
+    }
+    return maxSlot;
+  }, [appointmentsHere, baseSlotsTotal, state.dayISO, state.dayStart, state.slotMinutes, state.timezone]);
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {

@@ -76,6 +76,17 @@ export function slotsPerDay(config: ClinicTimeConfig): number {
   return Math.max(0, (hours * 60) / config.slotMinutes) | 0;
 }
 
+/**
+ * Devuelve el slot al que pertenece un timestamp dentro de `dateISO`.
+ * Devuelve `-1` SOLO cuando el timestamp pertenece a un **día calendario
+ * distinto** en `config.timezone`. Citas en el mismo día calendario pero
+ * fuera del horario de trabajo (`[dayStart, dayEnd)`) devuelven slots
+ * negativos (antes del horario) o superiores al rango (después). El
+ * consumidor decide cómo posicionarlas (clamp visual o extender la
+ * columna). Antes esta función filtraba duro estos casos y la cita
+ * desaparecía del DOM aunque se contara en el contador — bug histórico
+ * de la vista Día.
+ */
 export function timeToSlotIndex(
   iso: string,
   dateISO: string,
@@ -85,8 +96,6 @@ export function timeToSlotIndex(
   const [y, m, dy] = dateISO.split("-").map((n) => parseInt(n, 10));
   if (parts.year !== y || parts.month !== m || parts.day !== dy) return -1;
   const minutesFromStart = (parts.hour - config.dayStart) * 60 + parts.minute;
-  if (minutesFromStart < 0) return -1;
-  if (parts.hour >= config.dayEnd) return -1;
   return Math.floor(minutesFromStart / config.slotMinutes);
 }
 

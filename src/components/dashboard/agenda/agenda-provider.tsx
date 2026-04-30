@@ -22,6 +22,7 @@ import {
   persistViewMode,
   type AgendaAction,
 } from "@/lib/agenda/store";
+import { viewRangeISO } from "@/lib/agenda/date-ranges";
 import type {
   AgendaAppointmentDTO,
   AgendaColumnMode,
@@ -31,42 +32,6 @@ import type {
   AgendaStoreState,
   AgendaViewMode,
 } from "@/lib/agenda/types";
-
-function pad(n: number): string {
-  return n.toString().padStart(2, "0");
-}
-
-function fmtISO(d: Date): string {
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
-}
-
-/**
- * Calcula el rango (from, to) que cada vista necesita cargar.
- * Day → un solo día. Week → lunes a domingo. Month → grid de 42 celdas
- * (incluye colas de meses vecinos). List → mes calendario completo.
- */
-function rangeForView(dayISO: string, viewMode: AgendaViewMode): { from: string; to: string } {
-  const [y, m, d] = dayISO.split("-").map((n) => parseInt(n, 10));
-  if (viewMode === "day") return { from: dayISO, to: dayISO };
-  if (viewMode === "week") {
-    const ref = new Date(Date.UTC(y, m - 1, d));
-    const dow = (ref.getUTCDay() + 6) % 7;
-    const monday = new Date(Date.UTC(y, m - 1, d - dow));
-    const sunday = new Date(monday.getTime() + 6 * 86_400_000);
-    return { from: fmtISO(monday), to: fmtISO(sunday) };
-  }
-  if (viewMode === "month") {
-    const first = new Date(Date.UTC(y, m - 1, 1));
-    const dow = (first.getUTCDay() + 6) % 7;
-    const start = new Date(Date.UTC(y, m - 1, 1 - dow));
-    const end = new Date(start.getTime() + 41 * 86_400_000);
-    return { from: fmtISO(start), to: fmtISO(end) };
-  }
-  // list → mes calendario que contiene dayISO.
-  const first = new Date(Date.UTC(y, m - 1, 1));
-  const last = new Date(Date.UTC(y, m, 0));
-  return { from: fmtISO(first), to: fmtISO(last) };
-}
 
 interface AgendaContextValue {
   state: AgendaStoreState;
@@ -156,7 +121,10 @@ export function AgendaProvider({
     filters: AgendaFilters,
     options: { signal?: AbortSignal; backgroundOnly?: boolean } = {},
   ): Promise<void> => {
-    const range = rangeForView(dayISO, viewMode);
+    // Único helper de rangos — comparte semántica con SSR y
+    // /api/agenda/range. Si dos componentes calculan el rango distinto,
+    // los contadores y el render se desincronizan.
+    const range = viewRangeISO(viewMode, dayISO, state.timezone);
     const dKey = filters.doctorIds.join(",");
     const rKey = filters.resourceIds.join(",");
     const sKey = filters.statuses.join(",");
@@ -194,7 +162,7 @@ export function AgendaProvider({
       // Background fetch silent; foreground deja state.appointments con
       // lo que sea (stale o vacío) — no blank.
     }
-  }, []);
+  }, [state.timezone]);
 
   useEffect(() => {
     // Skip primer mount cuando los datos del SSR ya cubren la vista actual
@@ -211,7 +179,7 @@ export function AgendaProvider({
       state.filters.statuses.length === 0
     ) {
       initialFetchSkipped.current = true;
-      const range = rangeForView(initialDayISO, "day");
+      const range = viewRangeISO("day", initialDayISO, state.timezone);
       const key = `${range.from}|${range.to}|||`;
       cacheRef.current.set(key, { data: initialPayload.appointments, ts: Date.now() });
       return;
