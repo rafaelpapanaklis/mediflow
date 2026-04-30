@@ -1,5 +1,7 @@
 // Pediatrics — barrel export para server actions. Spec: §4.A.9
 
+export { isFailure, type ActionResult, type Success, type Failure } from "./result";
+
 export {
   createPediatricRecord,
   updatePediatricRecord,

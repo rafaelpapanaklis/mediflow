@@ -2148,6 +2148,168 @@
 .pedi-consent-pending-card__list { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 6px; }
 .pedi-consent-pending-card__list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text-1); }
 
+/* Forms del módulo --------------------------------------------- */
+.pedi-form { display: flex; flex-direction: column; gap: 16px; }
+.pedi-form__field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-2); }
+.pedi-form__field span { font-weight: 500; }
+.pedi-form__field input,
+.pedi-form__field select,
+.pedi-form__field textarea {
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-1);
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  transition: border-color 150ms ease-out;
+}
+.pedi-form__field input:focus,
+.pedi-form__field select:focus,
+.pedi-form__field textarea:focus {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+  border-color: var(--brand);
+}
+.pedi-form__hint { font-size: 11px; color: var(--text-2); margin: 4px 0 0; }
+.pedi-form__hint--err { color: var(--danger); }
+
+.pedi-form__fieldset { border: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.pedi-form__fieldset legend {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-2); padding: 0; margin-bottom: 4px;
+}
+
+.pedi-form__pillgroup { display: flex; gap: 6px; flex-wrap: wrap; }
+.pedi-form__pillgroup--wrap { gap: 6px; }
+.pedi-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-1);
+  font-size: 12px; font-weight: 500;
+  cursor: pointer;
+  transition: background-color 150ms ease-out, border-color 150ms ease-out;
+}
+.pedi-pill:hover { background: var(--bg-elev-2); }
+.pedi-pill.is-active { background: var(--brand); color: #fff; border-color: var(--brand); }
+.pedi-pill:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+.pedi-form__franklgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.pedi-frankl-option {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 12px;
+  border: 2px solid var(--border-soft);
+  background: var(--bg-elev);
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 150ms ease-out, background-color 150ms ease-out;
+}
+.pedi-frankl-option__digit {
+  font-family: var(--font-jetbrains-mono, ui-monospace, monospace);
+  font-size: 22px; font-weight: 700;
+  color: var(--text-1);
+}
+.pedi-frankl-option__label { font-size: 12px; font-weight: 600; color: var(--text-1); }
+.pedi-frankl-option__hint  { font-size: 10px; color: var(--text-2); }
+.pedi-frankl-option:hover  { border-color: var(--border-strong); }
+.pedi-frankl-option.is-active.pedi-frankl-option--1 { border-color: var(--danger);  background: var(--danger-soft); }
+.pedi-frankl-option.is-active.pedi-frankl-option--2 { border-color: var(--warning); background: var(--warning-soft); }
+.pedi-frankl-option.is-active.pedi-frankl-option--3 { border-color: var(--info);    background: var(--info-soft); }
+.pedi-frankl-option.is-active.pedi-frankl-option--4 { border-color: var(--success); background: var(--success-soft); }
+.pedi-frankl-option:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+.pedi-form__venhamlist { display: flex; flex-direction: column; gap: 6px; }
+.pedi-form__venhamlist .pedi-pill { width: 100%; justify-content: flex-start; }
+.pedi-form__monodigit {
+  font-family: var(--font-jetbrains-mono, ui-monospace, monospace);
+  width: 18px; display: inline-block; text-align: center;
+  background: var(--bg-elev-2);
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+.pedi-pill.is-active .pedi-form__monodigit { background: rgba(255, 255, 255, 0.2); color: #fff; }
+
+.pedi-checkbox {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  background: var(--bg-elev);
+  transition: background-color 150ms ease-out, border-color 150ms ease-out;
+}
+.pedi-checkbox:hover { background: var(--bg-elev-2); }
+.pedi-checkbox.is-checked { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
+.pedi-checkbox input[type="checkbox"] { accent-color: var(--brand); }
+.pedi-form__checklist { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+@media (max-width: 480px) {
+  .pedi-form__checklist { grid-template-columns: 1fr; }
+}
+.pedi-form__row-checks { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.pedi-form__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 480px) { .pedi-form__grid { grid-template-columns: 1fr; } }
+
+.pedi-form__section {
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--bg-elev);
+}
+.pedi-form__section summary {
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  color: var(--text-1);
+  margin-bottom: 8px;
+  list-style: none;
+}
+.pedi-form__section summary::-webkit-details-marker { display: none; }
+.pedi-form__section summary::before { content: "▸ "; color: var(--text-2); }
+.pedi-form__section[open] summary::before { content: "▾ "; }
+
+.pedi-form__teethgrid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+}
+@media (max-width: 600px) {
+  .pedi-form__teethgrid { grid-template-columns: repeat(5, 1fr); }
+}
+.pedi-tooth-toggle {
+  height: 32px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-2);
+  font-family: var(--font-jetbrains-mono, ui-monospace, monospace);
+  font-size: 11px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 150ms ease-out, color 150ms ease-out;
+}
+.pedi-tooth-toggle:hover { background: var(--bg-elev-2); }
+.pedi-tooth-toggle.is-active { background: var(--brand); color: #fff; border-color: var(--brand); }
+.pedi-tooth-toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+.pedi-cambra-preview {
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--bg-elev-2);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--text-1);
+}
+.pedi-cambra-preview p { margin: 6px 0; }
+.pedi-cambra-preview__rationale { color: var(--text-2); font-size: 11px; }
+.pedi-cambra-back { margin-top: 8px; align-self: flex-start; }
+
+.pedi-tooth-drawer__tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+
 /* Animaciones reducidas */
 @media (prefers-reduced-motion: reduce) {
   .drawer, .drawer-overlay,

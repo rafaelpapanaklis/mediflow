@@ -4,21 +4,8 @@ import { prisma } from "@/lib/prisma";
 import type { AuthContext } from "@/lib/auth-context";
 import { canSeePediatrics } from "@/lib/pediatrics/permissions";
 
-export type Failure = { ok: false; error: string };
-export type Success<T> = { ok: true; data: T };
-export type ActionResult<T = unknown> = Success<T> | Failure;
-
-export function ok<T>(data: T): Success<T> {
-  return { ok: true, data };
-}
-
-export function fail(error: string): Failure {
-  return { ok: false, error };
-}
-
-export function isFailure<T>(r: ActionResult<T>): r is Failure {
-  return r.ok === false;
-}
+export { ok, fail, isFailure, type ActionResult, type Success, type Failure } from "./result";
+import { ok, fail, type ActionResult } from "./result";
 
 export type LoadedPatient = {
   id: string;
