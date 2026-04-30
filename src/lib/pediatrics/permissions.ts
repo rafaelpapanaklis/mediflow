@@ -2,7 +2,12 @@
 
 import { isPediatric } from "./age";
 
-export const PEDIATRICS_MODULE_KEY = "PEDIATRICS";
+/**
+ * Key registrada en `modules.key` de marketplace para el módulo de
+ * odontopediatría. Coincide con prisma/seed.ts (SEED_MODULES). Cambiar
+ * AQUÍ propagaría a canAccessModule, gating de UI y server actions.
+ */
+export const PEDIATRICS_MODULE_KEY = "pediatric-dentistry";
 export const DEFAULT_PEDIATRICS_CUTOFF_YEARS = 14;
 
 export type PediatricsContext = {

@@ -10,6 +10,7 @@ import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { isPediatric, calculateAge } from "@/lib/pediatrics/age";
 import { classifyDentition } from "@/lib/pediatrics/dentition";
+import { PEDIATRICS_MODULE_KEY } from "@/lib/pediatrics/permissions";
 import type { PediatricsTabData } from "@/components/patient-detail/pediatrics/PediatricsTab";
 
 export default async function PatientDetailPage({ params }: { params: { id: string } }) {
@@ -63,7 +64,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
 
   let pediatricsData: PediatricsTabData | null = null;
   if (pediatricsEligible) {
-    const access = await canAccessModule(user.clinicId, "PEDIATRICS");
+    const access = await canAccessModule(user.clinicId, PEDIATRICS_MODULE_KEY);
     if (access.hasAccess) {
       const dob = patient.dob!;
       const age = calculateAge(dob);

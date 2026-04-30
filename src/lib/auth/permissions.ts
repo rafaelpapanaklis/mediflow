@@ -240,3 +240,19 @@ export function sanitizePermissionKeys(input: unknown): PermissionKey[] {
   }
   return Array.from(seen);
 }
+
+// ════════════════════════════════════════════════════════════════════
+// Marketplace modules — extensión pediatría (spec §4.B.4)
+//
+// Los módulos del marketplace viven en DB (tabla modules + clinic_modules).
+// Aquí re-exportamos las helpers puras del módulo pediátrico para que el
+// resto del producto pueda gating-ear sin tocar `lib/pediatrics/*`.
+// ════════════════════════════════════════════════════════════════════
+
+export {
+  canSeePediatrics,
+  hasPediatricsModule,
+  PEDIATRICS_MODULE_KEY,
+  DEFAULT_PEDIATRICS_CUTOFF_YEARS,
+  type PediatricsContext,
+} from "@/lib/pediatrics/permissions";

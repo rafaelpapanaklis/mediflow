@@ -1,11 +1,15 @@
-// Pediatrics — helpers internos para server actions (auth + audit). Spec: §4.A.9
+// Pediatrics — helpers internos para server actions (auth + audit). Spec: §4.A.9, §4.B.4
 
 import { prisma } from "@/lib/prisma";
 import type { AuthContext } from "@/lib/auth-context";
-import { canSeePediatrics } from "@/lib/pediatrics/permissions";
+import { canAccessModule } from "@/lib/marketplace/access-control";
+import { isPediatric } from "@/lib/pediatrics/age";
+import { DEFAULT_PEDIATRICS_CUTOFF_YEARS, PEDIATRICS_MODULE_KEY } from "@/lib/pediatrics/permissions";
 
 export { ok, fail, isFailure, type ActionResult, type Success, type Failure } from "./result";
 import { ok, fail, type ActionResult } from "./result";
+
+const ELIGIBLE_CATEGORIES = new Set(["DENTAL", "MEDICINE"]);
 
 export type LoadedPatient = {
   id: string;
@@ -17,6 +21,10 @@ export type LoadedPatient = {
  * Verifica que el paciente exista, pertenezca al clinicId activo, esté
  * activo y elegible para el módulo Pediatría (categoría + módulo + edad).
  * Devuelve `{ ok: false, error }` con string si falla cualquier predicado.
+ *
+ * El gate de módulo se evalúa contra ClinicModule via canAccessModule —
+ * cubre trial, status active y currentPeriodEnd. La categoría se valida
+ * contra DENTAL|MEDICINE. El cutoff de edad se respeta vía isPediatric.
  */
 export async function loadPatientForPediatrics(args: {
   ctx: AuthContext;
@@ -34,21 +42,17 @@ export async function loadPatientForPediatrics(args: {
   if (!patient || patient.deletedAt) return fail("Paciente no encontrado");
   if (patient.clinicId !== args.ctx.clinicId) return fail("Sin acceso a este paciente");
 
-  const eligible = canSeePediatrics({
-    clinicCategory: args.ctx.clinicCategory,
-    clinicModules: getClinicModulesFromCtx(args.ctx),
-    patientDob: patient.dob,
-  });
-  if (!eligible) return fail("Módulo Pediatría no disponible");
+  if (!ELIGIBLE_CATEGORIES.has(args.ctx.clinicCategory)) {
+    return fail("Categoría de clínica no soportada por el módulo");
+  }
+  if (!isPediatric(patient.dob, DEFAULT_PEDIATRICS_CUTOFF_YEARS)) {
+    return fail("El paciente excede el rango de edad pediátrico");
+  }
+
+  const access = await canAccessModule(args.ctx.clinicId, PEDIATRICS_MODULE_KEY);
+  if (!access.hasAccess) return fail("Módulo Pediatría no activo para esta clínica");
 
   return ok({ id: patient.id, clinicId: patient.clinicId, dob: patient.dob });
-}
-
-function getClinicModulesFromCtx(ctx: AuthContext): string[] {
-  const clinicAny = (ctx.clinic ?? {}) as { modules?: unknown };
-  const raw = clinicAny.modules;
-  if (Array.isArray(raw)) return raw.filter((x): x is string => typeof x === "string");
-  return [];
 }
 
 /**
