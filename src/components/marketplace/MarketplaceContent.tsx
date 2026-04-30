@@ -6,6 +6,12 @@
  *   - filtro por categoría y búsqueda
  *   - cómputo del estado por módulo (purchased/trial/available/locked)
  *   - rollback con react-hot-toast en error
+ *
+ * Polish dark-mode (post-Sprint 2):
+ *   - Migrado a CSS vars (--text-1, --text-2, --text-3, --bg-elev, ...).
+ *   - Tabs con ARIA roles (tablist + tab + aria-selected) para SR.
+ *   - Search input con label sr-only.
+ *   - Focus rings consistentes con --brand color.
  */
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -99,9 +105,10 @@ export function MarketplaceContent({
         } else if (res.moduleIds) {
           setCart(res.moduleIds);
         }
-      } catch {
+      } catch (err) {
         setCart((prev) => prev.filter((id) => id !== moduleId));
-        toast.error("Error de conexión al agregar al carrito");
+        toast.error("No se pudo agregar al carrito");
+        console.error("[marketplace.add]", err);
       } finally {
         markPending(moduleId, false);
       }
@@ -116,14 +123,15 @@ export function MarketplaceContent({
       try {
         const res = await removeFromCart(moduleId);
         if (!res.ok) {
-          setCart((prev) => (prev.includes(moduleId) ? prev : [...prev, moduleId])); // rollback
+          setCart((prev) => [...prev, moduleId]); // rollback
           toast.error(res.error ?? "No se pudo quitar del carrito");
         } else if (res.moduleIds) {
           setCart(res.moduleIds);
         }
-      } catch {
-        setCart((prev) => (prev.includes(moduleId) ? prev : [...prev, moduleId]));
-        toast.error("Error de conexión al actualizar el carrito");
+      } catch (err) {
+        setCart((prev) => [...prev, moduleId]);
+        toast.error("No se pudo quitar del carrito");
+        console.error("[marketplace.remove]", err);
       } finally {
         markPending(moduleId, false);
       }
@@ -133,10 +141,10 @@ export function MarketplaceContent({
   return (
     <div className="px-2 sm:px-4 lg:px-6 max-w-[1400px]">
       <header className="mb-6">
-        <h1 className="text-[28px] font-semibold text-slate-900 tracking-tight leading-tight">
+        <h1 className="text-[28px] font-semibold text-[var(--text-1)] tracking-tight leading-tight">
           Marketplace de módulos
         </h1>
-        <p className="text-slate-500 mt-1 text-[15px]">
+        <p className="text-[var(--text-2)] mt-1 text-[15px]">
           {trialStatus?.isExpired
             ? "Tu prueba terminó. Activa los módulos que necesitas para continuar."
             : trialStatus
@@ -148,16 +156,22 @@ export function MarketplaceContent({
       <DiscountTiersBar cartCount={cart.length} />
 
       <div className="mb-5 flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-1 bg-slate-100/70 p-1 rounded-lg overflow-x-auto">
+        <div
+          role="tablist"
+          aria-label="Filtrar módulos por categoría"
+          className="flex items-center gap-1 bg-[var(--bg-hover)] p-1 rounded-lg overflow-x-auto"
+        >
           {TABS.map((t) => (
             <button
               key={t}
               type="button"
+              role="tab"
+              aria-selected={activeTab === t}
               onClick={() => setActiveTab(t)}
-              className={`px-3.5 py-1.5 text-sm rounded-md whitespace-nowrap transition-all ${
+              className={`px-3.5 py-1.5 text-sm rounded-md whitespace-nowrap transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${
                 activeTab === t
-                  ? "bg-white text-slate-900 font-medium shadow-sm"
-                  : "text-slate-600 hover:text-slate-900"
+                  ? "bg-[var(--bg-elev)] text-[var(--text-1)] font-medium shadow-sm"
+                  : "text-[var(--text-2)] hover:text-[var(--text-1)]"
               }`}
             >
               {t}
@@ -165,13 +179,17 @@ export function MarketplaceContent({
           ))}
         </div>
         <div className="relative flex-shrink-0">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden />
+          <Search className="w-4 h-4 text-[var(--text-3)] absolute left-3 top-1/2 -translate-y-1/2" aria-hidden />
+          <label htmlFor="mp-search" className="sr-only">
+            Buscar módulo
+          </label>
           <input
+            id="mp-search"
             type="search"
             placeholder="Buscar módulo..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-md text-sm w-64 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            className="pl-9 pr-4 py-2 bg-[var(--bg-elev)] border border-[var(--border-soft)] text-[var(--text-1)] placeholder:text-[var(--text-3)] rounded-md text-sm w-64 focus:outline-none focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand-soft)]"
           />
         </div>
       </div>
@@ -192,7 +210,7 @@ export function MarketplaceContent({
           );
         })}
         {filtered.length === 0 && (
-          <div className="col-span-full text-center text-slate-500 py-16 text-sm">
+          <div className="col-span-full text-center text-[var(--text-3)] py-16 text-sm">
             No hay módulos que coincidan con la búsqueda.
           </div>
         )}

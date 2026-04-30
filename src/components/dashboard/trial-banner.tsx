@@ -3,7 +3,7 @@
  * que comunica el estado del trial y empuja al marketplace.
  *
  * Tres estados de urgencia según `daysLeft`:
- *   - morado (>7 días)  — promocional, "Prueba activa"
+ *   - morado (>7 días)   — promocional, "Prueba activa"
  *   - amarillo (4–7 días) — recordatorio, "X días restantes"
  *   - rojo (1–3 días)    — urgente, "Tu prueba termina en X días"
  *
@@ -12,6 +12,12 @@
  *
  * Server Component: lee solo props, sin estado. La pill compacta del
  * topbar (TrialPill) sigue funcionando en paralelo.
+ *
+ * Polish dark-mode (post-Sprint 2):
+ *   - Saturación reducida en dark mode (--600 → --700 en gradients).
+ *   - role="alert" en estado urgente, role="status" en warning.
+ *   - AlertTriangle pulsa con motion-safe en estado urgente.
+ *   - focus-visible rings en todos los Links.
  *
  * Props:
  *   - trialEndsAt: fecha de fin del trial (Date | null)
@@ -42,10 +48,13 @@ export function TrialBanner({ trialEndsAt, isInTrial }: TrialBannerProps) {
 
   if (isUrgent) {
     return (
-      <div className="flex-shrink-0 bg-gradient-to-r from-red-600 via-rose-600 to-red-600 text-white px-6 py-3 flex items-center justify-between gap-4 flex-wrap">
+      <div
+        role="alert"
+        className="flex-shrink-0 bg-gradient-to-r from-red-600 via-rose-600 to-red-600 dark:from-red-700 dark:via-rose-700 dark:to-red-700 text-white px-6 py-3 flex items-center justify-between gap-4 flex-wrap"
+      >
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur flex items-center justify-center flex-shrink-0">
-            <AlertTriangle className="w-4 h-4" strokeWidth={2.5} aria-hidden />
+            <AlertTriangle className="w-4 h-4 motion-safe:animate-pulse" strokeWidth={2.5} aria-hidden />
           </div>
           <div>
             <div className="text-sm font-semibold">
@@ -58,7 +67,7 @@ export function TrialBanner({ trialEndsAt, isInTrial }: TrialBannerProps) {
         </div>
         <Link
           href="/dashboard/marketplace"
-          className="bg-white text-red-700 hover:bg-red-50 font-semibold px-4 py-2 rounded-lg text-sm transition-colors flex items-center gap-1.5 flex-shrink-0"
+          className="bg-white text-red-700 hover:bg-red-50 font-semibold px-4 py-2 rounded-lg text-sm transition-colors flex items-center gap-1.5 flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-red-600"
         >
           Elegir módulos ahora
           <ArrowRight className="w-4 h-4" aria-hidden />
@@ -69,7 +78,10 @@ export function TrialBanner({ trialEndsAt, isInTrial }: TrialBannerProps) {
 
   if (isWarning) {
     return (
-      <div className="flex-shrink-0 bg-gradient-to-r from-amber-500 to-orange-500 text-white px-6 py-3 flex items-center justify-between gap-4 flex-wrap">
+      <div
+        role="status"
+        className="flex-shrink-0 bg-gradient-to-r from-amber-500 to-orange-500 dark:from-amber-600 dark:to-orange-600 text-white px-6 py-3 flex items-center justify-between gap-4 flex-wrap"
+      >
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur flex items-center justify-center flex-shrink-0">
             <Clock className="w-4 h-4" strokeWidth={2.5} aria-hidden />
@@ -80,7 +92,7 @@ export function TrialBanner({ trialEndsAt, isInTrial }: TrialBannerProps) {
         </div>
         <Link
           href="/dashboard/marketplace"
-          className="bg-white/15 backdrop-blur hover:bg-white/25 font-medium px-3 py-1.5 rounded-md text-sm transition-colors flex-shrink-0"
+          className="bg-white/15 backdrop-blur hover:bg-white/25 font-medium px-3 py-1.5 rounded-md text-sm transition-colors flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
         >
           Elegir mis módulos
         </Link>
@@ -90,7 +102,7 @@ export function TrialBanner({ trialEndsAt, isInTrial }: TrialBannerProps) {
 
   // >7 días — estado promocional (morado)
   return (
-    <div className="flex-shrink-0 bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 text-white px-6 py-3 flex items-center justify-between gap-4 flex-wrap">
+    <div className="flex-shrink-0 bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 dark:from-violet-700 dark:via-purple-700 dark:to-indigo-700 text-white px-6 py-3 flex items-center justify-between gap-4 flex-wrap">
       <div className="flex items-center gap-3">
         <div className="w-8 h-8 rounded-lg bg-white/15 backdrop-blur flex items-center justify-center flex-shrink-0">
           <PartyPopper className="w-4 h-4 text-amber-200" strokeWidth={2.5} aria-hidden />
@@ -104,7 +116,7 @@ export function TrialBanner({ trialEndsAt, isInTrial }: TrialBannerProps) {
       </div>
       <Link
         href="/dashboard/marketplace"
-        className="bg-white/15 backdrop-blur hover:bg-white/25 font-medium px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-1.5 flex-shrink-0"
+        className="bg-white/15 backdrop-blur hover:bg-white/25 font-medium px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-1.5 flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
       >
         Elegir mis módulos
         <ArrowRight className="w-3.5 h-3.5" aria-hidden />
