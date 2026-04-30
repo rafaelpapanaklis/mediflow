@@ -1944,6 +1944,64 @@
 .pedi-section__header { display: flex; align-items: center; justify-content: space-between; }
 .pedi-section__title { font-size: 16px; font-weight: 600; color: var(--text-1); margin: 0; }
 
+/* Charts del módulo (eruption, frankl, habits) ----------------- */
+.ped-eruption-chart,
+.ped-frankl-chart,
+.ped-habits-timeline {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  padding: 14px;
+}
+.ped-eruption-chart__section-toggle {
+  width: 100%;
+  height: 26px;
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 8px;
+  background: var(--bg-elev-2);
+  border: none;
+  border-radius: 6px;
+  font-size: 12px; font-weight: 600;
+  color: var(--text-1);
+  cursor: pointer;
+  transition: background-color 150ms ease-out;
+}
+.ped-eruption-chart__section-toggle:hover { background: var(--bg-hover, var(--bg-elev-2)); }
+.ped-eruption-chart__section-toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.ped-eruption-chart__counter {
+  margin-left: auto;
+  font-family: var(--font-jetbrains-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--text-2);
+}
+.ped-eruption-chart__row:hover rect { opacity: 0.85; }
+.ped-eruption-chart__legend {
+  display: flex; flex-wrap: wrap; gap: 12px;
+  margin-top: 10px; padding-top: 10px;
+  border-top: 1px solid var(--border-soft);
+  font-size: 11px; color: var(--text-2);
+}
+.ped-eruption-chart__legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.ped-eruption-chart__sw {
+  display: inline-block;
+  width: 12px; height: 12px;
+  border-radius: 3px;
+}
+
+.ped-frankl-chart--empty {
+  display: grid; place-items: center;
+  font-size: 12px; color: var(--text-2);
+}
+
+.ped-habits-timeline__label {
+  display: flex; align-items: center; gap: 8px;
+  height: 100%;
+  color: var(--text-1);
+  font-size: 12px;
+}
+.ped-habits-timeline__label-name   { font-weight: 600; }
+.ped-habits-timeline__label-status { font-size: 10px; color: var(--text-2); text-transform: capitalize; }
+
 /* Animaciones reducidas */
 @media (prefers-reduced-motion: reduce) {
   .drawer, .drawer-overlay,
