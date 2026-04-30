@@ -1,19 +1,24 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
+import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
 interface Params { params: { id: string } }
 
+function isAdminAuthed(): boolean {
+  const token = cookies().get("admin_token")?.value;
+  const secret = process.env.ADMIN_SECRET_TOKEN;
+  return !!token && !!secret && token === secret;
+}
+
 /**
  * GET /api/admin/bug-audit/runs/[id] — devuelve el detalle (incluye items).
- * Solo SUPER_ADMIN.
+ * Solo platform admin (cookie `admin_token`).
  */
 export async function GET(_req: NextRequest, { params }: Params) {
-  const user = await getCurrentUser();
-  if (user.role !== "SUPER_ADMIN") {
-    return NextResponse.json({ error: "forbidden_super_admin_only" }, { status: 403 });
+  if (!isAdminAuthed()) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const row = await prisma.bugAuditRun.findUnique({ where: { id: params.id } });

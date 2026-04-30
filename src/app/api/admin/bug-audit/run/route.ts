@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { cookies } from "next/headers";
 import { randomUUID } from "crypto";
-import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { runAllScanners } from "@/lib/bug-audit/registry";
 import { summarize } from "@/lib/bug-audit/helpers";
@@ -15,19 +15,27 @@ export const maxDuration = 180; // 3 min hard cap.
 
 const VALID_SECTIONS: ScannerSection[] = ["backend", "security", "performance", "quality", "frontend"];
 
+/** Auth idéntica al resto de /api/admin/* — cookie `admin_token` contra
+ *  `ADMIN_SECRET_TOKEN`. La capa middleware ya redirige el navegador en
+ *  /admin/*; aquí defendemos el endpoint contra llamadas directas. */
+function isAdminAuthed(): boolean {
+  const token = cookies().get("admin_token")?.value;
+  const secret = process.env.ADMIN_SECRET_TOKEN;
+  return !!token && !!secret && token === secret;
+}
+
 /**
  * POST /api/admin/bug-audit/run
  *
  * Body opcional: { sections?: ("backend"|"security"|"performance"|"quality"|"frontend")[] }
  *
- * Solo SUPER_ADMIN. Ejecuta todos los scanners (o solo los filtrados),
- * dedupe contra bug_audit_dismissed, persiste en bug_audit_runs,
- * devuelve summary + items.
+ * Solo platform admin (cookie `admin_token`). Ejecuta todos los scanners
+ * (o solo los filtrados), dedupe contra bug_audit_dismissed, persiste en
+ * bug_audit_runs y devuelve summary + items.
  */
 export async function POST(req: NextRequest) {
-  const user = await getCurrentUser();
-  if (user.role !== "SUPER_ADMIN") {
-    return NextResponse.json({ error: "forbidden_super_admin_only" }, { status: 403 });
+  if (!isAdminAuthed()) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = (await req.json().catch(() => ({}))) as {
@@ -52,14 +60,13 @@ export async function POST(req: NextRequest) {
   const durationMs = Date.now() - t0;
   const id = `run_${Date.now()}_${randomUUID().slice(0, 8)}`;
 
-  const triggeredBy =
-    `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() ||
-    user.email ||
-    user.id;
+  // El platform admin no está atado a ninguna clínica, así que clinicId
+  // y userId quedan null. triggeredBy fija una etiqueta legible para el
+  // historial.
+  const triggeredBy = "Platform Admin";
 
   // Persist. Si la tabla no existe (Supabase no aplicó SQL), devolvemos
-  // resultado pero loggeamos. clinicId+userId registran al actor (la
-  // auditoría es global pero tracking quien-corrió-qué).
+  // resultado pero loggeamos.
   try {
     await prisma.bugAuditRun.create({
       data: {
@@ -67,8 +74,8 @@ export async function POST(req: NextRequest) {
         triggeredBy,
         durationMs,
         status: "completed",
-        clinicId: user.clinicId ?? null,
-        userId: user.id,
+        clinicId: null,
+        userId: null,
         summary: summary as object,
         items: filteredItems as unknown as object,
       },

@@ -1,9 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { cookies } from "next/headers";
 import { randomUUID } from "crypto";
-import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
+
+function isAdminAuthed(): boolean {
+  const token = cookies().get("admin_token")?.value;
+  const secret = process.env.ADMIN_SECRET_TOKEN;
+  return !!token && !!secret && token === secret;
+}
 
 /**
  * POST /api/admin/bug-audit/dismiss
@@ -13,12 +19,11 @@ export const dynamic = "force-dynamic";
  * Marca un item como falso positivo. En runs futuros, el endpoint /run
  * filtra items con fingerprint dismissed antes de devolver y persistir.
  *
- * Solo SUPER_ADMIN.
+ * Solo platform admin (cookie `admin_token`).
  */
 export async function POST(req: NextRequest) {
-  const user = await getCurrentUser();
-  if (user.role !== "SUPER_ADMIN") {
-    return NextResponse.json({ error: "forbidden_super_admin_only" }, { status: 403 });
+  if (!isAdminAuthed()) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = (await req.json().catch(() => ({}))) as {
@@ -29,10 +34,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "missing_fingerprint" }, { status: 400 });
   }
 
-  const dismissedBy =
-    `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() ||
-    user.email ||
-    user.id;
+  // El platform admin no tiene perfil de usuario en la app — usamos una
+  // etiqueta fija para auditoría. Si en el futuro se agrega multi-account
+  // de platform admins, podemos leer un header `x-admin-name`.
+  const dismissedBy = "Platform Admin";
 
   await prisma.bugAuditDismissed.upsert({
     where: { fingerprint: body.fingerprint },
@@ -57,9 +62,8 @@ export async function POST(req: NextRequest) {
  * Re-activa un item dismissed (lo saca de la lista).
  */
 export async function DELETE(req: NextRequest) {
-  const user = await getCurrentUser();
-  if (user.role !== "SUPER_ADMIN") {
-    return NextResponse.json({ error: "forbidden_super_admin_only" }, { status: 403 });
+  if (!isAdminAuthed()) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const fingerprint = req.nextUrl.searchParams.get("fingerprint");

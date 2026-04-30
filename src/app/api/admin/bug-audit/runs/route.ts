@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
+import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
+
+function isAdminAuthed(): boolean {
+  const token = cookies().get("admin_token")?.value;
+  const secret = process.env.ADMIN_SECRET_TOKEN;
+  return !!token && !!secret && token === secret;
+}
 
 /**
  * GET /api/admin/bug-audit/runs
@@ -11,12 +17,11 @@ export const dynamic = "force-dynamic";
  * metadata, para no devolver megabytes). El detalle se carga al click
  * en un run específico via GET /runs/[id] (separado).
  *
- * Solo SUPER_ADMIN.
+ * Solo platform admin (cookie `admin_token`).
  */
 export async function GET() {
-  const user = await getCurrentUser();
-  if (user.role !== "SUPER_ADMIN") {
-    return NextResponse.json({ error: "forbidden_super_admin_only" }, { status: 403 });
+  if (!isAdminAuthed()) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const rows = await prisma.bugAuditRun.findMany({
