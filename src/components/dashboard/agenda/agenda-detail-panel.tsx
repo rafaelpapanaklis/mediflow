@@ -33,6 +33,8 @@ import {
   pipelinePosition,
 } from "@/lib/agenda/status-pipeline";
 import { possibleTransitions } from "@/lib/agenda/transitions";
+import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
+import { AgendaEditAppointmentModal } from "./agenda-edit-appointment-modal";
 import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
 
@@ -77,8 +79,10 @@ function patientInitials(name: string): string {
 export function AgendaDetailPanel() {
   const { state, selectAppointment, dispatch } = useAgenda();
   const router = useRouter();
+  const { open: openNewAppointment } = useNewAppointmentDialog();
   const [pendingStatus, setPendingStatus] = useState<AppointmentStatus | null>(null);
   const [waSending, setWaSending] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [, startTransition] = useTransition();
 
   const appt = useMemo(
@@ -197,12 +201,34 @@ export function AgendaDetailPanel() {
   // que solo aceptaba CHECKED_IN como origen y bloqueaba el flow
   // CONFIRMED → IN_PROGRESS reportado por el usuario.
   const validTargets = possibleTransitions(appt.status);
+  // Para citas terminales (CANCELLED/NO_SHOW), "SCHEDULED" técnicamente es
+  // una transición válida (revertir el status). Pero la UX clínica dental
+  // espera que "Reagendar" abra una nueva cita — la cita vieja queda
+  // CANCELLED y se crea otra. Por eso filtramos SCHEDULED del listado de
+  // primary actions y lo manejamos como botón aparte que abre el modal
+  // de Nueva Cita pre-poblado.
+  const isTerminal = appt.status === "CANCELLED" || appt.status === "NO_SHOW";
   const primaryActions = validTargets.filter(
-    (s) => s !== "CANCELLED" && s !== "NO_SHOW",
+    (s) => s !== "CANCELLED" && s !== "NO_SHOW" && !(isTerminal && s === "SCHEDULED"),
   );
   const dangerActions = validTargets.filter(
     (s) => s === "CANCELLED" || s === "NO_SHOW",
   );
+
+  function handleReschedule() {
+    if (!appt) return;
+    openNewAppointment({
+      initialPatient: { id: appt.patient.id, name: appt.patient.name },
+      initialDoctorId: appt.doctor?.id,
+      initialReason: appt.reason ?? undefined,
+      initialSlot: {
+        doctorId: appt.doctor?.id,
+        resourceId: appt.resourceId,
+      },
+      openAgendaAfter: false,
+    });
+    selectAppointment(null);
+  }
 
   return (
     <aside
@@ -351,14 +377,26 @@ export function AgendaDetailPanel() {
             <DollarSign size={12} aria-hidden /> Cobrar
           </button>
         )}
-        <button
-          type="button"
-          className={styles.detailAction}
-          disabled
-          title="Edición disponible próximamente"
-        >
-          <Pencil size={12} aria-hidden /> Editar
-        </button>
+        {!isTerminal && (
+          <button
+            type="button"
+            className={styles.detailAction}
+            onClick={(e) => { e.stopPropagation(); setEditOpen(true); }}
+            title="Editar fecha, doctor, sillón, motivo"
+          >
+            <Pencil size={12} aria-hidden /> Editar
+          </button>
+        )}
+        {isTerminal && (
+          <button
+            type="button"
+            className={`${styles.detailAction} ${styles.primary}`}
+            onClick={(e) => { e.stopPropagation(); handleReschedule(); }}
+            title="Crear nueva cita pre-poblada con los datos actuales"
+          >
+            <Calendar size={12} aria-hidden /> Reagendar
+          </button>
+        )}
         {/* Acciones destructivas al final. */}
         {dangerActions.map((target) => {
           const def = STATUS_ACTIONS[target];
@@ -381,6 +419,12 @@ export function AgendaDetailPanel() {
           );
         })}
       </div>
+
+      <AgendaEditAppointmentModal
+        appt={editOpen ? appt : null}
+        isOpen={editOpen}
+        onClose={() => setEditOpen(false)}
+      />
     </aside>
   );
 }
