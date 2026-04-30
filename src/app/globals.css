@@ -2479,6 +2479,112 @@
 
 .pedi-main { display: flex; flex-direction: column; }
 
+/* Lista de Odontopediatría (página index) ---------------------- */
+.ped-list { display: flex; flex-direction: column; gap: 16px; max-width: 1280px; margin: 0 auto; }
+.ped-list__header {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+  flex-wrap: wrap;
+}
+.ped-list__title { font-size: 22px; font-weight: 600; color: var(--text-1); margin: 0; letter-spacing: -0.01em; }
+.ped-list__subtitle { font-size: 13px; color: var(--text-2); margin: 4px 0 0; }
+
+.ped-list__toolbar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+}
+.ped-list__search {
+  display: flex; align-items: center; gap: 8px;
+  flex: 1; min-width: 220px;
+  padding: 6px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  color: var(--text-2);
+}
+.ped-list__search input {
+  flex: 1; background: transparent; border: none; outline: none;
+  font-size: 13px; color: var(--text-1); font-family: inherit;
+}
+.ped-list__search:focus-within { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.ped-list__count { font-size: 12px; color: var(--text-2); margin-left: auto; }
+
+.ped-list__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+@media (max-width: 1024px) { .ped-list__grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 640px)  { .ped-list__grid { grid-template-columns: 1fr; } }
+
+.ped-list-card {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 150ms ease-out, box-shadow 150ms ease-out, transform 150ms ease-out;
+}
+.ped-list-card:hover { border-color: var(--border-strong); box-shadow: 0 6px 18px -8px rgba(15,10,30,0.18); transform: translateY(-1px); }
+.ped-list-card:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+.ped-list-card__header { display: flex; align-items: center; gap: 10px; }
+.ped-list-card__avatar {
+  width: 40px; height: 40px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--brand-soft), var(--brand));
+  color: #fff; font-weight: 600; font-size: 13px;
+  flex-shrink: 0;
+}
+.ped-list-card__title-block { min-width: 0; flex: 1; }
+.ped-list-card__name { font-size: 14px; font-weight: 600; color: var(--text-1); }
+.ped-list-card__meta { display: flex; gap: 6px; align-items: center; font-size: 11px; color: var(--text-2); flex-wrap: wrap; }
+.ped-list-card__age { font-family: var(--font-jetbrains-mono, monospace); font-weight: 500; }
+.ped-list-card__dot { color: var(--text-3); }
+.ped-list-card__dentition { text-transform: capitalize; }
+
+.ped-list-card__chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.ped-list-card__frankl-block { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-2); }
+.ped-list-card__frankl-pill { width: 18px; height: 18px; font-size: 10px; }
+.ped-list-card__missing-record {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 999px;
+  background: var(--warning-soft); color: var(--warning);
+  font-size: 10px; font-weight: 600;
+}
+
+.ped-list-card__rows { display: flex; flex-direction: column; gap: 4px; }
+.ped-list-card__row {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--text-2);
+}
+
+.ped-list__empty {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 60px 20px;
+  background: var(--bg-elev);
+  border: 1px dashed var(--border-strong);
+  border-radius: 14px;
+  text-align: center;
+}
+.ped-list__empty--soft { padding: 30px 20px; border-style: solid; }
+.ped-list__empty-icon {
+  width: 80px; height: 80px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+.ped-list__empty h2 { font-size: 16px; font-weight: 600; color: var(--text-1); margin: 0; }
+.ped-list__empty p { font-size: 13px; color: var(--text-2); margin: 0; max-width: 460px; }
+
 /* Animaciones reducidas */
 @media (prefers-reduced-motion: reduce) {
   .drawer, .drawer-overlay,
