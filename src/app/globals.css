@@ -2615,6 +2615,56 @@
 
 .pedi-shell--full-page { gap: 18px; }
 
+/* Onboarding wizard (Nuevo paciente pediátrico) ---------------- */
+.ped-onboarding { width: min(820px, 100vw); }
+.ped-onboarding__stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 22px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-elev-2);
+}
+.ped-onboarding__step {
+  display: flex; align-items: center; gap: 8px;
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.ped-onboarding__step::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-soft);
+  margin-left: 8px;
+}
+.ped-onboarding__step:last-child::after { display: none; }
+.ped-onboarding__step-num {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: inline-grid; place-items: center;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elev);
+  color: var(--text-2);
+  font-size: 11px; font-weight: 600;
+  flex-shrink: 0;
+}
+.ped-onboarding__step-label { font-weight: 500; white-space: nowrap; }
+.ped-onboarding__step.is-active .ped-onboarding__step-num {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
+}
+.ped-onboarding__step.is-active .ped-onboarding__step-label { color: var(--text-1); font-weight: 600; }
+.ped-onboarding__step.is-done .ped-onboarding__step-num {
+  border-color: var(--success);
+  background: var(--success);
+  color: #fff;
+}
+.ped-onboarding__step.is-done .ped-onboarding__step-label { color: var(--success); }
+.ped-onboarding__body { min-height: 340px; }
+.ped-onboarding__footer { gap: 8px; flex-wrap: wrap; }
+
 /* Animaciones reducidas */
 @media (prefers-reduced-motion: reduce) {
   .drawer, .drawer-overlay,

@@ -75,3 +75,9 @@ export {
   signConsentByMinor,
   voidConsent,
 } from "./consent";
+
+export {
+  createPediatricPatient,
+  type CreatePediatricPatientInput,
+  type CreatePediatricPatientResult,
+} from "./onboarding";
