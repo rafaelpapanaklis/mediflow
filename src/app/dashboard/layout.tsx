@@ -68,7 +68,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
           email:     user.email,
           role:      user.role,
           color:     user.color ?? "#7c3aed",
-          permissionsOverride: (user as any).permissionsOverride ?? [],
+          // Prisma user.permissionsOverride es String[] @default([]) en
+          // schema; el tipo generado lo expone non-nullable. Sin cast, así
+          // el sidebar lo recibe correctamente y filtra los items.
+          permissionsOverride: user.permissionsOverride,
         }}
         clinicName={clinic.name}
         clinicId={clinic.id}

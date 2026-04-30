@@ -15,6 +15,16 @@ export async function requireAuth() {
   return user;
 }
 
+// Garantiza que el user devuelto siempre tenga permissionsOverride como
+// string[]. Defensivo contra un escenario de deploy donde Prisma client
+// quedó cacheado de una build vieja sin el campo — en ese caso la query
+// devuelve `undefined` y el sidebar caía al default del rol ignorando el
+// override que sí está en DB. Con este normalizer el caller puede asumir
+// que el array siempre existe.
+function normalizeUser<T extends { permissionsOverride?: string[] | null } & object>(u: T): T & { permissionsOverride: string[] } {
+  return { ...u, permissionsOverride: (u.permissionsOverride as string[] | null | undefined) ?? [] };
+}
+
 export async function getCurrentUser() {
   const supabaseUser = await requireAuth();
   const activeClinicId = readActiveClinicCookie();
@@ -32,7 +42,7 @@ export async function getCurrentUser() {
     });
     if (user) {
       console.log("[AUTH-DEBUG getCurrentUser] cookie match → clinicId=", user.clinicId);
-      return user;
+      return normalizeUser(user);
     }
   }
 
@@ -57,7 +67,7 @@ export async function getCurrentUser() {
     }));
   }
 
-  return user;
+  return normalizeUser(user);
 }
 
 export async function getUserClinics() {
