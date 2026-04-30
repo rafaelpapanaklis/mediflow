@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { BUCKETS, extractStoragePath, signMaybeUrl } from "@/lib/storage";
 
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
@@ -18,7 +19,16 @@ export async function GET(req: NextRequest) {
     orderBy: { takenAt: "desc" },
   });
 
-  return NextResponse.json(photos);
+  // Firma cada URL on-demand (TTL 5 min). Tolera tanto paths nuevos como
+  // URLs legacy guardadas antes de la migración a bucket privado.
+  const signed = await Promise.all(
+    photos.map(async (p) => ({
+      ...p,
+      url: await signMaybeUrl(p.url).catch(() => ""),
+    })),
+  );
+
+  return NextResponse.json(signed);
 }
 
 export async function POST(req: NextRequest) {
@@ -32,18 +42,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "patientId, category, angle, and url are required" }, { status: 400 });
   }
 
-  // Validar que la URL sea HTTPS y apunte al dominio de Supabase Storage de la clínica
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "https:") {
-      return NextResponse.json({ error: "URL debe usar https" }, { status: 400 });
+  // Aceptamos tanto un path interno como una URL de Supabase Storage del
+  // bucket privado. Cualquier otra cosa se rechaza para que no entren URLs
+  // arbitrarias en la tabla.
+  let storedPath: string | null = null;
+  if (!url.startsWith("http")) {
+    storedPath = url;
+  } else {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== "https:") {
+        return NextResponse.json({ error: "URL debe usar https" }, { status: 400 });
+      }
+      const supabaseHost = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").host;
+      if (supabaseHost && parsed.host !== supabaseHost) {
+        return NextResponse.json({ error: "URL no permitida" }, { status: 400 });
+      }
+      storedPath = extractStoragePath(url, BUCKETS.PATIENT_FILES);
+      if (!storedPath) {
+        return NextResponse.json({ error: "URL no pertenece al bucket de archivos" }, { status: 400 });
+      }
+    } catch {
+      return NextResponse.json({ error: "URL inválida" }, { status: 400 });
     }
-    const supabaseHost = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").host;
-    if (supabaseHost && parsed.host !== supabaseHost) {
-      return NextResponse.json({ error: "URL no permitida" }, { status: 400 });
-    }
-  } catch {
-    return NextResponse.json({ error: "URL inválida" }, { status: 400 });
   }
 
   // Verify patient belongs to clinic
@@ -60,11 +81,13 @@ export async function POST(req: NextRequest) {
       patientId,
       category,
       angle,
-      url,
+      url: storedPath,
       sessionId: sessionId ?? null,
       notes: notes ?? null,
     },
   });
 
-  return NextResponse.json(photo, { status: 201 });
+  // Devolvemos URL ya firmada al cliente para render inmediato.
+  const signedUrl = await signMaybeUrl(storedPath).catch(() => "");
+  return NextResponse.json({ ...photo, url: signedUrl }, { status: 201 });
 }

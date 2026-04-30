@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { rateLimit } from "@/lib/rate-limit";
+import { BUCKETS, signMaybeUrl } from "@/lib/storage";
 
 // GET /api/consent/[token] — public, get form content for patient to read
 export async function GET(req: NextRequest, { params }: { params: { token: string } }) {
@@ -19,7 +20,13 @@ export async function GET(req: NextRequest, { params }: { params: { token: strin
   if (!form) return NextResponse.json({ error: "Formulario no encontrado" }, { status: 404 });
   if (new Date() > form.expiresAt) return NextResponse.json({ error: "El enlace ha expirado" }, { status: 410 });
 
-  return NextResponse.json(form);
+  // Si ya está firmado, firmamos la URL de la imagen on-demand para que
+  // el paciente pueda ver su firma sin depender de un signed URL legacy.
+  const signedSignatureUrl = form.signatureUrl
+    ? await signMaybeUrl(form.signatureUrl).catch(() => "")
+    : null;
+
+  return NextResponse.json({ ...form, signatureUrl: signedSignatureUrl });
 }
 
 // POST /api/consent/[token] — patient signs the form
@@ -36,8 +43,9 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
   const { signatureDataUrl } = await req.json();
   if (!signatureDataUrl) return NextResponse.json({ error: "Firma requerida" }, { status: 400 });
 
-  // Upload signature to Supabase Storage
-  let signatureUrl: string | null = null;
+  // Upload signature to Supabase Storage. Persistimos sólo el path interno;
+  // la signed URL se genera on-demand cuando alguien lee el form.
+  let storedPath: string | null = null;
   try {
     const supabase = createAdmin(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -47,16 +55,15 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     const base64 = signatureDataUrl.split(",")[1];
     const buffer = Buffer.from(base64, "base64");
     const path   = `signatures/${form.clinicId}/${form.id}.png`;
-    await supabase.storage.from("patient-files").upload(path, buffer, { contentType: "image/png", upsert: true });
-    const { data: signedData } = await supabase.storage.from("patient-files").createSignedUrl(path, 3600);
-    signatureUrl = signedData?.signedUrl ?? null;
+    await supabase.storage.from(BUCKETS.PATIENT_FILES).upload(path, buffer, { contentType: "image/png", upsert: true });
+    storedPath = path;
   } catch (e) {
     console.error("Signature upload error:", e);
   }
 
   await prisma.consentForm.update({
     where: { id: form.id },
-    data:  { signedAt: new Date(), signatureUrl },
+    data:  { signedAt: new Date(), signatureUrl: storedPath },
   });
 
   // NO audit-log a tabla audit_logs aquí: el firmante es el paciente

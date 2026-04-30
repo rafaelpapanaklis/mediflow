@@ -326,6 +326,13 @@ model Patient {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // ARCO cancellation (LFPDPPP) — soft delete + anonimización del PII.
+  // NOM-024 obliga a retener historia clínica 5 años, por eso aquí no se
+  // hace DELETE: deletedAt oculta al paciente de listas/agenda y
+  // anonymizedAt marca cuándo se reemplazó el PII por placeholders.
+  deletedAt    DateTime?
+  anonymizedAt DateTime?
+
   clinic        Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   primaryDoctor User?           @relation("PrimaryDoctor", fields: [primaryDoctorId], references: [id])
   appointments  Appointment[]

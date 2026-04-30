@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdmin } from "@supabase/supabase-js";
+import { BUCKETS, extractStoragePath } from "@/lib/storage";
 
 function isAdminAuthed() {
   const token = cookies().get("admin_token")?.value;
@@ -49,13 +50,9 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     select: { url: true },
   });
 
+  // Acepta paths nuevos y URLs legacy (post-migración a bucket privado).
   const storagePaths = patientFiles
-    .map(f => {
-      try {
-        const urlPath = new URL(f.url).pathname;
-        return urlPath.split("/patient-files/").pop()?.split("?")[0] ?? "";
-      } catch { return ""; }
-    })
+    .map(f => extractStoragePath(f.url, BUCKETS.PATIENT_FILES) ?? "")
     .filter(Boolean);
 
   // 2. Borrar archivos de Supabase Storage ANTES de la DB, en lotes de 100.
@@ -71,13 +68,26 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     );
     for (let i = 0; i < storagePaths.length; i += 100) {
       const batch = storagePaths.slice(i, i + 100);
-      const { error } = await supabase.storage.from("patient-files").remove(batch);
+      const { error } = await supabase.storage.from(BUCKETS.PATIENT_FILES).remove(batch);
       if (error) {
         storageErrors += batch.length;
         console.error("[admin/clinics DELETE] storage batch failed:", (error as any)?.message ?? "unknown");
       } else {
         storageDeleted += batch.length;
       }
+    }
+
+    // 2b. Limpia el bucket público de la landing por prefijo
+    const { error: landingErr } = await supabase.storage
+      .from(BUCKETS.CLINIC_PUBLIC)
+      .list(`landing/${clinicId}`, { limit: 1000 })
+      .then(async ({ data, error }) => {
+        if (error || !data || data.length === 0) return { error };
+        const paths = data.map(d => `landing/${clinicId}/${d.name}`);
+        return supabase.storage.from(BUCKETS.CLINIC_PUBLIC).remove(paths);
+      });
+    if (landingErr) {
+      console.warn("[admin/clinics DELETE] landing cleanup non-fatal:", (landingErr as any)?.message ?? "unknown");
     }
   }
 

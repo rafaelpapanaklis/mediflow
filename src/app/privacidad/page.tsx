@@ -7,7 +7,7 @@ export const metadata: Metadata = {
     "Aviso de privacidad integral conforme a la Ley Federal de Protección de Datos Personales en Posesión de los Particulares (LFPDPPP).",
 };
 
-const LAST_UPDATED = "28 de abril de 2026";
+const LAST_UPDATED = "30 de abril de 2026";
 const RESPONSIBLE_NAME = "MediFlow (operado por Rafael Papanaklis)";
 const RESPONSIBLE_ADDRESS = "México · contacto: privacidad@mediflow.app";
 const PRIVACY_EMAIL = "privacidad@mediflow.app";
@@ -93,9 +93,10 @@ export default function PrivacidadPage() {
           <li><b>Supabase, Inc.</b> — hosting de base de datos y autenticación.</li>
           <li><b>Vercel, Inc.</b> — hosting de la aplicación web.</li>
           <li><b>Twilio, Inc. / Postmark</b> — envío de WhatsApp, SMS y correos transaccionales.</li>
-          <li><b>Stripe, Inc. / PayPal</b> — procesamiento de pagos cuando aplica.</li>
+          <li><b>Stripe, Inc. / PayPal / MercadoPago</b> — procesamiento de pagos cuando aplica.</li>
+          <li><b>FacturAPI / Proveedores autorizados de CFDI</b> — emisión de comprobantes fiscales.</li>
           <li><b>Daily.co</b> — sesiones de teleconsulta cuando aplica.</li>
-          <li><b>Anthropic / OpenAI</b> — procesamiento de IA con datos disociados.</li>
+          <li><b>Anthropic / OpenAI</b> — procesamiento de IA con datos disociados (radiografías).</li>
         </ul>
         <p>
           NO transferimos sus datos a terceros con fines comerciales sin su consentimiento expreso.

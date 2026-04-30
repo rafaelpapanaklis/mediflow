@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { rateLimit } from "@/lib/rate-limit";
+import { BUCKETS, extractStoragePath } from "@/lib/storage";
 
 const ANALYSIS_SYSTEM_PROMPT = `Actúas como un asistente de análisis radiográfico dental. Tu rol es identificar hallazgos visibles en la imagen y reportarlos con confianza calibrada a lo que realmente se ve. NO eres el diagnóstico final — el doctor revisa tu análisis y decide.
 
@@ -282,17 +283,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }, { status: 429 });
   }
 
-  // Download image from Supabase Storage
+  // Download image from Supabase Storage. file.url puede ser path nuevo o
+  // URL legacy — extractStoragePath maneja ambos.
   const supabase = getAdminSupabase();
-  const storagePath = file.url.includes("/patient-files/")
-    ? file.url.split("/patient-files/").pop()?.split("?")[0] ?? ""
-    : "";
+  const storagePath = extractStoragePath(file.url, BUCKETS.PATIENT_FILES);
 
   let imageBase64: string;
   let mediaType: string;
 
   if (storagePath) {
-    const { data, error } = await supabase.storage.from("patient-files").download(storagePath);
+    const { data, error } = await supabase.storage
+      .from(BUCKETS.PATIENT_FILES)
+      .download(storagePath);
     if (error || !data) {
       return NextResponse.json({ error: "No se pudo descargar la imagen" }, { status: 500 });
     }
@@ -300,15 +302,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     imageBase64 = buffer.toString("base64");
     mediaType = file.mimeType || "image/jpeg";
   } else {
-    try {
-      const imgRes = await fetch(file.url);
-      if (!imgRes.ok) throw new Error("Failed to fetch image");
-      const buffer = Buffer.from(await imgRes.arrayBuffer());
-      imageBase64 = buffer.toString("base64");
-      mediaType = file.mimeType || "image/jpeg";
-    } catch {
-      return NextResponse.json({ error: "No se pudo obtener la imagen" }, { status: 500 });
-    }
+    return NextResponse.json({ error: "Ruta de imagen inválida" }, { status: 500 });
   }
 
   // Patient context
