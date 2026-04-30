@@ -2442,6 +2442,43 @@
 .pedi-table__mono { font-family: var(--font-jetbrains-mono, ui-monospace, monospace); }
 .pedi-table__cap  { text-transform: capitalize; }
 
+/* Sub-nav y context-strip extras ------------------------------- */
+.pedi-subnav {
+  display: flex; gap: 4px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--border-soft);
+  margin-bottom: 14px;
+}
+.pedi-subnav__tab {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-2);
+  font-size: 13px; font-weight: 500;
+  cursor: pointer;
+  transition: color 150ms ease-out, border-color 150ms ease-out;
+}
+.pedi-subnav__tab:hover { color: var(--text-1); }
+.pedi-subnav__tab.is-active { color: var(--brand); border-bottom-color: var(--brand); }
+.pedi-subnav__tab:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; border-radius: 6px 6px 0 0; }
+.pedi-subnav__count {
+  background: var(--bg-elev-2);
+  color: var(--text-2);
+  font-size: 10px; font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+.pedi-subnav__tab.is-active .pedi-subnav__count { background: var(--brand-soft); color: var(--brand); }
+
+.pedi-context-strip__mono { font-family: var(--font-jetbrains-mono, ui-monospace, monospace); }
+.pedi-context-strip__cap  { text-transform: capitalize; }
+.pedi-context-strip__pill { font-size: 10px; width: 18px; height: 18px; }
+.pedi-context-strip__trend--up   { color: var(--success); }
+.pedi-context-strip__trend--down { color: var(--danger); }
+
+.pedi-main { display: flex; flex-direction: column; }
+
 /* Animaciones reducidas */
 @media (prefers-reduced-motion: reduce) {
   .drawer, .drawer-overlay,
