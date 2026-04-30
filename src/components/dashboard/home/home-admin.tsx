@@ -1,11 +1,11 @@
 // src/components/dashboard/home/home-admin.tsx
 "use client";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
   DollarSign, Calendar, TrendingUp, UserX, ChevronRight,
 } from "lucide-react";
 import { KpiCard } from "@/components/ui/design-system/kpi-card";
-import { RevenueAreaChart } from "@/components/dashboard/revenue-area-chart";
 import { HomeSection } from "./home-section";
 import { Greeting } from "./parts/greeting";
 import { AdminPeriodToggle } from "./parts/admin-period-toggle";
@@ -15,6 +15,27 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { HomeQuickActions } from "./parts/home-quick-actions";
 import { EmptyActionItemsAllClear } from "@/components/dashboard/empty-states";
 import type { HomeAdminData, AdminPeriod } from "@/lib/home/types";
+
+// recharts pesa ~95kb min+gz — dynamic import lo saca del bundle inicial
+// del dashboard. La gráfica aparece después del primer paint con un
+// skeleton suave.
+const RevenueAreaChart = dynamic(
+  () => import("@/components/dashboard/revenue-area-chart").then((m) => m.RevenueAreaChart),
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        style={{
+          height: 220,
+          background: "var(--bg-elev-2)",
+          borderRadius: 8,
+          opacity: 0.5,
+        }}
+        aria-hidden
+      />
+    ),
+  },
+);
 
 interface Props {
   user: { displayName: string };

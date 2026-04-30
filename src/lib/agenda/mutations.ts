@@ -72,10 +72,12 @@ export async function batchValidateAppointments(
 /* ─────── Appointment reschedule (drag-to-reschedule M6) ─────── */
 
 export interface RescheduleAppointmentInput {
-  startsAt: string;
-  endsAt: string;
+  startsAt?: string;
+  endsAt?: string;
   doctorId?: string;
   resourceId?: string | null;
+  reason?: string | null;
+  overrideReason?: string | null;
 }
 
 export async function rescheduleAppointment(

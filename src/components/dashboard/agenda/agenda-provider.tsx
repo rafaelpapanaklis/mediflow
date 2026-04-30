@@ -7,6 +7,7 @@ import {
   useEffect,
   useMemo,
   useReducer,
+  useRef,
   type Dispatch,
   type ReactNode,
 } from "react";
@@ -81,6 +82,16 @@ interface AgendaContextValue {
   togglePendingPanel: (open?: boolean) => void;
   setFilters: (filters: AgendaFilters) => void;
   clearFilters: () => void;
+  /**
+   * Hover-prefetch para tabs de vista. Llama esto al onMouseEnter de
+   * Día/Semana/Mes/Lista para warmar el cache antes del click.
+   */
+  prefetchView: (mode: AgendaViewMode) => void;
+}
+
+interface CacheEntry {
+  data: AgendaAppointmentDTO[];
+  ts: number;
 }
 
 const AgendaContext = createContext<AgendaContextValue | null>(null);
@@ -128,35 +139,100 @@ export function AgendaProvider({
   // de vista / cambiar filtros, refrescamos con el rango correcto via
   // /api/agenda/range. Multi-tenant: el endpoint usa loadClinicSession
   // y filtra por clinicId desde la sesión.
+  //
+  // SWR-lite cache: cada (range, filtros) se cachea por 30s. Cuando el
+  // usuario vuelve a una vista/día ya visto, render inmediato del
+  // cache + revalidate en background. Hover-prefetch en los tabs de
+  // vista warma el cache ANTES del click → transición instantánea.
   const filterDoctorIdsKey = state.filters.doctorIds.join(",");
   const filterResourceIdsKey = state.filters.resourceIds.join(",");
   const filterStatusesKey = state.filters.statuses.join(",");
-  useEffect(() => {
-    const ctrl = new AbortController();
-    const range = rangeForView(state.dayISO, state.viewMode);
+  const cacheRef = useRef<Map<string, CacheEntry>>(new Map());
+  const initialFetchSkipped = useRef(false);
+
+  const fetchRangeData = useCallback(async (
+    viewMode: AgendaViewMode,
+    dayISO: string,
+    filters: AgendaFilters,
+    options: { signal?: AbortSignal; backgroundOnly?: boolean } = {},
+  ): Promise<void> => {
+    const range = rangeForView(dayISO, viewMode);
+    const dKey = filters.doctorIds.join(",");
+    const rKey = filters.resourceIds.join(",");
+    const sKey = filters.statuses.join(",");
+    const key = `${range.from}|${range.to}|${dKey}|${rKey}|${sKey}`;
+
+    // Cache hit: render inmediato (stale-while-revalidate). Si el cache
+    // es fresco (< 30s) skip la revalidación; si no, sigue con el fetch
+    // para refrescar.
+    const cached = cacheRef.current.get(key);
+    if (cached && !options.backgroundOnly) {
+      dispatch({ type: "SET_APPOINTMENTS", appointments: cached.data });
+      if (Date.now() - cached.ts < 30_000) return;
+    }
+
     const params = new URLSearchParams();
     params.set("from", range.from);
     params.set("to", range.to);
-    if (filterDoctorIdsKey) params.set("doctorIds", filterDoctorIdsKey);
-    if (filterResourceIdsKey) params.set("resourceIds", filterResourceIdsKey);
-    if (filterStatusesKey) params.set("statuses", filterStatusesKey);
+    if (dKey) params.set("doctorIds", dKey);
+    if (rKey) params.set("resourceIds", rKey);
+    if (sKey) params.set("statuses", sKey);
 
-    dispatch({ type: "SET_LOADING", isLoading: true });
-    fetch(`/api/agenda/range?${params}`, { signal: ctrl.signal })
-      .then(async (r) => {
-        if (!r.ok) throw new Error("range_failed");
-        return r.json();
-      })
-      .then((data: { appointments: AgendaAppointmentDTO[] }) => {
-        if (ctrl.signal.aborted) return;
-        dispatch({ type: "SET_APPOINTMENTS", appointments: data.appointments ?? [] });
-      })
-      .catch((e: { name?: string }) => {
-        if (e?.name === "AbortError") return;
-        dispatch({ type: "SET_LOADING", isLoading: false });
-      });
+    try {
+      const res = await fetch(`/api/agenda/range?${params}`, { signal: options.signal });
+      if (!res.ok) throw new Error("range_failed");
+      const data = (await res.json()) as { appointments: AgendaAppointmentDTO[] };
+      if (options.signal?.aborted) return;
+      const appts = data.appointments ?? [];
+      cacheRef.current.set(key, { data: appts, ts: Date.now() });
+      if (!options.backgroundOnly) {
+        dispatch({ type: "SET_APPOINTMENTS", appointments: appts });
+      }
+    } catch (e) {
+      const err = e as { name?: string };
+      if (err?.name === "AbortError") return;
+      // Background fetch silent; foreground deja state.appointments con
+      // lo que sea (stale o vacío) — no blank.
+    }
+  }, []);
+
+  useEffect(() => {
+    // Skip primer mount cuando los datos del SSR ya cubren la vista actual
+    // (caso común: viewMode='day' + dayISO===initialDayISO). Evita un
+    // round-trip duplicado /api/agenda/range justo después de la SSR. Aún
+    // así, sembramos el cache con los datos del SSR para que volver a
+    // este mismo día sea instant.
+    if (
+      !initialFetchSkipped.current &&
+      state.viewMode === "day" &&
+      state.dayISO === initialDayISO &&
+      state.filters.doctorIds.length === 0 &&
+      state.filters.resourceIds.length === 0 &&
+      state.filters.statuses.length === 0
+    ) {
+      initialFetchSkipped.current = true;
+      const range = rangeForView(initialDayISO, "day");
+      const key = `${range.from}|${range.to}|||`;
+      cacheRef.current.set(key, { data: initialPayload.appointments, ts: Date.now() });
+      return;
+    }
+    initialFetchSkipped.current = true;
+
+    const ctrl = new AbortController();
+    void fetchRangeData(state.viewMode, state.dayISO, state.filters, { signal: ctrl.signal });
     return () => ctrl.abort();
-  }, [state.dayISO, state.viewMode, filterDoctorIdsKey, filterResourceIdsKey, filterStatusesKey]);
+  }, [state.dayISO, state.viewMode, filterDoctorIdsKey, filterResourceIdsKey, filterStatusesKey, state.filters, fetchRangeData, initialDayISO, initialPayload.appointments]);
+
+  // Idle-prefetch: cuando el usuario está en vista Día, después de 500ms
+  // de inactividad warmamos el cache de la Semana correspondiente. Si
+  // luego clickea "Semana", la transición es instantánea.
+  useEffect(() => {
+    if (state.viewMode !== "day") return;
+    const t = setTimeout(() => {
+      void fetchRangeData("week", state.dayISO, state.filters, { backgroundOnly: true });
+    }, 500);
+    return () => clearTimeout(t);
+  }, [state.viewMode, state.dayISO, filterDoctorIdsKey, filterResourceIdsKey, filterStatusesKey, state.filters, fetchRangeData]);
 
   const setDay = useCallback(
     (dayISO: string) => {
@@ -216,15 +292,19 @@ export function AgendaProvider({
     dispatch({ type: "SET_FILTERS", filters: { doctorIds: [], resourceIds: [], statuses: [] } });
   }, []);
 
+  const prefetchView = useCallback((mode: AgendaViewMode) => {
+    void fetchRangeData(mode, state.dayISO, state.filters, { backgroundOnly: true });
+  }, [fetchRangeData, state.dayISO, state.filters]);
+
   const ctx = useMemo<AgendaContextValue>(
     () => ({
       state, dispatch,
       setDay, setViewMode, setColumnMode,
       setSearchQuery, selectAppointment,
       openModal, closeModal, toggleWaitlist, togglePendingPanel,
-      setFilters, clearFilters,
+      setFilters, clearFilters, prefetchView,
     }),
-    [state, setDay, setViewMode, setColumnMode, setSearchQuery, selectAppointment, openModal, closeModal, toggleWaitlist, togglePendingPanel, setFilters, clearFilters],
+    [state, setDay, setViewMode, setColumnMode, setSearchQuery, selectAppointment, openModal, closeModal, toggleWaitlist, togglePendingPanel, setFilters, clearFilters, prefetchView],
   );
 
   return <AgendaContext.Provider value={ctx}>{children}</AgendaContext.Provider>;

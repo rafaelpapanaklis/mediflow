@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
       aggregateAdminPeriodKpis(period, session.clinic.id, session.clinic.timezone),
       aggregatePreviousPeriodKpis(period, session.clinic.id, session.clinic.timezone),
       buildRevenueSeries(session.clinic.id, session.clinic.timezone),
-      buildAlerts(session.clinic.id),
+      buildAlerts(session.clinic.id, session.clinic.trialEndsAt ?? null),
       buildTeamPerformance(period, session.clinic.id, session.clinic.timezone, session.clinic.category),
     ]);
 
@@ -235,7 +235,7 @@ async function buildRevenueSeries(
   return out;
 }
 
-async function buildAlerts(clinicId: string): Promise<HomeAdminAlert[]> {
+async function buildAlerts(clinicId: string, trialEndsAt: Date | null): Promise<HomeAdminAlert[]> {
   const alerts: HomeAdminAlert[] = [];
 
   // Inventario bajo (quantity <= minQuantity)
@@ -291,13 +291,10 @@ async function buildAlerts(clinicId: string): Promise<HomeAdminAlert[]> {
     /* skip */
   }
 
-  // Trial vencimiento
-  const clinic = await prisma.clinic.findUnique({
-    where: { id: clinicId },
-    select: { trialEndsAt: true },
-  });
-  if (clinic?.trialEndsAt) {
-    const days = Math.ceil((clinic.trialEndsAt.getTime() - Date.now()) / 86_400_000);
+  // Trial vencimiento — recibimos trialEndsAt del session.clinic (loadClinicSession
+  // ya hace include: { clinic: true }), evitamos un findUnique redundante.
+  if (trialEndsAt) {
+    const days = Math.ceil((trialEndsAt.getTime() - Date.now()) / 86_400_000);
     if (days > 0 && days <= 14) {
       alerts.push({
         id: "trial",
@@ -314,6 +311,10 @@ async function buildAlerts(clinicId: string): Promise<HomeAdminAlert[]> {
 /**
  * Team performance: revenueMXN por doctor degradado a 0 — Invoice no tiene
  * doctorId en el schema. Citas y completionPct sí se calculan correctamente.
+ *
+ * Antes: N+1 — un loop sobre doctores hacía 2 count() por cada uno (5
+ * doctores → 10 queries serie). Ahora: 2 queries fijas (doctors + groupBy
+ * de appointments por doctorId+status), independiente del N.
  */
 async function buildTeamPerformance(
   period: AdminPeriod,
@@ -323,40 +324,41 @@ async function buildTeamPerformance(
 ): Promise<HomeAdminTeamRow[]> {
   const { from, to } = periodRangeUtc(period, timezone);
 
-  const doctors = await prisma.user.findMany({
-    where: { clinicId, role: "DOCTOR", isActive: true },
-    select: { id: true, firstName: true, lastName: true },
-  });
+  const [doctors, grouped] = await Promise.all([
+    prisma.user.findMany({
+      where: { clinicId, role: "DOCTOR", isActive: true },
+      select: { id: true, firstName: true, lastName: true },
+    }),
+    prisma.appointment.groupBy({
+      by: ["doctorId", "status"],
+      where: {
+        clinicId,
+        startsAt: { gte: from, lt: to },
+        status: { notIn: ["CANCELLED"] },
+      },
+      _count: { _all: true },
+    }),
+  ]);
 
-  const rows: HomeAdminTeamRow[] = [];
-  for (const d of doctors) {
-    const [appts, completed] = await Promise.all([
-      prisma.appointment.count({
-        where: {
-          clinicId,
-          doctorId: d.id,
-          startsAt: { gte: from, lt: to },
-          status: { notIn: ["CANCELLED"] },
-        },
-      }),
-      prisma.appointment.count({
-        where: {
-          clinicId,
-          doctorId: d.id,
-          startsAt: { gte: from, lt: to },
-          status: "COMPLETED",
-        },
-      }),
-    ]);
+  // Agregamos por doctorId: total appts + completed appts.
+  const totals = new Map<string, { appts: number; completed: number }>();
+  for (const row of grouped) {
+    const cur = totals.get(row.doctorId) ?? { appts: 0, completed: 0 };
+    cur.appts += row._count._all;
+    if (row.status === "COMPLETED") cur.completed += row._count._all;
+    totals.set(row.doctorId, cur);
+  }
 
-    rows.push({
+  const rows: HomeAdminTeamRow[] = doctors.map((d) => {
+    const t = totals.get(d.id) ?? { appts: 0, completed: 0 };
+    return {
       userId: d.id,
       doctorName: shortName(d.firstName, category),
-      appointments: appts,
-      completionPct: appts > 0 ? Math.round((completed / appts) * 100) : 0,
+      appointments: t.appts,
+      completionPct: t.appts > 0 ? Math.round((t.completed / t.appts) * 100) : 0,
       revenueMXN: 0,
-    });
-  }
+    };
+  });
 
   return rows.sort((a, b) => b.appointments - a.appointments);
 }

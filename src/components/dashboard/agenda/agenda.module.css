@@ -430,6 +430,28 @@
   box-shadow: 0 0 0 2px var(--mf-doc-color, var(--brand)), 0 8px 20px -4px color-mix(in srgb, var(--mf-doc-color, var(--brand)) 40%, transparent);
   z-index: 4;
 }
+/* Cita pasada (endsAt < now y status no terminal): muted gris translúcido. */
+.appt.apptPast {
+  opacity: 0.62;
+  background: color-mix(in srgb, var(--text-3, #94a3b8) 14%, var(--bg-elev));
+  border-color: color-mix(in srgb, var(--text-3, #94a3b8) 28%, transparent);
+  filter: saturate(0.55);
+}
+.appt.apptPast:hover { opacity: 0.85; }
+/* Cita en curso (start <= now < end): ring verde brillante con pulse. */
+.appt.apptInProgress {
+  border-color: var(--success, #10b981);
+  box-shadow: 0 0 0 1px var(--success, #10b981), 0 0 14px -2px color-mix(in srgb, var(--success, #10b981) 60%, transparent);
+  animation: agendaApptInProgressPulse 1.8s ease-in-out infinite;
+}
+@keyframes agendaApptInProgressPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 1px var(--success, #10b981), 0 0 14px -2px color-mix(in srgb, var(--success, #10b981) 60%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 2px var(--success, #10b981), 0 0 22px -2px color-mix(in srgb, var(--success, #10b981) 80%, transparent);
+  }
+}
 .apptCompact { padding: 2px 6px; }
 .apptRow1 {
   display: flex; align-items: center; gap: 5px;
@@ -927,10 +949,10 @@
   gap: 12px;
   padding: 8px 10px;
   border: 1px solid var(--border-soft);
-  border-left: 4px solid var(--mf-status-color, var(--brand));
+  border-left: 4px solid var(--mf-doc-color, var(--brand));
   border-radius: 7px;
   margin-bottom: 4px;
-  background: var(--bg-elev);
+  background: color-mix(in srgb, var(--mf-doc-color, var(--brand)) 5%, var(--bg-elev));
   cursor: pointer;
   transition: box-shadow 0.12s, transform 0.12s, border-color 0.12s;
   font-family: var(--font-sora, "Sora", sans-serif);

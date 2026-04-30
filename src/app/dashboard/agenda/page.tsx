@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import {
   fetchActiveDoctors,
   fetchAppointmentsForDay,
@@ -27,18 +26,9 @@ export default async function AgendaPage({ searchParams }: PageProps) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const clinic = await prisma.clinic.findUnique({
-    where: { id: user.clinicId },
-    select: {
-      id: true,
-      name: true,
-      category: true,
-      timezone: true,
-      defaultSlotMinutes: true,
-      agendaDayStart: true,
-      agendaDayEnd: true,
-    },
-  });
+  // getCurrentUser ya hace include: { clinic: true } — leemos la config
+  // directo del session sin un segundo query a prisma.clinic.
+  const clinic = user.clinic;
   if (!clinic) redirect("/login");
 
   const timeConfig: ClinicTimeConfig = {
