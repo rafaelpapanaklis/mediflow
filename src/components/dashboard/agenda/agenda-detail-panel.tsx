@@ -129,10 +129,21 @@ export function AgendaDetailPanel() {
     ? "Walk-in"
     : "Presencial";
 
-  async function changeStatus(target: AppointmentStatus) {
-    if (!appt) return;
-    if (appt.status === target) return;
-    if (pendingStatus) return;
+  /**
+   * Cambia el status del appointment optimistically + revalidate via
+   * server. Devuelve true si el server confirmó el cambio, false si
+   * hubo error o no aplica. El caller usa el bool para decidir side
+   * effects (ej. navegar al expediente solo si IN_PROGRESS persistió).
+   */
+  async function changeStatus(target: AppointmentStatus): Promise<boolean> {
+    if (!appt) return false;
+    if (pendingStatus) return false;
+    if (appt.status === target) {
+      // Antes esto era un early return silente que el usuario veía como
+      // "el botón no hace nada". Ahora damos feedback claro.
+      toast(`La cita ya está en estado ${target}`);
+      return false;
+    }
 
     const original: AgendaAppointmentDTO = appt;
     setPendingStatus(target);
@@ -144,13 +155,16 @@ export function AgendaDetailPanel() {
         dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
       });
       toast.success("Estado actualizado");
+      return true;
     } catch (err) {
       dispatch({ type: "ROLLBACK_STATUS", original });
-      const reason =
-        (err as { reason?: string; error?: string })?.reason ??
-        (err as { error?: string })?.error ??
-        "No se pudo cambiar el estado";
-      toast.error(reason);
+      // ApiError viene como { status, error, reason } desde mutations.ts.
+      // Native Error tiene .message. Fetch reject puede ser TypeError.
+      const e = err as { status?: number; reason?: string; error?: string; message?: string };
+      const detail = e?.reason ?? e?.error ?? e?.message ?? "No se pudo cambiar el estado";
+      const prefix = e?.status ? `[${e.status}] ` : "";
+      toast.error(`${prefix}${detail}`);
+      return false;
     } finally {
       setPendingStatus(null);
     }
@@ -285,9 +299,13 @@ export function AgendaDetailPanel() {
           const isPrimary = def.variant === "primary";
           // Cuando se inicia consulta (IN_PROGRESS), navegamos al
           // expediente con ?appointment=... para abrir SOAP editor.
-          const onClickAction = async () => {
-            await changeStatus(target);
-            if (target === "IN_PROGRESS") {
+          // SOLO si la transición se aplicó OK (changeStatus → true).
+          // Antes navegaba aún si el server rechazaba con 409 → user
+          // veía cambio de página pero status real intacto.
+          const onClickAction = async (e: React.MouseEvent) => {
+            e.stopPropagation();
+            const ok = await changeStatus(target);
+            if (ok && target === "IN_PROGRESS") {
               router.push(`/dashboard/patients/${appt.patient.id}?appointment=${appt.id}`);
             }
           };
@@ -350,7 +368,10 @@ export function AgendaDetailPanel() {
               key={target}
               type="button"
               className={`${styles.detailAction} ${styles.danger}`}
-              onClick={() => changeStatus(target)}
+              onClick={(e) => {
+                e.stopPropagation();
+                void changeStatus(target);
+              }}
               disabled={pendingStatus !== null}
               title={def.label}
             >
@@ -369,7 +390,7 @@ export function AgendaDetailPanel() {
 interface StatusPipelineProps {
   appt: AgendaAppointmentDTO;
   pendingStatus: AppointmentStatus | null;
-  onChange: (status: AppointmentStatus) => void;
+  onChange: (status: AppointmentStatus) => Promise<boolean> | void;
 }
 
 function StatusPipeline({ appt, pendingStatus, onChange }: StatusPipelineProps) {
@@ -401,7 +422,10 @@ function StatusPipeline({ appt, pendingStatus, onChange }: StatusPipelineProps) 
               type="button"
               className={`${styles.pipelineChip} ${stateClass}`}
               style={{ "--mf-status-color": STATUS_COLOR[status] } as React.CSSProperties}
-              onClick={() => onChange(status)}
+              onClick={(e) => {
+                e.stopPropagation();
+                void onChange(status);
+              }}
               disabled={pendingStatus !== null && !isPending}
               aria-current={isCurrent}
               title={STATUS_LABELS[status]}
@@ -440,9 +464,10 @@ function StatusPipeline({ appt, pendingStatus, onChange }: StatusPipelineProps) 
                       type="button"
                       className={styles.statusPopoverItem}
                       style={{ "--mf-status-color": STATUS_COLOR[status] } as React.CSSProperties}
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setMoreOpen(false);
-                        onChange(status);
+                        void onChange(status);
                       }}
                       disabled={pendingStatus !== null}
                     >
