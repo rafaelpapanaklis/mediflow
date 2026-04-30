@@ -32,6 +32,7 @@ import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import dynamicImport from "next/dynamic";
 import type { PediatricsTabData } from "@/components/patient-detail/pediatrics/PediatricsTab";
+import { buildPediatricSoapPrefill } from "@/lib/pediatrics/soap-prefill";
 
 // Pediatrics — lazy load del módulo. Solo carga el bundle cuando el doctor
 // abre la pestaña, evitando inflar el bundle del paciente cuando no aplica.
@@ -409,6 +410,26 @@ export function PatientDetailClient({
             plan: note.plan ?? d.plan,
             attachments: note.specialtyData?.attachments ?? d.attachments,
           }));
+        } else if (pediatricsData) {
+          // Pre-fill pediátrico cuando es la primera vez que se abre la nota
+          // y aplica el módulo Pediatría (spec §4.B.9). Solo se inserta si
+          // el subjective está vacío para no pisar contenido del doctor.
+          const latestFrankl = pediatricsData.behaviorHistory.find(
+            (b) => b.scale === "frankl" && !b.deletedAt,
+          );
+          const activeHabits = pediatricsData.oralHabits
+            .filter((h) => !h.deletedAt && !h.endedAt)
+            .map((h) => h.habitType.replace(/_/g, " "));
+          const prefill = buildPediatricSoapPrefill({
+            ageFormatted: pediatricsData.ageFormatted,
+            latestFranklValue: latestFrankl?.value ?? null,
+            activeHabits,
+            cambraCategory: (pediatricsData.latestCambra?.category as any) ?? null,
+            cambraRecallMonths: pediatricsData.latestCambra?.recommendedRecallMonths ?? null,
+          });
+          if (prefill) {
+            setSoapDraft((d) => d.subjective.trim().length === 0 ? { ...d, subjective: prefill } : d);
+          }
         }
       } catch (err) {
         toast.error(
