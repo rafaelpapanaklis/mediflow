@@ -2059,6 +2059,95 @@
 .ped-tooth:hover { transform: scale(1.08); filter: drop-shadow(0 0 12px var(--brand)); }
 .ped-tooth:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 8px; }
 
+/* Cards del módulo --------------------------------------------- */
+.pedi-card__empty   { font-size: 12px; color: var(--text-2); margin: 0; }
+.pedi-card__title-row { display: flex; align-items: center; justify-content: space-between; }
+
+.pedi-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-1);
+  border-radius: 8px;
+  font-size: 12px; font-weight: 500;
+  cursor: pointer;
+  transition: background-color 150ms ease-out, border-color 150ms ease-out;
+}
+.pedi-btn:hover { background: var(--bg-elev-2); border-color: var(--border-strong); }
+.pedi-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.pedi-btn--brand { background: var(--brand); color: #fff; border-color: var(--brand); }
+.pedi-btn--brand:hover { background: var(--brand); filter: brightness(1.05); }
+.pedi-btn--xs { padding: 4px 8px; font-size: 11px; }
+
+.pedi-tutor-card__main { display: flex; gap: 10px; align-items: center; margin: 6px 0 10px; }
+.pedi-tutor-card__avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--brand-soft), var(--brand));
+  color: #fff;
+  font-weight: 600; font-size: 12px;
+}
+.pedi-tutor-card__name   { font-size: 13px; font-weight: 600; color: var(--text-1); }
+.pedi-tutor-card__role   { font-size: 11px; color: var(--text-2); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pedi-tutor-card__ine    { display: inline-flex; align-items: center; gap: 3px; font-weight: 600; padding: 1px 6px; border-radius: 999px; font-size: 10px; }
+.pedi-tutor-card__ine--ok      { background: var(--success-soft); color: var(--success); }
+.pedi-tutor-card__ine--pending { background: var(--warning-soft); color: var(--warning); }
+.pedi-tutor-card__contact { display: flex; flex-direction: column; gap: 4px; font-size: 11px; }
+.pedi-tutor-card__contact a { color: var(--text-2); display: inline-flex; align-items: center; gap: 6px; }
+.pedi-tutor-card__contact a:hover { color: var(--brand); }
+.pedi-tutor-card__actions { display: flex; gap: 6px; margin-top: 10px; }
+.pedi-tutor-card__badge   { background: var(--bg-elev-2); color: var(--text-2); font-size: 10px; padding: 1px 6px; border-radius: 999px; }
+
+.pedi-risk-card__meta { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 0; padding: 0; font-size: 12px; }
+.pedi-risk-card__meta div { display: flex; justify-content: space-between; }
+.pedi-risk-card__meta dt { color: var(--text-2); }
+.pedi-risk-card__meta dd { color: var(--text-1); margin: 0; font-weight: 500; }
+
+.pedi-alerts-card__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.pedi-alerts-card__list li { font-size: 12px; color: var(--text-1); display: flex; align-items: center; gap: 6px; }
+.pedi-alerts-card__sep { margin-top: 14px; }
+
+.pedi-maintainer-card__main { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0; color: var(--brand); }
+.pedi-maintainer-card__name { font-size: 13px; font-weight: 600; color: var(--text-1); }
+.pedi-maintainer-card__meta { font-size: 11px; color: var(--text-2); }
+.pedi-maintainer-card__progress { margin-top: 8px; }
+.pedi-maintainer-card__bar { height: 6px; background: var(--bg-elev-2); border-radius: 999px; overflow: hidden; }
+.pedi-maintainer-card__fill { height: 100%; background: var(--brand); }
+.pedi-maintainer-card__progress-meta { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-2); margin-top: 4px; }
+.pedi-maintainer-card__action { margin-top: 10px; width: 100%; justify-content: center; }
+
+.pedi-sealant-card__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+.pedi-sealant-card__cell {
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 11px;
+  display: flex; flex-direction: column; gap: 4px;
+  background: var(--bg-elev);
+}
+.pedi-sealant-card__cell--ok     { border-color: var(--success); }
+.pedi-sealant-card__cell--warn   { border-color: var(--warning); }
+.pedi-sealant-card__cell--danger { border-color: var(--danger); }
+.pedi-sealant-card__cell--empty  { opacity: 0.7; }
+.pedi-sealant-card__fdi      { font-family: var(--font-jetbrains-mono, ui-monospace, monospace); font-size: 11px; color: var(--text-2); }
+.pedi-sealant-card__status   { display: flex; align-items: center; gap: 4px; font-weight: 600; text-transform: capitalize; }
+.pedi-sealant-card__material { color: var(--text-2); font-size: 10px; }
+.pedi-sealant-card__missing  { color: var(--text-2); font-style: italic; }
+
+.pedi-frank-sparkline-card svg { display: block; margin: 8px 0; }
+.pedi-frank-sparkline-card__last { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); }
+
+.pedi-consent-pending-card { border-color: var(--warning); background: var(--warning-soft); }
+.pedi-consent-pending-card .pedi-card__title { color: var(--warning); display: flex; align-items: center; gap: 6px; }
+.pedi-consent-pending-card__list { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 6px; }
+.pedi-consent-pending-card__list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text-1); }
+
 /* Animaciones reducidas */
 @media (prefers-reduced-motion: reduce) {
   .drawer, .drawer-overlay,
