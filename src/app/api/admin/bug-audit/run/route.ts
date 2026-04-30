@@ -6,6 +6,10 @@ import { runAllScanners } from "@/lib/bug-audit/registry";
 import { summarize } from "@/lib/bug-audit/helpers";
 import type { BugItem, ScannerSection } from "@/lib/bug-audit/types";
 
+// El endpoint corre los 29 scanners (19 originales + 10 extras consolidados
+// del branch bug-audit-extras). El endpoint separado /run-extras quedó
+// eliminado al unificar el módulo.
+
 export const dynamic = "force-dynamic";
 export const maxDuration = 180; // 3 min hard cap.
 
@@ -54,14 +58,17 @@ export async function POST(req: NextRequest) {
     user.id;
 
   // Persist. Si la tabla no existe (Supabase no aplicó SQL), devolvemos
-  // resultado pero loggeamos.
+  // resultado pero loggeamos. clinicId+userId registran al actor (la
+  // auditoría es global pero tracking quien-corrió-qué).
   try {
     await prisma.bugAuditRun.create({
       data: {
         id,
         triggeredBy,
-        duration_ms: durationMs,
+        durationMs,
         status: "completed",
+        clinicId: user.clinicId ?? null,
+        userId: user.id,
         summary: summary as object,
         items: filteredItems as unknown as object,
       },

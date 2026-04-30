@@ -23,7 +23,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     id: row.id,
     runAt: row.runAt.toISOString(),
     triggeredBy: row.triggeredBy,
-    durationMs: row.duration_ms,
+    durationMs: row.durationMs,
     status: row.status,
     summary: row.summary,
     items: row.items,

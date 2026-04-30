@@ -26,6 +26,20 @@ import {
 import { scanBrokenButtons } from "./scanners/frontend";
 import { scanRLSCoverage, scanOrphanFKs } from "./scanners/db";
 
+// Extras (originalmente en branch bug-audit-extras como /run-extras endpoint
+// + src/lib/audit/scanners/*). Consolidados aquí: el endpoint /run ahora
+// corre los 29 scanners y el endpoint /run-extras se eliminó.
+import { runWebhookScan }      from "./scanners/extras/webhooks";
+import { runCronScan }         from "./scanners/extras/crons";
+import { runStorageScan }      from "./scanners/extras/storage";
+import { runAIScan }           from "./scanners/extras/ai";
+import { runEnvScan }          from "./scanners/extras/env";
+import { runArcoScan }         from "./scanners/extras/arco";
+import { runBackupScan }       from "./scanners/extras/backups";
+import { runTestCoverageScan } from "./scanners/extras/test-coverage";
+import { runA11yScan }         from "./scanners/extras/a11y";
+import { runMigrationScan }    from "./scanners/extras/migrations";
+
 interface ScannerDef {
   section: ScannerSection;
   name: string;
@@ -36,6 +50,10 @@ const SCANNERS: ScannerDef[] = [
   // Backend (DB structural)
   { section: "backend", name: "rls-coverage",      run: scanRLSCoverage },
   { section: "backend", name: "fk-orphans",        run: scanOrphanFKs },
+  // Backend (extras)
+  { section: "backend", name: "crons",             run: runCronScan },
+  { section: "backend", name: "backups",           run: runBackupScan },
+  { section: "backend", name: "migrations",        run: runMigrationScan },
 
   // Security
   { section: "security", name: "auth-coverage",    run: scanAuthCoverage },
@@ -46,6 +64,12 @@ const SCANNERS: ScannerDef[] = [
   { section: "security", name: "dangerous-html",   run: scanDangerousHTML },
   { section: "security", name: "audit-log",        run: scanAuditLogIntegrity },
   { section: "security", name: "hardcoded-secrets",run: scanHardcodedSecrets },
+  // Security (extras)
+  { section: "security", name: "webhooks",         run: runWebhookScan },
+  { section: "security", name: "storage",          run: runStorageScan },
+  { section: "security", name: "ai",               run: runAIScan },
+  { section: "security", name: "env",              run: runEnvScan },
+  { section: "security", name: "arco",             run: runArcoScan },
 
   // Performance
   { section: "performance", name: "n-plus-one",    run: scanNPlusOne },
@@ -58,9 +82,13 @@ const SCANNERS: ScannerDef[] = [
   { section: "quality", name: "console-log",       run: scanConsoleLogs },
   { section: "quality", name: "todo",              run: scanTodos },
   { section: "quality", name: "swallowed-error",   run: scanSwallowedErrors },
+  // Quality (extras)
+  { section: "quality", name: "tests",             run: runTestCoverageScan },
 
   // Frontend
   { section: "frontend", name: "broken-buttons",   run: scanBrokenButtons },
+  // Frontend (extras)
+  { section: "frontend", name: "a11y",             run: runA11yScan },
 ];
 
 export async function runAllScanners(

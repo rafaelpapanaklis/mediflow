@@ -446,9 +446,14 @@ function scoreColor(score: number): string {
 }
 
 function sectionForCategory(category: BugItem["category"]): ScannerSection {
-  if (["rls", "schema-drift", "fk-orphans", "deps"].includes(category)) return "backend";
-  if (["auth", "idor", "mass-assignment", "sql-injection", "xss", "secrets", "ssrf", "rate-limit", "headers", "cors", "cookies", "passwords", "tokens", "uploads", "open-redirect", "pii-logging", "audit-log", "fiel"].includes(category)) return "security";
+  // Backend (DB structural + jobs/migraciones de los extras).
+  if (["rls", "schema-drift", "fk-orphans", "deps", "crons", "backups", "migrations"].includes(category)) return "backend";
+  // Security (auth, AppSec + extras: webhooks, storage, IA, env, ARCO compliance).
+  if (["auth", "idor", "mass-assignment", "sql-injection", "xss", "secrets", "ssrf", "rate-limit", "headers", "cors", "cookies", "passwords", "tokens", "uploads", "open-redirect", "pii-logging", "audit-log", "fiel", "webhooks", "storage", "ai", "env", "arco"].includes(category)) return "security";
+  // Performance.
   if (["n-plus-one", "no-select", "indexes", "pool", "bundle", "images", "dynamic-imports", "cache", "useeffect-leak", "virtualization"].includes(category)) return "performance";
-  if (["ts-any", "fire-and-forget", "swallowed-error", "race-condition", "react-hooks", "console-log", "todo", "dead-code"].includes(category)) return "quality";
+  // Quality (incluye tests/coverage de los extras).
+  if (["ts-any", "fire-and-forget", "swallowed-error", "race-condition", "react-hooks", "console-log", "todo", "dead-code", "tests"].includes(category)) return "quality";
+  // Frontend (broken-* + a11y de los extras).
   return "frontend";
 }

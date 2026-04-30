@@ -6,6 +6,124 @@ import type { BugItem, BugCategory, BugSeverity, BugSummary } from "./types";
 
 const ROOT = process.cwd();
 
+/** Raíz del repo. Alias para legibilidad en scanners que ya importan repoRoot. */
+export function repoRoot(): string {
+  return ROOT;
+}
+
+const SKIP_DIRS = new Set([
+  "node_modules", ".next", ".git", "dist", "build",
+  "coverage", ".turbo", ".vercel", ".cache",
+]);
+/** Tamaño máximo (bytes) de archivo que el scanner leerá. */
+const MAX_FILE_BYTES = 1_000_000;
+
+/** Archivo cargado en memoria, listo para scannear. */
+export interface SourceFile {
+  /** Path absoluto. */
+  abs: string;
+  /** Path relativo al repo root, con `/` siempre. */
+  rel: string;
+  /** Contenido completo (truncado si excede MAX_FILE_BYTES). */
+  content: string;
+  /** Líneas separadas por `\n` — útil para reportar `line`. */
+  lines: string[];
+}
+
+/**
+ * Walk recursivo desde `dirAbs` que devuelve paths absolutos de archivos
+ * que matchean alguna de las extensiones. Skipea node_modules/.next/etc.
+ * Devuelve absolutos para componer con `readFileSafe`.
+ */
+export async function walk(dirAbs: string, exts: string[]): Promise<string[]> {
+  const out: string[] = [];
+  async function visit(d: string) {
+    let entries: import("fs").Dirent[];
+    try {
+      entries = await fs.readdir(d, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
+      const full = path.join(d, e.name);
+      if (e.isDirectory()) await visit(full);
+      else if (exts.some((x) => e.name.endsWith(x))) out.push(full);
+    }
+  }
+  await visit(dirAbs);
+  return out;
+}
+
+/** Lee un archivo, tolera fallos y aplica límite de tamaño. */
+export async function readFileSafe(abs: string): Promise<SourceFile | null> {
+  try {
+    const stat = await fs.stat(abs);
+    if (stat.size > MAX_FILE_BYTES) return null;
+    const content = await fs.readFile(abs, "utf-8");
+    const rel = path.relative(ROOT, abs).replace(/\\/g, "/");
+    return { abs, rel, content, lines: content.split("\n") };
+  } catch {
+    return null;
+  }
+}
+
+/** Lee múltiples paths absolutos secuencialmente, descarta los que fallan. */
+export async function readManyAbs(absPaths: string[]): Promise<SourceFile[]> {
+  const out: SourceFile[] = [];
+  for (const a of absPaths) {
+    const f = await readFileSafe(a);
+    if (f) out.push(f);
+  }
+  return out;
+}
+
+/**
+ * Resuelve glob simple: `<dir>/**\/<filename>` o `<dir>/**\/*.ext`.
+ * Suficiente para los patrones del scanner; no soporta sintaxis avanzada.
+ */
+export async function resolveGlob(pattern: string): Promise<string[]> {
+  const m = pattern.match(/^(.+?)\/\*\*\/(.+)$/);
+  if (m) {
+    const baseDir = path.join(ROOT, m[1]);
+    const target = m[2];
+    const exts = target.startsWith("*.") ? [target.slice(1)] : [];
+    const all = exts.length > 0
+      ? await walk(baseDir, exts)
+      : await walk(baseDir, [".ts", ".tsx", ".js", ".jsx"]);
+    return target.startsWith("*.") ? all : all.filter((p) => p.endsWith("/" + target));
+  }
+  const m2 = pattern.match(/^(.+?)\/\*\.(.+)$/);
+  if (m2) {
+    const baseDir = path.join(ROOT, m2[1]);
+    return walk(baseDir, ["." + m2[2]]);
+  }
+  const single = path.join(ROOT, pattern);
+  try {
+    await fs.access(single);
+    return [single];
+  } catch {
+    return [];
+  }
+}
+
+/** True si el archivo declara `"use client"` en sus primeras 5 líneas. */
+export function isUseClient(content: string): boolean {
+  const head = content.split("\n").slice(0, 5).join("\n");
+  return /^\s*['"]use client['"]/m.test(head);
+}
+
+/** Devuelve `{line, text}` para cada línea que matchea el regex. */
+export function findLineMatches(content: string, regex: RegExp): { line: number; text: string }[] {
+  const lines = content.split("\n");
+  const out: { line: number; text: string }[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (regex.test(lines[i])) out.push({ line: i + 1, text: lines[i] });
+    if (regex.global) regex.lastIndex = 0;
+  }
+  return out;
+}
+
 /**
  * Pesos por severidad para el health score. Mayor severidad = mayor peso.
  * Score = max(0, 100 - sum(items[s].count * weight[s])).
@@ -43,15 +161,20 @@ export function makeItem(it: Omit<BugItem, "fingerprint">): BugItem {
 
 /**
  * Trunca y enmascara snippets antes de exponer en UI. Reemplaza tokens
- * que parezcan secrets (sk_live_, eyJ JWT, claves >24 chars) por su
- * primer 8 + "…".
+ * que parezcan secrets (Stripe sk_/pk_, JWT eyJ, AWS access keys, claves
+ * largas, valores tras SUPABASE_SERVICE_ROLE_KEY=) por máscaras seguras.
+ *
+ * `maxLen` por default 240 chars (suficiente para una línea de código);
+ * los scanners pueden pedir 200 si quieren snippets más cortos.
  */
-export function safeSnippet(raw: string | null): string | null {
+export function safeSnippet(raw: string | null, maxLen = 240): string | null {
   if (!raw) return null;
-  let s = raw.length > 240 ? raw.slice(0, 240) + "…" : raw;
+  let s = raw.length > maxLen ? raw.slice(0, maxLen) + "…" : raw;
   s = s.replace(/(sk_(live|test)_[A-Za-z0-9]{12,})/g, (m) => `${m.slice(0, 8)}…[REDACTED]`);
+  s = s.replace(/(pk_(live|test)_[A-Za-z0-9]{12,})/g, (m) => `${m.slice(0, 8)}…[REDACTED]`);
   s = s.replace(/(eyJ[A-Za-z0-9_-]{20,})/g, (m) => `${m.slice(0, 8)}…[JWT]`);
   s = s.replace(/(AKIA[0-9A-Z]{16})/g, "[AWS_KEY]");
+  s = s.replace(/SUPABASE_SERVICE_ROLE_KEY[^\n]{0,200}/g, "SUPABASE_SERVICE_ROLE_KEY=[REDACTED]");
   s = s.replace(/([A-Za-z0-9]{32,})/g, (m) => (m.length > 32 ? `${m.slice(0, 8)}…[KEY]` : m));
   return s;
 }

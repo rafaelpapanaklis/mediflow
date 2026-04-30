@@ -45,7 +45,18 @@ export type BugCategory =
   | "dead-code"
   | "broken-button"
   | "broken-link"
-  | "broken-modal";
+  | "broken-modal"
+  // Extras (originalmente en src/lib/audit/types.ts antes del merge).
+  | "webhooks"
+  | "crons"
+  | "storage"
+  | "ai"
+  | "env"
+  | "arco"
+  | "backups"
+  | "tests"
+  | "a11y"
+  | "migrations";
 
 export interface BugItem {
   category: BugCategory;
