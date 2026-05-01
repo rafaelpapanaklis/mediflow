@@ -401,10 +401,17 @@
   font-family: var(--font-jetbrains-mono, monospace);
 }
 
-/* Override densidad de la card (M5 v2) */
+/* Override densidad de la card (M5 v2)
+ * Lanes (Bug C): cuando varias citas se solapan en horario, cada una
+ * recibe una `--mf-lane-index` (0..laneCount-1) y un `--mf-lane-count`
+ * (total del cluster overlapping). Sin overlap el default es lane=0,
+ * count=1 → la card ocupa el ancho completo de la columna como antes.
+ * Con overlap, width = (100% - margenes) / count, left = lane * width.
+ */
 .appt {
   position: absolute;
-  left: 3px; right: 3px;
+  left: calc(var(--mf-lane-index, 0) * (100% / var(--mf-lane-count, 1)) + 3px);
+  width: calc((100% / var(--mf-lane-count, 1)) - 6px);
   top: calc(var(--mf-slot-start, 0) * var(--mf-agenda-slot-h));
   height: calc(var(--mf-slot-span, 1) * var(--mf-agenda-slot-h) - 2px);
   border-radius: 6px;

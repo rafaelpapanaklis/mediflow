@@ -2,12 +2,14 @@
 
 import { useMemo } from "react";
 import { useAgenda } from "./agenda-provider";
-import { getTzParts, todayInTz } from "@/lib/agenda/time-utils";
+import { todayInTz } from "@/lib/agenda/time-utils";
+import { calendarDayISO, formatTimeInTz } from "@/lib/agenda/date-ranges";
 import { doctorColorFor } from "@/lib/agenda/doctor-color";
 import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
 
 const WEEKDAYS_ES = ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"];
+const MONTH_PREVIEW_LIMIT = 4;
 
 interface MonthCell {
   iso: string;
@@ -38,16 +40,6 @@ function buildMonthGrid(refISO: string): MonthCell[] {
   return cells;
 }
 
-function dateKeyInTz(iso: string, timezone: string): string {
-  const p = getTzParts(new Date(iso), timezone);
-  return `${p.year}-${pad(p.month)}-${pad(p.day)}`;
-}
-
-function fmtHHMMInTz(iso: string, timezone: string): string {
-  const p = getTzParts(new Date(iso), timezone);
-  return `${pad(p.hour)}:${pad(p.minute)}`;
-}
-
 export function AgendaMonthView() {
   const { state, setDay, setViewMode, selectAppointment } = useAgenda();
 
@@ -60,7 +52,7 @@ export function AgendaMonthView() {
     const map = new Map<string, AgendaAppointmentDTO[]>();
     for (const a of state.appointments) {
       if (a.status === "CANCELLED") continue;
-      const key = dateKeyInTz(a.startsAt, state.timezone);
+      const key = calendarDayISO(a.startsAt, state.timezone);
       const arr = map.get(key);
       if (arr) arr.push(a);
       else map.set(key, [a]);
@@ -92,7 +84,7 @@ export function AgendaMonthView() {
         {cells.map((c) => {
           const appts = byDay.get(c.iso) ?? [];
           const count = appts.length;
-          const preview = appts.slice(0, 5);
+          const preview = appts.slice(0, MONTH_PREVIEW_LIMIT);
           const more = Math.max(0, count - preview.length);
           const classes = [
             styles.monthDay,
@@ -148,17 +140,35 @@ export function AgendaMonthView() {
                       cursor: "pointer",
                       width: "100%",
                     }}
-                    title={`${fmtHHMMInTz(a.startsAt, state.timezone)} · ${a.patient.name}${a.reason ? ` — ${a.reason}` : ""}`}
+                    title={`${formatTimeInTz(a.startsAt, state.timezone)} · ${a.patient.name}${a.reason ? ` — ${a.reason}` : ""}`}
                   >
-                    {fmtHHMMInTz(a.startsAt, state.timezone)} {a.patient.name}
+                    {formatTimeInTz(a.startsAt, state.timezone)} {a.patient.name}
                     {a.reason ? ` · ${a.reason}` : ""}
                   </button>
                 );
               })}
               {more > 0 && (
-                <div className={styles.monthDayPreview} style={{ fontWeight: 600 }}>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    jumpToDay(c.iso);
+                  }}
+                  className={styles.monthDayPreview}
+                  style={{
+                    border: 0,
+                    background: "transparent",
+                    padding: "0 0 0 5px",
+                    textAlign: "left",
+                    cursor: "pointer",
+                    width: "100%",
+                    fontWeight: 600,
+                  }}
+                  title={`Ver ${count} cita${count === 1 ? "" : "s"} del ${c.iso}`}
+                  aria-label={`Ver las ${count} citas del día ${c.iso}`}
+                >
                   +{more} más
-                </div>
+                </button>
               )}
             </div>
           );

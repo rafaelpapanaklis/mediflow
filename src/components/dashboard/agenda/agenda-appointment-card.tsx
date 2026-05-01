@@ -7,7 +7,8 @@ import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useAgenda } from "./agenda-provider";
 import { AgendaStatusPopover } from "./agenda-status-popover";
-import { formatSlotTime, timeToSlotIndex } from "@/lib/agenda/time-utils";
+import { timeToSlotIndex } from "@/lib/agenda/time-utils";
+import { formatTimeInTz } from "@/lib/agenda/date-ranges";
 import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
 import { batchValidateAppointments, patchAppointmentStatus } from "@/lib/agenda/mutations";
 import { nextLogicalStatus } from "@/lib/agenda/status-pipeline";
@@ -23,6 +24,15 @@ interface Props {
   timezone: string;
   /** false en vistas que no soportan drag (mes, lista). */
   draggable?: boolean;
+  /**
+   * Carril asignado para resolver overlap visual. Default 0 (la primera
+   * y única cita en su slot). Cuando varias citas se solapan, cada una
+   * recibe un `lane` distinto (0..laneCount-1) y el ancho de cada card
+   * se calcula como `100% / laneCount` vía CSS variables.
+   */
+  lane?: number;
+  /** Total de carriles del cluster overlapping. Default 1 (sin overlap). */
+  laneCount?: number;
 }
 
 const STATUS_COLOR: Record<AppointmentStatus, string> = {
@@ -44,6 +54,8 @@ export function AgendaAppointmentCard({
   dayStart,
   timezone,
   draggable = true,
+  lane = 0,
+  laneCount = 1,
 }: Props) {
   const { state, selectAppointment, dispatch } = useAgenda();
   const [pendingNext, setPendingNext] = useState(false);
@@ -197,6 +209,8 @@ export function AgendaAppointmentCard({
           "--mf-slot-span": slotsSpan,
           "--mf-doc-color": docColor,
           "--mf-status-color": statusColor,
+          "--mf-lane-index": lane,
+          "--mf-lane-count": laneCount,
           minHeight: 22,
           transform: CSS.Translate.toString(transform),
           opacity: isDragging ? 0.4 : undefined,
@@ -214,7 +228,7 @@ export function AgendaAppointmentCard({
           selectAppointment(appointment.id);
         }
       }}
-      aria-label={`Cita: ${appointment.patient.name} a las ${formatSlotTime(appointment.startsAt, timezone)}`}
+      aria-label={`Cita: ${appointment.patient.name} a las ${formatTimeInTz(appointment.startsAt, timezone)}`}
       aria-selected={isSelected}
       {...listeners}
       {...attributes}
@@ -254,7 +268,7 @@ export function AgendaAppointmentCard({
           </span>
         )}
         <span className={styles.apptTime}>
-          {formatSlotTime(appointment.startsAt, timezone)}
+          {formatTimeInTz(appointment.startsAt, timezone)}
         </span>
         <span className={styles.apptName}>{appointment.patient.name}</span>
       </div>
