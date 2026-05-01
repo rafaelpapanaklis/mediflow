@@ -49,7 +49,7 @@ export function AgendaAppointmentCard({
   const [pendingNext, setPendingNext] = useState(false);
 
   const config = { timezone, slotMinutes, dayStart, dayEnd: 24 };
-  const startSlot = timeToSlotIndex(appointment.startsAt, dayISO, config);
+  const rawSlot = timeToSlotIndex(appointment.startsAt, dayISO, config);
 
   const dragDisabled =
     !draggable ||
@@ -69,7 +69,15 @@ export function AgendaAppointmentCard({
       disabled: dragDisabled,
     });
 
-  if (startSlot < 0) return null;
+  // -1 = día calendario distinto en tz (cita ajena a esta columna).
+  // Slots negativos = mismo día pero antes del agendaDayStart → los
+  // clampamos a slot 0 para que sigan visibles en lugar de
+  // desaparecer (eran invisibles + contadas en el contador, bug
+  // histórico). Slots > slotsTotal salen del horario configurado pero
+  // se posicionan según --mf-slot-start; la columna extiende su
+  // height para acomodarlos.
+  if (rawSlot === -1) return null;
+  const startSlot = Math.max(0, rawSlot);
 
   const startMs = new Date(appointment.startsAt).getTime();
   const endMs = appointment.endsAt
