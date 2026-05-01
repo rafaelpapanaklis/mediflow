@@ -23,6 +23,7 @@ import {
   type AgendaAction,
 } from "@/lib/agenda/store";
 import { viewRangeISO } from "@/lib/agenda/date-ranges";
+import { todayInTz } from "@/lib/agenda/time-utils";
 import type {
   AgendaAppointmentDTO,
   AgendaColumnMode,
@@ -124,7 +125,13 @@ export function AgendaProvider({
     // Único helper de rangos — comparte semántica con SSR y
     // /api/agenda/range. Si dos componentes calculan el rango distinto,
     // los contadores y el render se desincronizan.
-    const range = viewRangeISO(viewMode, dayISO, state.timezone);
+    //
+    // Bug E: vista Lista siempre arranca en HOY (no en `state.dayISO`),
+    // sin importar a qué día navegó el usuario en Día/Semana. Sin esto,
+    // si Rafael navegaba al 14/abr en vista Día y cambiaba a vista
+    // Lista, veía citas del 14/abr en adelante (citas pasadas).
+    const baseDayISO = viewMode === "list" ? todayInTz(state.timezone) : dayISO;
+    const range = viewRangeISO(viewMode, baseDayISO, state.timezone);
     const dKey = filters.doctorIds.join(",");
     const rKey = filters.resourceIds.join(",");
     const sKey = filters.statuses.join(",");

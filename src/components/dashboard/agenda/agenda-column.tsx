@@ -7,6 +7,7 @@ import { AgendaAppointmentCard } from "./agenda-appointment-card";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { getTzParts, slotIndexToUtc } from "@/lib/agenda/time-utils";
 import { calendarDayISO } from "@/lib/agenda/date-ranges";
+import { assignLanes } from "@/lib/agenda/lane-layout";
 import type { DroppableData } from "@/lib/agenda/drag-utils";
 import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 import {
@@ -72,6 +73,14 @@ export function AgendaColumn({ column }: { column: AgendaColumnDescriptor }) {
     }
     return sameDay.filter((a) => a.resourceId === column.resourceId);
   }, [state.appointments, state.dayISO, state.timezone, column]);
+
+  // Bug C: dentro de cada columna (doctor o sillón) puede haber citas
+  // overlapping. Asignamos lanes para que se rendericen una al lado de
+  // la otra dentro del ancho de la columna.
+  const lanedAppointments = useMemo(
+    () => assignLanes(appointmentsHere, state.slotMinutes),
+    [appointmentsHere, state.slotMinutes],
+  );
 
   // Slots base = horario de trabajo configurado. Si hay citas fuera de
   // horario (ej. emergencia a las 23:55), extendemos el alto para que
@@ -157,7 +166,7 @@ export function AgendaColumn({ column }: { column: AgendaColumnDescriptor }) {
       }}
     >
       {hourBands}
-      {appointmentsHere.map((appt) => (
+      {lanedAppointments.map(({ appt, lane, laneCount }) => (
         <AgendaAppointmentCard
           key={appt.id}
           appointment={appt}
@@ -165,6 +174,8 @@ export function AgendaColumn({ column }: { column: AgendaColumnDescriptor }) {
           slotMinutes={state.slotMinutes}
           dayStart={state.dayStart}
           timezone={state.timezone}
+          lane={lane}
+          laneCount={laneCount}
         />
       ))}
     </div>

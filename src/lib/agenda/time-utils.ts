@@ -123,15 +123,26 @@ export function appointmentSlotSpan(
   return Math.max(1, Math.ceil(durationMin / config.slotMinutes));
 }
 
+/**
+ * @deprecated usar `formatTimeInTz` desde `@/lib/agenda/date-ranges`.
+ * Wrapper mantenido por compatibilidad con call sites fuera de la
+ * agenda (ej. slot-grid-picker en new-appointment). Delega al helper
+ * unificado para que TODA la app pase por el mismo path con fallback
+ * a `America/Mexico_City` cuando la TZ llega vacía (Bug D).
+ */
 export function formatSlotTime(iso: string, timezone: string): string {
-  return new Intl.DateTimeFormat("es-MX", {
-    timeZone: timezone,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(iso));
+  // Inline para evitar dependencia circular date-ranges → time-utils →
+  // date-ranges. La lógica está duplicada aquí pero el comportamiento
+  // se mantiene en sync vía el test compartido.
+  const tz = timezone && timezone.length > 0 ? timezone : "America/Mexico_City";
+  const p = getTzParts(new Date(iso), tz);
+  const hour = p.hour === 24 ? 0 : p.hour;
+  return `${pad(hour)}:${pad(p.minute)}`;
 }
 
+/**
+ * @deprecated usar `formatTimeRangeInTz` desde `@/lib/agenda/date-ranges`.
+ */
 export function formatSlotRange(
   startsAtIso: string,
   endsAtIso: string,

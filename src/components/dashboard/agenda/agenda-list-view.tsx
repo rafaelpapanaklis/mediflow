@@ -2,15 +2,10 @@
 
 import { useMemo } from "react";
 import { useAgenda } from "./agenda-provider";
-import { formatSlotTime, getTzParts } from "@/lib/agenda/time-utils";
+import { calendarDayISO, formatTimeInTz } from "@/lib/agenda/date-ranges";
 import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
 import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
-
-function dateKeyInTz(iso: string, timezone: string): string {
-  const p = getTzParts(new Date(iso), timezone);
-  return `${p.year}-${p.month.toString().padStart(2, "0")}-${p.day.toString().padStart(2, "0")}`;
-}
 
 const STATUS_COLOR: Record<AppointmentStatus, string> = {
   SCHEDULED:    "var(--warning)",
@@ -51,10 +46,14 @@ export function AgendaListView() {
   const { state } = useAgenda();
 
   // Agrupamos por día (en clinic timezone) y ordenamos cronológicamente.
+  // Excluimos CANCELLED por default (mismo criterio que vista Mes); el
+  // usuario las ve en el detalle individual de la cita, no en el feed
+  // de "qué viene".
   const groups = useMemo(() => {
     const map = new Map<string, AgendaAppointmentDTO[]>();
     for (const a of state.appointments) {
-      const key = dateKeyInTz(a.startsAt, state.timezone);
+      if (a.status === "CANCELLED") continue;
+      const key = calendarDayISO(a.startsAt, state.timezone);
       const arr = map.get(key);
       if (arr) arr.push(a);
       else map.set(key, [a]);
@@ -97,9 +96,9 @@ export function AgendaListView() {
 
 function ListRow({ appointment }: { appointment: AgendaAppointmentDTO }) {
   const { state, selectAppointment } = useAgenda();
-  const start = formatSlotTime(appointment.startsAt, state.timezone);
+  const start = formatTimeInTz(appointment.startsAt, state.timezone);
   const end = appointment.endsAt
-    ? formatSlotTime(appointment.endsAt, state.timezone)
+    ? formatTimeInTz(appointment.endsAt, state.timezone)
     : null;
   const doctorMeta = appointment.doctor
     ? state.doctors.find((d) => d.id === appointment.doctor!.id) ?? null

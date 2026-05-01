@@ -5,16 +5,13 @@ import { useDroppable } from "@dnd-kit/core";
 import { useAgenda } from "./agenda-provider";
 import { AgendaTimeAxis } from "./agenda-time-axis";
 import { AgendaAppointmentCard } from "./agenda-appointment-card";
-import { getTzParts, todayInTz } from "@/lib/agenda/time-utils";
+import { todayInTz } from "@/lib/agenda/time-utils";
+import { calendarDayISO } from "@/lib/agenda/date-ranges";
+import { assignLanes } from "@/lib/agenda/lane-layout";
 import { useDragOverlap } from "@/app/dashboard/agenda/agenda-page-client";
 import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 import type { DroppableData } from "@/lib/agenda/drag-utils";
 import styles from "./agenda.module.css";
-
-function dateKeyInTz(iso: string, timezone: string): string {
-  const p = getTzParts(new Date(iso), timezone);
-  return `${p.year}-${p.month.toString().padStart(2, "0")}-${p.day.toString().padStart(2, "0")}`;
-}
 
 const WEEKDAYS_ES = ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"];
 
@@ -124,8 +121,16 @@ function WeekDayColumn({ day, isToday, slotsTotal }: WeekDayColumnProps) {
   // Filtramos las citas del rango (cargadas por el provider) que caen
   // exactamente en este día, en el timezone de la clínica.
   const dayAppts = useMemo<AgendaAppointmentDTO[]>(
-    () => state.appointments.filter((a) => dateKeyInTz(a.startsAt, state.timezone) === day.iso),
+    () => state.appointments.filter((a) => calendarDayISO(a.startsAt, state.timezone) === day.iso),
     [state.appointments, day.iso, state.timezone],
+  );
+
+  // Bug C: cada día puede tener citas que se solapan en horario.
+  // Asignamos lanes (columnas paralelas) para que se rendericen una al
+  // lado de la otra en vez de apiladas en la misma posición.
+  const lanedAppts = useMemo(
+    () => assignLanes(dayAppts, state.slotMinutes),
+    [dayAppts, state.slotMinutes],
   );
 
   const droppableData: DroppableData = {
@@ -167,7 +172,7 @@ function WeekDayColumn({ day, isToday, slotsTotal }: WeekDayColumnProps) {
       role="grid"
       aria-label={`Día ${day.iso}`}
     >
-      {dayAppts.map((appt) => (
+      {lanedAppts.map(({ appt, lane, laneCount }) => (
         <AgendaAppointmentCard
           key={appt.id}
           appointment={appt}
@@ -175,6 +180,8 @@ function WeekDayColumn({ day, isToday, slotsTotal }: WeekDayColumnProps) {
           slotMinutes={state.slotMinutes}
           dayStart={state.dayStart}
           timezone={state.timezone}
+          lane={lane}
+          laneCount={laneCount}
         />
       ))}
     </div>
