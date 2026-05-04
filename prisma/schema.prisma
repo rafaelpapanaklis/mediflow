@@ -179,6 +179,11 @@ model Clinic {
   orders               Order[]
   cart                 Cart?
 
+  // Endodontics module — see docs/marketplace/research/endodoncia/SPEC.md §4
+  endodonticDiagnoses  EndodonticDiagnosis[]
+  vitalityTests        VitalityTest[]
+  endodonticTreatments EndodonticTreatment[]
+
   @@map("clinics")
 }
 
@@ -270,6 +275,11 @@ model User {
   inboxSent          InboxMessage[]
   remindersCreated   Reminder[]          @relation("ReminderCreator")
   remindersAssigned  Reminder[]          @relation("ReminderAssignee")
+
+  // Endodontics module — see docs/marketplace/research/endodoncia/SPEC.md §4
+  endoDiagnosisDoctor EndodonticDiagnosis[] @relation("EndoDiagnosisDoctor")
+  vitalityDoctor      VitalityTest[]        @relation("VitalityDoctor")
+  endoTreatmentDoctor EndodonticTreatment[] @relation("EndoTreatmentDoctor")
 
   @@unique([supabaseId, clinicId])
   @@index([supabaseId])
@@ -381,6 +391,11 @@ model Patient {
   fluorideApplications FluorideApplication[]
   endoTreatments       PediatricEndodonticTreatment[]
   pediatricConsents    PediatricConsent[]
+
+  // Endodontics module — see docs/marketplace/research/endodoncia/SPEC.md §4
+  endodonticDiagnoses  EndodonticDiagnosis[]
+  vitalityTests        VitalityTest[]
+  endodonticTreatments EndodonticTreatment[]
 
   @@unique([clinicId, patientNumber])
   @@index([clinicId, status])
@@ -905,6 +920,13 @@ model PatientFile {
   patient      Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
   clinic       Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   xrayAnalysis XrayAnalysis?
+
+  // Endodontics module — radiografías referenciadas como conductometría /
+  // controles / intraoperatorio. SPEC §1.4 reutiliza PatientFile en lugar
+  // de crear un modelo Radiography separado.
+  conductometryRootCanals RootCanal[]          @relation("ConductometryFile")
+  followUpsAsControl      EndodonticFollowUp[] @relation("FollowUpFile")
+  apicalSurgeries         ApicalSurgery[]      @relation("ApicalSurgeryFile")
 
   @@index([clinicId, patientId, createdAt(sort: Desc)])
   @@index([patientId, category])
@@ -2336,4 +2358,441 @@ model PediatricConsent {
   @@index([clinicId])
   @@index([deletedAt])
   @@map("ped_consents")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// ENDODONTICS MODULE
+// Specs: docs/marketplace/research/endodoncia/SPEC.md §4
+// ─────────────────────────────────────────────────────────────────────────
+
+enum PulpalDiagnosis {
+  PULPA_NORMAL
+  PULPITIS_REVERSIBLE
+  PULPITIS_IRREVERSIBLE_SINTOMATICA
+  PULPITIS_IRREVERSIBLE_ASINTOMATICA
+  NECROSIS_PULPAR
+  PREVIAMENTE_TRATADO
+  PREVIAMENTE_INICIADO
+}
+
+enum PeriapicalDiagnosis {
+  TEJIDOS_PERIAPICALES_NORMALES
+  PERIODONTITIS_APICAL_SINTOMATICA
+  PERIODONTITIS_APICAL_ASINTOMATICA
+  ABSCESO_APICAL_AGUDO
+  ABSCESO_APICAL_CRONICO
+  OSTEITIS_CONDENSANTE
+}
+
+enum VitalityTestType {
+  FRIO
+  CALOR
+  EPT
+  PERCUSION_VERTICAL
+  PERCUSION_HORIZONTAL
+  PALPACION_APICAL
+  MORDIDA_TOOTHSLOOTH
+}
+
+enum VitalityResult {
+  POSITIVO
+  NEGATIVO
+  EXAGERADO
+  DIFERIDO
+  SIN_RESPUESTA
+}
+
+enum EndoTreatmentType {
+  TC_PRIMARIO
+  RETRATAMIENTO
+  APICECTOMIA
+  PULPOTOMIA_EMERGENCIA
+  TERAPIA_REGENERATIVA
+}
+
+enum AccessType {
+  CONVENCIONAL
+  CONSERVADOR
+  RECTIFICACION_PREVIO
+  POSTE_RETIRADO
+}
+
+enum InstrumentationSystem {
+  PROTAPER_GOLD
+  PROTAPER_NEXT
+  WAVEONE_GOLD
+  RECIPROC_BLUE
+  BIORACE
+  HYFLEX_EDM
+  TRUNATOMY
+  MANUAL_KFILES
+  OTRO
+}
+
+enum InstrumentationTechnique {
+  ROTACION_CONTINUA
+  RECIPROCACION
+  MANUAL
+  HIBRIDA
+}
+
+enum IrrigationActivation {
+  NINGUNA
+  SONICA
+  ULTRASONICA
+  LASER
+  XPF
+}
+
+enum ObturationTechnique {
+  CONDENSACION_LATERAL
+  CONDENSACION_VERTICAL_CALIENTE
+  OLA_CONTINUA
+  CONO_UNICO
+  TERMOPLASTICA_INYECTABLE
+  BIOCERAMIC_SINGLE_CONE
+}
+
+enum SealerType {
+  AH_PLUS
+  MTA_FILLAPEX
+  BIOROOT_RCS
+  BC_SEALER
+  TUBLISEAL
+  SEALAPEX
+  OTRO
+}
+
+enum CanalCanonicalName {
+  MB
+  MB2
+  DB
+  MV
+  DV
+  MP
+  P
+  D
+  M
+  L
+  V
+  ML
+  DL
+  CONDUCTO_UNICO
+  OTRO
+}
+
+enum ObturationQuality {
+  HOMOGENEA
+  ADECUADA
+  CON_HUECOS
+  SOBREOBTURADA
+  SUBOBTURADA
+}
+
+enum IntracanalSubstance {
+  HIDROXIDO_CALCIO
+  CTZ
+  LEDERMIX
+  FORMOCRESOL
+  PROPILENGLICOL
+  OTRO
+}
+
+enum FollowUpMilestone {
+  CONTROL_6M
+  CONTROL_12M
+  CONTROL_24M
+  CONTROL_EXTRA
+}
+
+enum FollowUpConclusion {
+  EXITO
+  EN_CURACION
+  FRACASO
+  INCIERTO
+}
+
+enum RetreatmentFailureReason {
+  FILTRACION_CORONAL
+  INSTRUMENTO_FRACTURADO
+  CONDUCTO_NO_TRATADO
+  SOBREOBTURACION
+  SUBOBTURACION
+  FRACTURA_RADICULAR
+  REINFECCION
+  DESCONOCIDO
+}
+
+enum RetreatmentDifficulty {
+  BAJA
+  MEDIA
+  ALTA
+}
+
+enum RetroFillingMaterial {
+  MTA
+  BIOCERAMIC_PUTTY
+  SUPER_EBA
+  IRM
+  OTRO
+}
+
+enum FlapType {
+  OCHSENBEIN_LUEBKE
+  SULCULAR
+  SEMILUNAR
+  PAPILAR
+}
+
+enum EndoOutcomeStatus {
+  EN_CURSO
+  COMPLETADO
+  FALLIDO
+  ABANDONADO
+}
+
+enum PostOpRestorationType {
+  CORONA_PORCELANA_METAL
+  CORONA_ZIRCONIA
+  CORONA_DISILICATO_LITIO
+  ONLAY
+  RESTAURACION_DIRECTA_RESINA
+  POSTE_FIBRA_CORONA
+  POSTE_METALICO_CORONA
+}
+
+model EndodonticDiagnosis {
+  id          String   @id @default(uuid())
+  clinicId    String
+  patientId   String
+  doctorId    String
+  toothFdi    Int
+  diagnosedAt DateTime @default(now())
+
+  pulpalDiagnosis     PulpalDiagnosis
+  periapicalDiagnosis PeriapicalDiagnosis
+  justification       String?             @db.Text
+
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  clinic     Clinic                @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  patient    Patient               @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  doctor     User                  @relation("EndoDiagnosisDoctor", fields: [doctorId], references: [id], onDelete: Restrict)
+  treatments EndodonticTreatment[]
+
+  @@index([clinicId, patientId, toothFdi])
+  @@index([clinicId, doctorId, diagnosedAt])
+  @@map("endodontic_diagnoses")
+}
+
+model VitalityTest {
+  id           String           @id @default(uuid())
+  clinicId     String
+  patientId    String
+  doctorId     String
+  toothFdi     Int
+  controlTeeth Json
+  testType     VitalityTestType
+  result       VitalityResult
+  intensity    Int?
+  evaluatedAt  DateTime         @default(now())
+  notes        String?          @db.Text
+
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  doctor  User    @relation("VitalityDoctor", fields: [doctorId], references: [id], onDelete: Restrict)
+
+  @@index([clinicId, patientId, toothFdi, evaluatedAt])
+  @@map("vitality_tests")
+}
+
+model EndodonticTreatment {
+  id             String            @id @default(uuid())
+  clinicId       String
+  patientId      String
+  doctorId       String
+  toothFdi       Int
+  treatmentType  EndoTreatmentType
+  diagnosisId    String?
+  startedAt      DateTime          @default(now())
+  completedAt    DateTime?
+  sessionsCount  Int               @default(1)
+  currentStep    Int               @default(1)
+  isMultiSession Boolean           @default(false)
+
+  // Acceso e instrumentación
+  rubberDamPlaced       Boolean                   @default(false)
+  accessType            AccessType?
+  instrumentationSystem InstrumentationSystem?
+  technique             InstrumentationTechnique?
+  motorBrand            String?
+  torqueSettings        String?
+  rpmSetting            Int?
+
+  // Irrigación
+  irrigants              Json?
+  irrigationActivation   IrrigationActivation?
+  totalIrrigationMinutes Int?
+
+  // Obturación
+  obturationTechnique ObturationTechnique?
+  sealer              SealerType?
+  masterConePresetIso Int?
+
+  // Restauración pos-TC
+  postOpRestorationPlan        PostOpRestorationType?
+  requiresPost                 Boolean                @default(false)
+  postMaterial                 String?
+  restorationUrgencyDays       Int?
+  restorationDoctorId          String?
+  postOpRestorationCompletedAt DateTime?
+
+  // Resultado global
+  outcomeStatus EndoOutcomeStatus @default(EN_CURSO)
+
+  notes String? @db.Text
+
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  clinic                Clinic                     @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  patient               Patient                    @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  doctor                User                       @relation("EndoTreatmentDoctor", fields: [doctorId], references: [id], onDelete: Restrict)
+  diagnosis             EndodonticDiagnosis?       @relation(fields: [diagnosisId], references: [id], onDelete: SetNull)
+  rootCanals            RootCanal[]
+  intracanalMedications IntracanalMedication[]
+  followUps             EndodonticFollowUp[]
+  retreatmentInfo       EndodonticRetreatmentInfo?
+  apicalSurgery         ApicalSurgery?
+
+  @@index([clinicId, patientId, toothFdi])
+  @@index([clinicId, doctorId, startedAt])
+  @@index([clinicId, outcomeStatus])
+  @@map("endodontic_treatments")
+}
+
+model RootCanal {
+  id                    String             @id @default(uuid())
+  treatmentId           String
+  canonicalName         CanalCanonicalName
+  customLabel           String?
+  workingLengthMm       Decimal            @db.Decimal(4, 1)
+  coronalReferencePoint String
+  masterApicalFileIso   Int
+  masterApicalFileTaper Decimal            @db.Decimal(3, 2)
+  apexLocatorReadingMm  Decimal?           @db.Decimal(4, 1)
+  radiographicLengthMm  Decimal?           @db.Decimal(4, 1)
+  apexLocatorBrand      String?
+  conductometryFileId   String?
+  obturationQuality     ObturationQuality?
+  notes                 String?            @db.Text
+
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  treatment         EndodonticTreatment @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
+  conductometryFile PatientFile?        @relation("ConductometryFile", fields: [conductometryFileId], references: [id], onDelete: SetNull)
+
+  @@index([treatmentId])
+  @@map("root_canals")
+}
+
+model IntracanalMedication {
+  id                String              @id @default(uuid())
+  treatmentId       String
+  substance         IntracanalSubstance
+  placedAt          DateTime
+  expectedRemovalAt DateTime?
+  actualRemovalAt   DateTime?
+  notes             String?             @db.Text
+
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  treatment EndodonticTreatment @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
+
+  @@index([treatmentId, placedAt])
+  @@map("intracanal_medications")
+}
+
+model EndodonticFollowUp {
+  id                String              @id @default(uuid())
+  treatmentId       String
+  milestone         FollowUpMilestone
+  scheduledAt       DateTime
+  performedAt       DateTime?
+  paiScore          Int?
+  symptomsPresent   Boolean?
+  conclusion        FollowUpConclusion?
+  recommendedAction String?             @db.Text
+  controlFileId     String?
+  notes             String?             @db.Text
+
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  treatment   EndodonticTreatment @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
+  controlFile PatientFile?        @relation("FollowUpFile", fields: [controlFileId], references: [id], onDelete: SetNull)
+
+  @@index([treatmentId, scheduledAt])
+  @@index([scheduledAt, performedAt])
+  @@map("endodontic_follow_ups")
+}
+
+model EndodonticRetreatmentInfo {
+  id                           String                   @id @default(uuid())
+  treatmentId                  String                   @unique
+  failureReason                RetreatmentFailureReason
+  originalTreatmentDate        DateTime?
+  fracturedInstrumentRecovered Boolean                  @default(false)
+  difficulty                   RetreatmentDifficulty    @default(MEDIA)
+  notes                        String?                  @db.Text
+
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  treatment EndodonticTreatment @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
+
+  @@map("endodontic_retreatment_info")
+}
+
+model ApicalSurgery {
+  id                   String               @id @default(uuid())
+  treatmentId          String               @unique
+  interventedRoot      String
+  resectedRootLengthMm Decimal              @db.Decimal(3, 1)
+  retroFillingMaterial RetroFillingMaterial
+  flapType             FlapType
+  sutureType           String?
+  postOpControlAt      DateTime?
+  intraoperativeFileId String?
+  notes                String?              @db.Text
+
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  treatment          EndodonticTreatment @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
+  intraoperativeFile PatientFile?        @relation("ApicalSurgeryFile", fields: [intraoperativeFileId], references: [id], onDelete: SetNull)
+
+  @@map("apical_surgeries")
 }
