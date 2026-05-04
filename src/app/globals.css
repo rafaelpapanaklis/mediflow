@@ -2827,6 +2827,45 @@
 .endo-canal-map__legend li { display: inline-flex; align-items: center; gap: 6px; }
 .endo-canal-map__sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
 
+.endo-tooth-timeline__header { margin-bottom: 12px; }
+.endo-tooth-timeline__list {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-direction: column; gap: 6px;
+  position: relative;
+}
+.endo-tooth-timeline__item { position: relative; }
+.endo-tooth-timeline__btn {
+  width: 100%;
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background-color 150ms, border-color 150ms;
+}
+.endo-tooth-timeline__btn:hover { background: var(--bg-hover, var(--bg-elev-2)); border-color: var(--border-strong); }
+.endo-tooth-timeline__btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.endo-tooth-timeline__icon {
+  width: 26px; height: 26px;
+  display: inline-grid; place-items: center;
+  border-radius: 6px;
+  flex-shrink: 0;
+  color: var(--text-2);
+  background: var(--bg-elev);
+}
+.endo-tooth-timeline__item--info    .endo-tooth-timeline__icon { background: var(--info-soft);    color: var(--info); }
+.endo-tooth-timeline__item--success .endo-tooth-timeline__icon { background: var(--success-soft); color: var(--success); }
+.endo-tooth-timeline__item--warning .endo-tooth-timeline__icon { background: var(--warning-soft); color: var(--warning); }
+.endo-tooth-timeline__item--danger  .endo-tooth-timeline__icon { background: var(--danger-soft);  color: var(--danger); }
+
+.endo-tooth-timeline__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.endo-tooth-timeline__date  { font-size: 11px; color: var(--text-2); font-family: var(--font-jetbrains-mono, monospace); }
+.endo-tooth-timeline__label { font-size: 13px; color: var(--text-1); font-weight: 500; }
+.endo-tooth-timeline__detail{ font-size: 11px; color: var(--text-3); }
+
 /* Animaciones reducidas */
 @media (prefers-reduced-motion: reduce) {
   .drawer, .drawer-overlay,
