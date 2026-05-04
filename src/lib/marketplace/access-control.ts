@@ -64,7 +64,8 @@ export async function canAccessModule(
  */
 const SPECIALTY_MODULE_KEYS: readonly string[] = [
   "pediatric-dentistry",
-  // Próximos: "endodontics", "orthodontics", "periodontics", "implantology"
+  "endodontics",
+  // Próximos: "orthodontics", "periodontics", "implantology"
 ];
 
 /**

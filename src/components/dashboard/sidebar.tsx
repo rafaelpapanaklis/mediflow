@@ -9,7 +9,7 @@ import {
   Stethoscope, Sparkles, FileImage, Camera, FlaskConical, Dumbbell, Footprints,
   Activity, Gift, DoorOpen, Package, Building2,
   CreditCard, BarChart3, Monitor, UserCog, Globe, ClipboardList, Settings,
-  ShoppingBag, Baby,
+  ShoppingBag, Baby, Zap,
   ChevronDown, ChevronRight, Moon, Sun, LogOut, PanelLeftClose, PanelLeft,
   X, type LucideIcon,
 } from "lucide-react";
@@ -140,6 +140,10 @@ const NAV_ITEMS: NavItemDef[] = [
     icon: Baby,
     categories: ["DENTAL", "MEDICINE"],
     permission: "specialties.pediatrics" },
+  { id: "endodontics",  section: "specialties", label: "Endodoncia", href: "/dashboard/specialties/endodontics",
+    icon: Zap,
+    categories: ["DENTAL"],
+    permission: "specialties.endodontics" },
 
   { id: "treatments",   section: "catalogo", label: "Tratamientos", href: "/dashboard/treatments", icon: Activity, permission: "treatments.view" },
   { id: "packages",     section: "catalogo", label: "Paquetes",     href: "/dashboard/packages",

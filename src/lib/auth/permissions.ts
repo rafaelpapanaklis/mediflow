@@ -138,7 +138,8 @@ export const ALL_PERMISSIONS = {
   // marketplace. La visibilidad real ADEMÁS exige el módulo activo en
   // ClinicModule (canAccessModule). Estas keys solo cubren la dimensión
   // de "tiene permiso UI"; el módulo se valida server-side.
-  "specialties.pediatrics": "Ver Odontopediatría",
+  "specialties.pediatrics":  "Ver Odontopediatría",
+  "specialties.endodontics": "Ver Endodoncia",
 } as const;
 
 export type PermissionKey = keyof typeof ALL_PERMISSIONS;
@@ -164,7 +165,7 @@ export const PERMISSION_GROUPS: { title: string; keys: PermissionKey[] }[] = [
   { title: "Equipo",         keys: ["team.view", "team.edit"] },
   { title: "Configuración",  keys: ["settings.view", "settings.edit", "landing.view", "landing.edit", "procedures.view", "procedures.edit", "clinicLayout.view", "clinicLayout.edit"] },
   { title: "Marketplace",    keys: ["marketplace.view"] },
-  { title: "Especialidades", keys: ["specialties.pediatrics"] },
+  { title: "Especialidades", keys: ["specialties.pediatrics", "specialties.endodontics"] },
 ];
 
 /**
@@ -185,6 +186,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     "inbox.view", "inbox.send",
     "marketplace.view",
     "specialties.pediatrics",
+    "specialties.endodontics",
   ],
   RECEPTIONIST: [
     "today.view",
@@ -196,6 +198,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     "treatments.view", "resources.view", "inventory.view",
     "marketplace.view",
     "specialties.pediatrics",
+    "specialties.endodontics",
   ],
   // READONLY: solo *.view excepto medical/prescription/xrays
   READONLY: ALL_PERMISSION_KEYS.filter((k) =>
