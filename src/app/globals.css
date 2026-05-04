@@ -2665,6 +2665,78 @@
 .ped-onboarding__body { min-height: 340px; }
 .ped-onboarding__footer { gap: 8px; flex-wrap: wrap; }
 
+/* Endodontics module ------------------------------------------ */
+.endo-shell {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+@media (max-width: 1024px) { .endo-shell { grid-template-columns: 1fr; } }
+
+.endo-mini-odo {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.endo-mini-odo__header h3 { font-size: 13px; font-weight: 600; color: var(--text-1); margin: 0; }
+.endo-mini-odo__header p  { font-size: 11px; color: var(--text-2); margin: 4px 0 0; }
+.endo-mini-odo__rows { display: flex; flex-direction: column; gap: 10px; }
+.endo-mini-odo__separator { height: 1px; border-top: 1px dashed var(--border-soft); }
+.endo-mini-odo__row { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+.endo-mini-odo__tooth {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 4px 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 120ms, border-color 120ms;
+}
+.endo-mini-odo__tooth:hover { background: var(--bg-elev-2); }
+.endo-mini-odo__tooth.is-active { border-color: var(--brand); background: var(--brand-soft); }
+.endo-mini-odo__tooth:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.endo-mini-odo__dot {
+  width: 18px; height: 22px;
+  border-radius: 6px;
+  display: block;
+}
+.endo-mini-odo__fdi {
+  font-size: 9px;
+  font-family: var(--font-jetbrains-mono, ui-monospace, monospace);
+  color: var(--text-2);
+}
+.endo-mini-odo__legend {
+  list-style: none; padding: 0; margin: 8px 0 0;
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 11px; color: var(--text-2);
+}
+.endo-mini-odo__legend li { display: flex; align-items: center; gap: 6px; }
+.endo-mini-odo__swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+.endo-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.endo-empty {
+  background: var(--bg-elev);
+  border: 1px dashed var(--border-strong);
+  border-radius: 14px;
+  padding: 60px 24px;
+  text-align: center;
+  color: var(--text-2);
+}
+.endo-empty h2 { font-size: 16px; font-weight: 600; color: var(--text-1); margin: 0 0 6px; }
+.endo-empty p  { font-size: 13px; margin: 0; }
+
+.endo-center { display: flex; flex-direction: column; gap: 16px; }
+.endo-section {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  padding: 18px;
+}
+.endo-section__placeholder { font-size: 12px; color: var(--text-3); margin: 0; font-style: italic; }
+
 /* Animaciones reducidas */
 @media (prefers-reduced-motion: reduce) {
   .drawer, .drawer-overlay,
