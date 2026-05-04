@@ -1,7 +1,6 @@
 export const dynamic = "force-dynamic";
 
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 import { getCurrentUser, getUserClinics } from "@/lib/auth";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
@@ -10,9 +9,9 @@ import { ActiveConsultProvider } from "@/components/dashboard/active-consult-pro
 import { NewAppointmentProvider } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { NewPatientProvider } from "@/components/dashboard/new-patient/new-patient-provider";
 import { PatientContextBar } from "@/components/dashboard/patient-context-bar";
+import { ExpiredPlanModal } from "@/components/dashboard/expired-plan-modal";
 import { prisma } from "@/lib/prisma";
 
-const SUSPENDED_PATH = "/dashboard/suspended";
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "paid"]);
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -20,7 +19,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const clinic = user.clinic;
   const pathname = headers().get("x-pathname") ?? "";
 
-  // ── Bloqueo total cuando el plan/trial expira ────────────────────
+  // ── Bloqueo cuando el plan/trial expira ──────────────────────────
   // Una clínica está expirada cuando trialEndsAt < now Y la suscripción
   // no está activa (subscriptionStatus no es active / trialing / paid).
   // Una clínica que paga después del trial limpia subscriptionStatus a
@@ -29,6 +28,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // SUPER_ADMIN necesita destrabar una clínica expirada, lo hace desde
   // el panel /admin (ruta separada, no bloqueada por este check) que
   // permite extender trial o activar suscripción manualmente.
+  //
+  // Implementación: el dashboard se renderiza completo (sidebar, topbar,
+  // contenido). El componente <ExpiredPlanModal /> se monta como portal
+  // encima y bloquea la interacción. Excepción: en /dashboard/suspended
+  // el modal NO se monta porque esa página YA es la pantalla de pago.
   const trialEndsAt = clinic.trialEndsAt ? new Date(clinic.trialEndsAt) : null;
   const now = new Date();
   const subscriptionStatus = (clinic as { subscriptionStatus?: string | null }).subscriptionStatus ?? null;
@@ -36,21 +40,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
     subscriptionStatus !== null && ACTIVE_SUBSCRIPTION_STATUSES.has(subscriptionStatus);
   const trialExpired = !!trialEndsAt && trialEndsAt < now;
   const isExpired = trialExpired && !subscriptionActive;
-
-  // En la pantalla de suspended NO renderizamos sidebar/topbar/banner:
-  // la página controla su propio chrome y debe ser bloqueante full-screen.
-  // Aplica a cualquiera que llegue ahí (incluso clínicas activas que
-  // accidentalmente tipean la URL — verán la pantalla de renovación pero
-  // sin perder el panel: pueden volver navegando a /dashboard).
-  if (pathname === SUSPENDED_PATH) {
-    return <>{children}</>;
-  }
-
-  // Cualquier otra ruta de /dashboard/* con clínica expirada se redirige.
-  if (isExpired) {
-    redirect(SUSPENDED_PATH);
-  }
-
   const isInTrial = !!trialEndsAt && trialEndsAt > now && !subscriptionActive;
   const allClinics = await getUserClinics();
 
@@ -130,6 +119,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </main>
       </div>
     </div>
+    <ExpiredPlanModal isExpired={isExpired} currentPathname={pathname} />
     </NewAppointmentProvider>
     </NewPatientProvider>
     </ActiveConsultProvider>
