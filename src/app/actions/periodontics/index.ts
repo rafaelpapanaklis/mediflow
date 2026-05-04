@@ -25,3 +25,14 @@ export {
   upsertToothData,
   bulkUpsertSiteData,
 } from "./sites";
+
+export { classifyPatient } from "./classification";
+
+export {
+  createGingivalRecession,
+  resolveGingivalRecession,
+} from "./recession";
+
+export { createRiskAssessment } from "./risk";
+
+export { createPeriImplantAssessment } from "./peri-implant";
