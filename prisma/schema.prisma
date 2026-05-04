@@ -184,6 +184,16 @@ model Clinic {
   vitalityTests        VitalityTest[]
   endodonticTreatments EndodonticTreatment[]
 
+  // Periodontics module — see docs/marketplace/research/periodoncia/SPEC.md §4
+  periodontalClassifications PeriodontalClassification[]
+  gingivalRecessions         GingivalRecession[]
+  periodontalPlans           PeriodontalTreatmentPlan[]
+  srpSessions                SRPSession[]
+  periodontalReevaluations   PeriodontalReevaluation[]
+  periodontalRiskAssessments PeriodontalRiskAssessment[]
+  periodontalSurgeries       PeriodontalSurgery[]
+  periImplantAssessments     PeriImplantAssessment[]
+
   @@map("clinics")
 }
 
@@ -280,6 +290,15 @@ model User {
   endoDiagnosisDoctor EndodonticDiagnosis[] @relation("EndoDiagnosisDoctor")
   vitalityDoctor      VitalityTest[]        @relation("VitalityDoctor")
   endoTreatmentDoctor EndodonticTreatment[] @relation("EndoTreatmentDoctor")
+
+  // Periodontics module — see docs/marketplace/research/periodoncia/SPEC.md §4
+  periodontalClassifications        PeriodontalClassification[]
+  recordedRecessions                GingivalRecession[]
+  srpSessionsAsDoctor               SRPSession[]                @relation("SrpDoctor")
+  reevaluationsAsEvaluator          PeriodontalReevaluation[]
+  riskAssessmentsAsEvaluator        PeriodontalRiskAssessment[]
+  surgeriesAsDoctor                 PeriodontalSurgery[]        @relation("PerioSurgeryDoctor")
+  periImplantAssessmentsAsEvaluator PeriImplantAssessment[]
 
   @@unique([supabaseId, clinicId])
   @@index([supabaseId])
@@ -396,6 +415,16 @@ model Patient {
   endodonticDiagnoses  EndodonticDiagnosis[]
   vitalityTests        VitalityTest[]
   endodonticTreatments EndodonticTreatment[]
+
+  // Periodontics module — see docs/marketplace/research/periodoncia/SPEC.md §4
+  periodontalClassifications PeriodontalClassification[]
+  gingivalRecessions         GingivalRecession[]
+  periodontalPlans           PeriodontalTreatmentPlan[]
+  srpSessions                SRPSession[]
+  periodontalReevaluations   PeriodontalReevaluation[]
+  periodontalRiskAssessments PeriodontalRiskAssessment[]
+  periodontalSurgeries       PeriodontalSurgery[]
+  periImplantAssessments     PeriImplantAssessment[]
 
   @@unique([clinicId, patientNumber])
   @@index([clinicId, status])
@@ -928,6 +957,12 @@ model PatientFile {
   followUpsAsControl      EndodonticFollowUp[] @relation("FollowUpFile")
   apicalSurgeries         ApicalSurgery[]      @relation("ApicalSurgeryFile")
 
+  // Periodontics module — fotos intraoperatorias y consentimientos firmados
+  // de cirugías. SPEC §1.16 reutiliza PatientFile (no se crea modelo
+  // Radiography). Spec §4.3.
+  surgeryIntraOpFor PeriodontalSurgery[] @relation("SurgeryIntraOpFile")
+  surgeryConsentFor PeriodontalSurgery[] @relation("SurgeryConsentFile")
+
   @@index([clinicId, patientId, createdAt(sort: Desc)])
   @@index([patientId, category])
   @@map("patient_files")
@@ -1052,22 +1087,58 @@ model ConsentForm {
 
 // ── Periodontal Records ────────────────────────────────────────────────────────
 model PeriodontalRecord {
-  id            String   @id @default(cuid())
-  patientId     String
-  clinicId      String
-  doctorId      String
-  recordedAt    DateTime @default(now())
-  // JSON: { "11": { "buccal": [2,3,2], "lingual": [2,2,3], "bleeding": [false,true,false], "furcation": 0 }, ... }
-  measurements  Json
+  id         String                @id @default(cuid())
+  patientId  String
+  clinicId   String
+  doctorId   String
+  recordedAt DateTime              @default(now())
+  recordType PeriodontalRecordType @default(INICIAL)
+
+  // 192 sitios capturados (6 × 32). JSON denso para evitar tabla pesada.
+  // Estructura: Array<{ fdi, position:SitePosition, pdMm, recMm, bop, plaque, suppuration }>.
+  // Spec §4.2 — el campo legacy `measurements` queda como compat con
+  // implementación pre-perio module; los reportes nuevos leen `sites`.
+  sites      Json?
+  toothLevel Json?
+
+  // Métricas calculadas en server action (opcional para registros legacy)
+  bopPercentage         Float?
+  plaqueIndexOleary     Float?
+  sites1to3mm           Int?
+  sites4to5mm           Int?
+  sites6PlusMm          Int?
+  teethWithPockets5Plus Int?
+
+  notes           String?
+  durationMinutes Int?
+
+  // Comparación con sondaje previo (auto-relación)
+  comparedToRecordId String?
+  comparedToRecord   PeriodontalRecord?  @relation("PerioCompare", fields: [comparedToRecordId], references: [id])
+  derivedRecords     PeriodontalRecord[] @relation("PerioCompare")
+
+  // Legacy (compliance v1, anterior al módulo de Periodoncia 3/5).
+  // Mantenido como opcional para no perder datos previos. Reportes
+  // y vistas nuevas usan `sites` + `toothLevel`.
+  measurements  Json?
   plaquIndex    Float?
   bleedingIndex Float?
-  notes         String?
-  createdAt     DateTime @default(now())
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
   clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   doctor  User    @relation(fields: [doctorId], references: [id])
 
+  classification         PeriodontalClassification?
+  reevaluationsAsInitial PeriodontalReevaluation[]  @relation("ReevalInitial")
+  reevaluationsAsPost    PeriodontalReevaluation[]  @relation("ReevalPost")
+
+  @@index([patientId, recordedAt(sort: Desc)])
+  @@index([clinicId, recordedAt(sort: Desc)])
+  @@index([clinicId, deletedAt])
   @@map("periodontal_records")
 }
 
@@ -2795,4 +2866,399 @@ model ApicalSurgery {
   intraoperativeFile PatientFile?        @relation("ApicalSurgeryFile", fields: [intraoperativeFileId], references: [id], onDelete: SetNull)
 
   @@map("apical_surgeries")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// PERIODONTICS MODULE
+// Specs: docs/marketplace/research/periodoncia/SPEC.md §4
+// ─────────────────────────────────────────────────────────────────────────
+
+enum PeriodontalRecordType {
+  INICIAL
+  PRE_TRATAMIENTO
+  POST_FASE_1
+  POST_FASE_2
+  MANTENIMIENTO
+  CIRUGIA_PRE
+  CIRUGIA_POST
+}
+
+enum SitePosition {
+  MV // mesiovestibular
+  MB // mediovestibular
+  DV // distovestibular
+  DL // distolingual / distopalatino
+  ML // mediolingual / mediopalatino
+  MB_PAL // mesiolingual / mesiopalatino
+}
+
+enum PeriodontalStage {
+  SALUD
+  GINGIVITIS
+  STAGE_I
+  STAGE_II
+  STAGE_III
+  STAGE_IV
+}
+
+enum PeriodontalGrade {
+  GRADE_A
+  GRADE_B
+  GRADE_C
+}
+
+enum PeriodontalExtension {
+  LOCALIZADA
+  GENERALIZADA
+  PATRON_MOLAR_INCISIVO
+}
+
+enum CairoClassification {
+  RT1
+  RT2
+  RT3
+}
+
+enum GingivalPhenotype {
+  DELGADO
+  GRUESO
+}
+
+enum PeriodontalPhase {
+  PHASE_1
+  PHASE_2
+  PHASE_3
+  PHASE_4
+}
+
+enum SRPTechnique {
+  SRP_CUADRANTE
+  FULL_MOUTH_DISINFECTION
+  FULL_MOUTH_SCALING
+}
+
+enum SRPInstrumentation {
+  MANUAL
+  ULTRASONICO
+  COMBINADO
+}
+
+enum SmokingStatus {
+  NO
+  MENOR_10
+  MAYOR_O_IGUAL_10
+}
+
+enum PeriodontalRiskCategory {
+  BAJO
+  MODERADO
+  ALTO
+}
+
+enum PeriodontalSurgeryType {
+  COLGAJO_ACCESO
+  GINGIVECTOMIA
+  RESECTIVA_OSEA
+  RTG
+  INJERTO_GINGIVAL_LIBRE
+  INJERTO_TEJIDO_CONECTIVO
+  TUNELIZACION
+  CORONALLY_ADVANCED_FLAP
+  OTRO
+}
+
+enum PeriImplantStatus {
+  SALUD
+  MUCOSITIS
+  PERIIMPLANTITIS_INICIAL
+  PERIIMPLANTITIS_MODERADA
+  PERIIMPLANTITIS_AVANZADA
+}
+
+enum GingivitisType {
+  SALUD_INTACTO
+  SALUD_REDUCIDO_ESTABLE
+  GINGIVITIS_INDUCIDA_PLACA
+  GINGIVITIS_NO_INDUCIDA_PLACA
+  PERIODONTITIS
+}
+
+model PeriodontalClassification {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  periodontalRecordId String            @unique
+  periodontalRecord   PeriodontalRecord @relation(fields: [periodontalRecordId], references: [id], onDelete: Cascade)
+
+  stage     PeriodontalStage
+  grade     PeriodontalGrade?
+  extension PeriodontalExtension?
+
+  modifiers         Json
+  computationInputs Json
+
+  calculatedAutomatically Boolean
+  overriddenByDoctor      Boolean @default(false)
+  justification           String?
+
+  classifiedAt   DateTime @default(now())
+  classifiedById String
+  classifiedBy   User     @relation(fields: [classifiedById], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, classifiedAt(sort: Desc)])
+  @@index([clinicId])
+  @@map("periodontal_classifications")
+}
+
+model GingivalRecession {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  toothFdi            Int
+  surface             String
+  recessionHeightMm   Float
+  recessionWidthMm    Float
+  keratinizedTissueMm Float
+
+  cairoClassification CairoClassification
+  gingivalPhenotype   GingivalPhenotype
+
+  recordedAt   DateTime @default(now())
+  recordedById String
+  recordedBy   User     @relation(fields: [recordedById], references: [id])
+
+  notes      String?
+  resolvedAt DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, toothFdi])
+  @@index([clinicId, recordedAt(sort: Desc)])
+  @@map("gingival_recessions")
+}
+
+model PeriodontalTreatmentPlan {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  currentPhase PeriodontalPhase
+
+  phase1StartedAt   DateTime?
+  phase1CompletedAt DateTime?
+  phase2StartedAt   DateTime?
+  phase2CompletedAt DateTime?
+  phase3StartedAt   DateTime?
+  phase3CompletedAt DateTime?
+  phase4StartedAt   DateTime?
+
+  nextEvaluationAt DateTime?
+
+  planNotes String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient       Patient                   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic        Clinic                    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  srpSessions   SRPSession[]
+  reevaluations PeriodontalReevaluation[]
+  surgeries     PeriodontalSurgery[]
+
+  @@index([patientId])
+  @@index([clinicId, currentPhase])
+  @@index([nextEvaluationAt])
+  @@map("periodontal_treatment_plans")
+}
+
+model SRPSession {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  planId String
+  plan   PeriodontalTreatmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  performedAt DateTime @default(now())
+  doctorId    String
+  doctor      User     @relation("SrpDoctor", fields: [doctorId], references: [id])
+
+  technique          SRPTechnique
+  instrumentation    SRPInstrumentation
+  quadrantsCompleted Json
+
+  anesthesiaUsed  Boolean @default(false)
+  anesthesiaType  String?
+  durationMinutes Int?
+
+  observations String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, performedAt(sort: Desc)])
+  @@index([clinicId])
+  @@index([planId])
+  @@map("srp_sessions")
+}
+
+model PeriodontalReevaluation {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  planId String
+  plan   PeriodontalTreatmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  initialRecordId String
+  initialRecord   PeriodontalRecord @relation("ReevalInitial", fields: [initialRecordId], references: [id])
+
+  postRecordId String
+  postRecord   PeriodontalRecord @relation("ReevalPost", fields: [postRecordId], references: [id])
+
+  bopImprovementPct       Float
+  pdAverageImprovementMm  Float
+  residualSites           Json
+  surgicalCandidatesTeeth Json
+
+  evaluatedAt   DateTime @default(now())
+  evaluatedById String
+  evaluatedBy   User     @relation(fields: [evaluatedById], references: [id])
+
+  recommendation String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, evaluatedAt(sort: Desc)])
+  @@index([clinicId])
+  @@map("periodontal_reevaluations")
+}
+
+model PeriodontalRiskAssessment {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  evaluatedAt DateTime @default(now())
+
+  bopPct             Float
+  residualSites5Plus Int
+  lostTeethPerio     Int
+  boneLossAgeRatio   Float?
+  smokingStatus      SmokingStatus
+  hba1c              Float?
+
+  riskCategory            PeriodontalRiskCategory
+  recommendedRecallMonths Int
+
+  evaluatedById String
+  evaluatedBy   User   @relation(fields: [evaluatedById], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, evaluatedAt(sort: Desc)])
+  @@index([clinicId, riskCategory])
+  @@map("periodontal_risk_assessments")
+}
+
+model PeriodontalSurgery {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  planId String?
+  plan   PeriodontalTreatmentPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  surgeryType PeriodontalSurgeryType
+
+  treatedSites Json
+  biomaterials Json?
+  sutureType   String?
+
+  surgeryDate DateTime
+  doctorId    String
+  doctor      User     @relation("PerioSurgeryDoctor", fields: [doctorId], references: [id])
+
+  sutureRemovalDate   DateTime?
+  postOpComplications String?
+
+  intraoperativeFileId String?
+  intraoperativeFile   PatientFile? @relation("SurgeryIntraOpFile", fields: [intraoperativeFileId], references: [id], onDelete: SetNull)
+
+  consentSignedFileId String?
+  consentSignedFile   PatientFile? @relation("SurgeryConsentFile", fields: [consentSignedFileId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, surgeryDate(sort: Desc)])
+  @@index([clinicId])
+  @@index([planId])
+  @@map("periodontal_surgeries")
+}
+
+model PeriImplantAssessment {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  // Sin FK al módulo de Implantología (4/5, aún no implementado).
+  // Cuando exista, se hará migración para agregar FK real. SPEC §1.17.
+  implantId  String?
+  implantFdi Int
+
+  status                 PeriImplantStatus
+  bop                    Boolean
+  suppuration            Boolean
+  radiographicBoneLossMm Float?
+  recommendedTreatment   String?
+
+  evaluatedAt   DateTime @default(now())
+  evaluatedById String
+  evaluatedBy   User     @relation(fields: [evaluatedById], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, evaluatedAt(sort: Desc)])
+  @@index([clinicId, status])
+  @@index([implantId])
+  @@map("peri_implant_assessments")
 }
