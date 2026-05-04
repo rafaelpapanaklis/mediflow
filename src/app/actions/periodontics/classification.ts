@@ -5,7 +5,12 @@
 import { revalidatePath } from "next/cache";
 import { differenceInYears } from "date-fns";
 import { prisma } from "@/lib/prisma";
-import { classifyPatientSchema, type Site, type ToothLevel } from "@/lib/periodontics/schemas";
+import {
+  classifyPatientSchema,
+  overrideClassificationSchema,
+  type Site,
+  type ToothLevel,
+} from "@/lib/periodontics/schemas";
 import { classifyPerio2017 } from "@/lib/periodontics/classification-2017";
 import { getRadiographicBoneLossPct } from "@/lib/periodontics/periodontogram-math";
 import {
@@ -113,5 +118,82 @@ export async function classifyPatient(
   } catch (e) {
     console.error("[perio classification] failed:", e);
     return fail("No se pudo clasificar al paciente");
+  }
+}
+
+/**
+ * Sobrescribe una clasificación existente con justificación textual.
+ * Setea `overriddenByDoctor=true` y registra audit OVERRIDE con before/after.
+ * La justificación es obligatoria (zod min(10) ya valida).
+ */
+export async function overrideClassification(
+  input: unknown,
+): Promise<ActionResult<{ id: string }>> {
+  const auth = await getPerioActionContext();
+  if (isFailure(auth)) return auth;
+  const { ctx } = auth.data;
+
+  const parsed = overrideClassificationSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Datos inválidos");
+
+  const before = await prisma.periodontalClassification.findFirst({
+    where: { id: parsed.data.classificationId, clinicId: ctx.clinicId, deletedAt: null },
+    select: {
+      id: true,
+      patientId: true,
+      stage: true,
+      grade: true,
+      extension: true,
+      overriddenByDoctor: true,
+      justification: true,
+    },
+  });
+  if (!before) return fail("Clasificación no encontrada");
+
+  try {
+    const next = await prisma.periodontalClassification.update({
+      where: { id: before.id },
+      data: {
+        stage: parsed.data.stage,
+        grade: parsed.data.grade,
+        extension: parsed.data.extension,
+        overriddenByDoctor: true,
+        justification: parsed.data.justification,
+      },
+      select: {
+        id: true,
+        patientId: true,
+        stage: true,
+        grade: true,
+        extension: true,
+        overriddenByDoctor: true,
+        justification: true,
+      },
+    });
+
+    await auditPerio({
+      ctx,
+      action: PERIO_AUDIT_ACTIONS.CLASSIFICATION_OVERRIDE,
+      entityType: "PeriodontalClassification",
+      entityId: next.id,
+      before: {
+        stage: before.stage,
+        grade: before.grade,
+        extension: before.extension,
+        justification: before.justification,
+      },
+      after: {
+        stage: next.stage,
+        grade: next.grade,
+        extension: next.extension,
+        justification: next.justification,
+      },
+    });
+
+    revalidatePath(`/dashboard/specialties/periodontics/${next.patientId}`);
+    return ok({ id: next.id });
+  } catch (e) {
+    console.error("[perio classification] override failed:", e);
+    return fail("No se pudo sobrescribir la clasificación");
   }
 }

@@ -26,7 +26,7 @@ export {
   bulkUpsertSiteData,
 } from "./sites";
 
-export { classifyPatient } from "./classification";
+export { classifyPatient, overrideClassification } from "./classification";
 
 export {
   createGingivalRecession,
@@ -42,3 +42,12 @@ export { createSRPSession } from "./srp";
 export { createReevaluation } from "./reevaluation";
 export { createPeriodontalSurgery } from "./surgery";
 export { scheduleMaintenance, completeMaintenance } from "./maintenance";
+
+export { signSrpConsent, signSurgeryConsent } from "./consents";
+
+export {
+  exportPerioPatientReportPdf,
+  exportPerioReferrerReportPdf,
+  exportPerioPrePostComparePdf,
+  type PerioPdfResult,
+} from "./reports";
