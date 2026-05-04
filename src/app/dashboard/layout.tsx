@@ -25,8 +25,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // no está activa (subscriptionStatus no es active / trialing / paid).
   // Una clínica que paga después del trial limpia subscriptionStatus a
   // 'active' y NO debe bloquearse aunque trialEndsAt siga en el pasado.
-  // SUPER_ADMIN nunca se bloquea: administra múltiples clínicas y no
-  // queremos atarlo a la salud comercial de una sola.
+  // El bloqueo aplica a TODOS los roles (incluso SUPER_ADMIN). Si un
+  // SUPER_ADMIN necesita destrabar una clínica expirada, lo hace desde
+  // el panel /admin (ruta separada, no bloqueada por este check) que
+  // permite extender trial o activar suscripción manualmente.
   const trialEndsAt = clinic.trialEndsAt ? new Date(clinic.trialEndsAt) : null;
   const now = new Date();
   const subscriptionStatus = (clinic as { subscriptionStatus?: string | null }).subscriptionStatus ?? null;
@@ -34,7 +36,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
     subscriptionStatus !== null && ACTIVE_SUBSCRIPTION_STATUSES.has(subscriptionStatus);
   const trialExpired = !!trialEndsAt && trialEndsAt < now;
   const isExpired = trialExpired && !subscriptionActive;
-  const bypassSuspended = user.role === "SUPER_ADMIN";
 
   // En la pantalla de suspended NO renderizamos sidebar/topbar/banner:
   // la página controla su propio chrome y debe ser bloqueante full-screen.
@@ -46,7 +47,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   // Cualquier otra ruta de /dashboard/* con clínica expirada se redirige.
-  if (isExpired && !bypassSuspended) {
+  if (isExpired) {
     redirect(SUSPENDED_PATH);
   }
 
