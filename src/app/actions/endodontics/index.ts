@@ -15,3 +15,10 @@ export {
 
 export { createDiagnosis, updateDiagnosis } from "./diagnosis";
 export { recordVitalityTest } from "./vitality";
+export {
+  startTreatment,
+  updateTreatmentStep,
+  upsertRootCanal,
+  recordIntracanalMedication,
+  completeTreatment,
+} from "./treatment";
