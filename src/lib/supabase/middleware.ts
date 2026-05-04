@@ -8,6 +8,11 @@ import { NextResponse, type NextRequest } from "next/server";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
 export async function updateSession(request: NextRequest) {
+  // Inyectamos `x-pathname` en los request headers para que los server
+  // layouts puedan leer la pathname con `headers()`. Sin esto, los RSC
+  // no tienen acceso a la URL y no pueden hacer redirects condicionales
+  // (ej. bloqueo total cuando la clínica tiene plan/trial expirado).
+  request.headers.set("x-pathname", request.nextUrl.pathname);
   let response = NextResponse.next({ request: { headers: request.headers } });
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

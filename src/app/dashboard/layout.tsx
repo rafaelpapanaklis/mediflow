@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { getCurrentUser, getUserClinics } from "@/lib/auth";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
@@ -10,18 +12,46 @@ import { NewPatientProvider } from "@/components/dashboard/new-patient/new-patie
 import { PatientContextBar } from "@/components/dashboard/patient-context-bar";
 import { prisma } from "@/lib/prisma";
 
+const SUSPENDED_PATH = "/dashboard/suspended";
+const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "paid"]);
+
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
   const clinic = user.clinic;
-  const allClinics = await getUserClinics();
+  const pathname = headers().get("x-pathname") ?? "";
+
+  // ── Bloqueo total cuando el plan/trial expira ────────────────────
+  // Una clínica está expirada cuando trialEndsAt < now Y la suscripción
+  // no está activa (subscriptionStatus no es active / trialing / paid).
+  // Una clínica que paga después del trial limpia subscriptionStatus a
+  // 'active' y NO debe bloquearse aunque trialEndsAt siga en el pasado.
+  // SUPER_ADMIN nunca se bloquea: administra múltiples clínicas y no
+  // queremos atarlo a la salud comercial de una sola.
   const trialEndsAt = clinic.trialEndsAt ? new Date(clinic.trialEndsAt) : null;
   const now = new Date();
-  const isSuspended = trialEndsAt && trialEndsAt < now;
-  // Trial activo = futuro Y sin suscripción activa pagando
+  const subscriptionStatus = (clinic as { subscriptionStatus?: string | null }).subscriptionStatus ?? null;
   const subscriptionActive =
-    (clinic as any).subscriptionStatus === "active" ||
-    (clinic as any).subscriptionStatus === "paid";
+    subscriptionStatus !== null && ACTIVE_SUBSCRIPTION_STATUSES.has(subscriptionStatus);
+  const trialExpired = !!trialEndsAt && trialEndsAt < now;
+  const isExpired = trialExpired && !subscriptionActive;
+  const bypassSuspended = user.role === "SUPER_ADMIN";
+
+  // En la pantalla de suspended NO renderizamos sidebar/topbar/banner:
+  // la página controla su propio chrome y debe ser bloqueante full-screen.
+  // Aplica a cualquiera que llegue ahí (incluso clínicas activas que
+  // accidentalmente tipean la URL — verán la pantalla de renovación pero
+  // sin perder el panel: pueden volver navegando a /dashboard).
+  if (pathname === SUSPENDED_PATH) {
+    return <>{children}</>;
+  }
+
+  // Cualquier otra ruta de /dashboard/* con clínica expirada se redirige.
+  if (isExpired && !bypassSuspended) {
+    redirect(SUSPENDED_PATH);
+  }
+
   const isInTrial = !!trialEndsAt && trialEndsAt > now && !subscriptionActive;
+  const allClinics = await getUserClinics();
 
   const counts = await prisma.$queryRaw<[{ doctors: bigint; patients: bigint; appts: bigint; records: bigint; invoices: bigint; schedules: bigint }]>`
     SELECT
@@ -81,12 +111,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
         onboardingCompleted={onboardingCompleted}
       />
       <div className="flex min-h-screen flex-1 flex-col lg:max-h-screen lg:overflow-y-auto">
-        {isSuspended && (
-          <div className="flex-shrink-0 bg-destructive px-4 py-2.5 text-center text-sm font-bold text-destructive-foreground">
-            ⚠️ Tu suscripción ha vencido.{" "}
-            <a href="/dashboard/suspended" className="underline hover:no-underline">Ver opciones de pago →</a>
-          </div>
-        )}
         <GlobalAnnouncementBanner />
         <Topbar
           clinicName={clinic.name}
