@@ -22,3 +22,10 @@ export {
   recordIntracanalMedication,
   completeTreatment,
 } from "./treatment";
+export { scheduleFollowUp, completeFollowUp } from "./followup";
+export { createRetreatmentInfo, createApicalSurgery } from "./retreatment";
+export {
+  exportTreatmentReportPdf,
+  exportLegalReportPdf,
+  type ExportPdfResult,
+} from "./reports";
