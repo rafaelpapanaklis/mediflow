@@ -18,7 +18,9 @@ export type AuditEntityType =
   | "xray-analysis"
   | "patient-file"
   | "prescription"
-  | "user";
+  | "user"
+  | "clinic"
+  | "subscription";
 
 interface AuditOptions {
   clinicId:   string;

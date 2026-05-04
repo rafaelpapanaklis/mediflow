@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { PLANS, type PlanId } from "@/lib/billing/plans";
+import { SuspendedPlanCards, type PlanCardData } from "./suspended-client";
 
 const BANK_INFO = {
   nombre: "Efthymios Rafail Papanaklis",
@@ -6,19 +8,42 @@ const BANK_INFO = {
   banco:  "BBVA",
 };
 
-const PLANS = [
-  { id: "BASIC",  name: "Básico",      price: "$49/mes",  features: ["1 profesional","200 pacientes","Agenda","Facturación"] },
-  { id: "PRO",    name: "Profesional", price: "$99/mes",  features: ["3 profesionales","Ilimitado","Expedientes","Reportes"] },
-  { id: "CLINIC", name: "Clínica",     price: "$249/mes", features: ["Todo ilimitado","Multi-sucursal","API","Manager"] },
-];
-
 export const dynamic = "force-dynamic";
 
+/**
+ * URLs de suscripción de PayPal Business por plan. Son URLs públicas
+ * (no secretos) que Rafael genera desde su panel de PayPal y configura
+ * en Vercel como NEXT_PUBLIC_PAYPAL_LINK_<PLAN>. Si una env no está
+ * configurada, el botón se renderiza disabled con texto
+ * "PayPal — próximamente".
+ *
+ * Las leemos en el server component (no en el client) para que
+ * Next.js no tenga que inlinear las vars en el bundle del cliente —
+ * pasamos el resultado como props serializadas.
+ */
+function getPaypalUrl(plan: PlanId): string | null {
+  const map: Record<PlanId, string | undefined> = {
+    BASIC:  process.env.NEXT_PUBLIC_PAYPAL_LINK_BASIC,
+    PRO:    process.env.NEXT_PUBLIC_PAYPAL_LINK_PRO,
+    CLINIC: process.env.NEXT_PUBLIC_PAYPAL_LINK_CLINIC,
+  };
+  const url = map[plan];
+  return url && url.length > 0 ? url : null;
+}
+
 export default function SuspendedPage() {
+  const planCards: PlanCardData[] = PLANS.map((p) => ({
+    id: p.id,
+    name: p.name,
+    priceMxn: p.priceMxn,
+    features: [...p.features],
+    paypalUrl: getPaypalUrl(p.id),
+  }));
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Hero bloqueante centrado */}
-      <section className="flex min-h-screen flex-col items-center justify-center px-4 py-16 text-center">
+      <section className="flex flex-col items-center justify-center px-4 py-16 text-center">
         <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl border border-destructive/40 bg-destructive/10 text-4xl">
           ⏰
         </div>
@@ -38,7 +63,7 @@ export default function SuspendedPage() {
               boxShadow: "0 10px 30px -8px var(--brand-soft, rgba(124,58,237,0.4))",
             }}
           >
-            Renovar plan →
+            Renovar plan ↓
           </a>
           <a
             href="mailto:soporte@mediflow.app"
@@ -64,62 +89,13 @@ export default function SuspendedPage() {
           Elige tu plan
         </h2>
         <p className="mb-8 text-center text-sm text-muted-foreground">
-          Realiza la transferencia y tu cuenta se reactiva en máximo 24 horas hábiles.
+          Pago instantáneo con tarjeta o PayPal — tu cuenta se reactiva
+          automáticamente. Si prefieres SPEI, los datos están más abajo.
         </p>
 
-        {/* Planes */}
-        <div className="mb-8 grid gap-4 sm:grid-cols-3">
-          {PLANS.map((plan) => {
-            const isPopular = plan.id === "PRO";
-            return (
-              <div
-                key={plan.id}
-                className={`flex flex-col rounded-2xl border p-5 ${
-                  isPopular
-                    ? "border-2 shadow-md"
-                    : "border-border bg-card"
-                }`}
-                style={
-                  isPopular
-                    ? {
-                        borderColor: "var(--brand)",
-                        background: "var(--brand-softer, hsl(var(--card)))",
-                      }
-                    : undefined
-                }
-              >
-                {isPopular && (
-                  <div
-                    className="mb-2 text-[10px] font-bold uppercase tracking-wider"
-                    style={{ color: "var(--brand)" }}
-                  >
-                    ★ Más popular
-                  </div>
-                )}
-                <div className="mb-1 text-base font-bold">{plan.name}</div>
-                <div
-                  className="mb-4 text-2xl font-extrabold"
-                  style={{ color: "var(--brand)" }}
-                >
-                  {plan.price}
-                </div>
-                <ul className="space-y-1.5">
-                  {plan.features.map((f) => (
-                    <li
-                      key={f}
-                      className="flex items-center gap-2 text-xs text-muted-foreground"
-                    >
-                      <span className="text-emerald-500">✓</span>
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
-        </div>
+        <SuspendedPlanCards plans={planCards} />
 
-        {/* Datos de pago SPEI */}
+        {/* Datos de pago SPEI (alternativa manual) */}
         <div
           className="rounded-2xl border-2 bg-card p-6"
           style={{ borderColor: "var(--brand)" }}
@@ -128,7 +104,7 @@ export default function SuspendedPage() {
             className="mb-5 text-xs font-bold uppercase tracking-wider"
             style={{ color: "var(--brand)" }}
           >
-            💳 Realiza tu pago por transferencia SPEI
+            💳 Alternativa: pago por transferencia SPEI
           </div>
           <div className="grid gap-5 sm:grid-cols-3">
             <div>
@@ -162,14 +138,15 @@ export default function SuspendedPage() {
             }}
           >
             <strong>Importante:</strong> en el concepto de tu transferencia
-            escribe el nombre de tu clínica. Tu acceso se reactiva en máximo
-            24 horas hábiles después de confirmar el pago.
+            escribe el nombre de tu clínica. Por SPEI tu acceso se reactiva
+            en máximo 24 horas hábiles después de confirmar el pago. Con
+            tarjeta o PayPal la reactivación es inmediata.
           </div>
         </div>
 
         {/* Contacto */}
         <div className="mt-6 text-center text-sm text-muted-foreground">
-          ¿Ya realizaste el pago? Escríbenos a{" "}
+          ¿Ya realizaste el pago por SPEI? Escríbenos a{" "}
           <a
             href="mailto:soporte@mediflow.app"
             className="font-semibold hover:underline"
