@@ -2866,6 +2866,43 @@
 .endo-tooth-timeline__label { font-size: 13px; color: var(--text-1); font-weight: 500; }
 .endo-tooth-timeline__detail{ font-size: 11px; color: var(--text-3); }
 
+.endo-wizard { width: min(960px, 100vw); }
+.endo-wizard__irrigants {
+  display: flex; flex-direction: column; gap: 6px;
+  margin-bottom: 8px;
+}
+.endo-wizard__irrigant-row {
+  display: grid;
+  grid-template-columns: 32px 1fr 100px 80px 32px;
+  gap: 8px;
+  align-items: center;
+}
+@media (max-width: 640px) {
+  .endo-wizard__irrigant-row { grid-template-columns: 1fr; }
+}
+.endo-wizard__irrigant-row input {
+  padding: 6px 10px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-1);
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+}
+.endo-wizard__irrigant-row input:focus {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+  border-color: var(--brand);
+}
+.endo-wizard__irrigant-order {
+  display: inline-grid; place-items: center;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 11px; font-weight: 600;
+  border-radius: 6px;
+  height: 30px;
+}
+
 /* Animaciones reducidas */
 @media (prefers-reduced-motion: reduce) {
   .drawer, .drawer-overlay,
