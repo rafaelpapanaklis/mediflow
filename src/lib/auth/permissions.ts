@@ -140,6 +140,7 @@ export const ALL_PERMISSIONS = {
   // de "tiene permiso UI"; el módulo se valida server-side.
   "specialties.pediatrics":  "Ver Odontopediatría",
   "specialties.endodontics": "Ver Endodoncia",
+  "specialties.periodontics": "Ver Periodoncia",
 } as const;
 
 export type PermissionKey = keyof typeof ALL_PERMISSIONS;
@@ -165,7 +166,7 @@ export const PERMISSION_GROUPS: { title: string; keys: PermissionKey[] }[] = [
   { title: "Equipo",         keys: ["team.view", "team.edit"] },
   { title: "Configuración",  keys: ["settings.view", "settings.edit", "landing.view", "landing.edit", "procedures.view", "procedures.edit", "clinicLayout.view", "clinicLayout.edit"] },
   { title: "Marketplace",    keys: ["marketplace.view"] },
-  { title: "Especialidades", keys: ["specialties.pediatrics", "specialties.endodontics"] },
+  { title: "Especialidades", keys: ["specialties.pediatrics", "specialties.endodontics", "specialties.periodontics"] },
 ];
 
 /**
@@ -187,6 +188,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     "marketplace.view",
     "specialties.pediatrics",
     "specialties.endodontics",
+    "specialties.periodontics",
   ],
   RECEPTIONIST: [
     "today.view",
@@ -199,6 +201,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     "marketplace.view",
     "specialties.pediatrics",
     "specialties.endodontics",
+    "specialties.periodontics",
   ],
   // READONLY: solo *.view excepto medical/prescription/xrays
   READONLY: ALL_PERMISSION_KEYS.filter((k) =>

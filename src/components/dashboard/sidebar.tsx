@@ -144,6 +144,10 @@ const NAV_ITEMS: NavItemDef[] = [
     icon: Zap,
     categories: ["DENTAL"],
     permission: "specialties.endodontics" },
+  { id: "periodontics", section: "specialties", label: "Periodoncia", href: "/dashboard/specialties/periodontics",
+    icon: Activity,
+    categories: ["DENTAL"],
+    permission: "specialties.periodontics" },
 
   { id: "treatments",   section: "catalogo", label: "Tratamientos", href: "/dashboard/treatments", icon: Activity, permission: "treatments.view" },
   { id: "packages",     section: "catalogo", label: "Paquetes",     href: "/dashboard/packages",
