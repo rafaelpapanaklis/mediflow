@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 400" data-archetype="molar-upper-mb2">
+  <defs>
+    <linearGradient id="enamel-mu" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F4F4F5"/>
+      <stop offset="1" stop-color="#D4D4D8"/>
+    </linearGradient>
+    <linearGradient id="dentin-mu" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FDE68A"/>
+      <stop offset="1" stop-color="#F59E0B"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Corona ancha con 4 cúspides -->
+  <path id="enamel-shape"
+        d="M 50 40 Q 52 25 65 28 L 78 50 L 88 28 Q 100 22 112 28 L 122 50 L 135 28 Q 148 25 150 40 Q 153 80 150 115 L 50 115 Q 47 80 50 40 Z"
+        fill="url(#enamel-mu)" stroke="#E5E7EB" stroke-width="1"/>
+
+  <!-- Dentina con 3 raíces (MB, DB, P) -->
+  <path id="dentin-shape"
+        d="M 56 45 Q 53 85 55 120 L 50 200
+           Q 40 300 56 360 Q 70 372 78 360 Q 90 300 90 220
+           Q 90 300 100 360 Q 110 372 122 360 Q 130 300 120 220
+           Q 130 300 144 360 Q 152 372 160 360 Q 172 300 160 200 L 145 120
+           Q 147 85 144 45 Z"
+        fill="url(#dentin-mu)" stroke="#D97706" stroke-width="0.5" opacity="0.85"/>
+
+  <!-- Cámara pulpar grande -->
+  <path id="pulp-chamber"
+        d="M 60 80 Q 58 115 65 145 L 135 145 Q 142 115 140 80 Z"
+        fill="#7F1D1D" opacity="0.65"/>
+
+  <!-- Conducto MB (mesiovestibular) -->
+  <g id="canal-mb" data-canal-name="Mesiovestibular">
+    <path d="M 70 145 Q 60 245 65 360"
+          fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="65" cy="362" r="2.5" fill="currentColor"/>
+  </g>
+
+  <!-- Conducto MB2 (segundo MB) — más fino, ligeramente desviado -->
+  <g id="canal-mb2" data-canal-name="MB2">
+    <path d="M 80 145 Q 76 220 80 320"
+          fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="0"/>
+    <circle cx="80" cy="322" r="2" fill="currentColor"/>
+  </g>
+
+  <!-- Conducto DB (distovestibular) -->
+  <g id="canal-db" data-canal-name="Distovestibular">
+    <path d="M 110 145 Q 110 245 114 360"
+          fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="114" cy="362" r="2.5" fill="currentColor"/>
+  </g>
+
+  <!-- Conducto P (palatino) — más grueso, recto -->
+  <g id="canal-p" data-canal-name="Palatino">
+    <path d="M 140 145 Q 145 245 150 360"
+          fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/>
+    <circle cx="150" cy="362" r="2.8" fill="currentColor"/>
+  </g>
+
+  <g id="labels" font-family="ui-sans-serif, system-ui" font-size="9" fill="#71717A">
+    <text x="40" y="375">MB</text>
+    <text x="74" y="335">MB2</text>
+    <text x="100" y="375">DB</text>
+    <text x="140" y="375">P</text>
+  </g>
+</svg>

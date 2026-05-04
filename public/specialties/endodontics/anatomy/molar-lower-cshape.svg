@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 400" data-archetype="molar-lower-cshape">
+  <defs>
+    <linearGradient id="enamel-mlc" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F4F4F5"/>
+      <stop offset="1" stop-color="#D4D4D8"/>
+    </linearGradient>
+    <linearGradient id="dentin-mlc" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FDE68A"/>
+      <stop offset="1" stop-color="#F59E0B"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Corona ancha (similar a molar inferior estándar) -->
+  <path id="enamel-shape"
+        d="M 50 38 Q 55 25 68 28 L 78 50 L 90 28 L 100 50 L 110 28 L 122 50 L 132 28 Q 145 25 150 38 Q 153 78 150 115 L 50 115 Q 47 78 50 38 Z"
+        fill="url(#enamel-mlc)" stroke="#E5E7EB" stroke-width="1"/>
+
+  <!-- Dentina con raíz fusionada (forma de C) — visto en algunos
+       segundos molares inferiores especialmente en pacientes asiáticos. -->
+  <path id="dentin-shape"
+        d="M 55 45 Q 53 85 55 120 L 50 200 Q 45 320 70 365 L 130 365 Q 155 320 150 200 L 145 120 Q 147 85 145 45 Z"
+        fill="url(#dentin-mlc)" stroke="#D97706" stroke-width="0.5" opacity="0.85"/>
+
+  <!-- Cámara pulpar en forma de C -->
+  <path id="pulp-chamber"
+        d="M 65 90 Q 60 120 70 145 L 130 145 Q 140 120 135 90 L 130 95 Q 100 110 70 95 Z"
+        fill="#7F1D1D" opacity="0.65"/>
+
+  <!-- Conducto C-buccal (vestibular del C) -->
+  <g id="canal-c-buccal" data-canal-name="C-Vestibular">
+    <path d="M 72 145 Q 65 250 75 360"
+          fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="75" cy="362" r="2.5" fill="currentColor"/>
+  </g>
+
+  <!-- Istmo del C (conducto en banda que conecta) -->
+  <g id="canal-c-isthmus" data-canal-name="C-Istmo">
+    <path d="M 80 200 L 120 200 L 122 250 L 78 250 Z"
+          fill="currentColor" opacity="0.55"/>
+  </g>
+
+  <!-- Conducto C-lingual -->
+  <g id="canal-c-lingual" data-canal-name="C-Lingual">
+    <path d="M 128 145 Q 135 250 125 360"
+          fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="125" cy="362" r="2.5" fill="currentColor"/>
+  </g>
+
+  <g id="labels" font-family="ui-sans-serif, system-ui" font-size="9" fill="#71717A">
+    <text x="55" y="375">C-V</text>
+    <text x="85" y="232">istmo</text>
+    <text x="135" y="375">C-L</text>
+  </g>
+</svg>
