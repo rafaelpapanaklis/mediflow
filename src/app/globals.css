@@ -2983,6 +2983,30 @@
 }
 .endo-radiograph-grid__images figcaption strong { color: var(--text-1); font-weight: 600; }
 
+.endo-index { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.endo-index__header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.endo-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+.endo-kpi {
+  background: var(--bg-elev-2);
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+.endo-kpi__label { font-size: 11px; color: var(--text-2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.endo-kpi__value {
+  font-family: var(--font-jetbrains-mono, monospace);
+  font-size: 22px; font-weight: 700;
+  color: var(--text-1);
+  margin-top: 4px;
+}
+.endo-kpi__suffix { font-size: 14px; color: var(--text-2); margin-left: 2px; }
+.endo-kpi--success .endo-kpi__value { color: var(--success); }
+.endo-kpi--info    .endo-kpi__value { color: var(--info); }
+.endo-kpi--warning .endo-kpi__value { color: var(--warning); }
+
 /* Animaciones reducidas */
 @media (prefers-reduced-motion: reduce) {
   .drawer, .drawer-overlay,
