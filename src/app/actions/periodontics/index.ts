@@ -36,3 +36,9 @@ export {
 export { createRiskAssessment } from "./risk";
 
 export { createPeriImplantAssessment } from "./peri-implant";
+
+export { createTreatmentPlan, advancePhase } from "./plan";
+export { createSRPSession } from "./srp";
+export { createReevaluation } from "./reevaluation";
+export { createPeriodontalSurgery } from "./surgery";
+export { scheduleMaintenance, completeMaintenance } from "./maintenance";
