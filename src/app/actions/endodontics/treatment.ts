@@ -351,6 +351,7 @@ export async function completeTreatment(
       restorationUrgencyDays: true,
       isMultiSession: true,
       rootCanals: { select: { id: true, obturationQuality: true } },
+      patient: { select: { phone: true } },
     },
   });
   if (!tx || tx.clinicId !== ctx.clinicId) return fail("Tratamiento no encontrado");
@@ -416,6 +417,10 @@ export async function completeTreatment(
             : "ENDO_FOLLOWUP_24M",
         });
       }
+      // Storing patientPhone + payload (toothFdi) permite que el queue
+      // worker A2 hidrate la plantilla sin re-fetchear el tratamiento.
+      // Si el paciente no tiene teléfono, igualmente registramos el row
+      // — el worker lo marcará como FAILED y se ve en analytics.
       for (const r of reminders) {
         await db.whatsAppReminder.create({
           data: {
@@ -424,6 +429,8 @@ export async function completeTreatment(
             status: "PENDING",
             scheduledFor: r.scheduledFor,
             message: r.message,
+            patientPhone: tx.patient?.phone ?? null,
+            payload: { toothFdi: tx.toothFdi },
           },
         });
       }

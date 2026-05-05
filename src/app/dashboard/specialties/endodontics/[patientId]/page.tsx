@@ -8,7 +8,7 @@ import { ArrowLeft, FileText } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule } from "@/lib/marketplace/access-control";
-import { ENDODONTICS_MODULE_KEY } from "@/app/actions/endodontics";
+import { ENDODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { EndodonticsTab } from "@/components/specialties/endodontics/EndodonticsTab";
 import {
   loadEndoToothData,

@@ -5,6 +5,7 @@ import {
   History,
   Stethoscope,
   Activity,
+  HeartPulse,
   FileImage,
   Pill,
   Calendar,
@@ -40,18 +41,36 @@ interface QuickNavProps {
     agenda?: number;
     facturacion?: number;
     pediatria?: number;
+    periodoncia?: number;
   };
   hasBalance: boolean;
   showPediatrics?: boolean;
+  showPeriodontics?: boolean;
 }
 
-export function QuickNav({ activeTab, onSelect, counts, hasBalance, showPediatrics }: QuickNavProps) {
+export function QuickNav({
+  activeTab,
+  onSelect,
+  counts,
+  hasBalance,
+  showPediatrics,
+  showPeriodontics,
+}: QuickNavProps) {
   const clinicItems: NavItem[] = [
     { id: "resumen",      label: "Resumen",         icon: ClipboardList },
     { id: "historia",     label: "Historia clínica", icon: History, count: counts.historia },
   ];
   if (showPediatrics) {
     clinicItems.push({ id: "pediatria", label: "Pediatría", icon: Baby, count: counts.pediatria, badgeTone: "brand" });
+  }
+  if (showPeriodontics) {
+    clinicItems.push({
+      id: "periodoncia",
+      label: "Periodoncia",
+      icon: HeartPulse,
+      count: counts.periodoncia,
+      badgeTone: "brand",
+    });
   }
   clinicItems.push(
     { id: "odontograma",  label: "Odontograma",     icon: Bone, count: counts.odontograma },

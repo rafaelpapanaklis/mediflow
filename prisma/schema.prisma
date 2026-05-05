@@ -184,6 +184,27 @@ model Clinic {
   vitalityTests        VitalityTest[]
   endodonticTreatments EndodonticTreatment[]
 
+  // Periodontics module — see docs/marketplace/research/periodoncia/SPEC.md §4
+  periodontalClassifications PeriodontalClassification[]
+  gingivalRecessions         GingivalRecession[]
+  periodontalPlans           PeriodontalTreatmentPlan[]
+  srpSessions                SRPSession[]
+  periodontalReevaluations   PeriodontalReevaluation[]
+  periodontalRiskAssessments PeriodontalRiskAssessment[]
+  periodontalSurgeries       PeriodontalSurgery[]
+  periImplantAssessments     PeriImplantAssessment[]
+
+  // Orthodontics module — see docs/marketplace/research/ortodoncia/SPEC.md §4
+  orthodonticDiagnoses      OrthodonticDiagnosis[]
+  orthodonticTreatmentPlans OrthodonticTreatmentPlan[]
+  orthodonticPhases         OrthodonticPhase[]
+  orthoPaymentPlans         OrthoPaymentPlan[]
+  orthoInstallments         OrthoInstallment[]
+  orthoPhotoSets            OrthoPhotoSet[]
+  orthodonticControls       OrthodonticControlAppointment[]
+  orthodonticDigitalRecords OrthodonticDigitalRecord[]
+  orthodonticConsents       OrthodonticConsent[]
+
   // Implants module — see docs/marketplace/research/implantologia/SPEC.md §4
   implants Implant[]
 
@@ -283,6 +304,23 @@ model User {
   endoDiagnosisDoctor EndodonticDiagnosis[] @relation("EndoDiagnosisDoctor")
   vitalityDoctor      VitalityTest[]        @relation("VitalityDoctor")
   endoTreatmentDoctor EndodonticTreatment[] @relation("EndoTreatmentDoctor")
+
+  // Periodontics module — see docs/marketplace/research/periodoncia/SPEC.md §4
+  periodontalClassifications        PeriodontalClassification[]
+  recordedRecessions                GingivalRecession[]
+  srpSessionsAsDoctor               SRPSession[]                @relation("SrpDoctor")
+  reevaluationsAsEvaluator          PeriodontalReevaluation[]
+  riskAssessmentsAsEvaluator        PeriodontalRiskAssessment[]
+  surgeriesAsDoctor                 PeriodontalSurgery[]        @relation("PerioSurgeryDoctor")
+  periImplantAssessmentsAsEvaluator PeriImplantAssessment[]
+
+  // Orthodontics module — see docs/marketplace/research/ortodoncia/SPEC.md §4
+  orthodonticDiagnosesAsDoctor OrthodonticDiagnosis[]          @relation("OrthoDiagnosedBy")
+  orthodonticControlsAttended  OrthodonticControlAppointment[] @relation("OrthoControlAttendedBy")
+  orthoPhotoSetsCaptured       OrthoPhotoSet[]                 @relation("OrthoPhotoSetCapturedBy")
+  orthoInstallmentsRecorded    OrthoInstallment[]              @relation("OrthoInstallmentRecordedBy")
+  orthoInstallmentsWaived      OrthoInstallment[]              @relation("OrthoInstallmentWaivedBy")
+  orthoDigitalRecordsUploaded  OrthodonticDigitalRecord[]      @relation("OrthoDigitalUploadedBy")
 
   // Implants module — see docs/marketplace/research/implantologia/SPEC.md §4
   implantsPlaced          Implant[]        @relation("ImplantPlacedBy")
@@ -403,6 +441,25 @@ model Patient {
   endodonticDiagnoses  EndodonticDiagnosis[]
   vitalityTests        VitalityTest[]
   endodonticTreatments EndodonticTreatment[]
+
+  // Periodontics module — see docs/marketplace/research/periodoncia/SPEC.md §4
+  periodontalClassifications PeriodontalClassification[]
+  gingivalRecessions         GingivalRecession[]
+  periodontalPlans           PeriodontalTreatmentPlan[]
+  srpSessions                SRPSession[]
+  periodontalReevaluations   PeriodontalReevaluation[]
+  periodontalRiskAssessments PeriodontalRiskAssessment[]
+  periodontalSurgeries       PeriodontalSurgery[]
+  periImplantAssessments     PeriImplantAssessment[]
+
+  // Orthodontics module — see docs/marketplace/research/ortodoncia/SPEC.md §4
+  orthodonticDiagnoses      OrthodonticDiagnosis[]
+  orthodonticTreatmentPlans OrthodonticTreatmentPlan[]
+  orthoPaymentPlans         OrthoPaymentPlan[]
+  orthoPhotoSets            OrthoPhotoSet[]
+  orthodonticControls       OrthodonticControlAppointment[]
+  orthodonticConsents       OrthodonticConsent[]
+  orthodonticDigitalRecords OrthodonticDigitalRecord[]
 
   // Implants module — see docs/marketplace/research/implantologia/SPEC.md §4
   implants        Implant[]
@@ -939,6 +996,29 @@ model PatientFile {
   followUpsAsControl      EndodonticFollowUp[] @relation("FollowUpFile")
   apicalSurgeries         ApicalSurgery[]      @relation("ApicalSurgeryFile")
 
+  // Periodontics module — fotos intraoperatorias y consentimientos firmados
+  // de cirugías. SPEC §1.16 reutiliza PatientFile (no se crea modelo
+  // Radiography). Spec §4.3.
+  surgeryIntraOpFor PeriodontalSurgery[] @relation("SurgeryIntraOpFile")
+  surgeryConsentFor PeriodontalSurgery[] @relation("SurgeryConsentFile")
+
+  // Orthodontics module — 8 vistas del set fotográfico (extra+intra) más
+  // consentimientos firmados de tratamiento/financiero/asentimiento + recibos
+  // de pago. SPEC §1.20 reutiliza PatientFile (no se crea modelo separado).
+  orthoPhotoFrontalFor               OrthoPhotoSet[]            @relation("OrthoPhotoFrontal")
+  orthoPhotoProfileFor               OrthoPhotoSet[]            @relation("OrthoPhotoProfile")
+  orthoPhotoSmileFor                 OrthoPhotoSet[]            @relation("OrthoPhotoSmile")
+  orthoPhotoIntraFrontalFor          OrthoPhotoSet[]            @relation("OrthoPhotoIntraFrontal")
+  orthoPhotoIntraLateralRFor         OrthoPhotoSet[]            @relation("OrthoPhotoIntraLateralR")
+  orthoPhotoIntraLateralLFor         OrthoPhotoSet[]            @relation("OrthoPhotoIntraLateralL")
+  orthoPhotoOcclusalUpperFor         OrthoPhotoSet[]            @relation("OrthoPhotoOcclusalUpper")
+  orthoPhotoOcclusalLowerFor         OrthoPhotoSet[]            @relation("OrthoPhotoOcclusalLower")
+  orthoTreatmentConsentsSignedFile   OrthodonticTreatmentPlan[] @relation("OrthoTreatmentConsentSignedFile")
+  orthoFinancialAgreementsSignedFile OrthoPaymentPlan[]         @relation("OrthoFinancialAgreementSignedFile")
+  orthoInstallmentsReceipt           OrthoInstallment[]         @relation("OrthoInstallmentReceiptFile")
+  orthoConsentsSignedFile            OrthodonticConsent[]       @relation("OrthoConsentSignedFile")
+  orthoDigitalRecordsFile            OrthodonticDigitalRecord[] @relation("OrthoDigitalRecordFile")
+
   // Implants module — radiografías peri-implantarias, foto intraoperatoria
   // de la cirugía, foto del paciente para el carnet, PDF del carnet,
   // consentimientos firmados. Ver SPEC §8.5.
@@ -963,10 +1043,22 @@ model XrayAnalysis {
   patientId String
   patient   Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
+  // Modo de análisis. GENERAL es el default histórico (free-form findings).
+  // PERIODONTAL_BONE_LOSS y PERIIMPLANT_BONE_LOSS son flujos dedicados con
+  // mediciones por sitio/implante. A2 cross-módulos.
+  // Un fileId tiene UN análisis: si el doctor cambia de modo y re-analiza,
+  // el nuevo modo sobreescribe al anterior (upsert por fileId).
+  mode XrayAnalysisMode @default(GENERAL)
+
   // Contenido del análisis
   summary         String @db.Text
   findings        Json // array con { id, title, description, tooth, severity, confidence }
   recommendations Json // string o array — el endpoint lo persiste tal cual
+
+  // Mediciones específicas por modo (null para GENERAL):
+  //   PERIODONTAL_BONE_LOSS: { sites: [{ toothFdi, position, lossMm, type: "horizontal"|"vertical", bopPresent }, ...] }
+  //   PERIIMPLANT_BONE_LOSS: { implantFdi, mesialMm, distalMm, baselineDate?, comparisonNote? }
+  measurements Json?
 
   // Top-level derivados (para queries/filtros sin parsear JSON)
   severity   String // max de findings: alta | media | baja | informativo
@@ -981,7 +1073,14 @@ model XrayAnalysis {
   @@index([clinicId])
   @@index([patientId])
   @@index([severity])
+  @@index([mode])
   @@map("xray_analyses")
+}
+
+enum XrayAnalysisMode {
+  GENERAL
+  PERIODONTAL_BONE_LOSS
+  PERIIMPLANT_BONE_LOSS
 }
 
 enum FileCategory {
@@ -997,6 +1096,14 @@ enum FileCategory {
   PHOTO_INTRAORAL
   PHOTO_PATIENT
   CONSENT_FORM
+  // Orthodontics module — set fotográfico T0/T1/T2 + controles + cefalo + STL.
+  // SPEC §1.3 + §1.20: reuso de PatientFile con FileCategory tipado.
+  ORTHO_PHOTO_T0
+  ORTHO_PHOTO_T1
+  ORTHO_PHOTO_T2
+  ORTHO_PHOTO_CONTROL
+  CEPH_ANALYSIS_PDF
+  SCAN_STL
   OTHER
 }
 
@@ -1074,22 +1181,58 @@ model ConsentForm {
 
 // ── Periodontal Records ────────────────────────────────────────────────────────
 model PeriodontalRecord {
-  id            String   @id @default(cuid())
-  patientId     String
-  clinicId      String
-  doctorId      String
-  recordedAt    DateTime @default(now())
-  // JSON: { "11": { "buccal": [2,3,2], "lingual": [2,2,3], "bleeding": [false,true,false], "furcation": 0 }, ... }
-  measurements  Json
+  id         String                @id @default(cuid())
+  patientId  String
+  clinicId   String
+  doctorId   String
+  recordedAt DateTime              @default(now())
+  recordType PeriodontalRecordType @default(INICIAL)
+
+  // 192 sitios capturados (6 × 32). JSON denso para evitar tabla pesada.
+  // Estructura: Array<{ fdi, position:SitePosition, pdMm, recMm, bop, plaque, suppuration }>.
+  // Spec §4.2 — el campo legacy `measurements` queda como compat con
+  // implementación pre-perio module; los reportes nuevos leen `sites`.
+  sites      Json?
+  toothLevel Json?
+
+  // Métricas calculadas en server action (opcional para registros legacy)
+  bopPercentage         Float?
+  plaqueIndexOleary     Float?
+  sites1to3mm           Int?
+  sites4to5mm           Int?
+  sites6PlusMm          Int?
+  teethWithPockets5Plus Int?
+
+  notes           String?
+  durationMinutes Int?
+
+  // Comparación con sondaje previo (auto-relación)
+  comparedToRecordId String?
+  comparedToRecord   PeriodontalRecord?  @relation("PerioCompare", fields: [comparedToRecordId], references: [id])
+  derivedRecords     PeriodontalRecord[] @relation("PerioCompare")
+
+  // Legacy (compliance v1, anterior al módulo de Periodoncia 3/5).
+  // Mantenido como opcional para no perder datos previos. Reportes
+  // y vistas nuevas usan `sites` + `toothLevel`.
+  measurements  Json?
   plaquIndex    Float?
   bleedingIndex Float?
-  notes         String?
-  createdAt     DateTime @default(now())
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
   clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   doctor  User    @relation(fields: [doctorId], references: [id])
 
+  classification         PeriodontalClassification?
+  reevaluationsAsInitial PeriodontalReevaluation[]  @relation("ReevalInitial")
+  reevaluationsAsPost    PeriodontalReevaluation[]  @relation("ReevalPost")
+
+  @@index([patientId, recordedAt(sort: Desc)])
+  @@index([clinicId, recordedAt(sort: Desc)])
+  @@index([clinicId, deletedAt])
   @@map("periodontal_records")
 }
 
@@ -1171,8 +1314,12 @@ model WhatsAppReminder {
   clinicId      String
   appointmentId String? // null for non-appointment reminders (recalls)
   patientPhone  String? // for recall reminders without appointment
-  message       String? // message sent
-  type          String                 @default("APPOINTMENT") // APPOINTMENT | RECALL
+  message       String? // message sent (legacy text) o template key con prefijo (ENDO_/PERIO_/ORTHO_/IMPLANT_<KEY>)
+  // Argumentos dinámicos del template — el worker los pasa al renderer del
+  // diccionario correspondiente. Ej: { installmentNumber, daysOverdue, … }.
+  // Null para mensajes legacy o templates sin argumentos.
+  payload       Json?
+  type          String                 @default("APPOINTMENT") // APPOINTMENT | RECALL | ENDO | PERIO | ORTHO | IMPLANT
   status        WhatsAppReminderStatus @default(PENDING)
   sentAt        DateTime?
   errorMsg      String?
@@ -3339,3 +3486,944 @@ model ImplantPassport {
 //
 // ── 4.4 Modelo v2.0 (REFERENCIA, NO migrado) ─────────────────────────
 // model ImplantInventoryItem { /* TODO v2.0 — stock con caducidad */ }
+
+// ─────────────────────────────────────────────────────────────────────────
+// PERIODONTICS MODULE
+// Specs: docs/marketplace/research/periodoncia/SPEC.md §4
+// ─────────────────────────────────────────────────────────────────────────
+
+enum PeriodontalRecordType {
+  INICIAL
+  PRE_TRATAMIENTO
+  POST_FASE_1
+  POST_FASE_2
+  MANTENIMIENTO
+  CIRUGIA_PRE
+  CIRUGIA_POST
+}
+
+enum SitePosition {
+  MV // mesiovestibular
+  MB // mediovestibular
+  DV // distovestibular
+  DL // distolingual / distopalatino
+  ML // mediolingual / mediopalatino
+  MB_PAL // mesiolingual / mesiopalatino
+}
+
+enum PeriodontalStage {
+  SALUD
+  GINGIVITIS
+  STAGE_I
+  STAGE_II
+  STAGE_III
+  STAGE_IV
+}
+
+enum PeriodontalGrade {
+  GRADE_A
+  GRADE_B
+  GRADE_C
+}
+
+enum PeriodontalExtension {
+  LOCALIZADA
+  GENERALIZADA
+  PATRON_MOLAR_INCISIVO
+}
+
+enum CairoClassification {
+  RT1
+  RT2
+  RT3
+}
+
+enum GingivalPhenotype {
+  DELGADO
+  GRUESO
+}
+
+enum PeriodontalPhase {
+  PHASE_1
+  PHASE_2
+  PHASE_3
+  PHASE_4
+}
+
+enum SRPTechnique {
+  SRP_CUADRANTE
+  FULL_MOUTH_DISINFECTION
+  FULL_MOUTH_SCALING
+}
+
+enum SRPInstrumentation {
+  MANUAL
+  ULTRASONICO
+  COMBINADO
+}
+
+enum SmokingStatus {
+  NO
+  MENOR_10
+  MAYOR_O_IGUAL_10
+}
+
+enum PeriodontalRiskCategory {
+  BAJO
+  MODERADO
+  ALTO
+}
+
+enum PeriodontalSurgeryType {
+  COLGAJO_ACCESO
+  GINGIVECTOMIA
+  RESECTIVA_OSEA
+  RTG
+  INJERTO_GINGIVAL_LIBRE
+  INJERTO_TEJIDO_CONECTIVO
+  TUNELIZACION
+  CORONALLY_ADVANCED_FLAP
+  OTRO
+}
+
+enum PeriImplantStatus {
+  SALUD
+  MUCOSITIS
+  PERIIMPLANTITIS_INICIAL
+  PERIIMPLANTITIS_MODERADA
+  PERIIMPLANTITIS_AVANZADA
+}
+
+enum GingivitisType {
+  SALUD_INTACTO
+  SALUD_REDUCIDO_ESTABLE
+  GINGIVITIS_INDUCIDA_PLACA
+  GINGIVITIS_NO_INDUCIDA_PLACA
+  PERIODONTITIS
+}
+
+model PeriodontalClassification {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  periodontalRecordId String            @unique
+  periodontalRecord   PeriodontalRecord @relation(fields: [periodontalRecordId], references: [id], onDelete: Cascade)
+
+  stage     PeriodontalStage
+  grade     PeriodontalGrade?
+  extension PeriodontalExtension?
+
+  modifiers         Json
+  computationInputs Json
+
+  calculatedAutomatically Boolean
+  overriddenByDoctor      Boolean @default(false)
+  justification           String?
+
+  classifiedAt   DateTime @default(now())
+  classifiedById String
+  classifiedBy   User     @relation(fields: [classifiedById], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, classifiedAt(sort: Desc)])
+  @@index([clinicId])
+  @@map("periodontal_classifications")
+}
+
+model GingivalRecession {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  toothFdi            Int
+  surface             String
+  recessionHeightMm   Float
+  recessionWidthMm    Float
+  keratinizedTissueMm Float
+
+  cairoClassification CairoClassification
+  gingivalPhenotype   GingivalPhenotype
+
+  recordedAt   DateTime @default(now())
+  recordedById String
+  recordedBy   User     @relation(fields: [recordedById], references: [id])
+
+  notes      String?
+  resolvedAt DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, toothFdi])
+  @@index([clinicId, recordedAt(sort: Desc)])
+  @@map("gingival_recessions")
+}
+
+model PeriodontalTreatmentPlan {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  currentPhase PeriodontalPhase
+
+  phase1StartedAt   DateTime?
+  phase1CompletedAt DateTime?
+  phase2StartedAt   DateTime?
+  phase2CompletedAt DateTime?
+  phase3StartedAt   DateTime?
+  phase3CompletedAt DateTime?
+  phase4StartedAt   DateTime?
+
+  nextEvaluationAt DateTime?
+
+  planNotes String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient       Patient                   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic        Clinic                    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  srpSessions   SRPSession[]
+  reevaluations PeriodontalReevaluation[]
+  surgeries     PeriodontalSurgery[]
+
+  @@index([patientId])
+  @@index([clinicId, currentPhase])
+  @@index([nextEvaluationAt])
+  @@map("periodontal_treatment_plans")
+}
+
+model SRPSession {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  planId String
+  plan   PeriodontalTreatmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  performedAt DateTime @default(now())
+  doctorId    String
+  doctor      User     @relation("SrpDoctor", fields: [doctorId], references: [id])
+
+  technique          SRPTechnique
+  instrumentation    SRPInstrumentation
+  quadrantsCompleted Json
+
+  anesthesiaUsed  Boolean @default(false)
+  anesthesiaType  String?
+  durationMinutes Int?
+
+  observations String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, performedAt(sort: Desc)])
+  @@index([clinicId])
+  @@index([planId])
+  @@map("srp_sessions")
+}
+
+model PeriodontalReevaluation {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  planId String
+  plan   PeriodontalTreatmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  initialRecordId String
+  initialRecord   PeriodontalRecord @relation("ReevalInitial", fields: [initialRecordId], references: [id])
+
+  postRecordId String
+  postRecord   PeriodontalRecord @relation("ReevalPost", fields: [postRecordId], references: [id])
+
+  bopImprovementPct       Float
+  pdAverageImprovementMm  Float
+  residualSites           Json
+  surgicalCandidatesTeeth Json
+
+  evaluatedAt   DateTime @default(now())
+  evaluatedById String
+  evaluatedBy   User     @relation(fields: [evaluatedById], references: [id])
+
+  recommendation String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, evaluatedAt(sort: Desc)])
+  @@index([clinicId])
+  @@map("periodontal_reevaluations")
+}
+
+model PeriodontalRiskAssessment {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  evaluatedAt DateTime @default(now())
+
+  bopPct             Float
+  residualSites5Plus Int
+  lostTeethPerio     Int
+  boneLossAgeRatio   Float?
+  smokingStatus      SmokingStatus
+  hba1c              Float?
+
+  riskCategory            PeriodontalRiskCategory
+  recommendedRecallMonths Int
+
+  evaluatedById String
+  evaluatedBy   User   @relation(fields: [evaluatedById], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, evaluatedAt(sort: Desc)])
+  @@index([clinicId, riskCategory])
+  @@map("periodontal_risk_assessments")
+}
+
+model PeriodontalSurgery {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  planId String?
+  plan   PeriodontalTreatmentPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  surgeryType PeriodontalSurgeryType
+
+  treatedSites Json
+  biomaterials Json?
+  sutureType   String?
+
+  surgeryDate DateTime
+  doctorId    String
+  doctor      User     @relation("PerioSurgeryDoctor", fields: [doctorId], references: [id])
+
+  sutureRemovalDate   DateTime?
+  postOpComplications String?
+
+  intraoperativeFileId String?
+  intraoperativeFile   PatientFile? @relation("SurgeryIntraOpFile", fields: [intraoperativeFileId], references: [id], onDelete: SetNull)
+
+  consentSignedFileId String?
+  consentSignedFile   PatientFile? @relation("SurgeryConsentFile", fields: [consentSignedFileId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, surgeryDate(sort: Desc)])
+  @@index([clinicId])
+  @@index([planId])
+  @@map("periodontal_surgeries")
+}
+
+// El modelo `Implant` vive en `feature/implant-module-v1` (módulo 4/5).
+// A2 cross-módulos NO lo redefine — solo agrega la FK desde
+// PeriImplantAssessment.implantId → implants.id (ALTER TABLE en migración)
+// y las reverse relations Patient.implants / Clinic.implants /
+// User.implantsPlaced que coinciden con las del módulo real.
+//
+// Esta rama A2 NO es deployable standalone: la migración asume que la
+// tabla `implants` existe (creada por el módulo Implantología). El merge
+// efectivo se hace vía `feature/implant-phase-8-v1` que ya parte de
+// `origin/feature/implant-module-v1`.
+
+model PeriImplantAssessment {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  // Columna FK opcional. La FK de SQL hacia `implants(id)` la agrega la
+  // migración 20260505100000_dental_cross_modules. La relation Prisma
+  // hacia el modelo `Implant` la define el módulo Implantología 4/5
+  // (`feature/implant-module-v1`); este branch no la declara para no
+  // romper el build standalone.
+  implantId  String?
+  implantFdi Int
+
+  status                 PeriImplantStatus
+  bop                    Boolean
+  suppuration            Boolean
+  radiographicBoneLossMm Float?
+  recommendedTreatment   String?
+
+  evaluatedAt   DateTime @default(now())
+  evaluatedById String
+  evaluatedBy   User     @relation(fields: [evaluatedById], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, evaluatedAt(sort: Desc)])
+  @@index([clinicId, status])
+  @@index([implantId])
+  @@map("peri_implant_assessments")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ORTHODONTICS MODULE — see docs/marketplace/research/ortodoncia/SPEC.md
+// 9 modelos MVP + 14 enums + 6 modelos v1.1 (TODO, sin lógica).
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum AngleClass {
+  CLASS_I
+  CLASS_II_DIV_1
+  CLASS_II_DIV_2
+  CLASS_III
+  ASYMMETRIC
+}
+
+enum OrthoTechnique {
+  METAL_BRACKETS
+  CERAMIC_BRACKETS
+  SELF_LIGATING_METAL
+  SELF_LIGATING_CERAMIC
+  LINGUAL_BRACKETS
+  CLEAR_ALIGNERS
+  HYBRID
+}
+
+enum AnchorageType {
+  MAXIMUM
+  MODERATE
+  MINIMUM
+  COMPOUND
+}
+
+enum OrthoPhaseKey {
+  ALIGNMENT
+  LEVELING
+  SPACE_CLOSURE
+  DETAILS
+  FINISHING
+  RETENTION
+}
+
+enum OrthoPhaseStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  DELAYED
+}
+
+enum OrthoTreatmentStatus {
+  PLANNED
+  IN_PROGRESS
+  ON_HOLD
+  RETENTION
+  COMPLETED
+  DROPPED_OUT
+}
+
+enum OrthoPaymentStatus {
+  ON_TIME
+  LIGHT_DELAY
+  SEVERE_DELAY
+  PAID_IN_FULL
+}
+
+enum InstallmentStatus {
+  PENDING
+  PAID
+  OVERDUE
+  WAIVED
+}
+
+enum OrthoPhotoSetType {
+  T0
+  T1
+  T2
+  CONTROL
+}
+
+enum OrthoPhotoView {
+  EXTRA_FRONTAL
+  EXTRA_PROFILE
+  EXTRA_SMILE
+  INTRA_FRONTAL_OCCLUSION
+  INTRA_LATERAL_RIGHT
+  INTRA_LATERAL_LEFT
+  INTRA_OCCLUSAL_UPPER
+  INTRA_OCCLUSAL_LOWER
+}
+
+// Reuso de HabitType (orto comparte con pediatría/periodoncia si existe).
+// Si los otros módulos ya lo definen, este enum se omite. SPEC §4.1 nota:
+// definirlo aquí y dejar que prisma fusione si hay conflicto. En este repo
+// HabitType NO existe globalmente; se define ahora.
+enum HabitType {
+  DIGITAL_SUCKING
+  MOUTH_BREATHING
+  TONGUE_THRUSTING
+  BRUXISM
+  NAIL_BITING
+  LIP_BITING
+  OTHER
+}
+
+enum DentalPhase {
+  DECIDUOUS
+  MIXED_EARLY
+  MIXED_LATE
+  PERMANENT
+}
+
+enum TreatmentObjective {
+  AESTHETIC_ONLY
+  FUNCTIONAL_ONLY
+  AESTHETIC_AND_FUNCTIONAL
+}
+
+enum OrthoConsentType {
+  TREATMENT
+  FINANCIAL
+  MINOR_ASSENT
+  PHOTO_USE
+}
+
+enum ControlAttendance {
+  ATTENDED
+  RESCHEDULED
+  NO_SHOW
+}
+
+enum AdjustmentType {
+  WIRE_CHANGE
+  BRACKET_REPOSITION
+  ELASTIC_CHANGE
+  NEW_ALIGNERS_DELIVERED
+  IPR
+  BUTTON_PLACEMENT
+  ATTACHMENT_PLACEMENT
+  HYGIENE_REINFORCEMENT
+  OTHER
+}
+
+enum OrthoPaymentMethod {
+  CASH
+  DEBIT_CARD
+  CREDIT_CARD
+  BANK_TRANSFER
+  CHECK
+  WALLET
+}
+
+enum DigitalRecordType {
+  CEPH_ANALYSIS_PDF
+  SCAN_STL
+}
+
+// ─── Modelos MVP (9) ─────────────────────────────────────────────────────────
+
+model OrthodonticDiagnosis {
+  id            String   @id @default(uuid())
+  patientId     String
+  clinicId      String
+  diagnosedById String
+  diagnosedAt   DateTime @default(now())
+
+  // Análisis Angle
+  angleClassRight    AngleClass
+  angleClassLeft     AngleClass
+  overbiteMm         Decimal    @db.Decimal(4, 1)
+  overbitePercentage Int
+  overjetMm          Decimal    @db.Decimal(4, 1)
+  midlineDeviationMm Decimal?   @db.Decimal(4, 1)
+  crossbite          Boolean    @default(false)
+  crossbiteDetails   String?
+  openBite           Boolean    @default(false)
+  openBiteDetails    String?
+  crowdingUpperMm    Decimal?   @db.Decimal(4, 1)
+  crowdingLowerMm    Decimal?   @db.Decimal(4, 1)
+
+  etiologySkeletal   Boolean @default(false)
+  etiologyDental     Boolean @default(false)
+  etiologyFunctional Boolean @default(false)
+  etiologyNotes      String?
+
+  habits            HabitType[]
+  habitsDescription String?
+
+  dentalPhase DentalPhase
+
+  tmjPainPresent     Boolean @default(false)
+  tmjClickingPresent Boolean @default(false)
+  tmjNotes           String?
+
+  initialPhotoSetId String? @unique
+  initialCephFileId String?
+  initialScanFileId String?
+
+  clinicalSummary String
+
+  treatmentPlan OrthodonticTreatmentPlan?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient     Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic      Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  diagnosedBy User    @relation("OrthoDiagnosedBy", fields: [diagnosedById], references: [id])
+
+  @@index([patientId])
+  @@index([clinicId, diagnosedAt(sort: Desc)])
+  @@map("orthodontic_diagnoses")
+}
+
+model OrthodonticTreatmentPlan {
+  id          String @id @default(uuid())
+  diagnosisId String @unique
+  patientId   String
+  clinicId    String
+
+  technique               OrthoTechnique
+  techniqueNotes          String?
+  estimatedDurationMonths Int
+  startDate               DateTime?
+  installedAt             DateTime?
+
+  totalCostMxn   Decimal       @db.Decimal(10, 2)
+  anchorageType  AnchorageType
+  anchorageNotes String?
+
+  extractionsRequired Boolean @default(false)
+  extractionsTeethFdi Int[]
+  iprRequired         Boolean @default(false)
+  tadsRequired        Boolean @default(false)
+
+  treatmentObjectives TreatmentObjective
+  patientGoals        String?
+
+  retentionPlanText String
+
+  status          OrthoTreatmentStatus @default(PLANNED)
+  statusUpdatedAt DateTime             @default(now())
+
+  onHoldReason     String?
+  onHoldStartedAt  DateTime?
+  droppedOutAt     DateTime?
+  droppedOutReason String?
+
+  signedTreatmentConsentFileId String?
+  signedTreatmentConsentFile   PatientFile? @relation("OrthoTreatmentConsentSignedFile", fields: [signedTreatmentConsentFileId], references: [id], onDelete: SetNull)
+
+  diagnosis      OrthodonticDiagnosis            @relation(fields: [diagnosisId], references: [id], onDelete: Cascade)
+  patient        Patient                         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic         Clinic                          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  phases         OrthodonticPhase[]
+  paymentPlan    OrthoPaymentPlan?
+  controls       OrthodonticControlAppointment[]
+  photoSets      OrthoPhotoSet[]
+  digitalRecords OrthodonticDigitalRecord[]
+  consents       OrthodonticConsent[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([patientId])
+  @@index([clinicId, status])
+  @@index([clinicId, installedAt(sort: Desc)])
+  @@map("orthodontic_treatment_plans")
+}
+
+model OrthodonticPhase {
+  id              String @id @default(uuid())
+  treatmentPlanId String
+  clinicId        String
+
+  phaseKey      OrthoPhaseKey
+  status        OrthoPhaseStatus @default(NOT_STARTED)
+  startedAt     DateTime?
+  expectedEndAt DateTime?
+  completedAt   DateTime?
+  notes         String?
+  orderIndex    Int
+
+  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([treatmentPlanId, phaseKey])
+  // SPEC §4.5: índice idx_ortho_kanban_lookup para query del kanban <100ms con
+  // 500 pacientes activos. La migración SQL le da nombre explícito.
+  @@index([clinicId, status, phaseKey], map: "idx_ortho_kanban_lookup")
+  @@index([treatmentPlanId, orderIndex])
+  @@map("orthodontic_phases")
+}
+
+model OrthoPaymentPlan {
+  id              String @id @default(uuid())
+  treatmentPlanId String @unique
+  patientId       String
+  clinicId        String
+
+  totalAmount        Decimal @db.Decimal(10, 2)
+  initialDownPayment Decimal @db.Decimal(10, 2)
+  installmentAmount  Decimal @db.Decimal(10, 2)
+  installmentCount   Int
+
+  startDate         DateTime
+  endDate           DateTime
+  paymentDayOfMonth Int
+
+  paidAmount      Decimal            @default(0) @db.Decimal(10, 2)
+  pendingAmount   Decimal            @db.Decimal(10, 2)
+  status          OrthoPaymentStatus @default(ON_TIME)
+  statusUpdatedAt DateTime           @default(now())
+
+  preferredPaymentMethod         OrthoPaymentMethod
+  signedFinancialAgreementFileId String?
+  signedFinancialAgreementFile   PatientFile?       @relation("OrthoFinancialAgreementSignedFile", fields: [signedFinancialAgreementFileId], references: [id], onDelete: SetNull)
+
+  notes String?
+
+  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  installments  OrthoInstallment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clinicId, status])
+  @@index([patientId])
+  @@map("ortho_payment_plans")
+}
+
+model OrthoInstallment {
+  id            String @id @default(uuid())
+  paymentPlanId String
+  clinicId      String
+
+  installmentNumber Int
+  amount            Decimal           @db.Decimal(10, 2)
+  dueDate           DateTime
+  status            InstallmentStatus @default(PENDING)
+
+  paidAt                  DateTime?
+  amountPaid              Decimal?            @db.Decimal(10, 2)
+  paymentMethod           OrthoPaymentMethod?
+  receiptFileId           String?
+  receiptFile             PatientFile?        @relation("OrthoInstallmentReceiptFile", fields: [receiptFileId], references: [id], onDelete: SetNull)
+  recordedById            String?
+  recordedBy              User?               @relation("OrthoInstallmentRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+  backdatingJustification String?
+
+  waivedAt     DateTime?
+  waivedById   String?
+  waivedBy     User?     @relation("OrthoInstallmentWaivedBy", fields: [waivedById], references: [id], onDelete: SetNull)
+  waiverReason String?
+
+  paymentPlan OrthoPaymentPlan @relation(fields: [paymentPlanId], references: [id], onDelete: Cascade)
+  clinic      Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([paymentPlanId, installmentNumber])
+  @@index([clinicId, dueDate, status])
+  @@index([clinicId, status])
+  @@map("ortho_installments")
+}
+
+model OrthoPhotoSet {
+  id              String @id @default(uuid())
+  treatmentPlanId String
+  patientId       String
+  clinicId        String
+
+  setType          OrthoPhotoSetType
+  capturedAt       DateTime
+  capturedById     String
+  capturedBy       User              @relation("OrthoPhotoSetCapturedBy", fields: [capturedById], references: [id])
+  monthInTreatment Int?
+  notes            String?
+
+  // 8 columnas tipadas (decisión Coordinator, no tabla relacional).
+  photoFrontalId       String?
+  photoFrontal         PatientFile? @relation("OrthoPhotoFrontal", fields: [photoFrontalId], references: [id], onDelete: SetNull)
+  photoProfileId       String?
+  photoProfile         PatientFile? @relation("OrthoPhotoProfile", fields: [photoProfileId], references: [id], onDelete: SetNull)
+  photoSmileId         String?
+  photoSmile           PatientFile? @relation("OrthoPhotoSmile", fields: [photoSmileId], references: [id], onDelete: SetNull)
+  photoIntraFrontalId  String?
+  photoIntraFrontal    PatientFile? @relation("OrthoPhotoIntraFrontal", fields: [photoIntraFrontalId], references: [id], onDelete: SetNull)
+  photoIntraLateralRId String?
+  photoIntraLateralR   PatientFile? @relation("OrthoPhotoIntraLateralR", fields: [photoIntraLateralRId], references: [id], onDelete: SetNull)
+  photoIntraLateralLId String?
+  photoIntraLateralL   PatientFile? @relation("OrthoPhotoIntraLateralL", fields: [photoIntraLateralLId], references: [id], onDelete: SetNull)
+  photoOcclusalUpperId String?
+  photoOcclusalUpper   PatientFile? @relation("OrthoPhotoOcclusalUpper", fields: [photoOcclusalUpperId], references: [id], onDelete: SetNull)
+  photoOcclusalLowerId String?
+  photoOcclusalLower   PatientFile? @relation("OrthoPhotoOcclusalLower", fields: [photoOcclusalLowerId], references: [id], onDelete: SetNull)
+
+  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([treatmentPlanId, setType])
+  @@index([clinicId, capturedAt(sort: Desc)])
+  @@map("ortho_photo_sets")
+}
+
+model OrthodonticControlAppointment {
+  id              String @id @default(uuid())
+  treatmentPlanId String
+  patientId       String
+  clinicId        String
+
+  scheduledAt      DateTime
+  performedAt      DateTime?
+  monthInTreatment Int
+  attendance       ControlAttendance @default(ATTENDED)
+  attendedById     String?
+  attendedBy       User?             @relation("OrthoControlAttendedBy", fields: [attendedById], references: [id], onDelete: SetNull)
+
+  hygieneScore       Int?
+  bracketsLoose      Int?
+  bracketsBroken     Int?
+  appliancesIntact   Boolean?
+  patientReportsPain Boolean  @default(false)
+  patientPainNotes   String?
+
+  adjustments     AdjustmentType[]
+  adjustmentNotes String?
+
+  photoSetId String?
+
+  nextAppointmentAt    DateTime?
+  nextAppointmentNotes String?
+
+  paymentStatusSnapshot OrthoPaymentStatus?
+
+  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([treatmentPlanId, monthInTreatment])
+  @@index([clinicId, scheduledAt])
+  @@index([clinicId, performedAt])
+  @@map("orthodontic_control_appointments")
+}
+
+model OrthodonticDigitalRecord {
+  id              String @id @default(uuid())
+  treatmentPlanId String
+  patientId       String
+  clinicId        String
+
+  recordType   DigitalRecordType
+  fileId       String
+  file         PatientFile       @relation("OrthoDigitalRecordFile", fields: [fileId], references: [id], onDelete: Cascade)
+  capturedAt   DateTime
+  uploadedById String
+  uploadedBy   User              @relation("OrthoDigitalUploadedBy", fields: [uploadedById], references: [id])
+  notes        String?
+
+  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([treatmentPlanId, recordType])
+  @@map("orthodontic_digital_records")
+}
+
+model OrthodonticConsent {
+  id              String @id @default(uuid())
+  treatmentPlanId String
+  patientId       String
+  clinicId        String
+
+  consentType            OrthoConsentType
+  signedAt               DateTime
+  signerName             String
+  signerRelationship     String?
+  patientSignatureImage  String?
+  guardianSignatureImage String?
+  signedFileId           String?
+  signedFile             PatientFile?     @relation("OrthoConsentSignedFile", fields: [signedFileId], references: [id], onDelete: SetNull)
+  notes                  String?
+
+  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([treatmentPlanId, consentType])
+  @@map("orthodontic_consents")
+}
+
+// ─── Modelos v1.1 (6, documentados sin lógica) ───────────────────────────────
+//
+// SPEC §4.3 + §14: estos 6 modelos se planean para v1.1 y NO se implementan
+// en MVP. Quedan documentados aquí como TODO para que el bot de v1.1 los
+// agregue sin redefinir el contrato.
+//
+// TODO v1.1: OrthodonticCephalometryAnalysis — captura numérica de valores
+//   Steiner/Ricketts/Jarabak (~30 campos: SNA, SNB, ANB, FMA, IMPA, planos,
+//   dimensiones faciales). Vinculado 1:1 con un PatientFile category=
+//   CEPH_ANALYSIS_PDF.
+//
+// TODO v1.1: OrthodonticBracketsMap — mapeo bracket por diente con
+//   prescripción (Roth, MBT, Andrews) + slot, torque, in/out, tip.
+//
+// TODO v1.1: OrthodonticAligner — tracking del set actual de alineadores con
+//   número, fecha entrega, fecha cambio, compliance reportado por paciente.
+//
+// TODO v1.1: OrthodonticIPR — registro de reducción interproximal por par de
+//   dientes con cantidad en mm, fecha, instrumento.
+//
+// TODO v1.1: OrthodonticTAD — mini-implantes de anclaje con lote, ubicación
+//   FDI, fecha colocación, fecha retiro, complicaciones.
+//
+// TODO v1.1: OrthodonticRefinement — segundo curso de tratamiento por
+//   ajustes finales no logrados con el plan original (alineadores y brackets).
