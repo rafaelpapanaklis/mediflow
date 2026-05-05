@@ -1,20 +1,17 @@
 "use server";
-// Implants — createPeriImplantAssessment STUB.
+// Implants — createPeriImplantAssessment.
 //
-// PENDIENTE FUTURO: el modelo PeriImplantAssessment vive en el módulo
-// Periodoncia (3/5), branch feature/periodontics-module-v1. Este branch
-// (feature/implant-module-v1) sale de origin/feature/endodontics-module-v1
-// y NO tiene acceso a ese modelo. Spec §1.20.
+// Tras la unificación de A2 cross-módulos, el modelo PeriImplantAssessment
+// (de Periodoncia, módulo 3/5) tiene FK real `implantId → implants.id`.
+// Esta acción crea la evaluación desde el contexto del módulo Implants
+// (típicamente disparada por MaintenanceDrawer cuando hay BoP+ o
+// supuración). Spec §1.20.
 //
-// Cuando ambos módulos se mergeen en main:
-//   1. Eliminar este STUB.
-//   2. Reescribir como acción real que crea PeriImplantAssessment.
-//   3. Migración SQL separada para FK real
-//      PeriImplantAssessment.implantId → Implant.id (Spec §1.21).
-//
-// El audit log registra el llamado para que quede trazabilidad de
-// que el flujo se intentó.
+// Cross-tenant safety: `loadImplantForCtx` ya valida clinicId; aquí
+// además forzamos `clinicId + patientId` desde el implante validado.
+// Imposible crear un assessment para un implante de otra clínica.
 
+import { prisma } from "@/lib/prisma";
 import {
   createPeriImplantAssessmentSchema,
   type CreatePeriImplantAssessmentInput,
@@ -26,15 +23,41 @@ import {
   loadImplantForCtx,
 } from "./_helpers";
 import { fail, isFailure, ok, type ActionResult } from "./result";
+import type { PeriImplantStatus } from "@prisma/client";
 
-export type PeriImplantStubResult = {
-  stub: true;
-  todo: string;
-};
+/**
+ * Deriva el `PeriImplantStatus` desde las métricas clínicas (consenso
+ * AAP-EFP 2017 + Albrektsson):
+ *   - Sin BoP + sin supuración + sin pérdida ósea → SALUD
+ *   - BoP+ y/o supuración + pérdida ósea <1mm → MUCOSITIS
+ *   - BoP+ + pérdida ósea 1–3mm → PERIIMPLANTITIS_INICIAL
+ *   - BoP+ + pérdida ósea 3–5mm → PERIIMPLANTITIS_MODERADA
+ *   - BoP+ + pérdida ósea ≥5mm o supuración severa → PERIIMPLANTITIS_AVANZADA
+ */
+function deriveStatus(args: {
+  bopPresent: boolean;
+  suppurationPresent: boolean;
+  radiographicBoneLossMm: number;
+}): PeriImplantStatus {
+  const { bopPresent, suppurationPresent, radiographicBoneLossMm } = args;
+  if (!bopPresent && !suppurationPresent && radiographicBoneLossMm < 1) {
+    return "SALUD";
+  }
+  if (radiographicBoneLossMm >= 5) {
+    return "PERIIMPLANTITIS_AVANZADA";
+  }
+  if (radiographicBoneLossMm >= 3) {
+    return "PERIIMPLANTITIS_MODERADA";
+  }
+  if (radiographicBoneLossMm >= 1) {
+    return "PERIIMPLANTITIS_INICIAL";
+  }
+  return "MUCOSITIS";
+}
 
 export async function createPeriImplantAssessment(
   input: CreatePeriImplantAssessmentInput,
-): Promise<ActionResult<PeriImplantStubResult>> {
+): Promise<ActionResult<{ id: string; status: PeriImplantStatus }>> {
   const parsed = createPeriImplantAssessmentSchema.safeParse(input);
   if (!parsed.success) {
     return fail(parsed.error.errors[0]?.message ?? "Datos inválidos");
@@ -49,32 +72,49 @@ export async function createPeriImplantAssessment(
     implantId: parsed.data.implantId,
   });
   if (isFailure(implantRes)) return implantRes;
+  const implant = implantRes.data;
 
-  // Audit del STUB para trazabilidad — el doctor intentó crear
-  // assessment periimplantar pero el módulo Periodoncia aún no está
-  // integrado.
-  await auditImplant({
-    ctx,
-    action: IMPLANT_AUDIT_ACTIONS.PERI_IMPLANT_ASSESSMENT_STUB,
-    entityType: "implant",
-    entityId: parsed.data.implantId,
-    meta: {
-      stub: true,
-      reason: "PeriImplantAssessment vive en módulo Periodoncia (no integrado todavía)",
-      input: {
-        bopPresent: parsed.data.bopPresent,
-        pdMaxMm: parsed.data.pdMaxMm,
-        suppurationPresent: parsed.data.suppurationPresent,
-        radiographicBoneLossMm: parsed.data.radiographicBoneLossMm,
+  const status = deriveStatus({
+    bopPresent: parsed.data.bopPresent ?? false,
+    suppurationPresent: parsed.data.suppurationPresent ?? false,
+    radiographicBoneLossMm: parsed.data.radiographicBoneLossMm ?? 0,
+  });
+
+  try {
+    const created = await prisma.periImplantAssessment.create({
+      data: {
+        clinicId: ctx.clinicId,
+        patientId: implant.patientId,
+        implantId: implant.id,
+        implantFdi: implant.toothFdi,
+        status,
+        bop: parsed.data.bopPresent ?? false,
+        suppuration: parsed.data.suppurationPresent ?? false,
+        radiographicBoneLossMm: parsed.data.radiographicBoneLossMm ?? null,
+        recommendedTreatment: parsed.data.notes ?? null,
+        evaluatedById: ctx.userId,
       },
-    },
-  });
+      select: { id: true, status: true },
+    });
 
-  return ok({
-    stub: true,
-    todo:
-      "Implementar al integrar el módulo Periodoncia. " +
-      "Migración SQL FK PeriImplantAssessment.implantId → Implant.id " +
-      "se ejecuta en commit separado.",
-  });
+    await auditImplant({
+      ctx,
+      action: IMPLANT_AUDIT_ACTIONS.PERI_IMPLANT_ASSESSMENT_CREATED,
+      entityType: "implant",
+      entityId: implant.id,
+      meta: {
+        assessmentId: created.id,
+        status: created.status,
+        bop: parsed.data.bopPresent ?? false,
+        suppuration: parsed.data.suppurationPresent ?? false,
+        radiographicBoneLossMm: parsed.data.radiographicBoneLossMm ?? null,
+        pdMaxMm: parsed.data.pdMaxMm ?? null,
+      },
+    });
+
+    return ok({ id: created.id, status: created.status });
+  } catch (e) {
+    console.error("[createPeriImplantAssessment]", e);
+    return fail("Error al crear la evaluación periimplantar");
+  }
 }

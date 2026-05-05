@@ -29,6 +29,7 @@ export const IMPLANT_AUDIT_ACTIONS = {
   REPORT_SURGICAL_PDF: "implant.report.surgical.pdf",
   REPORT_PLAN_PDF: "implant.report.plan.pdf",
   PERI_IMPLANT_ASSESSMENT_STUB: "implant.periImplantAssessment.stub",
+  PERI_IMPLANT_ASSESSMENT_CREATED: "implant.periImplantAssessment.created",
 } as const;
 
 export type ImplantAuditAction =

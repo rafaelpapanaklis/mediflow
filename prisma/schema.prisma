@@ -3189,6 +3189,9 @@ model Implant {
   followUps       ImplantFollowUp[]
   consents        ImplantConsent[]
   passport        ImplantPassport?
+  // Cross-module: evaluaciones periimplantares que apuntan a este
+  // implante via la FK que aporta A2 cross-módulos.
+  periImplantAssessments PeriImplantAssessment[] @relation("ImplantPeriAssessments")
 
   @@index([patientId, currentStatus])
   @@index([clinicId, currentStatus])
@@ -3865,11 +3868,10 @@ model PeriImplantAssessment {
   patientId String
   clinicId  String
 
-  // Columna FK opcional. La FK de SQL hacia `implants(id)` la agrega la
-  // migración 20260505100000_dental_cross_modules. La relation Prisma
-  // hacia el modelo `Implant` la define el módulo Implantología 4/5
-  // (`feature/implant-module-v1`); este branch no la declara para no
-  // romper el build standalone.
+  // FK opcional al modelo Implant (módulo 4/5). Se mantiene nullable
+  // para preservar assessments antiguos que no tienen un Implant
+  // referenciado. La FK de SQL la agrega la migración
+  // 20260505100000_dental_cross_modules.
   implantId  String?
   implantFdi Int
 
@@ -3887,8 +3889,9 @@ model PeriImplantAssessment {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  implant Implant? @relation("ImplantPeriAssessments", fields: [implantId], references: [id], onDelete: SetNull)
 
   @@index([patientId, evaluatedAt(sort: Desc)])
   @@index([clinicId, status])

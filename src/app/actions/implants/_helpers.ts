@@ -56,6 +56,7 @@ export async function loadImplantForCtx(args: {
     id: string;
     patientId: string;
     clinicId: string;
+    toothFdi: number;
     currentStatus: ImplantStatus;
     brand: string;
     lotNumber: string;
@@ -68,6 +69,7 @@ export async function loadImplantForCtx(args: {
       id: true,
       patientId: true,
       clinicId: true,
+      toothFdi: true,
       currentStatus: true,
       brand: true,
       lotNumber: true,

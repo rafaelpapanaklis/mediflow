@@ -19,18 +19,17 @@ import {
 /**
  * Crea una evaluación periimplantar (salud / mucositis / periimplantitis).
  *
- * Resolución de `implantId`:
- *   - Si el caller pasa un `implantId` explícito, valida que exista en
- *     la clínica + paciente. Si no existe → reject con error claro.
- *   - Si solo pasa `implantFdi`, busca por (clinicId, patientId, toothFdi).
- *     Si no encuentra → reject. La creación de Implant es responsabilidad
- *     del módulo Implantología (4/5).
+ * Resolución de `implantId` (cross-tenant safe):
+ *   - Si el caller pasa un `implantId` explícito → valida que exista en
+ *     `(clinicId, patientId)`. Si no → reject con error claro.
+ *   - Si solo pasa `implantFdi` → busca por `(clinicId, patientId, toothFdi)`,
+ *     filtrando removidos. Si no encuentra → reject. Crear el implante es
+ *     responsabilidad del módulo Implantología (4/5).
  *
- * Los queries van por `$queryRaw` porque este branch (A2) no declara el
- * modelo Prisma `Implant` — ese lo aporta `feature/implant-module-v1`
- * tras el merge. La columna FK `peri_implant_assessments.implantId →
- * implants(id)` la agrega la migración 20260505100000_dental_cross_modules.
- * SPEC §1.17.
+ * Tras el merge A3 con feature/implant-module-v1 el modelo Prisma `Implant`
+ * existe — usamos `prisma.implant.*` directo. La columna FK
+ * `peri_implant_assessments.implantId → implants(id)` la agrega la
+ * migración 20260505100000_dental_cross_modules. SPEC §1.17.
  */
 export async function createPeriImplantAssessment(
   input: unknown,
@@ -45,39 +44,37 @@ export async function createPeriImplantAssessment(
   const patient = await loadPatientForPerio({ ctx, patientId: parsed.data.patientId });
   if (isFailure(patient)) return patient;
 
-  // Resuelve implantId vía SQL raw. La tabla `implants` debe existir
-  // (aportada por el módulo Implantología). Si no existe, los queries
-  // fallan — caso esperado en un branch standalone sin merge con
-  // feature/implant-module-v1.
   let resolvedImplantId: string | null = null;
   if (parsed.data.implantId) {
-    const rows = await prisma.$queryRaw<Array<{ id: string }>>`
-      SELECT "id" FROM "implants"
-      WHERE "id" = ${parsed.data.implantId}
-        AND "clinicId" = ${ctx.clinicId}
-        AND "patientId" = ${parsed.data.patientId}
-      LIMIT 1
-    `;
-    if (rows.length === 0) {
+    const found = await prisma.implant.findFirst({
+      where: {
+        id: parsed.data.implantId,
+        clinicId: ctx.clinicId,
+        patientId: parsed.data.patientId,
+      },
+      select: { id: true },
+    });
+    if (!found) {
       return fail("El implante referenciado no existe en esta clínica");
     }
-    resolvedImplantId = rows[0].id;
+    resolvedImplantId = found.id;
   } else {
-    const rows = await prisma.$queryRaw<Array<{ id: string }>>`
-      SELECT "id" FROM "implants"
-      WHERE "clinicId" = ${ctx.clinicId}
-        AND "patientId" = ${parsed.data.patientId}
-        AND "toothFdi" = ${parsed.data.implantFdi}
-        AND "removedAt" IS NULL
-      ORDER BY "placedAt" DESC NULLS LAST
-      LIMIT 1
-    `;
-    if (rows.length === 0) {
+    const found = await prisma.implant.findFirst({
+      where: {
+        clinicId: ctx.clinicId,
+        patientId: parsed.data.patientId,
+        toothFdi: parsed.data.implantFdi,
+        removedAt: null,
+      },
+      orderBy: { placedAt: "desc" },
+      select: { id: true },
+    });
+    if (!found) {
       return fail(
         `No existe implante registrado para diente ${parsed.data.implantFdi}. Crea el implante primero desde el módulo de Implantología.`,
       );
     }
-    resolvedImplantId = rows[0].id;
+    resolvedImplantId = found.id;
   }
 
   try {
