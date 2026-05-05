@@ -1,12 +1,19 @@
 "use server";
 // Orthodontics — action 11/15: createControlAppointment con snapshot del payment status. SPEC §5.2.
+// + encolado WhatsApp F9.5 (APPOINTMENT_REMINDER_24H, MISSED_APPOINTMENT, MONTHLY_PROGRESS).
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { createControlAppointmentSchema } from "@/lib/validation/orthodontics";
+import {
+  enqueueOrthoWhatsAppBatch,
+  type EnqueueOrthoWhatsAppInput,
+} from "@/lib/orthodontics/whatsapp-queue";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
+
+const MILESTONE_MONTHS = new Set([6, 12, 18]);
 
 export async function createControlAppointment(
   input: unknown,
@@ -25,7 +32,10 @@ export async function createControlAppointment(
       patientId: parsed.data.patientId,
       deletedAt: null,
     },
-    include: { paymentPlan: { select: { status: true } } },
+    include: {
+      paymentPlan: { select: { status: true } },
+      patient: { select: { phone: true } },
+    },
   });
   if (!plan) return fail("Plan no encontrado");
 
@@ -69,6 +79,68 @@ export async function createControlAppointment(
         adjustments: parsed.data.adjustments,
       },
     });
+
+    // ─── WhatsApp queue (F9.5) ──────────────────────────────────────
+    const phone = plan.patient.phone;
+    const scheduledAt = new Date(parsed.data.scheduledAt);
+    const reminders: EnqueueOrthoWhatsAppInput[] = [];
+
+    if (parsed.data.attendance === "NO_SHOW") {
+      // Recordatorio inmediato post-falta.
+      reminders.push({
+        clinicId: ctx.clinicId,
+        templateKey: "MISSED_APPOINTMENT",
+        scheduledFor: new Date(),
+        patientPhone: phone,
+      });
+    } else if (parsed.data.attendance === "ATTENDED") {
+      // Si la cita aún está en el futuro y NO se marcó como completada,
+      // encolar el reminder de 24h. (Esto cubre el caso de pre-agendamiento.)
+      const isFuture = scheduledAt.getTime() - Date.now() > 24 * 60 * 60 * 1000;
+      if (isFuture && !parsed.data.performedAt) {
+        const remindAt = new Date(scheduledAt.getTime() - 24 * 60 * 60 * 1000);
+        reminders.push({
+          clinicId: ctx.clinicId,
+          templateKey: "APPOINTMENT_REMINDER_24H",
+          scheduledFor: remindAt,
+          patientPhone: phone,
+        });
+      }
+
+      // MONTHLY_PROGRESS milestones (mes 6, 12, 18) si la cita fue
+      // efectivamente completada.
+      if (
+        parsed.data.performedAt &&
+        MILESTONE_MONTHS.has(parsed.data.monthInTreatment)
+      ) {
+        reminders.push({
+          clinicId: ctx.clinicId,
+          templateKey: "MONTHLY_PROGRESS",
+          scheduledFor: new Date(),
+          patientPhone: phone,
+        });
+      }
+    }
+
+    // Si la cita programa una próxima cita, encolar 24h reminder para esa.
+    if (parsed.data.nextAppointmentAt) {
+      const nextAt = new Date(parsed.data.nextAppointmentAt);
+      const remindAt = new Date(nextAt.getTime() - 24 * 60 * 60 * 1000);
+      if (remindAt.getTime() > Date.now()) {
+        reminders.push({
+          clinicId: ctx.clinicId,
+          templateKey: "APPOINTMENT_REMINDER_24H",
+          scheduledFor: remindAt,
+          patientPhone: phone,
+        });
+      }
+    }
+
+    if (reminders.length > 0) {
+      await enqueueOrthoWhatsAppBatch(prisma, reminders).catch((e) => {
+        console.error("[ortho] WA enqueue failed (no bloquea):", e);
+      });
+    }
 
     revalidatePath(`/dashboard/patients/${parsed.data.patientId}/orthodontics`);
     revalidatePath(`/dashboard/specialties/orthodontics/${parsed.data.patientId}`);

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { createTreatmentPlanSchema } from "@/lib/validation/orthodontics";
 import { PHASE_ORDER } from "@/lib/orthodontics/phase-machine";
+import { enqueueOrthoWhatsApp } from "@/lib/orthodontics/whatsapp-queue";
 import {
   auditOrtho,
   getOrthoActionContext,
@@ -95,6 +96,29 @@ export async function createTreatmentPlan(
         installed: Boolean(installedAt),
       },
     });
+
+    // ─── WhatsApp queue F9.5 — PRE_INSTALLATION_INSTRUCTIONS ──────────
+    // Si el plan se programa con installedAt >24h en el futuro, encolar
+    // recordatorio para 24h antes de la cita de instalación.
+    if (installedAt) {
+      const remindAt = new Date(installedAt.getTime() - 24 * 60 * 60 * 1000);
+      if (remindAt.getTime() > Date.now() + 60_000) {
+        const phoneRow = await prisma.patient.findUnique({
+          where: { id: parsed.data.patientId },
+          select: { phone: true },
+        });
+        if (phoneRow?.phone) {
+          await enqueueOrthoWhatsApp(prisma, {
+            clinicId: ctx.clinicId,
+            templateKey: "PRE_INSTALLATION_INSTRUCTIONS",
+            scheduledFor: remindAt,
+            patientPhone: phoneRow.phone,
+          }).catch((e) => {
+            console.error("[ortho] WA enqueue PRE_INSTALL failed (no bloquea):", e);
+          });
+        }
+      }
+    }
 
     revalidatePath(`/dashboard/patients/${parsed.data.patientId}/orthodontics`);
     revalidatePath(`/dashboard/specialties/orthodontics/${parsed.data.patientId}`);

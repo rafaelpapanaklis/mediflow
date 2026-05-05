@@ -10,6 +10,8 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { recalculatePaymentStatusSchema } from "@/lib/validation/orthodontics";
 import { computePaymentStatus } from "@/lib/orthodontics/payment-status";
+import { enqueueOrthoWhatsApp } from "@/lib/orthodontics/whatsapp-queue";
+import type { OrthoWhatsAppTemplateKey } from "@/lib/orthodontics/whatsapp-templates";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
@@ -84,6 +86,31 @@ export async function recalculatePaymentStatus(
           amountOverdue: statusResult.amountOverdue,
         },
       });
+
+      // ─── WhatsApp queue (F9.5) — encolar notificación al transitar a delay ──
+      const transitionedToDelay =
+        (plan.status !== "LIGHT_DELAY" && statusResult.status === "LIGHT_DELAY") ||
+        (plan.status !== "SEVERE_DELAY" && statusResult.status === "SEVERE_DELAY");
+      if (transitionedToDelay) {
+        const templateKey: OrthoWhatsAppTemplateKey =
+          statusResult.status === "SEVERE_DELAY"
+            ? "INSTALLMENT_OVERDUE_SEVERE"
+            : "INSTALLMENT_OVERDUE_LIGHT";
+        const patient = await prisma.patient.findUnique({
+          where: { id: updated.patientId },
+          select: { phone: true },
+        });
+        if (patient?.phone) {
+          await enqueueOrthoWhatsApp(prisma, {
+            clinicId: ctx.clinicId,
+            templateKey,
+            scheduledFor: new Date(),
+            patientPhone: patient.phone,
+          }).catch((e) => {
+            console.error("[ortho] WA enqueue (delay) failed (no bloquea):", e);
+          });
+        }
+      }
     }
 
     revalidatePath(`/dashboard/patients/${updated.patientId}/orthodontics`);
