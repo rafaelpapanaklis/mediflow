@@ -193,7 +193,6 @@ model Clinic {
   periodontalRiskAssessments PeriodontalRiskAssessment[]
   periodontalSurgeries       PeriodontalSurgery[]
   periImplantAssessments     PeriImplantAssessment[]
-  implants                   Implant[]
 
   // Orthodontics module — see docs/marketplace/research/ortodoncia/SPEC.md §4
   orthodonticDiagnoses      OrthodonticDiagnosis[]
@@ -311,7 +310,6 @@ model User {
   riskAssessmentsAsEvaluator        PeriodontalRiskAssessment[]
   surgeriesAsDoctor                 PeriodontalSurgery[]        @relation("PerioSurgeryDoctor")
   periImplantAssessmentsAsEvaluator PeriImplantAssessment[]
-  implantsPlaced                    Implant[]                   @relation("ImplantPlacedBy")
 
   // Orthodontics module — see docs/marketplace/research/ortodoncia/SPEC.md §4
   orthodonticDiagnosesAsDoctor OrthodonticDiagnosis[]          @relation("OrthoDiagnosedBy")
@@ -446,7 +444,6 @@ model Patient {
   periodontalRiskAssessments PeriodontalRiskAssessment[]
   periodontalSurgeries       PeriodontalSurgery[]
   periImplantAssessments     PeriImplantAssessment[]
-  implants                   Implant[]
 
   // Orthodontics module — see docs/marketplace/research/ortodoncia/SPEC.md §4
   orthodonticDiagnoses      OrthodonticDiagnosis[]
@@ -3309,49 +3306,27 @@ model PeriodontalSurgery {
   @@map("periodontal_surgeries")
 }
 
-// Implant — modelo stub mínimo creado en A2 cross-módulos para soportar
-// la FK real desde PeriImplantAssessment. El módulo de Implantología
-// (4/5) aún no está implementado; cuando llegue, extiende este modelo
-// con marca, modelo, plataforma, fechas de osteointegración, etc.
-// La FK desde PeriImplantAssessment se preserva entre versiones.
-model Implant {
-  id        String   @id @default(cuid())
-  clinicId  String
-  patientId String
-  toothFdi  Int
-
-  // Identificación mínima del implante (los detalles vienen con el módulo
-  // 4/5: marca, modelo, plataforma, brandSku, lot, expiry, etc.).
-  brand    String?
-  model    String?
-  platform String?
-
-  placedAt        DateTime?
-  placedByUserId  String?
-  notes           String?   @db.Text
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
-
-  clinic                 Clinic                  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  patient                Patient                 @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  placedBy               User?                   @relation("ImplantPlacedBy", fields: [placedByUserId], references: [id], onDelete: SetNull)
-  periImplantAssessments PeriImplantAssessment[]
-
-  @@index([clinicId, patientId])
-  @@index([clinicId, toothFdi])
-  @@map("implants")
-}
+// El modelo `Implant` vive en `feature/implant-module-v1` (módulo 4/5).
+// A2 cross-módulos NO lo redefine — solo agrega la FK desde
+// PeriImplantAssessment.implantId → implants.id (ALTER TABLE en migración)
+// y las reverse relations Patient.implants / Clinic.implants /
+// User.implantsPlaced que coinciden con las del módulo real.
+//
+// Esta rama A2 NO es deployable standalone: la migración asume que la
+// tabla `implants` existe (creada por el módulo Implantología). El merge
+// efectivo se hace vía `feature/implant-phase-8-v1` que ya parte de
+// `origin/feature/implant-module-v1`.
 
 model PeriImplantAssessment {
   id        String @id @default(cuid())
   patientId String
   clinicId  String
 
-  // FK opcional al modelo Implant (stub). Se mantiene nullable para
-  // backwards-compat con assessments registrados antes de A2.
-  // Spec §1.17 + A2 cross-módulos.
+  // Columna FK opcional. La FK de SQL hacia `implants(id)` la agrega la
+  // migración 20260505100000_dental_cross_modules. La relation Prisma
+  // hacia el modelo `Implant` la define el módulo Implantología 4/5
+  // (`feature/implant-module-v1`); este branch no la declara para no
+  // romper el build standalone.
   implantId  String?
   implantFdi Int
 
@@ -3369,9 +3344,8 @@ model PeriImplantAssessment {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  patient Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  clinic  Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  implant Implant? @relation(fields: [implantId], references: [id], onDelete: SetNull)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
   @@index([patientId, evaluatedAt(sort: Desc)])
   @@index([clinicId, status])
