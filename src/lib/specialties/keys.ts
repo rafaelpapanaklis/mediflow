@@ -3,7 +3,15 @@
 // dependencias circulares; este archivo agrupa para imports cómodos.
 
 export { PEDIATRICS_MODULE_KEY } from "@/lib/pediatrics/permissions";
-export { ENDODONTICS_MODULE_KEY } from "@/app/actions/endodontics";
+
+/**
+ * Key registrada en `modules.key` del marketplace para Endodoncia.
+ * Coincide con prisma/seed.ts (SEED_MODULES). Antes estaba re-exportada
+ * desde `@/app/actions/endodontics` pero eso forzaba el re-export de
+ * `_helpers.ts` en el barrel de endo, que rompe el bundle del cliente
+ * (lección Periodoncia commit 05bf50e). Movido aquí 2026-05-05.
+ */
+export const ENDODONTICS_MODULE_KEY = "endodontics" as const;
 
 /**
  * Key registrada en `modules.key` del marketplace para Periodoncia.

@@ -5,7 +5,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { canAccessModule } from "@/lib/marketplace/access-control";
-import { ENDODONTICS_MODULE_KEY } from "@/app/actions/endodontics";
+import { ENDODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { suggestEndoAppointmentDuration } from "@/lib/helpers/endoAppointmentDurations";
 
 export const dynamic = "force-dynamic";

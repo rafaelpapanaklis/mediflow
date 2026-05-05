@@ -141,6 +141,7 @@ export const ALL_PERMISSIONS = {
   "specialties.pediatrics":  "Ver Odontopediatría",
   "specialties.endodontics": "Ver Endodoncia",
   "specialties.periodontics": "Ver Periodoncia",
+  "specialties.orthodontics": "Ver Ortodoncia",
 } as const;
 
 export type PermissionKey = keyof typeof ALL_PERMISSIONS;
@@ -166,7 +167,7 @@ export const PERMISSION_GROUPS: { title: string; keys: PermissionKey[] }[] = [
   { title: "Equipo",         keys: ["team.view", "team.edit"] },
   { title: "Configuración",  keys: ["settings.view", "settings.edit", "landing.view", "landing.edit", "procedures.view", "procedures.edit", "clinicLayout.view", "clinicLayout.edit"] },
   { title: "Marketplace",    keys: ["marketplace.view"] },
-  { title: "Especialidades", keys: ["specialties.pediatrics", "specialties.endodontics", "specialties.periodontics"] },
+  { title: "Especialidades", keys: ["specialties.pediatrics", "specialties.endodontics", "specialties.periodontics", "specialties.orthodontics"] },
 ];
 
 /**
@@ -189,6 +190,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     "specialties.pediatrics",
     "specialties.endodontics",
     "specialties.periodontics",
+    "specialties.orthodontics",
   ],
   RECEPTIONIST: [
     "today.view",
@@ -202,6 +204,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     "specialties.pediatrics",
     "specialties.endodontics",
     "specialties.periodontics",
+    "specialties.orthodontics",
   ],
   // READONLY: solo *.view excepto medical/prescription/xrays
   READONLY: ALL_PERMISSION_KEYS.filter((k) =>
