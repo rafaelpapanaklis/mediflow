@@ -54,6 +54,8 @@ interface XrayAnalysis {
   findings: AiFinding[];
   recommendations?: unknown;
   modelVersion?: string;
+  mode?: "GENERAL" | "PERIODONTAL_BONE_LOSS" | "PERIIMPLANT_BONE_LOSS";
+  measurements?: unknown;
 }
 
 interface PatientFile {
@@ -430,26 +432,47 @@ export function XraysClient({
     }
   }, [selectedPatient]);
 
-  const handleAnalyze = useCallback(async () => {
-    if (!activeFile) return;
-    setAnalyzing(true);
-    try {
-      const res = await fetch(`/api/xrays/${activeFile.id}/analyze`, { method: "POST" });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? "Error al analizar");
+  const handleAnalyze = useCallback(
+    async (mode: "GENERAL" | "PERIODONTAL_BONE_LOSS" | "PERIIMPLANT_BONE_LOSS" = "GENERAL") => {
+      if (!activeFile) return;
+      setAnalyzing(true);
+      try {
+        const url = `/api/xrays/${activeFile.id}/analyze?mode=${mode}${mode !== "GENERAL" ? "&refresh=true" : ""}`;
+        const res = await fetch(url, { method: "POST" });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error ?? "Error al analizar");
+        }
+        const data = await res.json();
+        setFiles((prev) =>
+          prev.map((f) =>
+            f.id === activeFile.id
+              ? {
+                  ...f,
+                  xrayAnalysis: {
+                    ...data.analysis,
+                    mode: data.mode,
+                    measurements: data.measurements ?? null,
+                  },
+                }
+              : f,
+          ),
+        );
+        toast.success(
+          mode === "PERIODONTAL_BONE_LOSS"
+            ? "Análisis periodontal completo"
+            : mode === "PERIIMPLANT_BONE_LOSS"
+              ? "Análisis periimplantar completo"
+              : "Análisis IA completo",
+        );
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Error al analizar");
+      } finally {
+        setAnalyzing(false);
       }
-      const data = await res.json();
-      setFiles((prev) =>
-        prev.map((f) => (f.id === activeFile.id ? { ...f, xrayAnalysis: data.analysis } : f)),
-      );
-      toast.success("Análisis IA completo");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error al analizar");
-    } finally {
-      setAnalyzing(false);
-    }
-  }, [activeFile]);
+    },
+    [activeFile],
+  );
 
   const handleDelete = useCallback(async () => {
     if (!activeFile) return;
@@ -1214,16 +1237,38 @@ export function XraysClient({
                       para detectar caries, lesiones periapicales, calidad ósea y más.
                     </div>
                   </div>
-                  <div className={styles.actionsRow}>
+                  <div className={styles.actionsRow} style={{ flexDirection: "column", gap: 6 }}>
                     <button
                       type="button"
                       className={`${styles.actionBtn} ${styles.actionBtnPrimary}`}
-                      onClick={handleAnalyze}
+                      onClick={() => handleAnalyze("GENERAL")}
                       disabled={analyzing || aiUsed >= aiLimit}
                     >
                       <Sparkles size={13} aria-hidden />
                       {analyzing ? "Analizando…" : "Analizar con IA"}
                     </button>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button
+                        type="button"
+                        className={styles.actionBtn}
+                        onClick={() => handleAnalyze("PERIODONTAL_BONE_LOSS")}
+                        disabled={analyzing || aiUsed >= aiLimit}
+                        title="Pérdida ósea horizontal/vertical por sitio"
+                        style={{ flex: 1, fontSize: 11 }}
+                      >
+                        Periodontal
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.actionBtn}
+                        onClick={() => handleAnalyze("PERIIMPLANT_BONE_LOSS")}
+                        disabled={analyzing || aiUsed >= aiLimit}
+                        title="Pérdida ósea mesial/distal alrededor del implante"
+                        style={{ flex: 1, fontSize: 11 }}
+                      >
+                        Periimplantar
+                      </button>
+                    </div>
                   </div>
                   {aiLimit > 0 && (
                     <div style={{ fontSize: 10, color: "var(--text-3)", textAlign: "center" }}>
@@ -1236,6 +1281,21 @@ export function XraysClient({
                   <div className={styles.aiSummary}>
                     <div className={styles.aiSummaryTitle}>
                       <Sparkles size={13} aria-hidden /> Resumen IA
+                      {aiAnalysis.mode && aiAnalysis.mode !== "GENERAL" && (
+                        <span
+                          className={styles.aiSummaryVersion}
+                          style={{
+                            background: "rgba(56, 189, 248, 0.18)",
+                            padding: "1px 6px",
+                            borderRadius: 4,
+                            fontSize: 10,
+                          }}
+                        >
+                          {aiAnalysis.mode === "PERIODONTAL_BONE_LOSS"
+                            ? "Periodontal"
+                            : "Periimplantar"}
+                        </span>
+                      )}
                       {aiAnalysis.modelVersion && (
                         <span className={styles.aiSummaryVersion}>· {aiAnalysis.modelVersion}</span>
                       )}

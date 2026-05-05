@@ -4,7 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { rateLimit } from "@/lib/rate-limit";
 import { BUCKETS, extractStoragePath } from "@/lib/storage";
+import { getModeConfig, isValidMode } from "@/lib/xray/analysis-modes";
+import type { XrayAnalysisMode } from "@prisma/client";
 
+// Prompt legacy preservado para tests/imports residuales. El flujo activo
+// usa getModeConfig().systemPrompt según el modo seleccionado.
 const ANALYSIS_SYSTEM_PROMPT = `Actúas como un asistente de análisis radiográfico dental. Tu rol es identificar hallazgos visibles en la imagen y reportarlos con confianza calibrada a lo que realmente se ve. NO eres el diagnóstico final — el doctor revisa tu análisis y decide.
 
 Usa la herramienta "report_radiograph_analysis" para reportar tu análisis estructurado. NO respondas con texto libre — siempre usa la herramienta.
@@ -189,6 +193,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       findings:        existing.findings,
       recommendations: existing.recommendations,
     },
+    mode:                 existing.mode,
+    measurements:         existing.measurements,
     severity:             existing.severity,
     confidence:           existing.confidence,
     tokensUsed:           existing.tokensUsed,
@@ -213,6 +219,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const url = new URL(req.url);
   const refresh = url.searchParams.get("refresh") === "true";
+  const modeRaw = url.searchParams.get("mode") ?? "GENERAL";
+  if (!isValidMode(modeRaw)) {
+    return NextResponse.json(
+      { error: "Modo inválido. Usa GENERAL, PERIODONTAL_BONE_LOSS o PERIIMPLANT_BONE_LOSS." },
+      { status: 400 },
+    );
+  }
+  const mode: XrayAnalysisMode = modeRaw;
+  const modeConfig = getModeConfig(mode);
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -229,12 +244,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: "Solo se pueden analizar imágenes" }, { status: 400 });
   }
 
-  // Fast path: cache hit
+  // Fast path: cache hit. Solo es válido si el cache existente coincide
+  // con el modo solicitado — si el doctor cambia de modo se re-analiza.
   if (!refresh) {
     const existing = await prisma.xrayAnalysis.findUnique({
       where: { fileId: params.id },
     });
-    if (existing) {
+    if (existing && existing.mode === mode) {
       const { remaining, limit } = await computeRemaining(ctx.clinicId);
       return NextResponse.json({
         analysis: {
@@ -242,6 +258,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           findings:        existing.findings,
           recommendations: existing.recommendations,
         },
+        mode:               existing.mode,
+        measurements:       existing.measurements,
         severity:           existing.severity,
         confidence:         existing.confidence,
         tokensUsed:         0,                     // no gastamos nada ahora
@@ -356,22 +374,22 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       body: JSON.stringify({
         model:       MODEL,
         max_tokens:  1500,
-        // System como array con cache_control para habilitar prompt caching
+        // System + tools por modo. Cache_control en cada uno habilita
+        // prompt caching cuando se re-analiza la misma imagen.
         system: [
           {
             type: "text",
-            text: ANALYSIS_SYSTEM_PROMPT,
+            text: modeConfig.systemPrompt,
             cache_control: { type: "ephemeral" },
           },
         ],
-        // Tools con cache_control en el último — cachea system + tools como un bloque
         tools: [
           {
-            ...ANALYSIS_TOOL,
+            ...modeConfig.tool,
             cache_control: { type: "ephemeral" },
           },
         ],
-        tool_choice: { type: "tool", name: ANALYSIS_TOOL.name },
+        tool_choice: { type: "tool", name: modeConfig.tool.name },
         messages: [{
           role: "user",
           content: [
@@ -412,14 +430,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     /* ─── Extract tool_use (happy path) o fallback a texto ─── */
     const contentBlocks: any[] = Array.isArray(data.content) ? data.content : [];
     const toolUseBlock = contentBlocks.find(
-      (b) => b?.type === "tool_use" && b?.name === ANALYSIS_TOOL.name,
+      (b) => b?.type === "tool_use" && b?.name === modeConfig.tool.name,
     );
 
-    let analysis: Analysis;
+    let analysis: Analysis & { sites?: unknown; measurement?: unknown };
 
     if (toolUseBlock && toolUseBlock.input && typeof toolUseBlock.input === "object") {
       // HAPPY PATH: Claude usó el tool, el input ya viene parseado como objeto
-      analysis = toolUseBlock.input as Analysis;
+      analysis = toolUseBlock.input as typeof analysis;
     } else {
       // FALLBACK: Claude no usó el tool (edge case). Intenta parseo defensivo del texto.
       const textBlock = contentBlocks.find((b) => b?.type === "text");
@@ -462,16 +480,32 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       ? analysis.confidence
       : avgConfidence(findings);
 
-    // Upsert en DB — create o sobreescribe si ya existe (refresh=true)
+    // Mediciones específicas del modo (sites para perio, measurement para
+    // periimplant). Para GENERAL queda null.
+    let measurements: unknown = null;
+    if (modeConfig.measurementsKey) {
+      const raw = analysis[modeConfig.measurementsKey as keyof typeof analysis];
+      if (raw && typeof raw === "object") {
+        measurements =
+          modeConfig.measurementsKey === "sites" && Array.isArray(raw)
+            ? { sites: raw }
+            : raw;
+      }
+    }
+
+    // Upsert en DB — create o sobreescribe si ya existe (refresh=true o
+    // cambio de modo).
     await prisma.xrayAnalysis.upsert({
       where:  { fileId: params.id },
       create: {
         fileId:          params.id,
         clinicId:        ctx.clinicId,
         patientId:       file.patientId,
+        mode,
         summary:         analysis.summary ?? "",
         findings:        findings as any,
         recommendations: (analysis.recommendations ?? "") as any,
+        measurements:    measurements as any,
         severity:        topSev,
         confidence:      avgConf,
         tokensUsed:      totalTokens,
@@ -479,9 +513,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         createdBy:       ctx.userId ?? null,
       },
       update: {
+        mode,
         summary:         analysis.summary ?? "",
         findings:        findings as any,
         recommendations: (analysis.recommendations ?? "") as any,
+        measurements:    measurements as any,
         severity:        topSev,
         confidence:      avgConf,
         tokensUsed:      totalTokens,
@@ -499,6 +535,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         findings,
         recommendations: analysis.recommendations ?? "",
       },
+      mode,
+      measurements,
       severity:        topSev,
       confidence:      avgConf,
       tokensUsed:      totalTokens,

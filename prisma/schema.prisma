@@ -193,6 +193,7 @@ model Clinic {
   periodontalRiskAssessments PeriodontalRiskAssessment[]
   periodontalSurgeries       PeriodontalSurgery[]
   periImplantAssessments     PeriImplantAssessment[]
+  implants                   Implant[]
 
   // Orthodontics module — see docs/marketplace/research/ortodoncia/SPEC.md §4
   orthodonticDiagnoses      OrthodonticDiagnosis[]
@@ -310,6 +311,7 @@ model User {
   riskAssessmentsAsEvaluator        PeriodontalRiskAssessment[]
   surgeriesAsDoctor                 PeriodontalSurgery[]        @relation("PerioSurgeryDoctor")
   periImplantAssessmentsAsEvaluator PeriImplantAssessment[]
+  implantsPlaced                    Implant[]                   @relation("ImplantPlacedBy")
 
   // Orthodontics module — see docs/marketplace/research/ortodoncia/SPEC.md §4
   orthodonticDiagnosesAsDoctor OrthodonticDiagnosis[]          @relation("OrthoDiagnosedBy")
@@ -444,6 +446,7 @@ model Patient {
   periodontalRiskAssessments PeriodontalRiskAssessment[]
   periodontalSurgeries       PeriodontalSurgery[]
   periImplantAssessments     PeriImplantAssessment[]
+  implants                   Implant[]
 
   // Orthodontics module — see docs/marketplace/research/ortodoncia/SPEC.md §4
   orthodonticDiagnoses      OrthodonticDiagnosis[]
@@ -1023,10 +1026,22 @@ model XrayAnalysis {
   patientId String
   patient   Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
+  // Modo de análisis. GENERAL es el default histórico (free-form findings).
+  // PERIODONTAL_BONE_LOSS y PERIIMPLANT_BONE_LOSS son flujos dedicados con
+  // mediciones por sitio/implante. A2 cross-módulos.
+  // Un fileId tiene UN análisis: si el doctor cambia de modo y re-analiza,
+  // el nuevo modo sobreescribe al anterior (upsert por fileId).
+  mode XrayAnalysisMode @default(GENERAL)
+
   // Contenido del análisis
   summary         String @db.Text
   findings        Json // array con { id, title, description, tooth, severity, confidence }
   recommendations Json // string o array — el endpoint lo persiste tal cual
+
+  // Mediciones específicas por modo (null para GENERAL):
+  //   PERIODONTAL_BONE_LOSS: { sites: [{ toothFdi, position, lossMm, type: "horizontal"|"vertical", bopPresent }, ...] }
+  //   PERIIMPLANT_BONE_LOSS: { implantFdi, mesialMm, distalMm, baselineDate?, comparisonNote? }
+  measurements Json?
 
   // Top-level derivados (para queries/filtros sin parsear JSON)
   severity   String // max de findings: alta | media | baja | informativo
@@ -1041,7 +1056,14 @@ model XrayAnalysis {
   @@index([clinicId])
   @@index([patientId])
   @@index([severity])
+  @@index([mode])
   @@map("xray_analyses")
+}
+
+enum XrayAnalysisMode {
+  GENERAL
+  PERIODONTAL_BONE_LOSS
+  PERIIMPLANT_BONE_LOSS
 }
 
 enum FileCategory {
@@ -1273,8 +1295,12 @@ model WhatsAppReminder {
   clinicId      String
   appointmentId String? // null for non-appointment reminders (recalls)
   patientPhone  String? // for recall reminders without appointment
-  message       String? // message sent
-  type          String                 @default("APPOINTMENT") // APPOINTMENT | RECALL
+  message       String? // message sent (legacy text) o template key con prefijo (ENDO_/PERIO_/ORTHO_/IMPLANT_<KEY>)
+  // Argumentos dinámicos del template — el worker los pasa al renderer del
+  // diccionario correspondiente. Ej: { installmentNumber, daysOverdue, … }.
+  // Null para mensajes legacy o templates sin argumentos.
+  payload       Json?
+  type          String                 @default("APPOINTMENT") // APPOINTMENT | RECALL | ENDO | PERIO | ORTHO | IMPLANT
   status        WhatsAppReminderStatus @default(PENDING)
   sentAt        DateTime?
   errorMsg      String?
@@ -3283,13 +3309,49 @@ model PeriodontalSurgery {
   @@map("periodontal_surgeries")
 }
 
+// Implant — modelo stub mínimo creado en A2 cross-módulos para soportar
+// la FK real desde PeriImplantAssessment. El módulo de Implantología
+// (4/5) aún no está implementado; cuando llegue, extiende este modelo
+// con marca, modelo, plataforma, fechas de osteointegración, etc.
+// La FK desde PeriImplantAssessment se preserva entre versiones.
+model Implant {
+  id        String   @id @default(cuid())
+  clinicId  String
+  patientId String
+  toothFdi  Int
+
+  // Identificación mínima del implante (los detalles vienen con el módulo
+  // 4/5: marca, modelo, plataforma, brandSku, lot, expiry, etc.).
+  brand    String?
+  model    String?
+  platform String?
+
+  placedAt        DateTime?
+  placedByUserId  String?
+  notes           String?   @db.Text
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  clinic                 Clinic                  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient                Patient                 @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  placedBy               User?                   @relation("ImplantPlacedBy", fields: [placedByUserId], references: [id], onDelete: SetNull)
+  periImplantAssessments PeriImplantAssessment[]
+
+  @@index([clinicId, patientId])
+  @@index([clinicId, toothFdi])
+  @@map("implants")
+}
+
 model PeriImplantAssessment {
   id        String @id @default(cuid())
   patientId String
   clinicId  String
 
-  // Sin FK al módulo de Implantología (4/5, aún no implementado).
-  // Cuando exista, se hará migración para agregar FK real. SPEC §1.17.
+  // FK opcional al modelo Implant (stub). Se mantiene nullable para
+  // backwards-compat con assessments registrados antes de A2.
+  // Spec §1.17 + A2 cross-módulos.
   implantId  String?
   implantFdi Int
 
@@ -3307,8 +3369,9 @@ model PeriImplantAssessment {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  implant Implant? @relation(fields: [implantId], references: [id], onDelete: SetNull)
 
   @@index([patientId, evaluatedAt(sort: Desc)])
   @@index([clinicId, status])
