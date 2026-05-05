@@ -39,7 +39,7 @@ Runbook consolidado para lanzar **Endodoncia + Periodoncia + Ortodoncia + Implan
   FROM clinic_modules cm
   JOIN clinics c ON c.id = cm."clinic_id"
   JOIN modules m ON m.id = cm."module_id"
-  WHERE cm.status = 'ACTIVE'
+  WHERE cm.status = 'active'
   ORDER BY c.name, m.key;
   ```
   Guarda el resultado en `runbook-pre-state-$(date).csv` por si hay rollback.
@@ -285,7 +285,7 @@ SELECT
   gen_random_uuid()::text,
   cp.id,
   m.id,
-  'ACTIVE',
+  'active',
   'MONTHLY',
   NOW(),
   NOW(),
@@ -294,7 +294,7 @@ SELECT
   m."price_mxn_monthly"
 FROM clinic_pilot cp CROSS JOIN mods m
 ON CONFLICT (clinic_id, module_id) DO UPDATE SET
-  status = 'ACTIVE',
+  status = 'active',
   current_period_end = NOW() + INTERVAL '30 days';
 ```
 
@@ -306,7 +306,7 @@ JOIN modules m ON m.id = cm."module_id"
 WHERE cm."clinic_id" = '<CLINIC_ID>' AND m.key IN (
   'endodontics', 'periodontics', 'orthodontics', 'implants', 'pediatric-dentistry'
 );
--- esperado: 5 filas, todas ACTIVE
+-- esperado: 5 filas, todas con status='active'
 ```
 
 ---
@@ -346,7 +346,7 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://mediflow.app/api/cron/ortho
 | Ortodoncia | Andrea Vázquez | `prisma/seeds/orthodontics-mock.ts` |
 | Periodoncia | Manuel Hernández | `prisma/seeds/periodontics-mock.ts` |
 | Implantología | Roberto Mendoza | implant module seed (commit `5a58be9`) |
-| Endodoncia | Patricia Reyes | (validar — endo seed no tiene archivo dedicado, agregar si falta) |
+| Endodoncia | Patricia Reyes | `prisma/seeds/endodontics-mock.ts` (caso 4 — tooth 26 historial completo, tooth 36 limpio para demo) |
 | Pediatría | Sofía Ramírez | módulo pediatría seed |
 
 ### 6.2 Recorrido manual (15 min)
@@ -476,7 +476,7 @@ UPDATE modules SET is_active = false WHERE key = '<module-key>';
 ### Rollback nivel 2 — clínica específica
 Solo afecta a una clínica:
 ```sql
-UPDATE clinic_modules SET status = 'CANCELLED', cancelled_at = NOW()
+UPDATE clinic_modules SET status = 'cancelled', cancelled_at = NOW()
 WHERE clinic_id = '<CLINIC_ID>' AND module_id IN (
   SELECT id FROM modules WHERE key IN ('endodontics', 'orthodontics', 'periodontics', 'implants', 'pediatric-dentistry')
 );
@@ -582,7 +582,11 @@ vercel deploy --prod
 
 ## Pendientes detectados durante prep (para post-launch)
 
-1. **Endo seed** — falta archivo `prisma/seeds/endodontics-mock.ts`. Demo paso §6.4 asume Patricia Reyes; si no existe, crear pre-go-live o sustituir por crear paciente manual.
-2. **TreatmentPlan sub-items** (Implant Phase 8 Item 2) — helpers existen, UI de fases con countdown pendiente. No bloquea go-live.
-3. **Validación E2E con implantólogo real** (Roberto end-to-end) — pendiente del sprint Implant Phase 10. No bloquea go-live técnico, sí bloquea soft launch a clientes externos.
-4. **Tercera variante de PDF Endo** — confirmado: SPEC §11 lista solo 2. No hay 3er PDF que agregar.
+1. **TreatmentPlan sub-items** (Implant Phase 8 Item 2) — helpers existen, UI de fases con countdown pendiente. No bloquea go-live.
+2. **Validación E2E con implantólogo real** (Roberto end-to-end) — pendiente del sprint Implant Phase 10. No bloquea go-live técnico, sí bloquea soft launch a clientes externos.
+3. **Tercera variante de PDF Endo** — confirmado: SPEC §11 lista solo 2. No hay 3er PDF que agregar.
+
+### Resueltos durante prep
+- ~~Endo seed faltante~~ → `prisma/seeds/endodontics-mock.ts` ya tiene 4 casos incluyendo Patricia Reyes para demo §6.4.
+- ~~Bug seed marketplace `implantology`~~ → corregido a `implants`.
+- ~~Bug onLoadTooth no propagado~~ → cableado vía `loadToothAction` server action.

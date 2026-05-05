@@ -1,10 +1,19 @@
-// Endodontics — seed con 3 pacientes mock para QA y demos. Spec §14.
+// Endodontics — seed con 4 pacientes mock para QA y demos. Spec §14.
 //
 // Run: npx tsx prisma/seeds/endodontics-mock.ts
 //
 // Idempotente: usa upsert por patient.patientNumber. Detecta la primera
 // clínica DENTAL con módulo `endodontics` activo y el primer DOCTOR de
 // esa clínica.
+//
+// Casos:
+//   1. Roberto Salinas — TC primario COMPLETADO (tooth 36, 4 conductos).
+//   2. Mariana Torres — Retratamiento EN_CURSO (tooth 21, fístula).
+//   3. Carlos Mendoza — Post-TC con controles 6m/12m hechos (tooth 47).
+//   4. Patricia Reyes — caso DEMO end-to-end (GO_LIVE §6.4):
+//      - Tooth 26: TC completado hace 24m + control final exitoso.
+//      - Tooth 36: SIN diagnóstico ni tratamiento. Lista para que el
+//        doctor capture diagnóstico + vitalidad + wizard step 1 desde cero.
 
 import { PrismaClient, Prisma } from "@prisma/client";
 
@@ -315,7 +324,134 @@ async function main() {
     });
   }
 
-  console.log("[endo-mock] OK: 3 pacientes sembrados (Roberto, Mariana, Carlos).");
+  // ─── Mock 4: Patricia Reyes — DEMO end-to-end §6.4 ───
+  // Tooth 26 con TC completado hace 24m + control 24m EXITOSO (timeline
+  // poblado para mostrar). Tooth 36 SIN diagnóstico ni tratamiento — lista
+  // para que el doctor capture todo desde cero durante el demo.
+  const patricia = await upsertPatient(clinic.id, {
+    patientNumber: "MOCK-ENDO-004",
+    firstName: "Patricia",
+    lastName: "Reyes Domínguez",
+    dob: new Date("1986-03-22"),
+    phone: "+52 55 1234 0004",
+    email: "patricia.reyes+mock@mediflow.test",
+  });
+
+  // Tooth 26 — TC primario completado hace 24m, control 24m exitoso.
+  const patriciaDiag26 = await db.endodonticDiagnosis.create({
+    data: {
+      clinicId: clinic.id,
+      patientId: patricia.id,
+      doctorId: doctor.id,
+      toothFdi: 26,
+      diagnosedAt: new Date("2024-04-15"),
+      pulpalDiagnosis: "NECROSIS_PULPAR",
+      periapicalDiagnosis: "PERIODONTITIS_APICAL_ASINTOMATICA",
+      justification:
+        "Caries profunda con exposición pulpar tras retiro de restauración antigua. " +
+        "Sin respuesta a frío ni EPT. Indicado TC primario.",
+      createdByUserId: doctor.id,
+    },
+  });
+
+  const patriciaTx26 = await db.endodonticTreatment.create({
+    data: {
+      clinicId: clinic.id,
+      patientId: patricia.id,
+      doctorId: doctor.id,
+      toothFdi: 26,
+      treatmentType: "TC_PRIMARIO",
+      diagnosisId: patriciaDiag26.id,
+      startedAt: new Date("2024-04-15"),
+      completedAt: new Date("2024-04-22"),
+      sessionsCount: 1,
+      currentStep: 4,
+      isMultiSession: false,
+      rubberDamPlaced: true,
+      accessType: "CONVENCIONAL",
+      instrumentationSystem: "PROTAPER_GOLD",
+      technique: "ROTACION_CONTINUA",
+      irrigants: [
+        { substance: "NaOCl", concentration: "5.25%", volumeMl: 12, order: 1 },
+        { substance: "EDTA", concentration: "17%", volumeMl: 5, order: 2 },
+      ] as Prisma.InputJsonValue,
+      irrigationActivation: "ULTRASONICA",
+      totalIrrigationMinutes: 8,
+      obturationTechnique: "CONO_UNICO",
+      sealer: "AH_PLUS",
+      postOpRestorationPlan: "CORONA_ZIRCONIA",
+      requiresPost: false,
+      restorationUrgencyDays: 30,
+      postOpRestorationCompletedAt: new Date("2024-05-12"),
+      outcomeStatus: "COMPLETADO",
+      createdByUserId: doctor.id,
+    },
+  });
+
+  for (const c of [
+    { canonicalName: "MV", wl: 19.5 },
+    { canonicalName: "ML", wl: 19.0 },
+    { canonicalName: "P", wl: 21.0 },
+  ] as const) {
+    await db.rootCanal.create({
+      data: {
+        treatmentId: patriciaTx26.id,
+        canonicalName: c.canonicalName,
+        workingLengthMm: new Prisma.Decimal(c.wl),
+        coronalReferencePoint: c.canonicalName === "P" ? "cúspide palatina" : "cúspide MV",
+        masterApicalFileIso: c.canonicalName === "P" ? 35 : 30,
+        masterApicalFileTaper: new Prisma.Decimal(0.06),
+        obturationQuality: "HOMOGENEA",
+        createdByUserId: doctor.id,
+      },
+    });
+  }
+
+  for (const f of [
+    {
+      milestone: "CONTROL_6M" as const,
+      scheduled: "2024-10-22",
+      performed: "2024-10-25",
+      pai: 2,
+      conclusion: "EN_CURACION" as const,
+      action: "Cicatrización ósea iniciada — control 12m programado.",
+    },
+    {
+      milestone: "CONTROL_12M" as const,
+      scheduled: "2025-04-22",
+      performed: "2025-04-20",
+      pai: 1,
+      conclusion: "EXITO" as const,
+      action: "Cicatrización completa. Control 24m programado.",
+    },
+    {
+      milestone: "CONTROL_24M" as const,
+      scheduled: "2026-04-22",
+      performed: "2026-04-18",
+      pai: 1,
+      conclusion: "EXITO" as const,
+      action: "Éxito final del tratamiento. Alta del paciente.",
+    },
+  ]) {
+    await db.endodonticFollowUp.create({
+      data: {
+        treatmentId: patriciaTx26.id,
+        milestone: f.milestone,
+        scheduledAt: new Date(f.scheduled),
+        performedAt: new Date(f.performed),
+        paiScore: f.pai,
+        symptomsPresent: false,
+        conclusion: f.conclusion,
+        recommendedAction: f.action,
+        createdByUserId: doctor.id,
+      },
+    });
+  }
+
+  // Tooth 36 — sin diagnóstico, sin tratamiento, sin vitalidad. Demo §6.4
+  // captura todo desde cero. NO crear nada para este diente.
+
+  console.log("[endo-mock] OK: 4 pacientes sembrados (Roberto, Mariana, Carlos, Patricia).");
 }
 
 interface PatientSeed {

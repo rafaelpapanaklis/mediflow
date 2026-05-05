@@ -144,7 +144,7 @@ async function checkClinicModuleActive() {
     const count = await prisma.clinicModule.count({
       where: {
         module: { key },
-        status: "ACTIVE",
+        status: "active", // canAccessModule espera lowercase
         currentPeriodEnd: { gt: new Date() },
       },
     });
