@@ -9,6 +9,8 @@
     "lint": "next lint",
     "postinstall": "prisma generate",
     "seed": "tsx prisma/seed.ts",
+    "db:seed": "tsx prisma/seed.ts",
+    "smoke:dental": "tsx scripts/smoke-test-dental.ts",
     "test:marketplace": "tsx --test src/lib/marketplace/access-control.test.ts",
     "test:marketplace-pricing": "tsx --test src/lib/marketplace/pricing.test.ts"
   },

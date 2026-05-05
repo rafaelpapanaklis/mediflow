@@ -549,7 +549,7 @@ vercel deploy --prod
 export DATABASE_URL='<production-database-url>'
 export NEXT_PUBLIC_APP_URL='https://mediflow.app'
 export CRON_SECRET='<CRON_SECRET_VALUE>'
-npx tsx scripts/smoke-test-dental.ts
+npm run smoke:dental   # alias de: npx tsx scripts/smoke-test-dental.ts
 # Si algún check rojo: lee §8 Troubleshooting. NO mergear hasta resolver.
 
 # ─── Demo end-to-end ──────────────────────────────────────────────────
