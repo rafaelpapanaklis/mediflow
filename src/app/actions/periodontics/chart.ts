@@ -12,6 +12,7 @@ import {
   type ToothLevel,
 } from "@/lib/periodontics/schemas";
 import { computePerioMetrics } from "@/lib/periodontics/periodontogram-math";
+import { FDI_ALL, SITE_CAPTURE_ORDER } from "@/lib/periodontics/site-helpers";
 import {
   PERIO_AUDIT_ACTIONS,
   auditPerio,
@@ -181,6 +182,118 @@ export async function finalizePerioChart(
   } catch (e) {
     console.error("[perio chart] finalize failed:", e);
     return fail("No se pudo finalizar el periodontograma");
+  }
+}
+
+/**
+ * Crea un periodontograma vacío con sites placeholder (PD=3, REC=-1, todos
+ * los marcadores en false → estado "sano por defecto") para que el usuario
+ * pueda empezar a editar de inmediato desde la UI del periodontograma sin
+ * tener que rellenar los 192 sitios desde un wizard.
+ *
+ * Convención: si es el primer record del paciente → recordType=INICIAL;
+ * si ya hay records previos → MANTENIMIENTO. El usuario puede cambiar el
+ * tipo después con updatePeriodontalRecord (no expuesto aún en UI; vive
+ * en server actions).
+ *
+ * Multi-tenant + audit log + revalidatePath. Devuelve `existingId` si ya
+ * hay un sondaje del día para este paciente — evita duplicados accidentales
+ * por doble click.
+ */
+export async function createEmptyPeriodontalRecord(
+  patientId: string,
+): Promise<ActionResult<{ id: string }>> {
+  const auth = await getPerioActionContext();
+  if (isFailure(auth)) return auth;
+  const { ctx } = auth.data;
+
+  if (typeof patientId !== "string" || !patientId) return fail("patientId requerido");
+
+  const patient = await loadPatientForPerio({ ctx, patientId });
+  if (isFailure(patient)) return patient;
+
+  // Anti-doble-click: si hay un record creado en los últimos 60s, lo devuelve.
+  const since = new Date(Date.now() - 60_000);
+  const recent = await prisma.periodontalRecord.findFirst({
+    where: {
+      patientId,
+      clinicId: ctx.clinicId,
+      deletedAt: null,
+      createdAt: { gt: since },
+    },
+    select: { id: true },
+    orderBy: { createdAt: "desc" },
+  });
+  if (recent) {
+    return fail("Ya se creó un sondaje hace menos de 1 minuto", recent.id);
+  }
+
+  // Detecta si es primer sondaje o subsecuente.
+  const previousCount = await prisma.periodontalRecord.count({
+    where: { patientId, clinicId: ctx.clinicId, deletedAt: null },
+  });
+  const recordType = previousCount === 0 ? "INICIAL" : "MANTENIMIENTO";
+
+  // Sites placeholder: 192 sitios sanos (6 posiciones × 32 dientes).
+  const sites: Site[] = [];
+  for (const fdi of FDI_ALL) {
+    for (const position of SITE_CAPTURE_ORDER) {
+      sites.push({
+        fdi,
+        position,
+        pdMm: 3,
+        recMm: -1,
+        bop: false,
+        plaque: false,
+        suppuration: false,
+      });
+    }
+  }
+  const teeth: ToothLevel[] = FDI_ALL.map((fdi) => ({
+    fdi,
+    mobility: 0,
+    furcation: 0,
+    absent: false,
+    isImplant: false,
+  }));
+
+  const metrics = computePerioMetrics(sites, teeth);
+
+  try {
+    const created = await prisma.periodontalRecord.create({
+      data: {
+        patientId,
+        clinicId: ctx.clinicId,
+        doctorId: ctx.userId,
+        recordType,
+        sites,
+        toothLevel: teeth,
+        bopPercentage: metrics.bopPct,
+        plaqueIndexOleary: metrics.plaquePct,
+        sites1to3mm: metrics.sites1to3,
+        sites4to5mm: metrics.sites4to5,
+        sites6PlusMm: metrics.sites6plus,
+        teethWithPockets5Plus: metrics.teethWithPockets5plus,
+      },
+      select: { id: true },
+    });
+
+    await auditPerio({
+      ctx,
+      action: PERIO_AUDIT_ACTIONS.RECORD_CREATED,
+      entityType: "PeriodontalRecord",
+      entityId: created.id,
+      after: { recordType, placeholder: true, sitesCount: sites.length },
+    });
+
+    revalidatePath(`/dashboard/specialties/periodontics/${patientId}`);
+    revalidatePath(`/dashboard/specialties/periodontics`);
+    revalidatePath(`/dashboard/patients/${patientId}`);
+
+    return ok({ id: created.id });
+  } catch (e) {
+    console.error("[perio chart] createEmpty failed:", e);
+    return fail("No se pudo crear el sondaje");
   }
 }
 

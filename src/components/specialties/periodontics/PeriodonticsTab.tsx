@@ -152,7 +152,9 @@ export function PeriodonticsTab(props: PeriodonticsTabProps) {
                 fontSize: 13,
               }}
             >
-              Aún no hay sondaje para este paciente. Crea uno desde el botón en la parte superior.
+              Aún no hay sondaje para este paciente. Usa el botón
+              <strong style={{ color: "var(--text-1)" }}> &quot;+ Iniciar primer sondaje&quot;</strong>
+              {" "}arriba a la derecha para crearlo.
             </div>
           )}
 

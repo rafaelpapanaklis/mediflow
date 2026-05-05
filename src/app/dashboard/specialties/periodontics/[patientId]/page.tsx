@@ -9,6 +9,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { PERIODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { PeriodonticsClient } from "@/components/specialties/periodontics/PeriodonticsClient";
+import { NewPerioRecordButton } from "@/components/specialties/periodontics/NewPerioRecordButton";
 import { loadPerioData } from "@/lib/periodontics/load-data";
 
 export default async function PeriodonticsPatientDetailPage({
@@ -45,6 +46,7 @@ export default async function PeriodonticsPatientDetailPage({
         <Link href={`/dashboard/patients/${data.patientId}`} className="pedi-btn">
           <FileText size={14} aria-hidden /> Ver expediente completo
         </Link>
+        <NewPerioRecordButton patientId={data.patientId} isFirst={!data.recordId} />
       </div>
 
       <header className="ped-detail__header">

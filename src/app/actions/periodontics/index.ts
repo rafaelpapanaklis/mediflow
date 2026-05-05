@@ -22,6 +22,7 @@ export {
 
 export {
   createPeriodontalRecord,
+  createEmptyPeriodontalRecord,
   updatePeriodontalRecord,
   finalizePerioChart,
   deletePeriodontalRecord,
