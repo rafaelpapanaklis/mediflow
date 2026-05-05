@@ -96,7 +96,9 @@ const SEED_MODULES: SeedModule[] = [
     priceMxnMonthly: 279,
   },
   {
-    key: "implantology",
+    // Coincide con IMPLANTS_MODULE_KEY ("implants") en
+    // src/lib/implants/permissions.ts. Si cambia uno, cambia el otro.
+    key: "implants",
     name: "Implantología",
     category: "Dental",
     description: "Registro por implante con timeline de osteointegración.",
