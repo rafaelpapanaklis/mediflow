@@ -94,6 +94,8 @@ export function ImplantsTab(props: ImplantsTabProps) {
         setDialog("complication");
         return;
       case "passport":
+        window.open(`/api/implants/${implantId}/passport`, "_blank", "noopener,noreferrer");
+        return;
       case "radiographs":
       case "consent":
       case "maintenance":
