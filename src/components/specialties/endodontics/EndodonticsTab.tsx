@@ -14,6 +14,7 @@ import { FollowUpDrawer } from "./drawers/FollowUpDrawer";
 import { ApicalSurgeryDrawer } from "./drawers/ApicalSurgeryDrawer";
 import { TreatmentWizard } from "./TreatmentWizard";
 import { StartTreatmentModal } from "./modals/StartTreatmentModal";
+import { loadToothAction } from "@/app/actions/endodontics/loadToothAction";
 import type { EndoToothSummary, ToothCenterViewData } from "@/lib/types/endodontics";
 
 export interface EndodonticsTabProps {
@@ -21,6 +22,10 @@ export interface EndodonticsTabProps {
   patientName: string;
   summaries: EndoToothSummary[];
   initialTooth?: ToothCenterViewData | null;
+  /**
+   * Override opcional para tests/storybook. Si no se pasa, se usa
+   * el server action `loadToothAction(patientId, fdi)`.
+   */
   onLoadTooth?: (fdi: number) => Promise<ToothCenterViewData | null>;
 }
 
@@ -75,15 +80,19 @@ export function EndodonticsTab(props: EndodonticsTabProps) {
   }, [initialTooth, selectedFdi]);
 
   // Cuando cambia la selección o reloadKey, recarga datos del diente.
+  // Por defecto usa el server action `loadToothAction`; el test puede
+  // pasar un override via `onLoadTooth` prop.
   useEffect(() => {
     if (!selectedFdi) {
       setCenterData(null);
       return;
     }
-    if (!onLoadTooth) return;
     let cancelled = false;
     setLoading(true);
-    onLoadTooth(selectedFdi)
+    const loader = onLoadTooth
+      ? onLoadTooth(selectedFdi)
+      : loadToothAction(patientId, selectedFdi);
+    loader
       .then((data) => {
         if (cancelled) return;
         setCenterData(data);
@@ -98,7 +107,7 @@ export function EndodonticsTab(props: EndodonticsTabProps) {
     return () => {
       cancelled = true;
     };
-  }, [selectedFdi, onLoadTooth, reloadKey]);
+  }, [selectedFdi, onLoadTooth, patientId, reloadKey]);
 
   const closeDrawer = useCallback(() => {
     setDrawer({ kind: "none" });
