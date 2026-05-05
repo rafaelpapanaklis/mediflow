@@ -112,6 +112,15 @@ export async function createImplant(
       },
     });
 
+    // TODO Phase 8 Item 2 — TreatmentPlan sub-items.
+    // El helper `buildSingleImplantPlan({ protocol })` ya genera la
+    // secuencia de fases (planeación → cirugía → osteointegración →
+    // prótesis → mantenimiento). Pendiente: UI en TreatmentPlan para
+    // renderizar `area: "implantology"` con countdown por fase. Cuando
+    // exista esa UI, llamar el helper aquí y crear TreatmentSessions
+    // (necesita extender el modelo con daysOffset + blockedByPrevious
+    // o serializar en notes).
+
     revalidateImplantPaths({ patientId: created.patientId });
     return ok({ id: created.id });
   } catch (e) {
