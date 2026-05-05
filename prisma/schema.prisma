@@ -184,6 +184,9 @@ model Clinic {
   vitalityTests        VitalityTest[]
   endodonticTreatments EndodonticTreatment[]
 
+  // Implants module — see docs/marketplace/research/implantologia/SPEC.md §4
+  implants Implant[]
+
   @@map("clinics")
 }
 
@@ -280,6 +283,10 @@ model User {
   endoDiagnosisDoctor EndodonticDiagnosis[] @relation("EndoDiagnosisDoctor")
   vitalityDoctor      VitalityTest[]        @relation("VitalityDoctor")
   endoTreatmentDoctor EndodonticTreatment[] @relation("EndoTreatmentDoctor")
+
+  // Implants module — see docs/marketplace/research/implantologia/SPEC.md §4
+  implantsPlaced          Implant[]        @relation("ImplantPlacedBy")
+  implantConsentsAsDoctor ImplantConsent[] @relation("ImplantConsentDoctor")
 
   @@unique([supabaseId, clinicId])
   @@index([supabaseId])
@@ -396,6 +403,10 @@ model Patient {
   endodonticDiagnoses  EndodonticDiagnosis[]
   vitalityTests        VitalityTest[]
   endodonticTreatments EndodonticTreatment[]
+
+  // Implants module — see docs/marketplace/research/implantologia/SPEC.md §4
+  implants        Implant[]
+  implantConsents ImplantConsent[]
 
   @@unique([clinicId, patientNumber])
   @@index([clinicId, status])
@@ -928,6 +939,15 @@ model PatientFile {
   followUpsAsControl      EndodonticFollowUp[] @relation("FollowUpFile")
   apicalSurgeries         ApicalSurgery[]      @relation("ApicalSurgeryFile")
 
+  // Implants module — radiografías peri-implantarias, foto intraoperatoria
+  // de la cirugía, foto del paciente para el carnet, PDF del carnet,
+  // consentimientos firmados. Ver SPEC §8.5.
+  implantSurgicalIntraoperative ImplantSurgicalRecord[] @relation("ImplantSurgicalIntraoperativePhoto")
+  implantFollowUpsRadiograph    ImplantFollowUp[]       @relation("ImplantFollowUpRadiograph")
+  implantPassportsPhoto         ImplantPassport[]       @relation("ImplantPassportPhoto")
+  implantPassportsPdf           ImplantPassport[]       @relation("ImplantPassportPdf")
+  implantConsentsSigned         ImplantConsent[]        @relation("ImplantConsentSigned")
+
   @@index([clinicId, patientId, createdAt(sort: Desc)])
   @@index([patientId, category])
   @@map("patient_files")
@@ -969,11 +989,13 @@ enum FileCategory {
   XRAY_PANORAMIC
   XRAY_BITEWING
   XRAY_OCCLUSAL
+  XRAY_CBCT
   PHOTO_FRONTAL
   PHOTO_LATERAL
   PHOTO_OCCLUSAL_UPPER
   PHOTO_OCCLUSAL_LOWER
   PHOTO_INTRAORAL
+  PHOTO_PATIENT
   CONSENT_FORM
   OTHER
 }
@@ -2796,3 +2818,524 @@ model ApicalSurgery {
 
   @@map("apical_surgeries")
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// IMPLANTS MODULE (4/5)
+// Specs: docs/marketplace/research/implantologia/SPEC.md §4
+//
+// COFEPRIS clase III: brand / lotNumber / placedAt INMUTABLES por defecto.
+// Mutación requiere justificación ≥20 chars + flag de sesión SQL +
+// audit log con acción COFEPRIS_TRACEABILITY_UPDATE.
+// DELETE prohibido a nivel DB (trigger). "Remover" = currentStatus =
+// REMOVED + removalReason ≥20 chars + removedAt timestamp.
+// ─────────────────────────────────────────────────────────────────────────
+
+enum ImplantBrand {
+  STRAUMANN
+  NOBEL_BIOCARE
+  NEODENT
+  MIS
+  BIOHORIZONS
+  ZIMMER_BIOMET
+  IMPLANT_DIRECT
+  ODONTIT
+  OTRO
+}
+
+enum ImplantConnectionType {
+  EXTERNAL_HEX
+  INTERNAL_HEX
+  CONICAL_MORSE
+  TRI_CHANNEL
+  OTRO
+}
+
+enum ImplantSurfaceTreatment {
+  SLA
+  SLActive
+  TiUnite
+  OsseoSpeed
+  LASER_LOK
+  OTRO
+}
+
+enum LekholmZarbDensity {
+  D1
+  D2
+  D3
+  D4
+}
+
+enum ImplantStatus {
+  PLANNED
+  PLACED
+  OSSEOINTEGRATING
+  UNCOVERED
+  LOADED_PROVISIONAL
+  LOADED_DEFINITIVE
+  FUNCTIONAL
+  COMPLICATION
+  FAILED
+  REMOVED
+}
+
+enum ImplantProtocol {
+  ONE_STAGE
+  TWO_STAGE
+  IMMEDIATE_PLACEMENT_DELAYED_LOADING
+  IMMEDIATE_PLACEMENT_IMMEDIATE_LOADING
+  DELAYED_PLACEMENT_IMMEDIATE_LOADING
+}
+
+enum AbutmentType {
+  PREFABRICATED_TI
+  CUSTOM_TI
+  CUSTOM_ZIRCONIA
+  MULTI_UNIT_STRAIGHT
+  MULTI_UNIT_ANGLED_17
+  MULTI_UNIT_ANGLED_30
+  HEALING_ABUTMENT
+  OTRO
+}
+
+enum ProsthesisType {
+  SCREW_RETAINED_SINGLE
+  CEMENT_RETAINED_SINGLE
+  SCREW_RETAINED_MULTI
+  CEMENT_RETAINED_MULTI
+  OVERDENTURE_LOCATOR
+  OVERDENTURE_BAR
+  ALL_ON_4
+  ALL_ON_6
+  PROVISIONAL_ACRYLIC
+}
+
+enum ProsthesisMaterial {
+  ZIRCONIA_MONOLITHIC
+  PORCELAIN_FUSED_TO_METAL
+  PORCELAIN_FUSED_TO_ZIRCONIA
+  LITHIUM_DISILICATE
+  ACRYLIC_PROVISIONAL
+  PMMA_PROVISIONAL
+  HYBRID_TITANIUM_ACRYLIC
+  OTRO
+}
+
+enum ImplantComplicationType {
+  PERI_IMPLANT_MUCOSITIS
+  PERI_IMPLANTITIS_INITIAL
+  PERI_IMPLANTITIS_MODERATE
+  PERI_IMPLANTITIS_ADVANCED
+  SCREW_LOOSENING
+  ABUTMENT_SCREW_FRACTURE
+  PROSTHESIS_FRACTURE
+  IMPLANT_FRACTURE
+  NERVE_DAMAGE_TRANSIENT
+  NERVE_DAMAGE_PERMANENT
+  SINUS_PERFORATION
+  SINUS_INFECTION
+  OSSEOINTEGRATION_FAILURE
+  AESTHETIC_COMPLICATION
+  OTRO
+}
+
+enum ASAClassification {
+  ASA_I
+  ASA_II
+  ASA_III
+  ASA_IV
+  ASA_V
+}
+
+// Hitos específicos del seguimiento implantológico. NO confundir con el
+// FollowUpMilestone de endodoncia (CONTROL_6M / CONTROL_12M / etc.) — los
+// implantes requieren cadencia más fina y ventanas de 5 / 10 años.
+enum ImplantFollowUpMilestone {
+  M_1_WEEK
+  M_2_WEEKS
+  M_1_MONTH
+  M_3_MONTHS
+  M_6_MONTHS
+  M_12_MONTHS
+  M_24_MONTHS
+  M_5_YEARS
+  M_10_YEARS
+  UNSCHEDULED
+}
+
+enum ImplantConsentType {
+  SURGERY
+  BONE_AUGMENTATION
+  QR_PUBLIC
+}
+
+// v1.1 — declarado para futuro uso en BoneAugmentation. Se mantiene en
+// MVP para evitar segunda migración cuando se libere el v1.1.
+enum BoneGraftSource {
+  AUTOLOGOUS
+  ALLOGRAFT_HUMAN
+  XENOGRAFT_BOVINE
+  XENOGRAFT_PORCINE
+  SYNTHETIC_BIOACTIVE_GLASS
+  SYNTHETIC_HYDROXYAPATITE
+  SYNTHETIC_TCP
+  OTRO
+}
+
+// ── 4.2 Modelos MVP (9) ──────────────────────────────────────────────
+
+/// Implante dental — entidad central, dispositivo médico clase III.
+/// brand / lotNumber / placedAt son INMUTABLES por defecto. Cualquier
+/// UPDATE en estos campos requiere flag de sesión + justificación ≥20
+/// chars (validado por trigger SQL `protect_implant_traceability`).
+/// DELETE prohibido por trigger `block_implant_delete` — "remover" =
+/// `currentStatus = REMOVED` + `removalReason`.
+model Implant {
+  id        String @id @default(uuid())
+  patientId String
+  clinicId  String
+
+  // Posición anatómica (FDI 11..48)
+  toothFdi Int
+
+  // ── Trazabilidad COFEPRIS clase III (INMUTABLE) ─────────────────────
+  brand            ImplantBrand
+  brandCustomName  String? // requerido si brand = OTRO
+  modelName        String
+  diameterMm       Decimal                  @db.Decimal(3, 1) // 3.0..7.0
+  lengthMm         Decimal                  @db.Decimal(4, 1) // 6.0..18.0
+  connectionType   ImplantConnectionType
+  surfaceTreatment ImplantSurfaceTreatment?
+  lotNumber        String // CRÍTICO COFEPRIS
+  manufactureDate  DateTime?
+  expiryDate       DateTime?
+  // ────────────────────────────────────────────────────────────────────
+
+  placedAt         DateTime // CRÍTICO COFEPRIS
+  placedByDoctorId String
+
+  protocol        ImplantProtocol
+  currentStatus   ImplantStatus   @default(PLACED)
+  statusUpdatedAt DateTime        @default(now())
+
+  // Removal (en lugar de delete) — §1.10
+  removedAt              DateTime?
+  removalReason          String? // length ≥20 si REMOVED
+  removalSurgeryRecordId String?
+
+  notes String? @db.Text
+
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  // NO deletedAt — semántica de "borrar" es REMOVED
+
+  patient        Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  clinic         Clinic  @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  placedByDoctor User    @relation("ImplantPlacedBy", fields: [placedByDoctorId], references: [id], onDelete: Restrict)
+
+  surgicalRecord  ImplantSurgicalRecord?
+  healingPhase    ImplantHealingPhase?
+  secondStage     ImplantSecondStageSurgery?
+  prostheticPhase ImplantProstheticPhase?
+  complications   ImplantComplication[]
+  followUps       ImplantFollowUp[]
+  consents        ImplantConsent[]
+  passport        ImplantPassport?
+
+  @@index([patientId, currentStatus])
+  @@index([clinicId, currentStatus])
+  @@index([clinicId, placedAt(sort: Desc)])
+  @@index([brand, lotNumber]) // queries de recall por lote
+  @@index([toothFdi])
+  @@map("implants")
+}
+
+/// Cirugía de colocación. 1:1 con Implant. Datos quirúrgicos completos
+/// + lote del pilar de cicatrización (COFEPRIS).
+model ImplantSurgicalRecord {
+  id        String @id @default(uuid())
+  implantId String @unique
+
+  performedAt           DateTime
+  asaClassification     ASAClassification
+  prophylaxisAntibiotic Boolean           @default(false)
+  prophylaxisDrug       String?
+  hba1cIfDiabetic       Decimal?          @db.Decimal(3, 1)
+
+  insertionTorqueNcm        Int
+  isqMesiodistal            Int
+  isqVestibulolingual       Int
+  boneDensity               LekholmZarbDensity
+  ridgeWidthMm              Decimal?           @db.Decimal(3, 1)
+  ridgeHeightMm             Decimal?           @db.Decimal(4, 1)
+  flapType                  String
+  drillingProtocol          String
+  healingAbutmentLot        String? // CRÍTICO COFEPRIS si protocolo 1-stage
+  healingAbutmentDiameterMm Decimal?           @db.Decimal(3, 1)
+  healingAbutmentHeightMm   Decimal?           @db.Decimal(3, 1)
+
+  sutureMaterial            String?
+  sutureRemovalScheduledAt  DateTime?
+  intraoperativePhotoFileId String?
+  postOpInstructions        String?   @db.Text
+  durationMinutes           Int
+
+  complications String? @db.Text // intraoperatorias
+
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  implant             Implant      @relation(fields: [implantId], references: [id], onDelete: Cascade)
+  intraoperativePhoto PatientFile? @relation("ImplantSurgicalIntraoperativePhoto", fields: [intraoperativePhotoFileId], references: [id], onDelete: SetNull)
+
+  @@index([performedAt])
+  @@map("implant_surgical_records")
+}
+
+/// Fase de osteointegración. 1:1 con Implant. Cicatrización + ISQ.
+model ImplantHealingPhase {
+  id        String @id @default(uuid())
+  implantId String @unique
+
+  startedAt             DateTime
+  expectedDurationWeeks Int
+
+  isqAt2Weeks Int?
+  isqAt4Weeks Int?
+  isqAt8Weeks Int?
+  isqLatest   Int?
+  isqLatestAt DateTime?
+
+  completedAt DateTime?
+  notes       String?   @db.Text
+
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  implant Implant @relation(fields: [implantId], references: [id], onDelete: Cascade)
+
+  @@map("implant_healing_phases")
+}
+
+/// 2ª cirugía (descubrimiento) en protocolo 2-stage. 1:1 con Implant.
+/// El lote del pilar de cicatrización es CRÍTICO COFEPRIS.
+model ImplantSecondStageSurgery {
+  id        String @id @default(uuid())
+  implantId String @unique
+
+  performedAt               DateTime
+  technique                 String
+  healingAbutmentLot        String // CRÍTICO COFEPRIS
+  healingAbutmentDiameterMm Decimal  @db.Decimal(3, 1)
+  healingAbutmentHeightMm   Decimal  @db.Decimal(3, 1)
+
+  isqAtUncovering Int?
+  durationMinutes Int
+
+  notes String? @db.Text
+
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  implant Implant @relation(fields: [implantId], references: [id], onDelete: Cascade)
+
+  @@map("implant_second_stage_surgeries")
+}
+
+/// Fase protésica. 1:1 con Implant. Lotes de pilar / prótesis / tornillo
+/// son críticos COFEPRIS. Al guardarse exitosamente se dispara la
+/// generación automática de ImplantPassport (carnet PDF).
+model ImplantProstheticPhase {
+  id        String @id @default(uuid())
+  implantId String @unique
+
+  // Pilar
+  abutmentType          AbutmentType
+  abutmentBrand         String?
+  abutmentLot           String // CRÍTICO COFEPRIS
+  abutmentDiameterMm    Decimal?     @db.Decimal(3, 1)
+  abutmentHeightMm      Decimal?     @db.Decimal(3, 1)
+  abutmentAngulationDeg Int?
+  abutmentTorqueNcm     Int
+
+  // Prótesis
+  prosthesisType     ProsthesisType
+  prosthesisMaterial ProsthesisMaterial
+  prosthesisLabName  String
+  prosthesisLabLot   String // CRÍTICO COFEPRIS
+
+  // Tornillo (si screw-retained)
+  screwLot       String?
+  screwTorqueNcm Int?
+
+  // Carga / entrega
+  immediateLoading       Boolean   @default(false)
+  provisionalDeliveredAt DateTime?
+  definitiveDeliveredAt  DateTime?
+  prosthesisDeliveredAt  DateTime
+  occlusionScheme        String?
+
+  notes String? @db.Text
+
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  implant Implant @relation(fields: [implantId], references: [id], onDelete: Cascade)
+
+  @@map("implant_prosthetic_phases")
+}
+
+/// Complicación periimplantaria. N:1 con Implant. Al crearse cambia
+/// `Implant.currentStatus` a COMPLICATION. Si tipo es biológico
+/// (mucositis / peri-implantitis) y módulo Periodoncia activo, también
+/// dispara `createPeriImplantAssessment` (STUB en MVP).
+model ImplantComplication {
+  id        String @id @default(uuid())
+  implantId String
+  clinicId  String
+  patientId String
+
+  detectedAt  DateTime
+  type        ImplantComplicationType
+  severity    String // leve | moderada | severa
+  description String                  @db.Text
+
+  // Hallazgos clínicos (si tipo biológico)
+  bopAtDiagnosis         Boolean?
+  pdMaxAtDiagnosisMm     Decimal? @db.Decimal(3, 1)
+  suppurationAtDiagnosis Boolean?
+  radiographicBoneLossMm Decimal? @db.Decimal(3, 1)
+
+  treatmentPlan String? @db.Text
+
+  // Resolución
+  resolvedAt DateTime?
+  outcome    String? // exitoso | parcial | fracaso | en_curso
+
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  implant Implant @relation(fields: [implantId], references: [id], onDelete: Cascade)
+
+  @@index([implantId, detectedAt(sort: Desc)])
+  @@index([clinicId, type])
+  @@index([clinicId, resolvedAt])
+  @@map("implant_complications")
+}
+
+/// Visita de mantenimiento periimplantario. N:1 con Implant. Pérdida
+/// ósea radiográfica acumulada se compara contra criterios Albrektsson
+/// 1986 (1.5mm año 1, <0.2mm/año después).
+model ImplantFollowUp {
+  id        String @id @default(uuid())
+  implantId String
+  clinicId  String
+
+  milestone   ImplantFollowUpMilestone
+  scheduledAt DateTime?
+  performedAt DateTime?
+
+  bopPresent      Boolean?
+  pdMaxMm         Decimal? @db.Decimal(3, 1)
+  suppuration     Boolean?
+  mobility        Boolean?
+  occlusionStable Boolean?
+
+  radiographicBoneLossMm   Decimal? @db.Decimal(3, 1)
+  meetsAlbrektssonCriteria Boolean?
+  radiographFileId         String?
+
+  nextControlAt DateTime?
+  notes         String?   @db.Text
+
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  implant        Implant      @relation(fields: [implantId], references: [id], onDelete: Cascade)
+  radiographFile PatientFile? @relation("ImplantFollowUpRadiograph", fields: [radiographFileId], references: [id], onDelete: SetNull)
+
+  @@index([implantId, scheduledAt])
+  @@index([clinicId, performedAt])
+  @@index([scheduledAt, performedAt]) // overdue queries
+  @@map("implant_follow_ups")
+}
+
+/// Consentimiento informado. N:1 con Implant. Tipo SURGERY / BONE_AUGMENTATION
+/// / QR_PUBLIC. La firma del paciente puede guardarse como base64 inline o
+/// como PatientFile.
+model ImplantConsent {
+  id        String @id @default(uuid())
+  implantId String
+  patientId String
+  doctorId  String
+
+  consentType   ImplantConsentType
+  text          String             @db.Text
+  acceptedRisks Json? // { mronj: true, sinus_perforation: true, ... }
+
+  signedAt              DateTime?
+  patientSignatureImage String?   @db.Text // base64 inline o referencia
+  signedFileId          String? // si se subió como archivo escaneado
+
+  revokedAt        DateTime?
+  revocationReason String?   @db.Text
+
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  implant    Implant      @relation(fields: [implantId], references: [id], onDelete: Cascade)
+  patient    Patient      @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  doctor     User         @relation("ImplantConsentDoctor", fields: [doctorId], references: [id], onDelete: Restrict)
+  signedFile PatientFile? @relation("ImplantConsentSigned", fields: [signedFileId], references: [id], onDelete: SetNull)
+
+  passportsLinkedByQrConsent ImplantPassport[] @relation("ImplantPassportQrConsent")
+
+  @@index([implantId, consentType])
+  @@map("implant_consents")
+}
+
+/// Carnet del implante (PDF licencia horizontal landscape). 1:1 con
+/// Implant. Auto-generado al finalizar fase protésica. Cualquier mutación
+/// posterior dispara regeneración (`regeneratedAt`).
+/// QR público es OPT-IN — requiere ImplantConsent type=QR_PUBLIC.
+model ImplantPassport {
+  id        String @id @default(uuid())
+  implantId String @unique
+
+  generatedAt   DateTime  @default(now())
+  regeneratedAt DateTime?
+
+  pdfFileId          String?
+  patientPhotoFileId String?
+
+  qrPublicEnabled   Boolean @default(false)
+  qrPublicConsentId String?
+  qrToken           String? @unique
+
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  implant          Implant         @relation(fields: [implantId], references: [id], onDelete: Cascade)
+  pdfFile          PatientFile?    @relation("ImplantPassportPdf", fields: [pdfFileId], references: [id], onDelete: SetNull)
+  patientPhotoFile PatientFile?    @relation("ImplantPassportPhoto", fields: [patientPhotoFileId], references: [id], onDelete: SetNull)
+  qrPublicConsent  ImplantConsent? @relation("ImplantPassportQrConsent", fields: [qrPublicConsentId], references: [id], onDelete: SetNull)
+
+  @@map("implant_passports")
+}
+
+// ── 4.3 Modelos v1.1 (DOCUMENTADOS, NO migrados en MVP) ──────────────
+// model ImplantSurgicalPlan { /* TODO v1.1 — planeación pre-CBCT */ }
+// model BoneAugmentation    { /* TODO v1.1 — aumento óseo + biomateriales */ }
+// model ImplantPrescription { /* TODO v1.1 — recetas implantológicas */ }
+//
+// ── 4.4 Modelo v2.0 (REFERENCIA, NO migrado) ─────────────────────────
+// model ImplantInventoryItem { /* TODO v2.0 — stock con caducidad */ }
