@@ -54,6 +54,8 @@ export default async function ImplantsPatientPage({ params }: PageProps) {
         patientId={patient.id}
         patientName={`${patient.firstName} ${patient.lastName}`}
         doctorId={user.id}
+        doctorName={`${user.firstName} ${user.lastName}`}
+        doctorCedula={user.cedulaProfesional ?? null}
         implants={implants}
       />
     </div>

@@ -16,6 +16,9 @@ import { NewImplantModal } from "./modals/NewImplantModal";
 import { RemoveImplantModal } from "./modals/RemoveImplantModal";
 import { BrandUpdateJustificationModal } from "./modals/BrandUpdateJustificationModal";
 import { ComplicationDrawer } from "./drawers/ComplicationDrawer";
+import { MaintenanceDrawer } from "./drawers/MaintenanceDrawer";
+import { SecondStageDrawer } from "./drawers/SecondStageDrawer";
+import { SurgeryConsentModal } from "./modals/SurgeryConsentModal";
 import { SurgeryWizard } from "./wizards/SurgeryWizard";
 import { ProstheticWizard } from "./wizards/ProstheticWizard";
 import type { ImplantFull } from "@/lib/types/implants";
@@ -28,6 +31,9 @@ type DialogKey =
   | "surgery"
   | "prosthetic"
   | "complication"
+  | "maintenance"
+  | "secondStage"
+  | "consent"
   | "remove"
   | "traceability";
 
@@ -35,6 +41,8 @@ export interface ImplantsTabProps {
   patientId: string;
   patientName: string;
   doctorId: string;
+  doctorName: string;
+  doctorCedula: string | null;
   implants: ImplantFull[];
   onMilestoneClick?: (milestone: MilestoneKey, implantId: string) => void;
 }
@@ -96,9 +104,13 @@ export function ImplantsTab(props: ImplantsTabProps) {
       case "passport":
         window.open(`/api/implants/${implantId}/passport`, "_blank", "noopener,noreferrer");
         return;
-      case "radiographs":
-      case "consent":
       case "maintenance":
+        setDialog("maintenance");
+        return;
+      case "consent":
+        setDialog("consent");
+        return;
+      case "radiographs":
         toast(`"${action}" — disponible en la siguiente fase`);
         return;
     }
@@ -109,6 +121,7 @@ export function ImplantsTab(props: ImplantsTabProps) {
     setActiveImplantId(implantId);
     if (m === "SURGERY") setDialog("surgery");
     else if (m === "PROSTHETIC") setDialog("prosthetic");
+    else if (m === "SECOND_STAGE") setDialog("secondStage");
     else props.onMilestoneClick?.(m, implantId);
   };
 
@@ -178,6 +191,30 @@ export function ImplantsTab(props: ImplantsTabProps) {
         implantId={activeImplantId}
         onClose={close}
         onCreated={() => refresh()}
+      />
+      <MaintenanceDrawer
+        open={dialog === "maintenance"}
+        implantId={activeImplantId}
+        placedAt={activeImplant ? new Date(activeImplant.placedAt) : null}
+        onClose={close}
+        onCreated={() => refresh()}
+      />
+      <SecondStageDrawer
+        open={dialog === "secondStage"}
+        implantId={activeImplantId}
+        onClose={close}
+        onCreated={() => refresh()}
+      />
+      <SurgeryConsentModal
+        open={dialog === "consent"}
+        implantId={activeImplantId}
+        patientId={props.patientId}
+        patientName={props.patientName}
+        doctorId={props.doctorId}
+        doctorName={props.doctorName}
+        doctorCedula={props.doctorCedula}
+        onClose={close}
+        onSigned={() => refresh()}
       />
       <RemoveImplantModal
         open={dialog === "remove"}
