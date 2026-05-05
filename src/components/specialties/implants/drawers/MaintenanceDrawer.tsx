@@ -55,6 +55,40 @@ export function MaintenanceDrawer(props: MaintenanceDrawerProps) {
   const [nextControl, setNextControl] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [analyzingXray, setAnalyzingXray] = useState(false);
+
+  const analyzeBoneLossFromXray = async () => {
+    if (!radiographFileId) {
+      toast.error("Pega primero el ID de la radiografía");
+      return;
+    }
+    setAnalyzingXray(true);
+    try {
+      const res = await fetch(
+        `/api/xrays/${radiographFileId}/analyze?mode=PERIIMPLANT_BONE_LOSS&refresh=true`,
+        { method: "POST" },
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error en análisis IA");
+      const measurement = data.measurements as
+        | { mesialMm?: number; distalMm?: number }
+        | null;
+      if (measurement && (measurement.mesialMm != null || measurement.distalMm != null)) {
+        const max = Math.max(measurement.mesialMm ?? 0, measurement.distalMm ?? 0);
+        setBoneLoss(Number(max.toFixed(1)));
+        toast.success(
+          `IA midió pérdida ósea: mesial ${measurement.mesialMm?.toFixed(1) ?? "—"} mm · distal ${measurement.distalMm?.toFixed(1) ?? "—"} mm`,
+          { icon: "📐" },
+        );
+      } else {
+        toast(data.analysis?.summary ?? "Análisis completado sin medición clara");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error en análisis IA");
+    } finally {
+      setAnalyzingXray(false);
+    }
+  };
 
   const yearsSince = useMemo(() => {
     if (!props.placedAt || !performedAt) return null;
@@ -93,9 +127,10 @@ export function MaintenanceDrawer(props: MaintenanceDrawerProps) {
         setError(r.error);
         return;
       }
-      // STUB: si hay signos de inflamación, intenta crear PeriImplantAssessment
+      // Si hay signos de inflamación crea PeriImplantAssessment real en
+      // la tabla compartida de Periodoncia (FK A2 cross-módulos).
       if (suggestsPerioInflammation) {
-        await createPeriImplantAssessment({
+        const assessmentRes = await createPeriImplantAssessment({
           implantId: props.implantId!,
           bopPresent: bop,
           pdMaxMm: pdMax !== "" ? Number(pdMax) : undefined,
@@ -103,9 +138,13 @@ export function MaintenanceDrawer(props: MaintenanceDrawerProps) {
           radiographicBoneLossMm: boneLoss !== "" ? Number(boneLoss) : undefined,
           notes,
         });
-        toast.success("Control guardado · STUB Perio registrado en audit", {
-          icon: "🔬",
-        });
+        if (isFailure(assessmentRes)) {
+          toast.error(`Control guardado · evaluación periimplantar: ${assessmentRes.error}`);
+        } else {
+          toast.success(`Control guardado · evaluación periimplantar: ${assessmentRes.data.status}`, {
+            icon: "🔬",
+          });
+        }
       } else {
         toast.success("Control de mantenimiento guardado");
       }
@@ -185,7 +224,23 @@ export function MaintenanceDrawer(props: MaintenanceDrawerProps) {
           )}
 
           <Field label="ID radiografía (PatientFile XRAY_PERIAPICAL)">
-            <input value={radiographFileId} onChange={(e) => setRadiographFileId(e.target.value)} className={cls} placeholder="opcional" />
+            <div className="flex gap-2">
+              <input
+                value={radiographFileId}
+                onChange={(e) => setRadiographFileId(e.target.value)}
+                className={`${cls} flex-1`}
+                placeholder="opcional"
+              />
+              <button
+                type="button"
+                onClick={analyzeBoneLossFromXray}
+                disabled={!radiographFileId || analyzingXray}
+                className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                title="Analiza pérdida ósea peri-implantar con IA y prefilla el campo"
+              >
+                {analyzingXray ? "Analizando…" : "📐 IA"}
+              </button>
+            </div>
           </Field>
 
           <Field label="Próximo control">
@@ -202,9 +257,9 @@ export function MaintenanceDrawer(props: MaintenanceDrawerProps) {
               <div>
                 <p className="font-medium">Hallazgos sugieren mucositis o peri-implantitis.</p>
                 <p className="mt-1">
-                  Al guardar, se crea registro en módulo Periodoncia
-                  (STUB). La integración real se activa cuando ese
-                  módulo se mergee a main.
+                  Al guardar se registra evaluación periimplantar
+                  (status derivado de BoP + supuración + pérdida ósea).
+                  Visible desde la pestaña Periodoncia del paciente.
                 </p>
               </div>
             </div>
