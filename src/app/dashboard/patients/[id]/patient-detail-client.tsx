@@ -33,12 +33,28 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import dynamicImport from "next/dynamic";
 import type { PediatricsTabData } from "@/components/patient-detail/pediatrics/PediatricsTab";
 import { buildPediatricSoapPrefill } from "@/lib/pediatrics/soap-prefill";
+import type { PerioTabData } from "@/lib/periodontics/load-data";
 
 // Pediatrics — lazy load del módulo. Solo carga el bundle cuando el doctor
 // abre la pestaña, evitando inflar el bundle del paciente cuando no aplica.
 const PediatricsTab = dynamicImport(
   () => import("@/components/patient-detail/pediatrics/PediatricsTab").then((m) => ({ default: m.PediatricsTab })),
   { ssr: false, loading: () => <div className="text-xs text-muted-foreground p-4">Cargando módulo de pediatría…</div> },
+);
+
+// Periodontics — lazy load del módulo. El bundle del periodontograma 6×32
+// solo carga cuando el doctor abre la pestaña.
+const PeriodonticsPatientTab = dynamicImport(
+  () =>
+    import("@/components/specialties/periodontics/PeriodonticsPatientTab").then((m) => ({
+      default: m.PeriodonticsPatientTab,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="text-xs text-muted-foreground p-4">Cargando módulo de periodoncia…</div>
+    ),
+  },
 );
 
 // MediFlow es DENTAL — el form de "Nueva consulta" siempre usa DentalForm.
@@ -77,12 +93,17 @@ const TABS_BASE = [
   { id: "facturacion",   label: "Facturación"          },
 ];
 
-function buildTabs(showPediatrics: boolean) {
-  if (!showPediatrics) return TABS_BASE;
-  // Insertar "Pediatría" entre "Historia clínica" y "Odontograma"
-  // según spec §1.2.
+function buildTabs(showPediatrics: boolean, showPeriodontics: boolean) {
   const out = [...TABS_BASE];
-  out.splice(2, 0, { id: "pediatria", label: "Pediatría" });
+  // Insertar "Pediatría" entre "Historia clínica" y "Odontograma" según spec §1.2.
+  if (showPediatrics) out.splice(2, 0, { id: "pediatria", label: "Pediatría" });
+  // Insertar "Periodoncia" justo antes de "Odontograma" — entre Historia
+  // clínica/Pediatría y Odontograma. Si Pediatría está, queda en posición
+  // 3; si no, queda en posición 2.
+  if (showPeriodontics) {
+    const odontoIdx = out.findIndex((t) => t.id === "odontograma");
+    out.splice(odontoIdx >= 0 ? odontoIdx : 2, 0, { id: "periodoncia", label: "Periodoncia" });
+  }
   return out;
 }
 
@@ -113,18 +134,30 @@ interface Props {
   treatments:   any[];
   portalUrl?:   string | null;
   pediatricsData?: PediatricsTabData | null;
+  perioData?: PerioTabData | null;
 }
 
 export function PatientDetailClient({
   patient, records: initialRecords, appointments, invoices,
   doctors, currentUser, specialty, totalPaid, totalBalance, totalPlan, treatments, portalUrl,
   pediatricsData,
+  perioData,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const showPediatrics = Boolean(pediatricsData);
-  const tabs = useMemo(() => buildTabs(showPediatrics), [showPediatrics]);
-  const initialTab = searchParams.get("tab") === "pediatria" && showPediatrics ? "pediatria" : "resumen";
+  const showPeriodontics = Boolean(perioData);
+  const tabs = useMemo(
+    () => buildTabs(showPediatrics, showPeriodontics),
+    [showPediatrics, showPeriodontics],
+  );
+  const tabFromUrl = searchParams.get("tab");
+  const initialTab =
+    tabFromUrl === "pediatria" && showPediatrics
+      ? "pediatria"
+      : tabFromUrl === "periodoncia" && showPeriodontics
+        ? "periodoncia"
+        : "resumen";
   const [tab, setTab]         = useState(initialTab);
   const [consultPaused, setConsultPaused] = useState(false);
   const [consultClosed, setConsultClosed] = useState(false);
@@ -667,9 +700,11 @@ export function PatientDetailClient({
             agenda: appointments.length,
             facturacion: invoices.length,
             pediatria: pediatricsData?.pendingConsents.length ?? 0,
+            periodoncia: perioData?.recordsCount ?? 0,
           }}
           hasBalance={totalBalance > 0}
           showPediatrics={showPediatrics}
+          showPeriodontics={showPeriodontics}
         />
 
         <div className={patientDetailStyles.mainColumn}>
@@ -866,6 +901,11 @@ export function PatientDetailClient({
           {/* ===== TAB: PEDIATRÍA ===== */}
           {tab === "pediatria" && pediatricsData && (
             <PediatricsTab data={pediatricsData} />
+          )}
+
+          {/* ===== TAB: PERIODONCIA ===== */}
+          {tab === "periodoncia" && perioData && (
+            <PeriodonticsPatientTab data={perioData} />
           )}
 
           {/* ===== TAB: ODONTOGRAMA ===== */}
