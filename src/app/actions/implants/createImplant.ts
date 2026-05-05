@@ -6,6 +6,10 @@ import {
   createImplantSchema,
   type CreateImplantInput,
 } from "@/lib/validation/implants";
+import {
+  ODONTOGRAM_STATE_FOR_IMPLANT,
+  buildOdontogramNotes,
+} from "@/lib/implants/odontogram-sync";
 import { IMPLANT_AUDIT_ACTIONS } from "./audit-actions";
 import {
   auditImplant,
@@ -34,29 +38,60 @@ export async function createImplant(
   if (isFailure(patientRes)) return patientRes;
 
   try {
-    const created = await prisma.implant.create({
-      data: {
-        clinicId: ctx.clinicId,
-        patientId: parsed.data.patientId,
-        toothFdi: parsed.data.toothFdi,
+    const created = await prisma.$transaction(async (tx) => {
+      const implant = await tx.implant.create({
+        data: {
+          clinicId: ctx.clinicId,
+          patientId: parsed.data.patientId,
+          toothFdi: parsed.data.toothFdi,
+          brand: parsed.data.brand,
+          brandCustomName: parsed.data.brandCustomName ?? null,
+          modelName: parsed.data.modelName,
+          diameterMm: parsed.data.diameterMm,
+          lengthMm: parsed.data.lengthMm,
+          connectionType: parsed.data.connectionType,
+          surfaceTreatment: parsed.data.surfaceTreatment ?? null,
+          lotNumber: parsed.data.lotNumber,
+          manufactureDate: parsed.data.manufactureDate ?? null,
+          expiryDate: parsed.data.expiryDate ?? null,
+          placedAt: parsed.data.placedAt,
+          placedByDoctorId: parsed.data.placedByDoctorId,
+          protocol: parsed.data.protocol,
+          currentStatus: parsed.data.initialStatus,
+          notes: parsed.data.notes ?? null,
+          createdByUserId: ctx.userId,
+        },
+        select: { id: true, patientId: true },
+      });
+
+      // Sincroniza odontograma: marca el diente como IMPLANTE.
+      // Spec §8.4. Reusa el modelo OdontogramEntry compartido —
+      // surface=null indica que aplica al diente completo.
+      const fullToothNotes = buildOdontogramNotes({
         brand: parsed.data.brand,
-        brandCustomName: parsed.data.brandCustomName ?? null,
         modelName: parsed.data.modelName,
-        diameterMm: parsed.data.diameterMm,
-        lengthMm: parsed.data.lengthMm,
-        connectionType: parsed.data.connectionType,
-        surfaceTreatment: parsed.data.surfaceTreatment ?? null,
         lotNumber: parsed.data.lotNumber,
-        manufactureDate: parsed.data.manufactureDate ?? null,
-        expiryDate: parsed.data.expiryDate ?? null,
-        placedAt: parsed.data.placedAt,
-        placedByDoctorId: parsed.data.placedByDoctorId,
-        protocol: parsed.data.protocol,
         currentStatus: parsed.data.initialStatus,
-        notes: parsed.data.notes ?? null,
-        createdByUserId: ctx.userId,
-      },
-      select: { id: true, patientId: true },
+      });
+      await tx.odontogramEntry.upsert({
+        where: {
+          patientId_toothNumber_surface: {
+            patientId: parsed.data.patientId,
+            toothNumber: parsed.data.toothFdi,
+            surface: null as unknown as string,
+          },
+        },
+        update: { state: ODONTOGRAM_STATE_FOR_IMPLANT, notes: fullToothNotes },
+        create: {
+          patientId: parsed.data.patientId,
+          toothNumber: parsed.data.toothFdi,
+          surface: null,
+          state: ODONTOGRAM_STATE_FOR_IMPLANT,
+          notes: fullToothNotes,
+        },
+      });
+
+      return implant;
     });
 
     await auditImplant({
