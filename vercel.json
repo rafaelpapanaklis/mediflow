@@ -1,4 +1,7 @@
 {
+  "$_notes": [
+    "TODO whatsapp-queue: al upgrade a Vercel Pro, volver a '*/15 * * * *' para procesamiento near-real-time del queue. Hobby (Free) limita los crons sub-diarios; el delay actual hasta 24h es aceptable para recordatorios endo/ortho que se encolan días/semanas antes de su scheduledFor."
+  ],
   "crons": [
     {
       "path": "/api/cron/annual-reminder",
@@ -22,7 +25,7 @@
     },
     {
       "path": "/api/cron/whatsapp-queue",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 7 * * *"
     }
   ]
 }
