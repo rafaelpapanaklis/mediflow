@@ -1,11 +1,19 @@
 "use client";
-// Endodontics — entrada del módulo: panel izquierdo + vista diente-céntrica. Spec §6.2
+// Endodontics — entrada del módulo: panel izquierdo + vista diente-céntrica
+// + drawers/wizard que reaccionan a las acciones del panel central. Spec §6.2
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
 import { ToothMiniOdontogram } from "./ToothMiniOdontogram";
 import { ToothCenterView } from "./ToothCenterView";
+import { DiagnosisDrawer } from "./drawers/DiagnosisDrawer";
+import { VitalityDrawer } from "./drawers/VitalityDrawer";
+import { RootCanalDrawer } from "./drawers/RootCanalDrawer";
+import { FollowUpDrawer } from "./drawers/FollowUpDrawer";
+import { ApicalSurgeryDrawer } from "./drawers/ApicalSurgeryDrawer";
+import { TreatmentWizard } from "./TreatmentWizard";
+import { StartTreatmentModal } from "./modals/StartTreatmentModal";
 import type { EndoToothSummary, ToothCenterViewData } from "@/lib/types/endodontics";
 
 export interface EndodonticsTabProps {
@@ -15,6 +23,14 @@ export interface EndodonticsTabProps {
   initialTooth?: ToothCenterViewData | null;
   onLoadTooth?: (fdi: number) => Promise<ToothCenterViewData | null>;
 }
+
+type DrawerKind =
+  | { kind: "none" }
+  | { kind: "diagnosis" }
+  | { kind: "vitality" }
+  | { kind: "canal"; canalId: string | null }
+  | { kind: "followup"; followUpId: string; milestoneLabel: string }
+  | { kind: "apical-surgery" };
 
 export function EndodonticsTab(props: EndodonticsTabProps) {
   const { patientId, patientName, summaries, initialTooth, onLoadTooth } = props;
@@ -30,6 +46,10 @@ export function EndodonticsTab(props: EndodonticsTabProps) {
   const [selectedFdi, setSelectedFdi] = useState<number | null>(initialFdi);
   const [centerData, setCenterData] = useState<ToothCenterViewData | null>(initialTooth ?? null);
   const [loading, setLoading] = useState(false);
+  const [drawer, setDrawer] = useState<DrawerKind>({ kind: "none" });
+  const [startModalOpen, setStartModalOpen] = useState(false);
+  const [wizardTreatmentId, setWizardTreatmentId] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const selectTooth = useCallback(
     (fdi: number) => {
@@ -41,13 +61,25 @@ export function EndodonticsTab(props: EndodonticsTabProps) {
     [params, router],
   );
 
-  // Cuando cambia la selección, recarga datos del diente.
+  const refresh = useCallback(() => {
+    setReloadKey((k) => k + 1);
+    router.refresh();
+  }, [router]);
+
+  // Cuando llega un initialTooth nuevo (router.refresh tras un write),
+  // sincronízalo si coincide con el diente seleccionado.
+  useEffect(() => {
+    if (initialTooth && initialTooth.toothFdi === selectedFdi) {
+      setCenterData(initialTooth);
+    }
+  }, [initialTooth, selectedFdi]);
+
+  // Cuando cambia la selección o reloadKey, recarga datos del diente.
   useEffect(() => {
     if (!selectedFdi) {
       setCenterData(null);
       return;
     }
-    if (centerData?.toothFdi === selectedFdi) return;
     if (!onLoadTooth) return;
     let cancelled = false;
     setLoading(true);
@@ -66,7 +98,18 @@ export function EndodonticsTab(props: EndodonticsTabProps) {
     return () => {
       cancelled = true;
     };
-  }, [selectedFdi, onLoadTooth, centerData?.toothFdi]);
+  }, [selectedFdi, onLoadTooth, reloadKey]);
+
+  const closeDrawer = useCallback(() => {
+    setDrawer({ kind: "none" });
+    refresh();
+  }, [refresh]);
+
+  const activeTreatment = centerData?.activeTreatment ?? null;
+  const canalInitial =
+    drawer.kind === "canal" && drawer.canalId
+      ? activeTreatment?.rootCanals.find((c) => c.id === drawer.canalId)
+      : undefined;
 
   return (
     <div className="endo-shell">
@@ -93,16 +136,50 @@ export function EndodonticsTab(props: EndodonticsTabProps) {
           <ToothCenterView
             data={centerData}
             onStartTreatment={() => {
-              // implementado en C14 (TreatmentWizard).
-              toast("Wizard de TC pendiente — fase 5.");
+              if (activeTreatment) {
+                toast(
+                  "Ya existe un tratamiento activo en este diente. Continúa el actual o ciérralo antes de iniciar otro.",
+                );
+                return;
+              }
+              setStartModalOpen(true);
             }}
-            onContinueTreatment={() => {
-              toast("Wizard de TC pendiente — fase 5.");
+            onContinueTreatment={(treatmentId) => setWizardTreatmentId(treatmentId)}
+            onCaptureDiagnosis={() => setDrawer({ kind: "diagnosis" })}
+            onCaptureVitality={() => setDrawer({ kind: "vitality" })}
+            onClickCanal={(canalId) => setDrawer({ kind: "canal", canalId })}
+            onClickTimelineEvent={(id, kind) => {
+              if (kind === "followup") {
+                const fu = activeTreatment?.followUps.find((f) => f.id === id);
+                if (!fu) {
+                  toast("Control no disponible.");
+                  return;
+                }
+                if (fu.performedAt) {
+                  toast(
+                    `Control ya cerrado el ${new Date(fu.performedAt).toLocaleDateString("es-MX")} (PAI ${fu.paiScore ?? "—"}).`,
+                  );
+                  return;
+                }
+                setDrawer({
+                  kind: "followup",
+                  followUpId: fu.id,
+                  milestoneLabel: fu.milestone.replaceAll("_", " ").toLowerCase(),
+                });
+                return;
+              }
+              if (kind === "treatment-apical") {
+                if (!activeTreatment) return;
+                if (activeTreatment.apicalSurgery) {
+                  toast("Cirugía apical ya registrada.");
+                  return;
+                }
+                setDrawer({ kind: "apical-surgery" });
+                return;
+              }
+              // Otros tipos (diagnosis, vitality, treatment-start, medication, restoration)
+              // son informativos por ahora — sin drawer dedicado.
             }}
-            onCaptureDiagnosis={() => toast("Drawer en C13.")}
-            onCaptureVitality={() => toast("Drawer en C13.")}
-            onClickCanal={() => toast("Drawer de conducto en C13.")}
-            onClickTimelineEvent={() => toast("Detalle de evento en C13.")}
           />
         ) : (
           <div className="endo-empty">
@@ -110,6 +187,82 @@ export function EndodonticsTab(props: EndodonticsTabProps) {
           </div>
         )}
       </main>
+
+      {selectedFdi ? (
+        <>
+          <DiagnosisDrawer
+            open={drawer.kind === "diagnosis"}
+            onClose={closeDrawer}
+            patientId={patientId}
+            toothFdi={selectedFdi}
+          />
+          <VitalityDrawer
+            open={drawer.kind === "vitality"}
+            onClose={closeDrawer}
+            patientId={patientId}
+            toothFdi={selectedFdi}
+          />
+          {activeTreatment ? (
+            <RootCanalDrawer
+              open={drawer.kind === "canal"}
+              onClose={closeDrawer}
+              treatmentId={activeTreatment.id}
+              initial={
+                canalInitial
+                  ? {
+                      id: canalInitial.id,
+                      canonicalName: canalInitial.canonicalName,
+                      workingLengthMm: Number(canalInitial.workingLengthMm),
+                      coronalReferencePoint: canalInitial.coronalReferencePoint,
+                      masterApicalFileIso: canalInitial.masterApicalFileIso,
+                      masterApicalFileTaper: Number(canalInitial.masterApicalFileTaper),
+                      obturationQuality: canalInitial.obturationQuality,
+                      notes: canalInitial.notes,
+                    }
+                  : undefined
+              }
+            />
+          ) : null}
+          {activeTreatment ? (
+            <ApicalSurgeryDrawer
+              open={drawer.kind === "apical-surgery"}
+              onClose={closeDrawer}
+              treatmentId={activeTreatment.id}
+            />
+          ) : null}
+          {drawer.kind === "followup" ? (
+            <FollowUpDrawer
+              open={true}
+              onClose={closeDrawer}
+              followUpId={drawer.followUpId}
+              milestoneLabel={drawer.milestoneLabel}
+            />
+          ) : null}
+
+          <StartTreatmentModal
+            open={startModalOpen}
+            onClose={() => setStartModalOpen(false)}
+            patientId={patientId}
+            toothFdi={selectedFdi}
+            diagnosisId={centerData?.diagnosis?.id ?? null}
+            onCreated={(id) => {
+              refresh();
+              setWizardTreatmentId(id);
+            }}
+          />
+          {wizardTreatmentId ? (
+            <TreatmentWizard
+              open={true}
+              onClose={() => {
+                setWizardTreatmentId(null);
+                refresh();
+              }}
+              treatmentId={wizardTreatmentId}
+              toothFdi={selectedFdi}
+            />
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }

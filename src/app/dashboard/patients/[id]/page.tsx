@@ -12,8 +12,10 @@ import { isPediatric } from "@/lib/pediatrics/age";
 import { PEDIATRICS_MODULE_KEY, DEFAULT_PEDIATRICS_CUTOFF_YEARS } from "@/lib/pediatrics/permissions";
 import { loadPediatricsData } from "@/lib/pediatrics/load-data";
 import type { PediatricsTabData } from "@/components/patient-detail/pediatrics/PediatricsTab";
-import { PERIODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
+import { PERIODONTICS_MODULE_KEY, ENDODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { loadPerioData, type PerioTabData } from "@/lib/periodontics/load-data";
+import { loadEndoSoapPrefill } from "@/lib/endodontics/load-soap-prefill";
+import type { SoapPrefill } from "@/lib/types/endodontics";
 
 export default async function PatientDetailPage({ params }: { params: { id: string } }) {
   const user = await getCurrentUser();
@@ -86,6 +88,21 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     const access = await canAccessModule(user.clinicId, PERIODONTICS_MODULE_KEY);
     if (access.hasAccess) {
       perioData = await loadPerioData({
+        clinicId: user.clinicId,
+        patientId: patient.id,
+      });
+    }
+  }
+
+  // ── Endodontics SOAP prefill ─────────────────────────────────────────────
+  // Solo se carga el prefill si la clínica es DENTAL + módulo activo + el
+  // paciente tiene tratamiento o diagnóstico endodóntico. Si nada aplica el
+  // helper devuelve null y el editor SOAP queda igual (no se pisa nada).
+  let endoSoapPrefill: SoapPrefill | null = null;
+  if (user.clinic.category === "DENTAL") {
+    const access = await canAccessModule(user.clinicId, ENDODONTICS_MODULE_KEY);
+    if (access.hasAccess) {
+      endoSoapPrefill = await loadEndoSoapPrefill({
         clinicId: user.clinicId,
         patientId: patient.id,
       });
@@ -166,6 +183,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           portalUrl={portalUrl}
           pediatricsData={pediatricsData}
           perioData={perioData}
+          endoSoapPrefill={endoSoapPrefill}
         />
       </ErrorBoundary>
     </div>

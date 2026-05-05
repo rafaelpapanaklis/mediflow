@@ -34,6 +34,7 @@ import dynamicImport from "next/dynamic";
 import type { PediatricsTabData } from "@/components/patient-detail/pediatrics/PediatricsTab";
 import { buildPediatricSoapPrefill } from "@/lib/pediatrics/soap-prefill";
 import type { PerioTabData } from "@/lib/periodontics/load-data";
+import type { SoapPrefill } from "@/lib/types/endodontics";
 
 // Pediatrics — lazy load del módulo. Solo carga el bundle cuando el doctor
 // abre la pestaña, evitando inflar el bundle del paciente cuando no aplica.
@@ -135,6 +136,7 @@ interface Props {
   portalUrl?:   string | null;
   pediatricsData?: PediatricsTabData | null;
   perioData?: PerioTabData | null;
+  endoSoapPrefill?: SoapPrefill | null;
 }
 
 export function PatientDetailClient({
@@ -142,6 +144,7 @@ export function PatientDetailClient({
   doctors, currentUser, specialty, totalPaid, totalBalance, totalPlan, treatments, portalUrl,
   pediatricsData,
   perioData,
+  endoSoapPrefill,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -463,6 +466,25 @@ export function PatientDetailClient({
           if (prefill) {
             setSoapDraft((d) => d.subjective.trim().length === 0 ? { ...d, subjective: prefill } : d);
           }
+        } else if (endoSoapPrefill) {
+          // Pre-fill endodóntico cuando hay tratamiento activo o diagnóstico
+          // AAE registrado para el paciente. Spec Endo §10.2. Solo aplica si
+          // los 4 campos están vacíos para no pisar contenido del doctor.
+          setSoapDraft((d) => {
+            const allEmpty =
+              !d.subjective.trim() &&
+              !d.objective.trim() &&
+              !d.assessment.trim() &&
+              !d.plan.trim();
+            if (!allEmpty) return d;
+            return {
+              ...d,
+              subjective: endoSoapPrefill.subjective,
+              objective: endoSoapPrefill.objective,
+              assessment: endoSoapPrefill.assessment,
+              plan: endoSoapPrefill.plan,
+            };
+          });
         }
       } catch (err) {
         toast.error(
