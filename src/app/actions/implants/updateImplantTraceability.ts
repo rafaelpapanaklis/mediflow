@@ -1,22 +1,26 @@
 "use server";
-// Implants — updateImplantTraceability. EL acción más sensible
+// Implants — updateImplantTraceability. La acción más sensible
 // legalmente del módulo (COFEPRIS clase III — §1.9, §10.2).
 //
-// Modifica brand / lotNumber / placedAt de un implante. Estos 3 campos
-// son INMUTABLES por defecto:
-//   - El trigger SQL `protect_implant_traceability` rechaza cualquier
-//     UPDATE en estos campos a menos que la sesión tenga el flag
-//     `app.implant_mutation_justified = 'true'`.
-//   - La justificación debe ser ≥20 chars (validación zod).
-//   - Audit log con acción COFEPRIS_TRACEABILITY_UPDATE incluyendo
-//     before/after/justification + cédula del doctor.
+// Modifica brand / lotNumber / placedAt de un implante. Estos 3
+// campos son inmutables por convención COFEPRIS.
 //
-// PRECAUCIÓN: si el pooler de Supabase ignora SET LOCAL (escenario
-// conocido con prepared statements en transaction mode de pgbouncer),
-// el trigger romperá la mutación. Ver comentario en
-// `prisma/migrations/20260504200000_implants_module/migration.sql`
-// sección 5 para validar y, si es necesario, deshabilitar el trigger
-// dejando esta validación como única defensa.
+// NOTA: el trigger SQL `protect_implant_traceability` fue eliminado
+// (migración `20260504210000_drop_implant_traceability_trigger`)
+// porque el pooler de Supabase (pgbouncer transaction mode) ignora
+// `SET LOCAL`. La validación COFEPRIS depende ahora de:
+//   1. Validación zod (`updateImplantTraceabilitySchema` exige
+//      `justification.length >= 20`) — bloquea cualquier llamada
+//      vía la app antes de tocar la DB.
+//   2. Audit log con `meta.cofeprisTraceability = true` — registra
+//      before/after/justification/doctorId/timestamp para defensa
+//      legal (query: `SELECT * FROM "audit_logs" WHERE
+//      entity_type='implant' AND changes->'_meta'->>'cofeprisTraceability'='true'`).
+// Estas 2 capas son suficientes porque ningún cliente tiene acceso
+// SQL directo a producción — solo super-admins con MFA.
+//
+// El trigger gemelo `block_implant_delete` se mantiene activo
+// (no requiere SET LOCAL — bloquea cualquier DELETE incondicionalmente).
 
 import { prisma } from "@/lib/prisma";
 import {
@@ -108,18 +112,9 @@ export async function updateImplantTraceability(
   }
 
   try {
-    await prisma.$transaction(async (tx) => {
-      // Activa flag de sesión ANTES del UPDATE para satisfacer al
-      // trigger `protect_implant_traceability`. SET LOCAL dura solo
-      // hasta el COMMIT/ROLLBACK de esta transacción.
-      await tx.$executeRawUnsafe(
-        `SET LOCAL app.implant_mutation_justified = 'true'`,
-      );
-
-      await tx.implant.update({
-        where: { id: before.id },
-        data,
-      });
+    await prisma.implant.update({
+      where: { id: before.id },
+      data,
     });
 
     await auditImplant({
@@ -142,12 +137,6 @@ export async function updateImplantTraceability(
     return ok({ id: before.id });
   } catch (e) {
     console.error("[updateImplantTraceability]", e);
-    const msg = e instanceof Error ? e.message : "Error desconocido";
-    if (msg.includes("COFEPRIS")) {
-      return fail(
-        "Trigger SQL rechazó la modificación. Verifica que el SET LOCAL esté funcionando con tu pooler — ver migración SQL §5.",
-      );
-    }
     return fail("Error al actualizar trazabilidad");
   }
 }

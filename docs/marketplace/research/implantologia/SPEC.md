@@ -39,7 +39,7 @@ Cuatro diferenciadores reales:
 | 1.6 | Si paciente tiene 8+ implantes (All-on-4 doble arcada): tarjetas se compactan a "vista de lista" con expansión on-demand | Usabilidad en rehabilitaciones completas |
 | 1.7 | Captura primaria: **WIZARDS** para flujos secuenciales largos (cirugía 3 pasos, fase protésica 3 pasos, planeación 4 pasos en v1.1) | Flujos lineales bien definidos |
 | 1.8 | **Drawer lateral derecho** para mantenimiento y complicación. Modal full-screen solo para consentimiento. NUNCA captura inline en la vista principal | Densidad de campos saturaría la vista |
-| 1.9 | **Trazabilidad COFEPRIS clase III**: `brand`, `lot`, `placedAt` INMUTABLES por defecto. UPDATE solo con justificación obligatoria ≥20 chars + audit before/after. DELETE PROHIBIDO | Regulación legal — no negociable |
+| 1.9 | **Trazabilidad COFEPRIS clase III**: `brand`, `lot`, `placedAt` INMUTABLES por convención. UPDATE solo vía `updateImplantTraceability` con justificación obligatoria ≥20 chars (zod) + audit log con `meta.cofeprisTraceability=true`. DELETE PROHIBIDO a nivel DB (trigger `block_implant_delete`). El trigger `protect_implant_traceability` fue eliminado (4 may 2026) porque Supabase pooler ignora `SET LOCAL` — la defensa queda en 2 capas de aplicación, suficiente porque nadie tiene SQL directo en producción salvo super-admins con MFA. | Regulación legal — no negociable |
 | 1.10 | "Remover" un implante: cambiar `currentStatus → REMOVED` con `removalReason ≥20 chars` y `removedAt` timestamp. Difiere del soft-delete estándar | Trazabilidad del dispositivo no se borra |
 | 1.11 | Enum `ImplantBrand` con 8 marcas + OTRO: STRAUMANN, NOBEL_BIOCARE, NEODENT, MIS, BIOHORIZONS, ZIMMER_BIOMET, IMPLANT_DIRECT, ODONTIT, OTRO | Cobertura mercado MX. Si OTRO, campo libre `brandCustomName: String?` |
 | 1.12 | **Densidad ósea: Lekholm-Zarb 1985 (D1-D4)**, NO mezclar con clasificación Misch | Estándar global |
@@ -442,7 +442,9 @@ model Implant {
 
 ### 4.6 Migración SQL adicional
 
-Constraints CHECK para rangos de torque/ISQ/diámetro/longitud, integridad de remoción (status REMOVED requiere `removedAt` + `removalReason ≥20 chars`), trigger `protect_implant_traceability` que valida flag de sesión `app.implant_mutation_justified` antes de permitir UPDATE en campos COFEPRIS, trigger `block_implant_delete` que bloquea DELETE a nivel DB, índice `idx_implant_brand_lot` para queries de recall, RLS policies multi-tenant en los 9 modelos MVP.
+Constraints CHECK para rangos de torque/ISQ/diámetro/longitud, integridad de remoción (status REMOVED requiere `removedAt` + `removalReason ≥20 chars`), trigger `block_implant_delete` que bloquea DELETE a nivel DB (sigue activo — no requiere SET LOCAL para funcionar), índice `idx_implant_brand_lot` para queries de recall, RLS policies multi-tenant en los 9 modelos MVP.
+
+> **Nota histórica:** la migración `20260504200000_implants_module` también incluía el trigger `protect_implant_traceability` que validaba el flag de sesión `app.implant_mutation_justified` antes de permitir UPDATE en `brand`/`lotNumber`/`placedAt`. Ese trigger fue **eliminado** en la migración follow-up `20260504210000_drop_implant_traceability_trigger` porque Supabase pooler (pgbouncer transaction mode) no respeta `SET LOCAL`. La defensa COFEPRIS queda en aplicación — ver §10.2.
 
 ---
 
@@ -456,7 +458,7 @@ Las 16 actions están listadas en el SPEC original con su propósito:
 
 ### Críticas con detalle
 
-`updateImplantTraceability` activa `SET LOCAL app.implant_mutation_justified = 'true'` en la transacción antes del UPDATE, valida justificación ≥20 chars, registra audit log con acción `COFEPRIS_TRACEABILITY_UPDATE` incluyendo before/after/justificación.
+`updateImplantTraceability` valida justificación ≥20 chars vía zod (`updateImplantTraceabilitySchema.safeParse`), ejecuta el UPDATE directo, y registra audit log con acción `COFEPRIS_TRACEABILITY_UPDATE` + `meta.cofeprisTraceability=true` incluyendo before/after/justification/doctorId/timestamp. NOTA: la versión inicial activaba `SET LOCAL app.implant_mutation_justified='true'` para un trigger SQL gemelo, pero el trigger fue eliminado tras descubrir que el pooler de Supabase ignora SET LOCAL — ver migración `20260504210000_drop_implant_traceability_trigger`.
 
 `removeImplant` cambia `currentStatus → REMOVED` con `removalReason ≥20 chars` y `removedAt`, NUNCA usa `prisma.delete()`. Audit log con acción `REMOVE`.
 
@@ -670,7 +672,7 @@ Al guardar: crea `ImplantSecondStageSurgery`, status → `UNCOVERED`, encola Wha
 
 Doctor descubre lote incorrecto. Click "Modificar trazabilidad" → `BrandUpdateJustificationModal`: selecciona campo `lotNumber`, valor actual mostrado, nuevo valor, justificación ≥20 chars con contador.
 
-Confirma → `updateImplantTraceability`: activa `SET LOCAL app.implant_mutation_justified = 'true'`, hace UPDATE, registra `AuditLog` con acción `COFEPRIS_TRACEABILITY_UPDATE`, before/after, justificación, doctor + cédula + timestamp.
+Confirma → `updateImplantTraceability`: valida justificación ≥20 vía zod, hace UPDATE, registra `AuditLog` con acción `COFEPRIS_TRACEABILITY_UPDATE`, `meta.cofeprisTraceability=true`, before/after, justificación, doctor + cédula + timestamp.
 
 Toast: "Modificación registrada en audit log COFEPRIS".
 
@@ -828,7 +830,13 @@ Los implantes son dispositivos clase III. Trazabilidad por lote es legalmente ex
 
   Respaldada por índice `idx_implant_brand_lot`.
 
-- **Inmutabilidad**: campos `brand`, `lotNumber`, `placedAt` requieren para modificación: justificación ≥20 chars, flag de sesión `app.implant_mutation_justified = 'true'`, trigger SQL valida flag, audit log con `COFEPRIS_TRACEABILITY_UPDATE`.
+- **Inmutabilidad**: campos `brand`, `lotNumber`, `placedAt` requieren para modificación pasar por la server action `updateImplantTraceability`. La defensa queda en **2 capas**:
+  1. **Validación zod** (`updateImplantTraceabilitySchema`): exige `justification.length >= 20`. Cualquier llamada vía la app que no cumpla, falla antes de tocar la DB.
+  2. **Audit log con `meta.cofeprisTraceability=true`**: cada modificación queda en `audit_logs.changes._meta` con before/after/justification/doctorId/timestamp. Query SQL para defensa legal: `SELECT * FROM "audit_logs" WHERE entity_type='implant' AND changes->'_meta'->>'cofeprisTraceability'='true'`.
+
+  > **Trigger SQL eliminado.** La versión inicial incluía el trigger `protect_implant_traceability` que validaba `current_setting('app.implant_mutation_justified', true)`. Validación contra Supabase pooler (4 may 2026): pgbouncer en transaction mode resetea la sesión entre `SET LOCAL` y `UPDATE`, rompiendo tanto la defensa como la action genuina. Trigger eliminado vía migración `20260504210000_drop_implant_traceability_trigger`. La defensa queda en aplicación — suficiente porque ningún cliente tiene acceso SQL directo a producción, solo super-admins con MFA (cuyas sesiones también quedan en audit log de Supabase).
+
+  El trigger gemelo `block_implant_delete` **se mantiene activo** porque no depende de `SET LOCAL`: bloquea incondicionalmente cualquier DELETE sobre `implants`.
 
 - **DELETE prohibido a nivel DB**: trigger `block_implant_delete`. "Remover" = `currentStatus = REMOVED` con `removalReason ≥20 chars`.
 

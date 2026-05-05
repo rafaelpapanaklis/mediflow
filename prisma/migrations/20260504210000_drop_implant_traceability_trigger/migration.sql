@@ -1,0 +1,45 @@
+-- ═══════════════════════════════════════════════════════════════════
+-- Implants — DROP del trigger protect_implant_traceability
+--
+-- CONTEXTO
+-- El trigger `protect_implant_traceability` se diseñó como defensa en
+-- profundidad contra UPDATE manual sobre brand / lotNumber / placedAt
+-- (campos COFEPRIS clase III inmutables). Validaba que la sesión
+-- tuviera activo el flag `app.implant_mutation_justified = 'true'`,
+-- que la server action `updateImplantTraceability` activaba con
+-- SET LOCAL antes del UPDATE.
+--
+-- VALIDACIÓN — 4 may 2026
+-- Se validó manualmente contra el pooler de Supabase (pgbouncer en
+-- transaction mode). Resultado:
+--   1. UPDATE directo SIN flag → PASÓ sin error. El trigger no se
+--      activa porque pgbouncer no respeta SET LOCAL en transaction
+--      mode (escenario documentado en pgbouncer issues, no es bug
+--      ni edge case).
+--   2. La acción `updateImplantTraceability` rompía con el trigger
+--      activo en producción — el SET LOCAL se ejecutaba pero
+--      pgbouncer reseteaba la sesión antes del UPDATE.
+--
+-- DECISIÓN
+-- Se elimina el trigger. La validación COFEPRIS queda en 2 capas:
+--   1. Server action updateImplantTraceability:
+--      - zod exige justification.length >= 20 chars
+--      - `safeParse` rechaza cualquier llamada antes de tocar la DB
+--   2. Audit log con meta.cofeprisTraceability=true:
+--      - Cada modificación queda en `audit_logs.changes._meta`
+--      - Query SQL para defensa legal:
+--          SELECT * FROM "audit_logs"
+--          WHERE entity_type='implant'
+--            AND changes->'_meta'->>'cofeprisTraceability'='true';
+--
+-- Esta defensa es suficiente porque ningún cliente tiene acceso SQL
+-- directo a producción — solo super-admins con MFA (los cuales también
+-- quedan registrados en audit log de Supabase).
+--
+-- El trigger gemelo `block_implant_delete` SE MANTIENE — DELETE sí se
+-- bloquea correctamente a nivel DB porque no requiere SET LOCAL para
+-- funcionar (es BEFORE DELETE incondicional).
+-- ═══════════════════════════════════════════════════════════════════
+
+DROP TRIGGER IF EXISTS protect_implant_traceability_trg ON "implants";
+DROP FUNCTION IF EXISTS protect_implant_traceability();

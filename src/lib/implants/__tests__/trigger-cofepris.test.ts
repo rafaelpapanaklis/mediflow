@@ -1,30 +1,29 @@
-// Implants — test E2E del trigger COFEPRIS protect_implant_traceability.
+// Implants — test E2E "trigger eliminado — fallback a server action".
 // Spec §1.9, §10.2.
+//
+// HISTORIA: este archivo originalmente validaba el trigger SQL
+// `protect_implant_traceability`. La validación contra el pooler
+// real de Supabase (4 may 2026 — ver
+// docs/marketplace/research/implantologia/TRIGGER_COFEPRIS_VALIDATION.md)
+// determinó que pgbouncer en transaction mode no respeta SET LOCAL, por
+// lo que el trigger se eliminó vía migración
+// `20260504210000_drop_implant_traceability_trigger`.
+//
+// Lo que este test valida ahora:
+//   1. UPDATE en lotNumber SIN flag → PASA (trigger eliminado, ningún
+//      bypass legítimo necesita el flag — la defensa quedó en la
+//      server action). La protección legal real es zod en
+//      updateImplantTraceability — ver
+//      `updateImplantTraceability.test.ts`.
+//   2. UPDATE en otros campos sin flag → pasa (esperado).
+//   3. DELETE → FALLA (trigger gemelo `block_implant_delete` se mantiene
+//      activo — no requiere SET LOCAL).
+//
+// Sin DATABASE_URL los casos se marcan it.skip para no romper CI.
 //
 // Run:
 //   DATABASE_URL=postgres://... DIRECT_URL=postgres://... \
 //     npx tsx --test src/lib/implants/__tests__/trigger-cofepris.test.ts
-//
-// El test requiere conexión real a Postgres con la migración
-// 20260504200000_implants_module aplicada. Si DATABASE_URL no está
-// definido, los casos se marcan como `it.skip` para no romper CI
-// cuando se corren los tests unitarios sin credenciales.
-//
-// Validaciones:
-//  1. UPDATE en brand/lotNumber/placedAt SIN flag de sesión → debe
-//     fallar con la excepción del trigger.
-//  2. UPDATE en mismos campos CON flag activo en la transacción →
-//     debe pasar.
-//  3. UPDATE en otros campos (notes) sin flag → debe pasar (el
-//     trigger solo protege los 3 campos COFEPRIS).
-//  4. DELETE → debe fallar con excepción del trigger
-//     block_implant_delete.
-//
-// PRECAUCIÓN: si el pooler de Supabase ignora SET LOCAL, el caso 2
-// fallará. La acción correctiva está documentada en la migración
-// SQL §5: ejecutar `DROP TRIGGER IF EXISTS
-// protect_implant_traceability_trg ON "implants";` y dejar la
-// validación en server action (justification ≥20 + audit log).
 
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
@@ -37,7 +36,7 @@ const TEST_LOT_NEW = "TRIGGER-TEST-B";
 
 const skipIfNoDb = HAS_DB ? it : it.skip;
 
-describe("trigger COFEPRIS — protect_implant_traceability", () => {
+describe("trigger eliminado — fallback a server action", () => {
   let prisma: PrismaClient;
   let testImplantId: string;
   let cleanup: (() => Promise<void>) | null = null;
@@ -46,8 +45,6 @@ describe("trigger COFEPRIS — protect_implant_traceability", () => {
     if (!HAS_DB) return;
     prisma = new PrismaClient();
 
-    // Buscamos una clínica + paciente + doctor reales para crear un
-    // implante de prueba (Prisma valida FKs).
     const clinic = await prisma.clinic.findFirst({
       where: {
         category: "DENTAL",
@@ -91,23 +88,16 @@ describe("trigger COFEPRIS — protect_implant_traceability", () => {
       },
     });
     cleanup = async () => {
-      // Borrar via SQL crudo + bypass del trigger usando flag de
-      // sesión para volver el lote al original primero — el test
-      // de DELETE bloqueado debe fallar (no nos deja borrar).
-      // En lugar de delete, marcamos como REMOVED con motivo válido.
-      await prisma.$transaction(async (tx) => {
-        await tx.$executeRawUnsafe(
-          `SET LOCAL app.implant_mutation_justified = 'true'`,
-        );
-        await tx.implant.update({
-          where: { id: testImplantId },
-          data: {
-            lotNumber: TEST_LOT_ORIGINAL,
-            currentStatus: "REMOVED",
-            removedAt: new Date(),
-            removalReason: "fixture cleanup — test trigger COFEPRIS finalizado",
-          },
-        });
+      // Cleanup vía UPDATE a status REMOVED (DELETE está bloqueado
+      // por el trigger gemelo block_implant_delete).
+      await prisma.implant.update({
+        where: { id: testImplantId },
+        data: {
+          lotNumber: TEST_LOT_ORIGINAL,
+          currentStatus: "REMOVED",
+          removedAt: new Date(),
+          removalReason: "fixture cleanup — test trigger COFEPRIS finalizado",
+        },
       });
     };
   });
@@ -117,31 +107,14 @@ describe("trigger COFEPRIS — protect_implant_traceability", () => {
     if (prisma) await prisma.$disconnect();
   });
 
-  skipIfNoDb("UPDATE de lotNumber SIN flag → falla", async () => {
-    await assert.rejects(
-      async () => {
-        await prisma.implant.update({
-          where: { id: testImplantId },
-          data: { lotNumber: TEST_LOT_NEW },
-        });
-      },
-      (err: Error) => {
-        const msg = err.message.toLowerCase();
-        // El trigger arroja "COFEPRIS: brand/lotNumber/placedAt son inmutables..."
-        return msg.includes("cofepris") || msg.includes("inmutable") || msg.includes("insufficient_privilege");
-      },
-    );
-  });
-
-  skipIfNoDb("UPDATE de lotNumber CON flag de sesión → pasa", async () => {
-    await prisma.$transaction(async (tx) => {
-      await tx.$executeRawUnsafe(
-        `SET LOCAL app.implant_mutation_justified = 'true'`,
-      );
-      await tx.implant.update({
-        where: { id: testImplantId },
-        data: { lotNumber: TEST_LOT_NEW },
-      });
+  skipIfNoDb("UPDATE de lotNumber SIN flag → PASA (trigger eliminado)", async () => {
+    // Antes había un trigger que requería SET LOCAL. Ya no existe —
+    // cualquier UPDATE pasa a nivel DB. La protección real está en
+    // la server action updateImplantTraceability (zod ≥20 chars +
+    // audit log con cofeprisTraceability:true).
+    await prisma.implant.update({
+      where: { id: testImplantId },
+      data: { lotNumber: TEST_LOT_NEW },
     });
     const after = await prisma.implant.findUnique({
       where: { id: testImplantId },
@@ -150,7 +123,7 @@ describe("trigger COFEPRIS — protect_implant_traceability", () => {
     assert.equal(after?.lotNumber, TEST_LOT_NEW);
   });
 
-  skipIfNoDb("UPDATE de notes sin flag → pasa (no es campo COFEPRIS)", async () => {
+  skipIfNoDb("UPDATE de notes sin flag → pasa (campo no-COFEPRIS)", async () => {
     const newNote = `noted at ${new Date().toISOString()}`;
     await prisma.implant.update({
       where: { id: testImplantId },
@@ -163,7 +136,7 @@ describe("trigger COFEPRIS — protect_implant_traceability", () => {
     assert.equal(after?.notes, newNote);
   });
 
-  skipIfNoDb("DELETE → falla por trigger block_implant_delete", async () => {
+  skipIfNoDb("DELETE → falla por trigger block_implant_delete (sigue activo)", async () => {
     await assert.rejects(
       async () => {
         await prisma.implant.delete({ where: { id: testImplantId } });

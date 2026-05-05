@@ -125,4 +125,4 @@ de prueba que usaste, y cierra el issue. El test E2E se queda en
 
 | Fecha | Operador | Resultado | Notas |
 |-------|----------|-----------|-------|
-|       |          |           |       |
+| 2026-05-04 | Rafael | Trigger ELIMINADO. SET LOCAL no persiste con Supabase pooler. | UPDATE directo `UPDATE implants SET "lotNumber"='HACK_TEST' WHERE id=...` pasó sin error en SQL Editor — el trigger no se activó. Ejecutado manualmente: `DROP TRIGGER IF EXISTS protect_implant_traceability_trg ON implants; DROP FUNCTION IF EXISTS protect_implant_traceability();`. Migración follow-up `20260504210000_drop_implant_traceability_trigger` agregada al repo para mantener prod y código en sync. Defensa COFEPRIS queda en server action (zod ≥20 chars + audit log con cofeprisTraceability:true). El trigger `block_implant_delete` se mantiene activo. |
