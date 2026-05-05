@@ -31,7 +31,8 @@ Runbook consolidado para lanzar **Endodoncia + Periodoncia + Ortodoncia + Implan
 | `DAILY_API_KEY` | dashboard.daily.co | Para teleconsulta |
 
 ### Backup obligatorio
-- [ ] Snapshot de Supabase Postgres (Settings → Database → Backups → Create Backup). Espera ✅ "Completed" antes de continuar.
+- [ ] **Plan Pro/Team de Supabase**: Snapshot de Postgres (Settings → Database → Backups → Create Backup). Espera ✅ "Completed" antes de continuar.
+- [ ] **Plan Free de Supabase** (sin backups automáticos): corre `scripts/pre-go-live-backup.sql` en el SQL Editor. Crea un schema `backup_pre_godo_20260505` con copia de todas las tablas de `public` (~107). Verifica al final que `status = 'OK'` en todas las filas del Results panel — si hay `MISMATCH`, NO continuar. Tiempo: 30s–5min según volumen. Costo: ~ el doble del espacio actual mientras dure el backup (borrar tras 30 días).
 - [ ] Tag git de la versión actual de producción: `git tag pre-dental-go-live-$(date +%Y%m%d)` y push.
 - [ ] Captura del estado actual del marketplace (lista de módulos activos por clínica) — sólo lectura SQL:
   ```sql
@@ -513,8 +514,14 @@ git push --tags
 # Si falla: ya existe el tag. Cambia el sufijo (-am, -pm, -v2).
 
 # ─── Backup snapshot ──────────────────────────────────────────────────
-# Supabase Dashboard → Database → Backups → "Create Backup"
+# Plan Pro/Team: Supabase Dashboard → Database → Backups → "Create Backup".
 # Espera ✅ "Completed". Si falla: contactar soporte Supabase, NO continuar.
+#
+# Plan Free (sin backups nativos): copia el contenido de
+# scripts/pre-go-live-backup.sql al SQL Editor y ejecútalo. Verifica
+# que el Results panel muestre 'OK' en TODAS las filas (no MISMATCH).
+# Si alguna fila marca MISMATCH, abre nuevo issue y NO continuar.
+cat scripts/pre-go-live-backup.sql   # → pegar al SQL Editor
 
 # ─── Migraciones (Supabase SQL Editor — copia el contenido de cada .sql) ──
 cat prisma/migrations/20260430160000_pediatrics_module/migration.sql       # Si tabla pediatric_records no existe
