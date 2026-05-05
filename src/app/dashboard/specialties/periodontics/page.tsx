@@ -9,13 +9,10 @@ import { prisma } from "@/lib/prisma";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { PERIODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import {
-  PerioPatientList,
-  type PerioPatientRow,
-} from "@/components/specialties/periodontics/PerioPatientList";
-import {
-  OverdueMaintenanceWidget,
-  type OverdueMaintenanceRow,
-} from "@/components/specialties/periodontics/OverdueMaintenanceWidget";
+  PeriodonticsIndexClient,
+} from "@/components/specialties/periodontics/PeriodonticsIndexClient";
+import type { PerioPatientRow } from "@/components/specialties/periodontics/PerioPatientList";
+import type { OverdueMaintenanceRow } from "@/components/specialties/periodontics/OverdueMaintenanceWidget";
 
 export default async function PeriodonticsIndexPage() {
   const user = await getCurrentUser();
@@ -119,33 +116,5 @@ export default async function PeriodonticsIndexPage() {
     })
     .sort((a, b) => b.daysOverdue - a.daysOverdue);
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: 16 }}>
-      <header>
-        <h1
-          style={{
-            fontSize: 22,
-            fontWeight: 700,
-            color: "var(--text-1)",
-            margin: 0,
-          }}
-        >
-          Periodoncia
-        </h1>
-        <p
-          style={{
-            fontSize: 12,
-            color: "var(--text-3)",
-            marginTop: 4,
-          }}
-        >
-          Pacientes con expediente periodontal · clasificación 2017 AAP/EFP · riesgo Berna.
-        </p>
-      </header>
-
-      <OverdueMaintenanceWidget rows={overdue} />
-
-      <PerioPatientList patients={rows} />
-    </div>
-  );
+  return <PeriodonticsIndexClient patients={rows} overdue={overdue} />;
 }

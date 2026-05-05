@@ -2,6 +2,7 @@
 // Periodontics — lista de pacientes con sondaje reciente. SPEC §6.
 
 import Link from "next/link";
+import { Plus } from "lucide-react";
 
 export interface PerioPatientRow {
   id: string;
@@ -12,21 +13,52 @@ export interface PerioPatientRow {
   bopPct?: number | null;
 }
 
-export function PerioPatientList(props: { patients: PerioPatientRow[] }) {
+export function PerioPatientList(props: {
+  patients: PerioPatientRow[];
+  onStartPerio?: () => void;
+}) {
   if (props.patients.length === 0) {
     return (
       <div
         style={{
-          padding: 24,
+          padding: 32,
           textAlign: "center",
           color: "var(--text-3)",
           background: "var(--bg-elev)",
           border: "1px dashed var(--border)",
           borderRadius: 8,
           fontSize: 13,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 14,
         }}
       >
-        Aún no hay pacientes con sondaje periodontal. Crea uno desde el expediente del paciente.
+        <p style={{ margin: 0, color: "var(--text-2)", maxWidth: 460 }}>
+          Aún no hay pacientes con sondaje periodontal. Inicia el primero seleccionando un
+          paciente existente o creando uno nuevo.
+        </p>
+        {props.onStartPerio ? (
+          <button
+            type="button"
+            onClick={props.onStartPerio}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "10px 18px",
+              borderRadius: 6,
+              border: "1px solid var(--brand, #6366f1)",
+              background: "var(--brand, #6366f1)",
+              color: "white",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            <Plus size={14} aria-hidden /> Iniciar primer sondaje
+          </button>
+        ) : null}
       </div>
     );
   }
