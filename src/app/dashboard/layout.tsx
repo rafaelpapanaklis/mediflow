@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { getCurrentUser, getUserClinics } from "@/lib/auth";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
+import { TrialBanner } from "@/components/dashboard/trial-banner";
 import { GlobalAnnouncementBanner } from "@/components/dashboard/global-announcement-banner";
 import { ActiveConsultProvider } from "@/components/dashboard/active-consult-provider";
 import { NewAppointmentProvider } from "@/components/dashboard/new-appointment/new-appointment-provider";
@@ -11,6 +12,7 @@ import { NewPatientProvider } from "@/components/dashboard/new-patient/new-patie
 import { PatientContextBar } from "@/components/dashboard/patient-context-bar";
 import { ExpiredPlanModal } from "@/components/dashboard/expired-plan-modal";
 import { prisma } from "@/lib/prisma";
+import { hasAnyActiveSpecialtyModule } from "@/lib/marketplace/access-control";
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "paid"]);
 
@@ -42,6 +44,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const isExpired = trialExpired && !subscriptionActive;
   const isInTrial = !!trialEndsAt && trialEndsAt > now && !subscriptionActive;
   const allClinics = await getUserClinics();
+
+  // Marketplace specialties — gate del grupo "Especialidades" del sidebar.
+  // True si la clínica tiene al menos un módulo de especialidad activo
+  // (status='active' + currentPeriodEnd > NOW) o está en trial vigente.
+  const hasSpecialtyAccess = await hasAnyActiveSpecialtyModule(clinic.id);
 
   const counts = await prisma.$queryRaw<[{ doctors: bigint; patients: bigint; appts: bigint; records: bigint; invoices: bigint; schedules: bigint }]>`
     SELECT
@@ -99,6 +106,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
         clinicCategory={(clinic as any).category ?? "OTHER"}
         allClinics={allClinics}
         onboardingCompleted={onboardingCompleted}
+        trialEndsAt={trialEndsAt}
+        isInTrial={isInTrial}
+        hasSpecialtyAccess={hasSpecialtyAccess}
       />
       <div className="flex min-h-screen flex-1 flex-col lg:max-h-screen lg:overflow-y-auto">
         <GlobalAnnouncementBanner />
@@ -108,6 +118,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           plan={clinic.plan as any}
           userRole={user.role}
         />
+        <TrialBanner trialEndsAt={trialEndsAt} isInTrial={isInTrial} />
         <PatientContextBar />
         <main
           id="main-content"

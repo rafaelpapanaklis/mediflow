@@ -26,10 +26,13 @@ interface SeedModule {
   priceMxnMonthly: number;
 }
 
-// Lista canónica de los 12 módulos iniciales (BRIEF.md sección 5).
-// MediFlow soporta múltiples tipos de clínica — los módulos no-dentales
-// (cardiología, pediatría, ginecología, etc.) son features válidos del
-// producto, no fuera de scope.
+// Catálogo activo del marketplace. Decisión de Rafael (2026-04-30): por
+// ahora solo se exponen los 6 módulos dentales en producción. Los 6
+// no-dentales viven en `FUTURE_MODULES` abajo y se reactivan cuando se
+// lance la expansión multi-tipo de clínica.
+//
+// Para ocultar/mostrar manualmente sin re-seedear, usa el campo `is_active`
+// en la tabla `modules` directo (ver sql/marketplace-only-dental.sql).
 const SEED_MODULES: SeedModule[] = [
   {
     key: "general-dentistry",
@@ -50,14 +53,15 @@ const SEED_MODULES: SeedModule[] = [
     key: "orthodontics",
     name: "Ortodoncia",
     category: "Dental",
-    description: "Suite para ortodoncistas: brackets, autoligado y alineadores.",
-    iconKey: "Activity",
+    description:
+      "Kanban operativo del consultorio + plan de pagos integrado al progreso clínico.",
+    iconKey: "Smile",
     iconBg: "bg-cyan-50",
     iconColor: "text-cyan-600",
     features: [
-      "Fases de tratamiento",
-      "Tracking de alineadores",
-      "Recordatorios automáticos por WhatsApp",
+      "Kanban por fase (alineación → retención)",
+      "Plan de pagos con seguimiento de mensualidades",
+      "Comparativo visual T0/T1/T2 + import de cefalometrías y STL",
     ],
     priceMxnMonthly: 329,
   },
@@ -92,7 +96,9 @@ const SEED_MODULES: SeedModule[] = [
     priceMxnMonthly: 279,
   },
   {
-    key: "implantology",
+    // Coincide con IMPLANTS_MODULE_KEY ("implants") en
+    // src/lib/implants/permissions.ts. Si cambia uno, cambia el otro.
+    key: "implants",
     name: "Implantología",
     category: "Dental",
     description: "Registro por implante con timeline de osteointegración.",
@@ -121,6 +127,17 @@ const SEED_MODULES: SeedModule[] = [
     ],
     priceMxnMonthly: 249,
   },
+];
+
+// Catálogo "guardado para después". NO se itera en el seed — solo vive
+// como referencia para cuando MediFlow lance las especialidades médicas y
+// estéticas. Para activarlos en su momento:
+//   1. Mueve las entradas relevantes de FUTURE_MODULES a SEED_MODULES.
+//   2. Corre `npx tsx prisma/seed.ts`.
+//   3. (Opcional) Si ya estaban en BD con is_active=false, aplica
+//      sql/marketplace-only-dental.sql con la query inversa comentada al
+//      final del archivo.
+const FUTURE_MODULES: SeedModule[] = [
   {
     key: "pediatrics",
     name: "Pediatría",
@@ -214,7 +231,10 @@ const SEED_MODULES: SeedModule[] = [
 ];
 
 async function main() {
-  console.log(`Seed marketplace: upsert de ${SEED_MODULES.length} módulos…`);
+  console.log(
+    `Seed marketplace: upsert de ${SEED_MODULES.length} módulos activos ` +
+    `(${FUTURE_MODULES.length} reservados en FUTURE_MODULES, no se siembran)…`,
+  );
 
   for (let index = 0; index < SEED_MODULES.length; index++) {
     const mod = SEED_MODULES[index];

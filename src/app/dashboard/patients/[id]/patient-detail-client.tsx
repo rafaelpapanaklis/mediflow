@@ -30,6 +30,33 @@ import { Label } from "@/components/ui/label";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
+import dynamicImport from "next/dynamic";
+import type { PediatricsTabData } from "@/components/patient-detail/pediatrics/PediatricsTab";
+import { buildPediatricSoapPrefill } from "@/lib/pediatrics/soap-prefill";
+import type { PerioTabData } from "@/lib/periodontics/load-data";
+import type { SoapPrefill } from "@/lib/types/endodontics";
+
+// Pediatrics — lazy load del módulo. Solo carga el bundle cuando el doctor
+// abre la pestaña, evitando inflar el bundle del paciente cuando no aplica.
+const PediatricsTab = dynamicImport(
+  () => import("@/components/patient-detail/pediatrics/PediatricsTab").then((m) => ({ default: m.PediatricsTab })),
+  { ssr: false, loading: () => <div className="text-xs text-muted-foreground p-4">Cargando módulo de pediatría…</div> },
+);
+
+// Periodontics — lazy load del módulo. El bundle del periodontograma 6×32
+// solo carga cuando el doctor abre la pestaña.
+const PeriodonticsPatientTab = dynamicImport(
+  () =>
+    import("@/components/specialties/periodontics/PeriodonticsPatientTab").then((m) => ({
+      default: m.PeriodonticsPatientTab,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="text-xs text-muted-foreground p-4">Cargando módulo de periodoncia…</div>
+    ),
+  },
+);
 
 // MediFlow es DENTAL — el form de "Nueva consulta" siempre usa DentalForm.
 // El parámetro `specialty` viene del Clinic.specialty (legacy) y se ignora.
@@ -54,7 +81,7 @@ const INV_STATUS: Record<string, { label: string; cls: string }> = {
   OVERDUE: { label: "Vencido",   cls: "bg-rose-50 text-rose-700 border border-rose-200"   },
 };
 
-const TABS = [
+const TABS_BASE = [
   { id: "resumen",       label: "Resumen"             },
   { id: "historia",      label: "Historia clínica"     },
   { id: "odontograma",   label: "Odontograma"          },
@@ -66,6 +93,20 @@ const TABS = [
   { id: "agenda",        label: "Citas"                },
   { id: "facturacion",   label: "Facturación"          },
 ];
+
+function buildTabs(showPediatrics: boolean, showPeriodontics: boolean) {
+  const out = [...TABS_BASE];
+  // Insertar "Pediatría" entre "Historia clínica" y "Odontograma" según spec §1.2.
+  if (showPediatrics) out.splice(2, 0, { id: "pediatria", label: "Pediatría" });
+  // Insertar "Periodoncia" justo antes de "Odontograma" — entre Historia
+  // clínica/Pediatría y Odontograma. Si Pediatría está, queda en posición
+  // 3; si no, queda en posición 2.
+  if (showPeriodontics) {
+    const odontoIdx = out.findIndex((t) => t.id === "odontograma");
+    out.splice(odontoIdx >= 0 ? odontoIdx : 2, 0, { id: "periodoncia", label: "Periodoncia" });
+  }
+  return out;
+}
 
 const SEV_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   alta:        { bg: "bg-rose-50 border-rose-200",    text: "text-rose-700",    label: "Prioridad alta"  },
@@ -93,15 +134,34 @@ interface Props {
   totalPlan:    number;
   treatments:   any[];
   portalUrl?:   string | null;
+  pediatricsData?: PediatricsTabData | null;
+  perioData?: PerioTabData | null;
+  endoSoapPrefill?: SoapPrefill | null;
 }
 
 export function PatientDetailClient({
   patient, records: initialRecords, appointments, invoices,
   doctors, currentUser, specialty, totalPaid, totalBalance, totalPlan, treatments, portalUrl,
+  pediatricsData,
+  perioData,
+  endoSoapPrefill,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [tab, setTab]         = useState("resumen");
+  const showPediatrics = Boolean(pediatricsData);
+  const showPeriodontics = Boolean(perioData);
+  const tabs = useMemo(
+    () => buildTabs(showPediatrics, showPeriodontics),
+    [showPediatrics, showPeriodontics],
+  );
+  const tabFromUrl = searchParams.get("tab");
+  const initialTab =
+    tabFromUrl === "pediatria" && showPediatrics
+      ? "pediatria"
+      : tabFromUrl === "periodoncia" && showPeriodontics
+        ? "periodoncia"
+        : "resumen";
+  const [tab, setTab]         = useState(initialTab);
   const [consultPaused, setConsultPaused] = useState(false);
   const [consultClosed, setConsultClosed] = useState(false);
   const [noteDetailOpen, setNoteDetailOpen] = useState<ClinicalNote | null>(null);
@@ -386,6 +446,45 @@ export function PatientDetailClient({
             plan: note.plan ?? d.plan,
             attachments: note.specialtyData?.attachments ?? d.attachments,
           }));
+        } else if (pediatricsData) {
+          // Pre-fill pediátrico cuando es la primera vez que se abre la nota
+          // y aplica el módulo Pediatría (spec §4.B.9). Solo se inserta si
+          // el subjective está vacío para no pisar contenido del doctor.
+          const latestFrankl = pediatricsData.behaviorHistory.find(
+            (b) => b.scale === "frankl" && !b.deletedAt,
+          );
+          const activeHabits = pediatricsData.oralHabits
+            .filter((h) => !h.deletedAt && !h.endedAt)
+            .map((h) => h.habitType.replace(/_/g, " "));
+          const prefill = buildPediatricSoapPrefill({
+            ageFormatted: pediatricsData.ageFormatted,
+            latestFranklValue: latestFrankl?.value ?? null,
+            activeHabits,
+            cambraCategory: (pediatricsData.latestCambra?.category as any) ?? null,
+            cambraRecallMonths: pediatricsData.latestCambra?.recommendedRecallMonths ?? null,
+          });
+          if (prefill) {
+            setSoapDraft((d) => d.subjective.trim().length === 0 ? { ...d, subjective: prefill } : d);
+          }
+        } else if (endoSoapPrefill) {
+          // Pre-fill endodóntico cuando hay tratamiento activo o diagnóstico
+          // AAE registrado para el paciente. Spec Endo §10.2. Solo aplica si
+          // los 4 campos están vacíos para no pisar contenido del doctor.
+          setSoapDraft((d) => {
+            const allEmpty =
+              !d.subjective.trim() &&
+              !d.objective.trim() &&
+              !d.assessment.trim() &&
+              !d.plan.trim();
+            if (!allEmpty) return d;
+            return {
+              ...d,
+              subjective: endoSoapPrefill.subjective,
+              objective: endoSoapPrefill.objective,
+              assessment: endoSoapPrefill.assessment,
+              plan: endoSoapPrefill.plan,
+            };
+          });
         }
       } catch (err) {
         toast.error(
@@ -581,6 +680,31 @@ export function PatientDetailClient({
         onCharge={() => setTab("facturacion")}
       />
 
+      {/* Pediatrics — chips informativos cuando aplica el módulo (spec §1.3) */}
+      {pediatricsData && (
+        <div className="flex flex-wrap items-center gap-2 px-1 -mt-2 mb-2">
+          <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700 dark:border-violet-700 dark:bg-violet-950 dark:text-violet-200">
+            <span className="font-mono">{pediatricsData.ageFormatted}</span>
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold capitalize">
+            Dentición {pediatricsData.dentition}
+          </span>
+          {pediatricsData.latestCambra ? (
+            <span className={`cambra-chip cambra-chip--${pediatricsData.latestCambra.category}`}>
+              <span className="cambra-chip__dot" aria-hidden />
+              CAMBRA {pediatricsData.latestCambra.category}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setTab("pediatria")}
+            className="ml-auto text-xs font-semibold text-violet-700 hover:underline dark:text-violet-200"
+          >
+            Ir a Pediatría →
+          </button>
+        </div>
+      )}
+
       {/* Layout 3 columnas — audit Opción C ajuste 3 */}
       <div
         className={`${patientDetailStyles.layout} ${
@@ -597,8 +721,12 @@ export function PatientDetailClient({
             tratamiento: treatments.length,
             agenda: appointments.length,
             facturacion: invoices.length,
+            pediatria: pediatricsData?.pendingConsents.length ?? 0,
+            periodoncia: perioData?.recordsCount ?? 0,
           }}
           hasBalance={totalBalance > 0}
+          showPediatrics={showPediatrics}
+          showPeriodontics={showPeriodontics}
         />
 
         <div className={patientDetailStyles.mainColumn}>
@@ -641,7 +769,7 @@ export function PatientDetailClient({
             role="tablist"
             aria-label="Secciones del paciente"
           >
-            {TABS.map((t) => {
+            {tabs.map((t) => {
               const isActive = tab === t.id;
               const count = tabCounts[t.id];
               return (
@@ -790,6 +918,16 @@ export function PatientDetailClient({
                 onOpenReferral={() => setTab("referencias")}
               />
             </div>
+          )}
+
+          {/* ===== TAB: PEDIATRÍA ===== */}
+          {tab === "pediatria" && pediatricsData && (
+            <PediatricsTab data={pediatricsData} />
+          )}
+
+          {/* ===== TAB: PERIODONCIA ===== */}
+          {tab === "periodoncia" && perioData && (
+            <PeriodonticsPatientTab data={perioData} />
           )}
 
           {/* ===== TAB: ODONTOGRAMA ===== */}

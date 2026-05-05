@@ -131,6 +131,18 @@ export const ALL_PERMISSIONS = {
   "procedures.edit":      "Editar procedimientos",
   "clinicLayout.view":    "Ver Mi Clínica Visual",
   "clinicLayout.edit":    "Editar Mi Clínica Visual",
+  // Marketplace — todos los roles ven por default (es el catálogo de módulos
+  // de la clínica). Comprar es admin-only y se valida en server actions.
+  "marketplace.view":     "Ver marketplace de módulos",
+  // Especialidades — gating de páginas dedicadas de los módulos del
+  // marketplace. La visibilidad real ADEMÁS exige el módulo activo en
+  // ClinicModule (canAccessModule). Estas keys solo cubren la dimensión
+  // de "tiene permiso UI"; el módulo se valida server-side.
+  "specialties.pediatrics":   "Ver Odontopediatría",
+  "specialties.endodontics":  "Ver Endodoncia",
+  "specialties.periodontics": "Ver Periodoncia",
+  "specialties.orthodontics": "Ver Ortodoncia",
+  "specialties.implants":     "Ver Implantología",
 } as const;
 
 export type PermissionKey = keyof typeof ALL_PERMISSIONS;
@@ -155,6 +167,8 @@ export const PERMISSION_GROUPS: { title: string; keys: PermissionKey[] }[] = [
   { title: "Reportes y TV",  keys: ["analytics.view", "reports.view", "tvModes.view", "tvModes.edit"] },
   { title: "Equipo",         keys: ["team.view", "team.edit"] },
   { title: "Configuración",  keys: ["settings.view", "settings.edit", "landing.view", "landing.edit", "procedures.view", "procedures.edit", "clinicLayout.view", "clinicLayout.edit"] },
+  { title: "Marketplace",    keys: ["marketplace.view"] },
+  { title: "Especialidades", keys: ["specialties.pediatrics", "specialties.endodontics", "specialties.periodontics", "specialties.orthodontics", "specialties.implants"] },
 ];
 
 /**
@@ -173,6 +187,12 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     "xrays.view", "xrays.upload", "xrays.analyze",
     "treatments.view",
     "inbox.view", "inbox.send",
+    "marketplace.view",
+    "specialties.pediatrics",
+    "specialties.endodontics",
+    "specialties.periodontics",
+    "specialties.orthodontics",
+    "specialties.implants",
   ],
   RECEPTIONIST: [
     "today.view",
@@ -182,6 +202,12 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     "inbox.view", "inbox.send",
     "whatsapp.view", "whatsapp.send",
     "treatments.view", "resources.view", "inventory.view",
+    "marketplace.view",
+    "specialties.pediatrics",
+    "specialties.endodontics",
+    "specialties.periodontics",
+    "specialties.orthodontics",
+    "specialties.implants",
   ],
   // READONLY: solo *.view excepto medical/prescription/xrays
   READONLY: ALL_PERMISSION_KEYS.filter((k) =>
@@ -234,3 +260,19 @@ export function sanitizePermissionKeys(input: unknown): PermissionKey[] {
   }
   return Array.from(seen);
 }
+
+// ════════════════════════════════════════════════════════════════════
+// Marketplace modules — extensión pediatría (spec §4.B.4)
+//
+// Los módulos del marketplace viven en DB (tabla modules + clinic_modules).
+// Aquí re-exportamos las helpers puras del módulo pediátrico para que el
+// resto del producto pueda gating-ear sin tocar `lib/pediatrics/*`.
+// ════════════════════════════════════════════════════════════════════
+
+export {
+  canSeePediatrics,
+  hasPediatricsModule,
+  PEDIATRICS_MODULE_KEY,
+  DEFAULT_PEDIATRICS_CUTOFF_YEARS,
+  type PediatricsContext,
+} from "@/lib/pediatrics/permissions";

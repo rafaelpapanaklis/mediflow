@@ -1,12 +1,18 @@
 import { prisma } from "@/lib/prisma";
 import type { NextRequest } from "next/server";
+import type { PediatricAuditAction } from "@/lib/pediatrics/audit";
 
 export type AuditAction =
   | "create" | "update" | "delete" | "view"
   | "XRAY_NOTES_UPDATED" | "FILE_NOTES_UPDATED"
   // Reset de contraseña por SUPER_ADMIN. NO incluye el password (ni hash)
   // en el log — solo la acción y el target.
-  | "password_reset";
+  | "password_reset"
+  // Acciones pediátricas (spec §4.B.5). El union se extiende vía
+  // PediatricAuditAction para que TypeScript valide los strings al pasarlos
+  // a logAudit/logMutation.
+  | PediatricAuditAction;
+
 export type AuditEntityType =
   | "patient"
   | "appointment"
@@ -20,7 +26,21 @@ export type AuditEntityType =
   | "prescription"
   | "user"
   | "clinic"
-  | "subscription";
+  | "subscription"
+  // Pediatrics module entity types (spec §4.B.5)
+  | "pediatric-record"
+  | "ped-guardian"
+  | "ped-behavior"
+  | "ped-cambra"
+  | "ped-habit"
+  | "ped-eruption"
+  | "ped-sealant"
+  | "ped-fluoride"
+  | "ped-maintainer"
+  | "ped-endodontic"
+  | "ped-consent";
+
+export { PEDIATRIC_AUDIT_ACTIONS, type PediatricAuditAction } from "@/lib/pediatrics/audit";
 
 interface AuditOptions {
   clinicId:   string;

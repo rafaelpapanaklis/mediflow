@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
-import { X, Loader2, Video, Footprints, MessageCircle } from "lucide-react";
+import { X, Loader2, Video, Footprints, MessageCircle, AlertTriangle, Baby } from "lucide-react";
 import toast from "react-hot-toast";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { PatientCombobox } from "./patient-combobox";
@@ -55,6 +55,18 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
   const [isWalkIn, setIsWalkIn] = useState(false);
   const [notifyPatient, setNotifyPatient] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // Pediatrics — context derivado del paciente seleccionado. Se hidrata
+  // tras seleccionar paciente vía /api/pediatrics/context. Cuando no
+  // aplica el módulo (gating), el endpoint devuelve { pediatric: false }
+  // y este state queda en null sin afectar el flujo normal.
+  const [pediatricContext, setPediatricContext] = useState<{
+    ageFormatted: string | null;
+    suggestedDurationMin: number;
+    suggestedDurationMaxMin: number;
+    recentFranklLow: boolean;
+    longerBlockSuggestion: { minMin: number; maxMin: number } | null;
+    primaryGuardianName: string | null;
+  } | null>(null);
 
   useEffect(() => {
     if (!isOpen || boot) return;
@@ -102,6 +114,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
     setIsTeleconsult(false);
     setIsWalkIn(false);
     setSubmitting(false);
+    setPediatricContext(null);
 
     const initialSlot = params?.initialSlot;
     if (initialSlot?.startsAt) {
@@ -131,6 +144,45 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
 
     setResourceId(initialSlot?.resourceId ?? "");
   }, [isOpen, boot, params]);
+
+  // Pediatrics — al cambiar paciente, consulta el endpoint para saber si
+  // aplica el módulo. Si aplica, baja la duración a 30 min y pre-llena
+  // notas con el tutor (spec §4.B.8).
+  useEffect(() => {
+    if (!patient) {
+      setPediatricContext(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/pediatrics/context?patientId=${encodeURIComponent(patient.id)}`, {
+      credentials: "include",
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (cancelled || !body || !body.pediatric) {
+          setPediatricContext(null);
+          return;
+        }
+        setPediatricContext({
+          ageFormatted: body.ageFormatted,
+          suggestedDurationMin: body.suggestedDurationMin,
+          suggestedDurationMaxMin: body.suggestedDurationMaxMin,
+          recentFranklLow: Boolean(body.recentFranklLow),
+          longerBlockSuggestion: body.longerBlockSuggestion ?? null,
+          primaryGuardianName: body.primaryGuardianName ?? null,
+        });
+        setDuration(body.recentFranklLow ? 60 : body.suggestedDurationMin);
+        if (body.primaryGuardianName) {
+          setReason((current) =>
+            current.trim().length === 0 ? `Tutor: ${body.primaryGuardianName}` : current,
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPediatricContext(null);
+      });
+    return () => { cancelled = true; };
+  }, [patient]);
 
   const submit = async () => {
     if (!patient) return toast.error("Selecciona un paciente");
@@ -265,6 +317,25 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                     </Field>
                   )}
                 </div>
+
+                {pediatricContext ? (
+                  <div style={pediatricBannerStyle} role="note" aria-label="Información pediátrica">
+                    <span style={pediatricChipStyle}>
+                      <Baby size={12} aria-hidden /> Paciente pediátrico
+                      {pediatricContext.ageFormatted ? ` · ${pediatricContext.ageFormatted}` : ""}
+                    </span>
+                    <span style={pediatricHintStyle}>
+                      Duración sugerida: {pediatricContext.suggestedDurationMin}–
+                      {pediatricContext.suggestedDurationMaxMin} min
+                    </span>
+                    {pediatricContext.recentFranklLow && pediatricContext.longerBlockSuggestion ? (
+                      <span style={pediatricWarningStyle}>
+                        <AlertTriangle size={12} aria-hidden /> Frankl ≤2 reciente — considera bloque más largo
+                        ({pediatricContext.longerBlockSuggestion.minMin}–{pediatricContext.longerBlockSuggestion.maxMin} min)
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <Field label="Motivo">
                   <input
@@ -524,4 +595,42 @@ const footerStyle: React.CSSProperties = {
   gap: 8,
   padding: "14px 20px",
   borderTop: "1px solid var(--border-soft)",
+};
+
+const pediatricBannerStyle: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 8,
+  alignItems: "center",
+  padding: "10px 12px",
+  background: "var(--brand-soft)",
+  border: "1px solid var(--border-soft)",
+  borderRadius: 10,
+  marginTop: 4,
+};
+
+const pediatricChipStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
+  fontSize: 11,
+  fontWeight: 600,
+  color: "var(--brand)",
+  background: "var(--bg-elev)",
+  padding: "4px 8px",
+  borderRadius: 999,
+};
+
+const pediatricHintStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: "var(--text-2)",
+};
+
+const pediatricWarningStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
+  fontSize: 11,
+  fontWeight: 500,
+  color: "var(--warning)",
 };

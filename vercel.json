@@ -15,6 +15,14 @@
     {
       "path": "/api/cron/db-export",
       "schedule": "0 10 * * 0"
+    },
+    {
+      "path": "/api/cron/orthodontics/recalculate-payment-status",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/whatsapp-queue",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

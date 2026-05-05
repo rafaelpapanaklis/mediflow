@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 400" data-archetype="canine">
+  <defs>
+    <linearGradient id="enamel-c" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F4F4F5"/>
+      <stop offset="1" stop-color="#D4D4D8"/>
+    </linearGradient>
+    <linearGradient id="dentin-c" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FDE68A"/>
+      <stop offset="1" stop-color="#F59E0B"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Esmalte (corona puntiaguda) -->
+  <path id="enamel-shape"
+        d="M 100 22 L 75 50 Q 72 90 75 120 L 125 120 Q 128 90 125 50 Z"
+        fill="url(#enamel-c)" stroke="#E5E7EB" stroke-width="1"/>
+
+  <!-- Dentina: raíz larga -->
+  <path id="dentin-shape"
+        d="M 80 50 Q 76 90 78 125 L 70 230 Q 65 330 82 380 Q 100 392 118 380 Q 135 330 130 230 L 122 125 Q 124 90 120 50 Z"
+        fill="url(#dentin-c)" stroke="#D97706" stroke-width="0.5" opacity="0.85"/>
+
+  <!-- Cámara pulpar -->
+  <path id="pulp-chamber"
+        d="M 90 80 Q 88 110 92 140 L 108 140 Q 112 110 110 80 Z"
+        fill="#7F1D1D" opacity="0.65"/>
+
+  <!-- Conducto único largo -->
+  <g id="canal-unico" data-canal-name="Conducto único">
+    <path d="M 100 140 Q 99 260 100 378"
+          fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="100" cy="380" r="2.5" fill="currentColor"/>
+  </g>
+
+  <g id="labels" font-family="ui-sans-serif, system-ui" font-size="10" fill="#71717A">
+    <text x="142" y="50">Corona</text>
+    <text x="142" y="220">Raíz</text>
+    <text x="142" y="380">Ápice</text>
+  </g>
+</svg>

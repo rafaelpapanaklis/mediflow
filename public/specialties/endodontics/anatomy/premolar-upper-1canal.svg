@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 400" data-archetype="premolar-upper-1canal">
+  <defs>
+    <linearGradient id="enamel-pu1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F4F4F5"/>
+      <stop offset="1" stop-color="#D4D4D8"/>
+    </linearGradient>
+    <linearGradient id="dentin-pu1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FDE68A"/>
+      <stop offset="1" stop-color="#F59E0B"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Corona con dos cúspides (V y P) -->
+  <path id="enamel-shape"
+        d="M 70 35 Q 80 25 90 30 L 100 50 L 110 30 Q 120 25 130 35 Q 132 75 130 110 L 70 110 Q 68 75 70 35 Z"
+        fill="url(#enamel-pu1)" stroke="#E5E7EB" stroke-width="1"/>
+
+  <!-- Dentina con raíz cónica -->
+  <path id="dentin-shape"
+        d="M 78 40 Q 76 80 76 115 L 72 220 Q 70 320 88 365 Q 100 375 112 365 Q 130 320 128 220 L 124 115 Q 124 80 122 40 Z"
+        fill="url(#dentin-pu1)" stroke="#D97706" stroke-width="0.5" opacity="0.85"/>
+
+  <!-- Cámara pulpar amplia -->
+  <path id="pulp-chamber"
+        d="M 82 75 Q 80 105 86 135 L 114 135 Q 120 105 118 75 Z"
+        fill="#7F1D1D" opacity="0.65"/>
+
+  <!-- Conducto único central -->
+  <g id="canal-unico" data-canal-name="Conducto único">
+    <path d="M 100 135 Q 99 250 100 365"
+          fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="100" cy="367" r="2.5" fill="currentColor"/>
+  </g>
+
+  <g id="labels" font-family="ui-sans-serif, system-ui" font-size="10" fill="#71717A">
+    <text x="55" y="22">V</text>
+    <text x="135" y="22">P</text>
+    <text x="142" y="220">Raíz</text>
+    <text x="142" y="367">Ápice</text>
+  </g>
+</svg>

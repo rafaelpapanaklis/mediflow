@@ -9,33 +9,33 @@ datasource db {
 }
 
 model Clinic {
-  id          String    @id @default(cuid())
-  name        String
-  slug        String    @unique
-  specialty   String // @deprecated — usar category en su lugar
-  category    ClinicCategory @default(OTHER)
-  country     String    @default("MX")
-  state       String?   // MX state (e.g., "Ciudad de México", "Jalisco")
-  city        String?
-  address     String?
-  phone       String?
-  clinicSize  String?   // "1" | "2-5" | "6-15" | "16+" — captured at signup
-  email       String?
-  logoUrl     String?
-  taxId       String?
-  isPublic    Boolean   @default(false)
-  description String?
-  plan        Plan      @default(PRO)
+  id              String         @id @default(cuid())
+  name            String
+  slug            String         @unique
+  specialty       String // @deprecated — usar category en su lugar
+  category        ClinicCategory @default(OTHER)
+  country         String         @default("MX")
+  state           String? // MX state (e.g., "Ciudad de México", "Jalisco")
+  city            String?
+  address         String?
+  phone           String?
+  clinicSize      String? // "1" | "2-5" | "6-15" | "16+" — captured at signup
+  email           String?
+  logoUrl         String?
+  taxId           String?
+  isPublic        Boolean        @default(false)
+  description     String?
+  plan            Plan           @default(PRO)
   // Trial — 14 días desde creación. trialStartedAt agregado en Sprint 1
   // marketplace; antes derivábamos de createdAt. trialEndsAt pasa a NOT NULL
   // tras backfill de la migración marketplace_foundation.
-  trialStartedAt   DateTime @default(now()) @map("trial_started_at")
-  trialEndsAt      DateTime
-  trialNotified7d  Boolean  @default(false) @map("trial_notified_7d")
-  trialNotified3d  Boolean  @default(false) @map("trial_notified_3d")
-  trialNotified1d  Boolean  @default(false) @map("trial_notified_1d")
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  trialStartedAt  DateTime       @default(now()) @map("trial_started_at")
+  trialEndsAt     DateTime
+  trialNotified7d Boolean        @default(false) @map("trial_notified_7d")
+  trialNotified3d Boolean        @default(false) @map("trial_notified_3d")
+  trialNotified1d Boolean        @default(false) @map("trial_notified_1d")
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   // WhatsApp (legacy Meta Cloud API)
   waPhoneNumberId  String?
@@ -47,52 +47,52 @@ model Clinic {
   waReminderMsg    String?
 
   // Inbox unificado — Twilio Conversations + Postmark Inbound
-  twilioAccountSid     String?  // SID de la cuenta Twilio (admin la conecta en /settings/integrations)
-  twilioAuthToken      String?  // token (encrypted-at-rest en producción)
-  twilioWhatsappNumber String?  // E.164: "+5215512345678"
-  postmarkInboundEmail String?  // ej: clinica-abc@inbox.mediflow.app — único por clínica
+  twilioAccountSid     String? // SID de la cuenta Twilio (admin la conecta en /settings/integrations)
+  twilioAuthToken      String? // token (encrypted-at-rest en producción)
+  twilioWhatsappNumber String? // E.164: "+5215512345678"
+  postmarkInboundEmail String? // ej: clinica-abc@inbox.mediflow.app — único por clínica
 
   // Google Calendar — clinic-level shared calendar
-  googleCalendarToken     String?   // access token of the admin who connected
-  googleRefreshToken      String?   // refresh token
-  googleCalendarEmail     String?   // google account email
-  googleCalendarEnabled   Boolean   @default(false)
-  googleClinicCalendarId  String?   // ID of the "clinic" calendar in Google
+  googleCalendarToken    String? // access token of the admin who connected
+  googleRefreshToken     String? // refresh token
+  googleCalendarEmail    String? // google account email
+  googleCalendarEnabled  Boolean @default(false)
+  googleClinicCalendarId String? // ID of the "clinic" calendar in Google
 
   // CFDI / Facturación SAT
-  facturApiOrgId    String?
-  rfcEmisor         String?
-  regimenFiscal     String?
-  cpEmisor          String?
-  facturApiEnabled  Boolean @default(false)
+  facturApiOrgId   String?
+  rfcEmisor        String?
+  regimenFiscal    String?
+  cpEmisor         String?
+  facturApiEnabled Boolean @default(false)
 
   // Identificación NOM-024 — CLUES Sector Salud (Compliance Fase A)
-  clues             String?  @db.VarChar(11)
+  clues String? @db.VarChar(11)
 
   // Subscription / Billing
-  subscriptionStatus   String?   // active, trialing, past_due, cancelled
-  subscriptionId       String?   // legacy — Stripe/MP subscription ID
-  nextBillingDate      DateTime?
-  monthlyPrice         Float?    @default(0)
+  subscriptionStatus     String? // active, trialing, past_due, cancelled
+  subscriptionId         String? // legacy — Stripe/MP subscription ID
+  nextBillingDate        DateTime?
+  monthlyPrice           Float?    @default(0)
   // Stripe subscription billing
-  stripeCustomerId       String?   // Stripe Customer ID for the clinic owner
-  stripeSubscriptionId   String?   // Stripe Subscription ID (recurring)
-  stripePaymentMethodId  String?   // default payment method
+  stripeCustomerId       String? // Stripe Customer ID for the clinic owner
+  stripeSubscriptionId   String? // Stripe Subscription ID (recurring)
+  stripePaymentMethodId  String? // default payment method
   // PayPal
-  paypalSubscriptionId   String?   // PayPal subscription ID (recurring)
-  paypalEmail            String?   // PayPal email for manual payments
+  paypalSubscriptionId   String? // PayPal subscription ID (recurring)
+  paypalEmail            String? // PayPal email for manual payments
   // Payment preferences
-  preferredPaymentMethod String?   // stripe, paypal, transfer, oxxo
+  preferredPaymentMethod String? // stripe, paypal, transfer, oxxo
   // Signup payment method capture (UI-only until Stripe wired)
-  paymentMethodCollected Boolean  @default(false)
-  paymentMethodType      String?  // "card" | "paypal" | "transfer"
-  paymentMethodLast4     String?  // last 4 digits (card only, for display)
+  paymentMethodCollected Boolean   @default(false)
+  paymentMethodType      String? // "card" | "paypal" | "transfer"
+  paymentMethodLast4     String? // last 4 digits (card only, for display)
   // Cancellation request (user-initiated from settings)
-  cancelRequested        Boolean  @default(false)
+  cancelRequested        Boolean   @default(false)
   cancelRequestedAt      DateTime?
-  recallMonths         Int       @default(6)  // months before annual reminder
-  recallActive         Boolean   @default(false)
-  googlePlaceId        String?   // Google Maps Place ID for fetching reviews
+  recallMonths           Int       @default(6) // months before annual reminder
+  recallActive           Boolean   @default(false)
+  googlePlaceId          String? // Google Maps Place ID for fetching reviews
 
   // Landing page
   landingActive       Boolean  @default(false)
@@ -116,37 +116,37 @@ model Clinic {
   aiLastResetAt DateTime @default(now())
 
   // Telemedicine
-  teleEnabled         Boolean  @default(false)
-  teleCommissionPct   Float    @default(15)
-  dailyApiKey         String?
+  teleEnabled       Boolean @default(false)
+  teleCommissionPct Float   @default(15)
+  dailyApiKey       String?
 
   // Agenda config (Fase 4)
-  defaultSlotMinutes  Int             @default(15)
-  agendaDayStart      Int             @default(8)
-  agendaDayEnd        Int             @default(20)
-  timezone            String          @default("America/Mexico_City")
+  defaultSlotMinutes Int    @default(15)
+  agendaDayStart     Int    @default(8)
+  agendaDayEnd       Int    @default(20)
+  timezone           String @default("America/Mexico_City")
 
   // ── Mi Clínica Visual — vista pública en vivo ──
   // Cada clínica puede compartir su modo "En Vivo" para mostrar en TV de
   // sala de espera. URL pública: /live/<liveModeSlug>. Si liveModePassword
   // está set, los visitantes deben ingresar el password una vez (cookie
   // unlock 12h). showPatientNames=false → solo iniciales en halos (HIPAA).
-  liveModeSlug             String?  @unique
-  liveModePassword         String?  // bcrypt hash; null = sin protección
-  liveModeEnabled          Boolean  @default(false)
-  liveModeShowPatientNames Boolean  @default(false)
+  liveModeSlug             String? @unique
+  liveModePassword         String? // bcrypt hash; null = sin protección
+  liveModeEnabled          Boolean @default(false)
+  liveModeShowPatientNames Boolean @default(false)
 
-  users        User[]
-  patients     Patient[]
-  appointments Appointment[]
-  records      MedicalRecord[]
-  invoices     Invoice[]
-  schedules    ClinicSchedule[]
-  inventory    InventoryItem[]
-  reminders    WhatsAppReminder[]
-  cfdis        CfdiRecord[]
-  treatments    TreatmentPlan[]
-  paymentPlans  PaymentPlan[]
+  users                User[]
+  patients             Patient[]
+  appointments         Appointment[]
+  records              MedicalRecord[]
+  invoices             Invoice[]
+  schedules            ClinicSchedule[]
+  inventory            InventoryItem[]
+  reminders            WhatsAppReminder[]
+  cfdis                CfdiRecord[]
+  treatments           TreatmentPlan[]
+  paymentPlans         PaymentPlan[]
   consentForms         ConsentForm[]
   periodontalRecords   PeriodontalRecord[]
   subscriptionInvoices SubscriptionInvoice[]
@@ -179,6 +179,35 @@ model Clinic {
   orders               Order[]
   cart                 Cart?
 
+  // Endodontics module — see docs/marketplace/research/endodoncia/SPEC.md §4
+  endodonticDiagnoses  EndodonticDiagnosis[]
+  vitalityTests        VitalityTest[]
+  endodonticTreatments EndodonticTreatment[]
+
+  // Periodontics module — see docs/marketplace/research/periodoncia/SPEC.md §4
+  periodontalClassifications PeriodontalClassification[]
+  gingivalRecessions         GingivalRecession[]
+  periodontalPlans           PeriodontalTreatmentPlan[]
+  srpSessions                SRPSession[]
+  periodontalReevaluations   PeriodontalReevaluation[]
+  periodontalRiskAssessments PeriodontalRiskAssessment[]
+  periodontalSurgeries       PeriodontalSurgery[]
+  periImplantAssessments     PeriImplantAssessment[]
+
+  // Orthodontics module — see docs/marketplace/research/ortodoncia/SPEC.md §4
+  orthodonticDiagnoses      OrthodonticDiagnosis[]
+  orthodonticTreatmentPlans OrthodonticTreatmentPlan[]
+  orthodonticPhases         OrthodonticPhase[]
+  orthoPaymentPlans         OrthoPaymentPlan[]
+  orthoInstallments         OrthoInstallment[]
+  orthoPhotoSets            OrthoPhotoSet[]
+  orthodonticControls       OrthodonticControlAppointment[]
+  orthodonticDigitalRecords OrthodonticDigitalRecord[]
+  orthodonticConsents       OrthodonticConsent[]
+
+  // Implants module — see docs/marketplace/research/implantologia/SPEC.md §4
+  implants Implant[]
+
   @@map("clinics")
 }
 
@@ -210,43 +239,43 @@ enum Plan {
 }
 
 model User {
-  id         String   @id @default(cuid())
+  id         String  @id @default(cuid())
   supabaseId String
   clinicId   String
   email      String
   firstName  String
   lastName   String
-  role       Role     @default(DOCTOR)
+  role       Role    @default(DOCTOR)
   specialty  String?
   avatarUrl  String?
   phone      String?
-  isActive   Boolean  @default(true)
+  isActive   Boolean @default(true)
 
   // Identificación NOM-024 (Compliance Fase A) — médicos
-  cedulaProfesional   String?  @db.VarChar(15)
-  especialidad        String?  @db.VarChar(100)
-  cedulaEspecialidad  String?  @db.VarChar(15)
+  cedulaProfesional  String? @db.VarChar(15)
+  especialidad       String? @db.VarChar(100)
+  cedulaEspecialidad String? @db.VarChar(15)
 
   // Firma electrónica avanzada FIEL/SAT (Compliance Fase C)
-  signatureCert       DoctorSignatureCert?
-  referralsAuthored   Referral[]
-  color      String   @default("#3b82f6")
-  agendaActive Boolean @default(true)
-  lastLogin  DateTime?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  signatureCert     DoctorSignatureCert?
+  referralsAuthored Referral[]
+  color             String               @default("#3b82f6")
+  agendaActive      Boolean              @default(true)
+  lastLogin         DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
 
   // Google Calendar
   googleCalendarToken   String?
   googleRefreshToken    String?
   googleCalendarEmail   String?
-  googleCalendarEnabled Boolean @default(false)
+  googleCalendarEnabled Boolean  @default(false)
   services              String[] @default([])
 
   // Stripe Connect (telemedicine payments)
-  stripeAccountId     String?
-  stripeOnboarded     Boolean  @default(false)
-  teleconsultPrice    Float?
+  stripeAccountId  String?
+  stripeOnboarded  Boolean @default(false)
+  teleconsultPrice Float?
 
   // Override granular del set default del role. Array de keys de permiso
   // ("agenda.view", "patients.edit", ...). Si está vacío se aplica el
@@ -254,22 +283,48 @@ model User {
   // por SUPER_ADMIN desde /dashboard/team. Ver src/lib/auth/permissions.ts.
   permissionsOverride String[] @default([])
 
-  clinic          Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  appointments    Appointment[]
-  records         MedicalRecord[]
-  primaryPatients Patient[]       @relation("PrimaryDoctor")
-  treatments          TreatmentPlan[]
-  periodontalRecords  PeriodontalRecord[]
-  auditLogs           AuditLog[]
-  adminNotesAuthored  AdminClinicNote[]
-  prescriptions       Prescription[]
-  apptsOverriddenBy   Appointment[]   @relation("ApptOverriddenBy")
-  waitlistCreated     WaitlistEntry[] @relation("WaitlistCreatedBy")
-  waitlistPreferred   WaitlistEntry[] @relation("WaitlistPreferredDoctor")
-  inboxAssigned       InboxThread[]   @relation("InboxAssignee")
-  inboxSent           InboxMessage[]
-  remindersCreated    Reminder[]      @relation("ReminderCreator")
-  remindersAssigned   Reminder[]      @relation("ReminderAssignee")
+  clinic             Clinic              @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  appointments       Appointment[]
+  records            MedicalRecord[]
+  primaryPatients    Patient[]           @relation("PrimaryDoctor")
+  treatments         TreatmentPlan[]
+  periodontalRecords PeriodontalRecord[]
+  auditLogs          AuditLog[]
+  adminNotesAuthored AdminClinicNote[]
+  prescriptions      Prescription[]
+  apptsOverriddenBy  Appointment[]       @relation("ApptOverriddenBy")
+  waitlistCreated    WaitlistEntry[]     @relation("WaitlistCreatedBy")
+  waitlistPreferred  WaitlistEntry[]     @relation("WaitlistPreferredDoctor")
+  inboxAssigned      InboxThread[]       @relation("InboxAssignee")
+  inboxSent          InboxMessage[]
+  remindersCreated   Reminder[]          @relation("ReminderCreator")
+  remindersAssigned  Reminder[]          @relation("ReminderAssignee")
+
+  // Endodontics module — see docs/marketplace/research/endodoncia/SPEC.md §4
+  endoDiagnosisDoctor EndodonticDiagnosis[] @relation("EndoDiagnosisDoctor")
+  vitalityDoctor      VitalityTest[]        @relation("VitalityDoctor")
+  endoTreatmentDoctor EndodonticTreatment[] @relation("EndoTreatmentDoctor")
+
+  // Periodontics module — see docs/marketplace/research/periodoncia/SPEC.md §4
+  periodontalClassifications        PeriodontalClassification[]
+  recordedRecessions                GingivalRecession[]
+  srpSessionsAsDoctor               SRPSession[]                @relation("SrpDoctor")
+  reevaluationsAsEvaluator          PeriodontalReevaluation[]
+  riskAssessmentsAsEvaluator        PeriodontalRiskAssessment[]
+  surgeriesAsDoctor                 PeriodontalSurgery[]        @relation("PerioSurgeryDoctor")
+  periImplantAssessmentsAsEvaluator PeriImplantAssessment[]
+
+  // Orthodontics module — see docs/marketplace/research/ortodoncia/SPEC.md §4
+  orthodonticDiagnosesAsDoctor OrthodonticDiagnosis[]          @relation("OrthoDiagnosedBy")
+  orthodonticControlsAttended  OrthodonticControlAppointment[] @relation("OrthoControlAttendedBy")
+  orthoPhotoSetsCaptured       OrthoPhotoSet[]                 @relation("OrthoPhotoSetCapturedBy")
+  orthoInstallmentsRecorded    OrthoInstallment[]              @relation("OrthoInstallmentRecordedBy")
+  orthoInstallmentsWaived      OrthoInstallment[]              @relation("OrthoInstallmentWaivedBy")
+  orthoDigitalRecordsUploaded  OrthodonticDigitalRecord[]      @relation("OrthoDigitalUploadedBy")
+
+  // Implants module — see docs/marketplace/research/implantologia/SPEC.md §4
+  implantsPlaced          Implant[]        @relation("ImplantPlacedBy")
+  implantConsentsAsDoctor ImplantConsent[] @relation("ImplantConsentDoctor")
 
   @@unique([supabaseId, clinicId])
   @@index([supabaseId])
@@ -304,7 +359,7 @@ model Patient {
   tags               String[]      @default([])
   notes              String?
   status             PatientStatus @default(ACTIVE)
-  isChild            Boolean   @default(false)  // true = dentición temporal
+  isChild            Boolean       @default(false) // true = dentición temporal
   primaryDoctorId    String?
 
   // Portal del paciente
@@ -312,13 +367,13 @@ model Patient {
   portalTokenExpiry DateTime?
 
   // Identificación NOM-024 (Compliance Fase A)
-  curp        String?     @db.VarChar(18)
-  curpStatus  CurpStatus  @default(PENDING)
-  passportNo  String?     @db.VarChar(20)
+  curp       String?    @db.VarChar(18)
+  curpStatus CurpStatus @default(PENDING)
+  passportNo String?    @db.VarChar(20)
 
   // NOM-004 antecedentes (Compliance Fase A)
-  familyHistory                   String?  @db.Text
-  personalNonPathologicalHistory  String?  @db.Text
+  familyHistory                  String? @db.Text
+  personalNonPathologicalHistory String? @db.Text
 
   // Datos fiscales para CFDI
   rfcPaciente      String?
@@ -346,14 +401,14 @@ model Patient {
   deletedAt    DateTime?
   anonymizedAt DateTime?
 
-  clinic        Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  primaryDoctor User?           @relation("PrimaryDoctor", fields: [primaryDoctorId], references: [id])
-  appointments  Appointment[]
-  records       MedicalRecord[]
-  invoices      Invoice[]
-  files         PatientFile[]
-  treatments    TreatmentPlan[]
-  paymentPlans  PaymentPlan[]
+  clinic              Clinic               @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  primaryDoctor       User?                @relation("PrimaryDoctor", fields: [primaryDoctorId], references: [id])
+  appointments        Appointment[]
+  records             MedicalRecord[]
+  invoices            Invoice[]
+  files               PatientFile[]
+  treatments          TreatmentPlan[]
+  paymentPlans        PaymentPlan[]
   consentForms        ConsentForm[]
   periodontalRecords  PeriodontalRecord[]
   beforeAfterPhotos   BeforeAfterPhoto[]
@@ -369,6 +424,47 @@ model Patient {
   patientReminders    Reminder[]
   referrals           Referral[]
 
+  // Pediatrics module — see docs/marketplace/research/odontopediatria/SPEC.md §5
+  pediatricRecord      PediatricRecord?
+  guardians            Guardian[]
+  behaviorAssessments  BehaviorAssessment[]
+  cariesAssessments    CariesRiskAssessment[]
+  oralHabits           OralHabit[]
+  eruptionRecords      EruptionRecord[]
+  spaceMaintainers     SpaceMaintainer[]
+  sealants             Sealant[]
+  fluorideApplications FluorideApplication[]
+  endoTreatments       PediatricEndodonticTreatment[]
+  pediatricConsents    PediatricConsent[]
+
+  // Endodontics module — see docs/marketplace/research/endodoncia/SPEC.md §4
+  endodonticDiagnoses  EndodonticDiagnosis[]
+  vitalityTests        VitalityTest[]
+  endodonticTreatments EndodonticTreatment[]
+
+  // Periodontics module — see docs/marketplace/research/periodoncia/SPEC.md §4
+  periodontalClassifications PeriodontalClassification[]
+  gingivalRecessions         GingivalRecession[]
+  periodontalPlans           PeriodontalTreatmentPlan[]
+  srpSessions                SRPSession[]
+  periodontalReevaluations   PeriodontalReevaluation[]
+  periodontalRiskAssessments PeriodontalRiskAssessment[]
+  periodontalSurgeries       PeriodontalSurgery[]
+  periImplantAssessments     PeriImplantAssessment[]
+
+  // Orthodontics module — see docs/marketplace/research/ortodoncia/SPEC.md §4
+  orthodonticDiagnoses      OrthodonticDiagnosis[]
+  orthodonticTreatmentPlans OrthodonticTreatmentPlan[]
+  orthoPaymentPlans         OrthoPaymentPlan[]
+  orthoPhotoSets            OrthoPhotoSet[]
+  orthodonticControls       OrthodonticControlAppointment[]
+  orthodonticConsents       OrthodonticConsent[]
+  orthodonticDigitalRecords OrthodonticDigitalRecord[]
+
+  // Implants module — see docs/marketplace/research/implantologia/SPEC.md §4
+  implants        Implant[]
+  implantConsents ImplantConsent[]
+
   @@unique([clinicId, patientNumber])
   @@index([clinicId, status])
   @@index([clinicId, createdAt(sort: Desc)])
@@ -381,14 +477,14 @@ model Patient {
 model OdontogramEntry {
   id          String   @id @default(cuid())
   patientId   String
-  toothNumber Int       // FDI numbering (11-18, 21-28, 31-38, 41-48, etc.)
-  surface     String?   // M | D | V | L | O | null (full tooth)
-  state       String    // SANO | CARIES | RESINA | CORONA | ENDODONCIA | IMPLANTE | AUSENTE | EXTRACCION
+  toothNumber Int // FDI numbering (11-18, 21-28, 31-38, 41-48, etc.)
+  surface     String? // M | D | V | L | O | null (full tooth)
+  state       String // SANO | CARIES | RESINA | CORONA | ENDODONCIA | IMPLANTE | AUSENTE | EXTRACCION
   notes       String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  patient     Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
   @@unique([patientId, toothNumber, surface])
   @@index([patientId])
@@ -400,14 +496,14 @@ model OdontogramEntry {
 /// contra el snapshot anterior para detectar tratamientos hechos.
 /// `entries` es JSON: [{ toothNumber, surface, state, notes }, ...].
 model OdontogramSnapshot {
-  id            String      @id @default(cuid())
+  id            String   @id @default(cuid())
   patientId     String
-  appointmentId String      @unique
-  snapshotAt    DateTime    @default(now())
+  appointmentId String   @unique
+  snapshotAt    DateTime @default(now())
   entries       Json
 
-  patient       Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patient     Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
 
   @@index([patientId])
   @@index([patientId, snapshotAt])
@@ -429,19 +525,19 @@ enum CurpStatus {
 /// Certificado FIEL/e.firma del SAT del médico — para firma electrónica
 /// avanzada de recetas/notas. Multi-tenant via User.clinicId.
 model DoctorSignatureCert {
-  id             String    @id @default(cuid())
-  userId         String    @unique
-  cerFileUrl     String    @db.Text
-  keyFileUrl     String    @db.Text
-  keyEncIv       String    @db.VarChar(48)
-  keyEncAuthTag  String    @db.VarChar(48)
-  cerSerial      String    @db.VarChar(60)
-  cerIssuer      String    @db.VarChar(200)
-  validFrom      DateTime  @db.Timestamptz(6)
-  validUntil     DateTime  @db.Timestamptz(6)
-  rfc            String    @db.VarChar(13)
-  isActive       Boolean   @default(true)
-  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  cerFileUrl    String   @db.Text
+  keyFileUrl    String   @db.Text
+  keyEncIv      String   @db.VarChar(48)
+  keyEncAuthTag String   @db.VarChar(48)
+  cerSerial     String   @db.VarChar(60)
+  cerIssuer     String   @db.VarChar(200)
+  validFrom     DateTime @db.Timestamptz(6)
+  validUntil    DateTime @db.Timestamptz(6)
+  rfc           String   @db.VarChar(13)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -453,15 +549,15 @@ model DoctorSignatureCert {
 /// docId es FK polimórfica (no enforced) al documento original.
 /// clinicId siempre presente para scope multi-tenant.
 model SignedDocument {
-  id           String         @id @default(cuid())
+  id           String        @id @default(cuid())
   clinicId     String
   docType      SignedDocType
   docId        String
   signerUserId String
-  sha256       String         @db.VarChar(64)
-  signature    String         @db.Text
-  tsaTimestamp String?        @db.Text
-  signedAt     DateTime       @default(now()) @db.Timestamptz(6)
+  sha256       String        @db.VarChar(64)
+  signature    String        @db.Text
+  tsaTimestamp String?       @db.Text
+  signedAt     DateTime      @default(now()) @db.Timestamptz(6)
 
   @@index([clinicId, docType])
   @@index([docId])
@@ -483,26 +579,26 @@ enum SignedDocType {
 /// Multi-tenant: clinicId es la clínica que crea/posee el registro
 /// (origen para OUTGOING, receptor para INCOMING).
 model Referral {
-  id                  String          @id @default(cuid())
-  clinicId            String
-  patientId           String
-  fromDoctorId        String
-  toClinicName        String          @db.VarChar(200)
-  toClinicClues       String?         @db.VarChar(11)
-  toDoctorName        String?         @db.VarChar(200)
-  toSpecialty         String?         @db.VarChar(100)
-  reason              String          @db.Text
-  clinicalSummary     String          @db.Text
-  relevantDiagnoses   Json?
-  type                ReferralType
-  status              ReferralStatus  @default(SENT)
-  sentAt              DateTime        @default(now()) @db.Timestamptz(6)
-  respondedAt         DateTime?       @db.Timestamptz(6)
-  response            String?         @db.Text
+  id                String         @id @default(cuid())
+  clinicId          String
+  patientId         String
+  fromDoctorId      String
+  toClinicName      String         @db.VarChar(200)
+  toClinicClues     String?        @db.VarChar(11)
+  toDoctorName      String?        @db.VarChar(200)
+  toSpecialty       String?        @db.VarChar(100)
+  reason            String         @db.Text
+  clinicalSummary   String         @db.Text
+  relevantDiagnoses Json?
+  type              ReferralType
+  status            ReferralStatus @default(SENT)
+  sentAt            DateTime       @default(now()) @db.Timestamptz(6)
+  respondedAt       DateTime?      @db.Timestamptz(6)
+  response          String?        @db.Text
 
-  clinic     Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  fromDoctor User     @relation(fields: [fromDoctorId], references: [id])
+  clinic     Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient    Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  fromDoctor User    @relation(fields: [fromDoctorId], references: [id])
 
   @@index([clinicId, status])
   @@index([patientId])
@@ -527,16 +623,16 @@ enum ReferralStatus {
 /// público (sin paciente identificado). Si patientId viene, validamos
 /// que pertenezca a una clínica y heredamos clinicId.
 model ArcoRequest {
-  id            String      @id @default(cuid())
+  id            String     @id @default(cuid())
   clinicId      String?
   patientId     String?
   type          ArcoType
-  reason        String      @db.Text
-  email         String      @db.VarChar(200)
-  status        ArcoStatus  @default(PENDING)
-  resolvedAt    DateTime?   @db.Timestamptz(6)
-  resolvedNotes String?     @db.Text
-  createdAt     DateTime    @default(now()) @db.Timestamptz(6)
+  reason        String     @db.Text
+  email         String     @db.VarChar(200)
+  status        ArcoStatus @default(PENDING)
+  resolvedAt    DateTime?  @db.Timestamptz(6)
+  resolvedNotes String?    @db.Text
+  createdAt     DateTime   @default(now()) @db.Timestamptz(6)
 
   @@index([clinicId, status])
   @@index([email])
@@ -564,26 +660,26 @@ enum PatientStatus {
 }
 
 model Appointment {
-  id                    String            @id @default(cuid())
-  clinicId              String
-  patientId             String
-  doctorId              String
-  type                  String
-  startsAt              DateTime          @db.Timestamptz(6)
-  endsAt                DateTime          @db.Timestamptz(6)
+  id        String   @id @default(cuid())
+  clinicId  String
+  patientId String
+  doctorId  String
+  type      String
+  startsAt  DateTime @db.Timestamptz(6)
+  endsAt    DateTime @db.Timestamptz(6)
 
-  resourceId            String?
+  resourceId String?
 
-  source                AppointmentSource @default(STAFF)
-  requiresValidation    Boolean           @default(false)
+  source             AppointmentSource @default(STAFF)
+  requiresValidation Boolean           @default(false)
 
-  overrideReason        String?           @db.VarChar(500)
-  overriddenBy          String?
-  overriddenAt          DateTime?         @db.Timestamptz(6)
+  overrideReason String?   @db.VarChar(500)
+  overriddenBy   String?
+  overriddenAt   DateTime? @db.Timestamptz(6)
 
-  checkedInAt           DateTime?         @db.Timestamptz(6)
-  startedAt             DateTime?         @db.Timestamptz(6)
-  completedAt           DateTime?         @db.Timestamptz(6)
+  checkedInAt DateTime? @db.Timestamptz(6)
+  startedAt   DateTime? @db.Timestamptz(6)
+  completedAt DateTime? @db.Timestamptz(6)
 
   room                  String?
   status                AppointmentStatus @default(PENDING)
@@ -598,32 +694,37 @@ model Appointment {
   isPaid                Boolean           @default(false)
 
   // Telemedicine
-  mode              AppointmentMode @default(IN_PERSON)
-  teleRoomId        String?
-  teleRoomUrl       String?
-  teleDoctorToken   String?
-  telePatientToken  String?
-  teleRecordingUrl  String?
-  paymentStatus     String?
-  paymentAmount     Float?
-  stripePaymentId   String?
-  stripeSessionId   String?
+  mode             AppointmentMode @default(IN_PERSON)
+  teleRoomId       String?
+  teleRoomUrl      String?
+  teleDoctorToken  String?
+  telePatientToken String?
+  teleRecordingUrl String?
+  paymentStatus    String?
+  paymentAmount    Float?
+  stripePaymentId  String?
+  stripeSessionId  String?
 
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  clinic    Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  patient   Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  doctor    User               @relation(fields: [doctorId], references: [id])
-  resource         Resource?   @relation(fields: [resourceId],   references: [id], onDelete: SetNull)
-  overriddenByUser User?       @relation("ApptOverriddenBy", fields: [overriddenBy], references: [id], onDelete: SetNull)
-  invoice            Invoice?
-  odontogramSnapshot OdontogramSnapshot?
-  reminders          WhatsAppReminder[]
+  clinic               Clinic                         @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient              Patient                        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor               User                           @relation(fields: [doctorId], references: [id])
+  resource             Resource?                      @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+  overriddenByUser     User?                          @relation("ApptOverriddenBy", fields: [overriddenBy], references: [id], onDelete: SetNull)
+  invoice              Invoice?
+  odontogramSnapshot   OdontogramSnapshot?
+  reminders            WhatsAppReminder[]
   // Analytics relations (Push 1)
-  timeline           AppointmentTimeline?
-  noShowPrediction   NoShowPrediction?
-  satisfaction       PatientSatisfaction?
+  timeline             AppointmentTimeline?
+  noShowPrediction     NoShowPrediction?
+  satisfaction         PatientSatisfaction?
+  // Pediatrics module — see docs/marketplace/research/odontopediatria/SPEC.md §5
+  behaviorAssessments  BehaviorAssessment[]
+  fluorideApplications FluorideApplication[]
+  spaceMaintainers     SpaceMaintainer[]
+  endoTreatments       PediatricEndodonticTreatment[]
 
   @@index([clinicId, startsAt, endsAt, status])
   @@index([doctorId, startsAt])
@@ -672,13 +773,13 @@ model MedicalRecord {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  doctor  User    @relation(fields: [doctorId], references: [id])
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor        User                     @relation(fields: [doctorId], references: [id])
   prescriptions Prescription[]
   // NOM-024 (Compliance Fase B) — diagnósticos estructurados con FK a CIE-10.
   // El campo `diagnoses Json?` legacy queda intacto para datos históricos.
-  diagnoses_v2 MedicalRecordDiagnosis[]
+  diagnoses_v2  MedicalRecordDiagnosis[]
 
   @@index([clinicId, patientId, visitDate(sort: Desc)])
   @@index([clinicId, doctorId])
@@ -688,9 +789,9 @@ model MedicalRecord {
 /// Catálogo CIE-10 OMS. Tabla GLOBAL (sin clinicId) — es estándar público.
 /// Seed inicial vía POST /api/admin/seed-cie10 con TOP ~200 códigos comunes.
 model Cie10Code {
-  code        String  @id @db.VarChar(8)
-  description String  @db.VarChar(500)
-  chapter     String  @db.VarChar(120)
+  code        String @id @db.VarChar(8)
+  description String @db.VarChar(500)
+  chapter     String @db.VarChar(120)
 
   diagnoses MedicalRecordDiagnosis[]
 
@@ -710,7 +811,7 @@ model MedicalRecordDiagnosis {
   createdAt       DateTime @default(now())
 
   medicalRecord MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
-  cie10         Cie10Code     @relation(fields: [cie10Code],       references: [code])
+  cie10         Cie10Code     @relation(fields: [cie10Code], references: [code])
 
   @@index([medicalRecordId])
   @@index([cie10Code])
@@ -719,23 +820,23 @@ model MedicalRecordDiagnosis {
 
 // ── IDEA 2: Treatment Plans ────────────────────────────────────────────────
 model TreatmentPlan {
-  id          String              @id @default(cuid())
-  clinicId    String
-  patientId   String
-  doctorId    String
-  name        String              // "Ortodoncia 18 meses", "Rehabilitación periodontal"
-  description String?
-  totalSessions Int               @default(1)
-  sessionIntervalDays Int         @default(30) // expected days between sessions
-  totalCost   Float               @default(0)
-  status      TreatmentStatus     @default(ACTIVE)
-  startDate   DateTime            @default(now())
-  endDate     DateTime?           // expected end date
+  id                  String          @id @default(cuid())
+  clinicId            String
+  patientId           String
+  doctorId            String
+  name                String // "Ortodoncia 18 meses", "Rehabilitación periodontal"
+  description         String?
+  totalSessions       Int             @default(1)
+  sessionIntervalDays Int             @default(30) // expected days between sessions
+  totalCost           Float           @default(0)
+  status              TreatmentStatus @default(ACTIVE)
+  startDate           DateTime        @default(now())
+  endDate             DateTime? // expected end date
   // Follow-up tracking
-  lastFollowUpSent DateTime?       // last time we sent a follow-up WhatsApp
-  nextExpectedDate DateTime?       // next expected session date
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+  lastFollowUpSent    DateTime? // last time we sent a follow-up WhatsApp
+  nextExpectedDate    DateTime? // next expected session date
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 
   clinic   Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   patient  Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -747,12 +848,12 @@ model TreatmentPlan {
 }
 
 model TreatmentSession {
-  id            String          @id @default(cuid())
+  id            String    @id @default(cuid())
   treatmentId   String
   sessionNumber Int
   notes         String?
-  completedAt   DateTime?       // null = not yet done
-  createdAt     DateTime        @default(now())
+  completedAt   DateTime? // null = not yet done
+  createdAt     DateTime  @default(now())
 
   treatment TreatmentPlan @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
 
@@ -769,20 +870,20 @@ enum TreatmentStatus {
 
 // ── CFDI records ──────────────────────────────────────────────────────────
 model CfdiRecord {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   clinicId        String
   invoiceId       String?
   facturapiId     String
-  uuid            String   @unique
-  tipoComprobante String   @default("I")
+  uuid            String    @unique
+  tipoComprobante String    @default("I")
   receptor        Json
   conceptos       Json
   total           Float
-  status          String   @default("valid")
+  status          String    @default("valid")
   xmlUrl          String?
   pdfUrl          String?
   cancelledAt     DateTime?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime  @default(now())
 
   clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
@@ -882,11 +983,50 @@ model PatientFile {
   // { id, type: "ruler"|"angle"|"freehand", points: [{x,y}], label?, color? }
   // Las coordenadas son relativas (0..1) al rect natural de la imagen para
   // que el dibujo sea estable a cualquier zoom/tamaño de visor.
-  annotations          Json?
+  annotations Json?
 
   patient      Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
   clinic       Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   xrayAnalysis XrayAnalysis?
+
+  // Endodontics module — radiografías referenciadas como conductometría /
+  // controles / intraoperatorio. SPEC §1.4 reutiliza PatientFile en lugar
+  // de crear un modelo Radiography separado.
+  conductometryRootCanals RootCanal[]          @relation("ConductometryFile")
+  followUpsAsControl      EndodonticFollowUp[] @relation("FollowUpFile")
+  apicalSurgeries         ApicalSurgery[]      @relation("ApicalSurgeryFile")
+
+  // Periodontics module — fotos intraoperatorias y consentimientos firmados
+  // de cirugías. SPEC §1.16 reutiliza PatientFile (no se crea modelo
+  // Radiography). Spec §4.3.
+  surgeryIntraOpFor PeriodontalSurgery[] @relation("SurgeryIntraOpFile")
+  surgeryConsentFor PeriodontalSurgery[] @relation("SurgeryConsentFile")
+
+  // Orthodontics module — 8 vistas del set fotográfico (extra+intra) más
+  // consentimientos firmados de tratamiento/financiero/asentimiento + recibos
+  // de pago. SPEC §1.20 reutiliza PatientFile (no se crea modelo separado).
+  orthoPhotoFrontalFor               OrthoPhotoSet[]            @relation("OrthoPhotoFrontal")
+  orthoPhotoProfileFor               OrthoPhotoSet[]            @relation("OrthoPhotoProfile")
+  orthoPhotoSmileFor                 OrthoPhotoSet[]            @relation("OrthoPhotoSmile")
+  orthoPhotoIntraFrontalFor          OrthoPhotoSet[]            @relation("OrthoPhotoIntraFrontal")
+  orthoPhotoIntraLateralRFor         OrthoPhotoSet[]            @relation("OrthoPhotoIntraLateralR")
+  orthoPhotoIntraLateralLFor         OrthoPhotoSet[]            @relation("OrthoPhotoIntraLateralL")
+  orthoPhotoOcclusalUpperFor         OrthoPhotoSet[]            @relation("OrthoPhotoOcclusalUpper")
+  orthoPhotoOcclusalLowerFor         OrthoPhotoSet[]            @relation("OrthoPhotoOcclusalLower")
+  orthoTreatmentConsentsSignedFile   OrthodonticTreatmentPlan[] @relation("OrthoTreatmentConsentSignedFile")
+  orthoFinancialAgreementsSignedFile OrthoPaymentPlan[]         @relation("OrthoFinancialAgreementSignedFile")
+  orthoInstallmentsReceipt           OrthoInstallment[]         @relation("OrthoInstallmentReceiptFile")
+  orthoConsentsSignedFile            OrthodonticConsent[]       @relation("OrthoConsentSignedFile")
+  orthoDigitalRecordsFile            OrthodonticDigitalRecord[] @relation("OrthoDigitalRecordFile")
+
+  // Implants module — radiografías peri-implantarias, foto intraoperatoria
+  // de la cirugía, foto del paciente para el carnet, PDF del carnet,
+  // consentimientos firmados. Ver SPEC §8.5.
+  implantSurgicalIntraoperative ImplantSurgicalRecord[] @relation("ImplantSurgicalIntraoperativePhoto")
+  implantFollowUpsRadiograph    ImplantFollowUp[]       @relation("ImplantFollowUpRadiograph")
+  implantPassportsPhoto         ImplantPassport[]       @relation("ImplantPassportPhoto")
+  implantPassportsPdf           ImplantPassport[]       @relation("ImplantPassportPdf")
+  implantConsentsSigned         ImplantConsent[]        @relation("ImplantConsentSigned")
 
   @@index([clinicId, patientId, createdAt(sort: Desc)])
   @@index([patientId, category])
@@ -895,33 +1035,52 @@ model PatientFile {
 
 // ── AI analysis of radiographs (cached per file) ──────────────────────
 model XrayAnalysis {
-  id              String   @id @default(cuid())
-  fileId          String   @unique
-  file            PatientFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
-  clinicId        String
-  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  patientId       String
-  patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  id        String      @id @default(cuid())
+  fileId    String      @unique
+  file      PatientFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  clinicId  String
+  clinic    Clinic      @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patientId String
+  patient   Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  // Modo de análisis. GENERAL es el default histórico (free-form findings).
+  // PERIODONTAL_BONE_LOSS y PERIIMPLANT_BONE_LOSS son flujos dedicados con
+  // mediciones por sitio/implante. A2 cross-módulos.
+  // Un fileId tiene UN análisis: si el doctor cambia de modo y re-analiza,
+  // el nuevo modo sobreescribe al anterior (upsert por fileId).
+  mode XrayAnalysisMode @default(GENERAL)
 
   // Contenido del análisis
-  summary         String   @db.Text
-  findings        Json     // array con { id, title, description, tooth, severity, confidence }
-  recommendations Json     // string o array — el endpoint lo persiste tal cual
+  summary         String @db.Text
+  findings        Json // array con { id, title, description, tooth, severity, confidence }
+  recommendations Json // string o array — el endpoint lo persiste tal cual
+
+  // Mediciones específicas por modo (null para GENERAL):
+  //   PERIODONTAL_BONE_LOSS: { sites: [{ toothFdi, position, lossMm, type: "horizontal"|"vertical", bopPresent }, ...] }
+  //   PERIIMPLANT_BONE_LOSS: { implantFdi, mesialMm, distalMm, baselineDate?, comparisonNote? }
+  measurements Json?
 
   // Top-level derivados (para queries/filtros sin parsear JSON)
-  severity        String   // max de findings: alta | media | baja | informativo
-  confidence      Float    // avg de findings, 0-100
+  severity   String // max de findings: alta | media | baja | informativo
+  confidence Float // avg de findings, 0-100
 
   // Metadata
-  tokensUsed      Int      @default(0)
-  modelUsed       String   @default("claude-sonnet-4-6")
-  createdAt       DateTime @default(now())
-  createdBy       String?  // userId del doctor que lo generó
+  tokensUsed Int      @default(0)
+  modelUsed  String   @default("claude-sonnet-4-6")
+  createdAt  DateTime @default(now())
+  createdBy  String? // userId del doctor que lo generó
 
   @@index([clinicId])
   @@index([patientId])
   @@index([severity])
+  @@index([mode])
   @@map("xray_analyses")
+}
+
+enum XrayAnalysisMode {
+  GENERAL
+  PERIODONTAL_BONE_LOSS
+  PERIIMPLANT_BONE_LOSS
 }
 
 enum FileCategory {
@@ -929,12 +1088,22 @@ enum FileCategory {
   XRAY_PANORAMIC
   XRAY_BITEWING
   XRAY_OCCLUSAL
+  XRAY_CBCT
   PHOTO_FRONTAL
   PHOTO_LATERAL
   PHOTO_OCCLUSAL_UPPER
   PHOTO_OCCLUSAL_LOWER
   PHOTO_INTRAORAL
+  PHOTO_PATIENT
   CONSENT_FORM
+  // Orthodontics module — set fotográfico T0/T1/T2 + controles + cefalo + STL.
+  // SPEC §1.3 + §1.20: reuso de PatientFile con FileCategory tipado.
+  ORTHO_PHOTO_T0
+  ORTHO_PHOTO_T1
+  ORTHO_PHOTO_T2
+  ORTHO_PHOTO_CONTROL
+  CEPH_ANALYSIS_PDF
+  SCAN_STL
   OTHER
 }
 
@@ -1010,58 +1179,92 @@ model ConsentForm {
   @@map("consent_forms")
 }
 
-
 // ── Periodontal Records ────────────────────────────────────────────────────────
 model PeriodontalRecord {
-  id          String   @id @default(cuid())
-  patientId   String
-  clinicId    String
-  doctorId    String
-  recordedAt  DateTime @default(now())
-  // JSON: { "11": { "buccal": [2,3,2], "lingual": [2,2,3], "bleeding": [false,true,false], "furcation": 0 }, ... }
-  measurements Json
-  plaquIndex  Float?
+  id         String                @id @default(cuid())
+  patientId  String
+  clinicId   String
+  doctorId   String
+  recordedAt DateTime              @default(now())
+  recordType PeriodontalRecordType @default(INICIAL)
+
+  // 192 sitios capturados (6 × 32). JSON denso para evitar tabla pesada.
+  // Estructura: Array<{ fdi, position:SitePosition, pdMm, recMm, bop, plaque, suppuration }>.
+  // Spec §4.2 — el campo legacy `measurements` queda como compat con
+  // implementación pre-perio module; los reportes nuevos leen `sites`.
+  sites      Json?
+  toothLevel Json?
+
+  // Métricas calculadas en server action (opcional para registros legacy)
+  bopPercentage         Float?
+  plaqueIndexOleary     Float?
+  sites1to3mm           Int?
+  sites4to5mm           Int?
+  sites6PlusMm          Int?
+  teethWithPockets5Plus Int?
+
+  notes           String?
+  durationMinutes Int?
+
+  // Comparación con sondaje previo (auto-relación)
+  comparedToRecordId String?
+  comparedToRecord   PeriodontalRecord?  @relation("PerioCompare", fields: [comparedToRecordId], references: [id])
+  derivedRecords     PeriodontalRecord[] @relation("PerioCompare")
+
+  // Legacy (compliance v1, anterior al módulo de Periodoncia 3/5).
+  // Mantenido como opcional para no perder datos previos. Reportes
+  // y vistas nuevas usan `sites` + `toothLevel`.
+  measurements  Json?
+  plaquIndex    Float?
   bleedingIndex Float?
-  notes       String?
-  createdAt   DateTime @default(now())
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
   clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   doctor  User    @relation(fields: [doctorId], references: [id])
 
+  classification         PeriodontalClassification?
+  reevaluationsAsInitial PeriodontalReevaluation[]  @relation("ReevalInitial")
+  reevaluationsAsPost    PeriodontalReevaluation[]  @relation("ReevalPost")
+
+  @@index([patientId, recordedAt(sort: Desc)])
+  @@index([clinicId, recordedAt(sort: Desc)])
+  @@index([clinicId, deletedAt])
   @@map("periodontal_records")
 }
 
 // ── Subscription Invoices (for admin billing) ──────────────────────────────────
 model SubscriptionInvoice {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   clinicId    String
   amount      Float
-  currency    String   @default("MXN")
-  status      String   @default("pending") // pending, paid, failed
-  method      String?  // stripe, mercadopago, transfer, deposit
-  reference   String?  // payment reference/ID
+  currency    String    @default("MXN")
+  status      String    @default("pending") // pending, paid, failed
+  method      String? // stripe, mercadopago, transfer, deposit
+  reference   String? // payment reference/ID
   periodStart DateTime
   periodEnd   DateTime
   paidAt      DateTime?
   notes       String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
   @@map("subscription_invoices")
 }
 
-
 // ── Audit Log ─────────────────────────────────────────────────────────────────
 model AuditLog {
   id         String   @id @default(cuid())
   clinicId   String
   userId     String
-  entityType String   // "patient" | "appointment" | "invoice" | "record"
+  entityType String // "patient" | "appointment" | "invoice" | "record"
   entityId   String
-  action     String   // "create" | "update" | "delete" | "view"
-  changes    Json?    // { field: { before, after } }
+  action     String // "create" | "update" | "delete" | "view"
+  changes    Json? // { field: { before, after } }
   ipAddress  String?
   userAgent  String?
   createdAt  DateTime @default(now())
@@ -1073,7 +1276,6 @@ model AuditLog {
   @@index([clinicId, createdAt])
   @@map("audit_logs")
 }
-
 
 model InventoryItem {
   id          String   @id @default(cuid())
@@ -1110,19 +1312,23 @@ model InventoryHistory {
 model WhatsAppReminder {
   id            String                 @id @default(cuid())
   clinicId      String
-  appointmentId String?   // null for non-appointment reminders (recalls)
-  patientPhone  String?   // for recall reminders without appointment
-  message       String?   // message sent
-  type          String    @default("APPOINTMENT") // APPOINTMENT | RECALL
+  appointmentId String? // null for non-appointment reminders (recalls)
+  patientPhone  String? // for recall reminders without appointment
+  message       String? // message sent (legacy text) o template key con prefijo (ENDO_/PERIO_/ORTHO_/IMPLANT_<KEY>)
+  // Argumentos dinámicos del template — el worker los pasa al renderer del
+  // diccionario correspondiente. Ej: { installmentNumber, daysOverdue, … }.
+  // Null para mensajes legacy o templates sin argumentos.
+  payload       Json?
+  type          String                 @default("APPOINTMENT") // APPOINTMENT | RECALL | ENDO | PERIO | ORTHO | IMPLANT
   status        WhatsAppReminderStatus @default(PENDING)
   sentAt        DateTime?
   errorMsg      String?
-  scheduledFor  DateTime  @default(now())
+  scheduledFor  DateTime               @default(now())
   patientReply  String?
   repliedAt     DateTime?
   createdAt     DateTime               @default(now())
 
-  clinic      Clinic      @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  clinic      Clinic       @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
 
   @@map("whatsapp_reminders")
@@ -1138,66 +1344,70 @@ enum WhatsAppReminderStatus {
 // ── Multi-category models ─────────────────────────────────────────────────────
 
 model BeforeAfterPhoto {
-  id          String   @id @default(cuid())
-  clinicId    String
-  patientId   String
-  category    String   // "before" | "after"
-  angle       String   // "front", "left", "right", "top"
-  sessionId   String?
-  url         String
-  takenAt     DateTime @default(now())
-  notes       String?
-  clinic      Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  clinicId  String
+  patientId String
+  category  String // "before" | "after"
+  angle     String // "front", "left", "right", "top"
+  sessionId String?
+  url       String
+  takenAt   DateTime @default(now())
+  notes     String?
+  clinic    Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
   @@index([patientId, category])
   @@index([clinicId])
   @@map("before_after_photos")
 }
 
 model ServicePackage {
-  id              String   @id @default(cuid())
-  clinicId        String
-  name            String
-  description     String?
-  totalSessions   Int
-  price           Float
-  validDays       Int      @default(365)
-  bodyZone        String?
-  isActive        Boolean  @default(true)
-  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  redemptions     PackageRedemption[]
+  id            String              @id @default(cuid())
+  clinicId      String
+  name          String
+  description   String?
+  totalSessions Int
+  price         Float
+  validDays     Int                 @default(365)
+  bodyZone      String?
+  isActive      Boolean             @default(true)
+  clinic        Clinic              @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  redemptions   PackageRedemption[]
+
   @@index([clinicId])
   @@map("service_packages")
 }
 
 model PackageRedemption {
-  id            String   @id @default(cuid())
+  id            String         @id @default(cuid())
   packageId     String
   patientId     String
   clinicId      String
-  purchasedAt   DateTime @default(now())
+  purchasedAt   DateTime       @default(now())
   expiresAt     DateTime
-  sessionsUsed  Int      @default(0)
+  sessionsUsed  Int            @default(0)
   totalSessions Int
-  status        String   @default("ACTIVE")
+  status        String         @default("ACTIVE")
   package       ServicePackage @relation(fields: [packageId], references: [id])
-  patient       Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patient       Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
   @@index([patientId])
   @@index([clinicId])
   @@map("package_redemptions")
 }
 
 model FormulaRecord {
-  id          String   @id @default(cuid())
-  clinicId    String
-  patientId   String
-  type        String   // "hair_color", "lash_extension", "brow_tint", "herbal"
-  formula     Json
-  notes       String?
-  appliedAt   DateTime @default(now())
-  appliedBy   String?
-  clinic      Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  clinicId  String
+  patientId String
+  type      String // "hair_color", "lash_extension", "brow_tint", "herbal"
+  formula   Json
+  notes     String?
+  appliedAt DateTime @default(now())
+  appliedBy String?
+  clinic    Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
   @@index([patientId, type])
   @@index([clinicId])
   @@map("formula_records")
@@ -1208,11 +1418,12 @@ model BodyMapAnnotation {
   clinicId    String
   patientId   String
   recordId    String?
-  mapType     String   // "full_body", "face", "scalp", "feet_dorsal", "feet_plantar"
+  mapType     String // "full_body", "face", "scalp", "feet_dorsal", "feet_plantar"
   annotations Json
   createdAt   DateTime @default(now())
   clinic      Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
   @@index([patientId])
   @@index([clinicId])
   @@map("body_map_annotations")
@@ -1231,6 +1442,7 @@ model WalkInQueue {
   startedAt   DateTime?
   completedAt DateTime?
   clinic      Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
   @@index([clinicId, status])
   @@map("walk_in_queue")
 }
@@ -1244,26 +1456,28 @@ model ResourceBooking {
   startTime     DateTime
   endTime       DateTime
   clinic        Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
   @@index([clinicId, resourceType, startTime])
   @@map("resource_bookings")
 }
 
 model ProcedureCatalog {
-  id           String   @id @default(cuid())
-  clinicId     String
-  name         String
-  code         String?  // SAT code for CFDI
+  id          String    @id @default(cuid())
+  clinicId    String
+  name        String
+  code        String? // SAT code for CFDI
   /// NOM-024 — código clínico CIE-9-MC del procedimiento (separado del SAT)
-  cieCode      String?  @db.VarChar(8)
-  category     String   // "general", "dental", "aesthetic", etc.
-  basePrice    Float
-  duration     Int?     // minutes
-  description  String?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  clinic       Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  cie9         Cie9Code? @relation(fields: [cieCode], references: [code])
+  cieCode     String?   @db.VarChar(8)
+  category    String // "general", "dental", "aesthetic", etc.
+  basePrice   Float
+  duration    Int? // minutes
+  description String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  clinic      Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  cie9        Cie9Code? @relation(fields: [cieCode], references: [code])
+
   @@index([clinicId, isActive])
   @@index([cieCode])
   @@map("procedure_catalog")
@@ -1286,12 +1500,12 @@ model Cie9Code {
 model AdminClinicNote {
   id        String   @id @default(cuid())
   clinicId  String
-  authorId  String?   // null = super admin (sin User record)
+  authorId  String? // null = super admin (sin User record)
   content   String   @db.Text
   createdAt DateTime @default(now())
 
-  clinic    Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  author    User?    @relation(fields: [authorId], references: [id])
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  author User?  @relation(fields: [authorId], references: [id])
 
   @@index([clinicId])
   @@map("admin_clinic_notes")
@@ -1314,7 +1528,7 @@ model AdminAnnouncement {
 model Coupon {
   id         String    @id @default(cuid())
   code       String    @unique
-  type       String    // percentage | fixed
+  type       String // percentage | fixed
   value      Float
   validFrom  DateTime  @default(now())
   validUntil DateTime?
@@ -1344,10 +1558,10 @@ model Prescription {
   cofeprisFolio    String?
   digitalSignature String?
 
-  medicalRecord MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
-  patient       Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  doctor        User          @relation(fields: [doctorId], references: [id])
-  clinic        Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  medicalRecord MedicalRecord      @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
+  patient       Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor        User               @relation(fields: [doctorId], references: [id])
+  clinic        Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   // NOM-024 (Compliance Fase B) — items estructurados con FK a CUMS.
   // El JSON `medications` legacy queda intacto para datos históricos.
   items         PrescriptionItem[]
@@ -1389,7 +1603,7 @@ model PrescriptionItem {
   createdAt      DateTime @default(now())
 
   prescription Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
-  cums         CumsItem     @relation(fields: [cumsKey],        references: [clave])
+  cums         CumsItem     @relation(fields: [cumsKey], references: [clave])
 
   @@index([prescriptionId])
   @@map("prescription_items")
@@ -1408,20 +1622,20 @@ enum AppointmentSource {
 
 /// Sillón / sala / equipo reservable.
 model Resource {
-  id              String        @id @default(cuid())
-  clinicId        String
-  name            String        @db.VarChar(120)
-  kind            ResourceKind  @default(CHAIR)
-  color           String?       @db.VarChar(9)
-  isActive        Boolean       @default(true)
-  orderIndex      Int           @default(0)
+  id         String       @id @default(cuid())
+  clinicId   String
+  name       String       @db.VarChar(120)
+  kind       ResourceKind @default(CHAIR)
+  color      String?      @db.VarChar(9)
+  isActive   Boolean      @default(true)
+  orderIndex Int          @default(0)
 
-  createdAt       DateTime      @default(now()) @db.Timestamptz(6)
-  updatedAt       DateTime      @updatedAt      @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  clinic          Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  appointments    Appointment[]
-  cost            ResourceCost?
+  clinic       Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+  cost         ResourceCost?
 
   @@index([clinicId, isActive, orderIndex])
 }
@@ -1447,11 +1661,11 @@ model ClinicLayout {
   clinicId  String   @unique
   name      String   @default("Layout principal") @db.VarChar(120)
   elements  Json     @default("[]")
-  metadata  Json?    // { zoom, panOffset, lastEditAt, gridSize }
+  metadata  Json? // { zoom, panOffset, lastEditAt, gridSize }
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  clinic    Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
   @@map("clinic_layouts")
 }
@@ -1459,26 +1673,26 @@ model ClinicLayout {
 /// Lista de espera de pacientes que quieren adelantar su cita
 /// si surge un hueco.
 model WaitlistEntry {
-  id                      String            @id @default(cuid())
-  clinicId                String
-  patientId               String
-  createdByUserId         String
-  reason                  String?           @db.VarChar(200)
-  priority                WaitlistPriority  @default(NORMAL)
-  preferredDoctorId       String?
-  preferredWindow         String?           @db.VarChar(80)
-  notes                   String?           @db.VarChar(500)
+  id                String           @id @default(cuid())
+  clinicId          String
+  patientId         String
+  createdByUserId   String
+  reason            String?          @db.VarChar(200)
+  priority          WaitlistPriority @default(NORMAL)
+  preferredDoctorId String?
+  preferredWindow   String?          @db.VarChar(80)
+  notes             String?          @db.VarChar(500)
 
-  resolvedAt              DateTime?         @db.Timestamptz(6)
-  resolvedAppointmentId   String?
+  resolvedAt            DateTime? @db.Timestamptz(6)
+  resolvedAppointmentId String?
 
-  createdAt               DateTime          @default(now()) @db.Timestamptz(6)
-  updatedAt               DateTime          @updatedAt      @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  clinic                  Clinic            @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  patient                 Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  createdBy               User              @relation("WaitlistCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
-  preferredDoctor         User?             @relation("WaitlistPreferredDoctor", fields: [preferredDoctorId], references: [id], onDelete: SetNull)
+  clinic          Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient         Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  createdBy       User    @relation("WaitlistCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  preferredDoctor User?   @relation("WaitlistPreferredDoctor", fields: [preferredDoctorId], references: [id], onDelete: SetNull)
 
   @@index([clinicId, resolvedAt])
   @@index([patientId])
@@ -1515,26 +1729,26 @@ enum MessageDirection {
 }
 
 model InboxThread {
-  id            String        @id @default(cuid())
+  id            String       @id @default(cuid())
   clinicId      String
   channel       InboxChannel
   /// ID en el sistema externo: Twilio Conversation SID, Postmark Message-ID, etc.
   externalId    String?
   patientId     String?
   subject       String
-  status        InboxStatus   @default(UNREAD)
+  status        InboxStatus  @default(UNREAD)
   assignedToId  String?
   snoozedUntil  DateTime?
   lastMessageAt DateTime
-  tags          String[]      @default([])
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  tags          String[]     @default([])
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
-  clinic        Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  patient       Patient?      @relation(fields: [patientId], references: [id], onDelete: SetNull)
-  assignedTo    User?         @relation("InboxAssignee", fields: [assignedToId], references: [id])
-  messages      InboxMessage[]
-  reminders     Reminder[]
+  clinic     Clinic         @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient    Patient?       @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  assignedTo User?          @relation("InboxAssignee", fields: [assignedToId], references: [id])
+  messages   InboxMessage[]
+  reminders  Reminder[]
 
   @@index([clinicId, status, lastMessageAt(sort: Desc)])
   @@index([clinicId, channel, lastMessageAt(sort: Desc)])
@@ -1548,15 +1762,15 @@ model InboxMessage {
   threadId    String
   direction   MessageDirection
   body        String           @db.Text
-  attachments Json?            // [{ name, url, mime, size }]
+  attachments Json? // [{ name, url, mime, size }]
   sentAt      DateTime         @default(now())
   sentById    String?
   externalId  String?
   /// true = nota interna del staff (no se envía al canal externo).
   isInternal  Boolean          @default(false)
 
-  thread      InboxThread      @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  sentBy      User?            @relation(fields: [sentById], references: [id])
+  thread InboxThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sentBy User?       @relation(fields: [sentById], references: [id])
 
   @@index([threadId, sentAt])
   @@map("inbox_messages")
@@ -1584,11 +1798,11 @@ model Reminder {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
-  clinic        Clinic       @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  createdBy     User         @relation("ReminderCreator", fields: [createdById], references: [id])
-  assignedTo    User         @relation("ReminderAssignee", fields: [assignedToId], references: [id])
-  patient       Patient?     @relation(fields: [patientId], references: [id], onDelete: SetNull)
-  thread        InboxThread? @relation(fields: [threadId], references: [id], onDelete: SetNull)
+  clinic     Clinic       @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  createdBy  User         @relation("ReminderCreator", fields: [createdById], references: [id])
+  assignedTo User         @relation("ReminderAssignee", fields: [assignedToId], references: [id])
+  patient    Patient?     @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  thread     InboxThread? @relation(fields: [threadId], references: [id], onDelete: SetNull)
 
   @@index([clinicId, status, dueAt])
   @@index([assignedToId, status, dueAt])
@@ -1606,19 +1820,19 @@ model Reminder {
 /// totalWaitMin = inChairAt - arrivedAt; totalConsultMin = consultEndAt -
 /// consultStartAt. Calculados en el endpoint que upserts el timeline.
 model AppointmentTimeline {
-  id              String      @id @default(cuid())
-  appointmentId   String      @unique
-  arrivedAt       DateTime?   @db.Timestamptz(6)
-  inChairAt       DateTime?   @db.Timestamptz(6)
-  consultStartAt  DateTime?   @db.Timestamptz(6)
-  consultEndAt    DateTime?   @db.Timestamptz(6)
-  checkoutAt      DateTime?   @db.Timestamptz(6)
+  id              String    @id @default(cuid())
+  appointmentId   String    @unique
+  arrivedAt       DateTime? @db.Timestamptz(6)
+  inChairAt       DateTime? @db.Timestamptz(6)
+  consultStartAt  DateTime? @db.Timestamptz(6)
+  consultEndAt    DateTime? @db.Timestamptz(6)
+  checkoutAt      DateTime? @db.Timestamptz(6)
   totalWaitMin    Int?
   totalConsultMin Int?
-  createdAt       DateTime    @default(now()) @db.Timestamptz(6)
-  updatedAt       DateTime    @updatedAt      @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
 
-  appointment     Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
 
   @@index([appointmentId])
   @@map("appointment_timelines")
@@ -1630,13 +1844,13 @@ model AppointmentTimeline {
 model ResourceCost {
   id          String   @id @default(cuid())
   resourceId  String   @unique
-  monthlyRent Decimal  @db.Decimal(10,2) @default(0)
-  monthlyOps  Decimal  @db.Decimal(10,2) @default(0)
+  monthlyRent Decimal  @default(0) @db.Decimal(10, 2)
+  monthlyOps  Decimal  @default(0) @db.Decimal(10, 2)
   notes       String?  @db.VarChar(500)
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt      @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
 
-  resource    Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  resource Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
 
   @@map("resource_costs")
 }
@@ -1646,13 +1860,13 @@ model ResourceCost {
 /// última cita. Persistimos para que el badge de la agenda no recalcule
 /// cada render. Refresh manual o vía cron al crear cita.
 model NoShowPrediction {
-  id            String      @id @default(cuid())
-  appointmentId String      @unique
-  probability   Float       /// 0.0 a 1.0
-  factors       Json        /// Array de { label: string, weight: number, reason: string }
-  predictedAt   DateTime    @default(now()) @db.Timestamptz(6)
+  id            String   @id @default(cuid())
+  appointmentId String   @unique
+  probability   Float /// 0.0 a 1.0
+  factors       Json /// Array de { label: string, weight: number, reason: string }
+  predictedAt   DateTime @default(now()) @db.Timestamptz(6)
 
-  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
 
   @@index([predictedAt])
   @@map("no_show_predictions")
@@ -1666,12 +1880,12 @@ model WeeklyInsight {
   clinicId  String
   weekStart DateTime @db.Timestamptz(6)
   weekEnd   DateTime @db.Timestamptz(6)
-  summary   String   @db.VarChar(500)  /// 1-2 oraciones top-line
-  insights  Json                       /// Array de { tone, title, detail }
+  summary   String   @db.VarChar(500) /// 1-2 oraciones top-line
+  insights  Json /// Array de { tone, title, detail }
   read      Boolean  @default(false)
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
-  clinic    Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
   @@index([clinicId, weekStart])
   @@map("weekly_insights")
@@ -1680,13 +1894,13 @@ model WeeklyInsight {
 /// NPS post-cita 1-5. Capturado vía portal del paciente o link en
 /// recordatorio WA. Alimenta el promedio de satisfacción del doctor.
 model PatientSatisfaction {
-  id            String      @id @default(cuid())
-  appointmentId String      @unique
-  score         Int         /// 1-5
-  comment       String?     @db.VarChar(1000)
-  submittedAt   DateTime    @default(now()) @db.Timestamptz(6)
+  id            String   @id @default(cuid())
+  appointmentId String   @unique
+  score         Int /// 1-5
+  comment       String?  @db.VarChar(1000)
+  submittedAt   DateTime @default(now()) @db.Timestamptz(6)
 
-  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
 
   @@index([submittedAt])
   @@map("patient_satisfactions")
@@ -1696,17 +1910,17 @@ model PatientSatisfaction {
 /// con modos OPERATIONAL (halos), MARKETING (carousel + testimonios)
 /// o HYBRID (split). publicSlug es la URL pública que se carga en la TV.
 model TVDisplay {
-  id          String   @id @default(cuid())
-  clinicId    String
-  name        String   @db.VarChar(120)
-  mode        String   @db.VarChar(20)  /// OPERATIONAL | MARKETING | HYBRID
-  config      Json     /// promociones, testimonios, branding, etc.
-  publicSlug  String   @unique @db.VarChar(80)
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt      @db.Timestamptz(6)
+  id         String   @id @default(cuid())
+  clinicId   String
+  name       String   @db.VarChar(120)
+  mode       String   @db.VarChar(20) /// OPERATIONAL | MARKETING | HYBRID
+  config     Json /// promociones, testimonios, branding, etc.
+  publicSlug String   @unique @db.VarChar(80)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
 
-  clinic      Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
   @@index([clinicId, active])
   @@map("tv_displays")
@@ -1740,11 +1954,11 @@ model BugAuditRun {
 }
 
 model BugAuditDismissed {
-  id           String   @id
-  fingerprint  String   @unique
-  reason       String?
-  dismissedBy  String
-  dismissedAt  DateTime @default(now()) @db.Timestamptz(6)
+  id          String   @id
+  fingerprint String   @unique
+  reason      String?
+  dismissedBy String
+  dismissedAt DateTime @default(now()) @db.Timestamptz(6)
 
   @@map("bug_audit_dismissed")
 }
@@ -1778,7 +1992,7 @@ model Module {
   sortOrder       Int      @default(0) @map("sort_order")
   isActive        Boolean  @default(true) @map("is_active")
 
-  clinicModules   ClinicModule[]
+  clinicModules ClinicModule[]
 
   @@map("modules")
 }
@@ -1872,3 +2086,2347 @@ model Cart {
 
   @@map("carts")
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// PEDIATRICS MODULE
+// Specs: docs/marketplace/research/odontopediatria/SPEC.md
+// ─────────────────────────────────────────────────────────────────────────
+
+enum PedDentitionType {
+  temporal
+  mixta
+  permanente
+}
+
+enum PedVaccinationStatus {
+  completo
+  incompleto
+  desconocido
+}
+
+enum PedFeedingType {
+  materna
+  mixta
+  formula
+  na
+}
+
+enum PedGuardianRelationship {
+  madre
+  padre
+  tutor_legal
+  abuelo
+  abuela
+  tio
+  tia
+  hermano
+  hermana
+  otro
+}
+
+enum PedBehaviorScale {
+  frankl
+  venham
+}
+
+enum PedCariesCategory {
+  bajo
+  moderado
+  alto
+  extremo
+}
+
+enum PedHabitType {
+  succion_digital
+  chupon
+  biberon_nocturno
+  respiracion_bucal
+  bruxismo_nocturno
+  onicofagia
+  deglucion_atipica
+}
+
+enum PedHabitFrequency {
+  continua
+  nocturna
+  ocasional
+  na
+}
+
+enum PedSpaceMaintainerType {
+  banda_ansa
+  corona_ansa
+  nance
+  arco_lingual
+  distal_shoe
+}
+
+enum PedSpaceMaintainerStatus {
+  activo
+  retirado
+  fracturado
+  perdido
+}
+
+enum PedSealantMaterial {
+  resina_fotocurada
+  ionomero
+}
+
+enum PedSealantRetention {
+  completo
+  parcial
+  perdido
+}
+
+enum PedFluorideProduct {
+  barniz_5pct_naf
+  gel_apf
+  sdf
+  fosfato_acido
+}
+
+enum PedEndoTreatmentType {
+  pulpotomia
+  pulpectomia
+  recubrimiento_indirecto
+  recubrimiento_directo
+}
+
+enum PedEndoMaterial {
+  formocresol
+  mta
+  sulfato_ferrico
+  hidroxido_calcio
+  otro
+}
+
+enum PedConsentProcedure {
+  anestesia_local
+  sedacion_consciente
+  oxido_nitroso
+  extraccion
+  pulpotomia
+  pulpectomia
+  fluorizacion
+  toma_impresiones
+  rx_intraoral
+  otro
+}
+
+model PediatricRecord {
+  id                  String               @id @default(cuid())
+  clinicId            String
+  patientId           String               @unique
+  doctorId            String?
+  createdBy           String
+  recordedAt          DateTime             @default(now())
+  lastReviewedAt      DateTime?
+  lastReviewedBy      String?
+  birthWeightKg       Decimal?             @db.Decimal(4, 2)
+  gestationWeeks      Int?
+  prematuro           Boolean              @default(false)
+  vaccinationStatus   PedVaccinationStatus @default(desconocido)
+  feedingType         PedFeedingType       @default(na)
+  specialConditions   Json                 @default("[]")
+  medication          Json                 @default("[]")
+  primaryGuardianId   String?
+  cutoffOverrideYears Int?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  deletedAt           DateTime?
+
+  patient              Patient                        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  primaryGuardian      Guardian?                      @relation("PrimaryGuardian", fields: [primaryGuardianId], references: [id])
+  guardians            Guardian[]                     @relation("AllGuardians")
+  behaviorAssessments  BehaviorAssessment[]
+  cariesAssessments    CariesRiskAssessment[]
+  oralHabits           OralHabit[]
+  eruptionRecords      EruptionRecord[]
+  spaceMaintainers     SpaceMaintainer[]
+  sealants             Sealant[]
+  fluorideApplications FluorideApplication[]
+  endoTreatments       PediatricEndodonticTreatment[]
+  consents             PediatricConsent[]
+
+  @@index([clinicId])
+  @@index([deletedAt])
+  @@map("pediatric_records")
+}
+
+model Guardian {
+  id                 String                  @id @default(cuid())
+  clinicId           String
+  patientId          String
+  pediatricRecordId  String?
+  fullName           String
+  parentesco         PedGuardianRelationship
+  birthDate          DateTime?
+  phone              String
+  email              String?
+  address            String?
+  ineUrl             String?
+  esResponsableLegal Boolean                 @default(true)
+  principal          Boolean                 @default(false)
+  createdBy          String
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  deletedAt          DateTime?
+
+  patient         Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  primaryFor      PediatricRecord[]  @relation("PrimaryGuardian")
+  pediatricRecord PediatricRecord?   @relation("AllGuardians", fields: [pediatricRecordId], references: [id])
+  consents        PediatricConsent[]
+
+  @@index([clinicId])
+  @@index([patientId, principal])
+  @@index([deletedAt])
+  @@map("ped_guardians")
+}
+
+model BehaviorAssessment {
+  id                String           @id @default(cuid())
+  clinicId          String
+  patientId         String
+  pediatricRecordId String
+  appointmentId     String?
+  scale             PedBehaviorScale
+  value             Int
+  notes             String?
+  recordedAt        DateTime         @default(now())
+  recordedBy        String
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  deletedAt         DateTime?
+
+  patient         Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  pediatricRecord PediatricRecord @relation(fields: [pediatricRecordId], references: [id], onDelete: Cascade)
+  appointment     Appointment?    @relation(fields: [appointmentId], references: [id])
+
+  @@index([patientId, recordedAt(sort: Desc)])
+  @@index([clinicId])
+  @@index([deletedAt])
+  @@map("ped_behavior_assessments")
+}
+
+model CariesRiskAssessment {
+  id                      String             @id @default(cuid())
+  clinicId                String
+  patientId               String
+  pediatricRecordId       String
+  scoredAt                DateTime           @default(now())
+  scoredBy                String
+  riskFactors             Json               @default("[]")
+  protectiveFactors       Json               @default("[]")
+  diseaseIndicators       Json               @default("[]")
+  category                PedCariesCategory
+  recommendedRecallMonths Int
+  previousCategory        PedCariesCategory?
+  nextDueAt               DateTime?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  deletedAt               DateTime?
+
+  patient         Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  pediatricRecord PediatricRecord @relation(fields: [pediatricRecordId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, scoredAt(sort: Desc)])
+  @@index([clinicId])
+  @@index([nextDueAt])
+  @@map("ped_caries_risk")
+}
+
+model OralHabit {
+  id                    String            @id @default(cuid())
+  clinicId              String
+  patientId             String
+  pediatricRecordId     String
+  habitType             PedHabitType
+  frequency             PedHabitFrequency @default(na)
+  startedAt             DateTime
+  endedAt               DateTime?
+  intervention          String?
+  interventionStartedAt DateTime?
+  interventionType      String?
+  notes                 String?
+  createdBy             String
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  deletedAt             DateTime?
+
+  patient         Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  pediatricRecord PediatricRecord @relation(fields: [pediatricRecordId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, habitType])
+  @@index([patientId, endedAt])
+  @@index([clinicId])
+  @@map("ped_oral_habits")
+}
+
+model EruptionRecord {
+  id                   String    @id @default(cuid())
+  clinicId             String
+  patientId            String
+  pediatricRecordId    String
+  toothFdi             Int
+  observedAt           DateTime
+  ageAtEruptionDecimal Decimal   @db.Decimal(4, 2)
+  withinExpectedRange  Boolean
+  deviation            String
+  notes                String?
+  recordedBy           String
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  deletedAt            DateTime?
+
+  patient         Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  pediatricRecord PediatricRecord @relation(fields: [pediatricRecordId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, toothFdi])
+  @@index([clinicId])
+  @@map("ped_eruption_records")
+}
+
+model SpaceMaintainer {
+  id                 String                   @id @default(cuid())
+  clinicId           String
+  patientId          String
+  pediatricRecordId  String
+  appointmentId      String?
+  replacedToothFdi   Int
+  type               PedSpaceMaintainerType
+  placedAt           DateTime
+  estimatedRemovalAt DateTime?
+  currentStatus      PedSpaceMaintainerStatus @default(activo)
+  removedAt          DateTime?
+  removedBy          String?
+  removedReason      String?
+  notes              String?
+  placedBy           String
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  deletedAt          DateTime?
+
+  patient         Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  pediatricRecord PediatricRecord @relation(fields: [pediatricRecordId], references: [id], onDelete: Cascade)
+  appointment     Appointment?    @relation(fields: [appointmentId], references: [id])
+
+  @@index([patientId, currentStatus])
+  @@index([clinicId])
+  @@map("ped_space_maintainers")
+}
+
+model Sealant {
+  id                String              @id @default(cuid())
+  clinicId          String
+  patientId         String
+  pediatricRecordId String
+  toothFdi          Int
+  material          PedSealantMaterial
+  placedAt          DateTime
+  placedBy          String
+  retentionStatus   PedSealantRetention @default(completo)
+  lastCheckedAt     DateTime?
+  reappliedAt       DateTime?
+  reappliedBy       String?
+  notes             String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  deletedAt         DateTime?
+
+  patient         Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  pediatricRecord PediatricRecord @relation(fields: [pediatricRecordId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, toothFdi])
+  @@index([clinicId])
+  @@map("ped_sealants")
+}
+
+model FluorideApplication {
+  id                String             @id @default(cuid())
+  clinicId          String
+  patientId         String
+  pediatricRecordId String
+  appointmentId     String?
+  product           PedFluorideProduct
+  appliedTeeth      Json               @default("[]")
+  lotNumber         String?
+  appliedAt         DateTime           @default(now())
+  appliedBy         String
+  notes             String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  deletedAt         DateTime?
+
+  patient         Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  pediatricRecord PediatricRecord @relation(fields: [pediatricRecordId], references: [id], onDelete: Cascade)
+  appointment     Appointment?    @relation(fields: [appointmentId], references: [id])
+
+  @@index([patientId, appliedAt(sort: Desc)])
+  @@index([clinicId])
+  @@map("ped_fluoride_applications")
+}
+
+model PediatricEndodonticTreatment {
+  id                String               @id @default(cuid())
+  clinicId          String
+  patientId         String
+  pediatricRecordId String
+  appointmentId     String?
+  toothFdi          Int
+  treatmentType     PedEndoTreatmentType
+  material          PedEndoMaterial
+  performedAt       DateTime             @default(now())
+  performedBy       String
+  residualVitality  String?
+  postOpSymptoms    String?
+  notes             String?
+  xrayUrl           String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  deletedAt         DateTime?
+
+  patient         Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  pediatricRecord PediatricRecord @relation(fields: [pediatricRecordId], references: [id], onDelete: Cascade)
+  appointment     Appointment?    @relation(fields: [appointmentId], references: [id])
+
+  @@index([patientId, performedAt(sort: Desc)])
+  @@index([clinicId])
+  @@map("ped_endodontic_treatments")
+}
+
+model PediatricConsent {
+  id                      String              @id @default(cuid())
+  clinicId                String
+  patientId               String
+  pediatricRecordId       String
+  procedureType           PedConsentProcedure
+  guardianId              String
+  guardianSignedAt        DateTime?
+  guardianSignatureUrl    String?
+  minorAssentRequired     Boolean             @default(false)
+  minorAssentSignedAt     DateTime?
+  minorAssentSignatureUrl String?
+  pdfUrl                  String?
+  pdfHash                 String?
+  expiresAt               DateTime
+  revokedAt               DateTime?
+  revokedBy               String?
+  revokedReason           String?
+  generatedBy             String
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+  deletedAt               DateTime?
+
+  patient         Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  pediatricRecord PediatricRecord @relation(fields: [pediatricRecordId], references: [id], onDelete: Cascade)
+  guardian        Guardian        @relation(fields: [guardianId], references: [id])
+
+  @@index([patientId, procedureType])
+  @@index([expiresAt])
+  @@index([clinicId])
+  @@index([deletedAt])
+  @@map("ped_consents")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// ENDODONTICS MODULE
+// Specs: docs/marketplace/research/endodoncia/SPEC.md §4
+// ─────────────────────────────────────────────────────────────────────────
+
+enum PulpalDiagnosis {
+  PULPA_NORMAL
+  PULPITIS_REVERSIBLE
+  PULPITIS_IRREVERSIBLE_SINTOMATICA
+  PULPITIS_IRREVERSIBLE_ASINTOMATICA
+  NECROSIS_PULPAR
+  PREVIAMENTE_TRATADO
+  PREVIAMENTE_INICIADO
+}
+
+enum PeriapicalDiagnosis {
+  TEJIDOS_PERIAPICALES_NORMALES
+  PERIODONTITIS_APICAL_SINTOMATICA
+  PERIODONTITIS_APICAL_ASINTOMATICA
+  ABSCESO_APICAL_AGUDO
+  ABSCESO_APICAL_CRONICO
+  OSTEITIS_CONDENSANTE
+}
+
+enum VitalityTestType {
+  FRIO
+  CALOR
+  EPT
+  PERCUSION_VERTICAL
+  PERCUSION_HORIZONTAL
+  PALPACION_APICAL
+  MORDIDA_TOOTHSLOOTH
+}
+
+enum VitalityResult {
+  POSITIVO
+  NEGATIVO
+  EXAGERADO
+  DIFERIDO
+  SIN_RESPUESTA
+}
+
+enum EndoTreatmentType {
+  TC_PRIMARIO
+  RETRATAMIENTO
+  APICECTOMIA
+  PULPOTOMIA_EMERGENCIA
+  TERAPIA_REGENERATIVA
+}
+
+enum AccessType {
+  CONVENCIONAL
+  CONSERVADOR
+  RECTIFICACION_PREVIO
+  POSTE_RETIRADO
+}
+
+enum InstrumentationSystem {
+  PROTAPER_GOLD
+  PROTAPER_NEXT
+  WAVEONE_GOLD
+  RECIPROC_BLUE
+  BIORACE
+  HYFLEX_EDM
+  TRUNATOMY
+  MANUAL_KFILES
+  OTRO
+}
+
+enum InstrumentationTechnique {
+  ROTACION_CONTINUA
+  RECIPROCACION
+  MANUAL
+  HIBRIDA
+}
+
+enum IrrigationActivation {
+  NINGUNA
+  SONICA
+  ULTRASONICA
+  LASER
+  XPF
+}
+
+enum ObturationTechnique {
+  CONDENSACION_LATERAL
+  CONDENSACION_VERTICAL_CALIENTE
+  OLA_CONTINUA
+  CONO_UNICO
+  TERMOPLASTICA_INYECTABLE
+  BIOCERAMIC_SINGLE_CONE
+}
+
+enum SealerType {
+  AH_PLUS
+  MTA_FILLAPEX
+  BIOROOT_RCS
+  BC_SEALER
+  TUBLISEAL
+  SEALAPEX
+  OTRO
+}
+
+enum CanalCanonicalName {
+  MB
+  MB2
+  DB
+  MV
+  DV
+  MP
+  P
+  D
+  M
+  L
+  V
+  ML
+  DL
+  CONDUCTO_UNICO
+  OTRO
+}
+
+enum ObturationQuality {
+  HOMOGENEA
+  ADECUADA
+  CON_HUECOS
+  SOBREOBTURADA
+  SUBOBTURADA
+}
+
+enum IntracanalSubstance {
+  HIDROXIDO_CALCIO
+  CTZ
+  LEDERMIX
+  FORMOCRESOL
+  PROPILENGLICOL
+  OTRO
+}
+
+enum FollowUpMilestone {
+  CONTROL_6M
+  CONTROL_12M
+  CONTROL_24M
+  CONTROL_EXTRA
+}
+
+enum FollowUpConclusion {
+  EXITO
+  EN_CURACION
+  FRACASO
+  INCIERTO
+}
+
+enum RetreatmentFailureReason {
+  FILTRACION_CORONAL
+  INSTRUMENTO_FRACTURADO
+  CONDUCTO_NO_TRATADO
+  SOBREOBTURACION
+  SUBOBTURACION
+  FRACTURA_RADICULAR
+  REINFECCION
+  DESCONOCIDO
+}
+
+enum RetreatmentDifficulty {
+  BAJA
+  MEDIA
+  ALTA
+}
+
+enum RetroFillingMaterial {
+  MTA
+  BIOCERAMIC_PUTTY
+  SUPER_EBA
+  IRM
+  OTRO
+}
+
+enum FlapType {
+  OCHSENBEIN_LUEBKE
+  SULCULAR
+  SEMILUNAR
+  PAPILAR
+}
+
+enum EndoOutcomeStatus {
+  EN_CURSO
+  COMPLETADO
+  FALLIDO
+  ABANDONADO
+}
+
+enum PostOpRestorationType {
+  CORONA_PORCELANA_METAL
+  CORONA_ZIRCONIA
+  CORONA_DISILICATO_LITIO
+  ONLAY
+  RESTAURACION_DIRECTA_RESINA
+  POSTE_FIBRA_CORONA
+  POSTE_METALICO_CORONA
+}
+
+model EndodonticDiagnosis {
+  id          String   @id @default(uuid())
+  clinicId    String
+  patientId   String
+  doctorId    String
+  toothFdi    Int
+  diagnosedAt DateTime @default(now())
+
+  pulpalDiagnosis     PulpalDiagnosis
+  periapicalDiagnosis PeriapicalDiagnosis
+  justification       String?             @db.Text
+
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  clinic     Clinic                @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  patient    Patient               @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  doctor     User                  @relation("EndoDiagnosisDoctor", fields: [doctorId], references: [id], onDelete: Restrict)
+  treatments EndodonticTreatment[]
+
+  @@index([clinicId, patientId, toothFdi])
+  @@index([clinicId, doctorId, diagnosedAt])
+  @@map("endodontic_diagnoses")
+}
+
+model VitalityTest {
+  id           String           @id @default(uuid())
+  clinicId     String
+  patientId    String
+  doctorId     String
+  toothFdi     Int
+  controlTeeth Json
+  testType     VitalityTestType
+  result       VitalityResult
+  intensity    Int?
+  evaluatedAt  DateTime         @default(now())
+  notes        String?          @db.Text
+
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  doctor  User    @relation("VitalityDoctor", fields: [doctorId], references: [id], onDelete: Restrict)
+
+  @@index([clinicId, patientId, toothFdi, evaluatedAt])
+  @@map("vitality_tests")
+}
+
+model EndodonticTreatment {
+  id             String            @id @default(uuid())
+  clinicId       String
+  patientId      String
+  doctorId       String
+  toothFdi       Int
+  treatmentType  EndoTreatmentType
+  diagnosisId    String?
+  startedAt      DateTime          @default(now())
+  completedAt    DateTime?
+  sessionsCount  Int               @default(1)
+  currentStep    Int               @default(1)
+  isMultiSession Boolean           @default(false)
+
+  // Acceso e instrumentación
+  rubberDamPlaced       Boolean                   @default(false)
+  accessType            AccessType?
+  instrumentationSystem InstrumentationSystem?
+  technique             InstrumentationTechnique?
+  motorBrand            String?
+  torqueSettings        String?
+  rpmSetting            Int?
+
+  // Irrigación
+  irrigants              Json?
+  irrigationActivation   IrrigationActivation?
+  totalIrrigationMinutes Int?
+
+  // Obturación
+  obturationTechnique ObturationTechnique?
+  sealer              SealerType?
+  masterConePresetIso Int?
+
+  // Restauración pos-TC
+  postOpRestorationPlan        PostOpRestorationType?
+  requiresPost                 Boolean                @default(false)
+  postMaterial                 String?
+  restorationUrgencyDays       Int?
+  restorationDoctorId          String?
+  postOpRestorationCompletedAt DateTime?
+
+  // Resultado global
+  outcomeStatus EndoOutcomeStatus @default(EN_CURSO)
+
+  notes String? @db.Text
+
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  clinic                Clinic                     @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  patient               Patient                    @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  doctor                User                       @relation("EndoTreatmentDoctor", fields: [doctorId], references: [id], onDelete: Restrict)
+  diagnosis             EndodonticDiagnosis?       @relation(fields: [diagnosisId], references: [id], onDelete: SetNull)
+  rootCanals            RootCanal[]
+  intracanalMedications IntracanalMedication[]
+  followUps             EndodonticFollowUp[]
+  retreatmentInfo       EndodonticRetreatmentInfo?
+  apicalSurgery         ApicalSurgery?
+
+  @@index([clinicId, patientId, toothFdi])
+  @@index([clinicId, doctorId, startedAt])
+  @@index([clinicId, outcomeStatus])
+  @@map("endodontic_treatments")
+}
+
+model RootCanal {
+  id                    String             @id @default(uuid())
+  treatmentId           String
+  canonicalName         CanalCanonicalName
+  customLabel           String?
+  workingLengthMm       Decimal            @db.Decimal(4, 1)
+  coronalReferencePoint String
+  masterApicalFileIso   Int
+  masterApicalFileTaper Decimal            @db.Decimal(3, 2)
+  apexLocatorReadingMm  Decimal?           @db.Decimal(4, 1)
+  radiographicLengthMm  Decimal?           @db.Decimal(4, 1)
+  apexLocatorBrand      String?
+  conductometryFileId   String?
+  obturationQuality     ObturationQuality?
+  notes                 String?            @db.Text
+
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  treatment         EndodonticTreatment @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
+  conductometryFile PatientFile?        @relation("ConductometryFile", fields: [conductometryFileId], references: [id], onDelete: SetNull)
+
+  @@index([treatmentId])
+  @@map("root_canals")
+}
+
+model IntracanalMedication {
+  id                String              @id @default(uuid())
+  treatmentId       String
+  substance         IntracanalSubstance
+  placedAt          DateTime
+  expectedRemovalAt DateTime?
+  actualRemovalAt   DateTime?
+  notes             String?             @db.Text
+
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  treatment EndodonticTreatment @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
+
+  @@index([treatmentId, placedAt])
+  @@map("intracanal_medications")
+}
+
+model EndodonticFollowUp {
+  id                String              @id @default(uuid())
+  treatmentId       String
+  milestone         FollowUpMilestone
+  scheduledAt       DateTime
+  performedAt       DateTime?
+  paiScore          Int?
+  symptomsPresent   Boolean?
+  conclusion        FollowUpConclusion?
+  recommendedAction String?             @db.Text
+  controlFileId     String?
+  notes             String?             @db.Text
+
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  treatment   EndodonticTreatment @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
+  controlFile PatientFile?        @relation("FollowUpFile", fields: [controlFileId], references: [id], onDelete: SetNull)
+
+  @@index([treatmentId, scheduledAt])
+  @@index([scheduledAt, performedAt])
+  @@map("endodontic_follow_ups")
+}
+
+model EndodonticRetreatmentInfo {
+  id                           String                   @id @default(uuid())
+  treatmentId                  String                   @unique
+  failureReason                RetreatmentFailureReason
+  originalTreatmentDate        DateTime?
+  fracturedInstrumentRecovered Boolean                  @default(false)
+  difficulty                   RetreatmentDifficulty    @default(MEDIA)
+  notes                        String?                  @db.Text
+
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  treatment EndodonticTreatment @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
+
+  @@map("endodontic_retreatment_info")
+}
+
+model ApicalSurgery {
+  id                   String               @id @default(uuid())
+  treatmentId          String               @unique
+  interventedRoot      String
+  resectedRootLengthMm Decimal              @db.Decimal(3, 1)
+  retroFillingMaterial RetroFillingMaterial
+  flapType             FlapType
+  sutureType           String?
+  postOpControlAt      DateTime?
+  intraoperativeFileId String?
+  notes                String?              @db.Text
+
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  treatment          EndodonticTreatment @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
+  intraoperativeFile PatientFile?        @relation("ApicalSurgeryFile", fields: [intraoperativeFileId], references: [id], onDelete: SetNull)
+
+  @@map("apical_surgeries")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// IMPLANTS MODULE (4/5)
+// Specs: docs/marketplace/research/implantologia/SPEC.md §4
+//
+// COFEPRIS clase III: brand / lotNumber / placedAt INMUTABLES por defecto.
+// Mutación requiere justificación ≥20 chars + flag de sesión SQL +
+// audit log con acción COFEPRIS_TRACEABILITY_UPDATE.
+// DELETE prohibido a nivel DB (trigger). "Remover" = currentStatus =
+// REMOVED + removalReason ≥20 chars + removedAt timestamp.
+// ─────────────────────────────────────────────────────────────────────────
+
+enum ImplantBrand {
+  STRAUMANN
+  NOBEL_BIOCARE
+  NEODENT
+  MIS
+  BIOHORIZONS
+  ZIMMER_BIOMET
+  IMPLANT_DIRECT
+  ODONTIT
+  OTRO
+}
+
+enum ImplantConnectionType {
+  EXTERNAL_HEX
+  INTERNAL_HEX
+  CONICAL_MORSE
+  TRI_CHANNEL
+  OTRO
+}
+
+enum ImplantSurfaceTreatment {
+  SLA
+  SLActive
+  TiUnite
+  OsseoSpeed
+  LASER_LOK
+  OTRO
+}
+
+enum LekholmZarbDensity {
+  D1
+  D2
+  D3
+  D4
+}
+
+enum ImplantStatus {
+  PLANNED
+  PLACED
+  OSSEOINTEGRATING
+  UNCOVERED
+  LOADED_PROVISIONAL
+  LOADED_DEFINITIVE
+  FUNCTIONAL
+  COMPLICATION
+  FAILED
+  REMOVED
+}
+
+enum ImplantProtocol {
+  ONE_STAGE
+  TWO_STAGE
+  IMMEDIATE_PLACEMENT_DELAYED_LOADING
+  IMMEDIATE_PLACEMENT_IMMEDIATE_LOADING
+  DELAYED_PLACEMENT_IMMEDIATE_LOADING
+}
+
+enum AbutmentType {
+  PREFABRICATED_TI
+  CUSTOM_TI
+  CUSTOM_ZIRCONIA
+  MULTI_UNIT_STRAIGHT
+  MULTI_UNIT_ANGLED_17
+  MULTI_UNIT_ANGLED_30
+  HEALING_ABUTMENT
+  OTRO
+}
+
+enum ProsthesisType {
+  SCREW_RETAINED_SINGLE
+  CEMENT_RETAINED_SINGLE
+  SCREW_RETAINED_MULTI
+  CEMENT_RETAINED_MULTI
+  OVERDENTURE_LOCATOR
+  OVERDENTURE_BAR
+  ALL_ON_4
+  ALL_ON_6
+  PROVISIONAL_ACRYLIC
+}
+
+enum ProsthesisMaterial {
+  ZIRCONIA_MONOLITHIC
+  PORCELAIN_FUSED_TO_METAL
+  PORCELAIN_FUSED_TO_ZIRCONIA
+  LITHIUM_DISILICATE
+  ACRYLIC_PROVISIONAL
+  PMMA_PROVISIONAL
+  HYBRID_TITANIUM_ACRYLIC
+  OTRO
+}
+
+enum ImplantComplicationType {
+  PERI_IMPLANT_MUCOSITIS
+  PERI_IMPLANTITIS_INITIAL
+  PERI_IMPLANTITIS_MODERATE
+  PERI_IMPLANTITIS_ADVANCED
+  SCREW_LOOSENING
+  ABUTMENT_SCREW_FRACTURE
+  PROSTHESIS_FRACTURE
+  IMPLANT_FRACTURE
+  NERVE_DAMAGE_TRANSIENT
+  NERVE_DAMAGE_PERMANENT
+  SINUS_PERFORATION
+  SINUS_INFECTION
+  OSSEOINTEGRATION_FAILURE
+  AESTHETIC_COMPLICATION
+  OTRO
+}
+
+enum ASAClassification {
+  ASA_I
+  ASA_II
+  ASA_III
+  ASA_IV
+  ASA_V
+}
+
+// Hitos específicos del seguimiento implantológico. NO confundir con el
+// FollowUpMilestone de endodoncia (CONTROL_6M / CONTROL_12M / etc.) — los
+// implantes requieren cadencia más fina y ventanas de 5 / 10 años.
+enum ImplantFollowUpMilestone {
+  M_1_WEEK
+  M_2_WEEKS
+  M_1_MONTH
+  M_3_MONTHS
+  M_6_MONTHS
+  M_12_MONTHS
+  M_24_MONTHS
+  M_5_YEARS
+  M_10_YEARS
+  UNSCHEDULED
+}
+
+enum ImplantConsentType {
+  SURGERY
+  BONE_AUGMENTATION
+  QR_PUBLIC
+}
+
+// v1.1 — declarado para futuro uso en BoneAugmentation. Se mantiene en
+// MVP para evitar segunda migración cuando se libere el v1.1.
+enum BoneGraftSource {
+  AUTOLOGOUS
+  ALLOGRAFT_HUMAN
+  XENOGRAFT_BOVINE
+  XENOGRAFT_PORCINE
+  SYNTHETIC_BIOACTIVE_GLASS
+  SYNTHETIC_HYDROXYAPATITE
+  SYNTHETIC_TCP
+  OTRO
+}
+
+// ── 4.2 Modelos MVP (9) ──────────────────────────────────────────────
+
+/// Implante dental — entidad central, dispositivo médico clase III.
+/// brand / lotNumber / placedAt son INMUTABLES por defecto. Cualquier
+/// UPDATE en estos campos requiere flag de sesión + justificación ≥20
+/// chars (validado por trigger SQL `protect_implant_traceability`).
+/// DELETE prohibido por trigger `block_implant_delete` — "remover" =
+/// `currentStatus = REMOVED` + `removalReason`.
+model Implant {
+  id        String @id @default(uuid())
+  patientId String
+  clinicId  String
+
+  // Posición anatómica (FDI 11..48)
+  toothFdi Int
+
+  // ── Trazabilidad COFEPRIS clase III (INMUTABLE) ─────────────────────
+  brand            ImplantBrand
+  brandCustomName  String? // requerido si brand = OTRO
+  modelName        String
+  diameterMm       Decimal                  @db.Decimal(3, 1) // 3.0..7.0
+  lengthMm         Decimal                  @db.Decimal(4, 1) // 6.0..18.0
+  connectionType   ImplantConnectionType
+  surfaceTreatment ImplantSurfaceTreatment?
+  lotNumber        String // CRÍTICO COFEPRIS
+  manufactureDate  DateTime?
+  expiryDate       DateTime?
+  // ────────────────────────────────────────────────────────────────────
+
+  placedAt         DateTime // CRÍTICO COFEPRIS
+  placedByDoctorId String
+
+  protocol        ImplantProtocol
+  currentStatus   ImplantStatus   @default(PLACED)
+  statusUpdatedAt DateTime        @default(now())
+
+  // Removal (en lugar de delete) — §1.10
+  removedAt              DateTime?
+  removalReason          String? // length ≥20 si REMOVED
+  removalSurgeryRecordId String?
+
+  notes String? @db.Text
+
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  // NO deletedAt — semántica de "borrar" es REMOVED
+
+  patient        Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  clinic         Clinic  @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  placedByDoctor User    @relation("ImplantPlacedBy", fields: [placedByDoctorId], references: [id], onDelete: Restrict)
+
+  surgicalRecord  ImplantSurgicalRecord?
+  healingPhase    ImplantHealingPhase?
+  secondStage     ImplantSecondStageSurgery?
+  prostheticPhase ImplantProstheticPhase?
+  complications   ImplantComplication[]
+  followUps       ImplantFollowUp[]
+  consents        ImplantConsent[]
+  passport        ImplantPassport?
+  // Cross-module: evaluaciones periimplantares que apuntan a este
+  // implante via la FK que aporta A2 cross-módulos.
+  periImplantAssessments PeriImplantAssessment[] @relation("ImplantPeriAssessments")
+
+  @@index([patientId, currentStatus])
+  @@index([clinicId, currentStatus])
+  @@index([clinicId, placedAt(sort: Desc)])
+  @@index([brand, lotNumber]) // queries de recall por lote
+  @@index([toothFdi])
+  @@map("implants")
+}
+
+/// Cirugía de colocación. 1:1 con Implant. Datos quirúrgicos completos
+/// + lote del pilar de cicatrización (COFEPRIS).
+model ImplantSurgicalRecord {
+  id        String @id @default(uuid())
+  implantId String @unique
+
+  performedAt           DateTime
+  asaClassification     ASAClassification
+  prophylaxisAntibiotic Boolean           @default(false)
+  prophylaxisDrug       String?
+  hba1cIfDiabetic       Decimal?          @db.Decimal(3, 1)
+
+  insertionTorqueNcm        Int
+  isqMesiodistal            Int
+  isqVestibulolingual       Int
+  boneDensity               LekholmZarbDensity
+  ridgeWidthMm              Decimal?           @db.Decimal(3, 1)
+  ridgeHeightMm             Decimal?           @db.Decimal(4, 1)
+  flapType                  String
+  drillingProtocol          String
+  healingAbutmentLot        String? // CRÍTICO COFEPRIS si protocolo 1-stage
+  healingAbutmentDiameterMm Decimal?           @db.Decimal(3, 1)
+  healingAbutmentHeightMm   Decimal?           @db.Decimal(3, 1)
+
+  sutureMaterial            String?
+  sutureRemovalScheduledAt  DateTime?
+  intraoperativePhotoFileId String?
+  postOpInstructions        String?   @db.Text
+  durationMinutes           Int
+
+  complications String? @db.Text // intraoperatorias
+
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  implant             Implant      @relation(fields: [implantId], references: [id], onDelete: Cascade)
+  intraoperativePhoto PatientFile? @relation("ImplantSurgicalIntraoperativePhoto", fields: [intraoperativePhotoFileId], references: [id], onDelete: SetNull)
+
+  @@index([performedAt])
+  @@map("implant_surgical_records")
+}
+
+/// Fase de osteointegración. 1:1 con Implant. Cicatrización + ISQ.
+model ImplantHealingPhase {
+  id        String @id @default(uuid())
+  implantId String @unique
+
+  startedAt             DateTime
+  expectedDurationWeeks Int
+
+  isqAt2Weeks Int?
+  isqAt4Weeks Int?
+  isqAt8Weeks Int?
+  isqLatest   Int?
+  isqLatestAt DateTime?
+
+  completedAt DateTime?
+  notes       String?   @db.Text
+
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  implant Implant @relation(fields: [implantId], references: [id], onDelete: Cascade)
+
+  @@map("implant_healing_phases")
+}
+
+/// 2ª cirugía (descubrimiento) en protocolo 2-stage. 1:1 con Implant.
+/// El lote del pilar de cicatrización es CRÍTICO COFEPRIS.
+model ImplantSecondStageSurgery {
+  id        String @id @default(uuid())
+  implantId String @unique
+
+  performedAt               DateTime
+  technique                 String
+  healingAbutmentLot        String // CRÍTICO COFEPRIS
+  healingAbutmentDiameterMm Decimal  @db.Decimal(3, 1)
+  healingAbutmentHeightMm   Decimal  @db.Decimal(3, 1)
+
+  isqAtUncovering Int?
+  durationMinutes Int
+
+  notes String? @db.Text
+
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  implant Implant @relation(fields: [implantId], references: [id], onDelete: Cascade)
+
+  @@map("implant_second_stage_surgeries")
+}
+
+/// Fase protésica. 1:1 con Implant. Lotes de pilar / prótesis / tornillo
+/// son críticos COFEPRIS. Al guardarse exitosamente se dispara la
+/// generación automática de ImplantPassport (carnet PDF).
+model ImplantProstheticPhase {
+  id        String @id @default(uuid())
+  implantId String @unique
+
+  // Pilar
+  abutmentType          AbutmentType
+  abutmentBrand         String?
+  abutmentLot           String // CRÍTICO COFEPRIS
+  abutmentDiameterMm    Decimal?     @db.Decimal(3, 1)
+  abutmentHeightMm      Decimal?     @db.Decimal(3, 1)
+  abutmentAngulationDeg Int?
+  abutmentTorqueNcm     Int
+
+  // Prótesis
+  prosthesisType     ProsthesisType
+  prosthesisMaterial ProsthesisMaterial
+  prosthesisLabName  String
+  prosthesisLabLot   String // CRÍTICO COFEPRIS
+
+  // Tornillo (si screw-retained)
+  screwLot       String?
+  screwTorqueNcm Int?
+
+  // Carga / entrega
+  immediateLoading       Boolean   @default(false)
+  provisionalDeliveredAt DateTime?
+  definitiveDeliveredAt  DateTime?
+  prosthesisDeliveredAt  DateTime
+  occlusionScheme        String?
+
+  notes String? @db.Text
+
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  implant Implant @relation(fields: [implantId], references: [id], onDelete: Cascade)
+
+  @@map("implant_prosthetic_phases")
+}
+
+/// Complicación periimplantaria. N:1 con Implant. Al crearse cambia
+/// `Implant.currentStatus` a COMPLICATION. Si tipo es biológico
+/// (mucositis / peri-implantitis) y módulo Periodoncia activo, también
+/// dispara `createPeriImplantAssessment` (STUB en MVP).
+model ImplantComplication {
+  id        String @id @default(uuid())
+  implantId String
+  clinicId  String
+  patientId String
+
+  detectedAt  DateTime
+  type        ImplantComplicationType
+  severity    String // leve | moderada | severa
+  description String                  @db.Text
+
+  // Hallazgos clínicos (si tipo biológico)
+  bopAtDiagnosis         Boolean?
+  pdMaxAtDiagnosisMm     Decimal? @db.Decimal(3, 1)
+  suppurationAtDiagnosis Boolean?
+  radiographicBoneLossMm Decimal? @db.Decimal(3, 1)
+
+  treatmentPlan String? @db.Text
+
+  // Resolución
+  resolvedAt DateTime?
+  outcome    String? // exitoso | parcial | fracaso | en_curso
+
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  implant Implant @relation(fields: [implantId], references: [id], onDelete: Cascade)
+
+  @@index([implantId, detectedAt(sort: Desc)])
+  @@index([clinicId, type])
+  @@index([clinicId, resolvedAt])
+  @@map("implant_complications")
+}
+
+/// Visita de mantenimiento periimplantario. N:1 con Implant. Pérdida
+/// ósea radiográfica acumulada se compara contra criterios Albrektsson
+/// 1986 (1.5mm año 1, <0.2mm/año después).
+model ImplantFollowUp {
+  id        String @id @default(uuid())
+  implantId String
+  clinicId  String
+
+  milestone   ImplantFollowUpMilestone
+  scheduledAt DateTime?
+  performedAt DateTime?
+
+  bopPresent      Boolean?
+  pdMaxMm         Decimal? @db.Decimal(3, 1)
+  suppuration     Boolean?
+  mobility        Boolean?
+  occlusionStable Boolean?
+
+  radiographicBoneLossMm   Decimal? @db.Decimal(3, 1)
+  meetsAlbrektssonCriteria Boolean?
+  radiographFileId         String?
+
+  nextControlAt DateTime?
+  notes         String?   @db.Text
+
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  implant        Implant      @relation(fields: [implantId], references: [id], onDelete: Cascade)
+  radiographFile PatientFile? @relation("ImplantFollowUpRadiograph", fields: [radiographFileId], references: [id], onDelete: SetNull)
+
+  @@index([implantId, scheduledAt])
+  @@index([clinicId, performedAt])
+  @@index([scheduledAt, performedAt]) // overdue queries
+  @@map("implant_follow_ups")
+}
+
+/// Consentimiento informado. N:1 con Implant. Tipo SURGERY / BONE_AUGMENTATION
+/// / QR_PUBLIC. La firma del paciente puede guardarse como base64 inline o
+/// como PatientFile.
+model ImplantConsent {
+  id        String @id @default(uuid())
+  implantId String
+  patientId String
+  doctorId  String
+
+  consentType   ImplantConsentType
+  text          String             @db.Text
+  acceptedRisks Json? // { mronj: true, sinus_perforation: true, ... }
+
+  signedAt              DateTime?
+  patientSignatureImage String?   @db.Text // base64 inline o referencia
+  signedFileId          String? // si se subió como archivo escaneado
+
+  revokedAt        DateTime?
+  revocationReason String?   @db.Text
+
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  implant    Implant      @relation(fields: [implantId], references: [id], onDelete: Cascade)
+  patient    Patient      @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  doctor     User         @relation("ImplantConsentDoctor", fields: [doctorId], references: [id], onDelete: Restrict)
+  signedFile PatientFile? @relation("ImplantConsentSigned", fields: [signedFileId], references: [id], onDelete: SetNull)
+
+  passportsLinkedByQrConsent ImplantPassport[] @relation("ImplantPassportQrConsent")
+
+  @@index([implantId, consentType])
+  @@map("implant_consents")
+}
+
+/// Carnet del implante (PDF licencia horizontal landscape). 1:1 con
+/// Implant. Auto-generado al finalizar fase protésica. Cualquier mutación
+/// posterior dispara regeneración (`regeneratedAt`).
+/// QR público es OPT-IN — requiere ImplantConsent type=QR_PUBLIC.
+model ImplantPassport {
+  id        String @id @default(uuid())
+  implantId String @unique
+
+  generatedAt   DateTime  @default(now())
+  regeneratedAt DateTime?
+
+  pdfFileId          String?
+  patientPhotoFileId String?
+
+  qrPublicEnabled   Boolean @default(false)
+  qrPublicConsentId String?
+  qrToken           String? @unique
+
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  implant          Implant         @relation(fields: [implantId], references: [id], onDelete: Cascade)
+  pdfFile          PatientFile?    @relation("ImplantPassportPdf", fields: [pdfFileId], references: [id], onDelete: SetNull)
+  patientPhotoFile PatientFile?    @relation("ImplantPassportPhoto", fields: [patientPhotoFileId], references: [id], onDelete: SetNull)
+  qrPublicConsent  ImplantConsent? @relation("ImplantPassportQrConsent", fields: [qrPublicConsentId], references: [id], onDelete: SetNull)
+
+  @@map("implant_passports")
+}
+
+// ── 4.3 Modelos v1.1 (DOCUMENTADOS, NO migrados en MVP) ──────────────
+// model ImplantSurgicalPlan { /* TODO v1.1 — planeación pre-CBCT */ }
+// model BoneAugmentation    { /* TODO v1.1 — aumento óseo + biomateriales */ }
+// model ImplantPrescription { /* TODO v1.1 — recetas implantológicas */ }
+//
+// ── 4.4 Modelo v2.0 (REFERENCIA, NO migrado) ─────────────────────────
+// model ImplantInventoryItem { /* TODO v2.0 — stock con caducidad */ }
+
+// ─────────────────────────────────────────────────────────────────────────
+// PERIODONTICS MODULE
+// Specs: docs/marketplace/research/periodoncia/SPEC.md §4
+// ─────────────────────────────────────────────────────────────────────────
+
+enum PeriodontalRecordType {
+  INICIAL
+  PRE_TRATAMIENTO
+  POST_FASE_1
+  POST_FASE_2
+  MANTENIMIENTO
+  CIRUGIA_PRE
+  CIRUGIA_POST
+}
+
+enum SitePosition {
+  MV // mesiovestibular
+  MB // mediovestibular
+  DV // distovestibular
+  DL // distolingual / distopalatino
+  ML // mediolingual / mediopalatino
+  MB_PAL // mesiolingual / mesiopalatino
+}
+
+enum PeriodontalStage {
+  SALUD
+  GINGIVITIS
+  STAGE_I
+  STAGE_II
+  STAGE_III
+  STAGE_IV
+}
+
+enum PeriodontalGrade {
+  GRADE_A
+  GRADE_B
+  GRADE_C
+}
+
+enum PeriodontalExtension {
+  LOCALIZADA
+  GENERALIZADA
+  PATRON_MOLAR_INCISIVO
+}
+
+enum CairoClassification {
+  RT1
+  RT2
+  RT3
+}
+
+enum GingivalPhenotype {
+  DELGADO
+  GRUESO
+}
+
+enum PeriodontalPhase {
+  PHASE_1
+  PHASE_2
+  PHASE_3
+  PHASE_4
+}
+
+enum SRPTechnique {
+  SRP_CUADRANTE
+  FULL_MOUTH_DISINFECTION
+  FULL_MOUTH_SCALING
+}
+
+enum SRPInstrumentation {
+  MANUAL
+  ULTRASONICO
+  COMBINADO
+}
+
+enum SmokingStatus {
+  NO
+  MENOR_10
+  MAYOR_O_IGUAL_10
+}
+
+enum PeriodontalRiskCategory {
+  BAJO
+  MODERADO
+  ALTO
+}
+
+enum PeriodontalSurgeryType {
+  COLGAJO_ACCESO
+  GINGIVECTOMIA
+  RESECTIVA_OSEA
+  RTG
+  INJERTO_GINGIVAL_LIBRE
+  INJERTO_TEJIDO_CONECTIVO
+  TUNELIZACION
+  CORONALLY_ADVANCED_FLAP
+  OTRO
+}
+
+enum PeriImplantStatus {
+  SALUD
+  MUCOSITIS
+  PERIIMPLANTITIS_INICIAL
+  PERIIMPLANTITIS_MODERADA
+  PERIIMPLANTITIS_AVANZADA
+}
+
+enum GingivitisType {
+  SALUD_INTACTO
+  SALUD_REDUCIDO_ESTABLE
+  GINGIVITIS_INDUCIDA_PLACA
+  GINGIVITIS_NO_INDUCIDA_PLACA
+  PERIODONTITIS
+}
+
+model PeriodontalClassification {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  periodontalRecordId String            @unique
+  periodontalRecord   PeriodontalRecord @relation(fields: [periodontalRecordId], references: [id], onDelete: Cascade)
+
+  stage     PeriodontalStage
+  grade     PeriodontalGrade?
+  extension PeriodontalExtension?
+
+  modifiers         Json
+  computationInputs Json
+
+  calculatedAutomatically Boolean
+  overriddenByDoctor      Boolean @default(false)
+  justification           String?
+
+  classifiedAt   DateTime @default(now())
+  classifiedById String
+  classifiedBy   User     @relation(fields: [classifiedById], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, classifiedAt(sort: Desc)])
+  @@index([clinicId])
+  @@map("periodontal_classifications")
+}
+
+model GingivalRecession {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  toothFdi            Int
+  surface             String
+  recessionHeightMm   Float
+  recessionWidthMm    Float
+  keratinizedTissueMm Float
+
+  cairoClassification CairoClassification
+  gingivalPhenotype   GingivalPhenotype
+
+  recordedAt   DateTime @default(now())
+  recordedById String
+  recordedBy   User     @relation(fields: [recordedById], references: [id])
+
+  notes      String?
+  resolvedAt DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, toothFdi])
+  @@index([clinicId, recordedAt(sort: Desc)])
+  @@map("gingival_recessions")
+}
+
+model PeriodontalTreatmentPlan {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  currentPhase PeriodontalPhase
+
+  phase1StartedAt   DateTime?
+  phase1CompletedAt DateTime?
+  phase2StartedAt   DateTime?
+  phase2CompletedAt DateTime?
+  phase3StartedAt   DateTime?
+  phase3CompletedAt DateTime?
+  phase4StartedAt   DateTime?
+
+  nextEvaluationAt DateTime?
+
+  planNotes String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient       Patient                   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic        Clinic                    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  srpSessions   SRPSession[]
+  reevaluations PeriodontalReevaluation[]
+  surgeries     PeriodontalSurgery[]
+
+  @@index([patientId])
+  @@index([clinicId, currentPhase])
+  @@index([nextEvaluationAt])
+  @@map("periodontal_treatment_plans")
+}
+
+model SRPSession {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  planId String
+  plan   PeriodontalTreatmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  performedAt DateTime @default(now())
+  doctorId    String
+  doctor      User     @relation("SrpDoctor", fields: [doctorId], references: [id])
+
+  technique          SRPTechnique
+  instrumentation    SRPInstrumentation
+  quadrantsCompleted Json
+
+  anesthesiaUsed  Boolean @default(false)
+  anesthesiaType  String?
+  durationMinutes Int?
+
+  observations String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, performedAt(sort: Desc)])
+  @@index([clinicId])
+  @@index([planId])
+  @@map("srp_sessions")
+}
+
+model PeriodontalReevaluation {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  planId String
+  plan   PeriodontalTreatmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  initialRecordId String
+  initialRecord   PeriodontalRecord @relation("ReevalInitial", fields: [initialRecordId], references: [id])
+
+  postRecordId String
+  postRecord   PeriodontalRecord @relation("ReevalPost", fields: [postRecordId], references: [id])
+
+  bopImprovementPct       Float
+  pdAverageImprovementMm  Float
+  residualSites           Json
+  surgicalCandidatesTeeth Json
+
+  evaluatedAt   DateTime @default(now())
+  evaluatedById String
+  evaluatedBy   User     @relation(fields: [evaluatedById], references: [id])
+
+  recommendation String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, evaluatedAt(sort: Desc)])
+  @@index([clinicId])
+  @@map("periodontal_reevaluations")
+}
+
+model PeriodontalRiskAssessment {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  evaluatedAt DateTime @default(now())
+
+  bopPct             Float
+  residualSites5Plus Int
+  lostTeethPerio     Int
+  boneLossAgeRatio   Float?
+  smokingStatus      SmokingStatus
+  hba1c              Float?
+
+  riskCategory            PeriodontalRiskCategory
+  recommendedRecallMonths Int
+
+  evaluatedById String
+  evaluatedBy   User   @relation(fields: [evaluatedById], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, evaluatedAt(sort: Desc)])
+  @@index([clinicId, riskCategory])
+  @@map("periodontal_risk_assessments")
+}
+
+model PeriodontalSurgery {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  planId String?
+  plan   PeriodontalTreatmentPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  surgeryType PeriodontalSurgeryType
+
+  treatedSites Json
+  biomaterials Json?
+  sutureType   String?
+
+  surgeryDate DateTime
+  doctorId    String
+  doctor      User     @relation("PerioSurgeryDoctor", fields: [doctorId], references: [id])
+
+  sutureRemovalDate   DateTime?
+  postOpComplications String?
+
+  intraoperativeFileId String?
+  intraoperativeFile   PatientFile? @relation("SurgeryIntraOpFile", fields: [intraoperativeFileId], references: [id], onDelete: SetNull)
+
+  consentSignedFileId String?
+  consentSignedFile   PatientFile? @relation("SurgeryConsentFile", fields: [consentSignedFileId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, surgeryDate(sort: Desc)])
+  @@index([clinicId])
+  @@index([planId])
+  @@map("periodontal_surgeries")
+}
+
+// El modelo `Implant` vive en `feature/implant-module-v1` (módulo 4/5).
+// A2 cross-módulos NO lo redefine — solo agrega la FK desde
+// PeriImplantAssessment.implantId → implants.id (ALTER TABLE en migración)
+// y las reverse relations Patient.implants / Clinic.implants /
+// User.implantsPlaced que coinciden con las del módulo real.
+//
+// Esta rama A2 NO es deployable standalone: la migración asume que la
+// tabla `implants` existe (creada por el módulo Implantología). El merge
+// efectivo se hace vía `feature/implant-phase-8-v1` que ya parte de
+// `origin/feature/implant-module-v1`.
+
+model PeriImplantAssessment {
+  id        String @id @default(cuid())
+  patientId String
+  clinicId  String
+
+  // FK opcional al modelo Implant (módulo 4/5). Se mantiene nullable
+  // para preservar assessments antiguos que no tienen un Implant
+  // referenciado. La FK de SQL la agrega la migración
+  // 20260505100000_dental_cross_modules.
+  implantId  String?
+  implantFdi Int
+
+  status                 PeriImplantStatus
+  bop                    Boolean
+  suppuration            Boolean
+  radiographicBoneLossMm Float?
+  recommendedTreatment   String?
+
+  evaluatedAt   DateTime @default(now())
+  evaluatedById String
+  evaluatedBy   User     @relation(fields: [evaluatedById], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic  Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  implant Implant? @relation("ImplantPeriAssessments", fields: [implantId], references: [id], onDelete: SetNull)
+
+  @@index([patientId, evaluatedAt(sort: Desc)])
+  @@index([clinicId, status])
+  @@index([implantId])
+  @@map("peri_implant_assessments")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ORTHODONTICS MODULE — see docs/marketplace/research/ortodoncia/SPEC.md
+// 9 modelos MVP + 14 enums + 6 modelos v1.1 (TODO, sin lógica).
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum AngleClass {
+  CLASS_I
+  CLASS_II_DIV_1
+  CLASS_II_DIV_2
+  CLASS_III
+  ASYMMETRIC
+}
+
+enum OrthoTechnique {
+  METAL_BRACKETS
+  CERAMIC_BRACKETS
+  SELF_LIGATING_METAL
+  SELF_LIGATING_CERAMIC
+  LINGUAL_BRACKETS
+  CLEAR_ALIGNERS
+  HYBRID
+}
+
+enum AnchorageType {
+  MAXIMUM
+  MODERATE
+  MINIMUM
+  COMPOUND
+}
+
+enum OrthoPhaseKey {
+  ALIGNMENT
+  LEVELING
+  SPACE_CLOSURE
+  DETAILS
+  FINISHING
+  RETENTION
+}
+
+enum OrthoPhaseStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  DELAYED
+}
+
+enum OrthoTreatmentStatus {
+  PLANNED
+  IN_PROGRESS
+  ON_HOLD
+  RETENTION
+  COMPLETED
+  DROPPED_OUT
+}
+
+enum OrthoPaymentStatus {
+  ON_TIME
+  LIGHT_DELAY
+  SEVERE_DELAY
+  PAID_IN_FULL
+}
+
+enum InstallmentStatus {
+  PENDING
+  PAID
+  OVERDUE
+  WAIVED
+}
+
+enum OrthoPhotoSetType {
+  T0
+  T1
+  T2
+  CONTROL
+}
+
+enum OrthoPhotoView {
+  EXTRA_FRONTAL
+  EXTRA_PROFILE
+  EXTRA_SMILE
+  INTRA_FRONTAL_OCCLUSION
+  INTRA_LATERAL_RIGHT
+  INTRA_LATERAL_LEFT
+  INTRA_OCCLUSAL_UPPER
+  INTRA_OCCLUSAL_LOWER
+}
+
+// Reuso de HabitType (orto comparte con pediatría/periodoncia si existe).
+// Si los otros módulos ya lo definen, este enum se omite. SPEC §4.1 nota:
+// definirlo aquí y dejar que prisma fusione si hay conflicto. En este repo
+// HabitType NO existe globalmente; se define ahora.
+enum HabitType {
+  DIGITAL_SUCKING
+  MOUTH_BREATHING
+  TONGUE_THRUSTING
+  BRUXISM
+  NAIL_BITING
+  LIP_BITING
+  OTHER
+}
+
+enum DentalPhase {
+  DECIDUOUS
+  MIXED_EARLY
+  MIXED_LATE
+  PERMANENT
+}
+
+enum TreatmentObjective {
+  AESTHETIC_ONLY
+  FUNCTIONAL_ONLY
+  AESTHETIC_AND_FUNCTIONAL
+}
+
+enum OrthoConsentType {
+  TREATMENT
+  FINANCIAL
+  MINOR_ASSENT
+  PHOTO_USE
+}
+
+enum ControlAttendance {
+  ATTENDED
+  RESCHEDULED
+  NO_SHOW
+}
+
+enum AdjustmentType {
+  WIRE_CHANGE
+  BRACKET_REPOSITION
+  ELASTIC_CHANGE
+  NEW_ALIGNERS_DELIVERED
+  IPR
+  BUTTON_PLACEMENT
+  ATTACHMENT_PLACEMENT
+  HYGIENE_REINFORCEMENT
+  OTHER
+}
+
+enum OrthoPaymentMethod {
+  CASH
+  DEBIT_CARD
+  CREDIT_CARD
+  BANK_TRANSFER
+  CHECK
+  WALLET
+}
+
+enum DigitalRecordType {
+  CEPH_ANALYSIS_PDF
+  SCAN_STL
+}
+
+// ─── Modelos MVP (9) ─────────────────────────────────────────────────────────
+
+model OrthodonticDiagnosis {
+  id            String   @id @default(uuid())
+  patientId     String
+  clinicId      String
+  diagnosedById String
+  diagnosedAt   DateTime @default(now())
+
+  // Análisis Angle
+  angleClassRight    AngleClass
+  angleClassLeft     AngleClass
+  overbiteMm         Decimal    @db.Decimal(4, 1)
+  overbitePercentage Int
+  overjetMm          Decimal    @db.Decimal(4, 1)
+  midlineDeviationMm Decimal?   @db.Decimal(4, 1)
+  crossbite          Boolean    @default(false)
+  crossbiteDetails   String?
+  openBite           Boolean    @default(false)
+  openBiteDetails    String?
+  crowdingUpperMm    Decimal?   @db.Decimal(4, 1)
+  crowdingLowerMm    Decimal?   @db.Decimal(4, 1)
+
+  etiologySkeletal   Boolean @default(false)
+  etiologyDental     Boolean @default(false)
+  etiologyFunctional Boolean @default(false)
+  etiologyNotes      String?
+
+  habits            HabitType[]
+  habitsDescription String?
+
+  dentalPhase DentalPhase
+
+  tmjPainPresent     Boolean @default(false)
+  tmjClickingPresent Boolean @default(false)
+  tmjNotes           String?
+
+  initialPhotoSetId String? @unique
+  initialCephFileId String?
+  initialScanFileId String?
+
+  clinicalSummary String
+
+  treatmentPlan OrthodonticTreatmentPlan?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  patient     Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic      Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  diagnosedBy User    @relation("OrthoDiagnosedBy", fields: [diagnosedById], references: [id])
+
+  @@index([patientId])
+  @@index([clinicId, diagnosedAt(sort: Desc)])
+  @@map("orthodontic_diagnoses")
+}
+
+model OrthodonticTreatmentPlan {
+  id          String @id @default(uuid())
+  diagnosisId String @unique
+  patientId   String
+  clinicId    String
+
+  technique               OrthoTechnique
+  techniqueNotes          String?
+  estimatedDurationMonths Int
+  startDate               DateTime?
+  installedAt             DateTime?
+
+  totalCostMxn   Decimal       @db.Decimal(10, 2)
+  anchorageType  AnchorageType
+  anchorageNotes String?
+
+  extractionsRequired Boolean @default(false)
+  extractionsTeethFdi Int[]
+  iprRequired         Boolean @default(false)
+  tadsRequired        Boolean @default(false)
+
+  treatmentObjectives TreatmentObjective
+  patientGoals        String?
+
+  retentionPlanText String
+
+  status          OrthoTreatmentStatus @default(PLANNED)
+  statusUpdatedAt DateTime             @default(now())
+
+  onHoldReason     String?
+  onHoldStartedAt  DateTime?
+  droppedOutAt     DateTime?
+  droppedOutReason String?
+
+  signedTreatmentConsentFileId String?
+  signedTreatmentConsentFile   PatientFile? @relation("OrthoTreatmentConsentSignedFile", fields: [signedTreatmentConsentFileId], references: [id], onDelete: SetNull)
+
+  diagnosis      OrthodonticDiagnosis            @relation(fields: [diagnosisId], references: [id], onDelete: Cascade)
+  patient        Patient                         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic         Clinic                          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  phases         OrthodonticPhase[]
+  paymentPlan    OrthoPaymentPlan?
+  controls       OrthodonticControlAppointment[]
+  photoSets      OrthoPhotoSet[]
+  digitalRecords OrthodonticDigitalRecord[]
+  consents       OrthodonticConsent[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([patientId])
+  @@index([clinicId, status])
+  @@index([clinicId, installedAt(sort: Desc)])
+  @@map("orthodontic_treatment_plans")
+}
+
+model OrthodonticPhase {
+  id              String @id @default(uuid())
+  treatmentPlanId String
+  clinicId        String
+
+  phaseKey      OrthoPhaseKey
+  status        OrthoPhaseStatus @default(NOT_STARTED)
+  startedAt     DateTime?
+  expectedEndAt DateTime?
+  completedAt   DateTime?
+  notes         String?
+  orderIndex    Int
+
+  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([treatmentPlanId, phaseKey])
+  // SPEC §4.5: índice idx_ortho_kanban_lookup para query del kanban <100ms con
+  // 500 pacientes activos. La migración SQL le da nombre explícito.
+  @@index([clinicId, status, phaseKey], map: "idx_ortho_kanban_lookup")
+  @@index([treatmentPlanId, orderIndex])
+  @@map("orthodontic_phases")
+}
+
+model OrthoPaymentPlan {
+  id              String @id @default(uuid())
+  treatmentPlanId String @unique
+  patientId       String
+  clinicId        String
+
+  totalAmount        Decimal @db.Decimal(10, 2)
+  initialDownPayment Decimal @db.Decimal(10, 2)
+  installmentAmount  Decimal @db.Decimal(10, 2)
+  installmentCount   Int
+
+  startDate         DateTime
+  endDate           DateTime
+  paymentDayOfMonth Int
+
+  paidAmount      Decimal            @default(0) @db.Decimal(10, 2)
+  pendingAmount   Decimal            @db.Decimal(10, 2)
+  status          OrthoPaymentStatus @default(ON_TIME)
+  statusUpdatedAt DateTime           @default(now())
+
+  preferredPaymentMethod         OrthoPaymentMethod
+  signedFinancialAgreementFileId String?
+  signedFinancialAgreementFile   PatientFile?       @relation("OrthoFinancialAgreementSignedFile", fields: [signedFinancialAgreementFileId], references: [id], onDelete: SetNull)
+
+  notes String?
+
+  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  installments  OrthoInstallment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clinicId, status])
+  @@index([patientId])
+  @@map("ortho_payment_plans")
+}
+
+model OrthoInstallment {
+  id            String @id @default(uuid())
+  paymentPlanId String
+  clinicId      String
+
+  installmentNumber Int
+  amount            Decimal           @db.Decimal(10, 2)
+  dueDate           DateTime
+  status            InstallmentStatus @default(PENDING)
+
+  paidAt                  DateTime?
+  amountPaid              Decimal?            @db.Decimal(10, 2)
+  paymentMethod           OrthoPaymentMethod?
+  receiptFileId           String?
+  receiptFile             PatientFile?        @relation("OrthoInstallmentReceiptFile", fields: [receiptFileId], references: [id], onDelete: SetNull)
+  recordedById            String?
+  recordedBy              User?               @relation("OrthoInstallmentRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+  backdatingJustification String?
+
+  waivedAt     DateTime?
+  waivedById   String?
+  waivedBy     User?     @relation("OrthoInstallmentWaivedBy", fields: [waivedById], references: [id], onDelete: SetNull)
+  waiverReason String?
+
+  paymentPlan OrthoPaymentPlan @relation(fields: [paymentPlanId], references: [id], onDelete: Cascade)
+  clinic      Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([paymentPlanId, installmentNumber])
+  @@index([clinicId, dueDate, status])
+  @@index([clinicId, status])
+  @@map("ortho_installments")
+}
+
+model OrthoPhotoSet {
+  id              String @id @default(uuid())
+  treatmentPlanId String
+  patientId       String
+  clinicId        String
+
+  setType          OrthoPhotoSetType
+  capturedAt       DateTime
+  capturedById     String
+  capturedBy       User              @relation("OrthoPhotoSetCapturedBy", fields: [capturedById], references: [id])
+  monthInTreatment Int?
+  notes            String?
+
+  // 8 columnas tipadas (decisión Coordinator, no tabla relacional).
+  photoFrontalId       String?
+  photoFrontal         PatientFile? @relation("OrthoPhotoFrontal", fields: [photoFrontalId], references: [id], onDelete: SetNull)
+  photoProfileId       String?
+  photoProfile         PatientFile? @relation("OrthoPhotoProfile", fields: [photoProfileId], references: [id], onDelete: SetNull)
+  photoSmileId         String?
+  photoSmile           PatientFile? @relation("OrthoPhotoSmile", fields: [photoSmileId], references: [id], onDelete: SetNull)
+  photoIntraFrontalId  String?
+  photoIntraFrontal    PatientFile? @relation("OrthoPhotoIntraFrontal", fields: [photoIntraFrontalId], references: [id], onDelete: SetNull)
+  photoIntraLateralRId String?
+  photoIntraLateralR   PatientFile? @relation("OrthoPhotoIntraLateralR", fields: [photoIntraLateralRId], references: [id], onDelete: SetNull)
+  photoIntraLateralLId String?
+  photoIntraLateralL   PatientFile? @relation("OrthoPhotoIntraLateralL", fields: [photoIntraLateralLId], references: [id], onDelete: SetNull)
+  photoOcclusalUpperId String?
+  photoOcclusalUpper   PatientFile? @relation("OrthoPhotoOcclusalUpper", fields: [photoOcclusalUpperId], references: [id], onDelete: SetNull)
+  photoOcclusalLowerId String?
+  photoOcclusalLower   PatientFile? @relation("OrthoPhotoOcclusalLower", fields: [photoOcclusalLowerId], references: [id], onDelete: SetNull)
+
+  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([treatmentPlanId, setType])
+  @@index([clinicId, capturedAt(sort: Desc)])
+  @@map("ortho_photo_sets")
+}
+
+model OrthodonticControlAppointment {
+  id              String @id @default(uuid())
+  treatmentPlanId String
+  patientId       String
+  clinicId        String
+
+  scheduledAt      DateTime
+  performedAt      DateTime?
+  monthInTreatment Int
+  attendance       ControlAttendance @default(ATTENDED)
+  attendedById     String?
+  attendedBy       User?             @relation("OrthoControlAttendedBy", fields: [attendedById], references: [id], onDelete: SetNull)
+
+  hygieneScore       Int?
+  bracketsLoose      Int?
+  bracketsBroken     Int?
+  appliancesIntact   Boolean?
+  patientReportsPain Boolean  @default(false)
+  patientPainNotes   String?
+
+  adjustments     AdjustmentType[]
+  adjustmentNotes String?
+
+  photoSetId String?
+
+  nextAppointmentAt    DateTime?
+  nextAppointmentNotes String?
+
+  paymentStatusSnapshot OrthoPaymentStatus?
+
+  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([treatmentPlanId, monthInTreatment])
+  @@index([clinicId, scheduledAt])
+  @@index([clinicId, performedAt])
+  @@map("orthodontic_control_appointments")
+}
+
+model OrthodonticDigitalRecord {
+  id              String @id @default(uuid())
+  treatmentPlanId String
+  patientId       String
+  clinicId        String
+
+  recordType   DigitalRecordType
+  fileId       String
+  file         PatientFile       @relation("OrthoDigitalRecordFile", fields: [fileId], references: [id], onDelete: Cascade)
+  capturedAt   DateTime
+  uploadedById String
+  uploadedBy   User              @relation("OrthoDigitalUploadedBy", fields: [uploadedById], references: [id])
+  notes        String?
+
+  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([treatmentPlanId, recordType])
+  @@map("orthodontic_digital_records")
+}
+
+model OrthodonticConsent {
+  id              String @id @default(uuid())
+  treatmentPlanId String
+  patientId       String
+  clinicId        String
+
+  consentType            OrthoConsentType
+  signedAt               DateTime
+  signerName             String
+  signerRelationship     String?
+  patientSignatureImage  String?
+  guardianSignatureImage String?
+  signedFileId           String?
+  signedFile             PatientFile?     @relation("OrthoConsentSignedFile", fields: [signedFileId], references: [id], onDelete: SetNull)
+  notes                  String?
+
+  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([treatmentPlanId, consentType])
+  @@map("orthodontic_consents")
+}
+
+// ─── Modelos v1.1 (6, documentados sin lógica) ───────────────────────────────
+//
+// SPEC §4.3 + §14: estos 6 modelos se planean para v1.1 y NO se implementan
+// en MVP. Quedan documentados aquí como TODO para que el bot de v1.1 los
+// agregue sin redefinir el contrato.
+//
+// TODO v1.1: OrthodonticCephalometryAnalysis — captura numérica de valores
+//   Steiner/Ricketts/Jarabak (~30 campos: SNA, SNB, ANB, FMA, IMPA, planos,
+//   dimensiones faciales). Vinculado 1:1 con un PatientFile category=
+//   CEPH_ANALYSIS_PDF.
+//
+// TODO v1.1: OrthodonticBracketsMap — mapeo bracket por diente con
+//   prescripción (Roth, MBT, Andrews) + slot, torque, in/out, tip.
+//
+// TODO v1.1: OrthodonticAligner — tracking del set actual de alineadores con
+//   número, fecha entrega, fecha cambio, compliance reportado por paciente.
+//
+// TODO v1.1: OrthodonticIPR — registro de reducción interproximal por par de
+//   dientes con cantidad en mm, fecha, instrumento.
+//
+// TODO v1.1: OrthodonticTAD — mini-implantes de anclaje con lote, ubicación
+//   FDI, fecha colocación, fecha retiro, complicaciones.
+//
+// TODO v1.1: OrthodonticRefinement — segundo curso de tratamiento por
+//   ajustes finales no logrados con el plan original (alineadores y brackets).
