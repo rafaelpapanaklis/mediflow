@@ -1,25 +1,41 @@
 "use client";
 // Implants — entrada del módulo en el detalle del paciente. Spec §6.
-// Combina los 3 sub-tabs (Implantes, Cirugías, Mantenimiento). Maneja
-// el handler onAction central que abre wizards/drawers/modales (Phase 5).
+// Combina los 3 sub-tabs + maneja el state de los wizards / drawers /
+// modales que disparan las acciones rápidas de cada ImplantCard.
 //
-// MOBILE FALLBACK: Si viewport < 1024px, renderiza banner read-only.
-// La captura clínica requiere tablet/desktop (Spec §1.17).
+// MOBILE FALLBACK: Si viewport < 1024px, renderiza banner read-only
+// y bloquea handlers de captura (Spec §1.17).
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 import { Anchor, MonitorSmartphone } from "lucide-react";
 import { ImplantsSubTabs } from "./ImplantsSubTabs";
 import { ImplantsListTab } from "./ImplantsListTab";
+import { NewImplantModal } from "./modals/NewImplantModal";
+import { RemoveImplantModal } from "./modals/RemoveImplantModal";
+import { BrandUpdateJustificationModal } from "./modals/BrandUpdateJustificationModal";
+import { ComplicationDrawer } from "./drawers/ComplicationDrawer";
+import { SurgeryWizard } from "./wizards/SurgeryWizard";
+import { ProstheticWizard } from "./wizards/ProstheticWizard";
 import type { ImplantFull } from "@/lib/types/implants";
 import type { ImplantActionType } from "./ImplantActions";
 import type { TimelineMilestone as MilestoneKey } from "@/lib/implants/implant-helpers";
 
+type DialogKey =
+  | null
+  | "newImplant"
+  | "surgery"
+  | "prosthetic"
+  | "complication"
+  | "remove"
+  | "traceability";
+
 export interface ImplantsTabProps {
   patientId: string;
   patientName: string;
+  doctorId: string;
   implants: ImplantFull[];
-  onAction?: (action: ImplantActionType, implantId: string) => void;
-  onNewImplant?: () => void;
   onMilestoneClick?: (milestone: MilestoneKey, implantId: string) => void;
 }
 
@@ -39,9 +55,7 @@ function MobileReadOnlyBanner() {
     <div className="rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 p-4 flex items-start gap-3">
       <MonitorSmartphone className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
       <div className="text-sm">
-        <p className="font-medium text-amber-900 dark:text-amber-200">
-          Modo solo lectura
-        </p>
+        <p className="font-medium text-amber-900 dark:text-amber-200">Modo solo lectura</p>
         <p className="text-amber-800 dark:text-amber-300 mt-1">
           Para captura de cirugía o fase protésica abre desde tablet o
           escritorio. Aquí puedes consultar las tarjetas, el carnet PDF y
@@ -53,16 +67,52 @@ function MobileReadOnlyBanner() {
 }
 
 export function ImplantsTab(props: ImplantsTabProps) {
+  const router = useRouter();
   const isMobile = useIsMobile();
+  const [dialog, setDialog] = useState<DialogKey>(null);
+  const [activeImplantId, setActiveImplantId] = useState<string | null>(null);
+
+  const close = () => { setDialog(null); setActiveImplantId(null); };
+  const refresh = () => router.refresh();
+
+  const activeImplant = useMemo(
+    () => (activeImplantId ? props.implants.find((i) => i.id === activeImplantId) ?? null : null),
+    [props.implants, activeImplantId],
+  );
 
   const handleAction = (action: ImplantActionType, implantId: string) => {
-    if (isMobile) return; // bloqueado en mobile
-    props.onAction?.(action, implantId);
+    if (isMobile) return;
+    setActiveImplantId(implantId);
+    switch (action) {
+      case "remove":
+        setDialog("remove");
+        return;
+      case "traceability":
+        setDialog("traceability");
+        return;
+      case "complication":
+        setDialog("complication");
+        return;
+      case "passport":
+      case "radiographs":
+      case "consent":
+      case "maintenance":
+        toast(`"${action}" — disponible en la siguiente fase`);
+        return;
+    }
+  };
+
+  const handleMilestone = (m: MilestoneKey, implantId: string) => {
+    if (isMobile) return;
+    setActiveImplantId(implantId);
+    if (m === "SURGERY") setDialog("surgery");
+    else if (m === "PROSTHETIC") setDialog("prosthetic");
+    else props.onMilestoneClick?.(m, implantId);
   };
 
   const handleNew = () => {
     if (isMobile) return;
-    props.onNewImplant?.();
+    setDialog("newImplant");
   };
 
   return (
@@ -73,12 +123,8 @@ export function ImplantsTab(props: ImplantsTabProps) {
             <Anchor className="h-5 w-5 text-blue-600 dark:text-blue-400" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-[var(--text-1,theme(colors.gray.900))]">
-              Implantología
-            </h1>
-            <p className="text-xs text-[var(--text-3,theme(colors.gray.500))]">
-              {props.patientName}
-            </p>
+            <h1 className="text-lg font-semibold text-[var(--text-1,theme(colors.gray.900))]">Implantología</h1>
+            <p className="text-xs text-[var(--text-3,theme(colors.gray.500))]">{props.patientName}</p>
           </div>
         </div>
       </header>
@@ -91,19 +137,66 @@ export function ImplantsTab(props: ImplantsTabProps) {
             implants={props.implants}
             onNew={handleNew}
             onAction={handleAction}
-            onMilestoneClick={props.onMilestoneClick}
+            onMilestoneClick={handleMilestone}
           />
         }
         surgeriesContent={
           <p className="text-sm text-[var(--text-3,theme(colors.gray.500))] py-8 text-center">
-            Timeline de cirugías y aumentos óseos — disponible en próxima fase.
+            Timeline cronológico de cirugías y aumentos — próxima fase.
           </p>
         }
         maintenanceContent={
           <p className="text-sm text-[var(--text-3,theme(colors.gray.500))] py-8 text-center">
-            Tabla de mantenimientos + gráfico de pérdida ósea — disponible en próxima fase.
+            Tabla de mantenimientos + gráfico Albrektsson — próxima fase.
           </p>
         }
+      />
+
+      <NewImplantModal
+        open={dialog === "newImplant"}
+        patientId={props.patientId}
+        doctorId={props.doctorId}
+        onClose={close}
+        onCreated={() => refresh()}
+      />
+      <SurgeryWizard
+        open={dialog === "surgery"}
+        implantId={activeImplantId}
+        onClose={close}
+        onSaved={() => refresh()}
+      />
+      <ProstheticWizard
+        open={dialog === "prosthetic"}
+        implantId={activeImplantId}
+        onClose={close}
+        onSaved={() => refresh()}
+      />
+      <ComplicationDrawer
+        open={dialog === "complication"}
+        implantId={activeImplantId}
+        onClose={close}
+        onCreated={() => refresh()}
+      />
+      <RemoveImplantModal
+        open={dialog === "remove"}
+        implantId={activeImplantId}
+        onClose={close}
+        onRemoved={() => refresh()}
+      />
+      <BrandUpdateJustificationModal
+        open={dialog === "traceability"}
+        implantId={activeImplantId}
+        current={
+          activeImplant
+            ? {
+                brand: activeImplant.brand,
+                lotNumber: activeImplant.lotNumber,
+                placedAt: new Date(activeImplant.placedAt),
+              }
+            : null
+        }
+        onClose={close}
+        onUpdated={() => refresh()}
       />
     </div>
   );
