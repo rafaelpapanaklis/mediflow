@@ -10,6 +10,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { auditClinicalShared, guardPatient } from "@/lib/clinical-shared/auth/guard";
 import { fail, isFailure, ok, type ActionResult } from "@/lib/clinical-shared/result";
 import { buildPediatricSummary } from "@/lib/clinical-shared/referral/summary";
+import { buildOrthoSummary } from "@/lib/clinical-shared/referral/summary-orthodontics";
 import { ReferralLetterDocument } from "@/lib/pdf/referral-letter-document";
 
 const moduleEnum = z.nativeEnum(ClinicalModule);
@@ -176,7 +177,13 @@ export async function buildReferralSummary(
       patientId: parsed.data.patientId,
       clinicId: ctx.clinicId,
     });
+  } else if (parsed.data.module === "orthodontics") {
+    summary = await buildOrthoSummary({
+      patientId: parsed.data.patientId,
+      clinicId: ctx.clinicId,
+    });
   }
+  // Otros módulos registran sus builders en sus branches.
   return ok({ summary });
 }
 
@@ -210,21 +217,18 @@ export async function createReferralLetter(
     }
   }
 
-  const created = await prisma.$transaction(async (tx) => {
-    const letter = await tx.referralLetter.create({
-      data: {
-        clinicId: ctx.clinicId,
-        patientId: parsed.data.patientId,
-        module: parsed.data.module,
-        contactId: parsed.data.contactId ?? null,
-        authorId: ctx.userId,
-        reason: parsed.data.reason,
-        summary: parsed.data.summary,
-        status: "draft",
-      },
-      select: { id: true },
-    });
-    return letter;
+  const created = await prisma.referralLetter.create({
+    data: {
+      clinicId: ctx.clinicId,
+      patientId: parsed.data.patientId,
+      module: parsed.data.module,
+      contactId: parsed.data.contactId ?? null,
+      authorId: ctx.userId,
+      reason: parsed.data.reason,
+      summary: parsed.data.summary,
+      status: "draft",
+    },
+    select: { id: true },
   });
 
   const pdfUrl = await renderReferralPdfBase64({
