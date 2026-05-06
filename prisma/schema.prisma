@@ -208,6 +208,17 @@ model Clinic {
   // Implants module — see docs/marketplace/research/implantologia/SPEC.md §4
   implants Implant[]
 
+  // Clinical-shared cross-cutting features
+  clinicalPhotos             ClinicalPhoto[]
+  clinicalEvolutionTemplates ClinicalEvolutionTemplate[]
+  referralLetters            ReferralLetter[]
+  doctorContacts             DoctorContact[]
+  labOrders                  LabOrder[]
+  labPartners                LabPartner[]
+  clinicalReminders          ClinicalReminder[]
+  patientShareLinks          PatientShareLink[]
+  treatmentLinks             TreatmentLink[]
+
   @@map("clinics")
 }
 
@@ -325,6 +336,15 @@ model User {
   // Implants module — see docs/marketplace/research/implantologia/SPEC.md §4
   implantsPlaced          Implant[]        @relation("ImplantPlacedBy")
   implantConsentsAsDoctor ImplantConsent[] @relation("ImplantConsentDoctor")
+
+  // Clinical-shared cross-cutting features
+  clinicalPhotosCaptured     ClinicalPhoto[]             @relation("ClinicalPhotoCapturedBy")
+  evolutionTemplatesCreated  ClinicalEvolutionTemplate[] @relation("EvolutionTemplateCreatedBy")
+  referralLettersAuthored    ReferralLetter[]            @relation("ReferralLetterAuthor")
+  labOrdersAuthored          LabOrder[]                  @relation("LabOrderAuthor")
+  clinicalRemindersCreated   ClinicalReminder[]          @relation("ClinicalReminderCreator")
+  patientShareLinksGenerated PatientShareLink[]          @relation("PatientShareLinkCreator")
+  treatmentLinksAuthored     TreatmentLink[]             @relation("TreatmentLinkAuthor")
 
   @@unique([supabaseId, clinicId])
   @@index([supabaseId])
@@ -464,6 +484,13 @@ model Patient {
   // Implants module — see docs/marketplace/research/implantologia/SPEC.md §4
   implants        Implant[]
   implantConsents ImplantConsent[]
+
+  // Clinical-shared cross-cutting features
+  clinicalPhotos    ClinicalPhoto[]
+  referralLetters   ReferralLetter[]
+  labOrders         LabOrder[]
+  clinicalReminders ClinicalReminder[]
+  patientShareLinks PatientShareLink[]
 
   @@unique([clinicId, patientNumber])
   @@index([clinicId, status])
@@ -855,7 +882,8 @@ model TreatmentSession {
   completedAt   DateTime? // null = not yet done
   createdAt     DateTime  @default(now())
 
-  treatment TreatmentPlan @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
+  treatment      TreatmentPlan   @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
+  treatmentLinks TreatmentLink[]
 
   @@index([treatmentId])
   @@map("treatment_sessions")
@@ -3181,17 +3209,17 @@ model Implant {
   clinic         Clinic  @relation(fields: [clinicId], references: [id], onDelete: Restrict)
   placedByDoctor User    @relation("ImplantPlacedBy", fields: [placedByDoctorId], references: [id], onDelete: Restrict)
 
-  surgicalRecord  ImplantSurgicalRecord?
-  healingPhase    ImplantHealingPhase?
-  secondStage     ImplantSecondStageSurgery?
-  prostheticPhase ImplantProstheticPhase?
-  complications   ImplantComplication[]
-  followUps       ImplantFollowUp[]
-  consents        ImplantConsent[]
-  passport        ImplantPassport?
+  surgicalRecord         ImplantSurgicalRecord?
+  healingPhase           ImplantHealingPhase?
+  secondStage            ImplantSecondStageSurgery?
+  prostheticPhase        ImplantProstheticPhase?
+  complications          ImplantComplication[]
+  followUps              ImplantFollowUp[]
+  consents               ImplantConsent[]
+  passport               ImplantPassport?
   // Cross-module: evaluaciones periimplantares que apuntan a este
   // implante via la FK que aporta A2 cross-módulos.
-  periImplantAssessments PeriImplantAssessment[] @relation("ImplantPeriAssessments")
+  periImplantAssessments PeriImplantAssessment[]    @relation("ImplantPeriAssessments")
 
   @@index([patientId, currentStatus])
   @@index([clinicId, currentStatus])
@@ -4430,3 +4458,399 @@ model OrthodonticConsent {
 //
 // TODO v1.1: OrthodonticRefinement — segundo curso de tratamiento por
 //   ajustes finales no logrados con el plan original (alineadores y brackets).
+
+// ─── Clinical-shared cross-cutting (Sprint cierre dental) ────────────────────
+//
+// 8 modelos compartidos por los 5 módulos dentales: pediatrics, endodontics,
+// periodontics, implants, orthodontics. Proveen capacidades transversales
+// (fotos clínicas, plantillas SOAP, hojas de referencia, órdenes de lab,
+// links a plan de tratamiento, exportación PDF, share con paciente,
+// recordatorios clínicos) sin duplicar lógica por módulo.
+
+enum ClinicalModule {
+  pediatrics
+  endodontics
+  periodontics
+  implants
+  orthodontics
+}
+
+enum ClinicalPhotoStage {
+  pre
+  during
+  post
+  control
+}
+
+enum ClinicalPhotoType {
+  // Pediátrico
+  oral_general
+  eruption_check
+  sealant_pre
+  sealant_post
+  fluoride_app
+  behavior_documentation
+  // Endodoncia
+  endo_access
+  endo_working_length
+  endo_obturation
+  // Periodoncia
+  perio_initial
+  perio_postsrp
+  perio_surgery
+  // Implantes
+  implant_site_pre
+  implant_placement
+  implant_healing
+  implant_prosthetic
+  // Ortodoncia
+  ortho_extraoral_front
+  ortho_extraoral_profile
+  ortho_intraoral
+  ortho_progress
+  // Cross
+  other
+}
+
+enum ReferralLetterStatus {
+  draft
+  sent
+  acknowledged
+  completed
+}
+
+enum ReferralLetterChannel {
+  whatsapp
+  email
+  print
+}
+
+enum LabOrderStatus {
+  draft
+  sent
+  in_progress
+  received
+  cancelled
+}
+
+enum LabOrderType {
+  // Endodoncia / Restauración
+  post_core
+  // Periodoncia / Implantes
+  surgical_guide
+  custom_abutment
+  crown
+  // Ortodoncia
+  ortho_appliance
+  retainer
+  // Pediatría — instalada para v1.1
+  ped_space_maintainer_lab
+  // Cross
+  other
+}
+
+enum ClinicalReminderType {
+  // Pediatría
+  ped_profilaxis_6m
+  ped_control_erupcion_anual
+  ped_cumpleanos_paciente
+  // Endodoncia
+  endo_followup_3m
+  endo_followup_6m
+  endo_followup_1y
+  // Periodoncia
+  perio_maintenance_3m
+  perio_reevaluation
+  // Implantes
+  implant_followup_1m
+  implant_followup_6m
+  implant_followup_1y
+  // Ortodoncia
+  ortho_control_30d
+  ortho_retention_check
+  // Cross
+  other
+}
+
+enum ClinicalReminderStatus {
+  pending
+  sent
+  completed
+  cancelled
+}
+
+// ── ClinicalPhoto ───────────────────────────────────────────────────────────
+//
+// Foto clínica unificada para los 5 módulos. Almacena URL pública en
+// Supabase storage bucket `clinical-photos` (RLS por clinicId). Soporta
+// thumbnail aparte para grids ligeros y soft-delete (deletedAt).
+model ClinicalPhoto {
+  id           String             @id @default(cuid())
+  clinicId     String
+  patientId    String
+  module       ClinicalModule
+  toothFdi     Int? // 11–48 (permanente) o 51–85 (temporal)
+  photoType    ClinicalPhotoType
+  stage        ClinicalPhotoStage
+  capturedAt   DateTime           @default(now())
+  capturedBy   String
+  blobUrl      String
+  thumbnailUrl String?
+  notes        String?
+  // Anotaciones libres sobre la foto (eg. "diente 51 erupcionando").
+  annotations  Json?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  deletedAt    DateTime?
+
+  clinic         Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient        Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  capturedByUser User    @relation("ClinicalPhotoCapturedBy", fields: [capturedBy], references: [id])
+
+  @@index([clinicId, patientId, module])
+  @@index([clinicId, patientId, photoType])
+  @@index([patientId, capturedAt(sort: Desc)])
+  @@index([clinicId, deletedAt])
+  @@map("clinical_photos")
+}
+
+// ── ClinicalEvolutionTemplate ───────────────────────────────────────────────
+//
+// Plantilla SOAP por módulo + clínica. soapTemplate guarda 4 strings con
+// placeholders {{patient.firstName}} etc. proceduresPrefilled: lista de
+// IDs de ProcedureCatalog. materialsPrefilled: lista de InventoryItem IDs.
+model ClinicalEvolutionTemplate {
+  id                  String         @id @default(cuid())
+  clinicId            String
+  module              ClinicalModule
+  name                String
+  soapTemplate        Json // { S: string; O: string; A: string; P: string }
+  proceduresPrefilled String[]       @default([])
+  materialsPrefilled  String[]       @default([])
+  isDefault           Boolean        @default(false)
+  createdBy           String
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  deletedAt           DateTime?
+
+  clinic        Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  createdByUser User   @relation("EvolutionTemplateCreatedBy", fields: [createdBy], references: [id])
+
+  @@unique([clinicId, module, name])
+  @@index([clinicId, module, isDefault])
+  @@map("clinical_evolution_templates")
+}
+
+// ── DoctorContact ───────────────────────────────────────────────────────────
+//
+// Contactos de doctores externos para hojas de referencia. La cédula
+// profesional es opcional pero recomendada para que aparezca en el PDF.
+model DoctorContact {
+  id         String    @id @default(cuid())
+  clinicId   String
+  fullName   String
+  specialty  String?
+  cedula     String?
+  phone      String?
+  email      String?
+  clinicName String?
+  address    String?
+  notes      String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  clinic          Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  referralLetters ReferralLetter[]
+
+  @@index([clinicId, fullName])
+  @@map("doctor_contacts")
+}
+
+// ── ReferralLetter ──────────────────────────────────────────────────────────
+//
+// Hoja de referencia/interconsulta. summary se pre-llena desde el módulo
+// origen (edad, dx, hábitos, alergias). pdfUrl apunta al PDF generado y
+// guardado en PatientFile. status trackea ciclo: draft → sent → completed.
+model ReferralLetter {
+  id             String                 @id @default(cuid())
+  clinicId       String
+  patientId      String
+  module         ClinicalModule
+  contactId      String?
+  authorId       String
+  reason         String
+  summary        String                 @db.Text
+  pdfUrl         String?
+  status         ReferralLetterStatus   @default(draft)
+  sentAt         DateTime?
+  sentChannel    ReferralLetterChannel?
+  acknowledgedAt DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  deletedAt      DateTime?
+
+  clinic  Clinic         @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  author  User           @relation("ReferralLetterAuthor", fields: [authorId], references: [id])
+  contact DoctorContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([clinicId, patientId, module])
+  @@index([clinicId, status])
+  @@map("referral_letters")
+}
+
+// ── LabPartner ──────────────────────────────────────────────────────────────
+//
+// Laboratorio externo asociado a la clínica. Se reutiliza por todas las
+// LabOrder del clinicId.
+model LabPartner {
+  id          String    @id @default(cuid())
+  clinicId    String
+  name        String
+  contactName String?
+  phone       String?
+  email       String?
+  address     String?
+  notes       String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  clinic    Clinic     @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  labOrders LabOrder[]
+
+  @@index([clinicId, isActive])
+  @@map("lab_partners")
+}
+
+// ── LabOrder ────────────────────────────────────────────────────────────────
+//
+// Orden de laboratorio polimórfica por módulo. spec guarda detalles
+// específicos por orderType (Json libre). pdfUrl apunta al PDF generado.
+model LabOrder {
+  id         String         @id @default(cuid())
+  clinicId   String
+  patientId  String
+  module     ClinicalModule
+  partnerId  String?
+  authorId   String
+  orderType  LabOrderType
+  spec       Json
+  toothFdi   Int?
+  shadeGuide String?
+  dueDate    DateTime?
+  pdfUrl     String?
+  status     LabOrderStatus @default(draft)
+  sentAt     DateTime?
+  receivedAt DateTime?
+  notes      String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  deletedAt  DateTime?
+
+  clinic  Clinic      @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  author  User        @relation("LabOrderAuthor", fields: [authorId], references: [id])
+  partner LabPartner? @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+
+  @@index([clinicId, patientId, module])
+  @@index([clinicId, status])
+  @@map("lab_orders")
+}
+
+// ── TreatmentLink ───────────────────────────────────────────────────────────
+//
+// Une una sesión específica de un módulo (eg. un Sealant aplicado, una
+// FluorideApplication, un EndodonticTreatment) con una TreatmentSession
+// del plan general (TreatmentPlan). Cuando se crea, marca la
+// TreatmentSession como completada (completedAt = now()).
+//
+// moduleEntityType es el nombre lógico (eg. "ped-sealant", "endo-treatment").
+// moduleSessionId es el id del registro del módulo. Tabla polimórfica:
+// no hay FK al moduleSessionId — la consistencia se garantiza por las
+// server actions que crean los links.
+model TreatmentLink {
+  id                 String         @id @default(cuid())
+  clinicId           String
+  module             ClinicalModule
+  moduleEntityType   String
+  moduleSessionId    String
+  treatmentSessionId String
+  linkedBy           String
+  notes              String?
+  createdAt          DateTime       @default(now())
+  deletedAt          DateTime?
+
+  clinic           Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  treatmentSession TreatmentSession @relation(fields: [treatmentSessionId], references: [id], onDelete: Cascade)
+  author           User             @relation("TreatmentLinkAuthor", fields: [linkedBy], references: [id])
+
+  @@unique([moduleEntityType, moduleSessionId, treatmentSessionId])
+  @@index([clinicId, treatmentSessionId])
+  @@index([clinicId, module])
+  @@map("treatment_links")
+}
+
+// ── PatientShareLink ────────────────────────────────────────────────────────
+//
+// Token público con expiración (default 30d) para que el paciente vea un
+// resumen del módulo en /share/p/[token]. revokedAt opcional para invalidar.
+model PatientShareLink {
+  id         String         @id @default(cuid())
+  clinicId   String
+  patientId  String
+  module     ClinicalModule
+  token      String         @unique
+  expiresAt  DateTime
+  createdBy  String
+  viewCount  Int            @default(0)
+  lastViewed DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime       @default(now())
+
+  clinic        Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient       Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  createdByUser User    @relation("PatientShareLinkCreator", fields: [createdBy], references: [id])
+
+  @@index([clinicId, patientId, module])
+  @@index([expiresAt])
+  @@map("patient_share_links")
+}
+
+// ── ClinicalReminder ────────────────────────────────────────────────────────
+//
+// Recordatorio clínico programado (no es lo mismo que Reminder existente
+// que es manual). Cada recordatorio representa una tarea recurrente o
+// puntual: control de erupción anual, profilaxis 6m, cumpleaños, etc.
+// El cron diario (06:00 MX) detecta los con dueDate <= today + 7 y crea
+// WhatsAppReminder con la plantilla correspondiente.
+model ClinicalReminder {
+  id                 String                 @id @default(cuid())
+  clinicId           String
+  patientId          String
+  module             ClinicalModule
+  reminderType       ClinicalReminderType
+  dueDate            DateTime
+  status             ClinicalReminderStatus @default(pending)
+  message            String?
+  payload            Json?
+  whatsappReminderId String?
+  triggeredAt        DateTime?
+  completedAt        DateTime?
+  createdBy          String
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  deletedAt          DateTime?
+
+  clinic        Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient       Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  createdByUser User    @relation("ClinicalReminderCreator", fields: [createdBy], references: [id])
+
+  @@index([clinicId, patientId, module])
+  @@index([status, dueDate])
+  @@index([reminderType, status])
+  @@map("clinical_reminders")
+}

@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { PEDIATRIC_AUDIT_ACTIONS } from "@/lib/pediatrics/audit";
 import { auditPediatric, ensurePediatricRecord, fail, isFailure, loadPatientForPediatrics, ok, type ActionResult } from "./_helpers";
+import { linkSessionToPlan } from "@/lib/clinical-shared/treatment-link/link";
 
 const behaviorSchema = z.object({
   patientId: z.string().min(1),
@@ -14,6 +15,8 @@ const behaviorSchema = z.object({
   value: z.number().int().min(0).max(5),
   appointmentId: z.string().optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
+  /** Si está presente, vincula esta evaluación a una sesión del plan. */
+  treatmentSessionId: z.string().min(1).optional().nullable(),
 });
 
 export type CaptureBehaviorInput = z.infer<typeof behaviorSchema>;
@@ -58,6 +61,22 @@ export async function captureBehavior(input: CaptureBehaviorInput): Promise<Acti
     entityId: created.id,
     changes: { scale: parsed.data.scale, value: parsed.data.value },
   });
+
+  if (parsed.data.treatmentSessionId) {
+    try {
+      await linkSessionToPlan({
+        clinicId: ctx.clinicId,
+        module: "pediatrics",
+        moduleEntityType: "ped-behavior",
+        moduleSessionId: created.id,
+        treatmentSessionId: parsed.data.treatmentSessionId,
+        linkedBy: ctx.userId,
+      });
+    } catch (e) {
+      console.warn("[pediatrics.captureBehavior] linkSessionToPlan failed:", (e as Error).message);
+    }
+  }
+
   revalidatePath(`/dashboard/patients/${parsed.data.patientId}`);
   return ok(created);
 }
