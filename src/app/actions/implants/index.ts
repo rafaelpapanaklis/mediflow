@@ -39,3 +39,4 @@ export {
   createImplantShareToken,
   revokeImplantShareToken,
 } from "./createShareToken";
+export { scheduleImplantReminders } from "./scheduleReminders";

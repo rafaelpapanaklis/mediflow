@@ -181,21 +181,22 @@ export const IMPLANT_REMINDER_OFFSETS_DAYS: Record<ImplantReminderRuleKey, numbe
 };
 
 /**
- * Mapeo a tipos del enum ClinicalReminderType (cuando aplica).
+ * Mapeo a tipos granulares del enum ClinicalReminderType (set v2).
  */
 export function implantReminderRuleToReminderType(
   key: ImplantReminderRuleKey,
 ): ClinicalReminderType {
   switch (key) {
     case "control_cicatrizacion_7d":
+      return "implant_cicatrizacion_7d";
     case "retiro_sutura_10d":
-      return "implant_followup_1m";
+      return "implant_retiro_sutura_10d";
     case "control_oseointegracion_4m":
-      return "implant_followup_6m";
+      return "implant_oseointegracion_4m";
     case "control_anual_implante":
-      return "implant_followup_1y";
+      return "implant_control_anual";
     case "control_peri_implantitis_6m":
-      return "implant_followup_6m";
+      return "implant_peri_implantitis_6m";
     default:
       return "other";
   }

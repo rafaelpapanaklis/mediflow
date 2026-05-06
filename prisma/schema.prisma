@@ -4571,10 +4571,16 @@ enum ClinicalReminderType {
   // Periodoncia
   perio_maintenance_3m
   perio_reevaluation
-  // Implantes
+  // Implantes — set v1 (pediatrics base)
   implant_followup_1m
   implant_followup_6m
   implant_followup_1y
+  // Implantes — set v2 (granular spec implantes 4/5)
+  implant_cicatrizacion_7d
+  implant_retiro_sutura_10d
+  implant_oseointegracion_4m
+  implant_control_anual
+  implant_peri_implantitis_6m
   // Ortodoncia
   ortho_control_30d
   ortho_retention_check

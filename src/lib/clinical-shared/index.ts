@@ -12,3 +12,4 @@ export * from "./referral-letters";
 export * from "./lab-orders";
 export * from "./treatment-link";
 export * from "./share-tokens";
+export * from "./reminder-rules";
