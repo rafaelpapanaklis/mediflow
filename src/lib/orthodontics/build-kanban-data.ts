@@ -14,7 +14,7 @@ export async function buildKanbanData(clinicId: string): Promise<OrthoKanbanCard
     where: {
       clinicId,
       deletedAt: null,
-      status: { in: ["IN_PROGRESS", "RETENTION", "ON_HOLD"] },
+      status: { in: ["PLANNED", "IN_PROGRESS", "RETENTION", "ON_HOLD"] },
     },
     include: {
       patient: { select: { firstName: true, lastName: true } },

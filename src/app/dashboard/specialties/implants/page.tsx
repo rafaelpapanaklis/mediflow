@@ -1,13 +1,16 @@
-// Implants — página dedicada index del módulo. Spec §6.17.
+// Implants — panel agregado del módulo. Spec §6.17.
+// Sección primaria: 4 KPIs spec + filtros + tabla + modal nuevo plan.
+// Sección secundaria: widgets de overdue follow-ups y complicaciones activas.
 
 export const dynamic = "force-dynamic";
 
 import { redirect } from "next/navigation";
-import { Anchor } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { IMPLANTS_MODULE_KEY } from "@/lib/implants/permissions";
+import { loadImplantPatients } from "@/lib/implants/load-patients";
+import { ImplantsSpecialtyClient } from "@/components/specialties/implants/ImplantsSpecialtyClient";
 import {
   OverdueFollowUpsWidget,
   type OverdueFollowUpRow,
@@ -20,9 +23,7 @@ import {
 export default async function ImplantsIndexPage() {
   const user = await getCurrentUser();
 
-  if (user.clinic.category !== "DENTAL") {
-    redirect("/dashboard");
-  }
+  if (user.clinic.category !== "DENTAL") redirect("/dashboard");
   const access = await canAccessModule(user.clinicId, IMPLANTS_MODULE_KEY);
   if (!access.hasAccess) {
     redirect(`/dashboard/marketplace?expired=${IMPLANTS_MODULE_KEY}`);
@@ -30,7 +31,8 @@ export default async function ImplantsIndexPage() {
 
   const now = new Date();
 
-  const [overdueRaw, complicationsRaw, totalImplants] = await Promise.all([
+  const [aggregate, overdueRaw, complicationsRaw] = await Promise.all([
+    loadImplantPatients(user.clinicId),
     prisma.implantFollowUp.findMany({
       where: {
         clinicId: user.clinicId,
@@ -63,9 +65,6 @@ export default async function ImplantsIndexPage() {
       orderBy: { detectedAt: "desc" },
       take: 50,
     }),
-    prisma.implant.count({
-      where: { clinicId: user.clinicId, currentStatus: { not: "REMOVED" } },
-    }),
   ]);
 
   const overdueRows: OverdueFollowUpRow[] = overdueRaw.map((f) => ({
@@ -76,10 +75,7 @@ export default async function ImplantsIndexPage() {
     toothFdi: f.implant.toothFdi,
     milestone: f.milestone,
     scheduledAt: f.scheduledAt!,
-    daysOverdue: Math.max(
-      0,
-      Math.floor((now.getTime() - f.scheduledAt!.getTime()) / 86_400_000),
-    ),
+    daysOverdue: Math.max(0, Math.floor((now.getTime() - f.scheduledAt!.getTime()) / 86_400_000)),
     patientPhone: f.implant.patient.phone,
   }));
 
@@ -101,28 +97,50 @@ export default async function ImplantsIndexPage() {
       : null,
   }));
 
+  const rowsSerializable = aggregate.rows.map((r) => ({
+    ...r,
+    placedAt: r.placedAt.toISOString(),
+    nextControlAt: r.nextControlAt ? r.nextControlAt.toISOString() : null,
+  }));
+
   return (
-    <div className="space-y-6 p-6">
-      <header className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
-            <Anchor className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold">Implantología</h1>
-            <p className="text-xs text-gray-500">
-              {totalImplants} implantes activos · {overdueRows.length} controles vencidos · {complicationRows.length} complicaciones activas
-            </p>
-          </div>
-        </div>
-      </header>
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <ImplantsSpecialtyClient
+        rows={rowsSerializable}
+        kpis={aggregate.kpis}
+        doctors={aggregate.doctors}
+      />
 
-      <OverdueFollowUpsWidget rows={overdueRows} />
-      <ActiveComplicationsWidget rows={complicationRows} />
+      <section
+        style={{
+          padding: "0 16px 24px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 16,
+          borderTop: "1px solid var(--border)",
+          paddingTop: 20,
+        }}
+      >
+        <header>
+          <p
+            style={{
+              fontSize: 11,
+              textTransform: "uppercase",
+              letterSpacing: 0.5,
+              color: "var(--text-3)",
+              margin: 0,
+            }}
+          >
+            Pendientes operativos
+          </p>
+          <h2 style={{ margin: "4px 0 0", fontSize: 16, fontWeight: 600, color: "var(--text-1)" }}>
+            Controles vencidos y complicaciones
+          </h2>
+        </header>
 
-      <p className="text-xs text-gray-500 text-center pt-2">
-        Inventario y dashboard de tasa de éxito personal — disponibles en v2.0.
-      </p>
+        <OverdueFollowUpsWidget rows={overdueRows} />
+        <ActiveComplicationsWidget rows={complicationRows} />
+      </section>
     </div>
   );
 }
