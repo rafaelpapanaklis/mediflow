@@ -29,19 +29,13 @@ export async function getCurrentUser() {
   const supabaseUser = await requireAuth();
   const activeClinicId = readActiveClinicCookie();
 
-  console.log("[AUTH-DEBUG getCurrentUser]", JSON.stringify({
-    supabaseId: supabaseUser.id,
-    email: supabaseUser.email,
-    activeClinicId,
-  }));
-
   if (activeClinicId) {
     const user = await prisma.user.findFirst({
       where: { supabaseId: supabaseUser.id, clinicId: activeClinicId, isActive: true },
       include: { clinic: true },
     });
     if (user) {
-      console.log("[AUTH-DEBUG getCurrentUser] cookie match → clinicId=", user.clinicId);
+      console.log("[AUTH-DEBUG getCurrentUser] cookie OK", JSON.stringify({ picked: user.clinicId }));
       return normalizeUser(user);
     }
   }
@@ -51,19 +45,21 @@ export async function getCurrentUser() {
     include: { clinic: true },
     orderBy: { createdAt: "asc" },
   });
-  console.log("[AUTH-DEBUG getCurrentUser] candidates=", candidates.map(u => ({ id: u.id, email: u.email, clinicId: u.clinicId })));
 
   const user = candidates[0];
   if (!user) redirect("/onboarding");
 
-  if (activeClinicId && activeClinicId !== user.clinicId) {
-    console.warn("[AUTH-DEBUG getCurrentUser] FALLBACK USADO", JSON.stringify({
-      email: supabaseUser.email, requested: activeClinicId, actual: user.clinicId,
+  if (activeClinicId) {
+    console.warn("[AUTH-DEBUG getCurrentUser] cookie inválida, reseteada", JSON.stringify({
+      reason: "supabaseId no es activo en clinicId solicitada",
+      requested: activeClinicId,
+      picked: user.clinicId,
     }));
     logClinicFallback({ supabaseId: supabaseUser.id, requestedClinicId: activeClinicId, actualClinicId: user.clinicId });
-  } else if (!activeClinicId && candidates.length > 1) {
-    console.warn("[AUTH-DEBUG getCurrentUser] sin cookie + multi-clínica → primer createdAt", JSON.stringify({
-      email: supabaseUser.email, picked: user.clinicId, allClinicIds: candidates.map(u => u.clinicId),
+  } else {
+    console.warn("[AUTH-DEBUG getCurrentUser] cookie inválida, reseteada", JSON.stringify({
+      reason: "cookie ausente o HMAC inválido",
+      picked: user.clinicId,
     }));
   }
 

@@ -37,16 +37,16 @@ export async function getAuthContext(): Promise<AuthContext | null> {
 
     const activeClinicId = readActiveClinicCookie();
 
-    console.log("[AUTH-DEBUG getAuthContext]", JSON.stringify({
-      supabaseId: user.id, email: user.email, activeClinicId,
-    }));
-
     const dbUser = activeClinicId
       ? await prisma.user.findFirst({
           where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true },
           include: { clinic: true },
         })
       : null;
+
+    if (dbUser) {
+      console.log("[AUTH-DEBUG getAuthContext] cookie OK", JSON.stringify({ picked: dbUser.clinicId }));
+    }
 
     const finalUser = dbUser ?? await prisma.user.findFirst({
       where: { supabaseId: user.id, isActive: true },
@@ -56,11 +56,20 @@ export async function getAuthContext(): Promise<AuthContext | null> {
 
     if (!finalUser || !finalUser.isActive) return null;
 
-    if (activeClinicId && activeClinicId !== finalUser.clinicId) {
-      console.warn("[AUTH-DEBUG getAuthContext] FALLBACK USADO", JSON.stringify({
-        email: user.email, requested: activeClinicId, actual: finalUser.clinicId,
-      }));
-      logClinicFallback({ supabaseId: user.id, requestedClinicId: activeClinicId, actualClinicId: finalUser.clinicId });
+    if (!dbUser) {
+      if (activeClinicId) {
+        console.warn("[AUTH-DEBUG getAuthContext] cookie inválida, reseteada", JSON.stringify({
+          reason: "supabaseId no es activo en clinicId solicitada",
+          requested: activeClinicId,
+          picked: finalUser.clinicId,
+        }));
+        logClinicFallback({ supabaseId: user.id, requestedClinicId: activeClinicId, actualClinicId: finalUser.clinicId });
+      } else {
+        console.warn("[AUTH-DEBUG getAuthContext] cookie inválida, reseteada", JSON.stringify({
+          reason: "cookie ausente o HMAC inválido",
+          picked: finalUser.clinicId,
+        }));
+      }
     }
 
     const isSuperAdmin   = finalUser.role === "SUPER_ADMIN";

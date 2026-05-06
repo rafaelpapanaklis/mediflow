@@ -13,7 +13,8 @@
     "smoke:dental": "tsx scripts/smoke-test-dental.ts",
     "test:marketplace": "tsx --test src/lib/marketplace/access-control.test.ts",
     "test:marketplace-pricing": "tsx --test src/lib/marketplace/pricing.test.ts",
-    "test:agenda": "tsx --test src/lib/agenda/date-ranges.test.ts"
+    "test:agenda": "tsx --test src/lib/agenda/date-ranges.test.ts",
+    "test:active-clinic": "tsx --test src/lib/active-clinic-core.test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
