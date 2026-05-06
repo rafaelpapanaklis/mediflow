@@ -43,6 +43,8 @@ import { DrawerSignAtHome } from "./drawers/DrawerSignAtHome";
 import { ModalCollect } from "./drawers/ModalCollect";
 import { DrawerCFDIList } from "./drawers/DrawerCFDIList";
 import { DrawerLabOrder } from "./drawers/DrawerLabOrder";
+import { DrawerWireStep, type DrawerWireStepSubmit } from "./drawers/DrawerWireStep";
+import { ModalCompare, type CompareSet } from "./drawers/ModalCompare";
 import type { OrthoRedesignViewModel, OrthoPhaseKey } from "./types";
 import type { DigitalRecordEntry } from "./sections/SectionDiagnosis";
 import type {
@@ -60,6 +62,8 @@ type DrawerState =
   | { kind: "collect" }
   | { kind: "cfdi" }
   | { kind: "laborder" }
+  | { kind: "wirestep" }
+  | { kind: "compare" }
   | null;
 
 export interface OrthodonticsRedesignClientProps {
@@ -110,8 +114,13 @@ export interface OrthodonticsRedesignClientProps {
   onStartDiagnosisWizard?: () => void;
   /** Hook para abrir wizard del plan tx legacy (G4 prescription). */
   onEditPrescription?: () => void;
-  /** Hook para abrir wizard de wire step nuevo. */
+  /** Hook para abrir wizard de wire step nuevo. Si está presente reemplaza
+   *  al drawer interno G3. */
   onAddWireStep?: () => void;
+  /** Submit de un wire step desde el DrawerWireStep G3 interno. */
+  onSubmitWireStep?: (payload: DrawerWireStepSubmit) => Promise<void> | void;
+  /** Generar PDF antes/después desde ModalCompare. */
+  onGenerateComparePdf?: () => void;
   /** Hook para abrir form de TAD nuevo. */
   onAddTad?: () => void;
   /** Hook para chat WhatsApp completo. */
@@ -204,7 +213,9 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             tads={vm.tads}
             auxMechanics={vm.auxMechanics}
             onEditPrescription={props.onEditPrescription}
-            onAddWireStep={props.onAddWireStep}
+            onAddWireStep={
+              props.onAddWireStep ?? (() => setDrawer({ kind: "wirestep" }))
+            }
             onAddTad={props.onAddTad}
           />
 
@@ -220,7 +231,12 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             monthTotal={t.monthTotal}
             historicalSets={props.historicalPhotoSets ?? []}
             onUpload={props.onUploadPhoto}
-            onCompare={props.onComparePhotos}
+            onCompare={
+              props.onComparePhotos ??
+              ((props.historicalPhotoSets ?? []).length > 0
+                ? () => setDrawer({ kind: "compare" })
+                : undefined)
+            }
             onScheduleG15={props.onScheduleG15}
           />
 
@@ -388,8 +404,53 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           }}
         />
       ) : null}
+
+      {/* Drawer Wire Step G3 */}
+      {drawer?.kind === "wirestep" ? (
+        <DrawerWireStep
+          defaultPhase={t.phase}
+          onClose={closeDrawer}
+          onSubmit={async (payload) => {
+            await props.onSubmitWireStep?.(payload);
+            closeDrawer();
+          }}
+        />
+      ) : null}
+
+      {/* Modal Compare T0 vs actual */}
+      {drawer?.kind === "compare" ? (
+        <ModalCompare
+          setT0={summaryToCompareSet(
+            (props.historicalPhotoSets ?? []).find((s) => s.stage === "T0") ?? null,
+          )}
+          setRight={summaryToCompareSet(
+            (props.historicalPhotoSets ?? []).find((s) => s.stage === "T1") ??
+              (props.historicalPhotoSets ?? []).find((s) => s.stage === "T2") ??
+              null,
+          )}
+          availableRightStages={(props.historicalPhotoSets ?? [])
+            .filter((s) => s.stage !== "T0")
+            .map((s) => s.stage)}
+          onGeneratePdf={props.onGenerateComparePdf}
+          onClose={closeDrawer}
+        />
+      ) : null}
     </div>
   );
+}
+
+/**
+ * El loader actual entrega únicamente meta-datos del set (sin URLs por slot).
+ * Este helper construye un CompareSet con `photos = {}` para mostrar
+ * placeholders en columnas y la fecha del set. La carga de URLs reales se
+ * hará vía server action en commit posterior cuando el loader incluya el
+ * map slot→url.
+ */
+function summaryToCompareSet(
+  s: import("./sections/SectionPhotos").PhotoSetSummary | null,
+): CompareSet | null {
+  if (!s) return null;
+  return { stage: s.stage, takenAt: s.date, photos: {} };
 }
 
 function isToday(iso: string | null | undefined): boolean {
