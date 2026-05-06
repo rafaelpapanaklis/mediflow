@@ -39,6 +39,7 @@ import {
 } from "@/lib/pediatrics/tab-state";
 import type { PerioTabData } from "@/lib/periodontics/load-data";
 import type { SoapPrefill, EndoToothSummary } from "@/lib/types/endodontics";
+import type { ImplantFull } from "@/lib/types/implants";
 
 // Pediatrics — lazy load del módulo. Solo carga el bundle cuando el doctor
 // abre la pestaña, evitando inflar el bundle del paciente cuando no aplica.
@@ -73,6 +74,21 @@ const EndodonticsTab = dynamicImport(
     ssr: false,
     loading: () => (
       <div className="text-xs text-muted-foreground p-4">Cargando módulo de endodoncia…</div>
+    ),
+  },
+);
+
+// Implants — lazy load. El bundle de los wizards de cirugía/prótesis +
+// drawers solo carga cuando el doctor abre la pestaña.
+const ImplantsTab = dynamicImport(
+  () =>
+    import("@/components/specialties/implants/ImplantsTab").then((m) => ({
+      default: m.ImplantsTab,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="text-xs text-muted-foreground p-4">Cargando módulo de implantes…</div>
     ),
   },
 );
@@ -130,6 +146,8 @@ function buildTabs(opts: {
   /** Endodoncia — enabled cuando el módulo está activo en la clínica
    *  (el componente maneja el caso de paciente sin tratamientos endo). */
   showEndodontics: boolean;
+  /** Implantes — enabled cuando el módulo está activo. Sin gate de edad. */
+  showImplants: boolean;
 }): PatientTab[] {
   const out: PatientTab[] = [...TABS_BASE];
   // Insertar "Pediatría" entre "Historia clínica" y "Odontograma" según spec §1.2.
@@ -143,13 +161,14 @@ function buildTabs(opts: {
   }
   // Insertar las especialidades dentales justo antes de "Odontograma".
   // Cada splice usa odontoIdx fresco, así el orden de inserción se preserva:
-  // periodoncia → endodoncia (más adelante implantes y ortodoncia).
+  // periodoncia → endodoncia → implantes (más adelante ortodoncia).
   const insertBeforeOdonto = (tab: PatientTab) => {
     const odontoIdx = out.findIndex((t) => t.id === "odontograma");
     out.splice(odontoIdx >= 0 ? odontoIdx : 2, 0, tab);
   };
   if (opts.showPeriodontics) insertBeforeOdonto({ id: "periodoncia", label: "Periodoncia" });
   if (opts.showEndodontics)  insertBeforeOdonto({ id: "endodoncia",  label: "Endodoncia" });
+  if (opts.showImplants)     insertBeforeOdonto({ id: "implantes",   label: "Implantes" });
   return out;
 }
 
@@ -172,7 +191,9 @@ interface Props {
   appointments: any[];
   invoices:     any[];
   doctors:      { id: string; firstName: string; lastName: string }[];
-  currentUser:  { id: string; firstName: string; lastName: string };
+  /** El doctor logueado. cedulaProfesional es necesaria para el carnet
+   *  de implantes (NOM-024 — firma legal del responsable de la cirugía). */
+  currentUser:  { id: string; firstName: string; lastName: string; cedulaProfesional?: string | null };
   specialty:    string;
   totalPaid:    number;
   totalBalance: number;
@@ -196,6 +217,13 @@ interface Props {
    */
   endoSummaries?: EndoToothSummary[] | null;
   endoSoapPrefill?: SoapPrefill | null;
+  /**
+   * Lista de implantes del paciente con todas sus relaciones para el tab
+   * Implantes. `null` cuando la clínica no tiene el módulo activo o no
+   * es DENTAL — el tab no se renderiza. Array vacío cuando módulo activo
+   * pero el paciente aún no tiene implantes colocados.
+   */
+  implants?: ImplantFull[] | null;
 }
 
 export function PatientDetailClient({
@@ -206,6 +234,7 @@ export function PatientDetailClient({
   perioData,
   endoSummaries,
   endoSoapPrefill,
+  implants,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -216,13 +245,15 @@ export function PatientDetailClient({
   const showPediatrics = pediatricsState === "enabled";
   const showPeriodontics = Boolean(perioData);
   const showEndodontics = endoSummaries !== null && endoSummaries !== undefined;
+  const showImplants    = implants !== null && implants !== undefined;
   const tabs = useMemo(
     () => buildTabs({
       pediatrics:      { state: pediatricsState, reason: PEDIATRICS_DISABLED_REASON },
       showPeriodontics,
       showEndodontics,
+      showImplants,
     }),
-    [pediatricsState, showPeriodontics, showEndodontics],
+    [pediatricsState, showPeriodontics, showEndodontics, showImplants],
   );
   const tabFromUrl = searchParams.get("tab");
   const initialTab =
@@ -232,7 +263,9 @@ export function PatientDetailClient({
         ? "periodoncia"
         : tabFromUrl === "endodoncia" && showEndodontics
           ? "endodoncia"
-          : "resumen";
+          : tabFromUrl === "implantes" && showImplants
+            ? "implantes"
+            : "resumen";
   const [tab, setTab]         = useState(initialTab);
   const [consultPaused, setConsultPaused] = useState(false);
   const [consultClosed, setConsultClosed] = useState(false);
@@ -796,11 +829,13 @@ export function PatientDetailClient({
             pediatria: pediatricsData?.pendingConsents.length ?? 0,
             periodoncia: perioData?.recordsCount ?? 0,
             endodoncia: endoSummaries?.filter((s) => s.hasActiveTreatment).length ?? 0,
+            implantes: implants?.length ?? 0,
           }}
           hasBalance={totalBalance > 0}
           pediatrics={{ state: pediatricsState, reason: PEDIATRICS_DISABLED_REASON }}
           showPeriodontics={showPeriodontics}
           showEndodontics={showEndodontics}
+          showImplants={showImplants}
         />
 
         <div className={patientDetailStyles.mainColumn}>
@@ -1014,6 +1049,18 @@ export function PatientDetailClient({
               patientId={patient.id}
               patientName={fullName}
               summaries={endoSummaries}
+            />
+          )}
+
+          {/* ===== TAB: IMPLANTES ===== */}
+          {tab === "implantes" && implants && (
+            <ImplantsTab
+              patientId={patient.id}
+              patientName={fullName}
+              doctorId={currentUser.id}
+              doctorName={`${currentUser.firstName} ${currentUser.lastName}`.trim()}
+              doctorCedula={currentUser.cedulaProfesional ?? null}
+              implants={implants}
             />
           )}
 

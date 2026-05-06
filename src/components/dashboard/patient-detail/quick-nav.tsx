@@ -13,6 +13,7 @@ import {
   Bone,
   Baby,
   Zap,
+  Anchor,
   type LucideIcon,
 } from "lucide-react";
 import styles from "./patient-detail.module.css";
@@ -54,6 +55,7 @@ interface QuickNavProps {
     pediatria?: number;
     periodoncia?: number;
     endodoncia?: number;
+    implantes?: number;
   };
   hasBalance: boolean;
   /** Pediatría tiene tres estados — ver `derivePediatricsTabState`. */
@@ -63,6 +65,8 @@ interface QuickNavProps {
    *  estado disabled (a diferencia de Pediatría): el componente del tab
    *  maneja el caso del paciente sin tratamientos endo. */
   showEndodontics?: boolean;
+  /** Implantes — visible cuando la clínica tiene el módulo activo. */
+  showImplants?: boolean;
 }
 
 export function QuickNav({
@@ -73,6 +77,7 @@ export function QuickNav({
   pediatrics,
   showPeriodontics,
   showEndodontics,
+  showImplants,
 }: QuickNavProps) {
   const clinicItems: NavItem[] = [
     { id: "resumen",      label: "Resumen",         icon: ClipboardList },
@@ -104,6 +109,15 @@ export function QuickNav({
       label: "Endodoncia",
       icon: Zap,
       count: counts.endodoncia,
+      badgeTone: "brand",
+    });
+  }
+  if (showImplants) {
+    clinicItems.push({
+      id: "implantes",
+      label: "Implantes",
+      icon: Anchor,
+      count: counts.implantes,
       badgeTone: "brand",
     });
   }

@@ -10,6 +10,8 @@ import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-
 import { canSeePediatrics, PEDIATRICS_MODULE_KEY } from "@/lib/pediatrics/permissions";
 import { loadPediatricsData } from "@/lib/pediatrics/load-data";
 import type { PediatricsTabData } from "@/components/patient-detail/pediatrics/PediatricsTab";
+import { IMPLANTS_MODULE_KEY } from "@/lib/implants/permissions";
+import type { ImplantFull } from "@/lib/types/implants";
 import { PERIODONTICS_MODULE_KEY, ENDODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { loadPerioData, type PerioTabData } from "@/lib/periodontics/load-data";
 import { loadEndoSoapPrefill } from "@/lib/endodontics/load-soap-prefill";
@@ -112,6 +114,29 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     ]);
   }
 
+  // Implantes — solo DENTAL con el módulo activo. Sin gate por edad. La
+  // tabla `implants` no tiene helper extraído todavía (el módulo lo
+  // carga inline en /dashboard/specialties/implants/[patientId]/page.tsx);
+  // replicamos los mismos includes para que ImplantsTab reciba la shape
+  // ImplantFull que espera. null cuando módulo inactivo.
+  let implants: ImplantFull[] | null = null;
+  if (isDental && clinicModuleKeys.includes(IMPLANTS_MODULE_KEY)) {
+    implants = (await prisma.implant.findMany({
+      where: { patientId: patient.id, clinicId: user.clinicId },
+      include: {
+        surgicalRecord:  true,
+        healingPhase:    true,
+        secondStage:     true,
+        prostheticPhase: true,
+        complications:   { orderBy: { detectedAt: "desc" } },
+        followUps:       { orderBy: { scheduledAt: "asc" } },
+        consents:        { orderBy: { createdAt: "desc" } },
+        passport:        true,
+      },
+      orderBy: { placedAt: "desc" },
+    })) as unknown as ImplantFull[];
+  }
+
   const totalPaid    = patient.invoices.reduce((s, i) => s + i.paid, 0);
   const totalBalance = patient.invoices.reduce((s, i) => s + i.balance, 0);
   const totalPlan    = patient.invoices.reduce((s, i) => s + i.total, 0);
@@ -178,7 +203,12 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           invoices={patient.invoices as any}
           treatments={serializedTreatments as any}
           doctors={doctors}
-          currentUser={{ id: user.id, firstName: user.firstName, lastName: user.lastName }}
+          currentUser={{
+            id:                 user.id,
+            firstName:          user.firstName,
+            lastName:           user.lastName,
+            cedulaProfesional:  user.cedulaProfesional ?? null,
+          }}
           specialty={user.clinic.specialty}
           totalPaid={totalPaid}
           totalBalance={totalBalance}
@@ -189,6 +219,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           perioData={perioData}
           endoSummaries={endoSummaries}
           endoSoapPrefill={endoSoapPrefill}
+          implants={implants}
         />
       </ErrorBoundary>
     </div>
