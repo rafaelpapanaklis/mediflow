@@ -40,3 +40,8 @@ export {
   revokeImplantShareToken,
 } from "./createShareToken";
 export { scheduleImplantReminders } from "./scheduleReminders";
+export {
+  listImplantCatalogModels,
+  upsertImplantCatalogModel,
+  deleteImplantCatalogModel,
+} from "./catalogActions";

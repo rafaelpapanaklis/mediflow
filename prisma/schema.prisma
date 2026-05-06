@@ -206,7 +206,8 @@ model Clinic {
   orthodonticConsents       OrthodonticConsent[]
 
   // Implants module — see docs/marketplace/research/implantologia/SPEC.md §4
-  implants Implant[]
+  implants             Implant[]
+  implantCatalogModels ImplantCatalogModel[]
 
   // Clinical-shared cross-cutting features
   clinicalPhotos             ClinicalPhoto[]
@@ -4458,6 +4459,40 @@ model OrthodonticConsent {
 //
 // TODO v1.1: OrthodonticRefinement — segundo curso de tratamiento por
 //   ajustes finales no logrados con el plan original (alineadores y brackets).
+
+/// Catálogo de marcas/modelos de implantes que la clínica usa habitualmente.
+/// Sirve como selector al crear un Implant (en lugar de typear modelName libre).
+/// Cada entrada cubre una combinación marca+modelo con sus dimensiones
+/// estándar (diámetros y longitudes disponibles) y plataformas (Bone Level,
+/// Tissue Level, RP, NP, etc.).
+model ImplantCatalogModel {
+  id       String       @id @default(cuid())
+  clinicId String
+  brand    ImplantBrand
+  /// Si brand=OTRO, nombre comercial libre.
+  brandCustomName String?
+  modelName       String
+  /// Lista de plataformas disponibles para este modelo (ej. ["RC","NC"]).
+  platforms       String[]      @default([])
+  /// Diámetros disponibles en mm (ej. [3.3, 4.1, 4.8]).
+  diametersMm     Decimal[]     @db.Decimal(3, 1)
+  /// Longitudes disponibles en mm (ej. [8, 10, 12]).
+  lengthsMm       Decimal[]     @db.Decimal(4, 1)
+  surfaceTreatment ImplantSurfaceTreatment?
+  connectionType   ImplantConnectionType?
+  notes      String?
+  isActive   Boolean   @default(true)
+  createdBy  String
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@unique([clinicId, brand, modelName])
+  @@index([clinicId, isActive])
+  @@map("implant_catalog_models")
+}
 
 // ─── Clinical-shared cross-cutting (Sprint cierre dental) ────────────────────
 //
