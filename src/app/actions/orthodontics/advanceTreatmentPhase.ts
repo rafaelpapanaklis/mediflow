@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { advanceTreatmentPhaseSchema } from "@/lib/validation/orthodontics";
 import { canAdvance } from "@/lib/orthodontics/phase-machine";
+import { linkSessionToPlan } from "@/lib/clinical-shared/treatment-link/link";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
@@ -61,6 +62,21 @@ export async function advanceTreatmentPhase(
           where: { id: plan.id },
           data: { status: "RETENTION", statusUpdatedAt: now },
         });
+      }
+
+      if (parsed.data.treatmentSessionId) {
+        await linkSessionToPlan(
+          {
+            clinicId: ctx.clinicId,
+            module: "orthodontics",
+            moduleEntityType: "ortho-phase",
+            moduleSessionId: currentPhase.id,
+            treatmentSessionId: parsed.data.treatmentSessionId,
+            linkedBy: ctx.userId,
+            notes: `Fase ${currentPhase.phaseKey} completada`,
+          },
+          tx,
+        );
       }
     });
 

@@ -9,6 +9,7 @@ import {
   enqueueOrthoWhatsAppBatch,
   type EnqueueOrthoWhatsAppInput,
 } from "@/lib/orthodontics/whatsapp-queue";
+import { linkSessionToPlan } from "@/lib/clinical-shared/treatment-link/link";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
@@ -40,32 +41,51 @@ export async function createControlAppointment(
   if (!plan) return fail("Plan no encontrado");
 
   try {
-    const created = await prisma.orthodonticControlAppointment.create({
-      data: {
-        treatmentPlanId: parsed.data.treatmentPlanId,
-        patientId: parsed.data.patientId,
-        clinicId: ctx.clinicId,
-        scheduledAt: new Date(parsed.data.scheduledAt),
-        performedAt: parsed.data.performedAt ? new Date(parsed.data.performedAt) : null,
-        monthInTreatment: parsed.data.monthInTreatment,
-        attendance: parsed.data.attendance,
-        attendedById: parsed.data.attendance === "ATTENDED" ? ctx.userId : null,
-        hygieneScore: parsed.data.hygieneScore ?? null,
-        bracketsLoose: parsed.data.bracketsLoose ?? null,
-        bracketsBroken: parsed.data.bracketsBroken ?? null,
-        appliancesIntact: parsed.data.appliancesIntact ?? null,
-        patientReportsPain: parsed.data.patientReportsPain,
-        patientPainNotes: parsed.data.patientPainNotes ?? null,
-        adjustments: parsed.data.adjustments,
-        adjustmentNotes: parsed.data.adjustmentNotes ?? null,
-        photoSetId: parsed.data.photoSetId ?? null,
-        nextAppointmentAt: parsed.data.nextAppointmentAt
-          ? new Date(parsed.data.nextAppointmentAt)
-          : null,
-        nextAppointmentNotes: parsed.data.nextAppointmentNotes ?? null,
-        paymentStatusSnapshot: plan.paymentPlan?.status ?? null,
-      },
-      select: { id: true, monthInTreatment: true, attendance: true },
+    const created = await prisma.$transaction(async (tx) => {
+      const appt = await tx.orthodonticControlAppointment.create({
+        data: {
+          treatmentPlanId: parsed.data.treatmentPlanId,
+          patientId: parsed.data.patientId,
+          clinicId: ctx.clinicId,
+          scheduledAt: new Date(parsed.data.scheduledAt),
+          performedAt: parsed.data.performedAt ? new Date(parsed.data.performedAt) : null,
+          monthInTreatment: parsed.data.monthInTreatment,
+          attendance: parsed.data.attendance,
+          attendedById: parsed.data.attendance === "ATTENDED" ? ctx.userId : null,
+          hygieneScore: parsed.data.hygieneScore ?? null,
+          bracketsLoose: parsed.data.bracketsLoose ?? null,
+          bracketsBroken: parsed.data.bracketsBroken ?? null,
+          appliancesIntact: parsed.data.appliancesIntact ?? null,
+          patientReportsPain: parsed.data.patientReportsPain,
+          patientPainNotes: parsed.data.patientPainNotes ?? null,
+          adjustments: parsed.data.adjustments,
+          adjustmentNotes: parsed.data.adjustmentNotes ?? null,
+          photoSetId: parsed.data.photoSetId ?? null,
+          nextAppointmentAt: parsed.data.nextAppointmentAt
+            ? new Date(parsed.data.nextAppointmentAt)
+            : null,
+          nextAppointmentNotes: parsed.data.nextAppointmentNotes ?? null,
+          paymentStatusSnapshot: plan.paymentPlan?.status ?? null,
+        },
+        select: { id: true, monthInTreatment: true, attendance: true },
+      });
+
+      if (parsed.data.treatmentSessionId && parsed.data.attendance === "ATTENDED") {
+        await linkSessionToPlan(
+          {
+            clinicId: ctx.clinicId,
+            module: "orthodontics",
+            moduleEntityType: "ortho-control",
+            moduleSessionId: appt.id,
+            treatmentSessionId: parsed.data.treatmentSessionId,
+            linkedBy: ctx.userId,
+            notes: `Control mes ${appt.monthInTreatment}`,
+          },
+          tx,
+        );
+      }
+
+      return appt;
     });
 
     await auditOrtho({
