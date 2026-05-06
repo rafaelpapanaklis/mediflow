@@ -216,6 +216,14 @@ model Clinic {
   orthoPhaseTransitions   OrthoPhaseTransition[]
   patientFlowEntries      PatientFlow[]
 
+  // Orthodontics Fase 1.5 rediseño completo.
+  orthoQuoteScenarios     OrthoQuoteScenario[]
+  orthoSignAtHomePackages OrthoSignAtHomePackage[]
+  orthoRetentionRegimens  OrthoRetentionRegimen[]
+  orthoRetainerCheckups   OrthoRetainerCheckup[]
+  orthoNpsSchedules       OrthoNpsSchedule[]
+  orthoReferralCodes      OrthoReferralCode[]
+
   // Implants module — see docs/marketplace/research/implantologia/SPEC.md §4
   implants             Implant[]
   implantCatalogModels ImplantCatalogModel[]
@@ -350,6 +358,10 @@ model User {
   orthoTadsPlaced             OrthoTAD[]             @relation("OrthoTadPlacedBy")
   orthoPhaseTransitionsSigned OrthoPhaseTransition[] @relation("OrthoPhaseTransitionSignedBy")
   patientFlowsTriggered       PatientFlow[]          @relation("PatientFlowTriggeredBy")
+
+  // Orthodontics Fase 1.5 rediseño completo.
+  orthoQuotesCreated          OrthoQuoteScenario[]     @relation("OrthoQuoteCreatedBy")
+  orthoSignAtHomeCreated      OrthoSignAtHomePackage[] @relation("OrthoSignAtHomeCreatedBy")
 
   // Implants module — see docs/marketplace/research/implantologia/SPEC.md §4
   implantsPlaced          Implant[]        @relation("ImplantPlacedBy")
@@ -509,6 +521,11 @@ model Patient {
   orthoAuxMechanics       OrthoAuxMechanics[]
   orthoPhaseTransitions   OrthoPhaseTransition[]
   patientFlowEntries      PatientFlow[]
+
+  // Orthodontics Fase 1.5 rediseño completo.
+  orthoSignAtHomePackages OrthoSignAtHomePackage[]
+  orthoNpsSchedules       OrthoNpsSchedule[]
+  orthoReferralCodes      OrthoReferralCode[]
 
   // Implants module — see docs/marketplace/research/implantologia/SPEC.md §4
   implants        Implant[]
@@ -1070,6 +1087,8 @@ model PatientFile {
   orthoPhotoIntraLateralLFor         OrthoPhotoSet[]            @relation("OrthoPhotoIntraLateralL")
   orthoPhotoOcclusalUpperFor         OrthoPhotoSet[]            @relation("OrthoPhotoOcclusalUpper")
   orthoPhotoOcclusalLowerFor         OrthoPhotoSet[]            @relation("OrthoPhotoOcclusalLower")
+  orthoPhotoFaceFrontFor             OrthoPhotoSet[]            @relation("OrthoPhotoFaceFront")
+  orthoPhotoFaceSmileFor             OrthoPhotoSet[]            @relation("OrthoPhotoFaceSmile")
   orthoTreatmentConsentsSignedFile   OrthodonticTreatmentPlan[] @relation("OrthoTreatmentConsentSignedFile")
   orthoFinancialAgreementsSignedFile OrthoPaymentPlan[]         @relation("OrthoFinancialAgreementSignedFile")
   orthoInstallmentsReceipt           OrthoInstallment[]         @relation("OrthoInstallmentReceiptFile")
@@ -4329,6 +4348,13 @@ model OrthodonticTreatmentPlan {
   auxMechanics     OrthoAuxMechanics?
   phaseTransitions OrthoPhaseTransition[]
 
+  // Fase 1.5 rediseño completo relations (Sección F/G/H).
+  quoteScenarios   OrthoQuoteScenario[]
+  retentionRegimen OrthoRetentionRegimen?
+  npsSchedules     OrthoNpsSchedule[]
+  signAtHomePackages OrthoSignAtHomePackage[]
+  referralCode     OrthoReferralCode?
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
@@ -4471,6 +4497,13 @@ model OrthoPhotoSet {
   photoOcclusalUpper   PatientFile? @relation("OrthoPhotoOcclusalUpper", fields: [photoOcclusalUpperId], references: [id], onDelete: SetNull)
   photoOcclusalLowerId String?
   photoOcclusalLower   PatientFile? @relation("OrthoPhotoOcclusalLower", fields: [photoOcclusalLowerId], references: [id], onDelete: SetNull)
+
+  // Fase 1.5 rediseño: 2 vistas faciales adicionales (Normal + Sonrisa).
+  // Total 10 vistas anatómicas según deliverable Claude Design.
+  photoFaceFrontId String?
+  photoFaceFront   PatientFile? @relation("OrthoPhotoFaceFront", fields: [photoFaceFrontId], references: [id], onDelete: SetNull)
+  photoFaceSmileId String?
+  photoFaceSmile   PatientFile? @relation("OrthoPhotoFaceSmile", fields: [photoFaceSmileId], references: [id], onDelete: SetNull)
 
   treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
   patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -4847,6 +4880,250 @@ model OrthoPhaseTransition {
   @@index([treatmentPlanId, signedAt(sort: Desc)])
   @@index([clinicId, signedAt(sort: Desc)])
   @@map("ortho_phase_transitions")
+}
+
+// ─── Modelos Fase 1.5 rediseño completo (mayo 2026) ─────────────────────────
+//
+// Cubre las secciones F (G5 Open Choice + G6 Sign@Home), G (retención G9),
+// H (NPS G11) y referidos G12 placeholder.
+
+enum OrthoQuoteScenarioStatus {
+  DRAFT
+  PRESENTED
+  ACCEPTED
+  REJECTED
+}
+
+enum OrthoQuoteScenarioPaymentMode {
+  CONTADO
+  ENGANCHE_MENSUALIDADES
+  ENGANCHE_MSI
+}
+
+enum OrthoSignAtHomeStatus {
+  PENDING
+  SENT
+  SIGNED
+  PAID
+  EXPIRED
+  REVOKED
+}
+
+enum OrthoRetainerType {
+  HAWLEY_SUP
+  HAWLEY_INF
+  ESSIX_SUP
+  ESSIX_INF
+  FIXED_LINGUAL_3_3
+  NONE
+}
+
+enum OrthoRetainerArchwireGauge {
+  G_0175
+  G_0195
+  G_021
+}
+
+enum OrthoRetainerCheckupStatus {
+  PROGRAMMED
+  COMPLETED
+  MISSED
+  CANCELLED
+}
+
+enum OrthoNpsType {
+  POST_DEBOND_3D
+  POST_DEBOND_6M
+  POST_DEBOND_12M
+}
+
+enum OrthoNpsStatus {
+  SCHEDULED
+  SENT
+  RESPONDED
+  EXPIRED
+  CANCELLED
+}
+
+model OrthoQuoteScenario {
+  id              String                          @id @default(uuid())
+  treatmentPlanId String
+  clinicId        String
+
+  label           String
+  paymentMode     OrthoQuoteScenarioPaymentMode
+  downPayment     Decimal                         @db.Decimal(10, 2)
+  monthlyAmount   Decimal                         @default(0) @db.Decimal(10, 2)
+  monthsCount     Int                             @default(0)
+  totalAmount     Decimal                         @db.Decimal(10, 2)
+  discountPct     Int?
+  /// Etiqueta visual: "Recomendado", "MSI 6 meses", "10% descuento", etc.
+  badge           String?
+  /// Lista de líneas que se imprimen como features del escenario.
+  includes        String[]                        @default([])
+  notes           String?
+  status          OrthoQuoteScenarioStatus        @default(DRAFT)
+  presentedAt     DateTime?
+  acceptedAt      DateTime?
+  rejectedAt      DateTime?
+
+  createdById     String?
+  createdBy       User?                           @relation("OrthoQuoteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([treatmentPlanId, status])
+  @@index([clinicId, status])
+  @@map("ortho_quote_scenarios")
+}
+
+model OrthoSignAtHomePackage {
+  id              String                @id @default(uuid())
+  treatmentPlanId String
+  patientId       String
+  clinicId        String
+
+  /// Token base64url 256 bits para el portal /share/p/sgnh_<id>.
+  token           String                @unique
+  expiresAt       DateTime
+  status          OrthoSignAtHomeStatus @default(PENDING)
+
+  /// IDs del escenario seleccionado y monto de enganche pre-cobrado.
+  selectedQuoteScenarioId String?
+  downPaymentAmount       Decimal? @db.Decimal(10, 2)
+
+  /// IDs de los 3 documentos asociados (consents existentes).
+  contractDocId    String?
+  consentDocIds    String[] @default([])
+  paymentMethod    OrthoPaymentMethod?
+
+  sentAt           DateTime?
+  signedAt         DateTime?
+  paidAt           DateTime?
+  cfdiUuid         String?
+
+  createdById      String
+  createdBy        User    @relation("OrthoSignAtHomeCreatedBy", fields: [createdById], references: [id])
+
+  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clinicId, status, expiresAt])
+  @@index([patientId, createdAt(sort: Desc)])
+  @@map("ortho_sign_at_home_packages")
+}
+
+model OrthoRetentionRegimen {
+  id              String @id @default(uuid())
+  treatmentPlanId String @unique
+  clinicId        String
+
+  upperRetainer        OrthoRetainerType?
+  upperDescription     String?
+  lowerRetainer        OrthoRetainerType?
+  lowerDescription     String?
+  fixedLingualPresent  Boolean                     @default(false)
+  fixedLingualGauge    OrthoRetainerArchwireGauge?
+
+  /// Régimen de uso (texto editable). Default: "24/7 año 1 · nocturno años 2-5".
+  regimenDescription String @default("24/7 año 1 · nocturno años 2-5")
+  preSurveyEnabled  Boolean @default(true)
+
+  /// Fecha de debonding (aplica al avanzar fase a Retención).
+  debondedAt DateTime?
+
+  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  checkups      OrthoRetainerCheckup[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("ortho_retention_regimens")
+}
+
+model OrthoRetainerCheckup {
+  id        String                      @id @default(uuid())
+  regimenId String
+  clinicId  String
+
+  /// Mes desde el debonding: 3, 6, 12, 24, 36.
+  monthsFromDebond Int
+  scheduledDate    DateTime
+  performedAt      DateTime?
+  status           OrthoRetainerCheckupStatus @default(PROGRAMMED)
+  notes            String?
+
+  regimen OrthoRetentionRegimen @relation(fields: [regimenId], references: [id], onDelete: Cascade)
+  clinic  Clinic                @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([regimenId, monthsFromDebond])
+  @@index([clinicId, scheduledDate, status])
+  @@map("ortho_retainer_checkups")
+}
+
+model OrthoNpsSchedule {
+  id              String         @id @default(uuid())
+  treatmentPlanId String
+  patientId       String
+  clinicId        String
+
+  npsType     OrthoNpsType
+  scheduledAt DateTime
+  status      OrthoNpsStatus @default(SCHEDULED)
+  sentAt      DateTime?
+  respondedAt DateTime?
+  /// Score 0-10. Cuando >=9 dispara trigger Google review.
+  npsScore       Int?
+  patientComment String?
+  /// True cuando se disparó automáticamente la solicitud de Google review.
+  googleReviewTriggered Boolean @default(false)
+
+  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([treatmentPlanId, npsType])
+  @@index([clinicId, status, scheduledAt])
+  @@map("ortho_nps_schedules")
+}
+
+model OrthoReferralCode {
+  id              String @id @default(uuid())
+  treatmentPlanId String @unique
+  patientId       String
+  clinicId        String
+
+  /// Código personalizado del paciente (ej. "GABY26"). Único por clínica.
+  code         String
+  referralCount Int    @default(0)
+  /// Premio o descuento configurado (texto libre).
+  rewardLabel  String?
+
+  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clinicId, code])
+  @@index([clinicId, referralCount(sort: Desc)])
+  @@map("ortho_referral_codes")
 }
 
 // ─── PatientFlow (cross-cutting clinical-shared) — G16 ──────────────────────
