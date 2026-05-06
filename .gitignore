@@ -17,3 +17,5 @@ next-env.d.ts
 /design-reference-landing/
 /design-reference-auth/
 /.claude/
+
+docs/ortho-redesign/

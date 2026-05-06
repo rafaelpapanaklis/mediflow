@@ -41,6 +41,7 @@ import type { PerioTabData } from "@/lib/periodontics/load-data";
 import type { SoapPrefill, EndoToothSummary } from "@/lib/types/endodontics";
 import type { ImplantFull } from "@/lib/types/implants";
 import type { OrthoTabData } from "@/lib/orthodontics/load-data";
+import type { OrthoRedesignViewModel } from "@/components/specialties/orthodontics/redesign/types";
 
 // Pediatrics — lazy load del módulo. Solo carga el bundle cuando el doctor
 // abre la pestaña, evitando inflar el bundle del paciente cuando no aplica.
@@ -94,8 +95,22 @@ const ImplantsTab = dynamicImport(
   },
 );
 
-// Orthodontics — lazy load. El bundle de wizards (diagnóstico, plan,
-// fotos, controles, pagos) solo carga cuando el doctor abre la pestaña.
+// Orthodontics — lazy load. Fase 1 rediseño usa OrthodonticsRedesignClient
+// (Hero + Diagnóstico + Plan + Treatment Card G1 + drawers + sidebar derecha).
+// Fallback al cliente legacy `OrthodonticsClient` cuando no hay viewModel.
+const OrthodonticsRedesignClient = dynamicImport(
+  () =>
+    import("@/components/specialties/orthodontics/redesign/OrthodonticsRedesignClient").then(
+      (m) => ({ default: m.OrthodonticsRedesignClient }),
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="text-xs text-muted-foreground p-4">Cargando módulo de Ortodoncia…</div>
+    ),
+  },
+);
+
 const OrthodonticsClient = dynamicImport(
   () =>
     import("@/components/specialties/orthodontics/OrthodonticsClient").then((m) => ({
@@ -257,6 +272,12 @@ interface Props {
    * el wizard de inicio.
    */
   orthoData?: OrthoTabData | null;
+  /**
+   * ViewModel del rediseño Fase 1 ortodoncia patient-detail. Cuando viene
+   * presente, se renderiza el shell nuevo (Hero+Diagnóstico+Plan+G1) en el
+   * tab "ortodoncia". Si es null, fallback al cliente legacy.
+   */
+  orthoRedesignVM?: OrthoRedesignViewModel | null;
 }
 
 export function PatientDetailClient({
@@ -269,6 +290,7 @@ export function PatientDetailClient({
   endoSoapPrefill,
   implants,
   orthoData,
+  orthoRedesignVM,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1105,7 +1127,10 @@ export function PatientDetailClient({
           )}
 
           {/* ===== TAB: ORTODONCIA ===== */}
-          {tab === "ortodoncia" && orthoData && (
+          {tab === "ortodoncia" && orthoRedesignVM && (
+            <OrthodonticsRedesignClient vm={orthoRedesignVM} />
+          )}
+          {tab === "ortodoncia" && !orthoRedesignVM && orthoData && (
             <OrthodonticsClient
               patientId={orthoData.patientId}
               patientName={orthoData.patientName}
