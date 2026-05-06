@@ -56,14 +56,18 @@ describe("clinical-shared/types", () => {
     assert.equal(implantSubtypeToLabOrderType("modelo_estudio_digital"), "other");
   });
 
-  it("implantReminderRuleToReminderType mapea", () => {
+  it("implantReminderRuleToReminderType mapea al set v2 granular", () => {
     assert.equal(
       implantReminderRuleToReminderType("control_anual_implante"),
-      "implant_followup_1y",
+      "implant_control_anual",
     );
     assert.equal(
       implantReminderRuleToReminderType("control_oseointegracion_4m"),
-      "implant_followup_6m",
+      "implant_oseointegracion_4m",
+    );
+    assert.equal(
+      implantReminderRuleToReminderType("control_cicatrizacion_7d"),
+      "implant_cicatrizacion_7d",
     );
   });
 
