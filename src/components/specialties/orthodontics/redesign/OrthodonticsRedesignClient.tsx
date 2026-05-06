@@ -154,8 +154,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
   ];
 
   return (
-    <div className="bg-slate-50 dark:bg-slate-950 -m-4 sm:-m-6 px-4 sm:px-6 py-4">
-      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
+    <div className="bg-slate-50 dark:bg-slate-950 grid-bg -m-4 sm:-m-6 px-4 sm:px-6 py-6 min-h-[calc(100vh-200px)]">
+      <div className="max-w-[1440px] mx-auto flex flex-col lg:flex-row gap-4 lg:gap-6">
         {/* Main column */}
         <main className="flex-1 min-w-0 space-y-4">
           <SectionHero
@@ -164,6 +164,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             onStartTreatment={props.onStartDiagnosisWizard}
             onEditPlan={props.onEditPrescription}
             onStartControl={() => setDrawer({ kind: "tcard-new" })}
+            onAdvancePhase={t.phase ? () => setDrawer({ kind: "advance-phase" }) : undefined}
           />
 
           <SectionDiagnosis
@@ -183,7 +184,6 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             onEditPrescription={props.onEditPrescription}
             onAddWireStep={props.onAddWireStep}
             onAddTad={props.onAddTad}
-            onAdvancePhase={t.phase ? () => setDrawer({ kind: "advance-phase" }) : undefined}
           />
 
           <SectionTreatmentCards
@@ -205,6 +205,11 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           ))}
 
           <PhaseTransitionAuditTeaser count={vm.phaseTransitions.length} />
+
+          <footer className="text-[11px] text-slate-400 text-center py-4 dark:text-slate-500">
+            MediFlow · Ortodoncia · Patient Detail · 11 gaps integrados (G1 G3 G4 G5 G6 G9 G10 G11
+            G15 G16 G18) · 6 differentiators preservados (M1-M6)
+          </footer>
         </main>
 
         {/* Right rail */}

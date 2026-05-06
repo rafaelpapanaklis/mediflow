@@ -41,7 +41,6 @@ export interface SectionPlanProps {
   onAddWireStep?: () => void;
   onAddTad?: () => void;
   onAddAuxMechanics?: () => void;
-  onAdvancePhase?: () => void;
 }
 
 export function SectionPlan(props: SectionPlanProps) {
@@ -52,13 +51,6 @@ export function SectionPlan(props: SectionPlanProps) {
       eyebrow="Sección C"
       title="Plan de tratamiento & setup digital"
       accent="violet"
-      action={
-        props.onAdvancePhase ? (
-          <Btn variant="primary" size="sm" onClick={props.onAdvancePhase}>
-            Avanzar de fase
-          </Btn>
-        ) : null
-      }
     >
       <PrescriptionBlock treatment={t} onEdit={props.onEditPrescription} />
       <WireSequenceBlock
