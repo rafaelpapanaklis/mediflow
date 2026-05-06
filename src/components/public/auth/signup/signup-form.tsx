@@ -197,8 +197,9 @@ export function SignupForm() {
       }
 
       toast.success("¡Cuenta creada! Bienvenido a MediFlow 🎉");
-      router.push("/dashboard");
-      router.refresh();
+      // Hard navigation: ver login-form.tsx — evita la cascada de
+      // fetches que causaba router.push + router.refresh síncronos.
+      window.location.href = "/dashboard";
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Error al crear cuenta";
       toast.error(msg);

@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import toast from "react-hot-toast";
 import { createClient } from "@/lib/supabase/client";
@@ -12,7 +11,6 @@ import { FormField } from "../form-field";
 import { PasswordInput } from "../password-input";
 
 export function LoginForm() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
@@ -37,8 +35,12 @@ export function LoginForm() {
       // Sembrar/limpiar cookie activeClinicId para el nuevo supabaseId.
       try { await fetch("/api/auth/post-login", { method: "POST" }); } catch { /* ignore */ }
       toast.success("¡Bienvenido!");
-      router.push("/dashboard");
-      router.refresh();
+      // Hard navigation: garantiza un único mount del layout y evita la
+      // cascada de fetches por router.push + router.refresh síncronos
+      // (remontaba el árbol cliente y disparaba useEffect[] varias veces
+      // — ej. /api/dashboard/sidebar-counts 5x en <2s). Mismo patrón que
+      // sidebar.tsx switchClinic/logout.
+      window.location.href = "/dashboard";
     } catch (err: any) {
       setError(err?.message ?? "Error al iniciar sesión");
       setLoading(false);
