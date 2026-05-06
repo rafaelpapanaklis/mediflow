@@ -59,3 +59,5 @@ export {
   exportPerioPrePostComparePdf,
   type PerioPdfResult,
 } from "./reports";
+
+export { createPerioPhoto, softDeletePerioPhoto } from "./photos";

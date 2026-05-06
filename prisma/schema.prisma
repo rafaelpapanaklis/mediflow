@@ -4533,6 +4533,12 @@ enum ClinicalPhotoType {
   perio_initial
   perio_postsrp
   perio_surgery
+  perio_pre_srp
+  perio_pre_surgery
+  perio_post_surgery
+  perio_suture_removal
+  perio_maintenance_check
+  perio_recession_baseline
   // Implantes — set v1 (pediatrics base)
   implant_site_pre
   implant_placement
