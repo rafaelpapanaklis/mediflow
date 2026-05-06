@@ -206,7 +206,8 @@ model Clinic {
   orthodonticConsents       OrthodonticConsent[]
 
   // Implants module — see docs/marketplace/research/implantologia/SPEC.md §4
-  implants Implant[]
+  implants             Implant[]
+  implantCatalogModels ImplantCatalogModel[]
 
   // Clinical-shared cross-cutting features
   clinicalPhotos             ClinicalPhoto[]
@@ -4459,6 +4460,40 @@ model OrthodonticConsent {
 // TODO v1.1: OrthodonticRefinement — segundo curso de tratamiento por
 //   ajustes finales no logrados con el plan original (alineadores y brackets).
 
+/// Catálogo de marcas/modelos de implantes que la clínica usa habitualmente.
+/// Sirve como selector al crear un Implant (en lugar de typear modelName libre).
+/// Cada entrada cubre una combinación marca+modelo con sus dimensiones
+/// estándar (diámetros y longitudes disponibles) y plataformas (Bone Level,
+/// Tissue Level, RP, NP, etc.).
+model ImplantCatalogModel {
+  id       String       @id @default(cuid())
+  clinicId String
+  brand    ImplantBrand
+  /// Si brand=OTRO, nombre comercial libre.
+  brandCustomName String?
+  modelName       String
+  /// Lista de plataformas disponibles para este modelo (ej. ["RC","NC"]).
+  platforms       String[]      @default([])
+  /// Diámetros disponibles en mm (ej. [3.3, 4.1, 4.8]).
+  diametersMm     Decimal[]     @db.Decimal(3, 1)
+  /// Longitudes disponibles en mm (ej. [8, 10, 12]).
+  lengthsMm       Decimal[]     @db.Decimal(4, 1)
+  surfaceTreatment ImplantSurfaceTreatment?
+  connectionType   ImplantConnectionType?
+  notes      String?
+  isActive   Boolean   @default(true)
+  createdBy  String
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@unique([clinicId, brand, modelName])
+  @@index([clinicId, isActive])
+  @@map("implant_catalog_models")
+}
+
 // ─── Clinical-shared cross-cutting (Sprint cierre dental) ────────────────────
 //
 // 8 modelos compartidos por los 5 módulos dentales: pediatrics, endodontics,
@@ -4498,11 +4533,21 @@ enum ClinicalPhotoType {
   perio_initial
   perio_postsrp
   perio_surgery
-  // Implantes
+  // Implantes — set v1 (pediatrics base)
   implant_site_pre
   implant_placement
   implant_healing
   implant_prosthetic
+  // Implantes — set v2 (fases granulares spec implantes 4/5)
+  pre_surgical
+  surgical_phase
+  second_stage
+  prosthetic_placement
+  follow_up_radiograph
+  peri_implant_check
+  // Cross genéricos
+  pre_treatment
+  post_treatment
   // Ortodoncia
   ortho_extraoral_front
   ortho_extraoral_profile
@@ -4561,10 +4606,16 @@ enum ClinicalReminderType {
   // Periodoncia
   perio_maintenance_3m
   perio_reevaluation
-  // Implantes
+  // Implantes — set v1 (pediatrics base)
   implant_followup_1m
   implant_followup_6m
   implant_followup_1y
+  // Implantes — set v2 (granular spec implantes 4/5)
+  implant_cicatrizacion_7d
+  implant_retiro_sutura_10d
+  implant_oseointegracion_4m
+  implant_control_anual
+  implant_peri_implantitis_6m
   // Ortodoncia
   ortho_control_30d
   ortho_retention_check

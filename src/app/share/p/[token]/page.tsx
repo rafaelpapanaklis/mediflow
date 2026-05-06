@@ -1,9 +1,13 @@
 // Página pública /share/p/[token] — vista del paciente sin autenticación.
 // Usa server action resolvePublicShareToken para validar token + cargar
-// resumen del módulo origen.
+// resumen del módulo origen. Branchea por module:
+//   - implants → timeline visual de fases (ImplantShareTimeline)
+//   - pediatrics (y demás) → resumen genérico con stats
 
 import { resolvePublicShareToken } from "@/app/actions/clinical-shared/share-links";
 import { isFailure } from "@/lib/clinical-shared/result";
+import { prisma } from "@/lib/prisma";
+import ImplantShareTimeline from "./ImplantShareTimeline";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -35,6 +39,11 @@ export default async function PublicSharePage(props: PageProps) {
   }
 
   const v = res.data;
+
+  // Para implants, renderizamos timeline visual de fases (no stats genéricos).
+  if (v.module === "implants") {
+    return <ImplantSharePage token={props.params.token} clinicName={v.clinicName} patientFirstName={v.patientFirstName} />;
+  }
 
   return (
     <main style={pageStyle}>
@@ -130,3 +139,120 @@ const cardStyle: React.CSSProperties = {
   borderRadius: 12,
   padding: 24,
 };
+
+// ── Implants — timeline visual de fases ─────────────────────────────
+
+async function ImplantSharePage({
+  token,
+  clinicName,
+  patientFirstName,
+}: {
+  token: string;
+  clinicName: string;
+  patientFirstName: string;
+}) {
+  // Token ya fue validado por resolvePublicShareToken; recargamos el link
+  // para obtener patientId/clinicId y consultar el implante asociado.
+  const link = await prisma.patientShareLink.findUnique({
+    where: { token },
+    select: { patientId: true, clinicId: true },
+  });
+  if (!link) {
+    return (
+      <main style={pageStyle}>
+        <div style={cardStyle}>
+          <h1 style={{ margin: 0, fontSize: 22 }}>Link no disponible</h1>
+        </div>
+      </main>
+    );
+  }
+
+  const implant = await prisma.implant.findFirst({
+    where: { patientId: link.patientId, clinicId: link.clinicId },
+    orderBy: { placedAt: "desc" },
+    select: {
+      id: true,
+      toothFdi: true,
+      brand: true,
+      brandCustomName: true,
+      modelName: true,
+      diameterMm: true,
+      lengthMm: true,
+      placedAt: true,
+      currentStatus: true,
+      protocol: true,
+      surgicalRecord: { select: { performedAt: true } },
+      healingPhase: {
+        select: {
+          startedAt: true,
+          expectedDurationWeeks: true,
+          completedAt: true,
+        },
+      },
+      secondStage: { select: { performedAt: true } },
+      prostheticPhase: { select: { prosthesisDeliveredAt: true } },
+      followUps: {
+        orderBy: { performedAt: "asc" },
+        select: {
+          milestone: true,
+          performedAt: true,
+          meetsAlbrektssonCriteria: true,
+        },
+      },
+    },
+  });
+
+  return (
+    <main className="mx-auto min-h-screen max-w-3xl px-4 py-8">
+      <header className="mb-6">
+        <p className="text-xs uppercase tracking-wide text-[var(--color-muted-fg)]">
+          {clinicName}
+        </p>
+        <h1 className="text-2xl font-semibold">Hola, {patientFirstName}</h1>
+        <p className="mt-1 text-sm text-[var(--color-muted-fg)]">
+          Aquí puedes seguir las fases del tratamiento de tu implante.
+        </p>
+      </header>
+
+      {implant ? (
+        <ImplantShareTimeline
+          implant={{
+            toothFdi: implant.toothFdi,
+            brand: implant.brandCustomName ?? implant.brand,
+            modelName: implant.modelName,
+            diameterMm: String(implant.diameterMm),
+            lengthMm: String(implant.lengthMm),
+            placedAt: implant.placedAt.toISOString(),
+            currentStatus: implant.currentStatus,
+            protocol: implant.protocol,
+            surgicalAt: implant.surgicalRecord?.performedAt?.toISOString() ?? null,
+            healingStartedAt:
+              implant.healingPhase?.startedAt?.toISOString() ?? null,
+            healingCompletedAt:
+              implant.healingPhase?.completedAt?.toISOString() ?? null,
+            healingExpectedWeeks:
+              implant.healingPhase?.expectedDurationWeeks ?? null,
+            secondStageAt: implant.secondStage?.performedAt?.toISOString() ?? null,
+            prosthesisDeliveredAt:
+              implant.prostheticPhase?.prosthesisDeliveredAt?.toISOString() ??
+              null,
+            followUps: implant.followUps.map((f) => ({
+              milestone: f.milestone,
+              performedAt: f.performedAt?.toISOString() ?? null,
+              meetsAlbrektssonCriteria: f.meetsAlbrektssonCriteria,
+            })),
+          }}
+        />
+      ) : (
+        <p className="text-sm text-[var(--color-muted-fg)]">
+          Aún no hay información disponible para mostrar.
+        </p>
+      )}
+
+      <footer className="mt-10 border-t border-[var(--border)] pt-4 text-center text-xs text-[var(--color-muted-fg)]">
+        Información compartida por su clínica. Para cualquier duda,
+        contáctenos.
+      </footer>
+    </main>
+  );
+}

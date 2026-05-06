@@ -28,3 +28,20 @@ export { exportSurgicalReportPdf } from "./exportSurgicalReportPdf";
 export { exportImplantPlanPdf } from "./exportImplantPlanPdf";
 export { createPeriImplantAssessment } from "./createPeriImplantAssessment";
 export { enableQrPublicAccess } from "./enableQrPublicAccess";
+export {
+  linkImplantPhaseToTreatmentSession,
+  onImplantSurgicalPhaseComplete,
+  onImplantHealingComplete,
+  onImplantProstheticComplete,
+} from "./linkTreatmentSession";
+export { exportImplantFullReport } from "./exportImplantFullReport";
+export {
+  createImplantShareToken,
+  revokeImplantShareToken,
+} from "./createShareToken";
+export { scheduleImplantReminders } from "./scheduleReminders";
+export {
+  listImplantCatalogModels,
+  upsertImplantCatalogModel,
+  deleteImplantCatalogModel,
+} from "./catalogActions";
