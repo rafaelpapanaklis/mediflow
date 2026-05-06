@@ -9,3 +9,4 @@ export * from "./types";
 export * from "./photo-gallery";
 export * from "./evolution-templates";
 export * from "./referral-letters";
+export * from "./lab-orders";
