@@ -35,3 +35,7 @@ export {
   onImplantProstheticComplete,
 } from "./linkTreatmentSession";
 export { exportImplantFullReport } from "./exportImplantFullReport";
+export {
+  createImplantShareToken,
+  revokeImplantShareToken,
+} from "./createShareToken";
