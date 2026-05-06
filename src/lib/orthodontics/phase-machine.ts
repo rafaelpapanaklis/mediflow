@@ -70,3 +70,28 @@ export function classifyTransition(
   if (toIdx > fromIdx + 1) return "skip";
   return "invalid";
 }
+
+/**
+ * Guard documental: para avanzar de la fase inicial (ALIGNMENT) a la
+ * siguiente, el plan debe tener un set fotográfico T0 completo (las 8
+ * vistas estándar: 3 extraorales + 5 intraorales). Esto asegura que se
+ * documentó el caso antes de modificar la oclusión y permite
+ * comparativos "antes/después" reales en el PDF de progreso.
+ *
+ * Devuelve null si OK, o un mensaje describiendo qué falta.
+ */
+export function requiresInitialPhotosBefore(args: {
+  from: OrthoPhaseKey;
+  to: OrthoPhaseKey;
+  hasCompleteT0Set: boolean;
+}): string | null {
+  // Solo gate la primera transición (ALIGNMENT → LEVELING).
+  // Las posteriores no se bloquean: si no hubo T0 al inicio, ya no se
+  // puede recuperar el momento, y la fase está corriendo.
+  if (args.from === "ALIGNMENT" && args.to === "LEVELING") {
+    if (!args.hasCompleteT0Set) {
+      return "No se puede avanzar a LEVELING sin un set fotográfico T0 completo (8 vistas).";
+    }
+  }
+  return null;
+}

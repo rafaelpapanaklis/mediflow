@@ -25,7 +25,8 @@ export interface ClinicalRemindersSummary {
 /**
  * Procesa todos los ClinicalReminder con dueDate dentro de
  * [now, now + LOOKAHEAD_DAYS] y status = pending. Resuelve la plantilla
- * de WhatsApp por reminderType y encola un row WhatsAppReminder.
+ * de WhatsApp por reminderType (o payload.subtype si reminderType=other)
+ * y encola un row WhatsAppReminder con el type derivado del prefijo.
  */
 export async function processClinicalReminders(opts?: {
   batchSize?: number;
@@ -50,9 +51,7 @@ export async function processClinicalReminders(opts?: {
     orderBy: { dueDate: "asc" },
     take: limit,
     include: {
-      patient: {
-        select: { firstName: true, phone: true, deletedAt: true },
-      },
+      patient: { select: { firstName: true, phone: true, deletedAt: true } },
       clinic: { select: { id: true, name: true, waConnected: true } },
     },
   });
@@ -74,20 +73,23 @@ export async function processClinicalReminders(opts?: {
         continue;
       }
 
-      const tpl = resolveTemplate(r.reminderType);
+      // El reminderType viene del enum SQL pero el sub-tipo puede vivir
+      // en payload.subtype para los casos `other`.
+      const lookupKey = resolveLookupKey(r);
+      const tpl = resolveTemplate(lookupKey);
       if (!tpl) {
         summary.skipped++;
         continue;
       }
 
-      const message = `${tpl.prefix}${r.reminderType}::${r.id}`;
+      const message = `${tpl.prefix}${lookupKey}::${r.id}`;
 
       const wa = await prisma.whatsAppReminder.create({
         data: {
           clinicId: r.clinic.id,
           patientPhone: r.patient.phone,
           message,
-          type: "PED_REMINDER",
+          type: tpl.prefix.replace(/_$/, ""),
           status: "PENDING",
           scheduledFor: r.dueDate,
           payload: (r.payload as object | null) ?? undefined,
@@ -113,9 +115,21 @@ export async function processClinicalReminders(opts?: {
   return summary;
 }
 
-function resolveTemplate(reminderType: string): ClinicalReminderTemplate | null {
-  if (reminderType in CLINICAL_REMINDER_TEMPLATES) {
-    return CLINICAL_REMINDER_TEMPLATES[reminderType as keyof typeof CLINICAL_REMINDER_TEMPLATES];
+function resolveLookupKey(r: {
+  reminderType: string;
+  payload: unknown;
+}): string {
+  if (r.reminderType !== "other") return r.reminderType;
+  if (r.payload && typeof r.payload === "object") {
+    const sub = (r.payload as Record<string, unknown>).subtype;
+    if (typeof sub === "string") return sub;
+  }
+  return r.reminderType;
+}
+
+function resolveTemplate(key: string): ClinicalReminderTemplate | null {
+  if (key in CLINICAL_REMINDER_TEMPLATES) {
+    return CLINICAL_REMINDER_TEMPLATES[key as keyof typeof CLINICAL_REMINDER_TEMPLATES];
   }
   return null;
 }

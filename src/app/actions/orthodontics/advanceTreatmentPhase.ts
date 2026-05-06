@@ -4,7 +4,9 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { advanceTreatmentPhaseSchema } from "@/lib/validation/orthodontics";
-import { canAdvance } from "@/lib/orthodontics/phase-machine";
+import { canAdvance, requiresInitialPhotosBefore } from "@/lib/orthodontics/phase-machine";
+import { isCompleteSet } from "@/lib/orthodontics/photo-set-helpers";
+import { linkSessionToPlan } from "@/lib/clinical-shared/treatment-link/link";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
@@ -36,6 +38,30 @@ export async function advanceTreatmentPhase(
     );
   }
 
+  // Guard: ALIGNMENT → LEVELING requiere set fotográfico T0 completo.
+  if (currentPhase.phaseKey === "ALIGNMENT" && parsed.data.toPhase === "LEVELING") {
+    const t0 = await prisma.orthoPhotoSet.findFirst({
+      where: { treatmentPlanId: plan.id, setType: "T0" },
+      select: {
+        photoFrontalId: true,
+        photoProfileId: true,
+        photoSmileId: true,
+        photoIntraFrontalId: true,
+        photoIntraLateralRId: true,
+        photoIntraLateralLId: true,
+        photoOcclusalUpperId: true,
+        photoOcclusalLowerId: true,
+      },
+    });
+    const hasCompleteT0Set = t0 ? isCompleteSet(t0) : false;
+    const guardError = requiresInitialPhotosBefore({
+      from: currentPhase.phaseKey,
+      to: parsed.data.toPhase,
+      hasCompleteT0Set,
+    });
+    if (guardError) return fail(guardError);
+  }
+
   const nextPhase = plan.phases.find((p) => p.phaseKey === parsed.data.toPhase);
   if (!nextPhase) return fail("Fase destino no inicializada en este plan");
 
@@ -61,6 +87,21 @@ export async function advanceTreatmentPhase(
           where: { id: plan.id },
           data: { status: "RETENTION", statusUpdatedAt: now },
         });
+      }
+
+      if (parsed.data.treatmentSessionId) {
+        await linkSessionToPlan(
+          {
+            clinicId: ctx.clinicId,
+            module: "orthodontics",
+            moduleEntityType: "ortho-phase",
+            moduleSessionId: currentPhase.id,
+            treatmentSessionId: parsed.data.treatmentSessionId,
+            linkedBy: ctx.userId,
+            notes: `Fase ${currentPhase.phaseKey} completada`,
+          },
+          tx,
+        );
       }
     });
 

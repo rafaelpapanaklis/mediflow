@@ -10,6 +10,10 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { auditClinicalShared, guardPatient } from "@/lib/clinical-shared/auth/guard";
 import { fail, isFailure, ok, type ActionResult } from "@/lib/clinical-shared/result";
+import {
+  buildShortOrthoSummary,
+  type OrthoShareStats,
+} from "@/lib/clinical-shared/share/summary-orthodontics";
 
 const moduleEnum = z.nativeEnum(ClinicalModule);
 
@@ -147,26 +151,36 @@ export interface PublicShareView {
   patientFirstName: string;
   clinicName: string;
   generatedAt: string;
-  // Resumen del módulo origen — string libre, sin PII fuera de lo
-  // necesario.
+  /** Resumen del módulo origen — string libre, sin PII fuera de lo necesario. */
   summary: string;
-  // Indicadores básicos para mostrar tarjetas resumen.
+  /**
+   * Stats pediátricos. Para módulos no-pediatrics se devuelven en cero
+   * para no romper consumidores que asumen el shape.
+   */
   stats: {
     sealants: number;
     fluorides: number;
     behaviorAssessments: number;
     consents: number;
   };
+  /** Stats orto-específicos (sólo presente cuando module=orthodontics). */
+  orthoStats?: OrthoShareStats;
 }
+
+const ZERO_STATS = {
+  sealants: 0,
+  fluorides: 0,
+  behaviorAssessments: 0,
+  consents: 0,
+};
 
 /**
  * Resuelve un token público y devuelve la vista mínima necesaria.
- * Solo módulo pediatrics está soportado en este sprint. Incrementa
- * viewCount + lastViewed.
+ * Incrementa viewCount + lastViewed sin bloquear el response.
  */
-export async function resolvePublicShareToken(token: string): Promise<
-  ActionResult<PublicShareView>
-> {
+export async function resolvePublicShareToken(
+  token: string,
+): Promise<ActionResult<PublicShareView>> {
   if (!token || token.length < 16) return fail("Token inválido");
 
   const link = await prisma.patientShareLink.findUnique({
@@ -192,6 +206,36 @@ export async function resolvePublicShareToken(token: string): Promise<
     })
     .catch(() => undefined);
 
+  if (link.module === "orthodontics") {
+    const [patient, clinic] = await Promise.all([
+      prisma.patient.findUnique({
+        where: { id: link.patientId },
+        select: { firstName: true, deletedAt: true },
+      }),
+      prisma.clinic.findUnique({
+        where: { id: link.clinicId },
+        select: { name: true },
+      }),
+    ]);
+    if (!patient || patient.deletedAt) return fail("Paciente no disponible");
+    if (!clinic) return fail("Clínica no disponible");
+
+    const built = await buildShortOrthoSummary({
+      patientId: link.patientId,
+      clinicId: link.clinicId,
+    });
+    return ok({
+      module: link.module,
+      patientFirstName: patient.firstName,
+      clinicName: clinic.name,
+      generatedAt: new Date().toISOString(),
+      summary: built.summary,
+      stats: ZERO_STATS,
+      orthoStats: built.stats,
+    });
+  }
+
+  // Pediatrics (default)
   const [patient, clinic, sealants, fluorides, behavior, consents] = await Promise.all([
     prisma.patient.findUnique({
       where: { id: link.patientId },

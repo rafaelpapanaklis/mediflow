@@ -154,6 +154,7 @@ export const advanceTreatmentPhaseSchema = z.object({
   treatmentPlanId: z.string().min(1),
   toPhase: z.enum(ORTHO_PHASE_KEY),
   notes: z.string().max(500).optional().nullable(),
+  treatmentSessionId: z.string().min(1).optional().nullable(),
 });
 
 // ─── 6-8. Plan de pagos ─────────────────────────────────────────────────────
@@ -227,6 +228,7 @@ export const createControlAppointmentSchema = z.object({
   photoSetId: z.string().optional().nullable(),
   nextAppointmentAt: z.string().datetime().optional().nullable(),
   nextAppointmentNotes: z.string().max(500).optional().nullable(),
+  treatmentSessionId: z.string().min(1).optional().nullable(),
 });
 
 // ─── 12. Cefalo / STL ───────────────────────────────────────────────────────

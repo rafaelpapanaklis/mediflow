@@ -3,8 +3,8 @@
 // Despacha por módulo:
 //   - periodontics → PerioShareView (perio-específico, sprint perio)
 //   - implants     → ImplantShareTimeline (timeline visual de fases)
+//   - orthodontics → OrthoSharePage + elastics calendar
 //   - pediatrics y resto → vista genérica con stats vía resolvePublicShareToken
-//                          (sprint pediatrics, modela stats pediátricos)
 
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -12,6 +12,8 @@ import { resolvePublicShareToken } from "@/app/actions/clinical-shared/share-lin
 import { isFailure } from "@/lib/clinical-shared/result";
 import ImplantShareTimeline from "./ImplantShareTimeline";
 import { PerioShareView } from "./PerioShareView";
+import { OrthoSharePage } from "@/components/share/OrthoSharePage";
+import { OrthoElasticsCalendar } from "@/components/share/OrthoElasticsCalendar";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -47,8 +49,12 @@ export default async function PublicSharePage(props: PageProps) {
     return (
       <main style={pageStyle}>
         <div style={cardStyle}>
-          <h1 style={{ margin: 0, fontSize: 22, color: "var(--text-1)" }}>Link no disponible</h1>
-          <p style={{ color: "var(--text-2)", marginTop: 8, fontSize: 14 }}>{res.error}</p>
+          <h1 style={{ margin: 0, fontSize: 22, color: "var(--text-1)" }}>
+            Link no disponible
+          </h1>
+          <p style={{ color: "var(--text-2)", marginTop: 8, fontSize: 14 }}>
+            {res.error}
+          </p>
         </div>
       </main>
     );
@@ -56,11 +62,50 @@ export default async function PublicSharePage(props: PageProps) {
 
   const v = res.data;
 
-  // Para implants, renderizamos timeline visual de fases (no stats genéricos).
+  // Implants — timeline visual de fases (no stats genéricos).
   if (v.module === "implants") {
-    return <ImplantSharePage token={props.params.token} clinicName={v.clinicName} patientFirstName={v.patientFirstName} />;
+    return (
+      <ImplantSharePage
+        token={props.params.token}
+        clinicName={v.clinicName}
+        patientFirstName={v.patientFirstName}
+      />
+    );
   }
 
+  // Ortodoncia — vista dedicada con calendar de elásticos.
+  if (v.module === "orthodontics" && v.orthoStats) {
+    return (
+      <main
+        style={{
+          minHeight: "100vh",
+          padding: 24,
+          background: "var(--surface-2, #f5f5f7)",
+          color: "var(--text-1, #14101f)",
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 720,
+            margin: "0 auto",
+            display: "flex",
+            flexDirection: "column",
+            gap: 18,
+          }}
+        >
+          <OrthoSharePage
+            patientFirstName={v.patientFirstName}
+            clinicName={v.clinicName}
+            summary={v.summary}
+            stats={v.orthoStats}
+          />
+          <OrthoElasticsCalendar token={props.params.token} />
+        </div>
+      </main>
+    );
+  }
+
+  // Pediatrics (default).
   return (
     <main style={pageStyle}>
       <div style={cardStyle}>
@@ -74,7 +119,14 @@ export default async function PublicSharePage(props: PageProps) {
             marginBottom: 16,
           }}
         >
-          <small style={{ fontSize: 11, color: "var(--text-2)", letterSpacing: 0.5, textTransform: "uppercase" }}>
+          <small
+            style={{
+              fontSize: 11,
+              color: "var(--text-2)",
+              letterSpacing: 0.5,
+              textTransform: "uppercase",
+            }}
+          >
             {v.clinicName}
           </small>
           <h1 style={{ margin: 0, fontSize: 22, color: "var(--text-1)" }}>
@@ -111,9 +163,10 @@ export default async function PublicSharePage(props: PageProps) {
           <Stat label="Consentimientos" value={v.stats.consents} />
         </section>
 
-        <footer style={{ marginTop: 18, fontSize: 11, color: "var(--text-2)", textAlign: "center" }}>
-          Compartido el {new Date(v.generatedAt).toLocaleDateString("es-MX")} ·
-          MediFlow
+        <footer
+          style={{ marginTop: 18, fontSize: 11, color: "var(--text-2)", textAlign: "center" }}
+        >
+          Compartido el {new Date(v.generatedAt).toLocaleDateString("es-MX")} · MediFlow
         </footer>
       </div>
     </main>

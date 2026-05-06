@@ -143,7 +143,7 @@ export async function listClinicalReminders(
 
 // ── Helpers de auto-creación pediátrica ────────────────────────────────
 
-const autoSchema = z.object({ patientId: z.string().min(1) });
+const autoPediatricSchema = z.object({ patientId: z.string().min(1) });
 
 /**
  * Crea (idempotente) los recordatorios pediátricos automáticos para un
@@ -151,9 +151,9 @@ const autoSchema = z.object({ patientId: z.string().min(1) });
  * Reusa el mismo dueDate si ya existe un reminder pending del mismo tipo.
  */
 export async function autoSeedPediatricReminders(
-  input: z.infer<typeof autoSchema>,
+  input: z.infer<typeof autoPediatricSchema>,
 ): Promise<ActionResult<{ created: number }>> {
-  const parsed = autoSchema.safeParse(input);
+  const parsed = autoPediatricSchema.safeParse(input);
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
@@ -174,6 +174,7 @@ export async function autoSeedPediatricReminders(
   await ensurePending({
     clinicId: ctx.clinicId,
     patientId: parsed.data.patientId,
+    module: "pediatrics",
     reminderType: "ped_profilaxis_6m",
     dueDate: addMonths(now, 6),
     createdBy: ctx.userId,
@@ -184,6 +185,7 @@ export async function autoSeedPediatricReminders(
   await ensurePending({
     clinicId: ctx.clinicId,
     patientId: parsed.data.patientId,
+    module: "pediatrics",
     reminderType: "ped_control_erupcion_anual",
     dueDate: addMonths(now, 12),
     createdBy: ctx.userId,
@@ -197,8 +199,113 @@ export async function autoSeedPediatricReminders(
     await ensurePending({
       clinicId: ctx.clinicId,
       patientId: parsed.data.patientId,
+      module: "pediatrics",
       reminderType: "ped_cumpleanos_paciente",
       dueDate,
+      createdBy: ctx.userId,
+      onCreate: () => created++,
+    });
+  }
+
+  return ok({ created });
+}
+
+// ── Helpers de auto-creación orto ──────────────────────────────────────
+
+const autoOrthoSchema = z.object({
+  patientId: z.string().min(1),
+  treatmentPlanId: z.string().min(1),
+});
+
+/**
+ * Crea (idempotente) los recordatorios orto automáticos para un paciente
+ * con plan activo:
+ *   - cita mensual de control (30 días)
+ *   - retiro de aparato próximo (si quedan ≤ 60 días al estimado)
+ *   - seguimiento de retención (si plan en RETENTION → 3m, 6m)
+ */
+export async function autoSeedOrthoReminders(
+  input: z.infer<typeof autoOrthoSchema>,
+): Promise<ActionResult<{ created: number }>> {
+  const parsed = autoOrthoSchema.safeParse(input);
+  if (!parsed.success) return fail("Datos inválidos");
+  const ctx = await getAuthContext();
+  if (!ctx) return fail("No autenticado");
+
+  const guard = await guardPatient({ ctx, patientId: parsed.data.patientId });
+  if (isFailure(guard)) return fail(guard.error);
+
+  const plan = await prisma.orthodonticTreatmentPlan.findUnique({
+    where: { id: parsed.data.treatmentPlanId },
+    select: {
+      id: true,
+      clinicId: true,
+      patientId: true,
+      installedAt: true,
+      startDate: true,
+      estimatedDurationMonths: true,
+      status: true,
+      deletedAt: true,
+    },
+  });
+  if (!plan || plan.deletedAt) return fail("Plan no encontrado");
+  if (plan.clinicId !== ctx.clinicId || plan.patientId !== parsed.data.patientId) {
+    return fail("Plan no coincide");
+  }
+
+  const now = new Date();
+  let created = 0;
+
+  // Cita mensual de control
+  await ensurePending({
+    clinicId: ctx.clinicId,
+    patientId: parsed.data.patientId,
+    module: "orthodontics",
+    reminderType: "ortho_control_30d",
+    dueDate: addDays(now, 30),
+    createdBy: ctx.userId,
+    onCreate: () => created++,
+  });
+
+  // Retiro de aparato si está cerca el estimado
+  const installedAt = plan.installedAt ?? plan.startDate;
+  if (installedAt && plan.estimatedDurationMonths) {
+    const estimatedRemoval = new Date(installedAt);
+    estimatedRemoval.setMonth(estimatedRemoval.getMonth() + plan.estimatedDurationMonths);
+    const daysUntilRemoval = Math.floor(
+      (estimatedRemoval.getTime() - now.getTime()) / (24 * 3600 * 1000),
+    );
+    if (daysUntilRemoval > 0 && daysUntilRemoval <= 60) {
+      await ensurePending({
+        clinicId: ctx.clinicId,
+        patientId: parsed.data.patientId,
+        module: "orthodontics",
+        reminderType: "other",
+        dueDate: addDays(estimatedRemoval, -14),
+        createdBy: ctx.userId,
+        payload: { subtype: "ortho_appliance_removal_soon" },
+        onCreate: () => created++,
+      });
+    }
+  }
+
+  // Retención: 3m + 6m si el plan ya está en RETENTION
+  if (plan.status === "RETENTION") {
+    await ensurePending({
+      clinicId: ctx.clinicId,
+      patientId: parsed.data.patientId,
+      module: "orthodontics",
+      reminderType: "ortho_retention_check",
+      dueDate: addDays(now, 90),
+      createdBy: ctx.userId,
+      onCreate: () => created++,
+    });
+    await ensurePending({
+      clinicId: ctx.clinicId,
+      patientId: parsed.data.patientId,
+      module: "orthodontics",
+      reminderType: "ortho_retention_check",
+      dueDate: addDays(now, 180),
       createdBy: ctx.userId,
       onCreate: () => created++,
     });
@@ -210,9 +317,11 @@ export async function autoSeedPediatricReminders(
 async function ensurePending(args: {
   clinicId: string;
   patientId: string;
+  module: ClinicalModule;
   reminderType: ClinicalReminderType;
   dueDate: Date;
   createdBy: string;
+  payload?: Record<string, unknown>;
   onCreate?: () => void;
 }): Promise<void> {
   const existing = await prisma.clinicalReminder.findFirst({
@@ -222,6 +331,15 @@ async function ensurePending(args: {
       reminderType: args.reminderType,
       status: "pending",
       deletedAt: null,
+      // Para `other` también compararemos payload.subtype
+      ...(args.reminderType === "other" && args.payload?.subtype
+        ? {
+            payload: {
+              path: ["subtype"],
+              equals: String(args.payload.subtype),
+            },
+          }
+        : {}),
     },
     select: { id: true },
   });
@@ -230,9 +348,10 @@ async function ensurePending(args: {
     data: {
       clinicId: args.clinicId,
       patientId: args.patientId,
-      module: "pediatrics",
+      module: args.module,
       reminderType: args.reminderType,
       dueDate: args.dueDate,
+      payload: args.payload ? (args.payload as object) : undefined,
       createdBy: args.createdBy,
     },
   });
@@ -242,5 +361,11 @@ async function ensurePending(args: {
 function addMonths(base: Date, n: number): Date {
   const d = new Date(base);
   d.setMonth(d.getMonth() + n);
+  return d;
+}
+
+function addDays(base: Date, n: number): Date {
+  const d = new Date(base);
+  d.setDate(d.getDate() + n);
   return d;
 }

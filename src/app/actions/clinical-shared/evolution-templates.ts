@@ -12,6 +12,7 @@ import {
   type EvolutionTemplateDTO,
 } from "@/lib/clinical-shared/evolution-templates/types";
 import { ensurePediatricDefaults } from "@/lib/clinical-shared/evolution-templates/seed-pediatrics";
+import { ensureOrthoDefaults } from "@/lib/clinical-shared/evolution-templates/seed-orthodontics";
 import { fail, ok, type ActionResult } from "@/lib/clinical-shared/result";
 
 const moduleEnum = z.nativeEnum(ClinicalModule);
@@ -73,7 +74,7 @@ export async function createEvolutionTemplate(
 
 const listSchema = z.object({
   module: moduleEnum,
-  /** Si true, garantiza que existan los defaults pediátricos antes de listar. */
+  /** Si true, garantiza que existan los defaults del módulo antes de listar. */
   ensureDefaults: z.boolean().optional(),
 });
 
@@ -85,8 +86,14 @@ export async function listEvolutionTemplates(
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
 
-  if (parsed.data.module === "pediatrics" && parsed.data.ensureDefaults) {
-    await ensurePediatricDefaults({ clinicId: ctx.clinicId, createdBy: ctx.userId });
+  if (parsed.data.ensureDefaults) {
+    if (parsed.data.module === "pediatrics") {
+      await ensurePediatricDefaults({ clinicId: ctx.clinicId, createdBy: ctx.userId });
+    } else if (parsed.data.module === "orthodontics") {
+      await ensureOrthoDefaults({ clinicId: ctx.clinicId, createdBy: ctx.userId });
+    }
+    // Otros módulos (endodontics/periodontics/implants) registran
+    // sus propios seeders en sus respectivas branches.
   }
 
   const rows = await prisma.clinicalEvolutionTemplate.findMany({
@@ -157,12 +164,19 @@ export async function seedEvolutionTemplateDefaults(
   if (!ctx) return fail("No autenticado");
   if (!ctx.isAdmin && !ctx.isSuperAdmin) return fail("Solo administradores");
 
-  if (parsed.data.module !== "pediatrics") {
-    return fail("Solo Pediatría tiene seeds default por ahora");
+  if (parsed.data.module === "pediatrics") {
+    const result = await ensurePediatricDefaults({
+      clinicId: ctx.clinicId,
+      createdBy: ctx.userId,
+    });
+    return ok(result);
   }
-  const result = await ensurePediatricDefaults({
-    clinicId: ctx.clinicId,
-    createdBy: ctx.userId,
-  });
-  return ok(result);
+  if (parsed.data.module === "orthodontics") {
+    const result = await ensureOrthoDefaults({
+      clinicId: ctx.clinicId,
+      createdBy: ctx.userId,
+    });
+    return ok(result);
+  }
+  return fail("Sin seeds default para este módulo");
 }

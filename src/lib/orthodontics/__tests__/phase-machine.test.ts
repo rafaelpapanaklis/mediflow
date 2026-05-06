@@ -9,6 +9,7 @@ import {
   classifyTransition,
   nextPhase,
   previousPhase,
+  requiresInitialPhotosBefore,
 } from "../phase-machine";
 
 describe("phase-machine", () => {
@@ -55,5 +56,34 @@ describe("phase-machine", () => {
     assert.equal(classifyTransition("ALIGNMENT", "FINISHING"), "skip");
     assert.equal(classifyTransition("DETAILS", "ALIGNMENT"), "rollback");
     assert.equal(classifyTransition("ALIGNMENT", "ALIGNMENT"), "invalid");
+  });
+});
+
+describe("requiresInitialPhotosBefore", () => {
+  it("bloquea ALIGNMENT → LEVELING sin set T0 completo", () => {
+    const error = requiresInitialPhotosBefore({
+      from: "ALIGNMENT",
+      to: "LEVELING",
+      hasCompleteT0Set: false,
+    });
+    assert.notEqual(error, null);
+  });
+
+  it("permite ALIGNMENT → LEVELING con set T0 completo", () => {
+    const error = requiresInitialPhotosBefore({
+      from: "ALIGNMENT",
+      to: "LEVELING",
+      hasCompleteT0Set: true,
+    });
+    assert.equal(error, null);
+  });
+
+  it("no bloquea transiciones posteriores aunque falte T0", () => {
+    const error = requiresInitialPhotosBefore({
+      from: "LEVELING",
+      to: "SPACE_CLOSURE",
+      hasCompleteT0Set: false,
+    });
+    assert.equal(error, null);
   });
 });
