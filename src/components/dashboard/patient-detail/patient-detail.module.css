@@ -295,6 +295,14 @@
   background: var(--brand-soft);
   color: var(--brand);
 }
+.mobileTabBtnDisabled,
+.mobileTabBtnDisabled:hover {
+  opacity: 0.55;
+  cursor: not-allowed;
+  color: var(--text-3);
+  background: var(--bg-elev);
+  border-color: var(--border-soft);
+}
 
 /* ─────── TREATMENTS MODAL (post-firmar consulta) ─────── */
 .treatmentsModal {
@@ -487,6 +495,14 @@
   color: var(--brand);
   border-color: var(--border-brand);
   font-weight: 600;
+}
+.navItemDisabled,
+.navItemDisabled:hover {
+  opacity: 0.55;
+  cursor: not-allowed;
+  color: var(--text-3);
+  background: transparent;
+  border-color: transparent;
 }
 .navItem svg { color: inherit; flex-shrink: 0; }
 .navItemLabel {
