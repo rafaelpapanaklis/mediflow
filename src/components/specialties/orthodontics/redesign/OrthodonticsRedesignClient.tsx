@@ -5,7 +5,7 @@
 // monta dentro del shell del patient-detail (que provee la sidebar
 // contextual a la izquierda).
 
-import { DollarSign, FileText, Shield, Sparkles, Star } from "lucide-react";
+import { FileText, Shield, Sparkles, Star } from "lucide-react";
 import { useState } from "react";
 import { SectionHero } from "./sections/SectionHero";
 import { SectionDiagnosis } from "./sections/SectionDiagnosis";
@@ -16,18 +16,32 @@ import {
   type PhotoSetSummary,
   type PhotoStage,
 } from "./sections/SectionPhotos";
+import { SectionFinance } from "./sections/SectionFinance";
 import { SectionPlaceholder } from "./sections/SectionPlaceholder";
 import { RightRail } from "./sidebar/RightRail";
 import { DrawerTreatmentCard } from "./drawers/DrawerTreatmentCard";
 import type { DrawerCardSubmit } from "./drawers/DrawerTreatmentCard";
 import { ModalAdvancePhase } from "./drawers/ModalAdvancePhase";
+import { ModalOpenChoice } from "./drawers/ModalOpenChoice";
+import { DrawerSignAtHome } from "./drawers/DrawerSignAtHome";
+import { ModalCollect } from "./drawers/ModalCollect";
+import { DrawerCFDIList } from "./drawers/DrawerCFDIList";
 import type { OrthoRedesignViewModel, OrthoPhaseKey } from "./types";
 import type { DigitalRecordEntry } from "./sections/SectionDiagnosis";
+import type {
+  CFDIRecordDTO,
+  OrthoInstallmentDTO,
+  QuoteScenarioDTO,
+} from "./types-finance";
 
 type DrawerState =
   | { kind: "tcard"; cardId: string }
   | { kind: "tcard-new" }
   | { kind: "advance-phase" }
+  | { kind: "openchoice" }
+  | { kind: "signhome" }
+  | { kind: "collect" }
+  | { kind: "cfdi" }
   | null;
 
 export interface OrthodonticsRedesignClientProps {
@@ -45,8 +59,21 @@ export interface OrthodonticsRedesignClientProps {
   onComparePhotos?: () => void;
   /** Programar foto-set + RX panorámica para mes 12 (G15). */
   onScheduleG15?: () => void;
-  /** Hook para cobrar siguiente mensualidad — abre modal cobro existente. */
+
+  /** Sección F · finanzas. */
+  installments?: OrthoInstallmentDTO[];
+  /** Escenarios de cotización pre-cargados (G5). */
+  quoteScenarios?: QuoteScenarioDTO[];
+  /** Lista de CFDI timbrados (M1). */
+  cfdiRecords?: CFDIRecordDTO[];
+  onSelectQuoteScenario?: (scenarioId: string) => Promise<void> | void;
+  onSendSignAtHome?: () => Promise<void> | void;
+  onConfirmCollect?: (
+    method: "tarjeta" | "transfer" | "efectivo" | "msi",
+  ) => Promise<void> | void;
+  /** Hook para cobrar siguiente mensualidad desde sidebar derecha. */
   onCollectNow?: () => void;
+
   /** Callback cuando se firma una card. */
   onCardSigned?: (payload: DrawerCardSubmit) => Promise<void> | void;
   /** Callback cuando se guarda como borrador. */
@@ -100,8 +127,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         }
       : undefined;
 
-  // Placeholders Fase 2 (las secciones F/G/H/I se implementan en commits
-  // siguientes; mantenemos el placeholder como guard si aún no llegan).
+  // Placeholders restantes (G/H/I se implementan en commits siguientes).
   const placeholders: Array<{
     id: string;
     eyebrow: string;
@@ -109,17 +135,6 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
     icon: React.ReactNode;
     bullets: string[];
   }> = [
-    {
-      id: "finance",
-      eyebrow: "Sección F",
-      title: "Plan financiero · CFDI 4.0",
-      icon: <DollarSign className="w-6 h-6" aria-hidden />,
-      bullets: [
-        "G5 Open Choice slider · 3 escenarios financieros para presentar al paciente.",
-        "G6 Sign@Home · firma + cobro vía WhatsApp con link tokenizado.",
-        "M1 CFDI 4.0 · timbrado automático con Facturapi.",
-      ],
-    },
     {
       id: "retention",
       eyebrow: "Sección G",
@@ -151,6 +166,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
       ],
     },
   ];
+
+  const nextPending = (props.installments ?? []).find((i) => i.status === "PENDING");
 
   return (
     <div className="bg-slate-50 dark:bg-slate-950 grid-bg -m-4 sm:-m-6 px-4 sm:px-6 py-6 min-h-[calc(100vh-200px)]">
@@ -201,6 +218,16 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             onScheduleG15={props.onScheduleG15}
           />
 
+          <SectionFinance
+            totalCost={t.totalCost}
+            paid={t.paid}
+            installments={props.installments ?? []}
+            onPresentQuote={() => setDrawer({ kind: "openchoice" })}
+            onSignAtHome={() => setDrawer({ kind: "signhome" })}
+            onCollectNext={() => setDrawer({ kind: "collect" })}
+            onViewCfdi={() => setDrawer({ kind: "cfdi" })}
+          />
+
           {placeholders.map((p) => (
             <SectionPlaceholder
               key={p.id}
@@ -229,8 +256,10 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
               patientFlow={vm.patientFlow}
               aiSuggestions={vm.aiSuggestions}
               whatsappRecent={vm.whatsappRecent}
-              suggestedChargeAmount={null}
-              onCollectNow={props.onCollectNow}
+              suggestedChargeAmount={nextPending?.amount ?? null}
+              onCollectNow={
+                props.onCollectNow ?? (() => setDrawer({ kind: "collect" }))
+              }
               onOpenChat={props.onOpenChat}
             />
           </div>
@@ -279,6 +308,53 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             closeDrawer();
           }}
         />
+      ) : null}
+
+      {/* Modal Open Choice G5 */}
+      {drawer?.kind === "openchoice" ? (
+        <ModalOpenChoice
+          scenarios={props.quoteScenarios ?? []}
+          patientFirstName={vm.patient.firstName}
+          onClose={closeDrawer}
+          onConfirm={async (id) => {
+            await props.onSelectQuoteScenario?.(id);
+            setDrawer({ kind: "signhome" });
+          }}
+        />
+      ) : null}
+
+      {/* Drawer Sign@Home G6 */}
+      {drawer?.kind === "signhome" ? (
+        <DrawerSignAtHome
+          patientFirstName={vm.patient.firstName}
+          onClose={closeDrawer}
+          onSend={async () => {
+            await props.onSendSignAtHome?.();
+            closeDrawer();
+          }}
+        />
+      ) : null}
+
+      {/* Modal Collect (cobrar siguiente) */}
+      {drawer?.kind === "collect" ? (
+        <ModalCollect
+          amount={nextPending?.amount ?? 0}
+          installmentLabel={
+            nextPending
+              ? `Mensualidad ${nextPending.installmentNumber}/${(props.installments ?? []).length}`
+              : "—"
+          }
+          onClose={closeDrawer}
+          onConfirm={async (method) => {
+            await props.onConfirmCollect?.(method);
+            closeDrawer();
+          }}
+        />
+      ) : null}
+
+      {/* Drawer CFDI list (M1) */}
+      {drawer?.kind === "cfdi" ? (
+        <DrawerCFDIList cfdiRecords={props.cfdiRecords ?? []} onClose={closeDrawer} />
       ) : null}
     </div>
   );
