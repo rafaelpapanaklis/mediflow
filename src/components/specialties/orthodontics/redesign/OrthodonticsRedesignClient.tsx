@@ -5,7 +5,7 @@
 // monta dentro del shell del patient-detail (que provee la sidebar
 // contextual a la izquierda).
 
-import { FileText, Shield, Sparkles, Star } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { useState } from "react";
 import { SectionHero } from "./sections/SectionHero";
 import { SectionDiagnosis } from "./sections/SectionDiagnosis";
@@ -17,7 +17,23 @@ import {
   type PhotoStage,
 } from "./sections/SectionPhotos";
 import { SectionFinance } from "./sections/SectionFinance";
-import { SectionPlaceholder } from "./sections/SectionPlaceholder";
+import {
+  SectionRetention,
+  type RetainerCheckupDTO,
+  type RetentionRegimenDTO,
+} from "./sections/SectionRetention";
+import {
+  SectionPostTreatment,
+  type NpsScheduleDTO,
+  type ReferralCodeDTO,
+} from "./sections/SectionPostTreatment";
+import {
+  SectionDocs,
+  type ConsentRow,
+  type LabOrderRow,
+  type ReferralLetterRow,
+  type WhatsAppLogEntry,
+} from "./sections/SectionDocs";
 import { RightRail } from "./sidebar/RightRail";
 import { DrawerTreatmentCard } from "./drawers/DrawerTreatmentCard";
 import type { DrawerCardSubmit } from "./drawers/DrawerTreatmentCard";
@@ -26,6 +42,7 @@ import { ModalOpenChoice } from "./drawers/ModalOpenChoice";
 import { DrawerSignAtHome } from "./drawers/DrawerSignAtHome";
 import { ModalCollect } from "./drawers/ModalCollect";
 import { DrawerCFDIList } from "./drawers/DrawerCFDIList";
+import { DrawerLabOrder } from "./drawers/DrawerLabOrder";
 import type { OrthoRedesignViewModel, OrthoPhaseKey } from "./types";
 import type { DigitalRecordEntry } from "./sections/SectionDiagnosis";
 import type {
@@ -42,6 +59,7 @@ type DrawerState =
   | { kind: "signhome" }
   | { kind: "collect" }
   | { kind: "cfdi" }
+  | { kind: "laborder" }
   | null;
 
 export interface OrthodonticsRedesignClientProps {
@@ -100,6 +118,33 @@ export interface OrthodonticsRedesignClientProps {
   onOpenChat?: () => void;
   /** ¿El usuario actual puede hacer override del checklist de fase? */
   canOverridePhase?: boolean;
+
+  /** Sección G · retención. */
+  retentionRegimen?: RetentionRegimenDTO | null;
+  retainerCheckups?: RetainerCheckupDTO[];
+  treatmentStatus?: "no-iniciado" | "en-tratamiento" | "retencion" | "completado";
+  onTogglePreSurvey?: (enabled: boolean) => Promise<void> | void;
+  onConfigureRetention?: () => void;
+
+  /** Sección H · post-tratamiento. */
+  npsSchedules?: NpsScheduleDTO[];
+  referralCode?: ReferralCodeDTO | null;
+  onGeneratePdfBeforeAfter?: () => void;
+  onConfigureNps?: () => void;
+  onCopyReferralCode?: () => void;
+
+  /** Sección I · documentos & comunicación. */
+  labOrders?: LabOrderRow[];
+  consents?: ConsentRow[];
+  referralLetters?: ReferralLetterRow[];
+  whatsappLog?: WhatsAppLogEntry[];
+  onCreateLabOrder?: (payload: {
+    catalog: string;
+    description: string;
+    lab: string;
+    expectedDate: string | null;
+  }) => Promise<void> | void;
+  onCreateReferralLetter?: () => void;
 }
 
 export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProps) {
@@ -127,47 +172,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         }
       : undefined;
 
-  // Placeholders restantes (G/H/I se implementan en commits siguientes).
-  const placeholders: Array<{
-    id: string;
-    eyebrow: string;
-    title: string;
-    icon: React.ReactNode;
-    bullets: string[];
-  }> = [
-    {
-      id: "retention",
-      eyebrow: "Sección G",
-      title: "Retención",
-      icon: <Shield className="w-6 h-6" aria-hidden />,
-      bullets: [
-        "G9 régimen visual: Hawley sup/inf · Essix · Fijo lingual 3-3 (.0175/.0195/.021).",
-        "Auto-schedule 3/6/12/24/36 meses con pre-encuesta WhatsApp antes de cada cita.",
-      ],
-    },
-    {
-      id: "post",
-      eyebrow: "Sección H",
-      title: "Post-tratamiento",
-      icon: <Star className="w-6 h-6" aria-hidden />,
-      bullets: [
-        "G11 NPS automático +3 días post-debond.",
-        "Programa referidos con código personalizado.",
-      ],
-    },
-    {
-      id: "docs",
-      eyebrow: "Sección I",
-      title: "Documentos & comunicación",
-      icon: <FileText className="w-6 h-6" aria-hidden />,
-      bullets: [
-        "Tabs: Lab orders · Consentimientos · Cartas referencia · WhatsApp log.",
-        "G18 LabOrder catalog ampliado.",
-      ],
-    },
-  ];
-
   const nextPending = (props.installments ?? []).find((i) => i.status === "PENDING");
+  const tStatus = props.treatmentStatus ?? "en-tratamiento";
 
   return (
     <div className="bg-slate-50 dark:bg-slate-950 grid-bg -m-4 sm:-m-6 px-4 sm:px-6 py-6 min-h-[calc(100vh-200px)]">
@@ -228,22 +234,37 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             onViewCfdi={() => setDrawer({ kind: "cfdi" })}
           />
 
-          {placeholders.map((p) => (
-            <SectionPlaceholder
-              key={p.id}
-              id={p.id}
-              eyebrow={p.eyebrow}
-              title={p.title}
-              icon={p.icon}
-              bullets={p.bullets}
-            />
-          ))}
+          <SectionRetention
+            regimen={props.retentionRegimen ?? null}
+            checkups={props.retainerCheckups ?? []}
+            treatmentStatus={tStatus}
+            onTogglePreSurvey={props.onTogglePreSurvey}
+            onConfigureRegimen={props.onConfigureRetention}
+          />
+
+          <SectionPostTreatment
+            treatmentStatus={tStatus}
+            npsSchedules={props.npsSchedules ?? []}
+            referralCode={props.referralCode ?? null}
+            onGeneratePdf={props.onGeneratePdfBeforeAfter}
+            onConfigureNps={props.onConfigureNps}
+            onCopyReferralCode={props.onCopyReferralCode}
+          />
+
+          <SectionDocs
+            labOrders={props.labOrders ?? []}
+            consents={props.consents ?? []}
+            referralLetters={props.referralLetters ?? []}
+            whatsappLog={props.whatsappLog ?? []}
+            onNewLabOrder={() => setDrawer({ kind: "laborder" })}
+            onNewReferral={props.onCreateReferralLetter}
+          />
 
           <PhaseTransitionAuditTeaser count={vm.phaseTransitions.length} />
 
           <footer className="text-[11px] text-slate-400 text-center py-4 dark:text-slate-500">
             MediFlow · Ortodoncia · Patient Detail · 11 gaps integrados (G1 G3 G4 G5 G6 G9 G10 G11
-            G15 G16 G18) · 6 differentiators preservados (M1-M6)
+            G12 G15 G16 G18) · 6 differentiators preservados (M1-M6)
           </footer>
         </main>
 
@@ -355,6 +376,17 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
       {/* Drawer CFDI list (M1) */}
       {drawer?.kind === "cfdi" ? (
         <DrawerCFDIList cfdiRecords={props.cfdiRecords ?? []} onClose={closeDrawer} />
+      ) : null}
+
+      {/* Drawer Lab Order G18 */}
+      {drawer?.kind === "laborder" ? (
+        <DrawerLabOrder
+          onClose={closeDrawer}
+          onSend={async (payload) => {
+            await props.onCreateLabOrder?.(payload);
+            closeDrawer();
+          }}
+        />
       ) : null}
     </div>
   );
