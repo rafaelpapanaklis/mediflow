@@ -12,7 +12,7 @@ import { NewPatientProvider } from "@/components/dashboard/new-patient/new-patie
 import { PatientContextBar } from "@/components/dashboard/patient-context-bar";
 import { ExpiredPlanModal } from "@/components/dashboard/expired-plan-modal";
 import { prisma } from "@/lib/prisma";
-import { hasAnyActiveSpecialtyModule } from "@/lib/marketplace/access-control";
+import { getActiveClinicModuleKeys } from "@/lib/clinical-shared/get-active-clinic-modules";
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "paid"]);
 
@@ -45,10 +45,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const isInTrial = !!trialEndsAt && trialEndsAt > now && !subscriptionActive;
   const allClinics = await getUserClinics();
 
-  // Marketplace specialties — gate del grupo "Especialidades" del sidebar.
-  // True si la clínica tiene al menos un módulo de especialidad activo
-  // (status='active' + currentPeriodEnd > NOW) o está en trial vigente.
-  const hasSpecialtyAccess = await hasAnyActiveSpecialtyModule(clinic.id);
+  // Marketplace specialties — set de keys para el sidebar global. Cada
+  // item de "Especialidades" en el sidebar exige que su moduleKey esté
+  // en esta lista; si no quedan items, la sección entera se oculta.
+  // Durante trial vigente getActiveClinicModuleKeys devuelve todas las
+  // SPECIALTY_MODULE_KEYS — todas las especialidades quedan visibles.
+  const clinicModuleKeys = await getActiveClinicModuleKeys(clinic.id);
 
   const counts = await prisma.$queryRaw<[{ doctors: bigint; patients: bigint; appts: bigint; records: bigint; invoices: bigint; schedules: bigint }]>`
     SELECT
@@ -108,7 +110,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         onboardingCompleted={onboardingCompleted}
         trialEndsAt={trialEndsAt}
         isInTrial={isInTrial}
-        hasSpecialtyAccess={hasSpecialtyAccess}
+        clinicModuleKeys={clinicModuleKeys}
       />
       <div className="flex min-h-screen flex-1 flex-col lg:max-h-screen lg:overflow-y-auto">
         <GlobalAnnouncementBanner />
