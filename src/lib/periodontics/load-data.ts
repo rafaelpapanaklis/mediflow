@@ -10,6 +10,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { computePerioMetrics } from "./periodontogram-math";
+import { MAINTENANCE_REMINDER_TYPES } from "./maintenance-reminders";
 import type { Site, ToothLevel } from "./schemas";
 import type { PeriodonticsClientProps } from "@/components/specialties/periodontics/PeriodonticsClient";
 
@@ -43,7 +44,7 @@ export async function loadPerioData(
   });
   if (!patient) return null;
 
-  const [latestRecord, plan, surgeries, maintenanceRecords, lastRisk, allBopRecords, recordsCount] =
+  const [latestRecord, plan, surgeries, maintenanceRecords, lastRisk, allBopRecords, recordsCount, nextMaintenanceReminder] =
     await Promise.all([
       prisma.periodontalRecord.findFirst({
         where: { patientId: patient.id, clinicId: input.clinicId, deletedAt: null },
@@ -82,6 +83,18 @@ export async function loadPerioData(
       prisma.periodontalRecord.count({
         where: { patientId: patient.id, clinicId: input.clinicId, deletedAt: null },
       }),
+      prisma.clinicalReminder.findFirst({
+        where: {
+          patientId: patient.id,
+          clinicId: input.clinicId,
+          module: "periodontics",
+          status: "pending",
+          deletedAt: null,
+          reminderType: { in: [...MAINTENANCE_REMINDER_TYPES] },
+        },
+        orderBy: { dueDate: "asc" },
+        select: { id: true, dueDate: true, reminderType: true },
+      }),
     ]);
 
   const sites = ((latestRecord?.sites as unknown as Site[] | null) ?? []) as Site[];
@@ -117,7 +130,11 @@ export async function loadPerioData(
       : null,
     riskCategory: lastRisk?.riskCategory ?? null,
     recallMonths,
-    nextMaintenanceAt: plan?.nextEvaluationAt ? fmt(plan.nextEvaluationAt) : null,
+    nextMaintenanceAt: pickEarliestMaintenanceDate(
+      plan?.nextEvaluationAt ?? null,
+      nextMaintenanceReminder?.dueDate ?? null,
+      fmt,
+    ),
     bopHistory: allBopRecords.map((r) => ({
       date: fmt(r.createdAt),
       bopPct: r.bopPercentage ?? 0,
@@ -154,6 +171,24 @@ export async function loadPerioData(
     })),
     recordsCount,
   };
+}
+
+/**
+ * Devuelve la fecha más temprana entre la próxima evaluación del plan y el
+ * próximo ClinicalReminder de mantenimiento auto-creado al cerrar SRP.
+ * Si solo hay una, devuelve esa.
+ */
+function pickEarliestMaintenanceDate(
+  planNextAt: Date | null,
+  reminderDueAt: Date | null,
+  fmt: (d: Date) => string,
+): string | null {
+  if (planNextAt && reminderDueAt) {
+    return fmt(planNextAt < reminderDueAt ? planNextAt : reminderDueAt);
+  }
+  if (planNextAt) return fmt(planNextAt);
+  if (reminderDueAt) return fmt(reminderDueAt);
+  return null;
 }
 
 function buildAlerts(

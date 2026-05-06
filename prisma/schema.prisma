@@ -4533,6 +4533,12 @@ enum ClinicalPhotoType {
   perio_initial
   perio_postsrp
   perio_surgery
+  perio_pre_srp
+  perio_pre_surgery
+  perio_post_surgery
+  perio_suture_removal
+  perio_maintenance_check
+  perio_recession_baseline
   // Implantes — set v1 (pediatrics base)
   implant_site_pre
   implant_placement
@@ -4590,6 +4596,10 @@ enum LabOrderType {
   retainer
   // Pediatría — instalada para v1.1
   ped_space_maintainer_lab
+  // Periodoncia
+  perio_splint
+  perio_custom_graft
+  perio_maintenance_tray
   // Cross
   other
 }
@@ -4605,6 +4615,8 @@ enum ClinicalReminderType {
   endo_followup_1y
   // Periodoncia
   perio_maintenance_3m
+  perio_maintenance_4m
+  perio_maintenance_6m
   perio_reevaluation
   // Implantes — set v1 (pediatrics base)
   implant_followup_1m
