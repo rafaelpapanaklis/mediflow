@@ -22,6 +22,7 @@ import { PaymentPlanView } from "./payments/PaymentPlanView";
 import { DigitalRecordsPanel } from "./digital/DigitalRecordsPanel";
 import { PediatricProfileBanner } from "./shared/PediatricProfileBanner";
 import { OrthoStageBadge } from "./shared/OrthoStageBadge";
+import { OrthoPaymentPlanCard } from "./payments/OrthoPaymentPlanCard";
 
 export interface OrthodonticsTabProps {
   patientId: string;
@@ -89,6 +90,14 @@ export function OrthodonticsTab(props: OrthodonticsTabProps) {
             {props.plan ? ` / ${props.plan.estimatedDurationMonths}` : ""}
           </span>
         </div>
+      ) : null}
+
+      {props.plan ? (
+        <OrthoPaymentPlanCard
+          paymentPlan={props.paymentPlan}
+          installments={props.installments}
+          onViewPlan={() => setTab("pagos")}
+        />
       ) : null}
 
       <OrthoSubTabs
