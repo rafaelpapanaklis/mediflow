@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { PEDIATRIC_AUDIT_ACTIONS } from "@/lib/pediatrics/audit";
 import { auditPediatric, ensurePediatricRecord, fail, isFailure, loadPatientForPediatrics, ok, type ActionResult } from "./_helpers";
+import { linkSessionToPlan } from "@/lib/clinical-shared/treatment-link/link";
 
 const fluorideSchema = z.object({
   patientId: z.string().min(1),
@@ -15,6 +16,8 @@ const fluorideSchema = z.object({
   appliedTeeth: z.array(z.number().int()).min(1, "Selecciona al menos un diente"),
   lotNumber: z.string().max(60).optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
+  /** Si está presente, vincula esta aplicación a una sesión del plan. */
+  treatmentSessionId: z.string().min(1).optional().nullable(),
 });
 
 export type ApplyFluorideInput = z.infer<typeof fluorideSchema>;
@@ -56,6 +59,22 @@ export async function applyFluoride(input: ApplyFluorideInput): Promise<ActionRe
       teethCount: parsed.data.appliedTeeth.length,
     },
   });
+
+  if (parsed.data.treatmentSessionId) {
+    try {
+      await linkSessionToPlan({
+        clinicId: ctx.clinicId,
+        module: "pediatrics",
+        moduleEntityType: "ped-fluoride",
+        moduleSessionId: created.id,
+        treatmentSessionId: parsed.data.treatmentSessionId,
+        linkedBy: ctx.userId,
+      });
+    } catch (e) {
+      console.warn("[pediatrics.applyFluoride] linkSessionToPlan failed:", (e as Error).message);
+    }
+  }
+
   revalidatePath(`/dashboard/patients/${parsed.data.patientId}`);
   return ok(created);
 }

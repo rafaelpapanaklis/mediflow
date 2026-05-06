@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { PEDIATRIC_AUDIT_ACTIONS } from "@/lib/pediatrics/audit";
 import { auditPediatric, ensurePediatricRecord, fail, isFailure, loadPatientForPediatrics, ok, type ActionResult } from "./_helpers";
+import { linkSessionToPlan } from "@/lib/clinical-shared/treatment-link/link";
 
 const HABIT_TYPE = [
   "succion_digital", "chupon", "biberon_nocturno",
@@ -109,7 +110,11 @@ export async function updateHabit(
   return ok({ id: habit.id });
 }
 
-export async function resolveHabit(args: { id: string; endedAt?: string }): Promise<ActionResult<{ id: string }>> {
+export async function resolveHabit(args: {
+  id: string;
+  endedAt?: string;
+  treatmentSessionId?: string | null;
+}): Promise<ActionResult<{ id: string }>> {
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
 
@@ -131,6 +136,22 @@ export async function resolveHabit(args: { id: string; endedAt?: string }): Prom
     entityType: "ped-habit",
     entityId: habit.id,
   });
+
+  if (args.treatmentSessionId) {
+    try {
+      await linkSessionToPlan({
+        clinicId: ctx.clinicId,
+        module: "pediatrics",
+        moduleEntityType: "ped-habit",
+        moduleSessionId: habit.id,
+        treatmentSessionId: args.treatmentSessionId,
+        linkedBy: ctx.userId,
+      });
+    } catch (e) {
+      console.warn("[pediatrics.resolveHabit] linkSessionToPlan failed:", (e as Error).message);
+    }
+  }
+
   revalidatePath(`/dashboard/patients/${habit.patientId}`);
   return ok({ id: habit.id });
 }

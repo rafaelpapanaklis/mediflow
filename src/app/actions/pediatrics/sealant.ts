@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { PEDIATRIC_AUDIT_ACTIONS } from "@/lib/pediatrics/audit";
 import { auditPediatric, ensurePediatricRecord, fail, isFailure, loadPatientForPediatrics, ok, type ActionResult } from "./_helpers";
+import { linkSessionToPlan } from "@/lib/clinical-shared/treatment-link/link";
 
 const placeSealantSchema = z.object({
   patientId: z.string().min(1),
@@ -14,6 +15,8 @@ const placeSealantSchema = z.object({
   material: z.enum(["resina_fotocurada", "ionomero"]),
   placedAt: z.string().datetime(),
   notes: z.string().max(500).optional().nullable(),
+  /** Si está presente, vincula este sellador a una sesión del plan. */
+  treatmentSessionId: z.string().min(1).optional().nullable(),
 });
 
 const updateRetentionSchema = z.object({
@@ -65,6 +68,22 @@ export async function placeSealant(input: z.infer<typeof placeSealantSchema>): P
     entityId: created.id,
     changes: { toothFdi: parsed.data.toothFdi, material: parsed.data.material },
   });
+
+  if (parsed.data.treatmentSessionId) {
+    try {
+      await linkSessionToPlan({
+        clinicId: ctx.clinicId,
+        module: "pediatrics",
+        moduleEntityType: "ped-sealant",
+        moduleSessionId: created.id,
+        treatmentSessionId: parsed.data.treatmentSessionId,
+        linkedBy: ctx.userId,
+      });
+    } catch (e) {
+      console.warn("[pediatrics.placeSealant] linkSessionToPlan failed:", (e as Error).message);
+    }
+  }
+
   revalidatePath(`/dashboard/patients/${parsed.data.patientId}`);
   return ok(created);
 }
