@@ -7,3 +7,4 @@
  */
 export * from "./types";
 export * from "./photo-gallery";
+export * from "./evolution-templates";
