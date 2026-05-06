@@ -665,7 +665,7 @@ function ClinicSwitcher({
 
   const switchClinic = async (id: string) => {
     try {
-      const res = await fetch("/api/dashboard/switch-clinic", {
+      const res = await fetch("/api/switch-clinic", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
