@@ -28,3 +28,9 @@ export { exportSurgicalReportPdf } from "./exportSurgicalReportPdf";
 export { exportImplantPlanPdf } from "./exportImplantPlanPdf";
 export { createPeriImplantAssessment } from "./createPeriImplantAssessment";
 export { enableQrPublicAccess } from "./enableQrPublicAccess";
+export {
+  linkImplantPhaseToTreatmentSession,
+  onImplantSurgicalPhaseComplete,
+  onImplantHealingComplete,
+  onImplantProstheticComplete,
+} from "./linkTreatmentSession";
