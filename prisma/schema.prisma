@@ -4615,6 +4615,8 @@ enum ClinicalReminderType {
   endo_followup_1y
   // Periodoncia
   perio_maintenance_3m
+  perio_maintenance_4m
+  perio_maintenance_6m
   perio_reevaluation
   // Implantes — set v1 (pediatrics base)
   implant_followup_1m

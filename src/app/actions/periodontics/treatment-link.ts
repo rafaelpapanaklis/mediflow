@@ -27,6 +27,11 @@ import {
   PERIO_TREATMENT_LINK_ENTITY,
   type PerioTreatmentLinkEntity,
 } from "@/lib/periodontics/treatment-link-keys";
+import {
+  dueDateForMaintenance,
+  maintenanceReminderTypeForMonths,
+  recallMonthsForRisk,
+} from "@/lib/periodontics/maintenance-reminders";
 
 // ─────────────────────────────────────────────────────────────────────
 // Helpers privados
@@ -98,6 +103,75 @@ interface CompleteResult {
   id: string;
   treatmentLinkId: string | null;
   treatmentSessionCompleted: boolean;
+  /** Solo poblado para SRP: ID del ClinicalReminder de mantenimiento auto-creado. */
+  maintenanceReminderId?: string | null;
+  /** Meses de recall aplicados (3/4/6 según Berna). Solo para SRP. */
+  maintenanceRecallMonths?: 3 | 4 | 6 | null;
+}
+
+/**
+ * Crea ClinicalReminder de mantenimiento perio basado en el último
+ * PeriodontalRiskAssessment del paciente. No bloquea el flujo si falla:
+ * loguea y devuelve null, el resto de la acción sigue.
+ *
+ * Idempotente débil: si ya hay un reminder pending del mismo tipo para
+ * este paciente con dueDate en el rango ±15 días del nuevo, no crea otro.
+ */
+async function createMaintenanceReminderForSrp(args: {
+  clinicId: string;
+  patientId: string;
+  userId: string;
+}): Promise<{ id: string; recallMonths: 3 | 4 | 6 } | null> {
+  try {
+    const lastRisk = await prisma.periodontalRiskAssessment.findFirst({
+      where: { patientId: args.patientId, clinicId: args.clinicId },
+      orderBy: { evaluatedAt: "desc" },
+      select: { riskCategory: true },
+    });
+
+    const months = recallMonthsForRisk(lastRisk?.riskCategory ?? null);
+    const reminderType = maintenanceReminderTypeForMonths(months);
+    const dueDate = dueDateForMaintenance(months);
+
+    const windowStart = new Date(dueDate);
+    windowStart.setDate(windowStart.getDate() - 15);
+    const windowEnd = new Date(dueDate);
+    windowEnd.setDate(windowEnd.getDate() + 15);
+
+    const existing = await prisma.clinicalReminder.findFirst({
+      where: {
+        clinicId: args.clinicId,
+        patientId: args.patientId,
+        module: "periodontics",
+        reminderType,
+        status: "pending",
+        deletedAt: null,
+        dueDate: { gte: windowStart, lte: windowEnd },
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      return { id: existing.id, recallMonths: months };
+    }
+
+    const created = await prisma.clinicalReminder.create({
+      data: {
+        clinicId: args.clinicId,
+        patientId: args.patientId,
+        module: "periodontics",
+        reminderType,
+        dueDate,
+        status: "pending",
+        message: `Mantenimiento periodontal cada ${months} meses (recall ${months}m)`,
+        createdBy: args.userId,
+      },
+      select: { id: true },
+    });
+    return { id: created.id, recallMonths: months };
+  } catch (e) {
+    console.error("[perio auto-reminder] failed:", e);
+    return null;
+  }
 }
 
 async function completeAndLink(
@@ -187,6 +261,20 @@ async function completeAndLink(
     }
   }
 
+  let maintenanceReminderId: string | null = null;
+  let maintenanceRecallMonths: 3 | 4 | 6 | null = null;
+  if (entity === PERIO_TREATMENT_LINK_ENTITY.SRP) {
+    const reminder = await createMaintenanceReminderForSrp({
+      clinicId: ctx.clinicId,
+      patientId: parsed.data.patientId,
+      userId: ctx.userId,
+    });
+    if (reminder) {
+      maintenanceReminderId = reminder.id;
+      maintenanceRecallMonths = reminder.recallMonths;
+    }
+  }
+
   await auditPerio({
     ctx,
     action: AUDIT_ACTIONS[entity],
@@ -196,6 +284,8 @@ async function completeAndLink(
       treatmentSessionId: parsed.data.treatmentSessionId ?? null,
       treatmentLinkId,
       treatmentSessionCompleted,
+      maintenanceReminderId,
+      maintenanceRecallMonths,
     },
   });
 
@@ -204,6 +294,8 @@ async function completeAndLink(
     id: session.id,
     treatmentLinkId,
     treatmentSessionCompleted,
+    maintenanceReminderId,
+    maintenanceRecallMonths,
   });
 }
 
