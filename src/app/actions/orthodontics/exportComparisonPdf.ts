@@ -1,24 +1,29 @@
 "use server";
-// Orthodontics — server action que renderiza el ComparisonPdf
-// (multi-página: portada → datos → dx → 8 fotos T0 → comparativo cada
-//  3 meses → final → retención).
+// Orthodontics — server action que carga la data necesaria para el
+// ComparisonPdf. El render del PDF lo hace el route handler en
+// /api/orthodontics/treatment-plans/[id]/comparison-pdf (mismo patrón
+// que treatment-plan-pdf y financial-agreement-pdf).
 
 import { z } from "zod";
-import { renderToStream } from "@react-pdf/renderer";
 import { prisma } from "@/lib/prisma";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { fail, isFailure, ok, type ActionResult } from "./result";
-import { ComparisonPdf, type ComparisonPdfData, type ComparisonPdfPhotoSet } from "@/lib/orthodontics/pdf-templates/comparison-pdf";
-import { PHOTO_VIEW_ORDER, VIEW_TO_COLUMN } from "@/lib/orthodontics/photo-set-helpers";
+import {
+  PHOTO_VIEW_ORDER,
+  VIEW_TO_COLUMN,
+} from "@/lib/orthodontics/photo-set-helpers";
+import type {
+  ComparisonPdfData,
+  ComparisonPdfPhotoSet,
+} from "@/lib/orthodontics/pdf-templates/comparison-pdf-types";
 
 const schema = z.object({
   treatmentPlanId: z.string().min(1),
-  resolveFileUrl: z.string().min(1).optional(),
 });
 
 export async function exportComparisonPdf(
   input: unknown,
-): Promise<ActionResult<{ pdfUrl: string }>> {
+): Promise<ActionResult<ComparisonPdfData>> {
   const auth = await getOrthoActionContext();
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
@@ -108,22 +113,12 @@ export async function exportComparisonPdf(
     retentionPlanText: plan.retentionPlanText,
     initialSet: toPdfSet(initialSet, initialSet ? "Inicio · T0" : undefined),
     midSets: midSets
-      .map((s) =>
-        toPdfSet(
-          s,
-          `${s.setType} · mes ${s.monthInTreatment ?? "—"}`,
-        ),
-      )
+      .map((s) => toPdfSet(s, `${s.setType} · mes ${s.monthInTreatment ?? "—"}`))
       .filter((s): s is ComparisonPdfPhotoSet => s !== null),
     finalSet: toPdfSet(finalSet, finalSet ? "Final · T2" : undefined),
     generatedAtIso: new Date().toISOString(),
     hasPhotoUseConsent: false,
   };
-
-  const stream = await renderToStream(ComparisonPdf({ data }));
-  const chunks: Buffer[] = [];
-  for await (const c of stream as unknown as AsyncIterable<Buffer>) chunks.push(c);
-  const pdfUrl = `data:application/pdf;base64,${Buffer.concat(chunks).toString("base64")}`;
 
   await auditOrtho({
     ctx,
@@ -137,5 +132,5 @@ export async function exportComparisonPdf(
     },
   });
 
-  return ok({ pdfUrl });
+  return ok(data);
 }

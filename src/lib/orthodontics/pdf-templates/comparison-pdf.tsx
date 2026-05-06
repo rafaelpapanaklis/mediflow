@@ -12,35 +12,12 @@ import {
   StyleSheet,
 } from "@react-pdf/renderer";
 import { PHOTO_VIEW_ORDER, VIEW_LABELS } from "../photo-set-helpers";
+import type {
+  ComparisonPdfPhotoSet,
+  ComparisonPdfData,
+} from "./comparison-pdf-types";
 
-export interface ComparisonPdfPhotoSet {
-  /** Etiqueta visible (eg. "T0 · Inicio · 12 mar 2024", "Mes 6", "T2 · Final"). */
-  label: string;
-  capturedAtIso: string;
-  monthInTreatment: number | null;
-  pairs: Array<{
-    view: (typeof PHOTO_VIEW_ORDER)[number];
-    url: string | null;
-  }>;
-}
-
-export interface ComparisonPdfData {
-  patientName: string;
-  patientDobIso: string | null;
-  doctorName: string;
-  doctorCedula: string | null;
-  clinicName: string;
-  techniqueLabel: string;
-  durationMonthsActual: number;
-  estimatedDurationMonths: number;
-  diagnosisSummary: string;
-  retentionPlanText: string;
-  initialSet: ComparisonPdfPhotoSet | null;
-  midSets: ComparisonPdfPhotoSet[];
-  finalSet: ComparisonPdfPhotoSet | null;
-  generatedAtIso: string;
-  hasPhotoUseConsent: boolean;
-}
+export type { ComparisonPdfPhotoSet, ComparisonPdfData };
 
 const styles = StyleSheet.create({
   page: {
