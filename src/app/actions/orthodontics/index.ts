@@ -30,3 +30,4 @@ export { createOrthodonticConsent } from "./createOrthodonticConsent";
 export { exportTreatmentPlanPdf } from "./exportTreatmentPlanPdf";
 export { exportFinancialAgreementPdf } from "./exportFinancialAgreementPdf";
 export { recordElasticsCompliance } from "./recordElasticsCompliance";
+export { exportComparisonPdf } from "./exportComparisonPdf";
