@@ -34,3 +34,4 @@ export {
   onImplantHealingComplete,
   onImplantProstheticComplete,
 } from "./linkTreatmentSession";
+export { exportImplantFullReport } from "./exportImplantFullReport";
