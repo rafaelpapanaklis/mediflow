@@ -7,7 +7,7 @@ import { PatientDetailClient } from "./patient-detail-client";
 import { PatientContextPanel } from "@/components/dashboard/patient-context";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-helpers";
-import { canSeePediatrics } from "@/lib/pediatrics/permissions";
+import { canSeePediatrics, PEDIATRICS_MODULE_KEY } from "@/lib/pediatrics/permissions";
 import { loadPediatricsData } from "@/lib/pediatrics/load-data";
 import type { PediatricsTabData } from "@/components/patient-detail/pediatrics/PediatricsTab";
 import { PERIODONTICS_MODULE_KEY, ENDODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
@@ -67,7 +67,11 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   const isDental = user.clinic.category === "DENTAL";
 
   // Pediatría — predicado puro existente: categoría DENTAL|MEDICINE +
-  // módulo activo + DOB + edad < cutoff (default 18, LGDNNA).
+  // módulo activo + DOB + edad < cutoff (default 18, LGDNNA). Reportamos
+  // por separado al cliente si la clínica tiene el módulo activo
+  // (`pediatricsModuleActive`) para que el tab pueda mostrarse en estado
+  // disabled cuando el admin lo contrató pero el paciente actual es adulto.
+  const pediatricsModuleActive = clinicModuleKeys.includes(PEDIATRICS_MODULE_KEY);
   let pediatricsData: PediatricsTabData | null = null;
   if (
     canSeePediatrics({
@@ -176,6 +180,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           totalPlan={totalPlan}
           portalUrl={portalUrl}
           pediatricsData={pediatricsData}
+          pediatricsModuleActive={pediatricsModuleActive}
           perioData={perioData}
           endoSoapPrefill={endoSoapPrefill}
         />

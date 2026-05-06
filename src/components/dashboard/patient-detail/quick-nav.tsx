@@ -22,11 +22,21 @@ interface NavItem {
   icon: LucideIcon;
   count?: number;
   badgeTone?: "neutral" | "danger" | "warning" | "success" | "brand";
+  /** Item visible pero no clickable. Sirve de feedback cuando el módulo
+   *  del marketplace está activo pero el paciente no califica. */
+  disabled?: boolean;
+  /** Texto del tooltip (`title` HTML) cuando `disabled=true`. */
+  disabledReason?: string;
 }
 
 interface NavSection {
   label: string;
   items: NavItem[];
+}
+
+export interface QuickNavPediatricsConfig {
+  state: "enabled" | "disabled" | "hidden";
+  reason?: string;
 }
 
 interface QuickNavProps {
@@ -44,7 +54,8 @@ interface QuickNavProps {
     periodoncia?: number;
   };
   hasBalance: boolean;
-  showPediatrics?: boolean;
+  /** Pediatría tiene tres estados — ver `derivePediatricsTabState`. */
+  pediatrics?: QuickNavPediatricsConfig;
   showPeriodontics?: boolean;
 }
 
@@ -53,15 +64,23 @@ export function QuickNav({
   onSelect,
   counts,
   hasBalance,
-  showPediatrics,
+  pediatrics,
   showPeriodontics,
 }: QuickNavProps) {
   const clinicItems: NavItem[] = [
     { id: "resumen",      label: "Resumen",         icon: ClipboardList },
     { id: "historia",     label: "Historia clínica", icon: History, count: counts.historia },
   ];
-  if (showPediatrics) {
-    clinicItems.push({ id: "pediatria", label: "Pediatría", icon: Baby, count: counts.pediatria, badgeTone: "brand" });
+  if (pediatrics && pediatrics.state !== "hidden") {
+    clinicItems.push({
+      id:             "pediatria",
+      label:          "Pediatría",
+      icon:           Baby,
+      count:          counts.pediatria,
+      badgeTone:      "brand",
+      disabled:       pediatrics.state === "disabled",
+      disabledReason: pediatrics.state === "disabled" ? pediatrics.reason : undefined,
+    });
   }
   if (showPeriodontics) {
     clinicItems.push({
@@ -105,12 +124,16 @@ export function QuickNav({
           {section.items.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
+            const isDisabled = item.disabled === true;
             return (
               <button
                 key={item.id}
                 type="button"
-                className={`${styles.navItem} ${isActive ? styles.active : ""}`}
-                onClick={() => onSelect(item.id)}
+                className={`${styles.navItem} ${isActive ? styles.active : ""} ${isDisabled ? styles.navItemDisabled : ""}`}
+                onClick={() => { if (!isDisabled) onSelect(item.id); }}
+                disabled={isDisabled}
+                aria-disabled={isDisabled || undefined}
+                title={isDisabled ? item.disabledReason : undefined}
                 aria-current={isActive ? "page" : undefined}
               >
                 <Icon size={14} aria-hidden />

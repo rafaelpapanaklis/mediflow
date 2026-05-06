@@ -33,6 +33,10 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import dynamicImport from "next/dynamic";
 import type { PediatricsTabData } from "@/components/patient-detail/pediatrics/PediatricsTab";
 import { buildPediatricSoapPrefill } from "@/lib/pediatrics/soap-prefill";
+import {
+  derivePediatricsTabState,
+  PEDIATRICS_DISABLED_REASON,
+} from "@/lib/pediatrics/tab-state";
 import type { PerioTabData } from "@/lib/periodontics/load-data";
 import type { SoapPrefill } from "@/lib/types/endodontics";
 
@@ -94,14 +98,35 @@ const TABS_BASE = [
   { id: "facturacion",   label: "Facturación"          },
 ];
 
-function buildTabs(showPediatrics: boolean, showPeriodontics: boolean) {
-  const out = [...TABS_BASE];
+interface PatientTab {
+  id: string;
+  label: string;
+  /** Tab visible pero deshabilitado: no responde click, sirve de feedback. */
+  disabled?: boolean;
+  /** Tooltip mostrado en `title` cuando `disabled=true`. */
+  disabledReason?: string;
+}
+
+function buildTabs(opts: {
+  /** Tab Pediatría con tres estados — ver `derivePediatricsTabState`. */
+  pediatrics: { state: "enabled" | "disabled" | "hidden"; reason?: string };
+  /** Periodoncia hoy solo enabled/hidden — no tiene gate clínico extra. */
+  showPeriodontics: boolean;
+}): PatientTab[] {
+  const out: PatientTab[] = [...TABS_BASE];
   // Insertar "Pediatría" entre "Historia clínica" y "Odontograma" según spec §1.2.
-  if (showPediatrics) out.splice(2, 0, { id: "pediatria", label: "Pediatría" });
+  if (opts.pediatrics.state !== "hidden") {
+    out.splice(2, 0, {
+      id:             "pediatria",
+      label:          "Pediatría",
+      disabled:       opts.pediatrics.state === "disabled",
+      disabledReason: opts.pediatrics.state === "disabled" ? opts.pediatrics.reason : undefined,
+    });
+  }
   // Insertar "Periodoncia" justo antes de "Odontograma" — entre Historia
   // clínica/Pediatría y Odontograma. Si Pediatría está, queda en posición
   // 3; si no, queda en posición 2.
-  if (showPeriodontics) {
+  if (opts.showPeriodontics) {
     const odontoIdx = out.findIndex((t) => t.id === "odontograma");
     out.splice(odontoIdx >= 0 ? odontoIdx : 2, 0, { id: "periodoncia", label: "Periodoncia" });
   }
@@ -135,6 +160,13 @@ interface Props {
   treatments:   any[];
   portalUrl?:   string | null;
   pediatricsData?: PediatricsTabData | null;
+  /**
+   * True si la clínica tiene el módulo Odontopediatría activo (o trial
+   * vigente). Se usa para mostrar el tab en estado disabled cuando
+   * `pediatricsData` viene null porque el paciente actual no califica
+   * (adulto / sin DOB) en lugar de ocultar el tab por completo.
+   */
+  pediatricsModuleActive?: boolean;
   perioData?: PerioTabData | null;
   endoSoapPrefill?: SoapPrefill | null;
 }
@@ -143,16 +175,24 @@ export function PatientDetailClient({
   patient, records: initialRecords, appointments, invoices,
   doctors, currentUser, specialty, totalPaid, totalBalance, totalPlan, treatments, portalUrl,
   pediatricsData,
+  pediatricsModuleActive = false,
   perioData,
   endoSoapPrefill,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const showPediatrics = Boolean(pediatricsData);
+  const pediatricsState = derivePediatricsTabState({
+    hasData:      Boolean(pediatricsData),
+    moduleActive: pediatricsModuleActive,
+  });
+  const showPediatrics = pediatricsState === "enabled";
   const showPeriodontics = Boolean(perioData);
   const tabs = useMemo(
-    () => buildTabs(showPediatrics, showPeriodontics),
-    [showPediatrics, showPeriodontics],
+    () => buildTabs({
+      pediatrics:      { state: pediatricsState, reason: PEDIATRICS_DISABLED_REASON },
+      showPeriodontics,
+    }),
+    [pediatricsState, showPeriodontics],
   );
   const tabFromUrl = searchParams.get("tab");
   const initialTab =
@@ -725,7 +765,7 @@ export function PatientDetailClient({
             periodoncia: perioData?.recordsCount ?? 0,
           }}
           hasBalance={totalBalance > 0}
-          showPediatrics={showPediatrics}
+          pediatrics={{ state: pediatricsState, reason: PEDIATRICS_DISABLED_REASON }}
           showPeriodontics={showPeriodontics}
         />
 
@@ -772,6 +812,7 @@ export function PatientDetailClient({
             {tabs.map((t) => {
               const isActive = tab === t.id;
               const count = tabCounts[t.id];
+              const isDisabled = t.disabled === true;
               return (
                 <button
                   key={t.id}
@@ -780,10 +821,13 @@ export function PatientDetailClient({
                   id={`patient-tab-${t.id}`}
                   aria-selected={isActive}
                   aria-controls={`patient-panel-${t.id}`}
+                  aria-disabled={isDisabled || undefined}
+                  disabled={isDisabled}
+                  title={isDisabled ? t.disabledReason : undefined}
                   className={`${patientDetailStyles.mobileTabBtn} ${
                     isActive ? patientDetailStyles.mobileTabBtnActive : ""
-                  }`}
-                  onClick={() => setTab(t.id)}
+                  } ${isDisabled ? patientDetailStyles.mobileTabBtnDisabled : ""}`}
+                  onClick={() => { if (!isDisabled) setTab(t.id); }}
                 >
                   {t.label}
                   {count !== undefined && count > 0 && (
