@@ -12,7 +12,8 @@ import { loadPediatricsData } from "@/lib/pediatrics/load-data";
 import type { PediatricsTabData } from "@/components/patient-detail/pediatrics/PediatricsTab";
 import { IMPLANTS_MODULE_KEY } from "@/lib/implants/permissions";
 import type { ImplantFull } from "@/lib/types/implants";
-import { PERIODONTICS_MODULE_KEY, ENDODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
+import { PERIODONTICS_MODULE_KEY, ENDODONTICS_MODULE_KEY, ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
+import { loadOrthoData, type OrthoTabData } from "@/lib/orthodontics/load-data";
 import { loadPerioData, type PerioTabData } from "@/lib/periodontics/load-data";
 import { loadEndoSoapPrefill } from "@/lib/endodontics/load-soap-prefill";
 import { loadEndoToothSummaries } from "@/lib/helpers/loadEndoToothData";
@@ -137,6 +138,18 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     })) as unknown as ImplantFull[];
   }
 
+  // Ortodoncia — solo DENTAL con el módulo activo. Sin gate por edad. El
+  // helper loadOrthoData devuelve null cuando el paciente no existe o
+  // está soft-deleted (caso ya descartado arriba via notFound), por eso
+  // el null aquí solo refleja "módulo inactivo" para el cliente.
+  let orthoData: OrthoTabData | null = null;
+  if (isDental && clinicModuleKeys.includes(ORTHODONTICS_MODULE_KEY)) {
+    orthoData = await loadOrthoData({
+      clinicId: user.clinicId,
+      patientId: patient.id,
+    });
+  }
+
   const totalPaid    = patient.invoices.reduce((s, i) => s + i.paid, 0);
   const totalBalance = patient.invoices.reduce((s, i) => s + i.balance, 0);
   const totalPlan    = patient.invoices.reduce((s, i) => s + i.total, 0);
@@ -220,6 +233,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           endoSummaries={endoSummaries}
           endoSoapPrefill={endoSoapPrefill}
           implants={implants}
+          orthoData={orthoData}
         />
       </ErrorBoundary>
     </div>

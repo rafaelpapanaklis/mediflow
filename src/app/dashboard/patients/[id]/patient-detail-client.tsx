@@ -40,6 +40,7 @@ import {
 import type { PerioTabData } from "@/lib/periodontics/load-data";
 import type { SoapPrefill, EndoToothSummary } from "@/lib/types/endodontics";
 import type { ImplantFull } from "@/lib/types/implants";
+import type { OrthoTabData } from "@/lib/orthodontics/load-data";
 
 // Pediatrics — lazy load del módulo. Solo carga el bundle cuando el doctor
 // abre la pestaña, evitando inflar el bundle del paciente cuando no aplica.
@@ -92,6 +93,28 @@ const ImplantsTab = dynamicImport(
     ),
   },
 );
+
+// Orthodontics — lazy load. El bundle de wizards (diagnóstico, plan,
+// fotos, controles, pagos) solo carga cuando el doctor abre la pestaña.
+const OrthodonticsClient = dynamicImport(
+  () =>
+    import("@/components/specialties/orthodontics/OrthodonticsClient").then((m) => ({
+      default: m.OrthodonticsClient,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="text-xs text-muted-foreground p-4">Cargando módulo de ortodoncia…</div>
+    ),
+  },
+);
+
+// resolveFileUrl es función — no se puede pasar de server a client. Como
+// patient-detail-client.tsx ya es "use client" la definimos aquí mismo,
+// igual al patrón de /dashboard/patients/[id]/orthodontics/page.tsx.
+function resolveOrthoFileUrl(fileId: string): string {
+  return `/api/patient-files/${fileId}`;
+}
 
 // MediFlow es DENTAL — el form de "Nueva consulta" siempre usa DentalForm.
 // El parámetro `specialty` viene del Clinic.specialty (legacy) y se ignora.
@@ -148,6 +171,8 @@ function buildTabs(opts: {
   showEndodontics: boolean;
   /** Implantes — enabled cuando el módulo está activo. Sin gate de edad. */
   showImplants: boolean;
+  /** Ortodoncia — enabled cuando el módulo está activo. Sin gate de edad. */
+  showOrthodontics: boolean;
 }): PatientTab[] {
   const out: PatientTab[] = [...TABS_BASE];
   // Insertar "Pediatría" entre "Historia clínica" y "Odontograma" según spec §1.2.
@@ -161,14 +186,15 @@ function buildTabs(opts: {
   }
   // Insertar las especialidades dentales justo antes de "Odontograma".
   // Cada splice usa odontoIdx fresco, así el orden de inserción se preserva:
-  // periodoncia → endodoncia → implantes (más adelante ortodoncia).
+  // periodoncia → endodoncia → implantes → ortodoncia.
   const insertBeforeOdonto = (tab: PatientTab) => {
     const odontoIdx = out.findIndex((t) => t.id === "odontograma");
     out.splice(odontoIdx >= 0 ? odontoIdx : 2, 0, tab);
   };
-  if (opts.showPeriodontics) insertBeforeOdonto({ id: "periodoncia", label: "Periodoncia" });
-  if (opts.showEndodontics)  insertBeforeOdonto({ id: "endodoncia",  label: "Endodoncia" });
-  if (opts.showImplants)     insertBeforeOdonto({ id: "implantes",   label: "Implantes" });
+  if (opts.showPeriodontics)  insertBeforeOdonto({ id: "periodoncia", label: "Periodoncia" });
+  if (opts.showEndodontics)   insertBeforeOdonto({ id: "endodoncia",  label: "Endodoncia"  });
+  if (opts.showImplants)      insertBeforeOdonto({ id: "implantes",   label: "Implantes"   });
+  if (opts.showOrthodontics)  insertBeforeOdonto({ id: "ortodoncia",  label: "Ortodoncia"  });
   return out;
 }
 
@@ -224,6 +250,13 @@ interface Props {
    * pero el paciente aún no tiene implantes colocados.
    */
   implants?: ImplantFull[] | null;
+  /**
+   * Datos del paciente para el tab Ortodoncia. `null` cuando la clínica
+   * no tiene el módulo activo o no es DENTAL — el tab no se renderiza.
+   * Cuando el paciente no tiene diagnóstico/plan, el componente muestra
+   * el wizard de inicio.
+   */
+  orthoData?: OrthoTabData | null;
 }
 
 export function PatientDetailClient({
@@ -235,6 +268,7 @@ export function PatientDetailClient({
   endoSummaries,
   endoSoapPrefill,
   implants,
+  orthoData,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -244,16 +278,18 @@ export function PatientDetailClient({
   });
   const showPediatrics = pediatricsState === "enabled";
   const showPeriodontics = Boolean(perioData);
-  const showEndodontics = endoSummaries !== null && endoSummaries !== undefined;
-  const showImplants    = implants !== null && implants !== undefined;
+  const showEndodontics  = endoSummaries !== null && endoSummaries !== undefined;
+  const showImplants     = implants !== null && implants !== undefined;
+  const showOrthodontics = orthoData !== null && orthoData !== undefined;
   const tabs = useMemo(
     () => buildTabs({
       pediatrics:      { state: pediatricsState, reason: PEDIATRICS_DISABLED_REASON },
       showPeriodontics,
       showEndodontics,
       showImplants,
+      showOrthodontics,
     }),
-    [pediatricsState, showPeriodontics, showEndodontics, showImplants],
+    [pediatricsState, showPeriodontics, showEndodontics, showImplants, showOrthodontics],
   );
   const tabFromUrl = searchParams.get("tab");
   const initialTab =
@@ -265,7 +301,9 @@ export function PatientDetailClient({
           ? "endodoncia"
           : tabFromUrl === "implantes" && showImplants
             ? "implantes"
-            : "resumen";
+            : tabFromUrl === "ortodoncia" && showOrthodontics
+              ? "ortodoncia"
+              : "resumen";
   const [tab, setTab]         = useState(initialTab);
   const [consultPaused, setConsultPaused] = useState(false);
   const [consultClosed, setConsultClosed] = useState(false);
@@ -830,12 +868,14 @@ export function PatientDetailClient({
             periodoncia: perioData?.recordsCount ?? 0,
             endodoncia: endoSummaries?.filter((s) => s.hasActiveTreatment).length ?? 0,
             implantes: implants?.length ?? 0,
+            ortodoncia: orthoData?.controls.filter((c) => c.performedAt === null).length ?? 0,
           }}
           hasBalance={totalBalance > 0}
           pediatrics={{ state: pediatricsState, reason: PEDIATRICS_DISABLED_REASON }}
           showPeriodontics={showPeriodontics}
           showEndodontics={showEndodontics}
           showImplants={showImplants}
+          showOrthodontics={showOrthodontics}
         />
 
         <div className={patientDetailStyles.mainColumn}>
@@ -1061,6 +1101,34 @@ export function PatientDetailClient({
               doctorName={`${currentUser.firstName} ${currentUser.lastName}`.trim()}
               doctorCedula={currentUser.cedulaProfesional ?? null}
               implants={implants}
+            />
+          )}
+
+          {/* ===== TAB: ORTODONCIA ===== */}
+          {tab === "ortodoncia" && orthoData && (
+            <OrthodonticsClient
+              patientId={orthoData.patientId}
+              patientName={orthoData.patientName}
+              isMinor={orthoData.isMinor}
+              hasPediatricProfile={orthoData.hasPediatricProfile}
+              guardianName={orthoData.guardianName}
+              pediatricHabits={orthoData.pediatricHabits}
+              pediatricsModuleActive={pediatricsModuleActive}
+              diagnosis={orthoData.diagnosis}
+              plan={orthoData.plan}
+              phases={orthoData.phases}
+              monthInTreatment={orthoData.monthInTreatment}
+              paymentPlan={orthoData.paymentPlan}
+              installments={orthoData.installments}
+              photoSets={orthoData.photoSets}
+              controls={orthoData.controls}
+              digitalRecords={orthoData.digitalRecords}
+              resolveFileUrl={resolveOrthoFileUrl}
+              agreementPdfHref={
+                orthoData.paymentPlan
+                  ? `/api/orthodontics/payment-plans/${orthoData.paymentPlan.id}/financial-agreement-pdf`
+                  : undefined
+              }
             />
           )}
 
