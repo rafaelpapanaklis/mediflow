@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Eye, Shield, Clock, Users, FileText, CreditCard, Activity, Trash2, BarChart3, MessageCircle, Mail, Download } from "lucide-react";
+import { ArrowLeft, Eye, Shield, Clock, Users, FileText, CreditCard, Activity, Trash2, BarChart3, MessageCircle, Mail, Download, Layers } from "lucide-react";
 import toast from "react-hot-toast";
 import { ClinicActivityTab } from "@/components/admin/clinic-activity-tab";
 import { ClinicUsageTab } from "@/components/admin/clinic-usage-tab";
 import { ClinicStripeTab } from "@/components/admin/clinic-stripe-tab";
+import { ClinicModulesTab, type ModuleCatalogRow, type ClinicModuleRow } from "@/components/admin/clinic-modules-tab";
 import { SendMessageModal } from "@/components/admin/send-message-modal";
 import { DeleteClinicModal } from "@/components/admin/delete-clinic-modal";
 import { CardNew } from "@/components/ui/design-system/card-new";
@@ -44,6 +45,8 @@ interface Props {
   stripeConfigured:     boolean;
   stripeInstructions:   string;
   totalClinicsInSystem: number;
+  moduleCatalog:        ModuleCatalogRow[];
+  clinicModuleRows:     ClinicModuleRow[];
 }
 
 export function AdminClinicDetailClient({
@@ -54,6 +57,8 @@ export function AdminClinicDetailClient({
   stripeConfigured,
   stripeInstructions,
   totalClinicsInSystem,
+  moduleCatalog,
+  clinicModuleRows,
 }: Props) {
   const askConfirm = useConfirm();
   const [saving, setSaving]   = useState(false);
@@ -187,6 +192,7 @@ export function AdminClinicDetailClient({
   const TABS = [
     { id: "overview",  label: "Resumen",       icon: Activity    },
     { id: "account",   label: "Cuenta",         icon: Users      },
+    { id: "modules",   label: "Módulos",        icon: Layers     },
     { id: "billing",   label: "Facturación",    icon: CreditCard },
     { id: "stripe",    label: "Stripe",         icon: CreditCard },
     { id: "activity",  label: "Actividad",      icon: Clock      },
@@ -483,6 +489,16 @@ export function AdminClinicDetailClient({
             </tbody>
           </table>
         </CardNew>
+      )}
+
+      {/* TAB: MODULES */}
+      {tab === "modules" && (
+        <ClinicModulesTab
+          clinicId={clinic.id}
+          clinicCategory={clinic.category}
+          modules={moduleCatalog}
+          clinicModules={clinicModuleRows}
+        />
       )}
 
       {/* TAB: BILLING */}

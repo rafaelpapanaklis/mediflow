@@ -14,6 +14,16 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
       users:        { select: { id: true, firstName: true, lastName: true, email: true, phone: true, role: true, createdAt: true, isActive: true } },
       _count:       { select: { patients: true, appointments: true, invoices: true, records: true, users: true, files: true } },
       schedules:    true,
+      clinicModules: {
+        select: {
+          status:           true,
+          paymentMethod:    true,
+          activatedAt:      true,
+          cancelledAt:      true,
+          currentPeriodEnd: true,
+          module:           { select: { key: true } },
+        },
+      },
     },
   });
 
@@ -35,6 +45,32 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
     _count: { id: true },
   });
 
+  // Catálogo de módulos del marketplace para el tab "Módulos". Filtramos
+  // por isActive=true y category="Dental" (los 6 dentales del seed).
+  const moduleCatalog = await prisma.module.findMany({
+    where:   { isActive: true, category: "Dental" },
+    orderBy: { sortOrder: "asc" },
+    select:  {
+      id:              true,
+      key:             true,
+      name:            true,
+      description:     true,
+      iconKey:         true,
+      iconBg:          true,
+      iconColor:       true,
+      priceMxnMonthly: true,
+    },
+  });
+
+  const clinicModuleRows = clinic.clinicModules.map((cm) => ({
+    moduleKey:        cm.module.key,
+    status:           cm.status,
+    paymentMethod:    cm.paymentMethod,
+    activatedAt:      cm.activatedAt.toISOString(),
+    cancelledAt:      cm.cancelledAt ? cm.cancelledAt.toISOString() : null,
+    currentPeriodEnd: cm.currentPeriodEnd.toISOString(),
+  }));
+
   return (
     <AdminClinicDetailClient
       clinic={clinic as any}
@@ -44,6 +80,8 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
       stripeConfigured={isStripeConfigured()}
       stripeInstructions={STRIPE_SETUP_INSTRUCTIONS}
       totalClinicsInSystem={totalClinics}
+      moduleCatalog={moduleCatalog}
+      clinicModuleRows={clinicModuleRows}
     />
   );
 }
