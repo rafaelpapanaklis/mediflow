@@ -39,14 +39,17 @@ export async function GET(request: Request) {
     });
     if (userClinics.length > 0) {
       const res = NextResponse.redirect(`${origin}${next}`);
-      // Sembrar/limpiar cookie activeClinicId del nuevo supabaseId.
       res.cookies.set("notifLastSeen", "", { path: "/", maxAge: 0 });
-      const { writeActiveClinicCookie } = await import("@/lib/active-clinic");
-      if (userClinics.length === 1) {
-        writeActiveClinicCookie(res, userClinics[0].clinicId);
-      } else {
-        res.cookies.set("activeClinicId", "", { path: "/", maxAge: 0 });
-      }
+      // Misma lógica que /api/auth/post-login: conservamos la cookie si
+      // apunta a una clínica del usuario; si no, la sembramos a la primera
+      // por createdAt para evitar el fallback "primer createdAt en cada
+      // request" en getCurrentUser para multi-clínica.
+      const { writeActiveClinicCookie, readActiveClinicCookie, pickActiveClinicId } =
+        await import("@/lib/active-clinic");
+      const current = readActiveClinicCookie();
+      const ownedIds = userClinics.map(u => u.clinicId);
+      const picked = pickActiveClinicId(current, ownedIds);
+      writeActiveClinicCookie(res, picked.clinicId);
       return res;
     }
   } catch (err) {
