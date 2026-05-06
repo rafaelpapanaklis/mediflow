@@ -1,13 +1,17 @@
 // Página pública /share/p/[token] — vista del paciente sin autenticación.
-// Usa server action resolvePublicShareToken para validar token + cargar
-// resumen del módulo origen. Branchea por module:
-//   - implants → timeline visual de fases (ImplantShareTimeline)
-//   - pediatrics (y demás) → resumen genérico con stats
+//
+// Despacha por módulo:
+//   - periodontics → PerioShareView (perio-específico, sprint perio)
+//   - implants     → ImplantShareTimeline (timeline visual de fases)
+//   - pediatrics y resto → vista genérica con stats vía resolvePublicShareToken
+//                          (sprint pediatrics, modela stats pediátricos)
 
+import { notFound } from "next/navigation";
+import { prisma } from "@/lib/prisma";
 import { resolvePublicShareToken } from "@/app/actions/clinical-shared/share-links";
 import { isFailure } from "@/lib/clinical-shared/result";
-import { prisma } from "@/lib/prisma";
 import ImplantShareTimeline from "./ImplantShareTimeline";
+import { PerioShareView } from "./PerioShareView";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -25,6 +29,18 @@ const MODULE_LABELS: Record<string, string> = {
 };
 
 export default async function PublicSharePage(props: PageProps) {
+  // Peek module sin auth para despachar a vista perio-específica.
+  // findUnique es indexado por token (@unique) — barato.
+  const peek = await prisma.patientShareLink.findUnique({
+    where: { token: props.params.token },
+    select: { module: true },
+  });
+
+  if (peek?.module === "periodontics") {
+    return <PerioShareSection token={props.params.token} />;
+  }
+
+  // Vista genérica (default) — utiliza resolvePublicShareToken.
   const res = await resolvePublicShareToken(props.params.token);
 
   if (isFailure(res)) {
@@ -103,6 +119,131 @@ export default async function PublicSharePage(props: PageProps) {
     </main>
   );
 }
+
+// ── Sub-render perio ─────────────────────────────────────────────────
+
+async function PerioShareSection({ token }: { token: string }) {
+  const link = await prisma.patientShareLink.findUnique({
+    where: { token },
+    select: {
+      id: true,
+      module: true,
+      patientId: true,
+      clinicId: true,
+      expiresAt: true,
+      revokedAt: true,
+      viewCount: true,
+    },
+  });
+
+  if (!link || link.module !== "periodontics") notFound();
+  if (link.revokedAt) return <PerioExpiredOrRevoked reason="revoked" />;
+  if (link.expiresAt < new Date()) return <PerioExpiredOrRevoked reason="expired" />;
+
+  const [patient, latestRecord, plan, lastSrp, classification] = await Promise.all([
+    prisma.patient.findFirst({
+      where: { id: link.patientId, clinicId: link.clinicId, deletedAt: null },
+      select: {
+        firstName: true,
+        clinic: { select: { name: true, logoUrl: true } },
+      },
+    }),
+    prisma.periodontalRecord.findFirst({
+      where: { patientId: link.patientId, clinicId: link.clinicId, deletedAt: null },
+      orderBy: { recordedAt: "desc" },
+      select: {
+        bopPercentage: true,
+        plaqueIndexOleary: true,
+        sites4to5mm: true,
+        sites6PlusMm: true,
+        teethWithPockets5Plus: true,
+        recordedAt: true,
+      },
+    }),
+    prisma.periodontalTreatmentPlan.findFirst({
+      where: { patientId: link.patientId, clinicId: link.clinicId, deletedAt: null },
+      select: { currentPhase: true, nextEvaluationAt: true },
+    }),
+    prisma.sRPSession.findFirst({
+      where: { patientId: link.patientId, clinicId: link.clinicId, deletedAt: null },
+      orderBy: { performedAt: "desc" },
+      select: { performedAt: true, technique: true },
+    }),
+    prisma.periodontalClassification.findFirst({
+      where: { patientId: link.patientId, clinicId: link.clinicId },
+      orderBy: { classifiedAt: "desc" },
+      select: { stage: true, grade: true, extension: true, classifiedAt: true },
+    }),
+  ]);
+
+  if (!patient) notFound();
+
+  // Incrementa view count en background — no bloqueamos render si falla.
+  prisma.patientShareLink
+    .update({
+      where: { id: link.id },
+      data: { viewCount: { increment: 1 }, lastViewed: new Date() },
+    })
+    .catch((e) => console.error("[perio share] view-count update failed:", e));
+
+  return (
+    <PerioShareView
+      patientFirstName={patient.firstName}
+      clinicName={patient.clinic.name}
+      clinicLogoUrl={patient.clinic.logoUrl}
+      latestRecord={
+        latestRecord
+          ? {
+              bopPercentage: latestRecord.bopPercentage,
+              plaquePercentage: latestRecord.plaqueIndexOleary,
+              sitesAtRisk:
+                (latestRecord.sites4to5mm ?? 0) + (latestRecord.sites6PlusMm ?? 0),
+              teethAtRisk: latestRecord.teethWithPockets5Plus ?? 0,
+              recordedAt: latestRecord.recordedAt.toISOString(),
+            }
+          : null
+      }
+      classification={
+        classification
+          ? {
+              stage: classification.stage,
+              grade: classification.grade,
+              extension: classification.extension,
+              classifiedAt: classification.classifiedAt.toISOString(),
+            }
+          : null
+      }
+      plan={
+        plan
+          ? {
+              currentPhase: plan.currentPhase,
+              nextEvaluationAt: plan.nextEvaluationAt?.toISOString() ?? null,
+            }
+          : null
+      }
+      lastSrpAt={lastSrp?.performedAt.toISOString() ?? null}
+      expiresAt={link.expiresAt.toISOString()}
+    />
+  );
+}
+
+function PerioExpiredOrRevoked({ reason }: { reason: "expired" | "revoked" }) {
+  const title = reason === "expired" ? "Enlace expirado" : "Enlace revocado";
+  const desc =
+    reason === "expired"
+      ? "Este enlace ya no está vigente. Solicita uno nuevo a tu clínica."
+      : "Este enlace fue revocado por la clínica. Comunícate con ellos para más información.";
+  return (
+    <main style={pageStyle}>
+      <div style={cardStyle}>
+        <h1 style={{ margin: 0, fontSize: 22, color: "var(--text-1)" }}>{title}</h1>
+        <p style={{ color: "var(--text-2)", marginTop: 8, fontSize: 14 }}>{desc}</p>
+      </div>
+    </main>
+  );
+}
+
+// ── Vista genérica (estilos compartidos) ─────────────────────────────
 
 function Stat(props: { label: string; value: number }) {
   return (

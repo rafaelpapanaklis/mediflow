@@ -67,3 +67,4 @@ export {
   completeReevaluation,
   completePeriSurgery,
 } from "./treatment-link";
+export { createPerioShareLink, revokePerioShareLink } from "./share";
