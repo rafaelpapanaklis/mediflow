@@ -87,6 +87,71 @@ export async function advanceTreatmentPhase(
           where: { id: plan.id },
           data: { status: "RETENTION", statusUpdatedAt: now },
         });
+
+        // TRIGGER G9: upsert régimen retención (Hawley sup, Essix inf, Fijo
+        // lingual .0195) y agenda los 5 controles 3/6/12/24/36 meses desde
+        // debonding (now). Idempotente — el upsert no duplica si ya existen.
+        const regimen = await tx.orthoRetentionRegimen.upsert({
+          where: { treatmentPlanId: plan.id },
+          create: {
+            treatmentPlanId: plan.id,
+            clinicId: plan.clinicId,
+            debondedAt: now,
+            upperRetainer: "HAWLEY_SUP",
+            lowerRetainer: "ESSIX_INF",
+            fixedLingualPresent: true,
+            fixedLingualGauge: "G_0195",
+            regimenDescription: "24/7 año 1 · nocturno años 2-5",
+            preSurveyEnabled: true,
+          },
+          update: { debondedAt: now },
+          select: { id: true },
+        });
+        for (const m of [3, 6, 12, 24, 36] as const) {
+          const scheduledDate = new Date(now);
+          scheduledDate.setMonth(scheduledDate.getMonth() + m);
+          await tx.orthoRetainerCheckup.upsert({
+            where: {
+              regimenId_monthsFromDebond: { regimenId: regimen.id, monthsFromDebond: m },
+            },
+            create: {
+              regimenId: regimen.id,
+              clinicId: plan.clinicId,
+              monthsFromDebond: m,
+              scheduledDate,
+              status: "PROGRAMMED",
+            },
+            update: { scheduledDate },
+          });
+        }
+
+        // TRIGGER G11: agenda NPS +3d/+6m/+12m al iniciar retención. El plan
+        // se marca COMPLETED cuando se finaliza la retención (otra acción),
+        // pero la timeline de NPS se siembra ya para que post-debond el
+        // primer envío esté agendado a +3d desde el debonding.
+        const npsOffsets: Array<{ type: "POST_DEBOND_3D" | "POST_DEBOND_6M" | "POST_DEBOND_12M"; days: number }> = [
+          { type: "POST_DEBOND_3D", days: 3 },
+          { type: "POST_DEBOND_6M", days: 30 * 6 },
+          { type: "POST_DEBOND_12M", days: 30 * 12 },
+        ];
+        for (const off of npsOffsets) {
+          const scheduledAt = new Date(now);
+          scheduledAt.setDate(scheduledAt.getDate() + off.days);
+          await tx.orthoNpsSchedule.upsert({
+            where: {
+              treatmentPlanId_npsType: { treatmentPlanId: plan.id, npsType: off.type },
+            },
+            create: {
+              treatmentPlanId: plan.id,
+              patientId: plan.patientId,
+              clinicId: plan.clinicId,
+              npsType: off.type,
+              scheduledAt,
+              status: "SCHEDULED",
+            },
+            update: { scheduledAt },
+          });
+        }
       }
 
       if (parsed.data.treatmentSessionId) {
