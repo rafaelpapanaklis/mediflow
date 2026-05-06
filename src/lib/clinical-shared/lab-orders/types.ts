@@ -37,6 +37,9 @@ export const LAB_ORDER_TYPE_LABELS: Record<LabOrderType, string> = {
   ortho_appliance: "Aparato ortodóncico",
   retainer: "Retenedor",
   ped_space_maintainer_lab: "Mantenedor de espacio",
+  perio_splint: "Ferulización periodontal",
+  perio_custom_graft: "Injerto personalizado",
+  perio_maintenance_tray: "Planchas de mantenimiento",
   other: "Otro",
 };
 
