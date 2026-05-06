@@ -9,6 +9,9 @@ import type {
   PeriodontalStage,
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { classifyPerioPlans } from "./specialty-kpis";
+
+export { classifyPerioPlans };
 
 export interface PerioPatientRow {
   patientId: string;
@@ -148,12 +151,7 @@ export async function loadPeriodonticPatients(
     };
   });
 
-  const overdueMaintenance = plans.filter(
-    (p) => p.nextEvaluationAt && p.nextEvaluationAt < now && p.currentPhase === "PHASE_4",
-  ).length;
-  const pendingReevaluations = plans.filter(
-    (p) => p.nextEvaluationAt && p.nextEvaluationAt < now && p.currentPhase !== "PHASE_4",
-  ).length;
+  const { overdueMaintenance, pendingReevaluations } = classifyPerioPlans(plans, now);
 
   const doctorsList = Array.from(doctorById.values()).sort((a, b) => a.name.localeCompare(b.name));
 
@@ -168,3 +166,4 @@ export async function loadPeriodonticPatients(
     doctors: doctorsList,
   };
 }
+

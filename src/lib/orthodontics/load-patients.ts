@@ -13,6 +13,9 @@ import type {
 import { prisma } from "@/lib/prisma";
 import { PHASE_ORDER } from "./phase-machine";
 import { computePaymentStatus } from "./payment-status";
+import { computeOrthoKpis } from "./specialty-kpis";
+
+export { computeOrthoKpis };
 
 export type OrthoRowStatus = OrthoTreatmentStatus | "DIAGNOSIS_ONLY";
 
@@ -51,12 +54,6 @@ export interface LoadOrthodonticPatientsResult {
   doctors: OrthoSpecialtyDoctor[];
 }
 
-const ACTIVE_PLAN_STATUSES: OrthoTreatmentStatus[] = [
-  "PLANNED",
-  "IN_PROGRESS",
-  "ON_HOLD",
-  "RETENTION",
-];
 
 export async function loadOrthodonticPatients(
   clinicId: string,
@@ -153,21 +150,7 @@ export async function loadOrthodonticPatients(
     };
   });
 
-  const activeTreatments = rows.filter(
-    (r) => r.treatmentPlanId !== null && ACTIVE_PLAN_STATUSES.includes(r.status as OrthoTreatmentStatus),
-  ).length;
-
-  const overdueRows = rows.filter(
-    (r) => r.paymentStatus === "LIGHT_DELAY" || r.paymentStatus === "SEVERE_DELAY",
-  );
-  const overduePaymentsCount = overdueRows.length;
-  const overduePaymentsAmountMxn = overdueRows.reduce((s, r) => s + r.amountOverdueMxn, 0);
-
-  const finishingSoon = rows.filter((r) => {
-    if (r.estimatedDurationMonths === null || r.monthInTreatment === null) return false;
-    const remaining = r.estimatedDurationMonths - r.monthInTreatment;
-    return remaining >= 0 && remaining <= 1 && r.status === "IN_PROGRESS";
-  }).length;
+  const kpis = computeOrthoKpis(rows, todayAppointmentsCount);
 
   const doctorsMap = new Map<string, OrthoSpecialtyDoctor>();
   for (const r of rows) {
@@ -178,13 +161,8 @@ export async function loadOrthodonticPatients(
 
   return {
     rows,
-    kpis: {
-      activeTreatments,
-      todayAppointments: todayAppointmentsCount,
-      overduePaymentsCount,
-      overduePaymentsAmountMxn,
-      finishingSoon,
-    },
+    kpis,
     doctors: Array.from(doctorsMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
   };
 }
+

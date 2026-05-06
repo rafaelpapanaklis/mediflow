@@ -2,6 +2,9 @@
 
 import type { ImplantBrand, ImplantFollowUpMilestone, ImplantStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { computeImplantCountsFromRows } from "./specialty-kpis";
+
+export { computeImplantCountsFromRows };
 
 export interface ImplantPatientRow {
   implantId: string;
@@ -36,12 +39,6 @@ export interface LoadImplantPatientsResult {
   kpis: ImplantSpecialtyKpis;
   doctors: ImplantSpecialtyDoctor[];
 }
-
-const PROSTHETIC_STATUSES: ImplantStatus[] = [
-  "UNCOVERED",
-  "LOADED_PROVISIONAL",
-  "LOADED_DEFINITIVE",
-];
 
 const ANNUAL_MILESTONES: ImplantFollowUpMilestone[] = [
   "M_12_MONTHS",
@@ -99,9 +96,7 @@ export async function loadImplantPatients(clinicId: string): Promise<LoadImplant
     };
   });
 
-  const activeImplants = rows.filter((r) => r.status !== "REMOVED" && r.status !== "FAILED").length;
-  const inHealing = rows.filter((r) => r.status === "OSSEOINTEGRATING").length;
-  const inProsthetic = rows.filter((r) => PROSTHETIC_STATUSES.includes(r.status)).length;
+  const partialKpis = computeImplantCountsFromRows(rows);
 
   const doctorsMap = new Map<string, ImplantSpecialtyDoctor>();
   for (const r of rows) {
@@ -112,12 +107,8 @@ export async function loadImplantPatients(clinicId: string): Promise<LoadImplant
 
   return {
     rows,
-    kpis: {
-      activeImplants,
-      inHealing,
-      inProsthetic,
-      pendingAnnualControls,
-    },
+    kpis: { ...partialKpis, pendingAnnualControls },
     doctors: Array.from(doctorsMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
   };
 }
+

@@ -3,6 +3,9 @@
 
 import type { EndoOutcomeStatus, EndoTreatmentType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { computeEndoCountsFromRows } from "./specialty-kpis";
+
+export { computeEndoCountsFromRows };
 
 export type EndoRowStatus = EndoOutcomeStatus | "RESTORATION_PENDING";
 
@@ -83,11 +86,7 @@ export async function loadEndodonticPatients(
     };
   });
 
-  const activeTreatments = rows.filter((r) => r.outcomeStatus === "EN_CURSO").length;
-  const retreatmentsActive = rows.filter(
-    (r) => r.treatmentType === "RETRATAMIENTO" && r.outcomeStatus === "EN_CURSO",
-  ).length;
-  const pendingRestorations = rows.filter((r) => r.needsRestoration).length;
+  const partialKpis = computeEndoCountsFromRows(rows);
 
   const pendingFollowUpsAgg = await prisma.endodonticFollowUp.count({
     where: {
@@ -106,12 +105,8 @@ export async function loadEndodonticPatients(
 
   return {
     rows,
-    kpis: {
-      activeTreatments,
-      pendingFollowUps: pendingFollowUpsAgg,
-      retreatmentsActive,
-      pendingRestorations,
-    },
+    kpis: { ...partialKpis, pendingFollowUps: pendingFollowUpsAgg },
     doctors: Array.from(doctorsMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
   };
 }
+

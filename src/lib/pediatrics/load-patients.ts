@@ -4,6 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { calculateAge } from "@/lib/pediatrics/age";
 import { DEFAULT_PEDIATRICS_CUTOFF_YEARS } from "@/lib/pediatrics/permissions";
 import type { CambraCategory } from "@/lib/pediatrics/cambra";
+import { computePediatricCountsFromRows } from "./specialty-kpis";
+
+export { computePediatricCountsFromRows };
 
 export interface PediatricPatientRow {
   patientId: string;
@@ -93,20 +96,12 @@ export async function loadPediatricPatients(
     };
   });
 
-  const activePatients = rows.length;
-  const pendingProphylaxis = rows.filter((r) => r.cariesRecallDue).length;
-  const highOrExtremeCambra = rows.filter(
-    (r) => r.cambra === "alto" || r.cambra === "extremo",
-  ).length;
   const eruptionControls = patients.filter((p) => p.eruptionRecords.length > 0).length;
+  const partialKpis = computePediatricCountsFromRows(rows);
 
   return {
     rows,
-    kpis: {
-      activePatients,
-      pendingProphylaxis,
-      highOrExtremeCambra,
-      eruptionControls,
-    },
+    kpis: { ...partialKpis, eruptionControls },
   };
 }
+
