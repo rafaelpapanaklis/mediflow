@@ -1,21 +1,21 @@
 "use client";
-// OrthodonticsRedesignClient — shell del rediseño Fase 1 patient-detail.
-//
-// Layout: 2 columnas (main scrollable + right rail sticky). El layout 3
-// columnas final (con la sidebar contextual del patient-detail) se logra
-// porque este componente se monta DENTRO del shell existente que ya provee
-// la sidebar izquierda — solo aportamos main + rail derecha.
-//
-// Maneja estado de drawer (Treatment Card) y modal (Advance Phase) con
-// useReducer simple; los handlers de save/sign son placeholders por ahora —
-// se cablean a server actions en commit posterior.
+// OrthodonticsRedesignClient — shell del rediseño completo del módulo
+// Ortodoncia patient-detail. Maneja secciones A-I + drawers/modales y
+// despacha callbacks a server actions. Layout 2 cols (main + rail) que se
+// monta dentro del shell del patient-detail (que provee la sidebar
+// contextual a la izquierda).
 
-import { Camera, DollarSign, FileText, Shield, Sparkles, Star } from "lucide-react";
+import { DollarSign, FileText, Shield, Sparkles, Star } from "lucide-react";
 import { useState } from "react";
 import { SectionHero } from "./sections/SectionHero";
 import { SectionDiagnosis } from "./sections/SectionDiagnosis";
 import { SectionPlan } from "./sections/SectionPlan";
 import { SectionTreatmentCards } from "./sections/SectionTreatmentCards";
+import {
+  SectionPhotos,
+  type PhotoSetSummary,
+  type PhotoStage,
+} from "./sections/SectionPhotos";
 import { SectionPlaceholder } from "./sections/SectionPlaceholder";
 import { RightRail } from "./sidebar/RightRail";
 import { DrawerTreatmentCard } from "./drawers/DrawerTreatmentCard";
@@ -33,9 +33,21 @@ type DrawerState =
 export interface OrthodonticsRedesignClientProps {
   vm: OrthoRedesignViewModel;
   digitalRecords?: DigitalRecordEntry[];
+  /** Foto-sets históricos por etapa (T0/T1/T2/CONTROL). */
+  historicalPhotoSets?: PhotoSetSummary[];
+  /** Hook para subir foto a un slot — server action al ortho-redesign loader. */
+  onUploadPhoto?: (
+    stage: PhotoStage,
+    slotId: string,
+    file: File,
+  ) => Promise<void> | void;
+  /** Comparativa T0 vs actual. */
+  onComparePhotos?: () => void;
+  /** Programar foto-set + RX panorámica para mes 12 (G15). */
+  onScheduleG15?: () => void;
   /** Hook para cobrar siguiente mensualidad — abre modal cobro existente. */
   onCollectNow?: () => void;
-  /** Callback cuando se firma una card. Para ahora, solo cierra drawer. */
+  /** Callback cuando se firma una card. */
   onCardSigned?: (payload: DrawerCardSubmit) => Promise<void> | void;
   /** Callback cuando se guarda como borrador. */
   onCardDraftSaved?: (payload: DrawerCardSubmit) => Promise<void> | void;
@@ -88,6 +100,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         }
       : undefined;
 
+  // Placeholders Fase 2 (las secciones F/G/H/I se implementan en commits
+  // siguientes; mantenemos el placeholder como guard si aún no llegan).
   const placeholders: Array<{
     id: string;
     eyebrow: string;
@@ -96,23 +110,11 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
     bullets: string[];
   }> = [
     {
-      id: "photos",
-      eyebrow: "Sección E",
-      title: "Fotos comparativas T0/T1/T2",
-      icon: <Camera className="w-6 h-6" aria-hidden />,
-      bullets: [
-        "Comparativa side-by-side T0 vs actual con métricas overlay (overjet, overbite).",
-        "Alert G15 automático: faltan registros mid-treatment a los 12 meses.",
-        "Reusa PhotoSetWizard existente con las 8 vistas AAO.",
-      ],
-    },
-    {
       id: "finance",
       eyebrow: "Sección F",
       title: "Plan financiero · CFDI 4.0",
       icon: <DollarSign className="w-6 h-6" aria-hidden />,
       bullets: [
-        "Plan de pagos visualizado como chips (mes 1, mes 2, … pagado/pendiente/futuro).",
         "G5 Open Choice slider · 3 escenarios financieros para presentar al paciente.",
         "G6 Sign@Home · firma + cobro vía WhatsApp con link tokenizado.",
         "M1 CFDI 4.0 · timbrado automático con Facturapi.",
@@ -126,7 +128,6 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
       bullets: [
         "G9 régimen visual: Hawley sup/inf · Essix · Fijo lingual 3-3 (.0175/.0195/.021).",
         "Auto-schedule 3/6/12/24/36 meses con pre-encuesta WhatsApp antes de cada cita.",
-        "Trigger automático al avanzar fase a Retención (LabOrder retenedor).",
       ],
     },
     {
@@ -136,7 +137,6 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
       icon: <Star className="w-6 h-6" aria-hidden />,
       bullets: [
         "G11 NPS automático +3 días post-debond.",
-        "Auto Google review +7 días.",
         "Programa referidos con código personalizado.",
       ],
     },
@@ -146,9 +146,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
       title: "Documentos & comunicación",
       icon: <FileText className="w-6 h-6" aria-hidden />,
       bullets: [
-        "Tabs: Consentimientos · Cartas referencia · LabOrders · WhatsApp log.",
-        "G18 LabOrder catalog ampliado: alineadores serie 1-30, retenedor Hawley/Essix/fijo, expansor RPE/Hyrax.",
-        "Reusa ReferralLetter + LabOrder cross-cutting existentes.",
+        "Tabs: Lab orders · Consentimientos · Cartas referencia · WhatsApp log.",
+        "G18 LabOrder catalog ampliado.",
       ],
     },
   ];
@@ -193,6 +192,15 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             onStartNewCard={() => setDrawer({ kind: "tcard-new" })}
           />
 
+          <SectionPhotos
+            monthCurrent={t.monthCurrent}
+            monthTotal={t.monthTotal}
+            historicalSets={props.historicalPhotoSets ?? []}
+            onUpload={props.onUploadPhoto}
+            onCompare={props.onComparePhotos}
+            onScheduleG15={props.onScheduleG15}
+          />
+
           {placeholders.map((p) => (
             <SectionPlaceholder
               key={p.id}
@@ -229,7 +237,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         </div>
       </div>
 
-      {/* Drawer Treatment Card */}
+      {/* Drawer Treatment Card existente */}
       {drawer?.kind === "tcard" && cardForDrawer ? (
         <DrawerTreatmentCard
           key={cardForDrawer.id}
@@ -241,6 +249,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         />
       ) : null}
 
+      {/* Drawer nueva cita */}
       {drawer?.kind === "tcard-new" && newCardDefaults ? (
         <DrawerTreatmentCard
           key="new-card"
@@ -259,7 +268,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         />
       ) : null}
 
-      {/* Modal Advance Phase */}
+      {/* Modal advance phase */}
       {drawer?.kind === "advance-phase" && t.phase ? (
         <ModalAdvancePhase
           fromPhase={t.phase}
