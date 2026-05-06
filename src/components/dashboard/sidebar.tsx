@@ -15,8 +15,16 @@ import {
 } from "lucide-react";
 import { useSidebarCounts } from "@/hooks/use-sidebar-counts";
 import { useActiveConsult } from "@/hooks/use-active-consult";
+import type { Role } from "@prisma/client";
 import { hasPermission, type PermissionKey } from "@/lib/auth/permissions";
 import { TrialSidebarStatus } from "@/components/dashboard/trial-sidebar-status";
+import { PEDIATRICS_MODULE_KEY } from "@/lib/pediatrics/permissions";
+import { IMPLANTS_MODULE_KEY } from "@/lib/implants/permissions";
+import {
+  ENDODONTICS_MODULE_KEY,
+  PERIODONTICS_MODULE_KEY,
+  ORTHODONTICS_MODULE_KEY,
+} from "@/lib/specialties/keys";
 
 // ═══════════════════════════════════════════════════════════════════
 // Tipos
@@ -74,12 +82,13 @@ export interface SidebarProps {
   /** True si el trial está vigente (futuro Y sin sub activa). */
   isInTrial?: boolean;
   /**
-   * True si la clínica tiene al menos un módulo de especialidad activo
-   * o está en trial. Determinado server-side en el layout vía
-   * hasAnyActiveSpecialtyModule(clinicId). Si false, el grupo
-   * "Especialidades" se oculta del sidebar.
+   * Specialty module keys activas en la clínica (o todas si está en trial
+   * vigente). Determinado server-side en el layout vía
+   * getActiveClinicModuleKeys(clinicId). Cada item de la sección
+   * "Especialidades" se oculta si su `moduleKey` no está en la lista; la
+   * sección entera se oculta cuando ningún item pasa el filtro.
    */
-  hasSpecialtyAccess?: boolean;
+  clinicModuleKeys?: string[];
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -103,6 +112,12 @@ interface NavItemDef {
   // Cuando está, se evalúa con hasPermission(user, permission) — el set
   // efectivo viene de role default + permissionsOverride.
   permission?: PermissionKey;
+  // Module key del marketplace que controla la visibilidad del item. Si
+  // está, el item solo aparece cuando la key está en `clinicModuleKeys`
+  // del SidebarProps. Items sin moduleKey no se gatean por marketplace
+  // (área "core" del producto). Se usa hoy para los items de
+  // "Especialidades" y se puede extender a otras áreas modulares.
+  moduleKey?: string;
 }
 
 const NAV_ITEMS: NavItemDef[] = [
@@ -132,30 +147,36 @@ const NAV_ITEMS: NavItemDef[] = [
     icon: Footprints,
     categories: ["PODIATRY"] },
 
-  // Especialidades — sub-items por módulo del marketplace. La sección
-  // entera se oculta en runtime si la clínica no tiene ningún módulo
-  // de especialidad activo (ver hasSpecialtyAccess en el layout).
+  // Especialidades — sub-items por módulo del marketplace. Cada item
+  // exige su `moduleKey` activo (o trial vigente) en `clinicModuleKeys`,
+  // determinado server-side en el layout vía getActiveClinicModuleKeys().
+  // Si ningún item pasa el filtro la sección entera se oculta.
   // Categorías: solo DENTAL/MEDICINE pueden tener pacientes pediátricos.
   { id: "pediatrics",   section: "specialties", label: "Odontopediatría", href: "/dashboard/specialties/pediatrics",
     icon: Baby,
     categories: ["DENTAL", "MEDICINE"],
-    permission: "specialties.pediatrics" },
+    permission: "specialties.pediatrics",
+    moduleKey: PEDIATRICS_MODULE_KEY },
   { id: "endodontics",  section: "specialties", label: "Endodoncia", href: "/dashboard/specialties/endodontics",
     icon: Zap,
     categories: ["DENTAL"],
-    permission: "specialties.endodontics" },
+    permission: "specialties.endodontics",
+    moduleKey: ENDODONTICS_MODULE_KEY },
   { id: "periodontics", section: "specialties", label: "Periodoncia", href: "/dashboard/specialties/periodontics",
     icon: Activity,
     categories: ["DENTAL"],
-    permission: "specialties.periodontics" },
+    permission: "specialties.periodontics",
+    moduleKey: PERIODONTICS_MODULE_KEY },
   { id: "orthodontics", section: "specialties", label: "Ortodoncia", href: "/dashboard/specialties/orthodontics",
     icon: Smile,
     categories: ["DENTAL"],
-    permission: "specialties.orthodontics" },
+    permission: "specialties.orthodontics",
+    moduleKey: ORTHODONTICS_MODULE_KEY },
   { id: "implants",     section: "specialties", label: "Implantología", href: "/dashboard/specialties/implants",
     icon: Anchor,
     categories: ["DENTAL"],
-    permission: "specialties.implants" },
+    permission: "specialties.implants",
+    moduleKey: IMPLANTS_MODULE_KEY },
 
   { id: "treatments",   section: "catalogo", label: "Tratamientos", href: "/dashboard/treatments", icon: Activity, permission: "treatments.view" },
   { id: "packages",     section: "catalogo", label: "Paquetes",     href: "/dashboard/packages",
@@ -218,11 +239,21 @@ function isActivePath(pathname: string | null, href: string, matchExact?: boolea
   return pathname === href || pathname.startsWith(href + "/");
 }
 
-function shouldShowItem(item: NavItemDef, user: SidebarUser, category: ClinicCategory): boolean {
+function shouldShowItem(
+  item: NavItemDef,
+  user: SidebarUser,
+  category: ClinicCategory,
+  clinicModuleKeys: string[],
+): boolean {
   if (item.adminOnly && user.role !== "SUPER_ADMIN" && user.role !== "ADMIN") return false;
   if (item.categories && item.categories.length > 0) {
     if (!item.categories.includes(category)) return false;
   }
+  // Marketplace gating: si el item declara `moduleKey`, exigimos que la
+  // clínica tenga ese módulo activo (o esté en trial). Aplica también al
+  // SUPER_ADMIN — el toggle del marketplace es la fuente de verdad y un
+  // admin tampoco debe ver una especialidad que no contrató.
+  if (item.moduleKey && !clinicModuleKeys.includes(item.moduleKey)) return false;
   // Permission gating: SUPER_ADMIN ve todo (mantiene el comportamiento previo).
   // Para los demás, si el item declara `permission`, exigimos que el set
   // efectivo (default del role + override) lo incluya. Items sin `permission`
@@ -233,7 +264,7 @@ function shouldShowItem(item: NavItemDef, user: SidebarUser, category: ClinicCat
     // mismos valores excepto ACCOUNTANT (UI-only, no en DB) que cae
     // como readonly por seguridad.
     const userForPerm = {
-      role: (user.role === "ACCOUNTANT" ? "READONLY" : user.role) as any,
+      role: (user.role === "ACCOUNTANT" ? "READONLY" : user.role) as Role,
       permissionsOverride: user.permissionsOverride ?? [],
     };
     if (!hasPermission(userForPerm, item.permission)) return false;
@@ -297,14 +328,19 @@ export function Sidebar(props: SidebarProps) {
     }
   }, [pathname, isMobile]);
 
+  const clinicModuleKeys = useMemo(
+    () => props.clinicModuleKeys ?? [],
+    [props.clinicModuleKeys],
+  );
+
   const visibleItems = useMemo(() => {
     return NAV_ITEMS.filter((item) =>
-      shouldShowItem(item, props.user, props.clinicCategory),
+      shouldShowItem(item, props.user, props.clinicCategory, clinicModuleKeys),
     );
     // Necesitamos depender del array completo (override puede cambiar tras
     // un guardado en /dashboard/team). props.user es el objeto referencial
     // que cambia cuando el layout re-renderiza con datos frescos.
-  }, [props.user, props.clinicCategory]);
+  }, [props.user, props.clinicCategory, clinicModuleKeys]);
 
   const itemsBySection = useMemo(() => {
     const map: Record<Section, NavItemDef[]> = {
@@ -528,7 +564,7 @@ export function Sidebar(props: SidebarProps) {
           </>
         )}
 
-        {props.hasSpecialtyAccess && itemsBySection.specialties.length > 0 && (
+        {itemsBySection.specialties.length > 0 && (
           <>
             {renderSectionLabel("Especialidades")}
             {itemsBySection.specialties.map((it) => renderItem(it))}
@@ -544,7 +580,7 @@ export function Sidebar(props: SidebarProps) {
           />
         )}
 
-        {props.hasSpecialtyAccess && collapsed && itemsBySection.specialties.length > 0 && (
+        {collapsed && itemsBySection.specialties.length > 0 && (
           <>
             <div style={{ height: 8 }} />
             {itemsBySection.specialties.map((it) => renderItem(it))}
