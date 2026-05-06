@@ -2,10 +2,15 @@
  * Plantillas de receta cross-modulo. Centraliza los presets clínicos por
  * especialidad para poder pre-cargar el modal genérico de receta.
  *
- * Específicamente para Implantes 4/5:
+ * Implantes 4/5:
  *   - implant_post_surgery       (cirugía de colocación, profilaxis)
  *   - implant_post_second_stage  (descubrimiento — analgesia + antiséptico)
  *   - implant_peri_implantitis   (infección peri-implantar)
+ *
+ * Endodoncia (cierre):
+ *   - endo_post_tc_basic         (post-TC sin infección, ibuprofeno)
+ *   - endo_post_tc_absceso       (post-TC con absceso, amoxi+clavu + ibu)
+ *   - endo_post_cirugia_apical   (post-cirugía apical, amoxi+clavu + ibu + clorhexidina)
  *
  * Cada plantilla devuelve `items[]` (medicamentos con dosaje) +
  * `indications` (texto libre que el sistema NOM-024 incluye).
@@ -14,7 +19,12 @@
 export type PrescriptionTemplateKey =
   | "implant_post_surgery"
   | "implant_post_second_stage"
-  | "implant_peri_implantitis";
+  | "implant_peri_implantitis"
+  | "endo_post_tc_basic"
+  | "endo_post_tc_absceso"
+  | "endo_post_cirugia_apical";
+
+export type PrescriptionSpecialty = "implants" | "endodontics";
 
 export interface PrescriptionItem {
   /** Nombre comercial / DCI legible. */
@@ -38,7 +48,7 @@ export interface PrescriptionTemplate {
   /** Descripción corta. */
   description: string;
   /** Especialidad del módulo. */
-  specialty: "implants";
+  specialty: PrescriptionSpecialty;
   /** Items a pre-cargar en el modal de receta. */
   items: PrescriptionItem[];
   /** Indicaciones generales que se concatenan al final. */
@@ -179,10 +189,117 @@ export const IMPLANT_PERI_IMPLANTITIS_TEMPLATE: PrescriptionTemplate = {
     "Reforzar técnica de higiene oral con cepillo interproximal y/o de cerdas suaves. Evitar tabaquismo. Cita de revaloración en 7 días. Si no hay mejoría clínica (BoP, supuración, dolor) en ese periodo, valorar tratamiento quirúrgico. Acudir de inmediato ante fiebre o aumento del dolor.",
 };
 
+/**
+ * Endodoncia — post-TC básica (sin infección).
+ * Manejo del dolor post-operatorio inmediato sin signos de infección
+ * activa. Útil tras pulpitis irreversible obturada en una sola cita
+ * (caso típico Roberto Salinas TC en 36).
+ */
+export const ENDO_POST_TC_BASIC_TEMPLATE: PrescriptionTemplate = {
+  key: "endo_post_tc_basic",
+  label: "Post-TC básica (sin infección)",
+  description:
+    "Analgesia post-operatoria tras tratamiento de conductos sin signos de infección activa.",
+  specialty: "endodontics",
+  items: [
+    {
+      drugName: "Ibuprofeno",
+      presentation: "Tableta 600 mg",
+      dosage: "1 tableta cada 8 horas",
+      duration: "3 días",
+      route: "Vía oral",
+      notes:
+        "Tomar con alimentos. Suspender si aparece molestia gástrica o reacción alérgica.",
+    },
+  ],
+  indications:
+    "Dieta blanda 24 horas y evitar masticar del lado tratado por 7 días. Si el dolor es intenso o aumenta después de 72 horas, comunicarse a la clínica. Acudir a la cita de restauración definitiva en las próximas 3 semanas.",
+};
+
+/**
+ * Endodoncia — post-TC con absceso periapical.
+ * Necrosis pulpar con absceso apical agudo o crónico. Combina
+ * antibiótico de primera línea con analgésico/antiinflamatorio.
+ */
+export const ENDO_POST_TC_ABSCESO_TEMPLATE: PrescriptionTemplate = {
+  key: "endo_post_tc_absceso",
+  label: "Post-TC con absceso periapical",
+  description:
+    "Antibiótico + analgesia tras tratamiento de conductos con absceso apical.",
+  specialty: "endodontics",
+  items: [
+    {
+      drugName: "Amoxicilina con ácido clavulánico",
+      presentation: "Tableta 500/125 mg",
+      dosage: "1 tableta cada 8 horas",
+      duration: "7 días",
+      route: "Vía oral",
+      notes:
+        "Tomar al inicio de los alimentos para reducir molestias gastrointestinales. Verificar alergia a penicilinas.",
+    },
+    {
+      drugName: "Ibuprofeno",
+      presentation: "Tableta 600 mg",
+      dosage: "1 tableta cada 8 horas",
+      duration: "3 días",
+      route: "Vía oral",
+      notes: "Tomar con alimentos.",
+    },
+  ],
+  indications:
+    "Tomar el antibiótico cada 8 horas SIN saltar dosis hasta completar el esquema. Si aparece edema progresivo, fiebre > 38 °C, trismus o dificultad para tragar, acudir a urgencias inmediatamente. Reforzar higiene oral; evitar enjuagues vigorosos durante las primeras 24 horas. Cita de seguimiento endodóntico en 5-7 días.",
+};
+
+/**
+ * Endodoncia — post-cirugía apical.
+ * Cobertura para apicectomía y retroobturación. Combina antibiótico +
+ * analgésico/antiinflamatorio + clorhexidina para higiene local.
+ */
+export const ENDO_POST_CIRUGIA_APICAL_TEMPLATE: PrescriptionTemplate = {
+  key: "endo_post_cirugia_apical",
+  label: "Post-cirugía apical",
+  description:
+    "Antibiótico + analgesia + antiséptico tras apicectomía y retroobturación.",
+  specialty: "endodontics",
+  items: [
+    {
+      drugName: "Amoxicilina con ácido clavulánico",
+      presentation: "Tableta 500/125 mg",
+      dosage: "1 tableta cada 8 horas",
+      duration: "7 días",
+      route: "Vía oral",
+      notes: "Verificar alergia a penicilinas. Tomar con alimentos.",
+    },
+    {
+      drugName: "Ibuprofeno",
+      presentation: "Tableta 600 mg",
+      dosage: "1 tableta cada 8 horas",
+      duration: "5 días",
+      route: "Vía oral",
+      notes:
+        "Tomar con alimentos. Alternar con paracetamol 500 mg si el dolor es intenso.",
+    },
+    {
+      drugName: "Clorhexidina al 0.12%",
+      presentation: "Enjuague bucal 250 ml",
+      dosage: "15 ml en buches por 30 segundos cada 12 horas",
+      duration: "10 días",
+      route: "Tópica oral",
+      notes:
+        "Iniciar a las 24 horas de la cirugía. Tinción dental reversible al suspender el uso.",
+    },
+  ],
+  indications:
+    "Aplicar hielo intermitente sobre la mejilla las primeras 4 horas (10 min sí / 10 min no). No enjuagar ni escupir vigorosamente las primeras 24 horas. Dieta blanda y fría durante 48 horas. Evitar tabaco y alcohol por 7 días. Retiro de puntos en 7-10 días. Control radiográfico a los 3 y 6 meses.",
+};
+
 export const PRESCRIPTION_TEMPLATES: ReadonlyArray<PrescriptionTemplate> = [
   IMPLANT_POST_SURGERY_TEMPLATE,
   IMPLANT_POST_SECOND_STAGE_TEMPLATE,
   IMPLANT_PERI_IMPLANTITIS_TEMPLATE,
+  ENDO_POST_TC_BASIC_TEMPLATE,
+  ENDO_POST_TC_ABSCESO_TEMPLATE,
+  ENDO_POST_CIRUGIA_APICAL_TEMPLATE,
 ];
 
 export function getPrescriptionTemplate(
@@ -194,7 +311,7 @@ export function getPrescriptionTemplate(
 }
 
 export function listPrescriptionTemplatesBySpecialty(
-  specialty: "implants",
+  specialty: PrescriptionSpecialty,
 ): PrescriptionTemplate[] {
   return PRESCRIPTION_TEMPLATES.filter((t) => t.specialty === specialty);
 }
