@@ -10,10 +10,14 @@ import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-
 import { canSeePediatrics, PEDIATRICS_MODULE_KEY } from "@/lib/pediatrics/permissions";
 import { loadPediatricsData } from "@/lib/pediatrics/load-data";
 import type { PediatricsTabData } from "@/components/patient-detail/pediatrics/PediatricsTab";
-import { PERIODONTICS_MODULE_KEY, ENDODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
+import { IMPLANTS_MODULE_KEY } from "@/lib/implants/permissions";
+import type { ImplantFull } from "@/lib/types/implants";
+import { PERIODONTICS_MODULE_KEY, ENDODONTICS_MODULE_KEY, ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
+import { loadOrthoData, type OrthoTabData } from "@/lib/orthodontics/load-data";
 import { loadPerioData, type PerioTabData } from "@/lib/periodontics/load-data";
 import { loadEndoSoapPrefill } from "@/lib/endodontics/load-soap-prefill";
-import type { SoapPrefill } from "@/lib/types/endodontics";
+import { loadEndoToothSummaries } from "@/lib/helpers/loadEndoToothData";
+import type { SoapPrefill, EndoToothSummary } from "@/lib/types/endodontics";
 import { getActiveClinicModuleKeys } from "@/lib/clinical-shared/get-active-clinic-modules";
 
 export default async function PatientDetailPage({ params }: { params: { id: string } }) {
@@ -96,12 +100,51 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     });
   }
 
-  // Endodoncia SOAP prefill — solo DENTAL con módulo activo + paciente con
-  // tratamiento o diagnóstico endodóntico. El helper devuelve null cuando
-  // no aplica para no pisar contenido del doctor en el editor SOAP.
+  // Endodoncia — solo DENTAL con el módulo activo. Sin gate por edad.
+  // Cargamos: (1) summaries de los 32 dientes para el odontograma miniatura
+  // del tab, y (2) prefill SOAP para hidratar el editor cuando el paciente
+  // tiene tratamiento o diagnóstico endodóntico activo. El cliente decide
+  // qué mostrar — `endoSummaries === null` significa módulo inactivo y el
+  // tab no se renderiza.
+  let endoSummaries: EndoToothSummary[] | null = null;
   let endoSoapPrefill: SoapPrefill | null = null;
   if (isDental && clinicModuleKeys.includes(ENDODONTICS_MODULE_KEY)) {
-    endoSoapPrefill = await loadEndoSoapPrefill({
+    [endoSummaries, endoSoapPrefill] = await Promise.all([
+      loadEndoToothSummaries({ clinicId: user.clinicId, patientId: patient.id }),
+      loadEndoSoapPrefill({ clinicId: user.clinicId, patientId: patient.id }),
+    ]);
+  }
+
+  // Implantes — solo DENTAL con el módulo activo. Sin gate por edad. La
+  // tabla `implants` no tiene helper extraído todavía (el módulo lo
+  // carga inline en /dashboard/specialties/implants/[patientId]/page.tsx);
+  // replicamos los mismos includes para que ImplantsTab reciba la shape
+  // ImplantFull que espera. null cuando módulo inactivo.
+  let implants: ImplantFull[] | null = null;
+  if (isDental && clinicModuleKeys.includes(IMPLANTS_MODULE_KEY)) {
+    implants = (await prisma.implant.findMany({
+      where: { patientId: patient.id, clinicId: user.clinicId },
+      include: {
+        surgicalRecord:  true,
+        healingPhase:    true,
+        secondStage:     true,
+        prostheticPhase: true,
+        complications:   { orderBy: { detectedAt: "desc" } },
+        followUps:       { orderBy: { scheduledAt: "asc" } },
+        consents:        { orderBy: { createdAt: "desc" } },
+        passport:        true,
+      },
+      orderBy: { placedAt: "desc" },
+    })) as unknown as ImplantFull[];
+  }
+
+  // Ortodoncia — solo DENTAL con el módulo activo. Sin gate por edad. El
+  // helper loadOrthoData devuelve null cuando el paciente no existe o
+  // está soft-deleted (caso ya descartado arriba via notFound), por eso
+  // el null aquí solo refleja "módulo inactivo" para el cliente.
+  let orthoData: OrthoTabData | null = null;
+  if (isDental && clinicModuleKeys.includes(ORTHODONTICS_MODULE_KEY)) {
+    orthoData = await loadOrthoData({
       clinicId: user.clinicId,
       patientId: patient.id,
     });
@@ -173,7 +216,12 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           invoices={patient.invoices as any}
           treatments={serializedTreatments as any}
           doctors={doctors}
-          currentUser={{ id: user.id, firstName: user.firstName, lastName: user.lastName }}
+          currentUser={{
+            id:                 user.id,
+            firstName:          user.firstName,
+            lastName:           user.lastName,
+            cedulaProfesional:  user.cedulaProfesional ?? null,
+          }}
           specialty={user.clinic.specialty}
           totalPaid={totalPaid}
           totalBalance={totalBalance}
@@ -182,7 +230,10 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           pediatricsData={pediatricsData}
           pediatricsModuleActive={pediatricsModuleActive}
           perioData={perioData}
+          endoSummaries={endoSummaries}
           endoSoapPrefill={endoSoapPrefill}
+          implants={implants}
+          orthoData={orthoData}
         />
       </ErrorBoundary>
     </div>

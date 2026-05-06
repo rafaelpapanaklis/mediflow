@@ -12,6 +12,9 @@ import {
   CreditCard,
   Bone,
   Baby,
+  Zap,
+  Anchor,
+  Smile,
   type LucideIcon,
 } from "lucide-react";
 import styles from "./patient-detail.module.css";
@@ -52,11 +55,22 @@ interface QuickNavProps {
     facturacion?: number;
     pediatria?: number;
     periodoncia?: number;
+    endodoncia?: number;
+    implantes?: number;
+    ortodoncia?: number;
   };
   hasBalance: boolean;
   /** Pediatría tiene tres estados — ver `derivePediatricsTabState`. */
   pediatrics?: QuickNavPediatricsConfig;
   showPeriodontics?: boolean;
+  /** Endodoncia — visible cuando la clínica tiene el módulo activo. Sin
+   *  estado disabled (a diferencia de Pediatría): el componente del tab
+   *  maneja el caso del paciente sin tratamientos endo. */
+  showEndodontics?: boolean;
+  /** Implantes — visible cuando la clínica tiene el módulo activo. */
+  showImplants?: boolean;
+  /** Ortodoncia — visible cuando la clínica tiene el módulo activo. */
+  showOrthodontics?: boolean;
 }
 
 export function QuickNav({
@@ -66,6 +80,9 @@ export function QuickNav({
   hasBalance,
   pediatrics,
   showPeriodontics,
+  showEndodontics,
+  showImplants,
+  showOrthodontics,
 }: QuickNavProps) {
   const clinicItems: NavItem[] = [
     { id: "resumen",      label: "Resumen",         icon: ClipboardList },
@@ -88,6 +105,33 @@ export function QuickNav({
       label: "Periodoncia",
       icon: HeartPulse,
       count: counts.periodoncia,
+      badgeTone: "brand",
+    });
+  }
+  if (showEndodontics) {
+    clinicItems.push({
+      id: "endodoncia",
+      label: "Endodoncia",
+      icon: Zap,
+      count: counts.endodoncia,
+      badgeTone: "brand",
+    });
+  }
+  if (showImplants) {
+    clinicItems.push({
+      id: "implantes",
+      label: "Implantes",
+      icon: Anchor,
+      count: counts.implantes,
+      badgeTone: "brand",
+    });
+  }
+  if (showOrthodontics) {
+    clinicItems.push({
+      id: "ortodoncia",
+      label: "Ortodoncia",
+      icon: Smile,
+      count: counts.ortodoncia,
       badgeTone: "brand",
     });
   }
