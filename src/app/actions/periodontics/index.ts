@@ -61,3 +61,4 @@ export {
 } from "./reports";
 
 export { createPerioPhoto, softDeletePerioPhoto } from "./photos";
+export { createPerioLabOrder, updatePerioLabOrderStatus } from "./lab-orders";

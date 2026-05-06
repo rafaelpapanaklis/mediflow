@@ -4596,6 +4596,10 @@ enum LabOrderType {
   retainer
   // Pediatría — instalada para v1.1
   ped_space_maintainer_lab
+  // Periodoncia
+  perio_splint
+  perio_custom_graft
+  perio_maintenance_tray
   // Cross
   other
 }
