@@ -13,7 +13,8 @@ import type { PediatricsTabData } from "@/components/patient-detail/pediatrics/P
 import { PERIODONTICS_MODULE_KEY, ENDODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { loadPerioData, type PerioTabData } from "@/lib/periodontics/load-data";
 import { loadEndoSoapPrefill } from "@/lib/endodontics/load-soap-prefill";
-import type { SoapPrefill } from "@/lib/types/endodontics";
+import { loadEndoToothSummaries } from "@/lib/helpers/loadEndoToothData";
+import type { SoapPrefill, EndoToothSummary } from "@/lib/types/endodontics";
 import { getActiveClinicModuleKeys } from "@/lib/clinical-shared/get-active-clinic-modules";
 
 export default async function PatientDetailPage({ params }: { params: { id: string } }) {
@@ -96,15 +97,19 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     });
   }
 
-  // Endodoncia SOAP prefill — solo DENTAL con módulo activo + paciente con
-  // tratamiento o diagnóstico endodóntico. El helper devuelve null cuando
-  // no aplica para no pisar contenido del doctor en el editor SOAP.
+  // Endodoncia — solo DENTAL con el módulo activo. Sin gate por edad.
+  // Cargamos: (1) summaries de los 32 dientes para el odontograma miniatura
+  // del tab, y (2) prefill SOAP para hidratar el editor cuando el paciente
+  // tiene tratamiento o diagnóstico endodóntico activo. El cliente decide
+  // qué mostrar — `endoSummaries === null` significa módulo inactivo y el
+  // tab no se renderiza.
+  let endoSummaries: EndoToothSummary[] | null = null;
   let endoSoapPrefill: SoapPrefill | null = null;
   if (isDental && clinicModuleKeys.includes(ENDODONTICS_MODULE_KEY)) {
-    endoSoapPrefill = await loadEndoSoapPrefill({
-      clinicId: user.clinicId,
-      patientId: patient.id,
-    });
+    [endoSummaries, endoSoapPrefill] = await Promise.all([
+      loadEndoToothSummaries({ clinicId: user.clinicId, patientId: patient.id }),
+      loadEndoSoapPrefill({ clinicId: user.clinicId, patientId: patient.id }),
+    ]);
   }
 
   const totalPaid    = patient.invoices.reduce((s, i) => s + i.paid, 0);
@@ -182,6 +187,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           pediatricsData={pediatricsData}
           pediatricsModuleActive={pediatricsModuleActive}
           perioData={perioData}
+          endoSummaries={endoSummaries}
           endoSoapPrefill={endoSoapPrefill}
         />
       </ErrorBoundary>

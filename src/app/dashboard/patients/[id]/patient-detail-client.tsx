@@ -38,7 +38,7 @@ import {
   PEDIATRICS_DISABLED_REASON,
 } from "@/lib/pediatrics/tab-state";
 import type { PerioTabData } from "@/lib/periodontics/load-data";
-import type { SoapPrefill } from "@/lib/types/endodontics";
+import type { SoapPrefill, EndoToothSummary } from "@/lib/types/endodontics";
 
 // Pediatrics — lazy load del módulo. Solo carga el bundle cuando el doctor
 // abre la pestaña, evitando inflar el bundle del paciente cuando no aplica.
@@ -58,6 +58,21 @@ const PeriodonticsPatientTab = dynamicImport(
     ssr: false,
     loading: () => (
       <div className="text-xs text-muted-foreground p-4">Cargando módulo de periodoncia…</div>
+    ),
+  },
+);
+
+// Endodontics — lazy load. El bundle del odontograma de 32 dientes + drawers
+// solo carga cuando el doctor abre la pestaña.
+const EndodonticsTab = dynamicImport(
+  () =>
+    import("@/components/specialties/endodontics/EndodonticsTab").then((m) => ({
+      default: m.EndodonticsTab,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="text-xs text-muted-foreground p-4">Cargando módulo de endodoncia…</div>
     ),
   },
 );
@@ -112,6 +127,9 @@ function buildTabs(opts: {
   pediatrics: { state: "enabled" | "disabled" | "hidden"; reason?: string };
   /** Periodoncia hoy solo enabled/hidden — no tiene gate clínico extra. */
   showPeriodontics: boolean;
+  /** Endodoncia — enabled cuando el módulo está activo en la clínica
+   *  (el componente maneja el caso de paciente sin tratamientos endo). */
+  showEndodontics: boolean;
 }): PatientTab[] {
   const out: PatientTab[] = [...TABS_BASE];
   // Insertar "Pediatría" entre "Historia clínica" y "Odontograma" según spec §1.2.
@@ -123,13 +141,15 @@ function buildTabs(opts: {
       disabledReason: opts.pediatrics.state === "disabled" ? opts.pediatrics.reason : undefined,
     });
   }
-  // Insertar "Periodoncia" justo antes de "Odontograma" — entre Historia
-  // clínica/Pediatría y Odontograma. Si Pediatría está, queda en posición
-  // 3; si no, queda en posición 2.
-  if (opts.showPeriodontics) {
+  // Insertar las especialidades dentales justo antes de "Odontograma".
+  // Cada splice usa odontoIdx fresco, así el orden de inserción se preserva:
+  // periodoncia → endodoncia (más adelante implantes y ortodoncia).
+  const insertBeforeOdonto = (tab: PatientTab) => {
     const odontoIdx = out.findIndex((t) => t.id === "odontograma");
-    out.splice(odontoIdx >= 0 ? odontoIdx : 2, 0, { id: "periodoncia", label: "Periodoncia" });
-  }
+    out.splice(odontoIdx >= 0 ? odontoIdx : 2, 0, tab);
+  };
+  if (opts.showPeriodontics) insertBeforeOdonto({ id: "periodoncia", label: "Periodoncia" });
+  if (opts.showEndodontics)  insertBeforeOdonto({ id: "endodoncia",  label: "Endodoncia" });
   return out;
 }
 
@@ -168,6 +188,13 @@ interface Props {
    */
   pediatricsModuleActive?: boolean;
   perioData?: PerioTabData | null;
+  /**
+   * Resúmenes de los 32 dientes para el tab de Endodoncia. `null` cuando
+   * la clínica no tiene el módulo activo o no es DENTAL — el tab no se
+   * renderiza. Array vacío cuando el módulo está activo pero el paciente
+   * no tiene tratamientos: el tab se muestra con su propio empty state.
+   */
+  endoSummaries?: EndoToothSummary[] | null;
   endoSoapPrefill?: SoapPrefill | null;
 }
 
@@ -177,6 +204,7 @@ export function PatientDetailClient({
   pediatricsData,
   pediatricsModuleActive = false,
   perioData,
+  endoSummaries,
   endoSoapPrefill,
 }: Props) {
   const router = useRouter();
@@ -187,12 +215,14 @@ export function PatientDetailClient({
   });
   const showPediatrics = pediatricsState === "enabled";
   const showPeriodontics = Boolean(perioData);
+  const showEndodontics = endoSummaries !== null && endoSummaries !== undefined;
   const tabs = useMemo(
     () => buildTabs({
       pediatrics:      { state: pediatricsState, reason: PEDIATRICS_DISABLED_REASON },
       showPeriodontics,
+      showEndodontics,
     }),
-    [pediatricsState, showPeriodontics],
+    [pediatricsState, showPeriodontics, showEndodontics],
   );
   const tabFromUrl = searchParams.get("tab");
   const initialTab =
@@ -200,7 +230,9 @@ export function PatientDetailClient({
       ? "pediatria"
       : tabFromUrl === "periodoncia" && showPeriodontics
         ? "periodoncia"
-        : "resumen";
+        : tabFromUrl === "endodoncia" && showEndodontics
+          ? "endodoncia"
+          : "resumen";
   const [tab, setTab]         = useState(initialTab);
   const [consultPaused, setConsultPaused] = useState(false);
   const [consultClosed, setConsultClosed] = useState(false);
@@ -763,10 +795,12 @@ export function PatientDetailClient({
             facturacion: invoices.length,
             pediatria: pediatricsData?.pendingConsents.length ?? 0,
             periodoncia: perioData?.recordsCount ?? 0,
+            endodoncia: endoSummaries?.filter((s) => s.hasActiveTreatment).length ?? 0,
           }}
           hasBalance={totalBalance > 0}
           pediatrics={{ state: pediatricsState, reason: PEDIATRICS_DISABLED_REASON }}
           showPeriodontics={showPeriodontics}
+          showEndodontics={showEndodontics}
         />
 
         <div className={patientDetailStyles.mainColumn}>
@@ -972,6 +1006,15 @@ export function PatientDetailClient({
           {/* ===== TAB: PERIODONCIA ===== */}
           {tab === "periodoncia" && perioData && (
             <PeriodonticsPatientTab data={perioData} />
+          )}
+
+          {/* ===== TAB: ENDODONCIA ===== */}
+          {tab === "endodoncia" && endoSummaries && (
+            <EndodonticsTab
+              patientId={patient.id}
+              patientName={fullName}
+              summaries={endoSummaries}
+            />
           )}
 
           {/* ===== TAB: ODONTOGRAMA ===== */}
