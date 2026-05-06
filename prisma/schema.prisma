@@ -4498,11 +4498,21 @@ enum ClinicalPhotoType {
   perio_initial
   perio_postsrp
   perio_surgery
-  // Implantes
+  // Implantes — set v1 (pediatrics base)
   implant_site_pre
   implant_placement
   implant_healing
   implant_prosthetic
+  // Implantes — set v2 (fases granulares spec implantes 4/5)
+  pre_surgical
+  surgical_phase
+  second_stage
+  prosthetic_placement
+  follow_up_radiograph
+  peri_implant_check
+  // Cross genéricos
+  pre_treatment
+  post_treatment
   // Ortodoncia
   ortho_extraoral_front
   ortho_extraoral_profile
