@@ -73,6 +73,12 @@ async function main() {
   await seedLabOrders(clinic.id, patientId, doctor.id);
   await seedPatientFlow(clinic.id, patientId);
   await seedWhatsAppLog(clinic.id, patientId, doctor.id);
+  // Stats hero: 14 visitas atendidas + 1 NO_SHOW + 1 cita futura 13-may-2026.
+  await seedOrthoControls(clinic.id, patientId, planId, doctor.id);
+  // Sección E: T0 + T1 con 8 PatientFile placeholder cada uno.
+  await seedPhotoSets(clinic.id, patientId, planId, doctor.id);
+  // Compliance elásticos 78% (visible en Hero stats).
+  await seedComplianceAuditLog(clinic.id, planId, doctor.id);
 
   console.log(`[ortho-demo] OK · paciente ${patientId} sembrada.`);
 }
@@ -145,6 +151,20 @@ async function wipePreviousOrthoData(patientId: string): Promise<void> {
   // borrar los threads del paciente (canal WHATSAPP).
   await db.inboxThread.deleteMany({
     where: { patientId, channel: "WHATSAPP" },
+  });
+  // PatientFile rows ORTHO_PHOTO_* — los re-creamos con cada seed.
+  await db.patientFile.deleteMany({
+    where: {
+      patientId,
+      category: { in: ["ORTHO_PHOTO_T0", "ORTHO_PHOTO_T1", "ORTHO_PHOTO_T2", "ORTHO_PHOTO_CONTROL"] },
+    },
+  });
+  // Audit logs de compliance — re-emitidos cada seed para recalcular el %.
+  await db.auditLog.deleteMany({
+    where: {
+      action: "ortho.elastics.compliance.recorded",
+      entityType: "OrthodonticTreatmentPlan",
+    },
   });
 }
 
@@ -596,29 +616,37 @@ async function seedPaymentPlan(
   patientId: string,
   treatmentPlanId: string,
 ): Promise<void> {
-  const startDate = new Date("2026-01-14");
-  const endDate = new Date("2027-09-14");
+  // Mockup verbatim: 8 mensualidades · $4,167 cada una · total $33,336 ≈ $33,340.
+  // 4 PAID (feb-may 2026) con CFDI ✓ + 4 PENDING (jun-sep 2026).
+  // Reemplaza el seed previo que usaba mix $1,875/$2,500 sin sumar al total.
+  const startDate = new Date("2026-02-14");
+  const endDate = new Date("2026-09-14");
+  const TOTAL = 33340;
+  const INSTALLMENT = 4167;
+  const COUNT = 8;
+  const paidCount = 4;
+  const paidAmount = INSTALLMENT * paidCount; // 16668
   const plan = await db.orthoPaymentPlan.create({
     data: {
       treatmentPlanId,
       patientId,
       clinicId,
-      totalAmount: 33340,
-      initialDownPayment: 5000,
-      installmentCount: 22,
-      installmentAmount: 1290,
+      totalAmount: TOTAL,
+      initialDownPayment: 0,
+      installmentCount: COUNT,
+      installmentAmount: INSTALLMENT,
       startDate,
       endDate,
       paymentDayOfMonth: 14,
-      paidAmount: 12500,
-      pendingAmount: 33340 - 12500,
+      paidAmount,
+      pendingAmount: TOTAL - paidAmount,
       status: "ON_TIME",
       preferredPaymentMethod: "CREDIT_CARD",
     },
     select: { id: true },
   });
 
-  // 8 installments visibles (4 PAID + 4 PENDING).
+  // 8 installments — 4 PAID con CFDI placeholder + 4 PENDING.
   const installments: Array<{
     installmentNumber: number;
     amount: number;
@@ -629,7 +657,7 @@ async function seedPaymentPlan(
   }> = [
     {
       installmentNumber: 1,
-      amount: 1875,
+      amount: INSTALLMENT,
       dueDate: new Date("2026-02-14"),
       status: "PAID",
       paidAt: new Date("2026-02-13"),
@@ -637,7 +665,7 @@ async function seedPaymentPlan(
     },
     {
       installmentNumber: 2,
-      amount: 1875,
+      amount: INSTALLMENT,
       dueDate: new Date("2026-03-14"),
       status: "PAID",
       paidAt: new Date("2026-03-12"),
@@ -645,7 +673,7 @@ async function seedPaymentPlan(
     },
     {
       installmentNumber: 3,
-      amount: 1875,
+      amount: INSTALLMENT,
       dueDate: new Date("2026-04-14"),
       status: "PAID",
       paidAt: new Date("2026-04-15"),
@@ -653,7 +681,7 @@ async function seedPaymentPlan(
     },
     {
       installmentNumber: 4,
-      amount: 1875,
+      amount: INSTALLMENT,
       dueDate: new Date("2026-05-14"),
       status: "PAID",
       paidAt: new Date("2026-05-02"),
@@ -661,7 +689,7 @@ async function seedPaymentPlan(
     },
     {
       installmentNumber: 5,
-      amount: 2500,
+      amount: INSTALLMENT,
       dueDate: new Date("2026-06-14"),
       status: "PENDING",
       paidAt: null,
@@ -669,7 +697,7 @@ async function seedPaymentPlan(
     },
     {
       installmentNumber: 6,
-      amount: 2500,
+      amount: INSTALLMENT,
       dueDate: new Date("2026-07-14"),
       status: "PENDING",
       paidAt: null,
@@ -677,7 +705,7 @@ async function seedPaymentPlan(
     },
     {
       installmentNumber: 7,
-      amount: 2500,
+      amount: INSTALLMENT,
       dueDate: new Date("2026-08-14"),
       status: "PENDING",
       paidAt: null,
@@ -685,7 +713,7 @@ async function seedPaymentPlan(
     },
     {
       installmentNumber: 8,
-      amount: 2500,
+      amount: INSTALLMENT,
       dueDate: new Date("2026-09-14"),
       status: "PENDING",
       paidAt: null,
@@ -829,6 +857,226 @@ async function seedPatientFlow(clinicId: string, patientId: string): Promise<voi
       status: "WAITING",
       chair: "Sillón 2",
       enteredAt,
+    },
+  });
+}
+
+/**
+ * Sección Hero stats + Sidebar derecha · "Próxima cita".
+ *
+ * Seedea 14 OrthodonticControlAppointment ATTENDED + 1 NO_SHOW +
+ * 1 future SCHEDULED (13-may-2026 10:30 · Control mensual ortodoncia ·
+ * Sillón 2 · 30 min). El loader deriva nextAppointment del control con
+ * scheduledAt futuro más cercano. attendancePct se computa en el adapter
+ * y dará 14/15 = 93%.
+ */
+async function seedOrthoControls(
+  clinicId: string,
+  patientId: string,
+  treatmentPlanId: string,
+  doctorId: string,
+): Promise<void> {
+  // 14 visitas atendidas distribuidas mes 0 → mes 4.
+  // Fechas reales de Card #1-#4 también son control appointments (mismas
+  // fechas), así el doctor puede correlacionar.
+  const ATTENDED_DATES: Array<{ date: string; month: number }> = [
+    { date: "2026-01-14T10:00:00.000-06:00", month: 0 },
+    { date: "2026-01-21T10:00:00.000-06:00", month: 0 }, // check-in post-bracket
+    { date: "2026-01-28T10:00:00.000-06:00", month: 0 },
+    { date: "2026-02-11T10:00:00.000-06:00", month: 1 },
+    { date: "2026-02-25T10:00:00.000-06:00", month: 1 }, // Card #2
+    { date: "2026-03-04T10:00:00.000-06:00", month: 2 },
+    { date: "2026-03-11T10:00:00.000-06:00", month: 2 }, // Card #3 + TADs
+    { date: "2026-03-18T10:00:00.000-06:00", month: 2 },
+    { date: "2026-03-25T10:00:00.000-06:00", month: 2 },
+    { date: "2026-04-01T10:00:00.000-06:00", month: 3 },
+    { date: "2026-04-08T10:00:00.000-06:00", month: 3 }, // Card #4
+    { date: "2026-04-15T10:00:00.000-06:00", month: 3 },
+    { date: "2026-04-22T10:00:00.000-06:00", month: 3 },
+    { date: "2026-04-29T10:00:00.000-06:00", month: 4 },
+  ];
+  for (const c of ATTENDED_DATES) {
+    const scheduledAt = new Date(c.date);
+    await db.orthodonticControlAppointment.create({
+      data: {
+        treatmentPlanId,
+        patientId,
+        clinicId,
+        scheduledAt,
+        performedAt: scheduledAt,
+        monthInTreatment: c.month,
+        attendance: "ATTENDED",
+        attendedById: doctorId,
+        appliancesIntact: true,
+        patientReportsPain: false,
+      },
+    });
+  }
+  // 1 NO_SHOW (paciente faltó · enfermedad).
+  await db.orthodonticControlAppointment.create({
+    data: {
+      treatmentPlanId,
+      patientId,
+      clinicId,
+      scheduledAt: new Date("2026-02-04T10:00:00.000-06:00"),
+      performedAt: null,
+      monthInTreatment: 1,
+      attendance: "NO_SHOW",
+      attendedById: doctorId,
+      patientPainNotes: "Paciente reportó cuadro gripal · re-agendar",
+    },
+  });
+  // 1 future SCHEDULED — Próxima cita 13-may-2026 10:30, Sillón 2, 30 min.
+  const nextDate = new Date("2026-05-13T10:30:00.000-06:00");
+  await db.orthodonticControlAppointment.create({
+    data: {
+      treatmentPlanId,
+      patientId,
+      clinicId,
+      scheduledAt: nextDate,
+      performedAt: null,
+      monthInTreatment: 4,
+      attendance: "ATTENDED", // ATTENDED es el default — el filtro en
+      // el adapter usa scheduledAt > now y attendance != NO_SHOW para
+      // detectar próxima cita. ATTENDED no se filtra (paciente aún no
+      // ha llegado pero está en agenda).
+      attendedById: doctorId,
+    },
+  });
+}
+
+/**
+ * Sección E · Foto-sets históricos.
+ *
+ * Seedea T0 (Inicial · 14-ene-2026 · 8 fotos) + T1 (3 meses · 8-abr-2026 ·
+ * 8 fotos). Cada foto es un PatientFile con URL placeholder de
+ * picsum.photos (público) — el `signMaybeUrl` los devuelve tal cual
+ * porque no son paths del bucket privado.
+ *
+ * NOTA: para producción real las URLs deben venir de Supabase Storage
+ * (private bucket) · ver /api/orthodontics/photos/upload.
+ */
+async function seedPhotoSets(
+  clinicId: string,
+  patientId: string,
+  treatmentPlanId: string,
+  doctorId: string,
+): Promise<void> {
+  type SetType = "T0" | "T1";
+  const VIEWS: Array<{
+    column:
+      | "photoFrontalId"
+      | "photoProfileId"
+      | "photoSmileId"
+      | "photoIntraFrontalId"
+      | "photoIntraLateralRId"
+      | "photoIntraLateralLId"
+      | "photoOcclusalUpperId"
+      | "photoOcclusalLowerId";
+    label: string;
+    seed: number;
+  }> = [
+    { column: "photoFrontalId", label: "Extraoral frontal", seed: 1011 },
+    { column: "photoProfileId", label: "Extraoral perfil", seed: 1012 },
+    { column: "photoSmileId", label: "Extraoral sonrisa", seed: 1013 },
+    { column: "photoIntraFrontalId", label: "Intraoral frontal", seed: 1014 },
+    { column: "photoIntraLateralRId", label: "Intraoral lateral der", seed: 1015 },
+    { column: "photoIntraLateralLId", label: "Intraoral lateral izq", seed: 1016 },
+    { column: "photoOcclusalUpperId", label: "Oclusal superior", seed: 1017 },
+    { column: "photoOcclusalLowerId", label: "Oclusal inferior", seed: 1018 },
+  ];
+
+  const SETS: Array<{
+    setType: SetType;
+    capturedAt: Date;
+    monthInTreatment: number;
+    notes: string;
+  }> = [
+    {
+      setType: "T0",
+      capturedAt: new Date("2026-01-14T11:00:00.000-06:00"),
+      monthInTreatment: 0,
+      notes: "Set fotográfico inicial · pre-bracket placement.",
+    },
+    {
+      setType: "T1",
+      capturedAt: new Date("2026-04-08T11:00:00.000-06:00"),
+      monthInTreatment: 3,
+      notes: "Set fotográfico 3 meses · transición ALIGNMENT → LEVELING.",
+    },
+  ];
+
+  for (const s of SETS) {
+    const createdSet = await db.orthoPhotoSet.create({
+      data: {
+        treatmentPlanId,
+        patientId,
+        clinicId,
+        setType: s.setType,
+        capturedAt: s.capturedAt,
+        capturedById: doctorId,
+        monthInTreatment: s.monthInTreatment,
+        notes: s.notes,
+      },
+      select: { id: true },
+    });
+
+    // 8 PatientFile placeholder pointing a picsum.photos (URLs públicas
+    // estables por seed). El `signMaybeUrl` los detecta como no-Supabase
+    // y los devuelve tal cual.
+    const ids: Record<string, string> = {};
+    for (const v of VIEWS) {
+      const placeholderUrl = `https://picsum.photos/seed/${s.setType}-${v.seed}/600/400`;
+      const file = await db.patientFile.create({
+        data: {
+          clinicId,
+          patientId,
+          uploadedBy: doctorId,
+          name: `${s.setType}-${v.label}.jpg`,
+          url: placeholderUrl,
+          mimeType: "image/jpeg",
+          category: s.setType === "T0" ? "ORTHO_PHOTO_T0" : "ORTHO_PHOTO_T1",
+          notes: `Set ${s.setType} · ${v.label} (seed demo).`,
+          takenAt: s.capturedAt,
+        },
+        select: { id: true },
+      });
+      ids[v.column] = file.id;
+    }
+    await db.orthoPhotoSet.update({
+      where: { id: createdSet.id },
+      data: ids,
+    });
+  }
+}
+
+/**
+ * Compliance elásticos 78% — guardado como auditLog `ortho.elastics.compliance.recorded`.
+ * El loader lee la última entry y la usa como elasticsCompliancePct (sin
+ * requerir column nueva en OrthodonticTreatmentPlan).
+ */
+async function seedComplianceAuditLog(
+  clinicId: string,
+  treatmentPlanId: string,
+  doctorId: string,
+): Promise<void> {
+  await db.auditLog.create({
+    data: {
+      clinicId,
+      userId: doctorId,
+      entityType: "OrthodonticTreatmentPlan",
+      entityId: treatmentPlanId,
+      action: "ortho.elastics.compliance.recorded",
+      changes: {
+        _created: {
+          before: null,
+          after: {
+            evaluatedAt: "2026-04-30T00:00:00.000Z",
+            compliancePct: 78,
+            reminderEnqueued: false,
+          },
+        },
+      },
     },
   });
 }
