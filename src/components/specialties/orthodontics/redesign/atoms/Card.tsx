@@ -1,5 +1,9 @@
 // Atom: Card wrapper estándar del rediseño ortho.
-// bg-white + border-slate-200 + rounded-xl + shadow-sm.
+// Tokens del mockup Claude Design:
+//   bg-white border border-slate-200 rounded-xl (sin shadow)
+//   header px-6 py-4 con border-b border-slate-100
+//   body sin padding por defecto (cada sección lo aplica)
+//   footer px-6 py-3 border-t border-slate-100 bg-slate-50/50
 
 import type { ReactNode } from "react";
 
@@ -30,7 +34,7 @@ export function Card(props: CardProps) {
   return (
     <section
       id={id}
-      className={`bg-white border border-slate-200 rounded-xl shadow-sm dark:bg-slate-900 dark:border-slate-800 ${className}`}
+      className={`bg-white border border-slate-200 rounded-xl dark:bg-slate-900 dark:border-slate-800 ${className}`}
     >
       {hasHeader ? (
         <header className="flex items-end justify-between gap-4 px-6 py-4 border-b border-slate-100 dark:border-slate-800">

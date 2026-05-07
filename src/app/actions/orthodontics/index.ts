@@ -31,3 +31,15 @@ export { exportTreatmentPlanPdf } from "./exportTreatmentPlanPdf";
 export { exportFinancialAgreementPdf } from "./exportFinancialAgreementPdf";
 export { recordElasticsCompliance } from "./recordElasticsCompliance";
 export { exportComparisonPdf } from "./exportComparisonPdf";
+
+// ─── Rediseño Fase 1.5 ──────────────────────────────────────────────────
+export { addWireStep } from "./addWireStep";
+export { selectQuoteScenario } from "./selectQuoteScenario";
+export { sendSignAtHomeLink } from "./sendSignAtHomeLink";
+export { confirmCollect } from "./confirmCollect";
+export { createOrthoLabOrder } from "./createOrthoLabOrder";
+export { toggleRetentionPreSurvey } from "./toggleRetentionPreSurvey";
+export { createReferralCode } from "./createReferralCode";
+export { recordNpsResponse } from "./recordNpsResponse";
+export { scheduleRetentionCheckups } from "./scheduleRetentionCheckups";
+export { scheduleNpsTimeline } from "./scheduleNpsTimeline";

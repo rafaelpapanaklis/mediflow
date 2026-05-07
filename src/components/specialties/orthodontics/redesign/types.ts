@@ -327,6 +327,8 @@ export interface NextAppointmentDTO {
   doctor: string;
   chair: string | null;
   prep: string[];
+  /** Activación planificada para esta cita (ej. "NiTi 16×22"). Optional. */
+  wireActivation?: string | null;
 }
 
 export interface AISuggestionDTO {

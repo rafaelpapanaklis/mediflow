@@ -6,7 +6,7 @@
 //   2. En tratamiento: status chip + 4 mini-stats + progress bar mes X/Y +
 //      timeline visual de fases + botón "Iniciar cita de control".
 
-import { Plus, Pencil, Sparkles, Layers } from "lucide-react";
+import { Plus, Pencil, Sparkles, Layers, ChevronRight } from "lucide-react";
 import { Btn, Card, StatChip, fmtDate, fmtPct } from "../atoms";
 import { Pill } from "../atoms/Pill";
 import {
@@ -22,6 +22,7 @@ export interface SectionHeroProps {
   onStartTreatment?: () => void;
   onEditPlan?: () => void;
   onStartControl?: () => void;
+  onAdvancePhase?: () => void;
 }
 
 export function SectionHero(props: SectionHeroProps) {
@@ -154,7 +155,7 @@ export function SectionHero(props: SectionHeroProps) {
               aria-hidden
             />
           </div>
-          <div className="mt-2 flex gap-2 flex-wrap">
+          <div className="mt-2 flex gap-2 flex-wrap items-center">
             {PHASE_ORDER.map((ph) => (
               <Pill
                 key={ph}
@@ -164,6 +165,17 @@ export function SectionHero(props: SectionHeroProps) {
                 {PHASE_LABELS[ph]}
               </Pill>
             ))}
+            {props.onAdvancePhase && t.phase ? (
+              <Btn
+                variant="violet-soft"
+                size="sm"
+                className="ml-auto"
+                icon={<ChevronRight className="w-3.5 h-3.5" aria-hidden />}
+                onClick={props.onAdvancePhase}
+              >
+                Avanzar de fase
+              </Btn>
+            ) : null}
           </div>
         </div>
       </div>
