@@ -9,6 +9,7 @@ type Variant =
   | "emerald"
   | "rose"
   | "violet-soft"
+  | "emerald-soft"
   | "danger";
 type Size = "sm" | "md" | "lg";
 
@@ -24,6 +25,8 @@ const VARIANTS: Record<Variant, string> = {
   rose: "bg-rose-600 hover:bg-rose-700 text-white border-rose-600 shadow-sm",
   "violet-soft":
     "bg-violet-50 hover:bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/30 dark:hover:bg-violet-900/50 dark:text-violet-200 dark:border-violet-800",
+  "emerald-soft":
+    "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 dark:text-emerald-200 dark:border-emerald-800",
   danger:
     "bg-white hover:bg-rose-50 text-rose-600 border-rose-200 dark:bg-slate-900 dark:hover:bg-rose-950/40 dark:text-rose-400 dark:border-rose-900",
 };

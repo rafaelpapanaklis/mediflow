@@ -24,6 +24,10 @@ export interface DigitalRecordEntry {
 export interface SectionDiagnosisProps {
   diagnosis: DiagnosisDTO | null;
   digitalRecords?: DigitalRecordEntry[];
+  /** Snapshots opcionales de líneas medias para mostrar como texto en KVs. */
+  midlineUpper?: string;
+  midlineLower?: string;
+  midlineLowerDeviated?: boolean;
   onStartWizard?: () => void;
   onEdit?: () => void;
   onUploadRecord?: () => void;
@@ -92,7 +96,12 @@ export function SectionDiagnosis(props: SectionDiagnosisProps) {
       }
     >
       <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-slate-100 dark:bg-slate-800">
-        <ClassificationCard d={d} />
+        <ClassificationCard
+          d={d}
+          midlineUpper={props.midlineUpper}
+          midlineLower={props.midlineLower}
+          midlineLowerDeviated={props.midlineLowerDeviated}
+        />
         <SkeletalAtmCard d={d} />
         <CephalometryCard />
         <DigitalRecordsCard
@@ -104,7 +113,17 @@ export function SectionDiagnosis(props: SectionDiagnosisProps) {
   );
 }
 
-function ClassificationCard({ d }: { d: DiagnosisDTO }) {
+function ClassificationCard({
+  d,
+  midlineUpper,
+  midlineLower,
+  midlineLowerDeviated,
+}: {
+  d: DiagnosisDTO;
+  midlineUpper?: string;
+  midlineLower?: string;
+  midlineLowerDeviated?: boolean;
+}) {
   const angleLabel = (k: string) => {
     if (k === "CLASS_I") return "Clase I";
     if (k === "CLASS_II_DIV_1") return "Clase II div. 1";
@@ -112,6 +131,14 @@ function ClassificationCard({ d }: { d: DiagnosisDTO }) {
     if (k === "CLASS_III") return "Clase III";
     return k;
   };
+  const upperLabel = midlineUpper ?? "centrada";
+  const lowerLabel =
+    midlineLower ??
+    (d.midlineDeviationMm != null && d.midlineDeviationMm !== 0
+      ? `desviada ${Math.abs(d.midlineDeviationMm).toFixed(1)} mm`
+      : "centrada");
+  const lowerIsDeviated =
+    midlineLowerDeviated ?? (d.midlineDeviationMm != null && Math.abs(d.midlineDeviationMm) > 0);
   return (
     <div className="bg-white p-5 dark:bg-slate-900">
       <h4 className="text-xs uppercase tracking-wider text-slate-500 font-medium mb-3 dark:text-slate-400">
@@ -124,20 +151,16 @@ function ClassificationCard({ d }: { d: DiagnosisDTO }) {
         <KV k="Overjet" v={fmtMm(d.overjetMm)} />
         <KV k="Apiñam. sup." v={fmtMm(d.crowdingUpperMm ?? null)} />
         <KV k="Apiñam. inf." v={fmtMm(d.crowdingLowerMm ?? null)} />
+        <KV k="Línea sup." v={upperLabel} />
         <KV
-          k="Línea media"
-          v={
-            d.midlineDeviationMm != null
-              ? `${d.midlineDeviationMm > 0 ? "+" : ""}${d.midlineDeviationMm.toFixed(1)} mm`
-              : "centrada"
-          }
+          k="Línea inf."
+          v={lowerLabel}
           vClass={
-            d.midlineDeviationMm != null && Math.abs(d.midlineDeviationMm) > 0
+            lowerIsDeviated
               ? "text-rose-600 font-medium dark:text-rose-400"
               : "text-slate-900 font-medium dark:text-slate-100"
           }
         />
-        <KV k="Mordida abierta" v={d.openBite ? "sí" : "no"} />
       </div>
       {d.crossbite || d.openBiteDetails ? (
         <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
@@ -171,27 +194,40 @@ function ClassificationCard({ d }: { d: DiagnosisDTO }) {
 }
 
 function SkeletalAtmCard({ d }: { d: DiagnosisDTO }) {
+  // Hábitos & ATM se renderizan en una sola card combinada para que coincidan con
+  // el handoff de Claude Design (B → "ATM & HÁBITOS").
   return (
     <div className="bg-white p-5 dark:bg-slate-900">
       <h4 className="text-xs uppercase tracking-wider text-slate-500 font-medium mb-3 dark:text-slate-400">
-        Patrón skeletal &amp; ATM
+        ATM &amp; hábitos
       </h4>
       <div className="space-y-2">
         <KV
           k="Patrón skeletal"
           v={d.skeletalPattern ? SKELETAL_PATTERN_LABELS[d.skeletalPattern] : "no clasificado"}
         />
-        <KV k="ATM clicking" v={d.tmjClickingPresent ? "presente" : "ausente"}
-          vClass={d.tmjClickingPresent ? "text-amber-700 font-medium dark:text-amber-400" : "text-slate-900 font-medium dark:text-slate-100"}
+        <KV
+          k="Ruidos ATM"
+          v={
+            d.tmjClickingPresent
+              ? d.tmjNotes ?? "click presente"
+              : "ausente"
+          }
+          vClass={
+            d.tmjClickingPresent
+              ? "text-rose-700 font-medium dark:text-rose-400"
+              : "text-slate-900 font-medium dark:text-slate-100"
+          }
         />
-        <KV k="Dolor ATM" v={d.tmjPainPresent ? "presente" : "ausente"}
-          vClass={d.tmjPainPresent ? "text-rose-700 font-medium dark:text-rose-400" : "text-slate-900 font-medium dark:text-slate-100"}
+        <KV
+          k="Dolor ATM"
+          v={d.tmjPainPresent ? "presente" : "ausente"}
+          vClass={
+            d.tmjPainPresent
+              ? "text-rose-700 font-medium dark:text-rose-400"
+              : "text-slate-900 font-medium dark:text-slate-100"
+          }
         />
-        {d.tmjNotes ? (
-          <div className="text-[11px] text-slate-500 leading-snug dark:text-slate-400">
-            {d.tmjNotes}
-          </div>
-        ) : null}
       </div>
       <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
         <div className="text-[11px] text-slate-500 mb-1 dark:text-slate-400">

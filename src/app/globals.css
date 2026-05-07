@@ -275,6 +275,16 @@
   .shadow-card-md { box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
   .dark .shadow-card    { box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
   .dark .shadow-card-md { box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+
+  /* Background grid sutil del módulo Ortodoncia patient-detail (mockup
+     Claude Design). Radial dots slate-200/0.6 con spacing 22px. */
+  .grid-bg {
+    background-image: radial-gradient(circle, rgb(226 232 240 / 0.6) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+  .dark .grid-bg {
+    background-image: radial-gradient(circle, rgb(51 65 85 / 0.4) 1px, transparent 1px);
+  }
   .animate-fade-up { animation: fadeUp 0.2s ease-out; }
 
   .scrollbar-thin::-webkit-scrollbar       { width: 6px; height: 6px; }

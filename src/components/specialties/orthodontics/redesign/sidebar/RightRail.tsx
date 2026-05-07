@@ -157,12 +157,19 @@ function NextAppointmentCard({
         </div>
         <div className="mt-2 pt-2 border-t border-slate-100 space-y-1 dark:border-slate-800">
           <KV k="Tipo" v={next.type} />
+          {next.wireActivation ? (
+            <KV
+              k="Activación"
+              v={next.wireActivation}
+              vClass="text-violet-700 font-mono font-medium dark:text-violet-300"
+            />
+          ) : null}
           {next.chair ? <KV k="Sillón" v={next.chair} /> : null}
           <KV k="Doctor" v={next.doctor} />
         </div>
         {onConfirm ? (
           <Btn
-            variant="violet-soft"
+            variant="emerald-soft"
             size="sm"
             className="mt-3 w-full justify-center"
             icon={<MessageCircle className="w-3.5 h-3.5" aria-hidden />}

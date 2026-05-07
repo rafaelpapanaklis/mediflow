@@ -20,6 +20,26 @@ export const ORTHO_AUDIT_ACTIONS = {
   REPORT_TREATMENT_PLAN_PDF: "ortho.report.treatmentPlan.pdf",
   REPORT_FINANCIAL_AGREEMENT_PDF: "ortho.report.financialAgreement.pdf",
   REPORT_PROGRESS_PDF: "ortho.report.progress.pdf",
+  // ─── Rediseño Fase 1.5 ──────────────────────────────────────────────
+  WIRE_STEP_ADDED: "ortho.wireStep.added",
+  WIRE_STEP_UPDATED: "ortho.wireStep.updated",
+  TAD_CREATED: "ortho.tad.created",
+  CARD_DRAFT_SAVED: "ortho.card.draftSaved",
+  CARD_SIGNED: "ortho.card.signed",
+  QUOTE_SCENARIO_SELECTED: "ortho.quoteScenario.selected",
+  SIGN_AT_HOME_SENT: "ortho.signAtHome.sent",
+  COLLECT_RECORDED: "ortho.collect.recorded",
+  CFDI_TIMBRADO_REQUESTED: "ortho.cfdi.timbrado.requested",
+  RETENTION_PRE_SURVEY_TOGGLED: "ortho.retention.preSurvey.toggled",
+  RETENTION_REGIMEN_CONFIGURED: "ortho.retention.regimen.configured",
+  RETAINER_CHECKUPS_SCHEDULED: "ortho.retention.checkups.scheduled",
+  NPS_SCHEDULED: "ortho.nps.scheduled",
+  NPS_RESPONSE_RECORDED: "ortho.nps.response.recorded",
+  GOOGLE_REVIEW_TRIGGERED: "ortho.googleReview.triggered",
+  REFERRAL_CODE_CREATED: "ortho.referralCode.created",
+  LAB_ORDER_CREATED: "ortho.labOrder.created",
+  REPORT_BEFORE_AFTER_PDF: "ortho.report.beforeAfter.pdf",
+  G15_CHECKPOINT_SCHEDULED: "ortho.g15.checkpoint.scheduled",
 } as const;
 
 export type OrthoAuditAction =

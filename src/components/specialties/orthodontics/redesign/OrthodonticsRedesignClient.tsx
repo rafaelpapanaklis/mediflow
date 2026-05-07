@@ -1,41 +1,103 @@
 "use client";
-// OrthodonticsRedesignClient — shell del rediseño Fase 1 patient-detail.
-//
-// Layout: 2 columnas (main scrollable + right rail sticky). El layout 3
-// columnas final (con la sidebar contextual del patient-detail) se logra
-// porque este componente se monta DENTRO del shell existente que ya provee
-// la sidebar izquierda — solo aportamos main + rail derecha.
-//
-// Maneja estado de drawer (Treatment Card) y modal (Advance Phase) con
-// useReducer simple; los handlers de save/sign son placeholders por ahora —
-// se cablean a server actions en commit posterior.
+// OrthodonticsRedesignClient — shell del rediseño completo del módulo
+// Ortodoncia patient-detail. Maneja secciones A-I + drawers/modales y
+// despacha callbacks a server actions. Layout 2 cols (main + rail) que se
+// monta dentro del shell del patient-detail (que provee la sidebar
+// contextual a la izquierda).
 
-import { Camera, DollarSign, FileText, Shield, Sparkles, Star } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { useState } from "react";
 import { SectionHero } from "./sections/SectionHero";
 import { SectionDiagnosis } from "./sections/SectionDiagnosis";
 import { SectionPlan } from "./sections/SectionPlan";
 import { SectionTreatmentCards } from "./sections/SectionTreatmentCards";
-import { SectionPlaceholder } from "./sections/SectionPlaceholder";
+import {
+  SectionPhotos,
+  type PhotoSetSummary,
+  type PhotoStage,
+} from "./sections/SectionPhotos";
+import { SectionFinance } from "./sections/SectionFinance";
+import {
+  SectionRetention,
+  type RetainerCheckupDTO,
+  type RetentionRegimenDTO,
+} from "./sections/SectionRetention";
+import {
+  SectionPostTreatment,
+  type NpsScheduleDTO,
+  type ReferralCodeDTO,
+} from "./sections/SectionPostTreatment";
+import {
+  SectionDocs,
+  type ConsentRow,
+  type LabOrderRow,
+  type ReferralLetterRow,
+  type WhatsAppLogEntry,
+} from "./sections/SectionDocs";
 import { RightRail } from "./sidebar/RightRail";
 import { DrawerTreatmentCard } from "./drawers/DrawerTreatmentCard";
 import type { DrawerCardSubmit } from "./drawers/DrawerTreatmentCard";
 import { ModalAdvancePhase } from "./drawers/ModalAdvancePhase";
+import { ModalOpenChoice } from "./drawers/ModalOpenChoice";
+import { DrawerSignAtHome } from "./drawers/DrawerSignAtHome";
+import { ModalCollect } from "./drawers/ModalCollect";
+import { DrawerCFDIList } from "./drawers/DrawerCFDIList";
+import { DrawerLabOrder } from "./drawers/DrawerLabOrder";
+import { DrawerWireStep, type DrawerWireStepSubmit } from "./drawers/DrawerWireStep";
+import { ModalCompare, type CompareSet } from "./drawers/ModalCompare";
+import { PatientHeaderG16, type PatientHeaderProps } from "./PatientHeaderG16";
 import type { OrthoRedesignViewModel, OrthoPhaseKey } from "./types";
 import type { DigitalRecordEntry } from "./sections/SectionDiagnosis";
+import type {
+  CFDIRecordDTO,
+  OrthoInstallmentDTO,
+  QuoteScenarioDTO,
+} from "./types-finance";
 
 type DrawerState =
   | { kind: "tcard"; cardId: string }
   | { kind: "tcard-new" }
   | { kind: "advance-phase" }
+  | { kind: "openchoice" }
+  | { kind: "signhome" }
+  | { kind: "collect" }
+  | { kind: "cfdi" }
+  | { kind: "laborder" }
+  | { kind: "wirestep" }
+  | { kind: "compare" }
   | null;
 
 export interface OrthodonticsRedesignClientProps {
   vm: OrthoRedesignViewModel;
   digitalRecords?: DigitalRecordEntry[];
-  /** Hook para cobrar siguiente mensualidad — abre modal cobro existente. */
+  /** Foto-sets históricos por etapa (T0/T1/T2/CONTROL). */
+  historicalPhotoSets?: PhotoSetSummary[];
+  /** Hook para subir foto a un slot — server action al ortho-redesign loader. */
+  onUploadPhoto?: (
+    stage: PhotoStage,
+    slotId: string,
+    file: File,
+  ) => Promise<void> | void;
+  /** Comparativa T0 vs actual. */
+  onComparePhotos?: () => void;
+  /** Programar foto-set + RX panorámica para mes 12 (G15). */
+  onScheduleG15?: () => void;
+
+  /** Sección F · finanzas. */
+  installments?: OrthoInstallmentDTO[];
+  /** Escenarios de cotización pre-cargados (G5). */
+  quoteScenarios?: QuoteScenarioDTO[];
+  /** Lista de CFDI timbrados (M1). */
+  cfdiRecords?: CFDIRecordDTO[];
+  onSelectQuoteScenario?: (scenarioId: string) => Promise<void> | void;
+  onSendSignAtHome?: () => Promise<void> | void;
+  onConfirmCollect?: (
+    method: "tarjeta" | "transfer" | "efectivo" | "msi",
+  ) => Promise<void> | void;
+  /** Hook para cobrar siguiente mensualidad desde sidebar derecha. */
   onCollectNow?: () => void;
-  /** Callback cuando se firma una card. Para ahora, solo cierra drawer. */
+
+  /** Callback cuando se firma una card. */
   onCardSigned?: (payload: DrawerCardSubmit) => Promise<void> | void;
   /** Callback cuando se guarda como borrador. */
   onCardDraftSaved?: (payload: DrawerCardSubmit) => Promise<void> | void;
@@ -53,14 +115,55 @@ export interface OrthodonticsRedesignClientProps {
   onStartDiagnosisWizard?: () => void;
   /** Hook para abrir wizard del plan tx legacy (G4 prescription). */
   onEditPrescription?: () => void;
-  /** Hook para abrir wizard de wire step nuevo. */
+  /** Hook para abrir wizard de wire step nuevo. Si está presente reemplaza
+   *  al drawer interno G3. */
   onAddWireStep?: () => void;
+  /** Submit de un wire step desde el DrawerWireStep G3 interno. */
+  onSubmitWireStep?: (payload: DrawerWireStepSubmit) => Promise<void> | void;
+  /** Generar PDF antes/después desde ModalCompare. */
+  onGenerateComparePdf?: () => void;
   /** Hook para abrir form de TAD nuevo. */
   onAddTad?: () => void;
   /** Hook para chat WhatsApp completo. */
   onOpenChat?: () => void;
   /** ¿El usuario actual puede hacer override del checklist de fase? */
   canOverridePhase?: boolean;
+
+  /** Sección G · retención. */
+  retentionRegimen?: RetentionRegimenDTO | null;
+  retainerCheckups?: RetainerCheckupDTO[];
+  treatmentStatus?: "no-iniciado" | "en-tratamiento" | "retencion" | "completado";
+  onTogglePreSurvey?: (enabled: boolean) => Promise<void> | void;
+  onConfigureRetention?: () => void;
+
+  /** Sección H · post-tratamiento. */
+  npsSchedules?: NpsScheduleDTO[];
+  referralCode?: ReferralCodeDTO | null;
+  onGeneratePdfBeforeAfter?: () => void;
+  onConfigureNps?: () => void;
+  onCopyReferralCode?: () => void;
+
+  /** Sección I · documentos & comunicación. */
+  labOrders?: LabOrderRow[];
+  consents?: ConsentRow[];
+  referralLetters?: ReferralLetterRow[];
+  whatsappLog?: WhatsAppLogEntry[];
+  onCreateLabOrder?: (payload: {
+    catalog: string;
+    description: string;
+    lab: string;
+    expectedDate: string | null;
+  }) => Promise<void> | void;
+  onCreateReferralLetter?: () => void;
+
+  /** Patient header con G16 — opcional. Cuando se provee, se renderiza arriba
+   *  de la grilla principal. Si se omite, el shell host (legacy o nuevo) es
+   *  responsable de renderizar el header del paciente. */
+  patientHeader?: Omit<PatientHeaderProps, "patientFlow" | "nextAppointment"> & {
+    /** Si se omite, se reusa vm.patientFlow / vm.nextAppointment. */
+    patientFlow?: PatientHeaderProps["patientFlow"];
+    nextAppointment?: PatientHeaderProps["nextAppointment"];
+  };
 }
 
 export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProps) {
@@ -88,74 +191,32 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         }
       : undefined;
 
-  const placeholders: Array<{
-    id: string;
-    eyebrow: string;
-    title: string;
-    icon: React.ReactNode;
-    bullets: string[];
-  }> = [
-    {
-      id: "photos",
-      eyebrow: "Sección E",
-      title: "Fotos comparativas T0/T1/T2",
-      icon: <Camera className="w-6 h-6" aria-hidden />,
-      bullets: [
-        "Comparativa side-by-side T0 vs actual con métricas overlay (overjet, overbite).",
-        "Alert G15 automático: faltan registros mid-treatment a los 12 meses.",
-        "Reusa PhotoSetWizard existente con las 8 vistas AAO.",
-      ],
-    },
-    {
-      id: "finance",
-      eyebrow: "Sección F",
-      title: "Plan financiero · CFDI 4.0",
-      icon: <DollarSign className="w-6 h-6" aria-hidden />,
-      bullets: [
-        "Plan de pagos visualizado como chips (mes 1, mes 2, … pagado/pendiente/futuro).",
-        "G5 Open Choice slider · 3 escenarios financieros para presentar al paciente.",
-        "G6 Sign@Home · firma + cobro vía WhatsApp con link tokenizado.",
-        "M1 CFDI 4.0 · timbrado automático con Facturapi.",
-      ],
-    },
-    {
-      id: "retention",
-      eyebrow: "Sección G",
-      title: "Retención",
-      icon: <Shield className="w-6 h-6" aria-hidden />,
-      bullets: [
-        "G9 régimen visual: Hawley sup/inf · Essix · Fijo lingual 3-3 (.0175/.0195/.021).",
-        "Auto-schedule 3/6/12/24/36 meses con pre-encuesta WhatsApp antes de cada cita.",
-        "Trigger automático al avanzar fase a Retención (LabOrder retenedor).",
-      ],
-    },
-    {
-      id: "post",
-      eyebrow: "Sección H",
-      title: "Post-tratamiento",
-      icon: <Star className="w-6 h-6" aria-hidden />,
-      bullets: [
-        "G11 NPS automático +3 días post-debond.",
-        "Auto Google review +7 días.",
-        "Programa referidos con código personalizado.",
-      ],
-    },
-    {
-      id: "docs",
-      eyebrow: "Sección I",
-      title: "Documentos & comunicación",
-      icon: <FileText className="w-6 h-6" aria-hidden />,
-      bullets: [
-        "Tabs: Consentimientos · Cartas referencia · LabOrders · WhatsApp log.",
-        "G18 LabOrder catalog ampliado: alineadores serie 1-30, retenedor Hawley/Essix/fijo, expansor RPE/Hyrax.",
-        "Reusa ReferralLetter + LabOrder cross-cutting existentes.",
-      ],
-    },
-  ];
+  const nextPending = (props.installments ?? []).find((i) => i.status === "PENDING");
+  const tStatus = props.treatmentStatus ?? "en-tratamiento";
 
   return (
-    <div className="bg-slate-50 dark:bg-slate-950 -m-4 sm:-m-6 px-4 sm:px-6 py-4">
-      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
+    <div className="bg-slate-50 dark:bg-slate-950 grid-bg -m-4 sm:-m-6 px-4 sm:px-6 lg:px-8 xl:px-12 2xl:px-16 py-6 min-h-[calc(100vh-200px)] overflow-x-hidden">
+      <div className="max-w-[1920px] mx-auto">
+        {props.patientHeader ? (
+          <div className="mb-4 lg:mb-6">
+            <PatientHeaderG16
+              patient={props.patientHeader.patient}
+              patientFlow={props.patientHeader.patientFlow ?? vm.patientFlow}
+              nextAppointment={
+                props.patientHeader.nextAppointment ?? vm.nextAppointment
+              }
+              outstandingAmount={props.patientHeader.outstandingAmount}
+              lastVisitAt={props.patientHeader.lastVisitAt}
+              totalVisits={props.patientHeader.totalVisits}
+              onStartVisit={props.patientHeader.onStartVisit}
+              onScheduleNext={props.patientHeader.onScheduleNext}
+              onCollect={props.patientHeader.onCollect}
+              onMore={props.patientHeader.onMore}
+            />
+          </div>
+        ) : null}
+      </div>
+      <div className="max-w-[1920px] mx-auto flex flex-col lg:flex-row gap-4 lg:gap-6">
         {/* Main column */}
         <main className="flex-1 min-w-0 space-y-4">
           <SectionHero
@@ -164,6 +225,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             onStartTreatment={props.onStartDiagnosisWizard}
             onEditPlan={props.onEditPrescription}
             onStartControl={() => setDrawer({ kind: "tcard-new" })}
+            onAdvancePhase={t.phase ? () => setDrawer({ kind: "advance-phase" }) : undefined}
           />
 
           <SectionDiagnosis
@@ -181,9 +243,10 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             tads={vm.tads}
             auxMechanics={vm.auxMechanics}
             onEditPrescription={props.onEditPrescription}
-            onAddWireStep={props.onAddWireStep}
+            onAddWireStep={
+              props.onAddWireStep ?? (() => setDrawer({ kind: "wirestep" }))
+            }
             onAddTad={props.onAddTad}
-            onAdvancePhase={t.phase ? () => setDrawer({ kind: "advance-phase" }) : undefined}
           />
 
           <SectionTreatmentCards
@@ -193,18 +256,62 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             onStartNewCard={() => setDrawer({ kind: "tcard-new" })}
           />
 
-          {placeholders.map((p) => (
-            <SectionPlaceholder
-              key={p.id}
-              id={p.id}
-              eyebrow={p.eyebrow}
-              title={p.title}
-              icon={p.icon}
-              bullets={p.bullets}
-            />
-          ))}
+          <SectionPhotos
+            monthCurrent={t.monthCurrent}
+            monthTotal={t.monthTotal}
+            historicalSets={props.historicalPhotoSets ?? []}
+            onUpload={props.onUploadPhoto}
+            onCompare={
+              props.onComparePhotos ??
+              ((props.historicalPhotoSets ?? []).length > 0
+                ? () => setDrawer({ kind: "compare" })
+                : undefined)
+            }
+            onScheduleG15={props.onScheduleG15}
+          />
+
+          <SectionFinance
+            totalCost={t.totalCost}
+            paid={t.paid}
+            installments={props.installments ?? []}
+            onPresentQuote={() => setDrawer({ kind: "openchoice" })}
+            onSignAtHome={() => setDrawer({ kind: "signhome" })}
+            onCollectNext={() => setDrawer({ kind: "collect" })}
+            onViewCfdi={() => setDrawer({ kind: "cfdi" })}
+          />
+
+          <SectionRetention
+            regimen={props.retentionRegimen ?? null}
+            checkups={props.retainerCheckups ?? []}
+            treatmentStatus={tStatus}
+            onTogglePreSurvey={props.onTogglePreSurvey}
+            onConfigureRegimen={props.onConfigureRetention}
+          />
+
+          <SectionPostTreatment
+            treatmentStatus={tStatus}
+            npsSchedules={props.npsSchedules ?? []}
+            referralCode={props.referralCode ?? null}
+            onGeneratePdf={props.onGeneratePdfBeforeAfter}
+            onConfigureNps={props.onConfigureNps}
+            onCopyReferralCode={props.onCopyReferralCode}
+          />
+
+          <SectionDocs
+            labOrders={props.labOrders ?? []}
+            consents={props.consents ?? []}
+            referralLetters={props.referralLetters ?? []}
+            whatsappLog={props.whatsappLog ?? []}
+            onNewLabOrder={() => setDrawer({ kind: "laborder" })}
+            onNewReferral={props.onCreateReferralLetter}
+          />
 
           <PhaseTransitionAuditTeaser count={vm.phaseTransitions.length} />
+
+          <footer className="text-[11px] text-slate-400 text-center py-4 dark:text-slate-500">
+            MediFlow · Ortodoncia · Patient Detail · 11 gaps integrados (G1 G3 G4 G5 G6 G9 G10 G11
+            G12 G15 G16 G18) · 6 differentiators preservados (M1-M6)
+          </footer>
         </main>
 
         {/* Right rail */}
@@ -216,15 +323,17 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
               patientFlow={vm.patientFlow}
               aiSuggestions={vm.aiSuggestions}
               whatsappRecent={vm.whatsappRecent}
-              suggestedChargeAmount={null}
-              onCollectNow={props.onCollectNow}
+              suggestedChargeAmount={nextPending?.amount ?? null}
+              onCollectNow={
+                props.onCollectNow ?? (() => setDrawer({ kind: "collect" }))
+              }
               onOpenChat={props.onOpenChat}
             />
           </div>
         </div>
       </div>
 
-      {/* Drawer Treatment Card */}
+      {/* Drawer Treatment Card existente */}
       {drawer?.kind === "tcard" && cardForDrawer ? (
         <DrawerTreatmentCard
           key={cardForDrawer.id}
@@ -236,6 +345,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         />
       ) : null}
 
+      {/* Drawer nueva cita */}
       {drawer?.kind === "tcard-new" && newCardDefaults ? (
         <DrawerTreatmentCard
           key="new-card"
@@ -254,7 +364,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         />
       ) : null}
 
-      {/* Modal Advance Phase */}
+      {/* Modal advance phase */}
       {drawer?.kind === "advance-phase" && t.phase ? (
         <ModalAdvancePhase
           fromPhase={t.phase}
@@ -266,8 +376,111 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           }}
         />
       ) : null}
+
+      {/* Modal Open Choice G5 */}
+      {drawer?.kind === "openchoice" ? (
+        <ModalOpenChoice
+          scenarios={props.quoteScenarios ?? []}
+          patientFirstName={vm.patient.firstName}
+          onClose={closeDrawer}
+          onConfirm={async (id) => {
+            await props.onSelectQuoteScenario?.(id);
+            setDrawer({ kind: "signhome" });
+          }}
+        />
+      ) : null}
+
+      {/* Drawer Sign@Home G6 */}
+      {drawer?.kind === "signhome" ? (
+        <DrawerSignAtHome
+          patientFirstName={vm.patient.firstName}
+          onClose={closeDrawer}
+          onSend={async () => {
+            await props.onSendSignAtHome?.();
+            closeDrawer();
+          }}
+        />
+      ) : null}
+
+      {/* Modal Collect (cobrar siguiente) */}
+      {drawer?.kind === "collect" ? (
+        <ModalCollect
+          amount={nextPending?.amount ?? 0}
+          installmentLabel={
+            nextPending
+              ? `Mensualidad ${nextPending.installmentNumber}/${(props.installments ?? []).length}`
+              : "—"
+          }
+          onClose={closeDrawer}
+          onConfirm={async (method) => {
+            await props.onConfirmCollect?.(method);
+            closeDrawer();
+          }}
+        />
+      ) : null}
+
+      {/* Drawer CFDI list (M1) */}
+      {drawer?.kind === "cfdi" ? (
+        <DrawerCFDIList cfdiRecords={props.cfdiRecords ?? []} onClose={closeDrawer} />
+      ) : null}
+
+      {/* Drawer Lab Order G18 */}
+      {drawer?.kind === "laborder" ? (
+        <DrawerLabOrder
+          onClose={closeDrawer}
+          onSend={async (payload) => {
+            await props.onCreateLabOrder?.(payload);
+            closeDrawer();
+          }}
+        />
+      ) : null}
+
+      {/* Drawer Wire Step G3 */}
+      {drawer?.kind === "wirestep" ? (
+        <DrawerWireStep
+          defaultPhase={t.phase}
+          onClose={closeDrawer}
+          onSubmit={async (payload) => {
+            await props.onSubmitWireStep?.(payload);
+            closeDrawer();
+          }}
+        />
+      ) : null}
+
+      {/* Modal Compare T0 vs actual */}
+      {drawer?.kind === "compare" ? (
+        <ModalCompare
+          setT0={summaryToCompareSet(
+            (props.historicalPhotoSets ?? []).find((s) => s.stage === "T0") ?? null,
+          )}
+          setRight={summaryToCompareSet(
+            (props.historicalPhotoSets ?? []).find((s) => s.stage === "T1") ??
+              (props.historicalPhotoSets ?? []).find((s) => s.stage === "T2") ??
+              null,
+          )}
+          availableRightStages={(props.historicalPhotoSets ?? [])
+            .filter((s) => s.stage !== "T0")
+            .map((s) => s.stage)}
+          onGeneratePdf={props.onGenerateComparePdf}
+          onClose={closeDrawer}
+        />
+      ) : null}
     </div>
   );
+}
+
+/**
+ * El loader actual entrega únicamente meta-datos del set (sin URLs por slot).
+ * Este helper construye un CompareSet con `photos = {}` para mostrar
+ * placeholders en columnas y la fecha del set. La carga de URLs reales se
+ * hará vía server action en commit posterior cuando el loader incluya el
+ * map slot→url.
+ */
+function summaryToCompareSet(
+  s: import("./sections/SectionPhotos").PhotoSetSummary | null,
+): CompareSet | null {
+  if (!s) return null;
+  return { stage: s.stage, takenAt: s.date, photos: {} };
 }
 
 function isToday(iso: string | null | undefined): boolean {
