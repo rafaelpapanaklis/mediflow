@@ -48,3 +48,6 @@ export { scheduleNpsTimeline } from "./scheduleNpsTimeline";
 export { signTreatmentCard } from "./signTreatmentCard";
 export { saveTreatmentCardDraft } from "./saveTreatmentCardDraft";
 export { createOrthoTAD } from "./createOrthoTAD";
+
+// ─── Editor del plan financiero ────────────────────────────────────────
+export { updateFinancialPlan } from "./updateFinancialPlan";

@@ -44,6 +44,7 @@ import { DrawerSignAtHome } from "./drawers/DrawerSignAtHome";
 import { ModalCollect } from "./drawers/ModalCollect";
 import { DrawerCFDIList } from "./drawers/DrawerCFDIList";
 import { DrawerLabOrder } from "./drawers/DrawerLabOrder";
+import { DrawerEditFinancialPlan } from "./drawers/DrawerEditFinancialPlan";
 import { DrawerWireStep, type DrawerWireStepSubmit } from "./drawers/DrawerWireStep";
 import { ModalCompare, type CompareSet } from "./drawers/ModalCompare";
 import { PatientHeaderG16, type PatientHeaderProps } from "./PatientHeaderG16";
@@ -66,6 +67,7 @@ type DrawerState =
   | { kind: "laborder" }
   | { kind: "wirestep" }
   | { kind: "compare" }
+  | { kind: "edit-financial" }
   | null;
 
 export interface OrthodonticsRedesignClientProps {
@@ -90,11 +92,26 @@ export interface OrthodonticsRedesignClientProps {
   quoteScenarios?: QuoteScenarioDTO[];
   /** Lista de CFDI timbrados (M1). */
   cfdiRecords?: CFDIRecordDTO[];
+  /** Datos del plan financiero — para el editor (BUG 7). */
+  financialPlan?: {
+    totalAmount: number;
+    initialDownPayment: number;
+    installmentCount: number;
+    installmentAmount: number;
+    paidAmount: number;
+  } | null;
   onSelectQuoteScenario?: (scenarioId: string) => Promise<void> | void;
   onSendSignAtHome?: () => Promise<void> | void;
   onConfirmCollect?: (
     method: "tarjeta" | "transfer" | "efectivo" | "msi",
   ) => Promise<void> | void;
+  /** Editar plan financiero — abre DrawerEditFinancialPlan. */
+  onUpdateFinancialPlan?: (payload: {
+    totalAmount: number;
+    initialDownPayment: number;
+    installmentCount: number;
+    paymentDayOfMonth: number;
+  }) => Promise<void> | void;
   /** Hook para cobrar siguiente mensualidad desde sidebar derecha. */
   onCollectNow?: () => void;
 
@@ -280,6 +297,11 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             totalCost={t.totalCost}
             paid={t.paid}
             installments={props.installments ?? []}
+            onEditFinancialPlan={
+              props.onUpdateFinancialPlan
+                ? () => setDrawer({ kind: "edit-financial" })
+                : undefined
+            }
             onPresentQuote={() => setDrawer({ kind: "openchoice" })}
             onSignAtHome={() => setDrawer({ kind: "signhome" })}
             onCollectNext={() => setDrawer({ kind: "collect" })}
@@ -469,6 +491,27 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             .map((s) => s.stage)}
           onGeneratePdf={props.onGenerateComparePdf}
           onClose={closeDrawer}
+        />
+      ) : null}
+
+      {/* Drawer Editor Plan Financiero (BUG 7 / nuevo feature) */}
+      {drawer?.kind === "edit-financial" && props.financialPlan ? (
+        <DrawerEditFinancialPlan
+          current={{
+            totalAmount: props.financialPlan.totalAmount,
+            initialDownPayment: props.financialPlan.initialDownPayment,
+            installmentCount: props.financialPlan.installmentCount,
+            installmentAmount: props.financialPlan.installmentAmount,
+            paidInstallmentsCount: (props.installments ?? []).filter(
+              (i) => i.status === "PAID",
+            ).length,
+            paidAmount: props.financialPlan.paidAmount,
+          }}
+          onClose={closeDrawer}
+          onConfirm={async (payload) => {
+            await props.onUpdateFinancialPlan?.(payload);
+            closeDrawer();
+          }}
         />
       ) : null}
     </div>
