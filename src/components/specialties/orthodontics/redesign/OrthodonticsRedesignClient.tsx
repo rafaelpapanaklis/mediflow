@@ -35,6 +35,7 @@ import {
   type WhatsAppLogEntry,
 } from "./sections/SectionDocs";
 import { RightRail } from "./sidebar/RightRail";
+import { OrthodonticsModuleSidebar } from "./sidebar/OrthodonticsModuleSidebar";
 import { DrawerTreatmentCard } from "./drawers/DrawerTreatmentCard";
 import type { DrawerCardSubmit } from "./drawers/DrawerTreatmentCard";
 import { ModalAdvancePhase } from "./drawers/ModalAdvancePhase";
@@ -216,9 +217,14 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           </div>
         ) : null}
       </div>
-      <div className="max-w-[1920px] mx-auto flex flex-col lg:flex-row gap-4 lg:gap-6">
+      <div
+        className="max-w-[1920px] mx-auto grid gap-4 lg:gap-6 grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)_320px] xl:grid-cols-[240px_minmax(0,1fr)_360px]"
+      >
+        {/* Sub-sidebar contextual del módulo (lg+) */}
+        <OrthodonticsModuleSidebar treatmentStatus={tStatus} />
+
         {/* Main column */}
-        <main className="flex-1 min-w-0 space-y-4">
+        <main className="min-w-0 space-y-4">
           <SectionHero
             treatment={t}
             hasUpcomingControlToday={isToday(vm.nextAppointment?.date)}
@@ -315,7 +321,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         </main>
 
         {/* Right rail */}
-        <div className="w-full lg:w-72 flex-shrink-0">
+        <div className="w-full">
           <div className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto pr-1">
             <RightRail
               treatment={t}

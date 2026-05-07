@@ -56,10 +56,11 @@ export function PatientHeaderG16(props: PatientHeaderProps) {
 
   return (
     <header className="bg-white border border-slate-200 rounded-xl p-5 dark:bg-slate-900 dark:border-slate-800">
-      <div className="flex items-start gap-4 flex-wrap">
-        {/* Avatar */}
+      <div className="flex items-start gap-5 flex-wrap">
+        {/* Avatar — mockup: 80px, fondo violet-100 con texto violet-700.
+            La sombra reproduce el ring + glow del shell.jsx. */}
         <div
-          className="w-16 h-16 rounded-full bg-violet-600 text-white flex items-center justify-center text-xl font-semibold flex-shrink-0 dark:bg-violet-500"
+          className="w-20 h-20 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center text-xl font-bold flex-shrink-0 shadow-[0_0_0_1px_rgba(124,58,237,0.15),0_6px_16px_-6px_rgba(124,58,237,0.4)] dark:bg-violet-900/40 dark:text-violet-200"
           aria-hidden
         >
           {p.avatarInitials}
@@ -68,14 +69,14 @@ export function PatientHeaderG16(props: PatientHeaderProps) {
         {/* Title block */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-1">
-            <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+            <h1 className="text-2xl font-bold text-slate-900 leading-tight tracking-tight dark:text-slate-100">
               {p.fullName}
             </h1>
-            <span className="text-xs text-slate-400 font-mono dark:text-slate-500">
-              # {p.id.slice(0, 8)}
-            </span>
+            <Pill color="violet" size="xs">
+              <span className="font-mono">#{p.id.slice(0, 8)}</span>
+            </Pill>
           </div>
-          <div className="flex items-center gap-2 text-xs text-slate-500 flex-wrap dark:text-slate-400">
+          <div className="flex items-center gap-2 text-sm text-slate-600 flex-wrap dark:text-slate-300">
             <span>{ageLabel}</span>
             {sexLabel ? <Sep>{sexLabel}</Sep> : null}
             {p.phone ? (
@@ -95,15 +96,20 @@ export function PatientHeaderG16(props: PatientHeaderProps) {
               </Pill>
             ) : null}
             {flow ? (
-              <Pill color="emerald" size="xs">
+              // Flow badge — mockup usa amber para "en clínica" (no emerald).
+              // El dot pulsa y el sufijo G16 va con tracking ancho.
+              <span className="inline-flex items-center gap-1 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-full px-2 py-0.5 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-200">
                 <span
-                  className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse"
+                  className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block animate-pulse"
                   aria-hidden
-                />{" "}
+                />
                 En clínica · {FLOW_STATUS_LABELS[flow.status].toLowerCase()} desde{" "}
                 {fmtTime(flow.enteredAt)}
-                {flow.chair ? ` · ${flow.chair}` : ""} · G16
-              </Pill>
+                {flow.chair ? ` · ${flow.chair}` : ""}
+                <span className="ml-1 text-[9px] uppercase tracking-wider opacity-70">
+                  G16
+                </span>
+              </span>
             ) : null}
           </div>
         </div>
@@ -216,9 +222,9 @@ function Stat({
       <div className="text-[10px] uppercase tracking-wider text-slate-400 font-medium dark:text-slate-500">
         {label}
       </div>
-      <div className={`mt-1 text-base font-bold ${valueCls}`}>{value}</div>
+      <div className={`mt-0.5 text-sm font-semibold ${valueCls}`}>{value}</div>
       {sub ? (
-        <div className="text-[11px] text-slate-500 mt-0.5 dark:text-slate-400">{sub}</div>
+        <div className="text-[11px] text-slate-500 dark:text-slate-400">{sub}</div>
       ) : null}
     </div>
   );

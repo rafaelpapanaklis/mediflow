@@ -804,8 +804,14 @@ export function PatientDetailClient({
       ? `Dr/a. ${activeAppointment.doctor.firstName} ${activeAppointment.doctor.lastName ?? ""}`.trim()
       : null;
 
+  // El módulo Ortodoncia rediseño usa max-width 1920px (mockup verbatim:
+  // viewport 1920+ aprovechado con sub-sidebar + sections + right rail).
+  // Otros tabs conservan 1400 para no romper densidad existente.
+  const isOrthoTab = tab === "ortodoncia" && Boolean(orthoRedesignVM);
+  const outerMaxWidth = isOrthoTab ? 1920 : 1400;
+
   return (
-    <div style={{ padding: "20px 28px 28px", maxWidth: 1400, margin: "0 auto" }}>
+    <div style={{ padding: "20px 28px 28px", maxWidth: outerMaxWidth, margin: "0 auto" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-3)", marginBottom: 12 }}>
         <Link href="/dashboard/patients" style={{ color: "var(--text-3)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
           <ArrowLeft size={12} /> Pacientes
@@ -896,10 +902,14 @@ export function PatientDetailClient({
         </div>
       )}
 
-      {/* Layout 3 columnas — audit Opción C ajuste 3 */}
+      {/* Layout 3 columnas — audit Opción C ajuste 3.
+          tab=ortodoncia y odontograma usan layoutWide (oculta SideCards
+          genéricas) porque el orchestrator de ortodoncia ya provee su
+          propia RightRail (M2 IA + M5 WhatsApp + estado de cuenta), y
+          odontograma usa todo el ancho para los 32 dientes. */}
       <div
         className={`${patientDetailStyles.layout} ${
-          tab === "odontograma" ? patientDetailStyles.layoutWide : ""
+          tab === "odontograma" || isOrthoTab ? patientDetailStyles.layoutWide : ""
         }`}
       >
         <QuickNav
