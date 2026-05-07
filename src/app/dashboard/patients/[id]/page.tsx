@@ -14,7 +14,10 @@ import { IMPLANTS_MODULE_KEY } from "@/lib/implants/permissions";
 import type { ImplantFull } from "@/lib/types/implants";
 import { PERIODONTICS_MODULE_KEY, ENDODONTICS_MODULE_KEY, ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { loadOrthoData, type OrthoTabData } from "@/lib/orthodontics/load-data";
-import { loadOrthoRedesignData } from "@/lib/orthodontics/redesign/loader";
+import {
+  loadOrthoRedesignData,
+  type OrthoRedesignBundle,
+} from "@/lib/orthodontics/redesign/loader";
 import type { OrthoRedesignViewModel } from "@/components/specialties/orthodontics/redesign/types";
 import { loadPerioData, type PerioTabData } from "@/lib/periodontics/load-data";
 import { loadEndoSoapPrefill } from "@/lib/endodontics/load-soap-prefill";
@@ -146,6 +149,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   // el null aquí solo refleja "módulo inactivo" para el cliente.
   let orthoData: OrthoTabData | null = null;
   let orthoRedesignVM: OrthoRedesignViewModel | null = null;
+  let orthoRedesignBundle: OrthoRedesignBundle | null = null;
   if (isDental && clinicModuleKeys.includes(ORTHODONTICS_MODULE_KEY)) {
     const redesign = await loadOrthoRedesignData({
       clinicId: user.clinicId,
@@ -154,6 +158,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     if (redesign) {
       orthoData = redesign.legacy;
       orthoRedesignVM = redesign.viewModel;
+      orthoRedesignBundle = redesign.bundle;
     }
   }
 
@@ -242,6 +247,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           implants={implants}
           orthoData={orthoData}
           orthoRedesignVM={orthoRedesignVM}
+          orthoRedesignBundle={orthoRedesignBundle}
         />
       </ErrorBoundary>
     </div>
