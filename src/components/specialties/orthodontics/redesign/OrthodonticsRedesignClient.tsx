@@ -45,6 +45,12 @@ import { ModalCollect } from "./drawers/ModalCollect";
 import { DrawerCFDIList } from "./drawers/DrawerCFDIList";
 import { DrawerLabOrder } from "./drawers/DrawerLabOrder";
 import { DrawerEditFinancialPlan } from "./drawers/DrawerEditFinancialPlan";
+import { DrawerEditDiagnosis } from "./drawers/DrawerEditDiagnosis";
+import { DrawerEditPrescription } from "./drawers/DrawerEditPrescription";
+import { DrawerNewReferral } from "./drawers/DrawerNewReferral";
+import { DrawerConfigRetention } from "./drawers/DrawerConfigRetention";
+import { DrawerConfigNps } from "./drawers/DrawerConfigNps";
+import { DrawerWhatsAppChat } from "./drawers/DrawerWhatsAppChat";
 import { DrawerWireStep, type DrawerWireStepSubmit } from "./drawers/DrawerWireStep";
 import { ModalCompare, type CompareSet } from "./drawers/ModalCompare";
 import { PatientHeaderG16, type PatientHeaderProps } from "./PatientHeaderG16";
@@ -68,6 +74,12 @@ type DrawerState =
   | { kind: "wirestep" }
   | { kind: "compare" }
   | { kind: "edit-financial" }
+  | { kind: "edit-diagnosis" }
+  | { kind: "edit-prescription" }
+  | { kind: "new-referral" }
+  | { kind: "config-retention" }
+  | { kind: "config-nps" }
+  | { kind: "wa-chat" }
   | null;
 
 export interface OrthodonticsRedesignClientProps {
@@ -112,6 +124,71 @@ export interface OrthodonticsRedesignClientProps {
     installmentCount: number;
     paymentDayOfMonth: number;
   }) => Promise<void> | void;
+  /** Editar escenario individual del modal G5 (cards editables). */
+  onUpdateQuoteScenario?: (payload: {
+    scenarioId: string;
+    downPayment: number;
+    monthlyAmount: number;
+    monthsCount: number;
+    totalAmount: number;
+  }) => Promise<void> | void;
+  /** Editor de diagnóstico ortodóntico — Sección B. */
+  onUpdateDiagnosis?: (payload: {
+    diagnosisId: string;
+    angleClassRight: string;
+    angleClassLeft: string;
+    overbiteMm: number;
+    overjetMm: number;
+    crowdingUpperMm: number | null;
+    crowdingLowerMm: number | null;
+    crossbite: boolean;
+    crossbiteDetails: string | null;
+    openBite: boolean;
+    skeletalPattern: string | null;
+    tmjPainPresent: boolean;
+    tmjClickingPresent: boolean;
+    tmjNotes: string | null;
+    clinicalSummary: string;
+  }) => Promise<void> | void;
+  /** Editor de aparatología — Sección C "Cambiar". */
+  onUpdateAppliances?: (payload: {
+    treatmentPlanId: string;
+    prescriptionSlot: string;
+    bondingType: "DIRECTO" | "INDIRECTO";
+    technique: string;
+    prescriptionNotes: string | null;
+  }) => Promise<void> | void;
+  /** Crear carta de referencia — Sección I. */
+  onCreateReferralLetter?: (payload: {
+    toClinicName: string;
+    toDoctorName: string | null;
+    toSpecialty: string | null;
+    reason: string;
+    clinicalSummary: string;
+  }) => Promise<void> | void;
+  /** Configurar régimen de retención — Sección G. */
+  onUpdateRetentionRegimen?: (payload: {
+    upperRetainer: string | null;
+    upperDescription: string | null;
+    lowerRetainer: string | null;
+    lowerDescription: string | null;
+    fixedLingualPresent: boolean;
+    fixedLingualGauge: string | null;
+    regimenDescription: string;
+    preSurveyEnabled: boolean;
+  }) => Promise<void> | void;
+  /** Configurar NPS — Sección H. */
+  onUpdateNpsConfig?: (payload: {
+    windowEarlyDays: number;
+    windowMidDays: number;
+    windowLateDays: number;
+    customMessage: string | null;
+    triggerGoogleReview: boolean;
+  }) => Promise<void> | void;
+  /** Programar foto-set checkpoint mes 12 — Sección E. */
+  onScheduleG15Action?: () => Promise<void> | void;
+  /** Patient name para chat WhatsApp drawer. */
+  patientFullName?: string;
   /** Hook para cobrar siguiente mensualidad desde sidebar derecha. */
   onCollectNow?: () => void;
 
@@ -172,7 +249,8 @@ export interface OrthodonticsRedesignClientProps {
     lab: string;
     expectedDate: string | null;
   }) => Promise<void> | void;
-  onCreateReferralLetter?: () => void;
+  // (onCreateReferralLetter ahora vive arriba en la sección "Cierre 100%"
+  // como callback con payload completo. Se removió la versión () => void.)
 
   /** Patient header con G16 — opcional. Cuando se provee, se renderiza arriba
    *  de la grilla principal. Si se omite, el shell host (legacy o nuevo) es
@@ -255,7 +333,11 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             diagnosis={vm.diagnosis}
             digitalRecords={props.digitalRecords ?? []}
             onStartWizard={props.onStartDiagnosisWizard}
-            onEdit={props.onStartDiagnosisWizard}
+            onEdit={
+              vm.diagnosis && props.onUpdateDiagnosis
+                ? () => setDrawer({ kind: "edit-diagnosis" })
+                : props.onStartDiagnosisWizard
+            }
             onUploadRecord={props.onStartDiagnosisWizard}
           />
 
@@ -265,7 +347,11 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             iprPlan={derivePlanIprFromCards(vm)}
             tads={vm.tads}
             auxMechanics={vm.auxMechanics}
-            onEditPrescription={props.onEditPrescription}
+            onEditPrescription={
+              props.onUpdateAppliances
+                ? () => setDrawer({ kind: "edit-prescription" })
+                : props.onEditPrescription
+            }
             onAddWireStep={
               props.onAddWireStep ?? (() => setDrawer({ kind: "wirestep" }))
             }
@@ -290,7 +376,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
                 ? () => setDrawer({ kind: "compare" })
                 : undefined)
             }
-            onScheduleG15={props.onScheduleG15}
+            onScheduleG15={props.onScheduleG15Action ?? props.onScheduleG15}
           />
 
           <SectionFinance
@@ -313,7 +399,11 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             checkups={props.retainerCheckups ?? []}
             treatmentStatus={tStatus}
             onTogglePreSurvey={props.onTogglePreSurvey}
-            onConfigureRegimen={props.onConfigureRetention}
+            onConfigureRegimen={
+              props.onUpdateRetentionRegimen
+                ? () => setDrawer({ kind: "config-retention" })
+                : props.onConfigureRetention
+            }
           />
 
           <SectionPostTreatment
@@ -321,7 +411,11 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             npsSchedules={props.npsSchedules ?? []}
             referralCode={props.referralCode ?? null}
             onGeneratePdf={props.onGeneratePdfBeforeAfter}
-            onConfigureNps={props.onConfigureNps}
+            onConfigureNps={
+              props.onUpdateNpsConfig
+                ? () => setDrawer({ kind: "config-nps" })
+                : props.onConfigureNps
+            }
             onCopyReferralCode={props.onCopyReferralCode}
           />
 
@@ -331,7 +425,11 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             referralLetters={props.referralLetters ?? []}
             whatsappLog={props.whatsappLog ?? []}
             onNewLabOrder={() => setDrawer({ kind: "laborder" })}
-            onNewReferral={props.onCreateReferralLetter}
+            onNewReferral={
+              props.onCreateReferralLetter
+                ? () => setDrawer({ kind: "new-referral" })
+                : undefined
+            }
           />
 
           <PhaseTransitionAuditTeaser count={vm.phaseTransitions.length} />
@@ -355,7 +453,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
               onCollectNow={
                 props.onCollectNow ?? (() => setDrawer({ kind: "collect" }))
               }
-              onOpenChat={props.onOpenChat}
+              onOpenChat={() => setDrawer({ kind: "wa-chat" })}
             />
           </div>
         </div>
@@ -405,7 +503,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
         />
       ) : null}
 
-      {/* Modal Open Choice G5 */}
+      {/* Modal Open Choice G5 — cards editables */}
       {drawer?.kind === "openchoice" ? (
         <ModalOpenChoice
           scenarios={props.quoteScenarios ?? []}
@@ -415,6 +513,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             await props.onSelectQuoteScenario?.(id);
             setDrawer({ kind: "signhome" });
           }}
+          onUpdateScenario={props.onUpdateQuoteScenario}
         />
       ) : null}
 
@@ -512,6 +611,112 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
             await props.onUpdateFinancialPlan?.(payload);
             closeDrawer();
           }}
+        />
+      ) : null}
+
+      {/* Drawer Editor Diagnóstico (Sección B "Editar") */}
+      {drawer?.kind === "edit-diagnosis" && vm.diagnosis ? (
+        <DrawerEditDiagnosis
+          diagnosis={vm.diagnosis}
+          onClose={closeDrawer}
+          onConfirm={async (payload) => {
+            await props.onUpdateDiagnosis?.(payload);
+            closeDrawer();
+          }}
+        />
+      ) : null}
+
+      {/* Drawer Editor Aparatología (Sección C "Cambiar") */}
+      {drawer?.kind === "edit-prescription" && t.treatmentPlanId ? (
+        <DrawerEditPrescription
+          current={{
+            treatmentPlanId: t.treatmentPlanId,
+            prescriptionSlot: t.appliance.prescriptionSlot,
+            bondingType: t.appliance.bonding,
+            technique:
+              t.appliance.type === "Brackets metálicos auto-ligado"
+                ? "SELF_LIGATING_METAL"
+                : "METAL_BRACKETS",
+            prescriptionNotes: t.appliance.notes,
+          }}
+          onClose={closeDrawer}
+          onConfirm={async (payload) => {
+            await props.onUpdateAppliances?.(payload);
+            closeDrawer();
+          }}
+        />
+      ) : null}
+
+      {/* Drawer Nueva Carta Referencia (Sección I) */}
+      {drawer?.kind === "new-referral" ? (
+        <DrawerNewReferral
+          patientName={vm.patient.fullName}
+          onClose={closeDrawer}
+          onConfirm={async (payload) => {
+            await props.onCreateReferralLetter?.(payload);
+            closeDrawer();
+          }}
+        />
+      ) : null}
+
+      {/* Drawer Configurar Régimen Retención (Sección G) */}
+      {drawer?.kind === "config-retention" ? (
+        <DrawerConfigRetention
+          current={
+            props.retentionRegimen
+              ? {
+                  upperRetainer: null,
+                  upperDescription: props.retentionRegimen.upperDescription,
+                  lowerRetainer: null,
+                  lowerDescription: props.retentionRegimen.lowerDescription,
+                  fixedLingualPresent:
+                    props.retentionRegimen.fixedLingualPresent,
+                  fixedLingualGauge:
+                    props.retentionRegimen.fixedLingualGauge ?? null,
+                  regimenDescription:
+                    props.retentionRegimen.regimenDescription,
+                  preSurveyEnabled: props.retentionRegimen.preSurveyEnabled,
+                }
+              : null
+          }
+          onClose={closeDrawer}
+          onConfirm={async (payload) => {
+            await props.onUpdateRetentionRegimen?.(payload);
+            closeDrawer();
+          }}
+        />
+      ) : null}
+
+      {/* Drawer Configurar NPS (Sección H) */}
+      {drawer?.kind === "config-nps" ? (
+        <DrawerConfigNps
+          current={{
+            windowEarlyDays: 3,
+            windowMidDays: 180,
+            windowLateDays: 360,
+            customMessage: null,
+            triggerGoogleReview: true,
+          }}
+          onClose={closeDrawer}
+          onConfirm={async (payload) => {
+            await props.onUpdateNpsConfig?.(payload);
+            closeDrawer();
+          }}
+        />
+      ) : null}
+
+      {/* Drawer WhatsApp Chat read-only (sidebar derecha "Abrir chat") */}
+      {drawer?.kind === "wa-chat" ? (
+        <DrawerWhatsAppChat
+          patientName={vm.patient.fullName}
+          messages={(props.whatsappLog ?? []).map((m) => ({
+            id: m.id,
+            direction: m.direction,
+            preview: m.preview,
+            at: m.at,
+            patientName: m.patientName,
+          }))}
+          onClose={closeDrawer}
         />
       ) : null}
     </div>

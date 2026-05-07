@@ -51,3 +51,11 @@ export { createOrthoTAD } from "./createOrthoTAD";
 
 // ─── Editor del plan financiero ────────────────────────────────────────
 export { updateFinancialPlan } from "./updateFinancialPlan";
+
+// ─── Cierre 100% — eliminar todos los toast.info no-externos ───────────
+export { createReferralLetter } from "./createReferralLetter";
+export { updateRetentionRegimenConfig } from "./updateRetentionRegimenConfig";
+export { updateNpsConfig } from "./updateNpsConfig";
+export { scheduleG15Checkpoint } from "./scheduleG15Checkpoint";
+export { updateQuoteScenario } from "./updateQuoteScenario";
+export { updateOrthoAppliances } from "./updateOrthoAppliances";

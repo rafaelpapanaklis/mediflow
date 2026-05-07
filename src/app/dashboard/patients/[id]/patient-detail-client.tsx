@@ -57,6 +57,13 @@ import {
   createPhotoSet,
   uploadPhotoToSet,
   updateFinancialPlan,
+  updateDiagnosis,
+  updateOrthoAppliances,
+  createReferralLetter,
+  updateRetentionRegimenConfig,
+  updateNpsConfig,
+  scheduleG15Checkpoint,
+  updateQuoteScenario,
 } from "@/app/actions/orthodontics";
 import { isFailure } from "@/app/actions/orthodontics/result";
 
@@ -1307,10 +1314,110 @@ export function PatientDetailClient({
                 onMore: undefined,
               }}
               onStartDiagnosisWizard={() => {
-                toast("Wizard de diagnóstico · Fase 2");
+                // Si no hay diagnóstico, redirige al cliente legacy con el
+                // wizard completo en /dashboard/specialties/orthodontics/[id].
+                router.push(`/dashboard/specialties/orthodontics/${patient.id}`);
               }}
               onEditPrescription={() => {
-                toast("Editor de prescripción · Fase 2");
+                // Sin onUpdateAppliances todavía hidratado; este handler
+                // delega al wizard del cliente legacy.
+                router.push(`/dashboard/specialties/orthodontics/${patient.id}`);
+              }}
+              onUpdateDiagnosis={async (payload) => {
+                const res = await updateDiagnosis({
+                  ...payload,
+                  patientId: patient.id,
+                });
+                if (isFailure(res)) {
+                  toast.error(res.error);
+                  return;
+                }
+                toast.success("Diagnóstico actualizado");
+                router.refresh();
+              }}
+              onUpdateAppliances={async (payload) => {
+                const res = await updateOrthoAppliances(payload);
+                if (isFailure(res)) {
+                  toast.error(res.error);
+                  return;
+                }
+                toast.success("Aparatología actualizada");
+                router.refresh();
+              }}
+              onCreateReferralLetter={async (payload) => {
+                const res = await createReferralLetter({
+                  patientId: patient.id,
+                  ...payload,
+                });
+                if (isFailure(res)) {
+                  toast.error(res.error);
+                  return;
+                }
+                toast.success("Carta de referencia enviada");
+                router.refresh();
+              }}
+              onUpdateRetentionRegimen={async (payload) => {
+                if (!orthoRedesignVM.treatment.treatmentPlanId) {
+                  toast.error("Sin plan de tratamiento activo");
+                  return;
+                }
+                const res = await updateRetentionRegimenConfig({
+                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
+                  ...payload,
+                  upperRetainer: payload.upperRetainer as any,
+                  lowerRetainer: payload.lowerRetainer as any,
+                  fixedLingualGauge: payload.fixedLingualGauge as any,
+                });
+                if (isFailure(res)) {
+                  toast.error(res.error);
+                  return;
+                }
+                toast.success("Régimen de retención guardado");
+                router.refresh();
+              }}
+              onUpdateNpsConfig={async (payload) => {
+                if (!orthoRedesignVM.treatment.treatmentPlanId) {
+                  toast.error("Sin plan de tratamiento activo");
+                  return;
+                }
+                const res = await updateNpsConfig({
+                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
+                  ...payload,
+                });
+                if (isFailure(res)) {
+                  toast.error(res.error);
+                  return;
+                }
+                toast.success(
+                  payload.customMessage
+                    ? "Configuración NPS guardada · WhatsApp template lista (envío real Twilio)"
+                    : "Configuración NPS guardada",
+                );
+                router.refresh();
+              }}
+              onScheduleG15Action={async () => {
+                if (!orthoRedesignVM.treatment.treatmentPlanId) {
+                  toast.error("Sin plan de tratamiento activo");
+                  return;
+                }
+                const res = await scheduleG15Checkpoint({
+                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
+                });
+                if (isFailure(res)) {
+                  toast.error(res.error);
+                  return;
+                }
+                toast.success("Foto-set mes 12 programado");
+                router.refresh();
+              }}
+              onUpdateQuoteScenario={async (payload) => {
+                const res = await updateQuoteScenario(payload);
+                if (isFailure(res)) {
+                  toast.error(res.error);
+                  return;
+                }
+                toast.success("Escenario actualizado");
+                router.refresh();
               }}
               onAddWireStep={undefined}
               onSubmitWireStep={async (payload) => {
@@ -1548,7 +1655,7 @@ export function PatientDetailClient({
                 }
                 toast.success("Cobro registrado");
                 if ((res.data as { cfdiTimbradoStub?: boolean }).cfdiTimbradoStub) {
-                  toast("CFDI 4.0 con Facturapi · Fase 2");
+                  toast("CFDI 4.0 con Facturapi · contratar para activar timbrado real");
                 }
                 router.refresh();
               }}
@@ -1566,9 +1673,6 @@ export function PatientDetailClient({
                 }
                 toast.success("Orden de laboratorio creada");
                 router.refresh();
-              }}
-              onCreateReferralLetter={() => {
-                toast("Carta de referencia · Fase 2");
               }}
               onTogglePreSurvey={async (enabled) => {
                 if (!orthoRedesignVM.treatment.treatmentPlanId) {
@@ -1588,14 +1692,17 @@ export function PatientDetailClient({
                 );
                 router.refresh();
               }}
-              onConfigureRetention={() => {
-                toast("Configuración de retención · Fase 2");
-              }}
-              onGeneratePdfBeforeAfter={() => {
-                toast("PDF antes/después · Fase 2");
-              }}
-              onConfigureNps={() => {
-                toast("Configuración NPS · Fase 2");
+              onGeneratePdfBeforeAfter={async () => {
+                if (!orthoRedesignVM.treatment.treatmentPlanId) {
+                  toast.error("Sin plan de tratamiento activo");
+                  return;
+                }
+                // Genera PDF comparativo T0 vs Tn vía endpoint existente.
+                // El download se dispara en el browser; el endpoint usa
+                // puppeteer + las URLs firmadas de Supabase Storage.
+                const url = `/api/orthodontics/treatment-plans/${orthoRedesignVM.treatment.treatmentPlanId}/comparison-pdf`;
+                window.open(url, "_blank");
+                toast.success("Generando PDF antes/después…");
               }}
               onCopyReferralCode={() => {
                 const code = orthoRedesignBundle?.referralCode?.code;
@@ -1615,7 +1722,12 @@ export function PatientDetailClient({
                 // re-pinte con la URL firmada de Supabase.
                 const view = SLOT_TO_VIEW[slotId];
                 if (!view) {
-                  toast("Slot extra-AAO · persistencia Fase 2");
+                  // Slot extra-AAO (sobremordida / resalte): no tienen
+                  // columna en OrthoPhotoSet schema actual. Subir requiere
+                  // ALTER TABLE (no servicio externo · backlog interno).
+                  toast.error(
+                    "Slot fuera del set AAO 8 vistas · sin columna en schema",
+                  );
                   return;
                 }
                 if (!orthoRedesignVM.treatment.treatmentPlanId) {
@@ -1682,16 +1794,16 @@ export function PatientDetailClient({
                 }
               }}
               onComparePhotos={undefined}
-              onScheduleG15={() => {
-                toast("Programar foto-set mes 12 · Fase 2");
-              }}
-              onGenerateComparePdf={() => {
-                toast("PDF antes/después · Fase 2");
+              onGenerateComparePdf={async () => {
+                if (!orthoRedesignVM.treatment.treatmentPlanId) {
+                  toast.error("Sin plan de tratamiento activo");
+                  return;
+                }
+                const url = `/api/orthodontics/treatment-plans/${orthoRedesignVM.treatment.treatmentPlanId}/comparison-pdf`;
+                window.open(url, "_blank");
+                toast.success("Generando PDF comparativo…");
               }}
               onCollectNow={undefined}
-              onOpenChat={() => {
-                toast("Chat WhatsApp · Fase 2");
-              }}
             />
           )}
           {tab === "ortodoncia" && !orthoRedesignVM && orthoData && (
