@@ -195,8 +195,8 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
   const tStatus = props.treatmentStatus ?? "en-tratamiento";
 
   return (
-    <div className="bg-slate-50 dark:bg-slate-950 grid-bg -m-4 sm:-m-6 px-4 sm:px-6 py-6 min-h-[calc(100vh-200px)]">
-      <div className="max-w-[1440px] mx-auto">
+    <div className="bg-slate-50 dark:bg-slate-950 grid-bg -m-4 sm:-m-6 px-4 sm:px-6 lg:px-8 xl:px-12 2xl:px-16 py-6 min-h-[calc(100vh-200px)] overflow-x-hidden">
+      <div className="max-w-[1920px] mx-auto">
         {props.patientHeader ? (
           <div className="mb-4 lg:mb-6">
             <PatientHeaderG16
@@ -216,7 +216,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           </div>
         ) : null}
       </div>
-      <div className="max-w-[1440px] mx-auto flex flex-col lg:flex-row gap-4 lg:gap-6">
+      <div className="max-w-[1920px] mx-auto flex flex-col lg:flex-row gap-4 lg:gap-6">
         {/* Main column */}
         <main className="flex-1 min-w-0 space-y-4">
           <SectionHero
