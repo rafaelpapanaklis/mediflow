@@ -104,14 +104,14 @@ function PrescriptionBlock({
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <PrescriptionTile
-          label="Tipo"
+          label="TIPO"
           value={treatment.appliance.type ?? "—"}
           accent
         />
-        <PrescriptionTile label="Prescripción / slot" value={slot} mono />
-        <PrescriptionTile label="Bonding" value={bonding} />
+        <PrescriptionTile label="PRESCRIPCIÓN / SLOT" value={slot} mono />
+        <PrescriptionTile label="BONDING" value={bonding} />
         <PrescriptionTile
-          label="Notas"
+          label="NOTAS"
           value={treatment.appliance.notes ?? "—"}
           subtle
         />
@@ -199,7 +199,7 @@ function WireSequenceBlock({
               </tr>
             </thead>
             <tbody>
-              {sequence.map((w) => (
+              {sequence.map((w, i) => (
                 <tr
                   key={w.id}
                   className={`border-t border-slate-100 dark:border-slate-800 ${
@@ -209,7 +209,7 @@ function WireSequenceBlock({
                   }`}
                 >
                   <td className="px-3 py-2 text-xs text-slate-400 font-mono dark:text-slate-500">
-                    {w.orderIndex}
+                    {i + 1}
                   </td>
                   <td className="px-3 py-2">
                     <Pill color={w.status === "ACTIVE" ? "violet" : "slate"} size="xs">
