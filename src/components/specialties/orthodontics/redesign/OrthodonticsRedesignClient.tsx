@@ -45,6 +45,7 @@ import { DrawerCFDIList } from "./drawers/DrawerCFDIList";
 import { DrawerLabOrder } from "./drawers/DrawerLabOrder";
 import { DrawerWireStep, type DrawerWireStepSubmit } from "./drawers/DrawerWireStep";
 import { ModalCompare, type CompareSet } from "./drawers/ModalCompare";
+import { PatientHeaderG16, type PatientHeaderProps } from "./PatientHeaderG16";
 import type { OrthoRedesignViewModel, OrthoPhaseKey } from "./types";
 import type { DigitalRecordEntry } from "./sections/SectionDiagnosis";
 import type {
@@ -154,6 +155,15 @@ export interface OrthodonticsRedesignClientProps {
     expectedDate: string | null;
   }) => Promise<void> | void;
   onCreateReferralLetter?: () => void;
+
+  /** Patient header con G16 — opcional. Cuando se provee, se renderiza arriba
+   *  de la grilla principal. Si se omite, el shell host (legacy o nuevo) es
+   *  responsable de renderizar el header del paciente. */
+  patientHeader?: Omit<PatientHeaderProps, "patientFlow" | "nextAppointment"> & {
+    /** Si se omite, se reusa vm.patientFlow / vm.nextAppointment. */
+    patientFlow?: PatientHeaderProps["patientFlow"];
+    nextAppointment?: PatientHeaderProps["nextAppointment"];
+  };
 }
 
 export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProps) {
@@ -186,6 +196,26 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
 
   return (
     <div className="bg-slate-50 dark:bg-slate-950 grid-bg -m-4 sm:-m-6 px-4 sm:px-6 py-6 min-h-[calc(100vh-200px)]">
+      <div className="max-w-[1440px] mx-auto">
+        {props.patientHeader ? (
+          <div className="mb-4 lg:mb-6">
+            <PatientHeaderG16
+              patient={props.patientHeader.patient}
+              patientFlow={props.patientHeader.patientFlow ?? vm.patientFlow}
+              nextAppointment={
+                props.patientHeader.nextAppointment ?? vm.nextAppointment
+              }
+              outstandingAmount={props.patientHeader.outstandingAmount}
+              lastVisitAt={props.patientHeader.lastVisitAt}
+              totalVisits={props.patientHeader.totalVisits}
+              onStartVisit={props.patientHeader.onStartVisit}
+              onScheduleNext={props.patientHeader.onScheduleNext}
+              onCollect={props.patientHeader.onCollect}
+              onMore={props.patientHeader.onMore}
+            />
+          </div>
+        ) : null}
+      </div>
       <div className="max-w-[1440px] mx-auto flex flex-col lg:flex-row gap-4 lg:gap-6">
         {/* Main column */}
         <main className="flex-1 min-w-0 space-y-4">
