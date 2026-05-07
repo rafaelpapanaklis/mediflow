@@ -19,3 +19,8 @@ next-env.d.ts
 /.claude/
 
 docs/ortho-redesign/
+
+# Playwright
+test-results/
+playwright-report/
+tests/e2e/screenshots/

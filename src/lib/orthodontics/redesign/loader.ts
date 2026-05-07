@@ -12,6 +12,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { loadOrthoData, type OrthoTabData } from "@/lib/orthodontics/load-data";
+import { signMaybeUrls } from "@/lib/storage";
 import {
   adaptToOrthoRedesignViewModel,
   type AdapterInput,
@@ -250,10 +251,26 @@ export async function loadOrthoRedesignData(
   ]);
 
   const attendancePct = computeAttendancePct(legacy);
-  const elasticsCompliancePct = 0;
+
+  // Compliance elásticos — última entry de audit log
+  // `ortho.elastics.compliance.recorded` para este plan. Si no existe, 0.
+  const elasticsCompliancePct = planId
+    ? await readLatestCompliancePct(input.clinicId, planId)
+    : 0;
+
+  // Doctor de la próxima cita — resuelve desde attendedById del control
+  // futuro más cercano. Sin esto, el adapter caía en bug "doctor = patientName"
+  // (placeholder heredado de Fase 1).
+  const nextAppointmentDoctor = await resolveNextAppointmentDoctor(
+    input.clinicId,
+    input.patientId,
+  );
+  // Sillón de la próxima cita — heredado del PatientFlow activo si existe.
+  const nextAppointmentChair =
+    (patientFlow as { chair?: string | null } | null)?.chair ?? null;
 
   // ── Construye bundle ──────────────────────────────────────────────────
-  const historicalPhotoSets = adaptPhotoSets(legacy.photoSets);
+  const historicalPhotoSets = await adaptPhotoSets(legacy.photoSets);
   const installments = legacy.installments.map(adaptInstallment);
   // CFDI 4.0 (M1) — el timbrado real con Facturapi llega en Fase 2; mientras
   // tanto exponemos lista vacía. La UI muestra empty state con CTA disabled.
@@ -303,6 +320,8 @@ export async function loadOrthoRedesignData(
     patientFlow: patientFlow as AdapterInput["patientFlow"],
     attendancePct,
     elasticsCompliancePct,
+    nextAppointmentDoctor,
+    nextAppointmentChair,
   };
 
   const viewModel = adaptToOrthoRedesignViewModel(adapterInput);
@@ -331,35 +350,170 @@ export async function loadOrthoRedesignData(
 
 // ─── Adapters Fase 1.5 ──────────────────────────────────────────────────
 
-function adaptPhotoSets(sets: OrthoTabData["photoSets"]): PhotoSetSummary[] {
+/**
+ * Adapter de OrthoPhotoSet → PhotoSetSummary. Hace dos cosas extra vs la
+ * versión previa:
+ *   1. Devuelve setId para que el cliente pueda invocar uploadPhotoToSet
+ *      sin tener que crear el set primero.
+ *   2. Mapea cada columna `photo*Id` a su URL firmada (Supabase Storage)
+ *      o URL pública (placeholder picsum) usando signMaybeUrls. Las URLs
+ *      van por slot en el campo `slots` para que SectionPhotos las muestre
+ *      pre-pobladas y persistan al recargar.
+ */
+async function adaptPhotoSets(
+  sets: OrthoTabData["photoSets"],
+): Promise<PhotoSetSummary[]> {
   const STAGE_LABELS: Record<PhotoStage, string> = {
     T0: "Inicial",
     T1: "3 meses",
     T2: "6 meses",
     CONTROL: "Control",
   };
-  return sets.map((s) => {
+  // Map column → slot id que usa SectionPhotos. Las 8 vistas matchean los
+  // 8 slots persistibles (los slots `sobremordida`/`resalte` del mockup
+  // son extra-AAO y no tienen columna en OrthoPhotoSet).
+  const COLUMN_TO_SLOT: Record<string, string> = {
+    photoFrontal: "normal",
+    photoProfile: "lateral",
+    photoSmile: "sonrisa",
+    photoIntraFrontal: "frontal",
+    photoIntraLateralR: "lat_der",
+    photoIntraLateralL: "lat_izq",
+    photoOcclusalUpper: "oclusal_sup",
+    photoOcclusalLower: "oclusal_inf",
+  };
+
+  // Collect all URLs across all sets for batch signing.
+  const allUrls: Array<string | null> = [];
+  const setSlotMap: Array<Array<{ slotId: string; idx: number }>> = [];
+  for (const s of sets) {
+    const cols = [
+      ["photoFrontal", s.photoFrontal?.url ?? null],
+      ["photoProfile", s.photoProfile?.url ?? null],
+      ["photoSmile", s.photoSmile?.url ?? null],
+      ["photoIntraFrontal", s.photoIntraFrontal?.url ?? null],
+      ["photoIntraLateralR", s.photoIntraLateralR?.url ?? null],
+      ["photoIntraLateralL", s.photoIntraLateralL?.url ?? null],
+      ["photoOcclusalUpper", s.photoOcclusalUpper?.url ?? null],
+      ["photoOcclusalLower", s.photoOcclusalLower?.url ?? null],
+    ] as const;
+    const setEntries: Array<{ slotId: string; idx: number }> = [];
+    for (const [colName, url] of cols) {
+      if (url) {
+        const slotId = COLUMN_TO_SLOT[colName];
+        if (slotId) {
+          setEntries.push({ slotId, idx: allUrls.length });
+          allUrls.push(url);
+        }
+      }
+    }
+    setSlotMap.push(setEntries);
+  }
+
+  const signed = await signMaybeUrls(allUrls);
+
+  return sets.map((s, setIdx) => {
     const stage = (s.setType as PhotoStage) ?? "T0";
-    const photoIds = [
-      s.photoFrontalId,
-      s.photoProfileId,
-      s.photoSmileId,
-      s.photoIntraFrontalId,
-      s.photoIntraLateralRId,
-      s.photoIntraLateralLId,
-      s.photoOcclusalUpperId,
-      s.photoOcclusalLowerId,
-    ];
-    const photoCount = photoIds.filter(Boolean).length;
+    const entries = setSlotMap[setIdx] ?? [];
+    const slots: Record<string, { url: string; uploadedAt: string }> = {};
+    for (const entry of entries) {
+      const url = signed[entry.idx] ?? "";
+      if (url) {
+        slots[entry.slotId] = {
+          url,
+          uploadedAt:
+            s.capturedAt instanceof Date
+              ? s.capturedAt.toLocaleString("es-MX", {
+                  day: "2-digit",
+                  month: "short",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : "",
+        };
+      }
+    }
     return {
+      setId: s.id,
       stage,
       date: s.capturedAt instanceof Date ? s.capturedAt.toISOString() : null,
       label: STAGE_LABELS[stage] ?? stage,
-      photoCount,
+      photoCount: Object.keys(slots).length,
+      slots,
       hasRxPan: false,
       hasRxLatCef: false,
     };
   });
+}
+
+/**
+ * Resuelve el doctor (firstName + lastName) que atenderá la próxima cita
+ * ortodóntica del paciente. Busca el OrthodonticControlAppointment con
+ * scheduledAt > now más cercano, lee su `attendedById` y trae el User.
+ *
+ * Sin este resolve, el adapter usaba `l.patientName` como placeholder
+ * (bug heredado del Fase 1) — la UI mostraba "Gabriela Hernández Ruiz"
+ * como doctor de la próxima cita.
+ */
+async function resolveNextAppointmentDoctor(
+  clinicId: string,
+  patientId: string,
+): Promise<{ firstName: string; lastName: string } | null> {
+  try {
+    const next = await prisma.orthodonticControlAppointment.findFirst({
+      where: {
+        clinicId,
+        patientId,
+        scheduledAt: { gte: new Date() },
+        attendance: { not: "NO_SHOW" },
+      },
+      orderBy: { scheduledAt: "asc" },
+      select: {
+        attendedById: true,
+        attendedBy: { select: { firstName: true, lastName: true } },
+      },
+    });
+    return next?.attendedBy ?? null;
+  } catch (e) {
+    console.error("[ortho-redesign] resolveNextAppointmentDoctor failed:", e);
+    return null;
+  }
+}
+
+/**
+ * Lee la última entry de audit log con action
+ * `ortho.elastics.compliance.recorded` para este plan y devuelve el
+ * compliancePct guardado en el JSON `changes._created.after`. Si no hay
+ * entries (paciente sin reporte) devuelve 0.
+ */
+async function readLatestCompliancePct(
+  clinicId: string,
+  planId: string,
+): Promise<number> {
+  try {
+    const entry = await prisma.auditLog.findFirst({
+      where: {
+        clinicId,
+        entityType: "OrthodonticTreatmentPlan",
+        entityId: planId,
+        action: "ortho.elastics.compliance.recorded",
+      },
+      orderBy: { createdAt: "desc" },
+      select: { changes: true },
+    });
+    if (!entry?.changes) return 0;
+    const changes = entry.changes as {
+      _created?: { after?: { compliancePct?: number } };
+    };
+    const pct = changes?._created?.after?.compliancePct;
+    if (typeof pct === "number" && Number.isFinite(pct)) {
+      return Math.max(0, Math.min(100, Math.round(pct)));
+    }
+    return 0;
+  } catch (e) {
+    console.error("[ortho-redesign] readLatestCompliancePct failed:", e);
+    return 0;
+  }
 }
 
 function adaptInstallment(i: OrthoTabData["installments"][number]): OrthoInstallmentDTO {
@@ -628,11 +782,23 @@ function isMissingTableError(e: unknown): boolean {
 }
 
 function computeAttendancePct(legacy: OrthoTabData): number {
-  const last = legacy.controls
-    .slice()
-    .sort((a, b) => b.scheduledAt.getTime() - a.scheduledAt.getTime())
-    .slice(0, 6);
-  if (last.length === 0) return 100;
-  const attended = last.filter((c) => c.attendance === "ATTENDED").length;
-  return Math.round((attended / last.length) * 100);
+  // Filtra controles pasados (performedAt no null O scheduledAt anterior a
+  // ahora). Excluye los futuros para no inflar la métrica con citas que
+  // aún no ocurrieron. Toma hasta los últimos 12 por fecha desc.
+  const now = Date.now();
+  const past = legacy.controls
+    .filter(
+      (c) =>
+        c.performedAt != null ||
+        c.scheduledAt.getTime() < now,
+    )
+    .sort((a, b) => {
+      const aT = (a.performedAt ?? a.scheduledAt).getTime();
+      const bT = (b.performedAt ?? b.scheduledAt).getTime();
+      return bT - aT;
+    })
+    .slice(0, 12);
+  if (past.length === 0) return 100;
+  const attended = past.filter((c) => c.attendance === "ATTENDED").length;
+  return Math.round((attended / past.length) * 100);
 }

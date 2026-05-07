@@ -9,8 +9,8 @@
 //   - PhotoSlot: empty → file picker · upload → lightbox + delete
 //   - Foto-sets históricos por etapa (T0/T1/T2/CONTROL) con grid 8 thumbs
 
-import { useRef, useState } from "react";
-import { AlertTriangle, Camera, Plus, Search, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { AlertTriangle, Camera, Loader2, Plus, Search, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { Card } from "../atoms/Card";
 import { Pill } from "../atoms/Pill";
@@ -21,6 +21,8 @@ import { PHOTO_SLOTS, PhotoSlotIcon } from "./PhotoSlotIcon";
 export type PhotoStage = "T0" | "T1" | "T2" | "CONTROL";
 
 export interface PhotoSetSummary {
+  /** ID del OrthoPhotoSet — necesario para cablear uploadPhotoToSet. */
+  setId?: string;
   stage: PhotoStage;
   /** Fecha ISO de captura. */
   date: string | null;
@@ -28,6 +30,9 @@ export interface PhotoSetSummary {
   label?: string | null;
   /** Cuántas de las 10 vistas se subieron. */
   photoCount: number;
+  /** Map slotId → { url firmada, label fecha humana }. Lo usa el grid de
+   *  slots para mostrar fotos pre-cargadas y persistir al recargar. */
+  slots?: Record<string, { url: string; uploadedAt: string }>;
   hasRxPan: boolean;
   hasRxLatCef: boolean;
 }
@@ -63,7 +68,11 @@ const STAGE_LABEL: Record<PhotoStage, string> = {
 
 export function SectionPhotos(props: SectionPhotosProps) {
   const [stage, setStage] = useState<PhotoStage>("T0");
+  // `uploads` se pre-popula desde historicalSets[stage].slots (URLs firmadas
+  // de fotos ya persistidas) y se actualiza optimistamente al subir nuevas.
+  // Cada vez que cambia stage o el set para esa stage, recargamos.
   const [uploads, setUploads] = useState<Record<string, UploadEntry>>({});
+  const [pending, setPending] = useState<Record<string, boolean>>({});
   const [lightbox, setLightbox] = useState<{
     slotId: string;
     label: string;
@@ -71,25 +80,51 @@ export function SectionPhotos(props: SectionPhotosProps) {
     photo: UploadEntry;
   } | null>(null);
 
+  // Pre-pobla `uploads` con los slots persistidos del set activo.
+  useEffect(() => {
+    const set = props.historicalSets.find((s) => s.stage === stage);
+    setUploads(set?.slots ?? {});
+  }, [stage, props.historicalSets]);
+
   const showG15 = props.monthCurrent >= 10 && props.monthCurrent <= 13;
   const hasControlSet = props.historicalSets.some((s) => s.stage === "CONTROL");
   const showG15Final = showG15 && !hasControlSet;
 
   const onPick = async (slotId: string, file: File) => {
-    const url = URL.createObjectURL(file);
-    setUploads((prev) => ({
-      ...prev,
-      [slotId]: {
-        url,
-        uploadedAt: new Date().toLocaleString("es-MX", {
-          day: "2-digit",
-          month: "short",
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      },
-    }));
-    if (props.onUpload) await props.onUpload(stage, slotId, file);
+    // Optimistic preview con blob URL — se reemplaza cuando router.refresh()
+    // re-pinta el componente con la signed URL real.
+    const blobUrl = URL.createObjectURL(file);
+    const optimisticEntry: UploadEntry = {
+      url: blobUrl,
+      uploadedAt: new Date().toLocaleString("es-MX", {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    };
+    setUploads((prev) => ({ ...prev, [slotId]: optimisticEntry }));
+    setPending((prev) => ({ ...prev, [slotId]: true }));
+
+    try {
+      if (props.onUpload) {
+        await props.onUpload(stage, slotId, file);
+      }
+    } catch (e) {
+      // Si el upload falla, revierte la previsualización.
+      setUploads((prev) => {
+        const next = { ...prev };
+        delete next[slotId];
+        return next;
+      });
+      throw e;
+    } finally {
+      setPending((prev) => {
+        const next = { ...prev };
+        delete next[slotId];
+        return next;
+      });
+    }
   };
 
   const onDelete = (slotId: string) => {
@@ -198,6 +233,7 @@ export function SectionPhotos(props: SectionPhotosProps) {
         title="Extraorales · 3 vistas faciales"
         slots={extraoral}
         uploads={uploads}
+        pending={pending}
         onPick={onPick}
         onDelete={onDelete}
         onView={(s, p) => setLightbox({ slotId: s.id, label: s.label, group: s.group, photo: p })}
@@ -207,6 +243,7 @@ export function SectionPhotos(props: SectionPhotosProps) {
         title="Intraorales · 7 vistas dentales"
         slots={intraoral}
         uploads={uploads}
+        pending={pending}
         onPick={onPick}
         onDelete={onDelete}
         onView={(s, p) => setLightbox({ slotId: s.id, label: s.label, group: s.group, photo: p })}
@@ -267,6 +304,7 @@ function PhotoGrid({
   title,
   slots,
   uploads,
+  pending,
   onPick,
   onDelete,
   onView,
@@ -274,6 +312,7 @@ function PhotoGrid({
   title: string;
   slots: typeof PHOTO_SLOTS;
   uploads: Record<string, UploadEntry>;
+  pending: Record<string, boolean>;
   onPick: (slotId: string, file: File) => void;
   onDelete: (slotId: string) => void;
   onView: (slot: (typeof PHOTO_SLOTS)[number], photo: UploadEntry) => void;
@@ -289,6 +328,7 @@ function PhotoGrid({
             key={slot.id}
             slot={slot}
             photo={uploads[slot.id]}
+            isPending={Boolean(pending[slot.id])}
             onPick={(f) => onPick(slot.id, f)}
             onDelete={() => onDelete(slot.id)}
             onView={(p) => onView(slot, p)}
@@ -302,12 +342,14 @@ function PhotoGrid({
 function PhotoSlot({
   slot,
   photo,
+  isPending,
   onPick,
   onDelete,
   onView,
 }: {
   slot: (typeof PHOTO_SLOTS)[number];
   photo: UploadEntry | undefined;
+  isPending: boolean;
   onPick: (file: File) => void;
   onDelete: () => void;
   onView: (photo: UploadEntry) => void;
@@ -334,14 +376,22 @@ function PhotoSlot({
                 alt={slot.label}
                 className="absolute inset-0 w-full h-full object-cover"
               />
-              <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                <span className="bg-white/95 text-slate-900 text-[11px] font-medium px-2.5 py-1 rounded-full flex items-center gap-1">
-                  <Search className="w-3 h-3" aria-hidden />
-                  Expandir
-                </span>
-              </div>
+              {isPending ? (
+                <div className="absolute inset-0 bg-slate-900/40 flex items-center justify-center">
+                  <Loader2 className="w-5 h-5 text-white animate-spin" aria-hidden />
+                </div>
+              ) : (
+                <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                  <span className="bg-white/95 text-slate-900 text-[11px] font-medium px-2.5 py-1 rounded-full flex items-center gap-1">
+                    <Search className="w-3 h-3" aria-hidden />
+                    Expandir
+                  </span>
+                </div>
+              )}
               <span
-                className="absolute top-1.5 right-1.5 bg-emerald-500 w-2 h-2 rounded-full ring-2 ring-white"
+                className={`absolute top-1.5 right-1.5 w-2 h-2 rounded-full ring-2 ring-white ${
+                  isPending ? "bg-amber-500 animate-pulse" : "bg-emerald-500"
+                }`}
                 aria-hidden
               />
             </>

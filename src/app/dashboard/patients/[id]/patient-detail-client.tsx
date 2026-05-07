@@ -54,8 +54,34 @@ import {
   confirmCollect,
   createOrthoLabOrder,
   toggleRetentionPreSurvey,
+  createPhotoSet,
+  uploadPhotoToSet,
 } from "@/app/actions/orthodontics";
 import { isFailure } from "@/app/actions/orthodontics/result";
+
+// Mapeo slotId del SectionPhotos → OrthoPhotoView del API. Solo las 8 vistas
+// AAO persistibles tienen mapeo; sobremordida y resalte (extra-AAO) no
+// tienen columna en OrthoPhotoSet y se documentan como Fase 2.
+const SLOT_TO_VIEW: Record<
+  string,
+  | "EXTRA_FRONTAL"
+  | "EXTRA_PROFILE"
+  | "EXTRA_SMILE"
+  | "INTRA_FRONTAL_OCCLUSION"
+  | "INTRA_LATERAL_RIGHT"
+  | "INTRA_LATERAL_LEFT"
+  | "INTRA_OCCLUSAL_UPPER"
+  | "INTRA_OCCLUSAL_LOWER"
+> = {
+  normal: "EXTRA_FRONTAL",
+  lateral: "EXTRA_PROFILE",
+  sonrisa: "EXTRA_SMILE",
+  frontal: "INTRA_FRONTAL_OCCLUSION",
+  lat_der: "INTRA_LATERAL_RIGHT",
+  lat_izq: "INTRA_LATERAL_LEFT",
+  oclusal_sup: "INTRA_OCCLUSAL_UPPER",
+  oclusal_inf: "INTRA_OCCLUSAL_LOWER",
+};
 
 // Pediatrics — lazy load del módulo. Solo carga el bundle cuando el doctor
 // abre la pestaña, evitando inflar el bundle del paciente cuando no aplica.
@@ -1226,9 +1252,28 @@ export function PatientDetailClient({
                   0,
                   orthoRedesignVM.treatment.totalCost - orthoRedesignVM.treatment.paid,
                 ),
-                lastVisitAt: lastAppt?.date ?? null,
+                // En tab Ortodoncia, derivamos lastVisitAt y totalVisits
+                // del modelo OrthodonticControlAppointment (visitas reales
+                // del tx ortodóntico), no del Appointment genérico.
+                lastVisitAt: (() => {
+                  const performed = (orthoData?.controls ?? []).filter(
+                    (c: any) => c.performedAt,
+                  );
+                  if (performed.length === 0) return lastAppt?.date ?? null;
+                  performed.sort(
+                    (a: any, b: any) =>
+                      new Date(b.performedAt).getTime() -
+                      new Date(a.performedAt).getTime(),
+                  );
+                  return performed[0].performedAt instanceof Date
+                    ? performed[0].performedAt.toISOString()
+                    : performed[0].performedAt;
+                })(),
                 totalVisits: {
-                  count: completedCount,
+                  count:
+                    (orthoData?.controls ?? []).filter(
+                      (c: any) => c.attendance === "ATTENDED" && c.performedAt,
+                    ).length || completedCount,
                   sinceLabel: orthoRedesignVM.treatment.startDate
                     ? `desde ${new Date(orthoRedesignVM.treatment.startDate).toLocaleDateString("es-MX", { month: "short", year: "numeric" })}`
                     : null,
@@ -1543,8 +1588,78 @@ export function PatientDetailClient({
                   .then(() => toast.success(`Código ${code} copiado`))
                   .catch(() => toast.error("No se pudo copiar al portapapeles"));
               }}
-              onUploadPhoto={() => {
-                toast("Upload de foto · Fase 2 (uploadPhotoToSet existe)");
+              onUploadPhoto={async (stage, slotId, file) => {
+                // Persistencia real: createPhotoSet (si no existe set para
+                // esta etapa) → POST /api/orthodontics/photos/upload →
+                // uploadPhotoToSet → router.refresh() para que el loader
+                // re-pinte con la URL firmada de Supabase.
+                const view = SLOT_TO_VIEW[slotId];
+                if (!view) {
+                  toast("Slot extra-AAO · persistencia Fase 2");
+                  return;
+                }
+                if (!orthoRedesignVM.treatment.treatmentPlanId) {
+                  toast.error("Sin plan de tratamiento activo");
+                  return;
+                }
+                try {
+                  // 1. Resolver setId · usar el del bundle si existe,
+                  //    o crear uno nuevo para esta etapa.
+                  const existingSet =
+                    orthoRedesignBundle?.historicalPhotoSets.find(
+                      (s) => s.stage === stage,
+                    );
+                  let setId = existingSet?.setId ?? null;
+                  if (!setId) {
+                    const created = await createPhotoSet({
+                      treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
+                      patientId: patient.id,
+                      setType: stage,
+                      capturedAt: new Date().toISOString(),
+                      monthInTreatment: orthoRedesignVM.treatment.monthCurrent,
+                    });
+                    if (isFailure(created)) {
+                      toast.error(created.error);
+                      return;
+                    }
+                    setId = (created.data as { id: string }).id;
+                  }
+
+                  // 2. POST file + setId + view al endpoint que sube a
+                  //    Supabase Storage + crea PatientFile.
+                  const fd = new FormData();
+                  fd.append("file", file);
+                  fd.append("setId", setId);
+                  fd.append("view", view);
+                  const res = await fetch(
+                    "/api/orthodontics/photos/upload",
+                    { method: "POST", body: fd },
+                  );
+                  if (!res.ok) {
+                    const errBody = await res.json().catch(() => null);
+                    toast.error(errBody?.error ?? "Falló subida de foto");
+                    return;
+                  }
+                  const { fileId } = (await res.json()) as { fileId: string };
+
+                  // 3. Asocia el PatientFile a la columna del set.
+                  const attached = await uploadPhotoToSet({
+                    setId,
+                    fileId,
+                    view,
+                  });
+                  if (isFailure(attached)) {
+                    toast.error(attached.error);
+                    return;
+                  }
+
+                  toast.success(`Foto ${view.replace(/_/g, " ").toLowerCase()} subida`);
+                  // 4. Re-pinta con URLs firmadas frescas del loader.
+                  router.refresh();
+                } catch (e) {
+                  console.error("[ortho upload] failed:", e);
+                  toast.error("Error inesperado subiendo la foto");
+                }
               }}
               onComparePhotos={undefined}
               onScheduleG15={() => {

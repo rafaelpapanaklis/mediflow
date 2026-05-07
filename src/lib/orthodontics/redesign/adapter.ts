@@ -111,6 +111,20 @@ export interface AdapterInput {
   // Métricas calculadas.
   attendancePct: number;
   elasticsCompliancePct: number;
+  /**
+   * Doctor que atenderá la próxima cita. Se resuelve en el loader vía
+   * lookup del `attendedById` del control con scheduledAt > now más
+   * cercano. Sin él, deriveNextAppointment caía en el bug de mostrar
+   * `patientName` como doctor (heredado del Fase 1, comentario placeholder
+   * en línea 410 antes del fix).
+   */
+  nextAppointmentDoctor?: {
+    firstName: string;
+    lastName: string;
+  } | null;
+  /** Sillón de la próxima cita (si la próxima cita tiene controlAppointmentId
+   *  con metadata adicional). Por ahora se hereda del PatientFlow activo. */
+  nextAppointmentChair?: string | null;
 }
 
 export function adaptToOrthoRedesignViewModel(
@@ -145,7 +159,10 @@ export function adaptToOrthoRedesignViewModel(
     auxMechanics: input.auxMechanics ? adaptAux(input.auxMechanics) : null,
     phaseTransitions: (input.phaseTransitions ?? []).map(adaptTransition),
     patientFlow: input.patientFlow ? adaptFlow(input.patientFlow) : null,
-    nextAppointment: deriveNextAppointment(l),
+    nextAppointment: deriveNextAppointment(l, {
+      doctor: input.nextAppointmentDoctor ?? null,
+      chair: input.nextAppointmentChair ?? null,
+    }),
     aiSuggestions: [],
     whatsappRecent: [],
   };
@@ -396,19 +413,31 @@ function deriveEstimatedEndDate(plan: OrthodonticTreatmentPlan | null): string |
   return d.toISOString();
 }
 
-function deriveNextAppointment(l: OrthoTabData) {
+function deriveNextAppointment(
+  l: OrthoTabData,
+  ctx: {
+    doctor: { firstName: string; lastName: string } | null;
+    chair: string | null;
+  },
+) {
   // Toma el próximo control con scheduledAt > now y attendance != NO_SHOW.
   const now = Date.now();
   const upcoming = l.controls
     .filter((c) => c.scheduledAt.getTime() >= now && c.attendance !== "NO_SHOW")
     .sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime())[0];
   if (!upcoming) return null;
+  // Doctor real (resuelto en loader desde attendedById). Antes el código
+  // ponía l.patientName como placeholder — bug detectado en audit E2E.
+  // Si no se pudo resolver, fallback "Doctor asignado" en vez de patientName.
+  const doctorName = ctx.doctor
+    ? `Dr/a. ${ctx.doctor.firstName} ${ctx.doctor.lastName}`.trim()
+    : "Doctor asignado";
   return {
     date: upcoming.scheduledAt.toISOString(),
     durationMin: 30,
     type: "Control mensual ortodoncia",
-    doctor: l.patientName, // placeholder; cuando haya doctor en VM pasarlo
-    chair: null,
+    doctor: doctorName,
+    chair: ctx.chair,
     prep: [],
   };
 }
