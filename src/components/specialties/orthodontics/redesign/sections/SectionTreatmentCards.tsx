@@ -40,8 +40,8 @@ export function SectionTreatmentCards(props: SectionTreatmentCardsProps) {
   return (
     <Card
       id="tcards"
-      eyebrow="Sección D · G1 — Treatment Card visual"
-      title="Citas mensuales"
+      eyebrow="Sección D · G1 — Gap más grande cerrado"
+      title="Treatment Card · Citas mensuales"
       accent="violet"
       action={
         props.onStartNewCard ? (
