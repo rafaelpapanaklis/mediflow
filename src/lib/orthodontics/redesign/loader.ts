@@ -78,6 +78,14 @@ export interface OrthoRedesignBundle {
   /** Top-3 más recientes para el RightRail. */
   whatsappRecent: WhatsAppEntryDTO[];
   treatmentStatus: OrthoTreatmentStatus;
+  /** Datos del plan financiero — para DrawerEditFinancialPlan (BUG 7). */
+  financialPlan: {
+    totalAmount: number;
+    initialDownPayment: number;
+    installmentCount: number;
+    installmentAmount: number;
+    paidAmount: number;
+  } | null;
 }
 
 export interface LoadOrthoRedesignResult {
@@ -328,6 +336,16 @@ export async function loadOrthoRedesignData(
   // Inyecta whatsappRecent en el viewModel para que RightRail lo lea desde vm.
   viewModel.whatsappRecent = whatsappRecent;
 
+  const financialPlan = legacy.paymentPlan
+    ? {
+        totalAmount: toNumber(legacy.paymentPlan.totalAmount),
+        initialDownPayment: toNumber(legacy.paymentPlan.initialDownPayment),
+        installmentCount: legacy.paymentPlan.installmentCount,
+        installmentAmount: toNumber(legacy.paymentPlan.installmentAmount),
+        paidAmount: toNumber(legacy.paymentPlan.paidAmount),
+      }
+    : null;
+
   const bundle: OrthoRedesignBundle = {
     historicalPhotoSets,
     installments,
@@ -343,6 +361,7 @@ export async function loadOrthoRedesignData(
     whatsappLog,
     whatsappRecent,
     treatmentStatus,
+    financialPlan,
   };
 
   return { viewModel, legacy, bundle };

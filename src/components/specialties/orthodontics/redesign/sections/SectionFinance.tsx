@@ -6,7 +6,7 @@
 // Calendario: chips horizontales por mensualidad con estado pagado/pendiente/futuro.
 // Footer: banner CFDI 4.0 Facturapi (M1) con CTA "Ver últimos N CFDI".
 
-import { DollarSign, FileText, MessageCircle, Shield } from "lucide-react";
+import { DollarSign, FileText, MessageCircle, Pencil, Shield } from "lucide-react";
 import { Btn } from "../atoms/Btn";
 import { Card } from "../atoms/Card";
 import { Pill } from "../atoms/Pill";
@@ -28,6 +28,8 @@ export interface SectionFinanceProps {
   onCollectNext?: () => void;
   /** Ver últimos CFDI — abre ModalCFDIList. */
   onViewCfdi?: () => void;
+  /** Editar plan financiero (precio total, enganche, meses) — abre DrawerEditFinancialPlan. */
+  onEditFinancialPlan?: () => void;
 }
 
 const INSTALLMENT_STYLE: Record<OrthoInstallmentDTO["status"], string> = {
@@ -72,6 +74,16 @@ export function SectionFinance(props: SectionFinanceProps) {
       accent="emerald"
       action={
         <div className="flex gap-2 flex-wrap">
+          {props.onEditFinancialPlan ? (
+            <Btn
+              variant="ghost"
+              size="sm"
+              icon={<Pencil className="w-3.5 h-3.5" aria-hidden />}
+              onClick={props.onEditFinancialPlan}
+            >
+              Editar plan
+            </Btn>
+          ) : null}
           {props.onPresentQuote ? (
             <Btn
               variant="secondary"

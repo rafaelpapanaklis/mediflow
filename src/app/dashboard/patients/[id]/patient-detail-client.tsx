@@ -56,6 +56,7 @@ import {
   toggleRetentionPreSurvey,
   createPhotoSet,
   uploadPhotoToSet,
+  updateFinancialPlan,
 } from "@/app/actions/orthodontics";
 import { isFailure } from "@/app/actions/orthodontics/result";
 
@@ -1222,6 +1223,25 @@ export function PatientDetailClient({
               referralLetters={orthoRedesignBundle?.referralLetters ?? []}
               whatsappLog={orthoRedesignBundle?.whatsappLog ?? []}
               treatmentStatus={orthoRedesignBundle?.treatmentStatus ?? "en-tratamiento"}
+              financialPlan={orthoRedesignBundle?.financialPlan ?? null}
+              onUpdateFinancialPlan={async (payload) => {
+                if (!orthoRedesignVM.treatment.treatmentPlanId) {
+                  toast.error("Sin plan de tratamiento activo");
+                  return;
+                }
+                const res = await updateFinancialPlan({
+                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
+                  ...payload,
+                });
+                if (isFailure(res)) {
+                  toast.error(res.error);
+                  return;
+                }
+                toast.success(
+                  `Plan financiero actualizado · ${res.data.installmentCount} mensualidades de ${res.data.installmentAmount.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 })}`,
+                );
+                router.refresh();
+              }}
               canOverridePhase={true}
               patientHeader={{
                 patient: {
