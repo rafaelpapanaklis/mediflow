@@ -79,6 +79,10 @@ async function main() {
   await seedPhotoSets(clinic.id, patientId, planId, doctor.id);
   // Compliance elásticos 78% (visible en Hero stats).
   await seedComplianceAuditLog(clinic.id, planId, doctor.id);
+  // Sección F · ModalOpenChoice G5: 3 escenarios pre-cargados.
+  await seedQuoteScenarios(clinic.id, planId, doctor.id);
+  // Sección H · programa referidos: código personalizado GABY26.
+  await seedReferralCode(clinic.id, patientId, planId);
 
   console.log(`[ortho-demo] OK · paciente ${patientId} sembrada.`);
 }
@@ -1048,6 +1052,105 @@ async function seedPhotoSets(
       data: ids,
     });
   }
+}
+
+/**
+ * Sección F · ModalOpenChoice G5 — 3 escenarios pre-cargados:
+ *   - Contado (10% descuento)
+ *   - Enganche + 18 meses (recomendado)
+ *   - Enganche + 24 meses MSI 6
+ *
+ * El doctor selecciona uno con `selectQuoteScenario` server action;
+ * el modal se abre desde Sección F → "Presentar cotización G5".
+ */
+async function seedQuoteScenarios(
+  clinicId: string,
+  treatmentPlanId: string,
+  doctorId: string,
+): Promise<void> {
+  await db.orthoQuoteScenario.create({
+    data: {
+      treatmentPlanId,
+      clinicId,
+      label: "Contado",
+      paymentMode: "CONTADO",
+      downPayment: 30006, // 33340 - 10% = 30006
+      monthlyAmount: 0,
+      monthsCount: 0,
+      totalAmount: 30006,
+      discountPct: 10,
+      badge: "10% descuento",
+      includes: [
+        "Pago único · sin cargos financieros",
+        "CFDI 4.0 timbrado al momento",
+        "Materiales premium (Damon Q2 + arcos NiTi termo)",
+      ],
+      status: "DRAFT",
+      createdById: doctorId,
+    },
+  });
+  await db.orthoQuoteScenario.create({
+    data: {
+      treatmentPlanId,
+      clinicId,
+      label: "Enganche + 18 meses",
+      paymentMode: "ENGANCHE_MENSUALIDADES",
+      downPayment: 5000,
+      monthlyAmount: 1574, // (33340-5000)/18 ≈ 1574
+      monthsCount: 18,
+      totalAmount: 33340,
+      discountPct: 0,
+      badge: "Recomendado",
+      includes: [
+        "Enganche $5,000 · 18 mensualidades",
+        "CFDI 4.0 mensual",
+        "Re-bond gratuito si bracket se cae 1ra vez",
+      ],
+      status: "DRAFT",
+      createdById: doctorId,
+    },
+  });
+  await db.orthoQuoteScenario.create({
+    data: {
+      treatmentPlanId,
+      clinicId,
+      label: "Enganche + 24 meses MSI 6",
+      paymentMode: "ENGANCHE_MSI",
+      downPayment: 5000,
+      monthlyAmount: 1181, // (33340-5000)/24 ≈ 1181
+      monthsCount: 24,
+      totalAmount: 33340,
+      discountPct: 0,
+      badge: "MSI 6",
+      includes: [
+        "Enganche $5,000 + 24 mensualidades",
+        "Primeros 6 meses sin intereses",
+        "Stripe MX · tarjetas participantes",
+      ],
+      status: "DRAFT",
+      createdById: doctorId,
+    },
+  });
+}
+
+/**
+ * Sección H · programa referidos — código personalizado para Gabriela.
+ */
+async function seedReferralCode(
+  clinicId: string,
+  patientId: string,
+  treatmentPlanId: string,
+): Promise<void> {
+  await db.orthoReferralCode.create({
+    data: {
+      treatmentPlanId,
+      patientId,
+      clinicId,
+      code: "GABY26",
+      referralCount: 0,
+      rewardLabel: "1 mes gratis · referido completa diagnóstico",
+    },
+  });
 }
 
 /**

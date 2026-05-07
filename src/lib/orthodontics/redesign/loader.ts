@@ -258,6 +258,17 @@ export async function loadOrthoRedesignData(
     ? await readLatestCompliancePct(input.clinicId, planId)
     : 0;
 
+  // Doctor de la próxima cita — resuelve desde attendedById del control
+  // futuro más cercano. Sin esto, el adapter caía en bug "doctor = patientName"
+  // (placeholder heredado de Fase 1).
+  const nextAppointmentDoctor = await resolveNextAppointmentDoctor(
+    input.clinicId,
+    input.patientId,
+  );
+  // Sillón de la próxima cita — heredado del PatientFlow activo si existe.
+  const nextAppointmentChair =
+    (patientFlow as { chair?: string | null } | null)?.chair ?? null;
+
   // ── Construye bundle ──────────────────────────────────────────────────
   const historicalPhotoSets = await adaptPhotoSets(legacy.photoSets);
   const installments = legacy.installments.map(adaptInstallment);
@@ -309,6 +320,8 @@ export async function loadOrthoRedesignData(
     patientFlow: patientFlow as AdapterInput["patientFlow"],
     attendancePct,
     elasticsCompliancePct,
+    nextAppointmentDoctor,
+    nextAppointmentChair,
   };
 
   const viewModel = adaptToOrthoRedesignViewModel(adapterInput);
@@ -431,6 +444,40 @@ async function adaptPhotoSets(
       hasRxLatCef: false,
     };
   });
+}
+
+/**
+ * Resuelve el doctor (firstName + lastName) que atenderá la próxima cita
+ * ortodóntica del paciente. Busca el OrthodonticControlAppointment con
+ * scheduledAt > now más cercano, lee su `attendedById` y trae el User.
+ *
+ * Sin este resolve, el adapter usaba `l.patientName` como placeholder
+ * (bug heredado del Fase 1) — la UI mostraba "Gabriela Hernández Ruiz"
+ * como doctor de la próxima cita.
+ */
+async function resolveNextAppointmentDoctor(
+  clinicId: string,
+  patientId: string,
+): Promise<{ firstName: string; lastName: string } | null> {
+  try {
+    const next = await prisma.orthodonticControlAppointment.findFirst({
+      where: {
+        clinicId,
+        patientId,
+        scheduledAt: { gte: new Date() },
+        attendance: { not: "NO_SHOW" },
+      },
+      orderBy: { scheduledAt: "asc" },
+      select: {
+        attendedById: true,
+        attendedBy: { select: { firstName: true, lastName: true } },
+      },
+    });
+    return next?.attendedBy ?? null;
+  } catch (e) {
+    console.error("[ortho-redesign] resolveNextAppointmentDoctor failed:", e);
+    return null;
+  }
 }
 
 /**
