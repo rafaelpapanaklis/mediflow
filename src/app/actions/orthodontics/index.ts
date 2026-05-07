@@ -43,3 +43,8 @@ export { createReferralCode } from "./createReferralCode";
 export { recordNpsResponse } from "./recordNpsResponse";
 export { scheduleRetentionCheckups } from "./scheduleRetentionCheckups";
 export { scheduleNpsTimeline } from "./scheduleNpsTimeline";
+
+// ─── Rediseño Fase 1.5 · cableo (3 stubs core) ─────────────────────────
+export { signTreatmentCard } from "./signTreatmentCard";
+export { saveTreatmentCardDraft } from "./saveTreatmentCardDraft";
+export { createOrthoTAD } from "./createOrthoTAD";
