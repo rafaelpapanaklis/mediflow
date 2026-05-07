@@ -72,6 +72,7 @@ async function main() {
   await seedPaymentPlan(clinic.id, patientId, planId);
   await seedLabOrders(clinic.id, patientId, doctor.id);
   await seedPatientFlow(clinic.id, patientId);
+  await seedWhatsAppLog(clinic.id, patientId, doctor.id);
 
   console.log(`[ortho-demo] OK · paciente ${patientId} sembrada.`);
 }
@@ -140,6 +141,11 @@ async function wipePreviousOrthoData(patientId: string): Promise<void> {
   await db.orthodonticDiagnosis.deleteMany({ where: { patientId } });
   await db.patientFlow.deleteMany({ where: { patientId } });
   await db.labOrder.deleteMany({ where: { patientId, module: "orthodontics" } });
+  // InboxMessage rows tienen ON DELETE CASCADE desde InboxThread, basta con
+  // borrar los threads del paciente (canal WHATSAPP).
+  await db.inboxThread.deleteMany({
+    where: { patientId, channel: "WHATSAPP" },
+  });
 }
 
 async function seedDiagnosis(
@@ -733,6 +739,79 @@ async function seedLabOrders(
         sentAt: null,
         receivedAt: null,
         notes: "Retenedor superior — pendiente al debonding (fase RETENTION).",
+      },
+    ],
+  });
+}
+
+/**
+ * Sección I · WhatsApp log — 3 mensajes demo para Gabriela.
+ *
+ * Modelo correcto: InboxThread (channel=WHATSAPP) + InboxMessage children con
+ * direction=IN/OUT. NO existe tabla "WhatsAppMessage" — el inbox unificado
+ * cubre WhatsApp, Email, PortalForm, Validation y Reminder bajo el mismo
+ * thread/message schema.
+ *
+ * Datos verbatim del prompt master:
+ *   - Hace 1 sem · OUT · "Tu cita es el 9 abril 10:30. Confirma con 1." · READ
+ *   - Hace 5 días · IN · "Doctora, se cayó un bracket otra vez 😔" · UNREAD/leído
+ *   - Hace 2 días · OUT · "Hola Gabriela, recuerda traer tus elásticos..." · DELIVERED
+ *
+ * El status del thread se deriva del último mensaje recibido sin leer.
+ */
+async function seedWhatsAppLog(
+  clinicId: string,
+  patientId: string,
+  doctorId: string,
+): Promise<void> {
+  const now = Date.now();
+  const _2d = new Date(now - 2 * 24 * 60 * 60 * 1000);
+  const _5d = new Date(now - 5 * 24 * 60 * 60 * 1000);
+  const _1w = new Date(now - 7 * 24 * 60 * 60 * 1000);
+
+  const thread = await db.inboxThread.create({
+    data: {
+      clinicId,
+      patientId,
+      channel: "WHATSAPP",
+      // El paciente leyó el último OUT pero el IN del bracket caído quedó
+      // como UNREAD para mostrar al doctor el badge en la inbox.
+      status: "READ",
+      subject: "Conversación WhatsApp ortodoncia",
+      lastMessageAt: _2d,
+      tags: ["ortodoncia"],
+    },
+    select: { id: true },
+  });
+
+  await db.inboxMessage.createMany({
+    data: [
+      // Hace 1 sem · OUT · cita confirmada
+      {
+        threadId: thread.id,
+        direction: "OUT",
+        body: "Hola Gabriela 👋 Tu cita es el martes 9 abril a las 10:30. Confirma con un 1 si vas a asistir, o avísanos para reagendar.",
+        sentAt: _1w,
+        sentById: doctorId,
+        isInternal: false,
+      },
+      // Hace 5 días · IN · bracket caído
+      {
+        threadId: thread.id,
+        direction: "IN",
+        body: "Doctora, se cayó un bracket otra vez 😔 ¿qué hago?",
+        sentAt: _5d,
+        sentById: null,
+        isInternal: false,
+      },
+      // Hace 2 días · OUT · recordatorio elásticos
+      {
+        threadId: thread.id,
+        direction: "OUT",
+        body: "Hola Gabriela, recuerda traer tus elásticos y el control de cepillado para tu cita del jueves. Te esperamos a las 10:30 ✨",
+        sentAt: _2d,
+        sentById: doctorId,
+        isInternal: false,
       },
     ],
   });
