@@ -42,6 +42,20 @@ import type { SoapPrefill, EndoToothSummary } from "@/lib/types/endodontics";
 import type { ImplantFull } from "@/lib/types/implants";
 import type { OrthoTabData } from "@/lib/orthodontics/load-data";
 import type { OrthoRedesignViewModel } from "@/components/specialties/orthodontics/redesign/types";
+import type { OrthoRedesignBundle } from "@/lib/orthodontics/redesign/loader";
+import {
+  signTreatmentCard,
+  saveTreatmentCardDraft,
+  createOrthoTAD,
+  addWireStep,
+  advanceTreatmentPhase,
+  selectQuoteScenario,
+  sendSignAtHomeLink,
+  confirmCollect,
+  createOrthoLabOrder,
+  toggleRetentionPreSurvey,
+} from "@/app/actions/orthodontics";
+import { isFailure } from "@/app/actions/orthodontics/result";
 
 // Pediatrics — lazy load del módulo. Solo carga el bundle cuando el doctor
 // abre la pestaña, evitando inflar el bundle del paciente cuando no aplica.
@@ -278,6 +292,13 @@ interface Props {
    * tab "ortodoncia". Si es null, fallback al cliente legacy.
    */
   orthoRedesignVM?: OrthoRedesignViewModel | null;
+  /**
+   * Datos extra del rediseño Fase 1.5 (secciones E-I) — installments,
+   * quoteScenarios, retentionRegimen, retainerCheckups, npsSchedules,
+   * referralCode, consents, labOrders, referralLetters, whatsappLog +
+   * treatmentStatus derivado. Cuando viene null se usa todo en empty state.
+   */
+  orthoRedesignBundle?: OrthoRedesignBundle | null;
 }
 
 export function PatientDetailClient({
@@ -291,6 +312,7 @@ export function PatientDetailClient({
   implants,
   orthoData,
   orthoRedesignVM,
+  orthoRedesignBundle,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -803,47 +825,51 @@ export function PatientDetailClient({
         </button>
       </div>
 
-      {/* Hero card permanente — audit Opción C ajuste 1 */}
-      <HeroCard
-        patient={{
-          id: patient.id,
-          firstName: patient.firstName,
-          lastName: patient.lastName,
-          patientNumber: patient.patientNumber,
-          gender: patient.gender ?? "",
-          dob: patient.dob ?? null,
-          phone: patient.phone ?? null,
-          email: patient.email ?? null,
-          bloodType: patient.bloodType ?? null,
-          status: patient.status ?? "ACTIVE",
-          allergies: patient.allergies ?? [],
-          chronicConditions: patient.chronicConditions ?? [],
-          currentMedications: patient.currentMedications ?? [],
-        }}
-        nextAppointment={nextAppt ? {
-          id: nextAppt.id,
-          date: nextAppt.date,
-          startTime: nextAppt.startTime ?? "",
-          type: nextAppt.type,
-          doctorName: nextAppt.doctor ? `Dr/a. ${nextAppt.doctor.firstName} ${nextAppt.doctor.lastName}` : undefined,
-        } : null}
-        lastVisitDate={lastAppt?.date ?? null}
-        visitCount={completedCount}
-        pendingBalance={totalBalance}
-        portalUrl={portalLink}
-        onEdit={() => setShowEdit(true)}
-        onStartConsult={() => {
-          if (nextAppt) {
-            // En commit 6 esto creará el draft note + activará context bar.
-            router.push(`?appointment=${nextAppt.id}`);
-          }
-        }}
-        onReschedule={() => {
-          // Por ahora redirige al tab Citas; en una futura iteración abrir picker inline.
-          setTab("agenda");
-        }}
-        onCharge={() => setTab("facturacion")}
-      />
+      {/* Hero card permanente — audit Opción C ajuste 1.
+          En tab Ortodoncia se reemplaza por PatientHeaderG16 (rendered
+          inside OrthodonticsRedesignClient) — evita doble header. */}
+      {tab !== "ortodoncia" && (
+        <HeroCard
+          patient={{
+            id: patient.id,
+            firstName: patient.firstName,
+            lastName: patient.lastName,
+            patientNumber: patient.patientNumber,
+            gender: patient.gender ?? "",
+            dob: patient.dob ?? null,
+            phone: patient.phone ?? null,
+            email: patient.email ?? null,
+            bloodType: patient.bloodType ?? null,
+            status: patient.status ?? "ACTIVE",
+            allergies: patient.allergies ?? [],
+            chronicConditions: patient.chronicConditions ?? [],
+            currentMedications: patient.currentMedications ?? [],
+          }}
+          nextAppointment={nextAppt ? {
+            id: nextAppt.id,
+            date: nextAppt.date,
+            startTime: nextAppt.startTime ?? "",
+            type: nextAppt.type,
+            doctorName: nextAppt.doctor ? `Dr/a. ${nextAppt.doctor.firstName} ${nextAppt.doctor.lastName}` : undefined,
+          } : null}
+          lastVisitDate={lastAppt?.date ?? null}
+          visitCount={completedCount}
+          pendingBalance={totalBalance}
+          portalUrl={portalLink}
+          onEdit={() => setShowEdit(true)}
+          onStartConsult={() => {
+            if (nextAppt) {
+              // En commit 6 esto creará el draft note + activará context bar.
+              router.push(`?appointment=${nextAppt.id}`);
+            }
+          }}
+          onReschedule={() => {
+            // Por ahora redirige al tab Citas; en una futura iteración abrir picker inline.
+            setTab("agenda");
+          }}
+          onCharge={() => setTab("facturacion")}
+        />
+      )}
 
       {/* Pediatrics — chips informativos cuando aplica el módulo (spec §1.3) */}
       {pediatricsData && (
@@ -1128,7 +1154,400 @@ export function PatientDetailClient({
 
           {/* ===== TAB: ORTODONCIA ===== */}
           {tab === "ortodoncia" && orthoRedesignVM && (
-            <OrthodonticsRedesignClient vm={orthoRedesignVM} />
+            <OrthodonticsRedesignClient
+              vm={orthoRedesignVM}
+              digitalRecords={orthoData?.digitalRecords?.map((r: any) => {
+                const RECORD_LABEL: Record<string, string> = {
+                  CEPH_ANALYSIS_PDF: "Análisis cefalométrico",
+                  SCAN_STL: "Escaneo digital STL",
+                };
+                const RECORD_KIND: Record<string, "ceph" | "stl" | "other"> = {
+                  CEPH_ANALYSIS_PDF: "ceph",
+                  SCAN_STL: "stl",
+                };
+                return {
+                  label: r.notes ?? RECORD_LABEL[r.recordType] ?? r.recordType,
+                  date: r.capturedAt instanceof Date
+                    ? r.capturedAt.toISOString()
+                    : (typeof r.capturedAt === "string" ? r.capturedAt : null),
+                  kind: RECORD_KIND[r.recordType] ?? "other",
+                };
+              }) ?? []}
+              historicalPhotoSets={orthoRedesignBundle?.historicalPhotoSets ?? []}
+              installments={orthoRedesignBundle?.installments ?? []}
+              quoteScenarios={orthoRedesignBundle?.quoteScenarios ?? []}
+              cfdiRecords={orthoRedesignBundle?.cfdiRecords ?? []}
+              retentionRegimen={orthoRedesignBundle?.retentionRegimen ?? null}
+              retainerCheckups={orthoRedesignBundle?.retainerCheckups ?? []}
+              npsSchedules={orthoRedesignBundle?.npsSchedules ?? []}
+              referralCode={orthoRedesignBundle?.referralCode ?? null}
+              labOrders={orthoRedesignBundle?.labOrders ?? []}
+              consents={orthoRedesignBundle?.consents ?? []}
+              referralLetters={orthoRedesignBundle?.referralLetters ?? []}
+              whatsappLog={orthoRedesignBundle?.whatsappLog ?? []}
+              treatmentStatus={orthoRedesignBundle?.treatmentStatus ?? "en-tratamiento"}
+              canOverridePhase={true}
+              patientHeader={{
+                patient: {
+                  id: patient.id,
+                  fullName: fullName,
+                  avatarInitials: getInitials(patient.firstName, patient.lastName),
+                  age: patient.dob ? ageFromDob(new Date(patient.dob)) : null,
+                  sex:
+                    patient.gender === "F"
+                      ? "F"
+                      : patient.gender === "M"
+                        ? "M"
+                        : patient.gender === "OTHER"
+                          ? "X"
+                          : null,
+                  phone: patient.phone ?? null,
+                  email: patient.email ?? null,
+                  bloodType: patient.bloodType ?? null,
+                  guardianLabel: orthoData?.guardianName
+                    ? `${orthoData.guardianName} (tutor)`
+                    : null,
+                  criticalAllergies:
+                    Array.isArray(patient.allergies) && patient.allergies.length > 0
+                      ? patient.allergies.join(", ")
+                      : null,
+                },
+                outstandingAmount: Math.max(
+                  0,
+                  orthoRedesignVM.treatment.totalCost - orthoRedesignVM.treatment.paid,
+                ),
+                lastVisitAt: lastAppt?.date ?? null,
+                totalVisits: {
+                  count: completedCount,
+                  sinceLabel: orthoRedesignVM.treatment.startDate
+                    ? `desde ${new Date(orthoRedesignVM.treatment.startDate).toLocaleDateString("es-MX", { month: "short", year: "numeric" })}`
+                    : null,
+                },
+                onStartVisit: () => {
+                  if (nextAppt) router.push(`?appointment=${nextAppt.id}`);
+                  else toast("Programa una cita primero");
+                },
+                onScheduleNext: () => setTab("agenda"),
+                onCollect: () => setTab("facturacion"),
+                onMore: undefined,
+              }}
+              onStartDiagnosisWizard={() => {
+                toast("Wizard de diagnóstico · Fase 2");
+              }}
+              onEditPrescription={() => {
+                toast("Editor de prescripción · Fase 2");
+              }}
+              onAddWireStep={undefined}
+              onSubmitWireStep={async (payload) => {
+                if (!orthoRedesignVM.treatment.treatmentPlanId) {
+                  toast.error("Sin plan de tratamiento activo");
+                  return;
+                }
+                const res = await addWireStep({
+                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
+                  phase: payload.phase,
+                  material: payload.material,
+                  shape: payload.shape,
+                  gauge: payload.gauge,
+                  archUpper: payload.archUpper,
+                  archLower: payload.archLower,
+                  durationWeeks: payload.durationWeeks,
+                  auxiliaries: payload.auxiliaries,
+                  purpose: payload.purpose ?? null,
+                  notes: payload.notes ?? null,
+                });
+                if (isFailure(res)) {
+                  toast.error(res.error);
+                  return;
+                }
+                toast.success("Wire step agregado");
+                router.refresh();
+              }}
+              onAddTad={async () => {
+                if (!orthoRedesignVM.treatment.treatmentPlanId) {
+                  toast.error("Sin plan de tratamiento activo");
+                  return;
+                }
+                const brand = window.prompt(
+                  "Marca TAD (DENTOS, SPIDER, IMTEC, OTHER):",
+                  "DENTOS",
+                );
+                if (!brand) return;
+                const size = window.prompt("Tamaño (ej. 1.4×6mm):", "");
+                if (!size) return;
+                const location = window.prompt(
+                  "Ubicación (ej. vestibular sup. der entre 14 y 15):",
+                  "",
+                );
+                if (!location) return;
+                const torqueStr = window.prompt(
+                  "Torque Ncm (opcional, vacío para omitir):",
+                  "",
+                );
+                const torqueNcm = torqueStr ? parseInt(torqueStr, 10) : null;
+                const res = await createOrthoTAD({
+                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
+                  brand: brand.toUpperCase() as any,
+                  size,
+                  location,
+                  torqueNcm: Number.isFinite(torqueNcm as number)
+                    ? (torqueNcm as number)
+                    : null,
+                });
+                if (isFailure(res)) {
+                  toast.error(res.error);
+                  return;
+                }
+                toast.success("TAD registrado");
+                router.refresh();
+              }}
+              onCardSigned={async (payload) => {
+                if (!orthoRedesignVM.treatment.treatmentPlanId) {
+                  toast.error("Sin plan de tratamiento activo");
+                  return;
+                }
+                const res = await signTreatmentCard({
+                  cardId: payload.cardId,
+                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
+                  cardNumber:
+                    (orthoRedesignVM.treatmentCards.find((c) => c.id === payload.cardId)
+                      ?.cardNumber ??
+                      orthoRedesignVM.treatmentCards.reduce(
+                        (m, c) => Math.max(m, c.cardNumber),
+                        0,
+                      ) + 1),
+                  visitDate:
+                    orthoRedesignVM.treatmentCards.find((c) => c.id === payload.cardId)
+                      ?.visitDate ?? new Date().toISOString(),
+                  durationMin:
+                    orthoRedesignVM.treatmentCards.find((c) => c.id === payload.cardId)
+                      ?.durationMin ?? 30,
+                  phaseKey:
+                    orthoRedesignVM.treatmentCards.find((c) => c.id === payload.cardId)
+                      ?.phaseKey ??
+                    orthoRedesignVM.treatment.phase ??
+                    "LEVELING",
+                  monthAt:
+                    orthoRedesignVM.treatmentCards.find((c) => c.id === payload.cardId)
+                      ?.monthAt ?? orthoRedesignVM.treatment.monthCurrent,
+                  wireFromId:
+                    orthoRedesignVM.treatmentCards.find((c) => c.id === payload.cardId)
+                      ?.wireFrom?.id ?? null,
+                  wireToId: payload.wireToId,
+                  soap: payload.soap,
+                  hygiene: payload.hygiene,
+                  elastics: payload.elastics,
+                  iprPoints: payload.iprPoints,
+                  brokenBrackets: payload.brokenBrackets,
+                  hasProgressPhoto: payload.hasProgressPhoto,
+                  nextDate: payload.nextDate,
+                  nextDurationMin: payload.nextDurationMin,
+                });
+                if (isFailure(res)) {
+                  toast.error(res.error);
+                  return;
+                }
+                toast.success("Cita firmada");
+                router.refresh();
+              }}
+              onCardDraftSaved={async (payload) => {
+                if (!orthoRedesignVM.treatment.treatmentPlanId) {
+                  toast.error("Sin plan de tratamiento activo");
+                  return;
+                }
+                const card = orthoRedesignVM.treatmentCards.find(
+                  (c) => c.id === payload.cardId,
+                );
+                const res = await saveTreatmentCardDraft({
+                  cardId: payload.cardId,
+                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
+                  cardNumber:
+                    card?.cardNumber ??
+                    orthoRedesignVM.treatmentCards.reduce(
+                      (m, c) => Math.max(m, c.cardNumber),
+                      0,
+                    ) + 1,
+                  visitDate: card?.visitDate ?? new Date().toISOString(),
+                  durationMin: card?.durationMin ?? 30,
+                  phaseKey:
+                    card?.phaseKey ?? orthoRedesignVM.treatment.phase ?? "LEVELING",
+                  monthAt: card?.monthAt ?? orthoRedesignVM.treatment.monthCurrent,
+                  wireFromId: card?.wireFrom?.id ?? null,
+                  wireToId: payload.wireToId,
+                  soap: payload.soap,
+                  hygiene: payload.hygiene,
+                  elastics: payload.elastics,
+                  iprPoints: payload.iprPoints,
+                  brokenBrackets: payload.brokenBrackets,
+                  hasProgressPhoto: payload.hasProgressPhoto,
+                  nextDate: payload.nextDate,
+                  nextDurationMin: payload.nextDurationMin,
+                });
+                if (isFailure(res)) {
+                  toast.error(res.error);
+                  return;
+                }
+                toast.success("Borrador guardado");
+                router.refresh();
+              }}
+              onPhaseAdvanced={async (payload) => {
+                if (!orthoRedesignVM.treatment.treatmentPlanId) {
+                  toast.error("Sin plan de tratamiento activo");
+                  return;
+                }
+                // El audit trail (criteriaChecked, isOverride) lo registra
+                // OrthoPhaseTransition por separado; advanceTreatmentPhase solo
+                // necesita treatmentPlanId + toPhase + notes.
+                const notesParts = [
+                  payload.doctorNotes ?? "",
+                  payload.isOverride
+                    ? `OVERRIDE: ${payload.overrideReason ?? "—"}`
+                    : "",
+                  payload.criteriaChecked.length > 0
+                    ? `Criterios: ${payload.criteriaChecked.join(", ")}`
+                    : "",
+                ].filter(Boolean);
+                const res = await advanceTreatmentPhase({
+                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
+                  toPhase: payload.toPhase,
+                  notes: notesParts.join(" · ") || null,
+                });
+                if (isFailure(res)) {
+                  toast.error(res.error);
+                  return;
+                }
+                toast.success(`Fase avanzada a ${payload.toPhase}`);
+                router.refresh();
+              }}
+              onSelectQuoteScenario={async (scenarioId) => {
+                if (!orthoRedesignVM.treatment.treatmentPlanId) {
+                  toast.error("Sin plan de tratamiento activo");
+                  return;
+                }
+                const res = await selectQuoteScenario({
+                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
+                  scenarioId,
+                });
+                if (isFailure(res)) {
+                  toast.error(res.error);
+                  return;
+                }
+                toast.success("Escenario seleccionado");
+                router.refresh();
+              }}
+              onSendSignAtHome={async () => {
+                if (!orthoRedesignVM.treatment.treatmentPlanId) {
+                  toast.error("Sin plan de tratamiento activo");
+                  return;
+                }
+                const accepted = orthoRedesignBundle?.quoteScenarios.find(
+                  (s) => s.status === "ACCEPTED",
+                );
+                if (!accepted) {
+                  toast.error("Selecciona un escenario antes de enviar Sign@Home");
+                  return;
+                }
+                const res = await sendSignAtHomeLink({
+                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
+                  scenarioId: accepted.id,
+                });
+                if (isFailure(res)) {
+                  toast.error(res.error);
+                  return;
+                }
+                toast.success("Link Sign@Home enviado por WhatsApp");
+                router.refresh();
+              }}
+              onConfirmCollect={async (method) => {
+                if (!orthoRedesignVM.treatment.treatmentPlanId) {
+                  toast.error("Sin plan de tratamiento activo");
+                  return;
+                }
+                const res = await confirmCollect({
+                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
+                  method,
+                });
+                if (isFailure(res)) {
+                  toast.error(res.error);
+                  return;
+                }
+                toast.success("Cobro registrado");
+                if ((res.data as { cfdiTimbradoStub?: boolean }).cfdiTimbradoStub) {
+                  toast("CFDI 4.0 con Facturapi · Fase 2");
+                }
+                router.refresh();
+              }}
+              onCreateLabOrder={async (payload) => {
+                const res = await createOrthoLabOrder({
+                  patientId: patient.id,
+                  catalog: payload.catalog,
+                  description: payload.description,
+                  lab: payload.lab,
+                  expectedDate: payload.expectedDate,
+                });
+                if (isFailure(res)) {
+                  toast.error(res.error);
+                  return;
+                }
+                toast.success("Orden de laboratorio creada");
+                router.refresh();
+              }}
+              onCreateReferralLetter={() => {
+                toast("Carta de referencia · Fase 2");
+              }}
+              onTogglePreSurvey={async (enabled) => {
+                if (!orthoRedesignVM.treatment.treatmentPlanId) {
+                  toast.error("Sin plan de tratamiento activo");
+                  return;
+                }
+                const res = await toggleRetentionPreSurvey({
+                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
+                  enabled,
+                });
+                if (isFailure(res)) {
+                  toast.error(res.error);
+                  return;
+                }
+                toast.success(
+                  enabled ? "Pre-encuesta activada" : "Pre-encuesta desactivada",
+                );
+                router.refresh();
+              }}
+              onConfigureRetention={() => {
+                toast("Configuración de retención · Fase 2");
+              }}
+              onGeneratePdfBeforeAfter={() => {
+                toast("PDF antes/después · Fase 2");
+              }}
+              onConfigureNps={() => {
+                toast("Configuración NPS · Fase 2");
+              }}
+              onCopyReferralCode={() => {
+                const code = orthoRedesignBundle?.referralCode?.code;
+                if (!code) {
+                  toast("Sin código de referidos asignado");
+                  return;
+                }
+                navigator.clipboard
+                  .writeText(code)
+                  .then(() => toast.success(`Código ${code} copiado`))
+                  .catch(() => toast.error("No se pudo copiar al portapapeles"));
+              }}
+              onUploadPhoto={() => {
+                toast("Upload de foto · Fase 2 (uploadPhotoToSet existe)");
+              }}
+              onComparePhotos={undefined}
+              onScheduleG15={() => {
+                toast("Programar foto-set mes 12 · Fase 2");
+              }}
+              onGenerateComparePdf={() => {
+                toast("PDF antes/después · Fase 2");
+              }}
+              onCollectNow={undefined}
+              onOpenChat={() => {
+                toast("Chat WhatsApp · Fase 2");
+              }}
+            />
           )}
           {tab === "ortodoncia" && !orthoRedesignVM && orthoData && (
             <OrthodonticsClient
