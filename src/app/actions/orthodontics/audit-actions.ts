@@ -23,6 +23,9 @@ export const ORTHO_AUDIT_ACTIONS = {
   // ─── Rediseño Fase 1.5 ──────────────────────────────────────────────
   WIRE_STEP_ADDED: "ortho.wireStep.added",
   WIRE_STEP_UPDATED: "ortho.wireStep.updated",
+  TAD_CREATED: "ortho.tad.created",
+  CARD_DRAFT_SAVED: "ortho.card.draftSaved",
+  CARD_SIGNED: "ortho.card.signed",
   QUOTE_SCENARIO_SELECTED: "ortho.quoteScenario.selected",
   SIGN_AT_HOME_SENT: "ortho.signAtHome.sent",
   COLLECT_RECORDED: "ortho.collect.recorded",
