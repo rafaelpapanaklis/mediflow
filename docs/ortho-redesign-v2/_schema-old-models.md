@@ -76,15 +76,11 @@ Línea  Enum                              Posible uso cross-módulo
 |---|---|---|
 | `LabOrder` | 5523 | Cross-módulo (endo/perio/implants/orto). El SPEC v2 define un `LabOrder` con `caseId String` — **conflicto de nombre**. Decidir si extender el existente o renombrar el v2 |
 
-## Constraint check: enums potencialmente cross-módulo
+## Constraint check: enums potencialmente cross-módulo — RESUELTO 2026-05-12
 
-Antes de drop, hacer:
+Audit ejecutado: los 3 enums sospechosos (`ControlAttendance`, `AdjustmentType`, `OrthoPaymentMethod`) están **solo dentro del módulo orto** (archivos `src/**/orthodontics/**` o `src/lib/types/orthodontics.ts`, y modelos Prisma `OrthodonticControlAppointment`, `OrthoPaymentPlan`, `OrthoInstallment`, `OrthoSignAtHomePackage` — todos a drop).
 
-```bash
-grep -rn "ControlAttendance\|AdjustmentType\|OrthoPaymentMethod" src/ prisma/ --include="*.ts" --include="*.tsx" --include="*.prisma"
-```
-
-Si aparecen en archivos no-ortho (agenda, billing, etc.), el drop rompe build.
+Detalle completo en `_decisions.md` punto 3. **Conclusión: los 29 enums se drop sin riesgo cross-módulo.**
 
 ## Mapeo old → new (SPEC v2)
 

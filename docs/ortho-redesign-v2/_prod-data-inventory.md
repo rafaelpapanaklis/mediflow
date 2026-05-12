@@ -44,6 +44,28 @@ Sergio y Andrés tienen **solo OrthodonticDiagnosis orphans** (un row cada uno, 
 
 Sin decisión, la demolición ON CASCADE de los modelos viejos perdería esos 2 diagnoses.
 
+## RESUELTO 2026-05-12 — Opción 1 (DELETE)
+
+Rafael resolvió: borrar los 2 diagnoses orphans antes de demoler.
+
+Ejecutado vía `scripts/delete-ortho-orphan-diagnoses.mts`:
+
+```
+🗑️  Sergio Ramírez López (#00008) · patientId=cmokj5td80007cux0em8qhxje
+     deleted dx id=92e5c6c6-6dca-4a56-b677-fde2ac5de20d ✓ esperado
+🗑️  Andrés López Ramírez (#00009) · patientId=cmokj5td80008cux02t8hd5xk
+     deleted dx id=34e2c6c7-43ad-4be5-a373-428302917523 ✓ esperado
+```
+
+Re-ejecución de `scripts/inventory-old-ortho-data.mts` post-delete confirma:
+
+```
+TOTAL                                      42 1 unique patients
+✅ OK: solo 1 paciente con data — Gabriela Hernández Ruiz (ORT-DEMO-GABY). Demolition segura.
+```
+
+Demolition de Fase 1 ahora autorizada.
+
 ### Para reproducir
 
 ```powershell
