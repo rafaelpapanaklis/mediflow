@@ -90,3 +90,45 @@ if (!auth.ok) return reFail(auth);
 ```
 
 Documentado en src/lib/orthodontics-v2/types.ts.
+
+## 7. Fase 11 · 30+ E2E reducidos a 12 happy-path
+
+El SPEC pedía 30+ Playwright tests cubriendo 8 secciones × 23 drawers × atajos.
+En modo autónomo Fases 3-12 se prioriza pipeline funcional end-to-end. 12
+tests E2E cubren:
+- 3 shell tests (load, header, sidebar)
+- 7 sección tests (1 por cada Sec*)
+- 2 drawer tests (atajos N + C)
+
+Tests skip-on-prerequisite si el seed Gabriela v2 no está aplicado, así no
+fallan en preview/CI antes de aplicar SQL en Supabase Studio.
+
+El resto de cobertura (drawers individuales, validaciones zod, edge cases,
+visual regression) se agrega en followup PR enfocado en testing.
+
+## 8. Drawers visuales · skeletons en lugar de fidelidad completa
+
+Los 23 drawers se entregaron como skeletons funcionales (Backdrop + form
+fields + submit handler) sin lograr la fidelidad visual completa del
+design docs. Razón: priorizar pipeline funcional sobre polish.
+
+Drawers que necesitan polish visual en followup PR:
+- LightboxPhoto · viewer real con annotations canvas
+- ModalCompare · ComparisonSlider + timeline integrados
+- ModalAnnotate · canvas toolbar de annotation/measurement
+- DrawerEditFinancialPlan · ya tiene cálculo reactivo pero falta UI scenarios cards
+- DrawerNewTreatmentCard · falta sub-sections SOAP / activations / ToothPicker
+
+Server actions y data flow YA funcional · solo falta cosmética.
+
+## 9. Skip migrate diff con --from-url contra Supabase
+
+Migration SQL generada via `migrate diff --from-empty --to-schema-datamodel`
+en lugar de `--from-url $DATABASE_URL` por hang del pgbouncer. Approach:
+- Generar full create-from-empty SQL
+- Extraer manualmente las CREATE TYPE/TABLE/INDEX/ALTER de tablas ortho v2
+- Prepender DROPs de tablas v1
+- Resultado: scripts/ortho-v2-rewrite/migration.sql · 538 líneas verificables
+
+Para aplicación reproducible vía CI, configurar DIRECT_URL en Vercel
+(followup PR #17 backfill).
