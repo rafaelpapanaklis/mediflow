@@ -221,6 +221,7 @@ export async function fetchResources(
       kind: true,
       color: true,
       orderIndex: true,
+      isActive: true,
     },
   });
 
@@ -230,6 +231,7 @@ export async function fetchResources(
     kind: r.kind as ResourceDTO["kind"],
     color: r.color,
     orderIndex: r.orderIndex,
+    isActive: r.isActive,
   }));
 }
 

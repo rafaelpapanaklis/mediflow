@@ -131,6 +131,7 @@ export interface UpdateResourceInput {
   name?: string;
   kind?: ResourceKind;
   color?: string | null;
+  isActive?: boolean;
 }
 
 export async function updateResource(

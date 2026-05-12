@@ -37,6 +37,7 @@ export interface ResourceDTO {
   kind: ResourceKind;
   color: string | null;
   orderIndex: number;
+  isActive?: boolean;
 }
 
 export interface DoctorColumnDTO {

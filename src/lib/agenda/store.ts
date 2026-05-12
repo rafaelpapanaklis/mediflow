@@ -35,6 +35,7 @@ export type AgendaAction =
   | { type: "UPSERT_RESOURCE"; resource: ResourceDTO }
   | { type: "REMOVE_RESOURCE"; id: string }
   | { type: "REORDER_RESOURCES"; orderedIds: string[] }
+  | { type: "SET_RESOURCES"; resources: ResourceDTO[] }
   | { type: "UPSERT_DOCTOR"; doctor: DoctorColumnDTO }
   | { type: "REMOVE_DOCTOR"; id: string };
 
@@ -183,6 +184,8 @@ export function agendaReducer(
       });
       return { ...state, resources: next };
     }
+    case "SET_RESOURCES":
+      return { ...state, resources: action.resources };
     case "UPSERT_DOCTOR": {
       const exists = state.doctors.some((d) => d.id === action.doctor.id);
       const next = exists
