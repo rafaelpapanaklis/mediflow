@@ -40,10 +40,21 @@ import {
 import type { PerioTabData } from "@/lib/periodontics/load-data";
 import type { SoapPrefill, EndoToothSummary } from "@/lib/types/endodontics";
 import type { ImplantFull } from "@/lib/types/implants";
+import type { OrthoCaseBundle } from "@/lib/orthodontics-v2/types";
 
-// Ortodoncia v2 — módulo en rewrite (feat/ortho-v2-rewrite). El módulo v1
-// está demolido en .backup/ortho-v1/. Imports + dynamic loader + helpers
-// se re-cablearán en Fase 9 del SPEC v2 sobre el schema nuevo.
+// Ortodoncia v2 — lazy load del orchestrator.
+const OrthoModuleShell = dynamicImport(
+  () =>
+    import("@/components/orthodontics-v2/OrthoModuleShell").then((m) => ({
+      default: m.OrthoModuleShell,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="text-xs text-muted-foreground p-4">Cargando módulo de Ortodoncia…</div>
+    ),
+  },
+);
 
 // Pediatrics — lazy load del módulo. Solo carga el bundle cuando el doctor
 // abre la pestaña, evitando inflar el bundle del paciente cuando no aplica.
@@ -152,6 +163,8 @@ function buildTabs(opts: {
   showEndodontics: boolean;
   /** Implantes — enabled cuando el módulo está activo. Sin gate de edad. */
   showImplants: boolean;
+  /** Ortodoncia v2 — enabled cuando el paciente tiene un OrthoCase. */
+  showOrthodontics: boolean;
 }): PatientTab[] {
   const out: PatientTab[] = [...TABS_BASE];
   // Insertar "Pediatría" entre "Historia clínica" y "Odontograma" según spec §1.2.
@@ -173,8 +186,7 @@ function buildTabs(opts: {
   if (opts.showPeriodontics)  insertBeforeOdonto({ id: "periodoncia", label: "Periodoncia" });
   if (opts.showEndodontics)   insertBeforeOdonto({ id: "endodoncia",  label: "Endodoncia"  });
   if (opts.showImplants)      insertBeforeOdonto({ id: "implantes",   label: "Implantes"   });
-  // Ortodoncia — pendiente Fase 9 v2 rewrite. Tab oculto hasta que el nuevo
-  // módulo monte sobre el schema v2 (OrthoCase + PatientHeaderG16 + secciones).
+  if (opts.showOrthodontics)  insertBeforeOdonto({ id: "ortodoncia",  label: "Ortodoncia"  });
   return out;
 }
 
@@ -230,7 +242,10 @@ interface Props {
    * pero el paciente aún no tiene implantes colocados.
    */
   implants?: ImplantFull[] | null;
-  // Ortodoncia v2 — re-cableado en Fase 9 v2 rewrite. Props demolidas.
+  /** Ortodoncia v2 — bundle del caso. null = sin caso activo. */
+  orthoBundle?: OrthoCaseBundle | null;
+  /** Nombre formateado del doctor primario para headers ortho. */
+  doctorName?: string;
 }
 
 export function PatientDetailClient({
@@ -242,6 +257,8 @@ export function PatientDetailClient({
   endoSummaries,
   endoSoapPrefill,
   implants,
+  orthoBundle,
+  doctorName = "Dr/a.",
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -253,14 +270,16 @@ export function PatientDetailClient({
   const showPeriodontics = Boolean(perioData);
   const showEndodontics  = endoSummaries !== null && endoSummaries !== undefined;
   const showImplants     = implants !== null && implants !== undefined;
+  const showOrthodontics = orthoBundle !== null && orthoBundle !== undefined;
   const tabs = useMemo(
     () => buildTabs({
       pediatrics:      { state: pediatricsState, reason: PEDIATRICS_DISABLED_REASON },
       showPeriodontics,
       showEndodontics,
       showImplants,
+      showOrthodontics,
     }),
-    [pediatricsState, showPeriodontics, showEndodontics, showImplants],
+    [pediatricsState, showPeriodontics, showEndodontics, showImplants, showOrthodontics],
   );
   const tabFromUrl = searchParams.get("tab");
   const initialTab =
@@ -272,7 +291,9 @@ export function PatientDetailClient({
           ? "endodoncia"
           : tabFromUrl === "implantes" && showImplants
             ? "implantes"
-            : "resumen";
+            : tabFromUrl === "ortodoncia" && showOrthodontics
+              ? "ortodoncia"
+              : "resumen";
   const [tab, setTab]         = useState(initialTab);
   const [consultPaused, setConsultPaused] = useState(false);
   const [consultClosed, setConsultClosed] = useState(false);
@@ -1083,11 +1104,9 @@ export function PatientDetailClient({
             />
           )}
 
-          {/* ===== TAB: ORTODONCIA ===== (v2 rewrite — Fase 9 pendiente) */}
-          {tab === "ortodoncia" && (
-            <div className="text-xs text-muted-foreground p-4">
-              Módulo Ortodoncia v2 en reconstrucción · ver feat/ortho-v2-rewrite
-            </div>
+          {/* ===== TAB: ORTODONCIA v2 ===== */}
+          {tab === "ortodoncia" && orthoBundle && (
+            <OrthoModuleShell bundle={orthoBundle} doctorName={doctorName} />
           )}
 
           {/* ===== TAB: ODONTOGRAMA ===== */}

@@ -12,7 +12,9 @@ import { loadPediatricsData } from "@/lib/pediatrics/load-data";
 import type { PediatricsTabData } from "@/components/patient-detail/pediatrics/PediatricsTab";
 import { IMPLANTS_MODULE_KEY } from "@/lib/implants/permissions";
 import type { ImplantFull } from "@/lib/types/implants";
-import { PERIODONTICS_MODULE_KEY, ENDODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
+import { PERIODONTICS_MODULE_KEY, ENDODONTICS_MODULE_KEY, ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
+import { loadOrthoCaseBundle } from "@/lib/orthodontics-v2/loader";
+import type { OrthoCaseBundle } from "@/lib/orthodontics-v2/types";
 import { loadPerioData, type PerioTabData } from "@/lib/periodontics/load-data";
 import { loadEndoSoapPrefill } from "@/lib/endodontics/load-soap-prefill";
 import { loadEndoToothSummaries } from "@/lib/helpers/loadEndoToothData";
@@ -137,11 +139,16 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     })) as unknown as ImplantFull[];
   }
 
-  // Ortodoncia v2 — rewrite en progreso (feat/ortho-v2-rewrite). El módulo v1
-  // fue demolido a .backup/ortho-v1/ durante Fase 1 del SPEC v2. Las nuevas
-  // props se cablearán en Fase 9 sobre el schema v2 (OrthoCase, TreatmentPlan,
-  // PhotoSet, TreatmentCard, FinancialPlan, RetentionPlan). Hasta entonces
-  // el tab Ortodoncia queda oculto.
+  // Ortodoncia v2 (feat/ortho-v2-rewrite Fase 9) — solo DENTAL + módulo activo.
+  // Sin gate por edad. loadOrthoCaseBundle devuelve null si el paciente no
+  // tiene OrthoCase todavía — el tab no se renderiza en ese caso.
+  let orthoBundle: OrthoCaseBundle | null = null;
+  if (isDental && clinicModuleKeys.includes(ORTHODONTICS_MODULE_KEY)) {
+    orthoBundle = await loadOrthoCaseBundle({
+      clinicId: user.clinicId,
+      patientId: patient.id,
+    });
+  }
 
   const totalPaid    = patient.invoices.reduce((s, i) => s + i.paid, 0);
   const totalBalance = patient.invoices.reduce((s, i) => s + i.balance, 0);
@@ -226,6 +233,12 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           endoSummaries={endoSummaries}
           endoSoapPrefill={endoSoapPrefill}
           implants={implants}
+          orthoBundle={orthoBundle}
+          doctorName={
+            patient.primaryDoctor
+              ? `Dr/a. ${patient.primaryDoctor.firstName} ${patient.primaryDoctor.lastName}`.trim()
+              : "Sin doctor asignado"
+          }
         />
       </ErrorBoundary>
     </div>
