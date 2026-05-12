@@ -1,3 +1,10 @@
+/**
+ * @deprecated 2026-05-06: This endpoint manages the legacy `ResourceBooking` model
+ * (free-text strings, no relation to `Appointment.resourceId`). Use
+ * `/api/agenda/resources/**` for typed CHAIR/ROOM/EQUIPMENT Resources.
+ * Kept functional only for `/dashboard/resource-bookings` (URL-only, not in sidebar).
+ * If `SELECT COUNT(*) FROM "resource_bookings"` returns 0 in prod, drop in next migration.
+ */
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";

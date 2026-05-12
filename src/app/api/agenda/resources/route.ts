@@ -19,12 +19,13 @@ const CreateSchema = z.object({
     .optional(),
 });
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await loadClinicSession();
   if (session instanceof NextResponse) return session;
   const denied = denyIfMissingPermission(session.user, "resources.view");
   if (denied) return denied;
-  const resources = await fetchResources(session.clinic.id);
+  const includeArchived = new URL(req.url).searchParams.get("includeArchived") === "1";
+  const resources = await fetchResources(session.clinic.id, { includeArchived });
   return NextResponse.json({ resources });
 }
 

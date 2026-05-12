@@ -7,6 +7,7 @@ import type {
   AppointmentSource,
   DoctorColumnDTO,
   ResourceDTO,
+  ResourceKind,
 } from "./types";
 import {
   dayRangeUtc,
@@ -201,9 +202,18 @@ export async function fetchActiveDoctors(
   }));
 }
 
-export async function fetchResources(clinicId: string): Promise<ResourceDTO[]> {
+export async function fetchResources(
+  clinicId: string,
+  opts?: { kind?: ResourceKind | ResourceKind[]; includeArchived?: boolean },
+): Promise<ResourceDTO[]> {
   const rows = await prisma.resource.findMany({
-    where: { clinicId, isActive: true },
+    where: {
+      clinicId,
+      ...(opts?.includeArchived ? {} : { isActive: true }),
+      ...(opts?.kind
+        ? { kind: Array.isArray(opts.kind) ? { in: opts.kind } : opts.kind }
+        : {}),
+    },
     orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
     select: {
       id: true,

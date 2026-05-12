@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { loadClinicSession } from "@/lib/agenda/api-helpers";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
@@ -17,6 +18,7 @@ const PatchSchema = z
       .regex(/^#[0-9a-fA-F]{6,8}$/, "color must be a hex code")
       .nullable()
       .optional(),
+    isActive: z.boolean().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, "no fields to update");
 
@@ -39,8 +41,10 @@ export async function PATCH(req: Request, { params }: Params) {
     );
   }
 
+  // No filtramos por isActive aquí: el PATCH puede usarse para restaurar
+  // un recurso archivado (isActive: true desde la vista de archivados).
   const existing = await prisma.resource.findFirst({
-    where: { id: params.id, clinicId: session.clinic.id, isActive: true },
+    where: { id: params.id, clinicId: session.clinic.id },
     select: { id: true },
   });
   if (!existing) {
@@ -53,6 +57,7 @@ export async function PATCH(req: Request, { params }: Params) {
       ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
       ...(parsed.data.kind !== undefined ? { kind: parsed.data.kind } : {}),
       ...(parsed.data.color !== undefined ? { color: parsed.data.color } : {}),
+      ...(parsed.data.isActive !== undefined ? { isActive: parsed.data.isActive } : {}),
     },
     select: { id: true, name: true, kind: true, color: true, orderIndex: true },
   });
@@ -72,6 +77,37 @@ export async function DELETE(_req: Request, { params }: Params) {
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+
+  // Guard 409: no permitir archivar un recurso con citas activas futuras.
+  // Si las hay, el cliente debe reasignarlas antes (UI fase B).
+  const ACTIVE_STATUSES: Prisma.AppointmentWhereInput["status"] = {
+    in: ["PENDING", "SCHEDULED", "CONFIRMED", "CHECKED_IN", "IN_CHAIR", "IN_PROGRESS"],
+  };
+  const activeWhere: Prisma.AppointmentWhereInput = {
+    resourceId: params.id,
+    clinicId: session.clinic.id,
+    status: ACTIVE_STATUSES,
+    endsAt: { gt: new Date() },
+  };
+  const [activeCount, activeSample] = await prisma.$transaction([
+    prisma.appointment.count({ where: activeWhere }),
+    prisma.appointment.findMany({
+      where: activeWhere,
+      select: { id: true, startsAt: true, patientId: true },
+      orderBy: { startsAt: "asc" },
+      take: 3,
+    }),
+  ]);
+  if (activeCount > 0) {
+    return NextResponse.json(
+      {
+        error: "resource_has_active_appointments",
+        count: activeCount,
+        sample: activeSample.map((a) => a.id),
+      },
+      { status: 409 },
+    );
   }
 
   await prisma.resource.update({
