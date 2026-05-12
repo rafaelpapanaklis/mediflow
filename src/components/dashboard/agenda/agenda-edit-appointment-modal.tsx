@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { X } from "lucide-react";
 import { useAgenda } from "./agenda-provider";
-import { rescheduleAppointment } from "@/lib/agenda/mutations";
+import { rescheduleAppointment, type ApiError } from "@/lib/agenda/mutations";
+import { describeOverlapConflict } from "@/lib/agenda/conflict-copy";
 import { getTzParts } from "@/lib/agenda/time-utils";
 import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 
@@ -133,10 +134,15 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
       toast.success("Cita actualizada");
       onClose();
     } catch (err) {
-      const e = err as { status?: number; reason?: string; error?: string; message?: string };
-      // overlap → mostrar conflict warning con opción override (si rol).
+      const e = err as ApiError & { message?: string };
+      // overlap → mostrar conflict warning con copy descriptivo (doctor vs sillón vs ambos).
       if (e?.error === "appointment_overlap") {
-        setConflict(e.reason ?? "Conflicto con otra cita en ese horario.");
+        setConflict(
+          describeOverlapConflict(e.conflictingAppointment, {
+            doctorId: form.doctorId,
+            resourceId: form.resourceId || null,
+          }),
+        );
       } else {
         const detail = e?.reason ?? e?.error ?? e?.message ?? "No se pudo actualizar";
         const prefix = e?.status ? `[${e.status}] ` : "";

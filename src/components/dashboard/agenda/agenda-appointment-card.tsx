@@ -33,6 +33,10 @@ interface Props {
   lane?: number;
   /** Total de carriles del cluster overlapping. Default 1 (sin overlap). */
   laneCount?: number;
+  /** Modo de columna en el que vive la card (afecta el color del border-left). */
+  columnMode?: "doctor" | "resource" | "unified";
+  /** Color del Resource cuando se renderiza en modo "Por sillon" - herencia visual de la columna. */
+  resourceColor?: string | null;
 }
 
 const STATUS_COLOR: Record<AppointmentStatus, string> = {
@@ -56,6 +60,8 @@ export function AgendaAppointmentCard({
   draggable = true,
   lane = 0,
   laneCount = 1,
+  columnMode,
+  resourceColor,
 }: Props) {
   const { state, selectAppointment, dispatch } = useAgenda();
   const [pendingNext, setPendingNext] = useState(false);
@@ -198,10 +204,17 @@ export function AgendaAppointmentCard({
 
   const treatment = appointment.reason ?? "Consulta";
 
+  // Cuando la columna es "resource" y conocemos el color del Resource,
+  // exponemos un CSS var adicional para que el border-left herede ese tono.
+  // En modo doctor/unified queda undefined y CSS cae al statusColor default.
+  const resourceColorVar =
+    columnMode === "resource" && resourceColor ? resourceColor : undefined;
+
   return (
     <div
       ref={setNodeRef}
       data-appt-id={appointment.id}
+      data-column-mode={columnMode}
       className={className}
       style={
         {
@@ -209,6 +222,7 @@ export function AgendaAppointmentCard({
           "--mf-slot-span": slotsSpan,
           "--mf-doc-color": docColor,
           "--mf-status-color": statusColor,
+          ...(resourceColorVar ? { "--mf-resource-color": resourceColorVar } : {}),
           "--mf-lane-index": lane,
           "--mf-lane-count": laneCount,
           minHeight: 22,

@@ -501,8 +501,12 @@ export function ClinicLayoutClient({
             setChairsState((prev) => prev.filter((c) => c.id !== elem.resourceId));
             toast.success("Sillón eliminado del layout y de la agenda");
           } else if (res.status === 409) {
+            const body = (await res.json().catch(() => ({}))) as { count?: number };
+            const n = body.count ?? 0;
             toast.error(
-              "No se pudo eliminar de la agenda: hay citas asociadas. Quitado solo del layout.",
+              n > 0
+                ? `No se pudo archivar: ${n} cita${n === 1 ? "" : "s"} activa${n === 1 ? "" : "s"}. Cancela o reagenda primero. (Quitado solo del layout.)`
+                : "No se pudo eliminar de la agenda: hay citas asociadas. Quitado solo del layout.",
             );
           } else {
             toast.error("No se pudo eliminar de la agenda. Quitado solo del layout.");
@@ -1448,7 +1452,7 @@ export function ClinicLayoutClient({
                   </select>
                   <div className={styles.propChairHint}>
                     {liveChairs.length === 0 ? (
-                      <>No hay sillones registrados. <a href="/dashboard/team">Crea uno en Equipo →</a></>
+                      <>No hay sillones registrados. <a href="/dashboard/resources">Crea uno en Recursos →</a></>
                     ) : (
                       <>El sillón conecta este elemento con la agenda en modo En Vivo.</>
                     )}

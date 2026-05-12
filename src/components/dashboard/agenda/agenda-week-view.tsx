@@ -182,6 +182,7 @@ function WeekDayColumn({ day, isToday, slotsTotal }: WeekDayColumnProps) {
           timezone={state.timezone}
           lane={lane}
           laneCount={laneCount}
+          columnMode="unified"
         />
       ))}
     </div>
