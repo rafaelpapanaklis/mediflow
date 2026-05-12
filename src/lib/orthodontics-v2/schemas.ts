@@ -112,21 +112,23 @@ export const PlanInputSchema = z.object({
   iprPlan: z.record(z.number().min(0).max(1)),
 });
 
-export const ArchInputSchema = z
-  .object({
-    phase: PhaseEnumZ,
-    material: ArchMaterialEnum,
-    gauge: z
-      .string()
-      .regex(/^\.\d{3}(\s?x\s?\.\d{3})?$/, "Formato: .016 o .016x.022"),
-    durationW: z.number().int().min(1).max(52),
-    startDate: z.date().optional(),
-    endDate: z.date().optional(),
-    notes: z.string().max(500).optional(),
-  })
-  .refine((d) => !d.endDate || !d.startDate || d.endDate > d.startDate, {
-    message: "endDate > startDate",
-  });
+// Base sin .refine() para que se pueda usar `.partial()` en updates.
+export const ArchInputBase = z.object({
+  phase: PhaseEnumZ,
+  material: ArchMaterialEnum,
+  gauge: z
+    .string()
+    .regex(/^\.\d{3}(\s?x\s?\.\d{3})?$/, "Formato: .016 o .016x.022"),
+  durationW: z.number().int().min(1).max(52),
+  startDate: z.date().optional(),
+  endDate: z.date().optional(),
+  notes: z.string().max(500).optional(),
+});
+
+export const ArchInputSchema = ArchInputBase.refine(
+  (d) => !d.endDate || !d.startDate || d.endDate > d.startDate,
+  { message: "endDate > startDate" },
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. FINANCIAL · SPEC §1.4 con validación enganche+meses*monthly ≈ total

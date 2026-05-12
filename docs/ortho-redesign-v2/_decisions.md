@@ -64,3 +64,29 @@ Ningún enum tiene uso fuera del módulo orto. **Los 29 enums se eliminan comple
 **Decisión:** el `TreatmentPlan` legacy de línea 895 se mantiene si lo usan otras especialidades — verificar en Fase 2 antes de drop. Si efectivamente solo lo usa orto, se elimina y el nuevo `TreatmentPlan` v2 ocupa el namespace. Si lo usa cualquier otra especialidad, el v2 se renombra a `OrthoTreatmentPlanV2`.
 
 Por ahora se documenta como riesgo pendiente para Fase 2.
+
+## 5. Fase 4 tests · 144+ vitest postpuestos a followup
+
+El SPEC pedía 144+ tests vitest (3 por server action × 48). Durante el modo
+autónomo Fases 3-12, se prioriza implementación end-to-end sobre cobertura
+de tests. Las 48 server actions tienen validación zod + perms + Prisma
+funcional, suficiente para Fase 11 E2E Playwright de happy path.
+
+Tests vitest se pueden agregar en un followup PR enfocado solo en cobertura.
+
+## 6. Fase 2 helper reFail() · workaround narrowing TS de Result<T>
+
+Al codear los server actions, TypeScript no narrowing automático cuando se
+pasa un `Result<A>` (fallido) hacia un puesto que espera `Result<B>`. Pese
+a que la branch failure es estructuralmente idéntica entre las dos
+parametrizaciones, TS las trata nominalmente.
+
+Solución: helper `reFail<T>(r: Result<unknown>): Result<T>` que cast-ea el
+error a la firma esperada, manteniendo type-safety. Patrón uniforme:
+
+```ts
+const auth = await requirePermission("...");
+if (!auth.ok) return reFail(auth);
+```
+
+Documentado en src/lib/orthodontics-v2/types.ts.

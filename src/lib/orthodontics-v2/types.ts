@@ -58,6 +58,19 @@ export const fail = (code: string, message: string, field?: string): Result<neve
 export const isOk = <T>(r: Result<T>): r is { ok: true; data: T } => r.ok;
 export const isFailure = <T>(r: Result<T>): r is { ok: false; error: { code: string; message: string; field?: string } } => !r.ok;
 
+/**
+ * Re-wrap un Result fallido a otro tipo. TypeScript no unifica Result<A> con
+ * Result<B> aunque sus branches false sean estructuralmente idénticas, así
+ * que necesitamos un cast explícito al pasar errores entre helpers.
+ *
+ * Acepta cualquier `Result<unknown>`; si está en estado ok lanza para que el
+ * caller arregle el bug — solo debe llamarse dentro de `if (!r.ok) return reFail(r)`.
+ */
+export function reFail<T>(r: Result<unknown>): Result<T> {
+  if (r.ok) throw new Error("reFail called on success Result");
+  return r as Result<T>;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Re-exports de enums de Prisma para consumo del cliente sin importar prisma
 // ─────────────────────────────────────────────────────────────────────────────
