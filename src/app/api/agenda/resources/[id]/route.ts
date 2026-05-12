@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { loadClinicSession, requireRole } from "@/lib/agenda/api-helpers";
+import { loadClinicSession } from "@/lib/agenda/api-helpers";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -26,8 +27,8 @@ interface Params {
 export async function PATCH(req: Request, { params }: Params) {
   const session = await loadClinicSession();
   if (session instanceof NextResponse) return session;
-  const guard = requireRole(session, ["SUPER_ADMIN", "ADMIN"]);
-  if (guard) return guard;
+  const denied = denyIfMissingPermission(session.user, "resources.edit");
+  if (denied) return denied;
 
   const body = await req.json().catch(() => null);
   const parsed = PatchSchema.safeParse(body);
@@ -62,8 +63,8 @@ export async function PATCH(req: Request, { params }: Params) {
 export async function DELETE(_req: Request, { params }: Params) {
   const session = await loadClinicSession();
   if (session instanceof NextResponse) return session;
-  const guard = requireRole(session, ["SUPER_ADMIN", "ADMIN"]);
-  if (guard) return guard;
+  const denied = denyIfMissingPermission(session.user, "resources.edit");
+  if (denied) return denied;
 
   const existing = await prisma.resource.findFirst({
     where: { id: params.id, clinicId: session.clinic.id, isActive: true },

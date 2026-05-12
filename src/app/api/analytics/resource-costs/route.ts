@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 export const dynamic = "force-dynamic";
 // Vercel Pro permite hasta 300s. 60s da cabecera mientras instrumentamos
@@ -34,9 +35,10 @@ export const maxDuration = 60;
 export async function GET(req: NextRequest) {
   console.time("resource-costs:total");
   const user = await getCurrentUser();
-  if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
+  const denied = denyIfMissingPermission(user, "analytics.view");
+  if (denied) {
     console.timeEnd("resource-costs:total");
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    return denied;
   }
   const clinicId = user.clinicId;
 
@@ -124,9 +126,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  const denied = denyIfMissingPermission(user, "resources.edit");
+  if (denied) return denied;
   const clinicId = user.clinicId;
 
   let body: { resourceId?: string; monthlyRent?: number; monthlyOps?: number; notes?: string };
@@ -176,9 +177,8 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  const denied = denyIfMissingPermission(user, "resources.edit");
+  if (denied) return denied;
   const clinicId = user.clinicId;
 
   const url = new URL(req.url);

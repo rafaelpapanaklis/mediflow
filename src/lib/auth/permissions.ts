@@ -185,7 +185,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
     "medicalRecord.view", "medicalRecord.edit",
     "prescription.view", "prescription.create",
     "xrays.view", "xrays.upload", "xrays.analyze",
-    "treatments.view",
+    "treatments.view", "resources.view",
     "inbox.view", "inbox.send",
     "marketplace.view",
     "specialties.pediatrics",
