@@ -31,7 +31,9 @@
 
 ## 2. PR
 
-A abrirse contra `main` durante Fase 12 (este reporte se commitea como parte del PR).
+**URL**: [https://github.com/rafaelpapanaklis/mediflow/pull/24](https://github.com/rafaelpapanaklis/mediflow/pull/24)
+
+Branch `feat/ortho-v2-rewrite` → `main`. NO merge sin aprobación de Rafael.
 
 ---
 
