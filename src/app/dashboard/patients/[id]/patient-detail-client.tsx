@@ -40,56 +40,10 @@ import {
 import type { PerioTabData } from "@/lib/periodontics/load-data";
 import type { SoapPrefill, EndoToothSummary } from "@/lib/types/endodontics";
 import type { ImplantFull } from "@/lib/types/implants";
-import type { OrthoTabData } from "@/lib/orthodontics/load-data";
-import type { OrthoRedesignViewModel } from "@/components/specialties/orthodontics/redesign/types";
-import type { OrthoRedesignBundle } from "@/lib/orthodontics/redesign/loader";
-import {
-  signTreatmentCard,
-  saveTreatmentCardDraft,
-  createOrthoTAD,
-  addWireStep,
-  advanceTreatmentPhase,
-  selectQuoteScenario,
-  sendSignAtHomeLink,
-  confirmCollect,
-  createOrthoLabOrder,
-  toggleRetentionPreSurvey,
-  createPhotoSet,
-  uploadPhotoToSet,
-  updateFinancialPlan,
-  updateDiagnosis,
-  updateOrthoAppliances,
-  createReferralLetter,
-  updateRetentionRegimenConfig,
-  updateNpsConfig,
-  scheduleG15Checkpoint,
-  updateQuoteScenario,
-} from "@/app/actions/orthodontics";
-import { isFailure } from "@/app/actions/orthodontics/result";
 
-// Mapeo slotId del SectionPhotos → OrthoPhotoView del API. Solo las 8 vistas
-// AAO persistibles tienen mapeo; sobremordida y resalte (extra-AAO) no
-// tienen columna en OrthoPhotoSet y se documentan como Fase 2.
-const SLOT_TO_VIEW: Record<
-  string,
-  | "EXTRA_FRONTAL"
-  | "EXTRA_PROFILE"
-  | "EXTRA_SMILE"
-  | "INTRA_FRONTAL_OCCLUSION"
-  | "INTRA_LATERAL_RIGHT"
-  | "INTRA_LATERAL_LEFT"
-  | "INTRA_OCCLUSAL_UPPER"
-  | "INTRA_OCCLUSAL_LOWER"
-> = {
-  normal: "EXTRA_FRONTAL",
-  lateral: "EXTRA_PROFILE",
-  sonrisa: "EXTRA_SMILE",
-  frontal: "INTRA_FRONTAL_OCCLUSION",
-  lat_der: "INTRA_LATERAL_RIGHT",
-  lat_izq: "INTRA_LATERAL_LEFT",
-  oclusal_sup: "INTRA_OCCLUSAL_UPPER",
-  oclusal_inf: "INTRA_OCCLUSAL_LOWER",
-};
+// Ortodoncia v2 — módulo en rewrite (feat/ortho-v2-rewrite). El módulo v1
+// está demolido en .backup/ortho-v1/. Imports + dynamic loader + helpers
+// se re-cablearán en Fase 9 del SPEC v2 sobre el schema nuevo.
 
 // Pediatrics — lazy load del módulo. Solo carga el bundle cuando el doctor
 // abre la pestaña, evitando inflar el bundle del paciente cuando no aplica.
@@ -142,42 +96,6 @@ const ImplantsTab = dynamicImport(
     ),
   },
 );
-
-// Orthodontics — lazy load. Fase 1 rediseño usa OrthodonticsRedesignClient
-// (Hero + Diagnóstico + Plan + Treatment Card G1 + drawers + sidebar derecha).
-// Fallback al cliente legacy `OrthodonticsClient` cuando no hay viewModel.
-const OrthodonticsRedesignClient = dynamicImport(
-  () =>
-    import("@/components/specialties/orthodontics/redesign/OrthodonticsRedesignClient").then(
-      (m) => ({ default: m.OrthodonticsRedesignClient }),
-    ),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="text-xs text-muted-foreground p-4">Cargando módulo de Ortodoncia…</div>
-    ),
-  },
-);
-
-const OrthodonticsClient = dynamicImport(
-  () =>
-    import("@/components/specialties/orthodontics/OrthodonticsClient").then((m) => ({
-      default: m.OrthodonticsClient,
-    })),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="text-xs text-muted-foreground p-4">Cargando módulo de ortodoncia…</div>
-    ),
-  },
-);
-
-// resolveFileUrl es función — no se puede pasar de server a client. Como
-// patient-detail-client.tsx ya es "use client" la definimos aquí mismo,
-// igual al patrón de /dashboard/patients/[id]/orthodontics/page.tsx.
-function resolveOrthoFileUrl(fileId: string): string {
-  return `/api/patient-files/${fileId}`;
-}
 
 // MediFlow es DENTAL — el form de "Nueva consulta" siempre usa DentalForm.
 // El parámetro `specialty` viene del Clinic.specialty (legacy) y se ignora.
@@ -234,8 +152,6 @@ function buildTabs(opts: {
   showEndodontics: boolean;
   /** Implantes — enabled cuando el módulo está activo. Sin gate de edad. */
   showImplants: boolean;
-  /** Ortodoncia — enabled cuando el módulo está activo. Sin gate de edad. */
-  showOrthodontics: boolean;
 }): PatientTab[] {
   const out: PatientTab[] = [...TABS_BASE];
   // Insertar "Pediatría" entre "Historia clínica" y "Odontograma" según spec §1.2.
@@ -257,7 +173,8 @@ function buildTabs(opts: {
   if (opts.showPeriodontics)  insertBeforeOdonto({ id: "periodoncia", label: "Periodoncia" });
   if (opts.showEndodontics)   insertBeforeOdonto({ id: "endodoncia",  label: "Endodoncia"  });
   if (opts.showImplants)      insertBeforeOdonto({ id: "implantes",   label: "Implantes"   });
-  if (opts.showOrthodontics)  insertBeforeOdonto({ id: "ortodoncia",  label: "Ortodoncia"  });
+  // Ortodoncia — pendiente Fase 9 v2 rewrite. Tab oculto hasta que el nuevo
+  // módulo monte sobre el schema v2 (OrthoCase + PatientHeaderG16 + secciones).
   return out;
 }
 
@@ -313,26 +230,7 @@ interface Props {
    * pero el paciente aún no tiene implantes colocados.
    */
   implants?: ImplantFull[] | null;
-  /**
-   * Datos del paciente para el tab Ortodoncia. `null` cuando la clínica
-   * no tiene el módulo activo o no es DENTAL — el tab no se renderiza.
-   * Cuando el paciente no tiene diagnóstico/plan, el componente muestra
-   * el wizard de inicio.
-   */
-  orthoData?: OrthoTabData | null;
-  /**
-   * ViewModel del rediseño Fase 1 ortodoncia patient-detail. Cuando viene
-   * presente, se renderiza el shell nuevo (Hero+Diagnóstico+Plan+G1) en el
-   * tab "ortodoncia". Si es null, fallback al cliente legacy.
-   */
-  orthoRedesignVM?: OrthoRedesignViewModel | null;
-  /**
-   * Datos extra del rediseño Fase 1.5 (secciones E-I) — installments,
-   * quoteScenarios, retentionRegimen, retainerCheckups, npsSchedules,
-   * referralCode, consents, labOrders, referralLetters, whatsappLog +
-   * treatmentStatus derivado. Cuando viene null se usa todo en empty state.
-   */
-  orthoRedesignBundle?: OrthoRedesignBundle | null;
+  // Ortodoncia v2 — re-cableado en Fase 9 v2 rewrite. Props demolidas.
 }
 
 export function PatientDetailClient({
@@ -344,9 +242,6 @@ export function PatientDetailClient({
   endoSummaries,
   endoSoapPrefill,
   implants,
-  orthoData,
-  orthoRedesignVM,
-  orthoRedesignBundle,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -358,16 +253,14 @@ export function PatientDetailClient({
   const showPeriodontics = Boolean(perioData);
   const showEndodontics  = endoSummaries !== null && endoSummaries !== undefined;
   const showImplants     = implants !== null && implants !== undefined;
-  const showOrthodontics = orthoData !== null && orthoData !== undefined;
   const tabs = useMemo(
     () => buildTabs({
       pediatrics:      { state: pediatricsState, reason: PEDIATRICS_DISABLED_REASON },
       showPeriodontics,
       showEndodontics,
       showImplants,
-      showOrthodontics,
     }),
-    [pediatricsState, showPeriodontics, showEndodontics, showImplants, showOrthodontics],
+    [pediatricsState, showPeriodontics, showEndodontics, showImplants],
   );
   const tabFromUrl = searchParams.get("tab");
   const initialTab =
@@ -379,9 +272,7 @@ export function PatientDetailClient({
           ? "endodoncia"
           : tabFromUrl === "implantes" && showImplants
             ? "implantes"
-            : tabFromUrl === "ortodoncia" && showOrthodontics
-              ? "ortodoncia"
-              : "resumen";
+            : "resumen";
   const [tab, setTab]         = useState(initialTab);
   const [consultPaused, setConsultPaused] = useState(false);
   const [consultClosed, setConsultClosed] = useState(false);
@@ -838,11 +729,9 @@ export function PatientDetailClient({
       ? `Dr/a. ${activeAppointment.doctor.firstName} ${activeAppointment.doctor.lastName ?? ""}`.trim()
       : null;
 
-  // El módulo Ortodoncia rediseño usa max-width 1920px (mockup verbatim:
-  // viewport 1920+ aprovechado con sub-sidebar + sections + right rail).
-  // Otros tabs conservan 1400 para no romper densidad existente.
-  const isOrthoTab = tab === "ortodoncia" && Boolean(orthoRedesignVM);
-  const outerMaxWidth = isOrthoTab ? 1920 : 1400;
+  // Ortodoncia v2 — el ancho 1920px se restaura en Fase 9 v2 rewrite cuando
+  // el módulo nuevo monte sobre el schema v2. Por ahora layout estándar 1400.
+  const outerMaxWidth = 1400;
 
   return (
     <div style={{ padding: "20px 28px 28px", maxWidth: outerMaxWidth, margin: "0 auto" }}>
@@ -866,8 +755,8 @@ export function PatientDetailClient({
       </div>
 
       {/* Hero card permanente — audit Opción C ajuste 1.
-          En tab Ortodoncia se reemplaza por PatientHeaderG16 (rendered
-          inside OrthodonticsRedesignClient) — evita doble header. */}
+          En tab Ortodoncia v2 (Fase 9 rewrite) se reemplazará por
+          PatientHeaderG16 dentro del orchestrator nuevo. */}
       {tab !== "ortodoncia" && (
         <HeroCard
           patient={{
@@ -943,7 +832,7 @@ export function PatientDetailClient({
           odontograma usa todo el ancho para los 32 dientes. */}
       <div
         className={`${patientDetailStyles.layout} ${
-          tab === "odontograma" || isOrthoTab ? patientDetailStyles.layoutWide : ""
+          tab === "odontograma" ? patientDetailStyles.layoutWide : ""
         }`}
       >
         <QuickNav
@@ -960,14 +849,12 @@ export function PatientDetailClient({
             periodoncia: perioData?.recordsCount ?? 0,
             endodoncia: endoSummaries?.filter((s) => s.hasActiveTreatment).length ?? 0,
             implantes: implants?.length ?? 0,
-            ortodoncia: orthoData?.controls.filter((c) => c.performedAt === null).length ?? 0,
           }}
           hasBalance={totalBalance > 0}
           pediatrics={{ state: pediatricsState, reason: PEDIATRICS_DISABLED_REASON }}
           showPeriodontics={showPeriodontics}
           showEndodontics={showEndodontics}
           showImplants={showImplants}
-          showOrthodontics={showOrthodontics}
         />
 
         <div className={patientDetailStyles.mainColumn}>
@@ -1196,641 +1083,11 @@ export function PatientDetailClient({
             />
           )}
 
-          {/* ===== TAB: ORTODONCIA ===== */}
-          {tab === "ortodoncia" && orthoRedesignVM && (
-            <OrthodonticsRedesignClient
-              vm={orthoRedesignVM}
-              digitalRecords={orthoData?.digitalRecords?.map((r: any) => {
-                const RECORD_LABEL: Record<string, string> = {
-                  CEPH_ANALYSIS_PDF: "Análisis cefalométrico",
-                  SCAN_STL: "Escaneo digital STL",
-                };
-                const RECORD_KIND: Record<string, "ceph" | "stl" | "other"> = {
-                  CEPH_ANALYSIS_PDF: "ceph",
-                  SCAN_STL: "stl",
-                };
-                return {
-                  label: r.notes ?? RECORD_LABEL[r.recordType] ?? r.recordType,
-                  date: r.capturedAt instanceof Date
-                    ? r.capturedAt.toISOString()
-                    : (typeof r.capturedAt === "string" ? r.capturedAt : null),
-                  kind: RECORD_KIND[r.recordType] ?? "other",
-                };
-              }) ?? []}
-              historicalPhotoSets={orthoRedesignBundle?.historicalPhotoSets ?? []}
-              installments={orthoRedesignBundle?.installments ?? []}
-              quoteScenarios={orthoRedesignBundle?.quoteScenarios ?? []}
-              cfdiRecords={orthoRedesignBundle?.cfdiRecords ?? []}
-              retentionRegimen={orthoRedesignBundle?.retentionRegimen ?? null}
-              retainerCheckups={orthoRedesignBundle?.retainerCheckups ?? []}
-              npsSchedules={orthoRedesignBundle?.npsSchedules ?? []}
-              referralCode={orthoRedesignBundle?.referralCode ?? null}
-              labOrders={orthoRedesignBundle?.labOrders ?? []}
-              consents={orthoRedesignBundle?.consents ?? []}
-              referralLetters={orthoRedesignBundle?.referralLetters ?? []}
-              whatsappLog={orthoRedesignBundle?.whatsappLog ?? []}
-              treatmentStatus={orthoRedesignBundle?.treatmentStatus ?? "en-tratamiento"}
-              financialPlan={orthoRedesignBundle?.financialPlan ?? null}
-              onUpdateFinancialPlan={async (payload) => {
-                if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
-                  return;
-                }
-                const res = await updateFinancialPlan({
-                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
-                  ...payload,
-                });
-                if (isFailure(res)) {
-                  toast.error(res.error);
-                  return;
-                }
-                toast.success(
-                  `Plan financiero actualizado · ${res.data.installmentCount} mensualidades de ${res.data.installmentAmount.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 })}`,
-                );
-                router.refresh();
-              }}
-              canOverridePhase={true}
-              patientHeader={{
-                patient: {
-                  id: patient.id,
-                  fullName: fullName,
-                  avatarInitials: getInitials(patient.firstName, patient.lastName),
-                  age: patient.dob ? ageFromDob(new Date(patient.dob)) : null,
-                  sex:
-                    patient.gender === "F"
-                      ? "F"
-                      : patient.gender === "M"
-                        ? "M"
-                        : patient.gender === "OTHER"
-                          ? "X"
-                          : null,
-                  phone: patient.phone ?? null,
-                  email: patient.email ?? null,
-                  bloodType: patient.bloodType ?? null,
-                  guardianLabel: orthoData?.guardianName
-                    ? `${orthoData.guardianName} (tutor)`
-                    : null,
-                  criticalAllergies:
-                    Array.isArray(patient.allergies) && patient.allergies.length > 0
-                      ? patient.allergies.join(", ")
-                      : null,
-                },
-                outstandingAmount: Math.max(
-                  0,
-                  orthoRedesignVM.treatment.totalCost - orthoRedesignVM.treatment.paid,
-                ),
-                // En tab Ortodoncia, derivamos lastVisitAt y totalVisits
-                // del modelo OrthodonticControlAppointment (visitas reales
-                // del tx ortodóntico), no del Appointment genérico.
-                lastVisitAt: (() => {
-                  const performed = (orthoData?.controls ?? []).filter(
-                    (c: any) => c.performedAt,
-                  );
-                  if (performed.length === 0) return lastAppt?.date ?? null;
-                  performed.sort(
-                    (a: any, b: any) =>
-                      new Date(b.performedAt).getTime() -
-                      new Date(a.performedAt).getTime(),
-                  );
-                  return performed[0].performedAt instanceof Date
-                    ? performed[0].performedAt.toISOString()
-                    : performed[0].performedAt;
-                })(),
-                totalVisits: {
-                  count:
-                    (orthoData?.controls ?? []).filter(
-                      (c: any) => c.attendance === "ATTENDED" && c.performedAt,
-                    ).length || completedCount,
-                  sinceLabel: orthoRedesignVM.treatment.startDate
-                    ? `desde ${new Date(orthoRedesignVM.treatment.startDate).toLocaleDateString("es-MX", { month: "short", year: "numeric" })}`
-                    : null,
-                },
-                onStartVisit: () => {
-                  if (nextAppt) router.push(`?appointment=${nextAppt.id}`);
-                  else toast("Programa una cita primero");
-                },
-                onScheduleNext: () => setTab("agenda"),
-                onCollect: () => setTab("facturacion"),
-                onMore: undefined,
-              }}
-              onStartDiagnosisWizard={() => {
-                // Si no hay diagnóstico, redirige al cliente legacy con el
-                // wizard completo en /dashboard/specialties/orthodontics/[id].
-                router.push(`/dashboard/specialties/orthodontics/${patient.id}`);
-              }}
-              onEditPrescription={() => {
-                // Sin onUpdateAppliances todavía hidratado; este handler
-                // delega al wizard del cliente legacy.
-                router.push(`/dashboard/specialties/orthodontics/${patient.id}`);
-              }}
-              onUpdateDiagnosis={async (payload) => {
-                const res = await updateDiagnosis({
-                  ...payload,
-                  patientId: patient.id,
-                });
-                if (isFailure(res)) {
-                  toast.error(res.error);
-                  return;
-                }
-                toast.success("Diagnóstico actualizado");
-                router.refresh();
-              }}
-              onUpdateAppliances={async (payload) => {
-                const res = await updateOrthoAppliances(payload);
-                if (isFailure(res)) {
-                  toast.error(res.error);
-                  return;
-                }
-                toast.success("Aparatología actualizada");
-                router.refresh();
-              }}
-              onCreateReferralLetter={async (payload) => {
-                const res = await createReferralLetter({
-                  patientId: patient.id,
-                  ...payload,
-                });
-                if (isFailure(res)) {
-                  toast.error(res.error);
-                  return;
-                }
-                toast.success("Carta de referencia enviada");
-                router.refresh();
-              }}
-              onUpdateRetentionRegimen={async (payload) => {
-                if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
-                  return;
-                }
-                const res = await updateRetentionRegimenConfig({
-                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
-                  ...payload,
-                  upperRetainer: payload.upperRetainer as any,
-                  lowerRetainer: payload.lowerRetainer as any,
-                  fixedLingualGauge: payload.fixedLingualGauge as any,
-                });
-                if (isFailure(res)) {
-                  toast.error(res.error);
-                  return;
-                }
-                toast.success("Régimen de retención guardado");
-                router.refresh();
-              }}
-              onUpdateNpsConfig={async (payload) => {
-                if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
-                  return;
-                }
-                const res = await updateNpsConfig({
-                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
-                  ...payload,
-                });
-                if (isFailure(res)) {
-                  toast.error(res.error);
-                  return;
-                }
-                toast.success(
-                  payload.customMessage
-                    ? "Configuración NPS guardada · WhatsApp template lista (envío real Twilio)"
-                    : "Configuración NPS guardada",
-                );
-                router.refresh();
-              }}
-              onScheduleG15Action={async () => {
-                if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
-                  return;
-                }
-                const res = await scheduleG15Checkpoint({
-                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
-                });
-                if (isFailure(res)) {
-                  toast.error(res.error);
-                  return;
-                }
-                toast.success("Foto-set mes 12 programado");
-                router.refresh();
-              }}
-              onUpdateQuoteScenario={async (payload) => {
-                const res = await updateQuoteScenario(payload);
-                if (isFailure(res)) {
-                  toast.error(res.error);
-                  return;
-                }
-                toast.success("Escenario actualizado");
-                router.refresh();
-              }}
-              onAddWireStep={undefined}
-              onSubmitWireStep={async (payload) => {
-                if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
-                  return;
-                }
-                const res = await addWireStep({
-                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
-                  phase: payload.phase,
-                  material: payload.material,
-                  shape: payload.shape,
-                  gauge: payload.gauge,
-                  archUpper: payload.archUpper,
-                  archLower: payload.archLower,
-                  durationWeeks: payload.durationWeeks,
-                  auxiliaries: payload.auxiliaries,
-                  purpose: payload.purpose ?? null,
-                  notes: payload.notes ?? null,
-                });
-                if (isFailure(res)) {
-                  toast.error(res.error);
-                  return;
-                }
-                toast.success("Wire step agregado");
-                router.refresh();
-              }}
-              onAddTad={async () => {
-                if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
-                  return;
-                }
-                const brand = window.prompt(
-                  "Marca TAD (DENTOS, SPIDER, IMTEC, OTHER):",
-                  "DENTOS",
-                );
-                if (!brand) return;
-                const size = window.prompt("Tamaño (ej. 1.4×6mm):", "");
-                if (!size) return;
-                const location = window.prompt(
-                  "Ubicación (ej. vestibular sup. der entre 14 y 15):",
-                  "",
-                );
-                if (!location) return;
-                const torqueStr = window.prompt(
-                  "Torque Ncm (opcional, vacío para omitir):",
-                  "",
-                );
-                const torqueNcm = torqueStr ? parseInt(torqueStr, 10) : null;
-                const res = await createOrthoTAD({
-                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
-                  brand: brand.toUpperCase() as any,
-                  size,
-                  location,
-                  torqueNcm: Number.isFinite(torqueNcm as number)
-                    ? (torqueNcm as number)
-                    : null,
-                });
-                if (isFailure(res)) {
-                  toast.error(res.error);
-                  return;
-                }
-                toast.success("TAD registrado");
-                router.refresh();
-              }}
-              onCardSigned={async (payload) => {
-                if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
-                  return;
-                }
-                const res = await signTreatmentCard({
-                  cardId: payload.cardId,
-                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
-                  cardNumber:
-                    (orthoRedesignVM.treatmentCards.find((c) => c.id === payload.cardId)
-                      ?.cardNumber ??
-                      orthoRedesignVM.treatmentCards.reduce(
-                        (m, c) => Math.max(m, c.cardNumber),
-                        0,
-                      ) + 1),
-                  visitDate:
-                    orthoRedesignVM.treatmentCards.find((c) => c.id === payload.cardId)
-                      ?.visitDate ?? new Date().toISOString(),
-                  durationMin:
-                    orthoRedesignVM.treatmentCards.find((c) => c.id === payload.cardId)
-                      ?.durationMin ?? 30,
-                  phaseKey:
-                    orthoRedesignVM.treatmentCards.find((c) => c.id === payload.cardId)
-                      ?.phaseKey ??
-                    orthoRedesignVM.treatment.phase ??
-                    "LEVELING",
-                  monthAt:
-                    orthoRedesignVM.treatmentCards.find((c) => c.id === payload.cardId)
-                      ?.monthAt ?? orthoRedesignVM.treatment.monthCurrent,
-                  wireFromId:
-                    orthoRedesignVM.treatmentCards.find((c) => c.id === payload.cardId)
-                      ?.wireFrom?.id ?? null,
-                  wireToId: payload.wireToId,
-                  soap: payload.soap,
-                  hygiene: payload.hygiene,
-                  elastics: payload.elastics,
-                  iprPoints: payload.iprPoints,
-                  brokenBrackets: payload.brokenBrackets,
-                  hasProgressPhoto: payload.hasProgressPhoto,
-                  nextDate: payload.nextDate,
-                  nextDurationMin: payload.nextDurationMin,
-                });
-                if (isFailure(res)) {
-                  toast.error(res.error);
-                  return;
-                }
-                toast.success("Cita firmada");
-                router.refresh();
-              }}
-              onCardDraftSaved={async (payload) => {
-                if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
-                  return;
-                }
-                const card = orthoRedesignVM.treatmentCards.find(
-                  (c) => c.id === payload.cardId,
-                );
-                const res = await saveTreatmentCardDraft({
-                  cardId: payload.cardId,
-                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
-                  cardNumber:
-                    card?.cardNumber ??
-                    orthoRedesignVM.treatmentCards.reduce(
-                      (m, c) => Math.max(m, c.cardNumber),
-                      0,
-                    ) + 1,
-                  visitDate: card?.visitDate ?? new Date().toISOString(),
-                  durationMin: card?.durationMin ?? 30,
-                  phaseKey:
-                    card?.phaseKey ?? orthoRedesignVM.treatment.phase ?? "LEVELING",
-                  monthAt: card?.monthAt ?? orthoRedesignVM.treatment.monthCurrent,
-                  wireFromId: card?.wireFrom?.id ?? null,
-                  wireToId: payload.wireToId,
-                  soap: payload.soap,
-                  hygiene: payload.hygiene,
-                  elastics: payload.elastics,
-                  iprPoints: payload.iprPoints,
-                  brokenBrackets: payload.brokenBrackets,
-                  hasProgressPhoto: payload.hasProgressPhoto,
-                  nextDate: payload.nextDate,
-                  nextDurationMin: payload.nextDurationMin,
-                });
-                if (isFailure(res)) {
-                  toast.error(res.error);
-                  return;
-                }
-                toast.success("Borrador guardado");
-                router.refresh();
-              }}
-              onPhaseAdvanced={async (payload) => {
-                if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
-                  return;
-                }
-                // El audit trail (criteriaChecked, isOverride) lo registra
-                // OrthoPhaseTransition por separado; advanceTreatmentPhase solo
-                // necesita treatmentPlanId + toPhase + notes.
-                const notesParts = [
-                  payload.doctorNotes ?? "",
-                  payload.isOverride
-                    ? `OVERRIDE: ${payload.overrideReason ?? "—"}`
-                    : "",
-                  payload.criteriaChecked.length > 0
-                    ? `Criterios: ${payload.criteriaChecked.join(", ")}`
-                    : "",
-                ].filter(Boolean);
-                const res = await advanceTreatmentPhase({
-                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
-                  toPhase: payload.toPhase,
-                  notes: notesParts.join(" · ") || null,
-                });
-                if (isFailure(res)) {
-                  toast.error(res.error);
-                  return;
-                }
-                toast.success(`Fase avanzada a ${payload.toPhase}`);
-                router.refresh();
-              }}
-              onSelectQuoteScenario={async (scenarioId) => {
-                if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
-                  return;
-                }
-                const res = await selectQuoteScenario({
-                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
-                  scenarioId,
-                });
-                if (isFailure(res)) {
-                  toast.error(res.error);
-                  return;
-                }
-                toast.success("Escenario seleccionado");
-                router.refresh();
-              }}
-              onSendSignAtHome={async () => {
-                if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
-                  return;
-                }
-                const accepted = orthoRedesignBundle?.quoteScenarios.find(
-                  (s) => s.status === "ACCEPTED",
-                );
-                if (!accepted) {
-                  toast.error("Selecciona un escenario antes de enviar Sign@Home");
-                  return;
-                }
-                const res = await sendSignAtHomeLink({
-                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
-                  scenarioId: accepted.id,
-                });
-                if (isFailure(res)) {
-                  toast.error(res.error);
-                  return;
-                }
-                toast.success("Link Sign@Home enviado por WhatsApp");
-                router.refresh();
-              }}
-              onConfirmCollect={async (method) => {
-                if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
-                  return;
-                }
-                const res = await confirmCollect({
-                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
-                  method,
-                });
-                if (isFailure(res)) {
-                  toast.error(res.error);
-                  return;
-                }
-                toast.success("Cobro registrado");
-                if ((res.data as { cfdiTimbradoStub?: boolean }).cfdiTimbradoStub) {
-                  toast("CFDI 4.0 con Facturapi · contratar para activar timbrado real");
-                }
-                router.refresh();
-              }}
-              onCreateLabOrder={async (payload) => {
-                const res = await createOrthoLabOrder({
-                  patientId: patient.id,
-                  catalog: payload.catalog,
-                  description: payload.description,
-                  lab: payload.lab,
-                  expectedDate: payload.expectedDate,
-                });
-                if (isFailure(res)) {
-                  toast.error(res.error);
-                  return;
-                }
-                toast.success("Orden de laboratorio creada");
-                router.refresh();
-              }}
-              onTogglePreSurvey={async (enabled) => {
-                if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
-                  return;
-                }
-                const res = await toggleRetentionPreSurvey({
-                  treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
-                  enabled,
-                });
-                if (isFailure(res)) {
-                  toast.error(res.error);
-                  return;
-                }
-                toast.success(
-                  enabled ? "Pre-encuesta activada" : "Pre-encuesta desactivada",
-                );
-                router.refresh();
-              }}
-              onGeneratePdfBeforeAfter={async () => {
-                if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
-                  return;
-                }
-                // Genera PDF comparativo T0 vs Tn vía endpoint existente.
-                // El download se dispara en el browser; el endpoint usa
-                // puppeteer + las URLs firmadas de Supabase Storage.
-                const url = `/api/orthodontics/treatment-plans/${orthoRedesignVM.treatment.treatmentPlanId}/comparison-pdf`;
-                window.open(url, "_blank");
-                toast.success("Generando PDF antes/después…");
-              }}
-              onCopyReferralCode={() => {
-                const code = orthoRedesignBundle?.referralCode?.code;
-                if (!code) {
-                  toast("Sin código de referidos asignado");
-                  return;
-                }
-                navigator.clipboard
-                  .writeText(code)
-                  .then(() => toast.success(`Código ${code} copiado`))
-                  .catch(() => toast.error("No se pudo copiar al portapapeles"));
-              }}
-              onUploadPhoto={async (stage, slotId, file) => {
-                // Persistencia real: createPhotoSet (si no existe set para
-                // esta etapa) → POST /api/orthodontics/photos/upload →
-                // uploadPhotoToSet → router.refresh() para que el loader
-                // re-pinte con la URL firmada de Supabase.
-                const view = SLOT_TO_VIEW[slotId];
-                if (!view) {
-                  // Slot extra-AAO (sobremordida / resalte): no tienen
-                  // columna en OrthoPhotoSet schema actual. Subir requiere
-                  // ALTER TABLE (no servicio externo · backlog interno).
-                  toast.error(
-                    "Slot fuera del set AAO 8 vistas · sin columna en schema",
-                  );
-                  return;
-                }
-                if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
-                  return;
-                }
-                try {
-                  // 1. Resolver setId · usar el del bundle si existe,
-                  //    o crear uno nuevo para esta etapa.
-                  const existingSet =
-                    orthoRedesignBundle?.historicalPhotoSets.find(
-                      (s) => s.stage === stage,
-                    );
-                  let setId = existingSet?.setId ?? null;
-                  if (!setId) {
-                    const created = await createPhotoSet({
-                      treatmentPlanId: orthoRedesignVM.treatment.treatmentPlanId,
-                      patientId: patient.id,
-                      setType: stage,
-                      capturedAt: new Date().toISOString(),
-                      monthInTreatment: orthoRedesignVM.treatment.monthCurrent,
-                    });
-                    if (isFailure(created)) {
-                      toast.error(created.error);
-                      return;
-                    }
-                    setId = (created.data as { id: string }).id;
-                  }
-
-                  // 2. POST file + setId + view al endpoint que sube a
-                  //    Supabase Storage + crea PatientFile.
-                  const fd = new FormData();
-                  fd.append("file", file);
-                  fd.append("setId", setId);
-                  fd.append("view", view);
-                  const res = await fetch(
-                    "/api/orthodontics/photos/upload",
-                    { method: "POST", body: fd },
-                  );
-                  if (!res.ok) {
-                    const errBody = await res.json().catch(() => null);
-                    toast.error(errBody?.error ?? "Falló subida de foto");
-                    return;
-                  }
-                  const { fileId } = (await res.json()) as { fileId: string };
-
-                  // 3. Asocia el PatientFile a la columna del set.
-                  const attached = await uploadPhotoToSet({
-                    setId,
-                    fileId,
-                    view,
-                  });
-                  if (isFailure(attached)) {
-                    toast.error(attached.error);
-                    return;
-                  }
-
-                  toast.success(`Foto ${view.replace(/_/g, " ").toLowerCase()} subida`);
-                  // 4. Re-pinta con URLs firmadas frescas del loader.
-                  router.refresh();
-                } catch (e) {
-                  console.error("[ortho upload] failed:", e);
-                  toast.error("Error inesperado subiendo la foto");
-                }
-              }}
-              onComparePhotos={undefined}
-              onGenerateComparePdf={async () => {
-                if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
-                  return;
-                }
-                const url = `/api/orthodontics/treatment-plans/${orthoRedesignVM.treatment.treatmentPlanId}/comparison-pdf`;
-                window.open(url, "_blank");
-                toast.success("Generando PDF comparativo…");
-              }}
-              onCollectNow={undefined}
-            />
-          )}
-          {tab === "ortodoncia" && !orthoRedesignVM && orthoData && (
-            <OrthodonticsClient
-              patientId={orthoData.patientId}
-              patientName={orthoData.patientName}
-              isMinor={orthoData.isMinor}
-              hasPediatricProfile={orthoData.hasPediatricProfile}
-              guardianName={orthoData.guardianName}
-              pediatricHabits={orthoData.pediatricHabits}
-              pediatricsModuleActive={pediatricsModuleActive}
-              diagnosis={orthoData.diagnosis}
-              plan={orthoData.plan}
-              phases={orthoData.phases}
-              monthInTreatment={orthoData.monthInTreatment}
-              paymentPlan={orthoData.paymentPlan}
-              installments={orthoData.installments}
-              photoSets={orthoData.photoSets}
-              controls={orthoData.controls}
-              digitalRecords={orthoData.digitalRecords}
-              resolveFileUrl={resolveOrthoFileUrl}
-              agreementPdfHref={
-                orthoData.paymentPlan
-                  ? `/api/orthodontics/payment-plans/${orthoData.paymentPlan.id}/financial-agreement-pdf`
-                  : undefined
-              }
-            />
+          {/* ===== TAB: ORTODONCIA ===== (v2 rewrite — Fase 9 pendiente) */}
+          {tab === "ortodoncia" && (
+            <div className="text-xs text-muted-foreground p-4">
+              Módulo Ortodoncia v2 en reconstrucción · ver feat/ortho-v2-rewrite
+            </div>
           )}
 
           {/* ===== TAB: ODONTOGRAMA ===== */}
