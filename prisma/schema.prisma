@@ -194,35 +194,13 @@ model Clinic {
   periodontalSurgeries       PeriodontalSurgery[]
   periImplantAssessments     PeriImplantAssessment[]
 
-  // Orthodontics module — see docs/marketplace/research/ortodoncia/SPEC.md §4
-  orthodonticDiagnoses      OrthodonticDiagnosis[]
-  orthodonticTreatmentPlans OrthodonticTreatmentPlan[]
-  orthodonticPhases         OrthodonticPhase[]
-  orthoPaymentPlans         OrthoPaymentPlan[]
-  orthoInstallments         OrthoInstallment[]
-  orthoPhotoSets            OrthoPhotoSet[]
-  orthodonticControls       OrthodonticControlAppointment[]
-  orthodonticDigitalRecords OrthodonticDigitalRecord[]
-  orthodonticConsents       OrthodonticConsent[]
-
-  // Orthodontics Fase 1 rediseño patient-detail (mayo 2026).
-  orthoWireSteps          OrthoWireStep[]
-  orthoTreatmentCards     OrthoTreatmentCard[]
-  orthoCardElastics       OrthoCardElastic[]
-  orthoCardIprPoints      OrthoCardIprPoint[]
-  orthoCardBrokenBrackets OrthoCardBrokenBracket[]
-  orthoTads               OrthoTAD[]
-  orthoAuxMechanics       OrthoAuxMechanics[]
-  orthoPhaseTransitions   OrthoPhaseTransition[]
-  patientFlowEntries      PatientFlow[]
-
-  // Orthodontics Fase 1.5 rediseño completo.
-  orthoQuoteScenarios     OrthoQuoteScenario[]
-  orthoSignAtHomePackages OrthoSignAtHomePackage[]
-  orthoRetentionRegimens  OrthoRetentionRegimen[]
-  orthoRetainerCheckups   OrthoRetainerCheckup[]
-  orthoNpsSchedules       OrthoNpsSchedule[]
-  orthoReferralCodes      OrthoReferralCode[]
+  // Orthodontics module v2 — see docs/ortho-redesign-v2/SPEC.md
+  orthoCases               OrthoCase[]
+  orthoTemplates           OrthoTemplate[]
+  orthoNoteTemplates       NoteTemplate[]
+  orthoIndicationTemplates IndicationTemplate[]
+  orthoApplianceTypes      ApplianceType[]
+  patientFlowEntries       PatientFlow[]
 
   // Implants module — see docs/marketplace/research/implantologia/SPEC.md §4
   implants             Implant[]
@@ -345,23 +323,9 @@ model User {
   surgeriesAsDoctor                 PeriodontalSurgery[]        @relation("PerioSurgeryDoctor")
   periImplantAssessmentsAsEvaluator PeriImplantAssessment[]
 
-  // Orthodontics module — see docs/marketplace/research/ortodoncia/SPEC.md §4
-  orthodonticDiagnosesAsDoctor OrthodonticDiagnosis[]          @relation("OrthoDiagnosedBy")
-  orthodonticControlsAttended  OrthodonticControlAppointment[] @relation("OrthoControlAttendedBy")
-  orthoPhotoSetsCaptured       OrthoPhotoSet[]                 @relation("OrthoPhotoSetCapturedBy")
-  orthoInstallmentsRecorded    OrthoInstallment[]              @relation("OrthoInstallmentRecordedBy")
-  orthoInstallmentsWaived      OrthoInstallment[]              @relation("OrthoInstallmentWaivedBy")
-  orthoDigitalRecordsUploaded  OrthodonticDigitalRecord[]      @relation("OrthoDigitalUploadedBy")
-
-  // Orthodontics Fase 1 rediseño patient-detail (mayo 2026).
-  orthoCardsSigned            OrthoTreatmentCard[]   @relation("OrthoCardSignedBy")
-  orthoTadsPlaced             OrthoTAD[]             @relation("OrthoTadPlacedBy")
-  orthoPhaseTransitionsSigned OrthoPhaseTransition[] @relation("OrthoPhaseTransitionSignedBy")
-  patientFlowsTriggered       PatientFlow[]          @relation("PatientFlowTriggeredBy")
-
-  // Orthodontics Fase 1.5 rediseño completo.
-  orthoQuotesCreated          OrthoQuoteScenario[]     @relation("OrthoQuoteCreatedBy")
-  orthoSignAtHomeCreated      OrthoSignAtHomePackage[] @relation("OrthoSignAtHomeCreatedBy")
+  // Orthodontics module v2 — see docs/ortho-redesign-v2/SPEC.md
+  orthoCasesAsDoctor    OrthoCase[]   @relation("OrthoCasePrimaryDoctor")
+  patientFlowsTriggered PatientFlow[] @relation("PatientFlowTriggeredBy")
 
   // Implants module — see docs/marketplace/research/implantologia/SPEC.md §4
   implantsPlaced          Implant[]        @relation("ImplantPlacedBy")
@@ -502,30 +466,9 @@ model Patient {
   periodontalSurgeries       PeriodontalSurgery[]
   periImplantAssessments     PeriImplantAssessment[]
 
-  // Orthodontics module — see docs/marketplace/research/ortodoncia/SPEC.md §4
-  orthodonticDiagnoses      OrthodonticDiagnosis[]
-  orthodonticTreatmentPlans OrthodonticTreatmentPlan[]
-  orthoPaymentPlans         OrthoPaymentPlan[]
-  orthoPhotoSets            OrthoPhotoSet[]
-  orthodonticControls       OrthodonticControlAppointment[]
-  orthodonticConsents       OrthodonticConsent[]
-  orthodonticDigitalRecords OrthodonticDigitalRecord[]
-
-  // Orthodontics Fase 1 rediseño patient-detail (mayo 2026).
-  orthoWireSteps          OrthoWireStep[]
-  orthoTreatmentCards     OrthoTreatmentCard[]
-  orthoCardElastics       OrthoCardElastic[]
-  orthoCardIprPoints      OrthoCardIprPoint[]
-  orthoCardBrokenBrackets OrthoCardBrokenBracket[]
-  orthoTads               OrthoTAD[]
-  orthoAuxMechanics       OrthoAuxMechanics[]
-  orthoPhaseTransitions   OrthoPhaseTransition[]
-  patientFlowEntries      PatientFlow[]
-
-  // Orthodontics Fase 1.5 rediseño completo.
-  orthoSignAtHomePackages OrthoSignAtHomePackage[]
-  orthoNpsSchedules       OrthoNpsSchedule[]
-  orthoReferralCodes      OrthoReferralCode[]
+  // Orthodontics module v2 — see docs/ortho-redesign-v2/SPEC.md
+  orthoCase          OrthoCase?
+  patientFlowEntries PatientFlow[]
 
   // Implants module — see docs/marketplace/research/implantologia/SPEC.md §4
   implants        Implant[]
@@ -788,6 +731,8 @@ model Appointment {
   overriddenByUser     User?                          @relation("ApptOverriddenBy", fields: [overriddenBy], references: [id], onDelete: SetNull)
   invoice              Invoice?
   odontogramSnapshot   OdontogramSnapshot?
+  // Orthodontics v2 — link bidi con TreatmentCard (SPEC §2)
+  treatmentCard        TreatmentCard?
   reminders            WhatsAppReminder[]
   // Analytics relations (Push 1)
   timeline             AppointmentTimeline?
@@ -985,10 +930,12 @@ model Invoice {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  clinic      Clinic       @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  appointment Appointment? @relation(fields: [appointmentId], references: [id])
-  payments    Payment[]
+  clinic       Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient      Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointment  Appointment?  @relation(fields: [appointmentId], references: [id])
+  payments     Payment[]
+  // Orthodontics v2 — un Invoice puede tener varias Installments (financial plan)
+  installments Installment[]
 
   @@unique([clinicId, invoiceNumber])
   @@index([clinicId, status, createdAt(sort: Desc)])
@@ -1076,24 +1023,9 @@ model PatientFile {
   surgeryIntraOpFor PeriodontalSurgery[] @relation("SurgeryIntraOpFile")
   surgeryConsentFor PeriodontalSurgery[] @relation("SurgeryConsentFile")
 
-  // Orthodontics module — 8 vistas del set fotográfico (extra+intra) más
-  // consentimientos firmados de tratamiento/financiero/asentimiento + recibos
-  // de pago. SPEC §1.20 reutiliza PatientFile (no se crea modelo separado).
-  orthoPhotoFrontalFor               OrthoPhotoSet[]            @relation("OrthoPhotoFrontal")
-  orthoPhotoProfileFor               OrthoPhotoSet[]            @relation("OrthoPhotoProfile")
-  orthoPhotoSmileFor                 OrthoPhotoSet[]            @relation("OrthoPhotoSmile")
-  orthoPhotoIntraFrontalFor          OrthoPhotoSet[]            @relation("OrthoPhotoIntraFrontal")
-  orthoPhotoIntraLateralRFor         OrthoPhotoSet[]            @relation("OrthoPhotoIntraLateralR")
-  orthoPhotoIntraLateralLFor         OrthoPhotoSet[]            @relation("OrthoPhotoIntraLateralL")
-  orthoPhotoOcclusalUpperFor         OrthoPhotoSet[]            @relation("OrthoPhotoOcclusalUpper")
-  orthoPhotoOcclusalLowerFor         OrthoPhotoSet[]            @relation("OrthoPhotoOcclusalLower")
-  orthoPhotoFaceFrontFor             OrthoPhotoSet[]            @relation("OrthoPhotoFaceFront")
-  orthoPhotoFaceSmileFor             OrthoPhotoSet[]            @relation("OrthoPhotoFaceSmile")
-  orthoTreatmentConsentsSignedFile   OrthodonticTreatmentPlan[] @relation("OrthoTreatmentConsentSignedFile")
-  orthoFinancialAgreementsSignedFile OrthoPaymentPlan[]         @relation("OrthoFinancialAgreementSignedFile")
-  orthoInstallmentsReceipt           OrthoInstallment[]         @relation("OrthoInstallmentReceiptFile")
-  orthoConsentsSignedFile            OrthodonticConsent[]       @relation("OrthoConsentSignedFile")
-  orthoDigitalRecordsFile            OrthodonticDigitalRecord[] @relation("OrthoDigitalRecordFile")
+  // Orthodontics module v2 — PatientFile YA NO se usa para ortho.
+  // El nuevo módulo guarda URLs directas en Photo.url + OrthoDocument.url
+  // sin pasar por la tabla PatientFile (ver docs/ortho-redesign-v2/SPEC.md §1.1).
 
   // Implants module — radiografías peri-implantarias, foto intraoperatoria
   // de la cirugía, foto del paciente para el carnet, PDF del carnet,
@@ -3976,248 +3908,507 @@ model PeriImplantAssessment {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ORTHODONTICS MODULE — see docs/marketplace/research/ortodoncia/SPEC.md
-// 9 modelos MVP + 14 enums + 6 modelos v1.1 (TODO, sin lógica).
+// ORTHODONTICS MODULE v2 — feat/ortho-v2-rewrite
+// 17 modelos + 15 enums conformes a docs/ortho-redesign-v2/SPEC.md
+//
+// Renames vs SPEC (registrados en docs/ortho-redesign-v2/_decisions.md):
+//   - SPEC `TreatmentPlan` → `OrthoTreatmentPlan` (legacy TreatmentPlan
+//     cross-módulo en línea 895 preservado para perio/implants/clinical-shared)
+//   - SPEC `LabOrder` → `OrthoLabOrder` (LabOrder cross-módulo en línea 5306
+//     intacto)
+//   - SPEC `LabOrderStatus` → `OrthoLabOrderStatus` (colisión con enum
+//     cross-módulo de línea 5306)
+//
+// Sin FK a `Xray` (modelo no existe en schema actual — RX se modelan como
+// `Photo.kind = RX_*`). Re-cablear en Fase 4 si surge `Xray` global.
 // ─────────────────────────────────────────────────────────────────────────────
 
-enum AngleClass {
-  CLASS_I
-  CLASS_II_DIV_1
-  CLASS_II_DIV_2
-  CLASS_III
-  ASYMMETRIC
+// ════════ ENUMS ════════
+enum CaseStatus {
+  DRAFT
+  EVAL
+  ACCEPTED
+  ACTIVE
+  PAUSED
+  DEBONDING
+  RETENTION
+  COMPLETED
 }
 
-enum OrthoTechnique {
-  METAL_BRACKETS
-  CERAMIC_BRACKETS
-  SELF_LIGATING_METAL
-  SELF_LIGATING_CERAMIC
-  LINGUAL_BRACKETS
-  CLEAR_ALIGNERS
-  HYBRID
-}
-
-enum AnchorageType {
-  MAXIMUM
-  MODERATE
-  MINIMUM
-  COMPOUND
-}
-
-enum OrthoPhaseKey {
+enum PhaseEnum {
   ALIGNMENT
   LEVELING
-  SPACE_CLOSURE
-  DETAILS
+  SPACE_CLOSE
+  DETAIL
   FINISHING
   RETENTION
 }
 
-enum OrthoPhaseStatus {
-  NOT_STARTED
-  IN_PROGRESS
-  COMPLETED
-  DELAYED
+enum AngleClass {
+  I
+  II_DIV1
+  II_DIV2
+  III
+  COMBO
 }
 
-enum OrthoTreatmentStatus {
-  PLANNED
-  IN_PROGRESS
-  ON_HOLD
-  RETENTION
-  COMPLETED
-  DROPPED_OUT
+enum OpenBite {
+  NONE
+  ANTERIOR
+  POSTERIOR
+  BOTH
 }
 
-enum OrthoPaymentStatus {
-  ON_TIME
-  LIGHT_DELAY
-  SEVERE_DELAY
-  PAID_IN_FULL
+enum CrossBite {
+  NONE
+  ANTERIOR
+  LATERAL_R
+  LATERAL_L
+  POSTERIOR_R
+  POSTERIOR_L
+  BILATERAL
 }
 
-enum InstallmentStatus {
+enum FacialProfile {
+  CONCAVE
+  STRAIGHT
+  CONVEX
+}
+
+enum SkeletalPattern {
+  BRACHY
+  MESO
+  DOLICHO
+}
+
+enum ArchMaterial {
+  NITI
+  SS
+  TMA
+  BETA_TI
+  ESTHETIC
+  OTHER
+}
+
+enum ArchStatus {
+  FUTURE
+  CURRENT
+  PAST
+  SKIPPED
+}
+
+enum PhotoKind {
+  EXTRA_FRONTAL_REST
+  EXTRA_FRONTAL_SMILE
+  EXTRA_LAT34
+  EXTRA_PROFILE_R
+  EXTRA_PROFILE_L
+  INTRA_FRONT
+  INTRA_LAT_R
+  INTRA_LAT_L
+  INTRA_OCCL_UP
+  INTRA_OCCL_LO
+  INTRA_OVERJET
+  RX_PANO
+  RX_CEPH
+  RX_PA
+  RX_CBCT
+  STL_UP
+  STL_LO
+  STL_BITE
+  PDF
+  OTHER
+}
+
+enum VisitType {
+  INSTALLATION
+  CONTROL
+  EMERGENCY
+  DEBONDING
+  RETAINER_FIT
+  FOLLOWUP
+}
+
+enum InstStatus {
+  FUTURE
   PENDING
   PAID
   OVERDUE
   WAIVED
 }
 
-enum OrthoPhotoSetType {
-  T0
-  T1
-  T2
-  CONTROL
+enum RetainerKind {
+  NONE
+  HAWLEY
+  ESSIX
+  FIXED_3_3
+  FIXED_EXTENDED
+  CLEAR_NIGHT
 }
 
-enum OrthoPhotoView {
-  EXTRA_FRONTAL
-  EXTRA_PROFILE
-  EXTRA_SMILE
-  INTRA_FRONTAL_OCCLUSION
-  INTRA_LATERAL_RIGHT
-  INTRA_LATERAL_LEFT
-  INTRA_OCCLUSAL_UPPER
-  INTRA_OCCLUSAL_LOWER
-}
-
-// Reuso de HabitType (orto comparte con pediatría/periodoncia si existe).
-// Si los otros módulos ya lo definen, este enum se omite. SPEC §4.1 nota:
-// definirlo aquí y dejar que prisma fusione si hay conflicto. En este repo
-// HabitType NO existe globalmente; se define ahora.
-enum HabitType {
-  DIGITAL_SUCKING
-  MOUTH_BREATHING
-  TONGUE_THRUSTING
-  BRUXISM
-  NAIL_BITING
-  LIP_BITING
+enum DocumentKind {
+  CONSENT
+  REFERRAL_LETTER
+  LAB_ORDER
   OTHER
 }
 
-enum DentalPhase {
-  DECIDUOUS
-  MIXED_EARLY
-  MIXED_LATE
-  PERMANENT
-}
-
-enum TreatmentObjective {
-  AESTHETIC_ONLY
-  FUNCTIONAL_ONLY
-  AESTHETIC_AND_FUNCTIONAL
-}
-
-enum OrthoConsentType {
-  TREATMENT
-  FINANCIAL
-  MINOR_ASSENT
-  PHOTO_USE
-}
-
-enum ControlAttendance {
-  ATTENDED
-  RESCHEDULED
-  NO_SHOW
-}
-
-enum AdjustmentType {
-  WIRE_CHANGE
-  BRACKET_REPOSITION
-  ELASTIC_CHANGE
-  NEW_ALIGNERS_DELIVERED
-  IPR
-  BUTTON_PLACEMENT
-  ATTACHMENT_PLACEMENT
-  HYGIENE_REINFORCEMENT
-  OTHER
-}
-
-enum OrthoPaymentMethod {
-  CASH
-  DEBIT_CARD
-  CREDIT_CARD
-  BANK_TRANSFER
-  CHECK
-  WALLET
-}
-
-enum DigitalRecordType {
-  CEPH_ANALYSIS_PDF
-  SCAN_STL
-}
-
-// ─── Enums Fase 1 rediseño patient-detail (mayo 2026) ───────────────────────
-
-enum OrthoApplianceSlot {
-  MBT_018
-  MBT_022
-  ROTH_018
-  ROTH_022
-  DAMON_Q2
-  DAMON_ULTIMA
-  SPARK
-  INVISALIGN
-}
-
-enum OrthoBondingType {
-  DIRECTO
-  INDIRECTO
-}
-
-enum OrthoSkeletalPattern {
-  MESOFACIAL
-  DOLICOFACIAL
-  BRAQUIFACIAL
-}
-
-enum OrthoWireMaterial {
-  NITI
-  SS
-  TMA
-  BETA_TITANIUM
-}
-
-enum OrthoWireShape {
-  ROUND
-  RECT
-}
-
-enum OrthoWireStepStatus {
-  PLANNED
-  ACTIVE
-  COMPLETED
-  SKIPPED
-}
-
-enum OrthoElasticClass {
-  CLASE_I
-  CLASE_II
-  CLASE_III
-  BOX
-  CRISS_CROSS
-  SETTLING
-}
-
-enum OrthoElasticZone {
-  ANTERIOR
-  POSTERIOR
-  INTERMAXILAR
-}
-
-enum OrthoTadBrand {
-  DENTOS
-  SPIDER
-  IMTEC
-  OTHER
-}
-
-enum OrthoExpanderType {
-  RPE_HYRAX
-  QUAD_HELIX
-  MCNAMARA
-  OTHER
-}
-
-enum OrthoDistalizerType {
-  PENDULUM
-  CARRIERE
-  BENESLIDER
-  FORSUS
-  OTHER
-}
-
-enum OrthoGingivitisLevel {
-  AUSENTE
-  LEVE
-  MODERADA
-  SEVERA
-}
-
-enum OrthoCardStatus {
+enum OrthoLabOrderStatus {
   DRAFT
-  SIGNED
+  SENT
+  RECEIVED
+  CANCELLED
+}
+
+// ════════ CASE ════════
+model OrthoCase {
+  id              String     @id @default(cuid())
+  clinicId        String
+  patientId       String     @unique
+  caseCode        String
+  status          CaseStatus @default(DRAFT)
+  currentPhase    PhaseEnum?
+  primaryDoctorId String
+  startedAt       DateTime?
+  estimatedEnd    DateTime?
+  debondedAt      DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  clinic         Clinic              @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient        Patient             @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  primaryDoctor  User                @relation("OrthoCasePrimaryDoctor", fields: [primaryDoctorId], references: [id])
+  diagnosis      OrthoDiagnosis?
+  plan           OrthoTreatmentPlan?
+  photoSets      PhotoSet[]
+  treatmentCards TreatmentCard[]
+  financialPlan  FinancialPlan?
+  retentionPlan  RetentionPlan?
+  documents      OrthoDocument[]
+  labOrders      OrthoLabOrder[]
+  comms          CommunicationLog[]
+
+  @@unique([clinicId, caseCode])
+  @@index([clinicId, status])
+  @@index([clinicId, primaryDoctorId])
+  @@map("ortho_cases")
+}
+
+// ════════ DIAGNOSIS ════════
+model OrthoDiagnosis {
+  id               String          @id @default(cuid())
+  caseId           String          @unique
+  angleClass       AngleClass
+  subCaninoR       AngleClass?
+  subCaninoL       AngleClass?
+  subMolarR        AngleClass?
+  subMolarL        AngleClass?
+  overjetMm        Float?
+  overbiteMm       Float?
+  openBite         OpenBite        @default(NONE)
+  crossBite        CrossBite       @default(NONE)
+  crowdingMaxMm    Float?
+  crowdingMandMm   Float?
+  diastemas        Json
+  midlineDeviation Float?
+  facialProfile    FacialProfile
+  skeletalPattern  SkeletalPattern
+  skeletalIssues   String[]
+  tmjFindings      Json
+  habits           String[]
+  narrative        String          @db.Text
+  updatedAt        DateTime        @updatedAt
+  updatedBy        String
+
+  case OrthoCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@map("ortho_diagnoses")
+}
+
+// ════════ TREATMENT PLAN ════════
+model OrthoTreatmentPlan {
+  id           String    @id @default(cuid())
+  caseId       String    @unique
+  appliances   String[]
+  extractions  Int[]
+  elastics     Json
+  expanders    Json
+  tads         Json
+  objectives   String[]
+  notes        String    @db.Text
+  templateId   String?
+  iprPlan      Json
+  acceptedAt   DateTime?
+  acceptedBy   String?
+  signedDocUrl String?
+
+  case          OrthoCase      @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  archesPlanned ArchPlanned[]
+  template      OrthoTemplate? @relation(fields: [templateId], references: [id])
+
+  @@index([templateId])
+  @@map("ortho_treatment_plans")
+}
+
+model ArchPlanned {
+  id        String       @id @default(cuid())
+  planId    String
+  order     Int
+  phase     PhaseEnum
+  material  ArchMaterial
+  gauge     String
+  durationW Int
+  startDate DateTime?
+  endDate   DateTime?
+  status    ArchStatus   @default(FUTURE)
+  notes     String?
+
+  plan OrthoTreatmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, order])
+  @@map("ortho_arches_planned")
+}
+
+// ════════ PHOTOS ════════
+model PhotoSet {
+  id         String   @id @default(cuid())
+  caseId     String
+  stageCode  String
+  capturedAt DateTime
+  notes      String?
+  createdAt  DateTime @default(now())
+  createdBy  String
+
+  case   OrthoCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  photos Photo[]
+
+  @@unique([caseId, stageCode])
+  @@index([caseId, capturedAt])
+  @@map("ortho_photo_sets")
+}
+
+model Photo {
+  id           String    @id @default(cuid())
+  photoSetId   String
+  kind         PhotoKind
+  url          String
+  thumbUrl     String?
+  isFavorite   Boolean   @default(false)
+  annotations  Json
+  measurements Json
+  teethRef     Int[]
+  width        Int
+  height       Int
+  exifJson     Json?
+  createdAt    DateTime  @default(now())
+
+  photoSet PhotoSet @relation(fields: [photoSetId], references: [id], onDelete: Cascade)
+
+  @@index([photoSetId])
+  @@map("ortho_photos")
+}
+
+// ════════ TREATMENT CARD ════════
+model TreatmentCard {
+  id              String    @id @default(cuid())
+  caseId          String
+  appointmentId   String?   @unique
+  visitDate       DateTime
+  visitType       VisitType
+  templateUsed    String?
+  archPlacedId    String?
+  archPlacedJson  Json?
+  ligColor        String?
+  ligKind         String?
+  activations     String[]
+  elasticUse      Json
+  bracketsLost    Int[]
+  iprDoneDelta    Json
+  soap            Json
+  homeInstr       String    @db.Text
+  nextSuggestedAt DateTime?
+  linkedPhotoSet  String?
+  createdAt       DateTime  @default(now())
+  createdBy       String
+  signedOffAt     DateTime?
+
+  case        OrthoCase    @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id])
+
+  @@index([caseId, visitDate])
+  @@index([appointmentId])
+  @@map("ortho_treatment_cards")
+}
+
+// ════════ FINANCIAL ════════
+model FinancialPlan {
+  id               String    @id @default(cuid())
+  caseId           String    @unique
+  total            Decimal   @db.Decimal(10, 2)
+  downPayment      Decimal   @db.Decimal(10, 2)
+  months           Int
+  monthly          Decimal   @db.Decimal(10, 2)
+  startDate        DateTime
+  scenarios        Json
+  activeScenarioId String?
+  signAtHomeUrl    String?
+  signedByPatient  Boolean   @default(false)
+  signedAt         DateTime?
+
+  case         OrthoCase     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  installments Installment[]
+
+  @@map("ortho_financial_plans")
+}
+
+model Installment {
+  id          String     @id @default(cuid())
+  financialId String
+  number      Int
+  amount      Decimal    @db.Decimal(10, 2)
+  dueDate     DateTime
+  paidAt      DateTime?
+  invoiceId   String?
+  status      InstStatus @default(FUTURE)
+
+  financial FinancialPlan @relation(fields: [financialId], references: [id], onDelete: Cascade)
+  invoice   Invoice?      @relation(fields: [invoiceId], references: [id])
+
+  @@unique([financialId, number])
+  @@index([dueDate, status])
+  @@map("ortho_installments")
+}
+
+// ════════ RETENTION ════════
+model RetentionPlan {
+  id              String       @id @default(cuid())
+  caseId          String       @unique
+  retUpper        RetainerKind @default(NONE)
+  retLower        RetainerKind @default(NONE)
+  fixedGauge      String?
+  regimen         String       @db.Text
+  checkpoints     DateTime[]
+  checkpointsDone Json
+  beforeAfterPdf  String?
+  referralCode    String       @unique
+  referralReward  Json
+  referralsCount  Int          @default(0)
+
+  case OrthoCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@map("ortho_retention_plans")
+}
+
+// ════════ DOCS & LAB ════════
+model OrthoDocument {
+  id          String       @id @default(cuid())
+  caseId      String
+  kind        DocumentKind
+  title       String
+  url         String
+  signedAt    DateTime?
+  signedToken String?
+  createdAt   DateTime     @default(now())
+  createdBy   String
+
+  case OrthoCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@map("ortho_documents")
+}
+
+model OrthoLabOrder {
+  id           String              @id @default(cuid())
+  caseId       String
+  itemCode     String
+  itemLabel    String
+  labPartner   String
+  trackingCode String?
+  sentAt       DateTime?
+  receivedAt   DateTime?
+  status       OrthoLabOrderStatus @default(DRAFT)
+  notes        String?
+
+  case OrthoCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId, status])
+  @@map("ortho_lab_orders")
+}
+
+// ════════ COMUNICACIÓN ════════
+model CommunicationLog {
+  id         String   @id @default(cuid())
+  caseId     String
+  channel    String
+  direction  String
+  body       String   @db.Text
+  templateId String?
+  sentAt     DateTime @default(now())
+  externalId String?
+
+  case OrthoCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId, sentAt])
+  @@map("ortho_communication_logs")
+}
+
+// ════════ CATÁLOGOS EXTENSIBLES ════════
+model ApplianceType {
+  id        String  @id @default(cuid())
+  clinicId  String
+  code      String
+  label     String
+  category  String
+  builtin   Boolean @default(false)
+  createdBy String?
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@unique([clinicId, code])
+  @@map("ortho_appliance_types")
+}
+
+model OrthoTemplate {
+  id          String   @id @default(cuid())
+  clinicId    String
+  name        String
+  description String?
+  ownerUserId String?
+  payload     Json
+  usageCount  Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  clinic Clinic               @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  plans  OrthoTreatmentPlan[]
+
+  @@unique([clinicId, name])
+  @@map("ortho_templates")
+}
+
+model NoteTemplate {
+  id       String  @id @default(cuid())
+  clinicId String
+  scope    String
+  name     String
+  body     String  @db.Text
+  builtin  Boolean @default(false)
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@unique([clinicId, scope, name])
+  @@map("ortho_note_templates")
+}
+
+model IndicationTemplate {
+  id       String @id @default(cuid())
+  clinicId String
+  label    String
+  body     String @db.Text
+  category String
+
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@map("ortho_indication_templates")
 }
 
 enum PatientFlowStatus {
@@ -4225,905 +4416,6 @@ enum PatientFlowStatus {
   IN_CHAIR
   CHECKOUT
   COMPLETED
-}
-
-// ─── Modelos MVP (9) ─────────────────────────────────────────────────────────
-
-model OrthodonticDiagnosis {
-  id            String   @id @default(uuid())
-  patientId     String
-  clinicId      String
-  diagnosedById String
-  diagnosedAt   DateTime @default(now())
-
-  // Análisis Angle
-  angleClassRight    AngleClass
-  angleClassLeft     AngleClass
-  overbiteMm         Decimal    @db.Decimal(4, 1)
-  overbitePercentage Int
-  overjetMm          Decimal    @db.Decimal(4, 1)
-  midlineDeviationMm Decimal?   @db.Decimal(4, 1)
-  crossbite          Boolean    @default(false)
-  crossbiteDetails   String?
-  openBite           Boolean    @default(false)
-  openBiteDetails    String?
-  crowdingUpperMm    Decimal?   @db.Decimal(4, 1)
-  crowdingLowerMm    Decimal?   @db.Decimal(4, 1)
-
-  etiologySkeletal   Boolean @default(false)
-  etiologyDental     Boolean @default(false)
-  etiologyFunctional Boolean @default(false)
-  etiologyNotes      String?
-
-  habits            HabitType[]
-  habitsDescription String?
-
-  dentalPhase DentalPhase
-
-  // Fase 1 rediseño: patrón skeletal categórico para Diagnóstico (B).
-  skeletalPattern OrthoSkeletalPattern?
-
-  tmjPainPresent     Boolean @default(false)
-  tmjClickingPresent Boolean @default(false)
-  tmjNotes           String?
-
-  initialPhotoSetId String? @unique
-  initialCephFileId String?
-  initialScanFileId String?
-
-  clinicalSummary String
-
-  treatmentPlan OrthodonticTreatmentPlan?
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
-
-  patient     Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  clinic      Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  diagnosedBy User    @relation("OrthoDiagnosedBy", fields: [diagnosedById], references: [id])
-
-  @@index([patientId])
-  @@index([clinicId, diagnosedAt(sort: Desc)])
-  @@map("orthodontic_diagnoses")
-}
-
-model OrthodonticTreatmentPlan {
-  id          String @id @default(uuid())
-  diagnosisId String @unique
-  patientId   String
-  clinicId    String
-
-  technique               OrthoTechnique
-  techniqueNotes          String?
-  estimatedDurationMonths Int
-  startDate               DateTime?
-  installedAt             DateTime?
-
-  // Fase 1 rediseño: prescripción G4 detallada (slot system + bonding).
-  prescriptionSlot            OrthoApplianceSlot?
-  bondingType                 OrthoBondingType?
-  prescriptionNotes           String?
-  estimatedTotalDurationWeeks Int?
-
-  totalCostMxn   Decimal       @db.Decimal(10, 2)
-  anchorageType  AnchorageType
-  anchorageNotes String?
-
-  extractionsRequired Boolean @default(false)
-  extractionsTeethFdi Int[]
-  iprRequired         Boolean @default(false)
-  tadsRequired        Boolean @default(false)
-
-  treatmentObjectives TreatmentObjective
-  patientGoals        String?
-
-  retentionPlanText String
-
-  status          OrthoTreatmentStatus @default(PLANNED)
-  statusUpdatedAt DateTime             @default(now())
-
-  onHoldReason     String?
-  onHoldStartedAt  DateTime?
-  droppedOutAt     DateTime?
-  droppedOutReason String?
-
-  signedTreatmentConsentFileId String?
-  signedTreatmentConsentFile   PatientFile? @relation("OrthoTreatmentConsentSignedFile", fields: [signedTreatmentConsentFileId], references: [id], onDelete: SetNull)
-
-  diagnosis      OrthodonticDiagnosis            @relation(fields: [diagnosisId], references: [id], onDelete: Cascade)
-  patient        Patient                         @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  clinic         Clinic                          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  phases         OrthodonticPhase[]
-  paymentPlan    OrthoPaymentPlan?
-  controls       OrthodonticControlAppointment[]
-  photoSets      OrthoPhotoSet[]
-  digitalRecords OrthodonticDigitalRecord[]
-  consents       OrthodonticConsent[]
-
-  // Fase 1 rediseño relations.
-  wireSteps        OrthoWireStep[]
-  treatmentCards   OrthoTreatmentCard[]
-  tads             OrthoTAD[]
-  auxMechanics     OrthoAuxMechanics?
-  phaseTransitions OrthoPhaseTransition[]
-
-  // Fase 1.5 rediseño completo relations (Sección F/G/H).
-  quoteScenarios   OrthoQuoteScenario[]
-  retentionRegimen OrthoRetentionRegimen?
-  npsSchedules     OrthoNpsSchedule[]
-  signAtHomePackages OrthoSignAtHomePackage[]
-  referralCode     OrthoReferralCode?
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
-
-  @@index([patientId])
-  @@index([clinicId, status])
-  @@index([clinicId, installedAt(sort: Desc)])
-  @@map("orthodontic_treatment_plans")
-}
-
-model OrthodonticPhase {
-  id              String @id @default(uuid())
-  treatmentPlanId String
-  clinicId        String
-
-  phaseKey      OrthoPhaseKey
-  status        OrthoPhaseStatus @default(NOT_STARTED)
-  startedAt     DateTime?
-  expectedEndAt DateTime?
-  completedAt   DateTime?
-  notes         String?
-  orderIndex    Int
-
-  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
-  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([treatmentPlanId, phaseKey])
-  // SPEC §4.5: índice idx_ortho_kanban_lookup para query del kanban <100ms con
-  // 500 pacientes activos. La migración SQL le da nombre explícito.
-  @@index([clinicId, status, phaseKey], map: "idx_ortho_kanban_lookup")
-  @@index([treatmentPlanId, orderIndex])
-  @@map("orthodontic_phases")
-}
-
-model OrthoPaymentPlan {
-  id              String @id @default(uuid())
-  treatmentPlanId String @unique
-  patientId       String
-  clinicId        String
-
-  totalAmount        Decimal @db.Decimal(10, 2)
-  initialDownPayment Decimal @db.Decimal(10, 2)
-  installmentAmount  Decimal @db.Decimal(10, 2)
-  installmentCount   Int
-
-  startDate         DateTime
-  endDate           DateTime
-  paymentDayOfMonth Int
-
-  paidAmount      Decimal            @default(0) @db.Decimal(10, 2)
-  pendingAmount   Decimal            @db.Decimal(10, 2)
-  status          OrthoPaymentStatus @default(ON_TIME)
-  statusUpdatedAt DateTime           @default(now())
-
-  preferredPaymentMethod         OrthoPaymentMethod
-  signedFinancialAgreementFileId String?
-  signedFinancialAgreementFile   PatientFile?       @relation("OrthoFinancialAgreementSignedFile", fields: [signedFinancialAgreementFileId], references: [id], onDelete: SetNull)
-
-  notes String?
-
-  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
-  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  installments  OrthoInstallment[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([clinicId, status])
-  @@index([patientId])
-  @@map("ortho_payment_plans")
-}
-
-model OrthoInstallment {
-  id            String @id @default(uuid())
-  paymentPlanId String
-  clinicId      String
-
-  installmentNumber Int
-  amount            Decimal           @db.Decimal(10, 2)
-  dueDate           DateTime
-  status            InstallmentStatus @default(PENDING)
-
-  paidAt                  DateTime?
-  amountPaid              Decimal?            @db.Decimal(10, 2)
-  paymentMethod           OrthoPaymentMethod?
-  receiptFileId           String?
-  receiptFile             PatientFile?        @relation("OrthoInstallmentReceiptFile", fields: [receiptFileId], references: [id], onDelete: SetNull)
-  recordedById            String?
-  recordedBy              User?               @relation("OrthoInstallmentRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
-  backdatingJustification String?
-
-  waivedAt     DateTime?
-  waivedById   String?
-  waivedBy     User?     @relation("OrthoInstallmentWaivedBy", fields: [waivedById], references: [id], onDelete: SetNull)
-  waiverReason String?
-
-  paymentPlan OrthoPaymentPlan @relation(fields: [paymentPlanId], references: [id], onDelete: Cascade)
-  clinic      Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([paymentPlanId, installmentNumber])
-  @@index([clinicId, dueDate, status])
-  @@index([clinicId, status])
-  @@map("ortho_installments")
-}
-
-model OrthoPhotoSet {
-  id              String @id @default(uuid())
-  treatmentPlanId String
-  patientId       String
-  clinicId        String
-
-  setType          OrthoPhotoSetType
-  capturedAt       DateTime
-  capturedById     String
-  capturedBy       User              @relation("OrthoPhotoSetCapturedBy", fields: [capturedById], references: [id])
-  monthInTreatment Int?
-  notes            String?
-
-  // 8 columnas tipadas (decisión Coordinator, no tabla relacional).
-  photoFrontalId       String?
-  photoFrontal         PatientFile? @relation("OrthoPhotoFrontal", fields: [photoFrontalId], references: [id], onDelete: SetNull)
-  photoProfileId       String?
-  photoProfile         PatientFile? @relation("OrthoPhotoProfile", fields: [photoProfileId], references: [id], onDelete: SetNull)
-  photoSmileId         String?
-  photoSmile           PatientFile? @relation("OrthoPhotoSmile", fields: [photoSmileId], references: [id], onDelete: SetNull)
-  photoIntraFrontalId  String?
-  photoIntraFrontal    PatientFile? @relation("OrthoPhotoIntraFrontal", fields: [photoIntraFrontalId], references: [id], onDelete: SetNull)
-  photoIntraLateralRId String?
-  photoIntraLateralR   PatientFile? @relation("OrthoPhotoIntraLateralR", fields: [photoIntraLateralRId], references: [id], onDelete: SetNull)
-  photoIntraLateralLId String?
-  photoIntraLateralL   PatientFile? @relation("OrthoPhotoIntraLateralL", fields: [photoIntraLateralLId], references: [id], onDelete: SetNull)
-  photoOcclusalUpperId String?
-  photoOcclusalUpper   PatientFile? @relation("OrthoPhotoOcclusalUpper", fields: [photoOcclusalUpperId], references: [id], onDelete: SetNull)
-  photoOcclusalLowerId String?
-  photoOcclusalLower   PatientFile? @relation("OrthoPhotoOcclusalLower", fields: [photoOcclusalLowerId], references: [id], onDelete: SetNull)
-
-  // Fase 1.5 rediseño: 2 vistas faciales adicionales (Normal + Sonrisa).
-  // Total 10 vistas anatómicas según deliverable Claude Design.
-  photoFaceFrontId String?
-  photoFaceFront   PatientFile? @relation("OrthoPhotoFaceFront", fields: [photoFaceFrontId], references: [id], onDelete: SetNull)
-  photoFaceSmileId String?
-  photoFaceSmile   PatientFile? @relation("OrthoPhotoFaceSmile", fields: [photoFaceSmileId], references: [id], onDelete: SetNull)
-
-  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
-  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([treatmentPlanId, setType])
-  @@index([clinicId, capturedAt(sort: Desc)])
-  @@map("ortho_photo_sets")
-}
-
-model OrthodonticControlAppointment {
-  id              String @id @default(uuid())
-  treatmentPlanId String
-  patientId       String
-  clinicId        String
-
-  scheduledAt      DateTime
-  performedAt      DateTime?
-  monthInTreatment Int
-  attendance       ControlAttendance @default(ATTENDED)
-  attendedById     String?
-  attendedBy       User?             @relation("OrthoControlAttendedBy", fields: [attendedById], references: [id], onDelete: SetNull)
-
-  hygieneScore       Int?
-  bracketsLoose      Int?
-  bracketsBroken     Int?
-  appliancesIntact   Boolean?
-  patientReportsPain Boolean  @default(false)
-  patientPainNotes   String?
-
-  adjustments     AdjustmentType[]
-  adjustmentNotes String?
-
-  photoSetId String?
-
-  nextAppointmentAt    DateTime?
-  nextAppointmentNotes String?
-
-  paymentStatusSnapshot OrthoPaymentStatus?
-
-  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
-  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-
-  // Fase 1 rediseño: card 1:1 opcional (rich SOAP). El control sigue siendo
-  // el snapshot legacy para reportes/PDFs existentes.
-  treatmentCard OrthoTreatmentCard? @relation("OrthoCardControl")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([treatmentPlanId, monthInTreatment])
-  @@index([clinicId, scheduledAt])
-  @@index([clinicId, performedAt])
-  @@map("orthodontic_control_appointments")
-}
-
-model OrthodonticDigitalRecord {
-  id              String @id @default(uuid())
-  treatmentPlanId String
-  patientId       String
-  clinicId        String
-
-  recordType   DigitalRecordType
-  fileId       String
-  file         PatientFile       @relation("OrthoDigitalRecordFile", fields: [fileId], references: [id], onDelete: Cascade)
-  capturedAt   DateTime
-  uploadedById String
-  uploadedBy   User              @relation("OrthoDigitalUploadedBy", fields: [uploadedById], references: [id])
-  notes        String?
-
-  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
-  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-
-  @@index([treatmentPlanId, recordType])
-  @@map("orthodontic_digital_records")
-}
-
-model OrthodonticConsent {
-  id              String @id @default(uuid())
-  treatmentPlanId String
-  patientId       String
-  clinicId        String
-
-  consentType            OrthoConsentType
-  signedAt               DateTime
-  signerName             String
-  signerRelationship     String?
-  patientSignatureImage  String?
-  guardianSignatureImage String?
-  signedFileId           String?
-  signedFile             PatientFile?     @relation("OrthoConsentSignedFile", fields: [signedFileId], references: [id], onDelete: SetNull)
-  notes                  String?
-
-  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
-  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-
-  @@index([treatmentPlanId, consentType])
-  @@map("orthodontic_consents")
-}
-
-// ─── Modelos Fase 1 rediseño patient-detail (mayo 2026) ─────────────────────
-//
-// Estos 8 modelos extienden la pantalla de Ortodoncia patient-detail con
-// G1 Treatment Card visual, G3 wire sequencing, G10 TADs, G16 patient flow.
-// Coexisten con OrthodonticControlAppointment (legacy snapshot) y los planes
-// existentes — son aditivos.
-
-model OrthoWireStep {
-  id              String @id @default(uuid())
-  treatmentPlanId String
-  clinicId        String
-
-  orderIndex    Int
-  phaseKey      OrthoPhaseKey
-  material      OrthoWireMaterial
-  shape         OrthoWireShape
-  /// Calibre como string libre: "0.014", "0.018", "16x22", "19x25" — combina
-  /// round (0.014/0.016/0.018) y rect (16x22, 19x25) bajo un formato único.
-  gauge         String
-  /// "Alineación inicial", "Trabajo sagital", etc. Texto libre acotado.
-  purpose       String?
-  archUpper     Boolean           @default(true)
-  archLower     Boolean           @default(true)
-  durationWeeks Int
-  /// Auxiliares aplicados al instalar este wire: stops, open coil, lazo cinch.
-  auxiliaries   String[]
-  notes         String?
-
-  status        OrthoWireStepStatus @default(PLANNED)
-  plannedDate   DateTime?
-  appliedDate   DateTime?
-  completedDate DateTime?
-
-  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
-  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-
-  cardsFromHere OrthoTreatmentCard[] @relation("OrthoCardWireFrom")
-  cardsToHere   OrthoTreatmentCard[] @relation("OrthoCardWireTo")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  Patient   Patient? @relation(fields: [patientId], references: [id])
-  patientId String?
-
-  @@unique([treatmentPlanId, orderIndex])
-  @@index([treatmentPlanId, status])
-  @@index([clinicId, status])
-  @@map("ortho_wire_steps")
-}
-
-model OrthoTreatmentCard {
-  id              String @id @default(uuid())
-  treatmentPlanId String
-  patientId       String
-  clinicId        String
-
-  /// FK opcional al ControlAppointment legacy. Si está poblado, ambos
-  /// representan el mismo evento — la card es la versión rica con SOAP.
-  controlAppointmentId String?                        @unique
-  controlAppointment   OrthodonticControlAppointment? @relation("OrthoCardControl", fields: [controlAppointmentId], references: [id], onDelete: SetNull)
-
-  cardNumber  Int
-  visitDate   DateTime
-  durationMin Int           @default(30)
-  phaseKey    OrthoPhaseKey
-  monthAt     Decimal       @db.Decimal(4, 1)
-
-  /// Wire del que viene y al que pasa. Nullables para citas sin cambio de wire.
-  wireFromId String?
-  wireFrom   OrthoWireStep? @relation("OrthoCardWireFrom", fields: [wireFromId], references: [id], onDelete: SetNull)
-  wireToId   String?
-  wireTo     OrthoWireStep? @relation("OrthoCardWireTo", fields: [wireToId], references: [id], onDelete: SetNull)
-
-  /// SOAP estructurado. Todos required (no vacíos) al firmar (status SIGNED).
-  soapS String @default("")
-  soapO String @default("")
-  soapA String @default("")
-  soapP String @default("")
-
-  /// Higiene snapshot al inicio de la cita.
-  hygienePlaquePct  Int?
-  hygieneGingivitis OrthoGingivitisLevel?
-  hygieneWhiteSpots Boolean               @default(false)
-
-  hasProgressPhoto Boolean @default(false)
-  /// FK opcional al photo set capturado durante esta cita (no enforced FK
-  /// para no acoplar — un set puede preceder o seguir a la card).
-  photoSetId       String?
-
-  /// Próxima cita programada al cerrar la card.
-  nextDate        DateTime?
-  nextDurationMin Int?
-
-  status     OrthoCardStatus @default(DRAFT)
-  signedAt   DateTime?
-  signedById String?
-  signedBy   User?           @relation("OrthoCardSignedBy", fields: [signedById], references: [id], onDelete: SetNull)
-
-  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
-  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-
-  elastics       OrthoCardElastic[]
-  iprPoints      OrthoCardIprPoint[]
-  brokenBrackets OrthoCardBrokenBracket[]
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
-
-  @@unique([treatmentPlanId, cardNumber])
-  @@index([clinicId, visitDate(sort: Desc)])
-  @@index([patientId, visitDate(sort: Desc)])
-  @@map("ortho_treatment_cards")
-}
-
-model OrthoCardElastic {
-  id       String @id @default(uuid())
-  cardId   String
-  clinicId String
-
-  elasticClass OrthoElasticClass
-  /// Configuración legible: '1/4" 6oz', '3/16" 4.5oz', '5/16" 3.5oz'.
-  config       String
-  zone         OrthoElasticZone
-
-  card   OrthoTreatmentCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  clinic Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  Patient   Patient? @relation(fields: [patientId], references: [id])
-  patientId String?
-
-  @@index([cardId])
-  @@map("ortho_card_elastics")
-}
-
-model OrthoCardIprPoint {
-  id       String @id @default(uuid())
-  cardId   String
-  clinicId String
-
-  toothA   Int
-  toothB   Int
-  amountMm Decimal @db.Decimal(3, 1)
-  done     Boolean @default(true)
-
-  card   OrthoTreatmentCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  clinic Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  Patient   Patient? @relation(fields: [patientId], references: [id])
-  patientId String?
-
-  @@index([cardId])
-  @@map("ortho_card_ipr_points")
-}
-
-model OrthoCardBrokenBracket {
-  id       String @id @default(uuid())
-  cardId   String
-  clinicId String
-
-  toothFdi     Int
-  brokenDate   DateTime
-  reBondedDate DateTime?
-  notes        String?
-
-  card   OrthoTreatmentCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  clinic Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  Patient   Patient? @relation(fields: [patientId], references: [id])
-  patientId String?
-
-  @@index([cardId])
-  @@map("ortho_card_broken_brackets")
-}
-
-model OrthoTAD {
-  id              String @id @default(uuid())
-  treatmentPlanId String
-  patientId       String
-  clinicId        String
-
-  brand      OrthoTadBrand
-  /// Tamaño legible: "1.4×6mm", "1.4×8mm", "2×10mm".
-  size       String
-  /// Texto libre: "vestibular sup. der entre 14 y 15".
-  location   String
-  torqueNcm  Int?
-  placedDate DateTime
-  placedById String?
-  placedBy   User?         @relation("OrthoTadPlacedBy", fields: [placedById], references: [id], onDelete: SetNull)
-
-  failed        Boolean   @default(false)
-  failedDate    DateTime?
-  failureReason String?
-
-  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
-  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
-
-  @@index([treatmentPlanId, failed])
-  @@index([clinicId, placedDate(sort: Desc)])
-  @@map("ortho_tads")
-}
-
-model OrthoAuxMechanics {
-  id              String @id @default(uuid())
-  treatmentPlanId String @unique
-  clinicId        String
-
-  expanderType        OrthoExpanderType?
-  expanderActivations Int?
-  expanderInstalledAt DateTime?
-  expanderRemovedAt   DateTime?
-
-  distalizerType        OrthoDistalizerType?
-  distalizerInstalledAt DateTime?
-  distalizerRemovedAt   DateTime?
-
-  notes String?
-
-  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
-  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  Patient   Patient? @relation(fields: [patientId], references: [id])
-  patientId String?
-
-  @@map("ortho_aux_mechanics")
-}
-
-model OrthoPhaseTransition {
-  id              String @id @default(uuid())
-  treatmentPlanId String
-  clinicId        String
-
-  fromPhase       OrthoPhaseKey
-  toPhase         OrthoPhaseKey
-  /// Lista de claves de criterios clínicos confirmados al avanzar.
-  criteriaChecked String[]
-  doctorNotes     String?
-  signedById      String
-  signedBy        User          @relation("OrthoPhaseTransitionSignedBy", fields: [signedById], references: [id])
-  signedAt        DateTime      @default(now())
-  /// True si el usuario admin/titular forzó override del checklist.
-  isOverride      Boolean       @default(false)
-  overrideReason  String?
-
-  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
-  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  Patient   Patient? @relation(fields: [patientId], references: [id])
-  patientId String?
-
-  @@index([treatmentPlanId, signedAt(sort: Desc)])
-  @@index([clinicId, signedAt(sort: Desc)])
-  @@map("ortho_phase_transitions")
-}
-
-// ─── Modelos Fase 1.5 rediseño completo (mayo 2026) ─────────────────────────
-//
-// Cubre las secciones F (G5 Open Choice + G6 Sign@Home), G (retención G9),
-// H (NPS G11) y referidos G12 placeholder.
-
-enum OrthoQuoteScenarioStatus {
-  DRAFT
-  PRESENTED
-  ACCEPTED
-  REJECTED
-}
-
-enum OrthoQuoteScenarioPaymentMode {
-  CONTADO
-  ENGANCHE_MENSUALIDADES
-  ENGANCHE_MSI
-}
-
-enum OrthoSignAtHomeStatus {
-  PENDING
-  SENT
-  SIGNED
-  PAID
-  EXPIRED
-  REVOKED
-}
-
-enum OrthoRetainerType {
-  HAWLEY_SUP
-  HAWLEY_INF
-  ESSIX_SUP
-  ESSIX_INF
-  FIXED_LINGUAL_3_3
-  NONE
-}
-
-enum OrthoRetainerArchwireGauge {
-  G_0175
-  G_0195
-  G_021
-}
-
-enum OrthoRetainerCheckupStatus {
-  PROGRAMMED
-  COMPLETED
-  MISSED
-  CANCELLED
-}
-
-enum OrthoNpsType {
-  POST_DEBOND_3D
-  POST_DEBOND_6M
-  POST_DEBOND_12M
-}
-
-enum OrthoNpsStatus {
-  SCHEDULED
-  SENT
-  RESPONDED
-  EXPIRED
-  CANCELLED
-}
-
-model OrthoQuoteScenario {
-  id              String                          @id @default(uuid())
-  treatmentPlanId String
-  clinicId        String
-
-  label           String
-  paymentMode     OrthoQuoteScenarioPaymentMode
-  downPayment     Decimal                         @db.Decimal(10, 2)
-  monthlyAmount   Decimal                         @default(0) @db.Decimal(10, 2)
-  monthsCount     Int                             @default(0)
-  totalAmount     Decimal                         @db.Decimal(10, 2)
-  discountPct     Int?
-  /// Etiqueta visual: "Recomendado", "MSI 6 meses", "10% descuento", etc.
-  badge           String?
-  /// Lista de líneas que se imprimen como features del escenario.
-  includes        String[]                        @default([])
-  notes           String?
-  status          OrthoQuoteScenarioStatus        @default(DRAFT)
-  presentedAt     DateTime?
-  acceptedAt      DateTime?
-  rejectedAt      DateTime?
-
-  createdById     String?
-  createdBy       User?                           @relation("OrthoQuoteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-
-  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
-  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([treatmentPlanId, status])
-  @@index([clinicId, status])
-  @@map("ortho_quote_scenarios")
-}
-
-model OrthoSignAtHomePackage {
-  id              String                @id @default(uuid())
-  treatmentPlanId String
-  patientId       String
-  clinicId        String
-
-  /// Token base64url 256 bits para el portal /share/p/sgnh_<id>.
-  token           String                @unique
-  expiresAt       DateTime
-  status          OrthoSignAtHomeStatus @default(PENDING)
-
-  /// IDs del escenario seleccionado y monto de enganche pre-cobrado.
-  selectedQuoteScenarioId String?
-  downPaymentAmount       Decimal? @db.Decimal(10, 2)
-
-  /// IDs de los 3 documentos asociados (consents existentes).
-  contractDocId    String?
-  consentDocIds    String[] @default([])
-  paymentMethod    OrthoPaymentMethod?
-
-  sentAt           DateTime?
-  signedAt         DateTime?
-  paidAt           DateTime?
-  cfdiUuid         String?
-
-  createdById      String
-  createdBy        User    @relation("OrthoSignAtHomeCreatedBy", fields: [createdById], references: [id])
-
-  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
-  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([clinicId, status, expiresAt])
-  @@index([patientId, createdAt(sort: Desc)])
-  @@map("ortho_sign_at_home_packages")
-}
-
-model OrthoRetentionRegimen {
-  id              String @id @default(uuid())
-  treatmentPlanId String @unique
-  clinicId        String
-
-  upperRetainer        OrthoRetainerType?
-  upperDescription     String?
-  lowerRetainer        OrthoRetainerType?
-  lowerDescription     String?
-  fixedLingualPresent  Boolean                     @default(false)
-  fixedLingualGauge    OrthoRetainerArchwireGauge?
-
-  /// Régimen de uso (texto editable). Default: "24/7 año 1 · nocturno años 2-5".
-  regimenDescription String @default("24/7 año 1 · nocturno años 2-5")
-  preSurveyEnabled  Boolean @default(true)
-
-  /// Fecha de debonding (aplica al avanzar fase a Retención).
-  debondedAt DateTime?
-
-  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
-  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  checkups      OrthoRetainerCheckup[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("ortho_retention_regimens")
-}
-
-model OrthoRetainerCheckup {
-  id        String                      @id @default(uuid())
-  regimenId String
-  clinicId  String
-
-  /// Mes desde el debonding: 3, 6, 12, 24, 36.
-  monthsFromDebond Int
-  scheduledDate    DateTime
-  performedAt      DateTime?
-  status           OrthoRetainerCheckupStatus @default(PROGRAMMED)
-  notes            String?
-
-  regimen OrthoRetentionRegimen @relation(fields: [regimenId], references: [id], onDelete: Cascade)
-  clinic  Clinic                @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([regimenId, monthsFromDebond])
-  @@index([clinicId, scheduledDate, status])
-  @@map("ortho_retainer_checkups")
-}
-
-model OrthoNpsSchedule {
-  id              String         @id @default(uuid())
-  treatmentPlanId String
-  patientId       String
-  clinicId        String
-
-  npsType     OrthoNpsType
-  scheduledAt DateTime
-  status      OrthoNpsStatus @default(SCHEDULED)
-  sentAt      DateTime?
-  respondedAt DateTime?
-  /// Score 0-10. Cuando >=9 dispara trigger Google review.
-  npsScore       Int?
-  patientComment String?
-  /// True cuando se disparó automáticamente la solicitud de Google review.
-  googleReviewTriggered Boolean @default(false)
-
-  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
-  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([treatmentPlanId, npsType])
-  @@index([clinicId, status, scheduledAt])
-  @@map("ortho_nps_schedules")
-}
-
-model OrthoReferralCode {
-  id              String @id @default(uuid())
-  treatmentPlanId String @unique
-  patientId       String
-  clinicId        String
-
-  /// Código personalizado del paciente (ej. "GABY26"). Único por clínica.
-  code         String
-  referralCount Int    @default(0)
-  /// Premio o descuento configurado (texto libre).
-  rewardLabel  String?
-
-  treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
-  patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([clinicId, code])
-  @@index([clinicId, referralCount(sort: Desc)])
-  @@map("ortho_referral_codes")
 }
 
 // ─── PatientFlow (cross-cutting clinical-shared) — G16 ──────────────────────

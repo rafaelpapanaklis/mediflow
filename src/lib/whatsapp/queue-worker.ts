@@ -12,7 +12,8 @@
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { ENDO_WHATSAPP_TEMPLATES } from "@/lib/endodontics/whatsapp-templates";
-import { ORTHO_WHATSAPP_TEMPLATES } from "@/lib/orthodontics/whatsapp-templates";
+// ORTHO_WHATSAPP_TEMPLATES — demolido en Fase 1 del rewrite v2. El case
+// ORTHO_ devuelve null hasta que Fase 4 v2 lo recablee con templates nuevos.
 import { PERIO_WHATSAPP_TEMPLATES } from "@/lib/periodontics/whatsapp-templates";
 import { IMPLANT_WHATSAPP_TEMPLATES } from "@/lib/implantology/whatsapp-templates";
 
@@ -311,42 +312,9 @@ function renderTemplate(
         return null;
       }
 
-      case "ORTHO_": {
-        switch (key) {
-          case "APPOINTMENT_REMINDER_24H":
-            return ORTHO_WHATSAPP_TEMPLATES.APPOINTMENT_REMINDER_24H(firstName, hora);
-          case "MISSED_APPOINTMENT":
-            return ORTHO_WHATSAPP_TEMPLATES.MISSED_APPOINTMENT(firstName, hora);
-          case "INSTALLMENT_DUE_3_DAYS":
-            return ORTHO_WHATSAPP_TEMPLATES.INSTALLMENT_DUE_3_DAYS(
-              firstName,
-              num("installmentNumber", 0),
-              str("fecha", fecha),
-              num("amountMxn", 0),
-            );
-          case "INSTALLMENT_OVERDUE_LIGHT":
-            return ORTHO_WHATSAPP_TEMPLATES.INSTALLMENT_OVERDUE_LIGHT(
-              firstName,
-              num("installmentNumber", 0),
-              num("daysOverdue", 0),
-              num("pendingMxn", 0),
-            );
-          case "INSTALLMENT_OVERDUE_SEVERE":
-            return ORTHO_WHATSAPP_TEMPLATES.INSTALLMENT_OVERDUE_SEVERE(
-              firstName,
-              num("installmentNumber", 0),
-            );
-          case "MONTHLY_PROGRESS":
-            return ORTHO_WHATSAPP_TEMPLATES.MONTHLY_PROGRESS(
-              firstName,
-              num("monthInTreatment", 0),
-              str("phaseLabel", "alineación"),
-            );
-          case "PRE_INSTALLATION_INSTRUCTIONS":
-            return ORTHO_WHATSAPP_TEMPLATES.PRE_INSTALLATION_INSTRUCTIONS(firstName);
-        }
+      case "ORTHO_":
+        // Templates demolidos en Fase 1 v2 rewrite. Re-cableado en Fase 4 v2.
         return null;
-      }
 
       case "PERIO_": {
         switch (key) {

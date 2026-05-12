@@ -227,91 +227,16 @@ const autoOrthoSchema = z.object({
 export async function autoSeedOrthoReminders(
   input: z.infer<typeof autoOrthoSchema>,
 ): Promise<ActionResult<{ created: number }>> {
+  // Ortodoncia v2 rewrite (feat/ortho-v2-rewrite) — re-cablear en Fase 4 v2
+  // con OrthoCase + OrthoTreatmentPlan v2 + ArchPlanned + RetentionPlan.
+  // No-op por ahora; el caller recibe Result.ok({ created: 0 }).
   const parsed = autoOrthoSchema.safeParse(input);
   if (!parsed.success) return fail("Datos inválidos");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
-
   const guard = await guardPatient({ ctx, patientId: parsed.data.patientId });
   if (isFailure(guard)) return fail(guard.error);
-
-  const plan = await prisma.orthodonticTreatmentPlan.findUnique({
-    where: { id: parsed.data.treatmentPlanId },
-    select: {
-      id: true,
-      clinicId: true,
-      patientId: true,
-      installedAt: true,
-      startDate: true,
-      estimatedDurationMonths: true,
-      status: true,
-      deletedAt: true,
-    },
-  });
-  if (!plan || plan.deletedAt) return fail("Plan no encontrado");
-  if (plan.clinicId !== ctx.clinicId || plan.patientId !== parsed.data.patientId) {
-    return fail("Plan no coincide");
-  }
-
-  const now = new Date();
-  let created = 0;
-
-  // Cita mensual de control
-  await ensurePending({
-    clinicId: ctx.clinicId,
-    patientId: parsed.data.patientId,
-    module: "orthodontics",
-    reminderType: "ortho_control_30d",
-    dueDate: addDays(now, 30),
-    createdBy: ctx.userId,
-    onCreate: () => created++,
-  });
-
-  // Retiro de aparato si está cerca el estimado
-  const installedAt = plan.installedAt ?? plan.startDate;
-  if (installedAt && plan.estimatedDurationMonths) {
-    const estimatedRemoval = new Date(installedAt);
-    estimatedRemoval.setMonth(estimatedRemoval.getMonth() + plan.estimatedDurationMonths);
-    const daysUntilRemoval = Math.floor(
-      (estimatedRemoval.getTime() - now.getTime()) / (24 * 3600 * 1000),
-    );
-    if (daysUntilRemoval > 0 && daysUntilRemoval <= 60) {
-      await ensurePending({
-        clinicId: ctx.clinicId,
-        patientId: parsed.data.patientId,
-        module: "orthodontics",
-        reminderType: "other",
-        dueDate: addDays(estimatedRemoval, -14),
-        createdBy: ctx.userId,
-        payload: { subtype: "ortho_appliance_removal_soon" },
-        onCreate: () => created++,
-      });
-    }
-  }
-
-  // Retención: 3m + 6m si el plan ya está en RETENTION
-  if (plan.status === "RETENTION") {
-    await ensurePending({
-      clinicId: ctx.clinicId,
-      patientId: parsed.data.patientId,
-      module: "orthodontics",
-      reminderType: "ortho_retention_check",
-      dueDate: addDays(now, 90),
-      createdBy: ctx.userId,
-      onCreate: () => created++,
-    });
-    await ensurePending({
-      clinicId: ctx.clinicId,
-      patientId: parsed.data.patientId,
-      module: "orthodontics",
-      reminderType: "ortho_retention_check",
-      dueDate: addDays(now, 180),
-      createdBy: ctx.userId,
-      onCreate: () => created++,
-    });
-  }
-
-  return ok({ created });
+  return ok({ created: 0 });
 }
 
 async function ensurePending(args: {

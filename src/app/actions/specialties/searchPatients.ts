@@ -109,12 +109,8 @@ async function loadSpecialtyCounts(
 
   switch (specialty) {
     case "orthodontics": {
-      const groups = await prisma.orthodonticDiagnosis.groupBy({
-        by: ["patientId"],
-        where: { ...baseWhere, deletedAt: null },
-        _count: { _all: true },
-      });
-      for (const g of groups) map.set(g.patientId, g._count._all);
+      // Ortodoncia v2 rewrite (Fase 9 pendiente). El filtro por especialidad
+      // ortho devuelve 0 hasta que OrthoCase + OrthoDiagnosis v2 esté wired.
       break;
     }
     case "endodontics": {
