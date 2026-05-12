@@ -1,0 +1,292 @@
+﻿<!doctype html>
+<html lang="es" data-theme="light">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>MediFlow Â· Ortodoncia Â· Hi-Fi</title>
+<link rel="stylesheet" href="ortho-tokens.css"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  html,body { height:100%; }
+  body { margin:0; background: var(--bg); color: var(--text-1); font-family:'Sora','Inter',system-ui,sans-serif; font-size:14px; line-height:1.5; }
+  *, *:before, *:after { box-sizing: border-box; }
+  button { font-family:inherit; }
+  @keyframes fadein { from{opacity:0} to{opacity:1} }
+  @keyframes slidein { from{transform:translateX(20px);opacity:0} to{transform:translateX(0);opacity:1} }
+  @keyframes popin { from{transform:scale(.96);opacity:0} to{transform:scale(1);opacity:1} }
+  ::-webkit-scrollbar { width:8px; height:8px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-soft); border-radius:4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+
+  /* Layout */
+  .app-shell { display:grid; grid-template-rows: 56px 1fr; height:100vh; overflow:hidden; }
+  .topbar {
+    background: var(--bg-elev-1); border-bottom:1px solid var(--border-soft);
+    display:flex; align-items:center; gap:16px; padding:0 18px;
+  }
+  .logo { display:flex; align-items:center; gap:8px; font-weight:600; font-family:'Sora'; }
+  .logo-mark { width:28px; height:28px; border-radius:7px; background: linear-gradient(135deg, var(--brand-500), var(--violet-500)); display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:13px; }
+  .tb-sep { width:1px; height:22px; background: var(--border-soft); }
+  .tb-link { padding:6px 10px; border-radius:7px; font-size:13px; color: var(--text-2); cursor:pointer; }
+  .tb-link[data-active="true"] { background: var(--brand-50); color: var(--brand-700); font-weight:500; }
+  .tb-search { flex:1; max-width:420px; }
+
+  .body { display:grid; grid-template-columns: 220px 1fr; overflow:hidden; }
+  .nav-main { background: var(--bg-elev-1); border-right:1px solid var(--border-soft); padding:14px 10px; display:flex; flex-direction:column; gap:2px; }
+  .nav-main-item { padding:9px 12px; border-radius:8px; font-size:13px; color: var(--text-2); cursor:pointer; display:flex; align-items:center; gap:10px; }
+  .nav-main-item:hover { background: var(--bg-elev-2); }
+  .nav-main-item[data-active="true"] { background: var(--brand-50); color: var(--brand-700); font-weight:500; }
+
+  .work { display:flex; flex-direction:column; overflow:hidden; }
+  .breadcrumbs { padding:10px 22px; border-bottom:1px solid var(--border-soft); display:flex; align-items:center; gap:8px; font-size:12px; color: var(--text-3); }
+  .breadcrumbs a { color: var(--text-3); text-decoration:none; }
+  .breadcrumbs .b-current { color: var(--text-1); font-weight:500; }
+
+  .patient-header { padding:18px 22px 0; }
+  .ph-row { display:flex; align-items:center; gap:14px; }
+  .ph-name { font-family:'Sora'; font-size:22px; font-weight:600; }
+  .ph-meta { font-size:12px; color: var(--text-3); margin-top:2px; }
+  .ph-actions { display:flex; gap:6px; }
+
+  .ph-stats { display:grid; grid-template-columns: repeat(4, 1fr); gap:10px; padding:16px 22px 14px; }
+  .ph-tabs { display:flex; gap:2px; padding:0 22px; border-bottom:1px solid var(--border-soft); }
+  .ph-tab { padding:10px 14px; font-size:13px; color: var(--text-2); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; }
+  .ph-tab[data-active="true"] { border-bottom-color: var(--brand-500); color: var(--text-1); font-weight:500; }
+
+  /* Module shell */
+  .module { display:grid; grid-template-columns: 240px 1fr; flex:1; overflow:hidden; }
+  .sub-sidebar {
+    background: var(--bg-elev-1); border-right:1px solid var(--border-soft);
+    padding:18px 12px; overflow-y:auto;
+  }
+  .sub-sidebar-h { font-size:10px; text-transform:uppercase; letter-spacing:.1em; font-weight:600; color: var(--text-3); padding: 4px 12px 10px; }
+  .sub-item { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:8px; cursor:pointer; font-size:13px; color: var(--text-2); }
+  .sub-item:hover { background: var(--bg-elev-2); }
+  .sub-item[data-active="true"] { background: var(--brand-50); color: var(--brand-700); font-weight:500; }
+  .sub-item .badge { margin-left:auto; padding:1px 6px; border-radius:5px; font-size:10px; font-family:'JetBrains Mono'; background: var(--bg-elev-2); color: var(--text-3); }
+  .sub-item[data-active="true"] .badge { background: var(--brand-500); color:#fff; }
+
+  .module-main { overflow-y:auto; padding:22px 28px 40px; }
+
+  /* Tweaks */
+  .tweak-fab { position:fixed; right:18px; bottom:18px; z-index:50; padding:10px 14px; border-radius:11px; background: var(--bg-elev-1); border:1px solid var(--border-strong); box-shadow: 0 6px 24px rgba(0,0,0,.15); display:flex; gap:6px; align-items:center; font-size:12px; }
+  .tweak-fab button { padding:5px 10px; border-radius:6px; border:1px solid var(--border-soft); background: var(--bg-elev-2); color: var(--text-2); cursor:pointer; font-size:11px; }
+  .tweak-fab button[data-on="true"] { background: var(--brand-500); color:#fff; border-color: var(--brand-500); }
+
+  /* Empty pop-in for stats */
+  .empty-ph { background: var(--bg-elev-2); border:1px dashed var(--border-soft); border-radius:10px; padding:14px; display:flex; align-items:center; justify-content:center; color: var(--text-3); font-size:12px; }
+
+  /* Responsive */
+  @media (max-width: 1280px) {
+    .nav-main { width:200px; }
+    .sub-sidebar { width:220px; }
+    .module-main { padding:18px 20px 32px; }
+  }
+  @media (max-width: 1024px) {
+    .body { grid-template-columns: 64px 1fr; }
+    .nav-main { padding:10px 6px; }
+    .nav-main-item span:not(.icon-wrap) { display:none; }
+    .nav-main-item { justify-content:center; }
+    .module { grid-template-columns: 200px 1fr; }
+  }
+  @media (max-width: 720px) {
+    .body { grid-template-columns: 1fr; }
+    .nav-main { display:none; }
+    .module { grid-template-columns: 1fr; }
+    .sub-sidebar { display:none; }
+    .ph-stats { grid-template-columns: repeat(2, 1fr); }
+    .ph-tabs { overflow-x:auto; }
+    .module-main { padding:14px 14px 30px; }
+    .topbar { padding:0 12px; }
+    .tb-link:not(.tb-mobile) { display:none; }
+    .ph-actions .btn-new span { display:none; }
+  }
+</style>
+</head>
+<body>
+  <div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="ortho-atoms.jsx"></script>
+<script type="text/babel" src="ortho-sections-1.jsx"></script>
+<script type="text/babel" src="ortho-sections-2.jsx"></script>
+<script type="text/babel" src="ortho-drawers.jsx"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo } = React;
+const { I, PATIENT, CURRENT_CASE, SECTIONS } = window.OrthoCommon;
+const { PatientHeader } = window.OrthoAtoms;
+const { SecResumen, SecExpediente, SecFotos } = window.OrthoSections1;
+const { SecPlan, SecCitas, SecFinanciero, SecRetencion, SecDocumentos } = window.OrthoSections2;
+const { DrEditDx, DrUploadPhotos, ModalLightbox, DrNewTC, DrEditFinancial, DrCollect, DrNewAppliance, ModalTemplate, ModalMobile, ModalCmd, DrEditTC } = window.OrthoDrawers;
+
+const TWEAKS = /*EDITMODE-BEGIN*/{
+  "theme":"light",
+  "section":"resumen",
+  "macroState":"ACTIVE",
+  "subSidebar":true,
+  "density":"normal"
+}/*EDITMODE-END*/;
+
+function App(){
+  const [theme, setTheme] = useState(TWEAKS.theme);
+  const [section, setSection] = useState(TWEAKS.section);
+  const [macroState, setMacroState] = useState(TWEAKS.macroState);
+  const [drawer, setDrawer] = useState(null);
+  const [drawerData, setDrawerData] = useState(null);
+
+  useEffect(()=>{ document.documentElement.dataset.theme = theme; }, [theme]);
+
+  // Keyboard shortcuts
+  useEffect(()=>{
+    const onKey = (e)=>{
+      if(e.target.tagName==="INPUT"||e.target.tagName==="TEXTAREA") return;
+      if((e.metaKey||e.ctrlKey) && e.key==="k"){ e.preventDefault(); setDrawer("modal-cmd"); return; }
+      if(e.key==="Escape"){ setDrawer(null); return; }
+      const m = {r:"resumen",e:"expediente",f:"fotos",p:"plan",t:"citas",d:"docs"};
+      if(m[e.key.toLowerCase()]) setSection(m[e.key.toLowerCase()]);
+      if(e.key.toLowerCase()==="n") setDrawer("drawer-new-tc");
+      if(e.key.toLowerCase()==="c") setDrawer("drawer-collect");
+    };
+    window.addEventListener("keydown",onKey);
+    return ()=>window.removeEventListener("keydown",onKey);
+  },[]);
+
+  const onCmd = (cmd)=>{
+    if(cmd.startsWith("nav-")) { setSection(cmd.replace("nav-","")); return; }
+    if(cmd.startsWith("drawer-edit-tc-")) { setDrawerData({idx: +cmd.split("-").pop()}); setDrawer("drawer-edit-tc"); return; }
+    if(cmd.startsWith("drawer-collect-")) { setDrawer("drawer-collect"); return; }
+    if(cmd.startsWith("lightbox")) { setDrawerData({action: cmd.split("-")[1]}); setDrawer("modal-lightbox"); return; }
+    setDrawer(cmd);
+  };
+
+  // section gating per macro state
+  const isEmpty = (sec)=>{
+    if(macroState==="NEW") return true;
+    if(macroState==="EVAL" && (sec==="plan"||sec==="citas"||sec==="financiero")) return true;
+    if(macroState==="ACCEPTED" && (sec==="citas")) return true;
+    return false;
+  };
+
+  const renderSection = () => {
+    const props = { onCmd, macroState, empty: isEmpty(section) };
+    if(section==="resumen") return <SecResumen {...props}/>;
+    if(section==="expediente") return <SecExpediente {...props} empty={macroState==="NEW"}/>;
+    if(section==="fotos") return <SecFotos {...props} empty={macroState==="NEW"}/>;
+    if(section==="plan") return <SecPlan {...props}/>;
+    if(section==="citas") return <SecCitas {...props}/>;
+    if(section==="financiero") return <SecFinanciero {...props}/>;
+    if(section==="retencion") return <SecRetencion {...props}/>;
+    if(section==="docs") return <SecDocumentos {...props}/>;
+    return null;
+  };
+
+  return (
+    <div className="app-shell">
+      {/* TOPBAR */}
+      <div className="topbar">
+        <div className="logo">
+          <span className="logo-mark">M</span>
+          <span>MediFlow</span>
+        </div>
+        <div className="tb-sep"/>
+        <div className="tb-link tb-mobile" data-active="true">Pacientes</div>
+        <div className="tb-link">Agenda</div>
+        <div className="tb-link">Caja</div>
+        <div className="tb-link">Reportes</div>
+        <div style={{flex:1}}/>
+        <button className="btn-new btn-new--ghost btn-sm" onClick={()=>setDrawer("modal-cmd")}><I n="cmd" size={13}/>Cmd+K</button>
+        <button className="btn-icon-sm" onClick={()=>setTheme(theme==="light"?"dark":"light")} title="Tema">
+          <I n={theme==="light"?"moon":"sun"} size={15}/>
+        </button>
+        <span style={{width:32,height:32,borderRadius:9,background:"linear-gradient(135deg,var(--brand-500),var(--violet-500))",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:600,fontSize:13}}>RV</span>
+      </div>
+
+      <div className="body">
+        {/* MAIN NAV */}
+        <aside className="nav-main">
+          <div className="nav-main-item"><span className="icon-wrap"><I n="user" size={16}/></span><span>Pacientes</span></div>
+          <div className="nav-main-item"><span className="icon-wrap"><I n="cal" size={16}/></span><span>Agenda</span></div>
+          <div className="nav-main-item"><span className="icon-wrap"><I n="dollar" size={16}/></span><span>Caja</span></div>
+          <div className="nav-main-item"><span className="icon-wrap"><I n="trending" size={16}/></span><span>Reportes</span></div>
+          <div className="nav-main-item"><span className="icon-wrap"><I n="whats" size={16}/></span><span>WhatsApp</span></div>
+          <div style={{flex:1}}/>
+          <div className="nav-main-item"><span className="icon-wrap"><I n="cog" size={16}/></span><span>Ajustes</span></div>
+        </aside>
+
+        <main className="work">
+          {/* breadcrumbs */}
+          <div className="breadcrumbs">
+            <a href="#">Pacientes</a>
+            <I n="chevright" size={11}/>
+            <a href="#">Gabriela Reyes</a>
+            <I n="chevright" size={11}/>
+            <span className="b-current">Ortodoncia Â· {SECTIONS.find(s=>s.k===section)?.l}</span>
+          </div>
+
+          {/* PATIENT HEADER */}
+          <PatientHeader patient={PATIENT} macroState={macroState} onCmd={onCmd}/>
+
+          {/* MODULE SHELL */}
+          <div className="module">
+            <aside className="sub-sidebar">
+              <div className="sub-sidebar-h">MÃ³dulo Â· Ortodoncia</div>
+              {SECTIONS.map(s=>(
+                <div key={s.k} className="sub-item" data-active={section===s.k?"true":"false"} onClick={()=>setSection(s.k)}>
+                  <I n={s.i} size={15}/><span>{s.l}</span>
+                  {s.badge && <span className="badge">{s.badge}</span>}
+                </div>
+              ))}
+              <div style={{height:14}}/>
+              <div className="sub-sidebar-h">Estado del caso</div>
+              <div style={{padding:"6px 12px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:500}}>
+                  <span style={{width:8,height:8,borderRadius:"50%",background:"var(--brand-500)"}}/>
+                  {{NEW:"Paciente nuevo",EVAL:"En evaluaciÃ³n",ACCEPTED:"Plan aceptado",ACTIVE:"En tratamiento",RETENTION:"RetenciÃ³n",COMPLETED:"Completado"}[macroState]}
+                </div>
+                <div style={{fontSize:11,color:"var(--text-3)",marginTop:6}}>Inicio: 20 jun 2025</div>
+                <div style={{fontSize:11,color:"var(--text-3)",marginTop:2}}>Doctor: Dr. Rafael Vargas</div>
+              </div>
+            </aside>
+
+            <div className="module-main">
+              {renderSection()}
+            </div>
+          </div>
+        </main>
+      </div>
+
+      {/* DRAWERS */}
+      {drawer==="drawer-edit-dx" && <DrEditDx onClose={()=>setDrawer(null)}/>}
+      {drawer==="drawer-upload-photos" && <DrUploadPhotos onClose={()=>setDrawer(null)}/>}
+      {drawer==="modal-lightbox" && <ModalLightbox onClose={()=>setDrawer(null)} action={drawerData?.action}/>}
+      {drawer==="drawer-new-tc" && <DrNewTC onClose={()=>setDrawer(null)}/>}
+      {drawer==="drawer-edit-tc" && <DrEditTC onClose={()=>setDrawer(null)} idx={drawerData?.idx||0}/>}
+      {drawer==="drawer-edit-financial" && <DrEditFinancial onClose={()=>setDrawer(null)}/>}
+      {drawer==="drawer-collect" && <DrCollect onClose={()=>setDrawer(null)}/>}
+      {drawer==="drawer-new-appliance" && <DrNewAppliance onClose={()=>setDrawer(null)}/>}
+      {drawer==="modal-template" && <ModalTemplate onClose={()=>setDrawer(null)}/>}
+      {drawer==="modal-mobile" && <ModalMobile onClose={()=>setDrawer(null)}/>}
+      {drawer==="modal-cmd" && <ModalCmd onClose={()=>setDrawer(null)}/>}
+
+      {/* TWEAKS FAB */}
+      <div className="tweak-fab">
+        <span style={{color:"var(--text-3)",marginRight:4}}>Estado:</span>
+        {[["NEW","Nuevo"],["EVAL","Eval"],["ACCEPTED","Plan âœ“"],["ACTIVE","Activo"],["RETENTION","RetenciÃ³n"],["COMPLETED","Final"]].map(([k,l])=>(
+          <button key={k} data-on={macroState===k?"true":"false"} onClick={()=>setMacroState(k)}>{l}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
