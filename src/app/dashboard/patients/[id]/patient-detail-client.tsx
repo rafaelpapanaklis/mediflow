@@ -3,7 +3,7 @@
 import { useCallback, useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Plus, Printer, Edit, Download, Pill, HeartPulse } from "lucide-react";
+import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Plus, Printer, Edit, Download, Pill, HeartPulse, Play } from "lucide-react";
 import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
 import { ageFromDob, fmtMXN } from "@/lib/format";
 import { Odontogram } from "@/components/dashboard/odontogram/Odontogram";
@@ -44,6 +44,7 @@ import type { OrthoTabData } from "@/lib/orthodontics/load-data";
 import type { OrthoRedesignViewModel } from "@/components/specialties/orthodontics/redesign/types";
 import type { OrthoRedesignBundle } from "@/lib/orthodontics/redesign/loader";
 import type { PatientActivityCounts } from "@/lib/clinical-shared/get-patient-activity-counts";
+import { buildEmptySuggestion } from "@/lib/patient-detail/empty-suggestion";
 import {
   signTreatmentCard,
   saveTreatmentCardDraft,
@@ -1049,22 +1050,45 @@ export function PatientDetailClient({
                   <div className="w-2 h-2 rounded-full bg-brand-500" />
                   <span className="text-xs font-bold">Resumen clínico</span>
                 </div>
-                {records.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Sin registros clínicos aún.</p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {[
-                      { label: "Motivo último consulta", val: records[0]?.subjective?.slice(0, 50) ?? "—" },
-                      { label: "Diagnóstico",            val: records[0]?.assessment?.slice(0, 50) ?? "—" },
-                      { label: "Plan",                   val: records[0]?.plan?.slice(0, 50) ?? "—" },
-                    ].map(r => (
-                      <div key={r.label} className="flex justify-between items-start py-1.5 border-b border-slate-50 text-xs">
-                        <span className="text-muted-foreground">{r.label}</span>
-                        <span className="font-semibold text-right max-w-[55%]">{r.val}</span>
+                <HistoriaTimeline
+                  patientId={patient.id}
+                  compact
+                  limit={8}
+                  onOpenSoap={(recordId) => {
+                    const record = records.find((r) => r.id === recordId);
+                    if (record) setNoteDetailOpen(record as ClinicalNote);
+                  }}
+                  onOpenXray={(fileId) => router.push(`/dashboard/xrays/${patient.id}?fileId=${fileId}`)}
+                  onOpenAppointment={() => setTab("agenda")}
+                  onOpenTreatment={() => setTab("tratamiento")}
+                  onOpenReferral={() => setTab("referencias")}
+                  emptyState={(() => {
+                    const ageYears = ageFromDob(patient.dob);
+                    const suggestion = buildEmptySuggestion({
+                      ageYears,
+                      isChild: Boolean(patient.isChild) || (ageYears !== null && ageYears < 18),
+                      dentition: pediatricsData?.dentition,
+                      hasPerioModule: perioData !== null && perioData !== undefined,
+                      hasOrthoModule: (orthoData !== null && orthoData !== undefined) || orthoRedesignVM !== null,
+                      hasEndoModule: endoSummaries !== null && endoSummaries !== undefined,
+                      hasImplantsModule: implants !== null && implants !== undefined,
+                      clinicSpecialty: specialty ?? "",
+                    });
+                    return (
+                      <div className="bg-card border border-dashed border-border rounded-xl p-4 text-center">
+                        <p className="text-xs font-semibold text-foreground mb-1">{suggestion.headline}</p>
+                        <p className="text-xs text-muted-foreground mb-3">{suggestion.hint}</p>
+                        <button
+                          type="button"
+                          onClick={() => setTab("expediente")}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-brand-600 text-white hover:bg-brand-700"
+                        >
+                          <Play size={12} aria-hidden /> Iniciar consulta
+                        </button>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    );
+                  })()}
+                />
                 {records[0]?.specialtyData?.periodontal && (
                   <div className="mt-3">
                     <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2">Semáforo clínico</div>

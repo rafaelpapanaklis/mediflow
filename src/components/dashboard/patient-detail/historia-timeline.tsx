@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Stethoscope,
   Pill,
@@ -40,6 +40,15 @@ interface Props {
   onOpenAppointment?: (entityId: string) => void;
   onOpenTreatment?: (entityId: string) => void;
   onOpenReferral?: (entityId: string) => void;
+  /** Variante condensada: oculta el range picker y los chips de filtro,
+   *  toma los últimos N eventos (rango 365d fijo). Usada en el card
+   *  "Resumen clínico" de la pestaña Resumen. */
+  compact?: boolean;
+  /** Tope de eventos a renderizar en modo compact. Default 8. */
+  limit?: number;
+  /** Bloque que reemplaza el empty state default cuando `events.length`
+   *  es 0. Si no se provee, se usa el texto genérico habitual. */
+  emptyState?: ReactNode;
 }
 
 const TYPE_META: Record<TimelineEventType, { label: string; icon: React.ElementType; bg: string; fg: string; border: string }> = {
@@ -93,6 +102,9 @@ export function HistoriaTimeline({
   onOpenAppointment,
   onOpenTreatment,
   onOpenReferral,
+  compact = false,
+  limit,
+  emptyState,
 }: Props) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -130,7 +142,10 @@ export function HistoriaTimeline({
     return () => ctrl.abort();
   }, [patientId, range]);
 
-  const filtered = useMemo(() => events.filter((e) => enabledTypes.has(e.type)), [events, enabledTypes]);
+  const filtered = useMemo(() => {
+    const base = events.filter((e) => enabledTypes.has(e.type));
+    return compact ? base.slice(0, limit ?? 8) : base;
+  }, [events, enabledTypes, compact, limit]);
   const counts = useMemo(() => {
     const c: Record<TimelineEventType, number> = {
       soap: 0, prescription: 0, appointment: 0, xray: 0, treatment: 0, referral: 0, diagnosis: 0,
@@ -185,53 +200,57 @@ export function HistoriaTimeline({
 
   return (
     <div className="space-y-4">
-      {/* Range picker */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Rango:</span>
-        {RANGE_PRESETS.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            onClick={() => setRange(p.id)}
-            className={`px-3 py-1 text-xs font-semibold rounded-lg border ${
-              range === p.id ? "bg-brand-600 text-white border-brand-600" : "bg-card text-foreground border-border hover:bg-muted"
-            }`}
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
+      {!compact && (
+        <>
+          {/* Range picker */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Rango:</span>
+            {RANGE_PRESETS.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setRange(p.id)}
+                className={`px-3 py-1 text-xs font-semibold rounded-lg border ${
+                  range === p.id ? "bg-brand-600 text-white border-brand-600" : "bg-card text-foreground border-border hover:bg-muted"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
 
-      {/* Type filter chips */}
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {TYPE_ORDER.map((t) => {
-          const meta = TYPE_META[t];
-          const enabled = enabledTypes.has(t);
-          const count = counts[t];
-          const Icon = meta.icon;
-          return (
-            <button
-              key={t}
-              type="button"
-              onClick={() => toggleType(t)}
-              aria-pressed={enabled}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full border transition-all"
-              style={{
-                background: enabled ? meta.bg : "transparent",
-                color: enabled ? meta.fg : "var(--text-3, #94a3b8)",
-                borderColor: enabled ? meta.border : "var(--border-soft, #e2e8f0)",
-                opacity: enabled ? 1 : 0.55,
-              }}
-            >
-              <Icon size={12} aria-hidden />
-              {meta.label}
-              {count > 0 && (
-                <span className="text-[10px] font-bold opacity-70">({count})</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+          {/* Type filter chips */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {TYPE_ORDER.map((t) => {
+              const meta = TYPE_META[t];
+              const enabled = enabledTypes.has(t);
+              const count = counts[t];
+              const Icon = meta.icon;
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => toggleType(t)}
+                  aria-pressed={enabled}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full border transition-all"
+                  style={{
+                    background: enabled ? meta.bg : "transparent",
+                    color: enabled ? meta.fg : "var(--text-3, #94a3b8)",
+                    borderColor: enabled ? meta.border : "var(--border-soft, #e2e8f0)",
+                    opacity: enabled ? 1 : 0.55,
+                  }}
+                >
+                  <Icon size={12} aria-hidden />
+                  {meta.label}
+                  {count > 0 && (
+                    <span className="text-[10px] font-bold opacity-70">({count})</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       {/* Timeline */}
       {loading ? (
@@ -243,11 +262,15 @@ export function HistoriaTimeline({
           Error al cargar timeline: {error}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="p-6 bg-card border border-border rounded-xl text-center text-xs text-muted-foreground">
-          {events.length === 0
-            ? "Sin eventos clínicos registrados en este rango."
-            : "Ningún evento coincide con los filtros seleccionados."}
-        </div>
+        events.length === 0 && emptyState ? (
+          <>{emptyState}</>
+        ) : (
+          <div className="p-6 bg-card border border-border rounded-xl text-center text-xs text-muted-foreground">
+            {events.length === 0
+              ? "Sin eventos clínicos registrados en este rango."
+              : "Ningún evento coincide con los filtros seleccionados."}
+          </div>
+        )
       ) : (
         <ol className="relative ml-3 space-y-3 border-l-2 border-border">
           {filtered.map((e) => {
