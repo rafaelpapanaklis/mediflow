@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 // GET /api/treatments — list all treatment plans for clinic (role-filtered)
 export async function GET(req: NextRequest) {
@@ -91,6 +92,7 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  revalidateAfter("treatments");
   return NextResponse.json({
     ...plan,
     startDate:       plan.startDate.toISOString(),

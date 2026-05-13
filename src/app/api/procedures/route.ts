@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 // Default dental procedures with MX average prices
 const DENTAL_SEED = [
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
         description: body.description?.trim() || null,
       },
     });
-    revalidatePath("/dashboard/settings");
+    revalidateAfter("procedures");
     return NextResponse.json(procedure, { status: 201 });
   } catch (err: any) {
     console.error("Create procedure error:", err);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Plus, X, Package, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -33,6 +34,7 @@ interface Redemption {
 type Tab = "paquetes" | "clientes";
 
 export function PackagesClient({ initialPackages, initialRedemptions }: { initialPackages: ServicePkg[]; initialRedemptions: Redemption[] }) {
+  const router = useRouter();
   const askConfirm = useConfirm();
   const [tab, setTab] = useState<Tab>("paquetes");
   const [packages, setPackages] = useState<ServicePkg[]>(initialPackages);
@@ -54,6 +56,7 @@ export function PackagesClient({ initialPackages, initialRedemptions }: { initia
       setShowAdd(false);
       setForm({ name: "", description: "", totalSessions: 10, price: 0, validDays: 365, bodyZone: "" });
       toast.success("Paquete creado");
+      router.refresh();
     } catch {
       toast.error("Error al crear paquete");
     }
@@ -71,6 +74,7 @@ export function PackagesClient({ initialPackages, initialRedemptions }: { initia
       if (!res.ok) throw new Error("Error al eliminar");
       setPackages(prev => prev.filter(p => p.id !== id));
       toast.success("Paquete eliminado");
+      router.refresh();
     } catch {
       toast.error("Error al eliminar");
     }
@@ -85,6 +89,7 @@ export function PackagesClient({ initialPackages, initialRedemptions }: { initia
       const updated = await res.json();
       setRedemptions(prev => prev.map(r => r.id === redemptionId ? { ...r, sessionsUsed: updated.sessionsUsed, status: updated.status } : r));
       toast.success("Sesión registrada");
+      router.refresh();
     } catch {
       toast.error("Error al registrar sesión");
     }

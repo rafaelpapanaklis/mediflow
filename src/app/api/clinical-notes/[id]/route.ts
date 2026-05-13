@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 export const dynamic = "force-dynamic";
 
@@ -122,5 +123,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     after: { subjective: updated.subjective, objective: updated.objective, assessment: updated.assessment, plan: updated.plan, specialtyData: updated.specialtyData },
   });
 
+  revalidateAfter("clinicalNotes");
   return NextResponse.json({ note: updated });
 }

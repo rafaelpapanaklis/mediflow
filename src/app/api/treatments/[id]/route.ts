@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -79,6 +80,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       },
     });
 
+    revalidateAfter("treatments");
     return NextResponse.json({ success: true, sessionNumber: nextNumber, completed: isCompleted });
   }
 
@@ -100,6 +102,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (body.sessionIntervalDays !== undefined) data.sessionIntervalDays = Number(body.sessionIntervalDays);
 
   await prisma.treatmentPlan.updateMany({ where: { id: params.id, clinicId: ctx.clinicId }, data });
+  revalidateAfter("treatments");
   return NextResponse.json({ success: true });
 }
 
@@ -112,5 +115,6 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }
   await prisma.treatmentPlan.deleteMany({ where: { id: params.id, clinicId: ctx.clinicId } });
+  revalidateAfter("treatments");
   return NextResponse.json({ success: true });
 }
