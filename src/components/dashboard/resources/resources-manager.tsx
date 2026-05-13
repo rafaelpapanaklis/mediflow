@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { Plus, GripVertical, Archive, RotateCcw, EyeOff, Eye, Clock } from "lucide-react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -50,6 +51,7 @@ export function ResourcesManager({
   variant = "page",
   onChange,
 }: ResourcesManagerProps) {
+  const router = useRouter();
   const askConfirm = useConfirm();
   const [resources, setResources] = useState<ResourceDTO[]>(initialResources);
   const [showArchived, setShowArchived] = useState(false);
@@ -126,6 +128,7 @@ export function ResourcesManager({
     }
     try {
       await reorderResources(finalOrder);
+      router.refresh();
     } catch (err) {
       if (lastOrderRef.current) {
         const order = lastOrderRef.current;
@@ -157,6 +160,7 @@ export function ResourcesManager({
       if (patch.isActive !== undefined) apiPatch.isActive = patch.isActive;
       const updated = await updateResource(id, apiPatch);
       setResources((prev) => prev.map((r) => (r.id === id ? { ...optimistic, ...updated } : r)));
+      router.refresh();
     } catch (err) {
       setResources((prev) => prev.map((r) => (r.id === id ? original : r)));
       const reason = isApiError(err)
@@ -186,6 +190,7 @@ export function ResourcesManager({
     try {
       await deleteResource(id);
       toast.success("Recurso archivado");
+      router.refresh();
     } catch (err) {
       setResources(original);
       if (
@@ -217,6 +222,7 @@ export function ResourcesManager({
       const updated = await updateResource(id, { isActive: true });
       setResources((prev) => prev.map((r) => (r.id === id ? { ...r, ...updated, isActive: true } : r)));
       toast.success("Recurso restaurado");
+      router.refresh();
     } catch (err) {
       setResources(original);
       const reason = isApiError(err)
@@ -232,6 +238,7 @@ export function ResourcesManager({
       setResources((prev) => [...prev, { ...created, isActive: true }]);
       toast.success("Recurso añadido");
       setAdding(false);
+      router.refresh();
     } catch (err) {
       const reason = isApiError(err)
         ? err.reason ?? err.error ?? "No se pudo crear"

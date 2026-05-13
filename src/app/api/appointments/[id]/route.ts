@@ -11,6 +11,7 @@ import { appointmentToDTO } from "@/lib/agenda/server";
 import { canOverrideOverlap } from "@/lib/agenda/transitions";
 import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
 import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 import type {
   AppointmentConflictError,
   AppointmentStatus,
@@ -174,6 +175,7 @@ export async function PATCH(
       after: { startsAt: updated.startsAt, endsAt: updated.endsAt, doctorId: updated.doctorId, resourceId: updated.resourceId, type: updated.type, status: updated.status },
     });
 
+    revalidateAfter("appointments");
     return NextResponse.json(
       { appointment: appointmentToDTO(updated, session.clinic.category) },
     );
@@ -254,6 +256,7 @@ export async function DELETE(
     before: { status: existing.status, patientId: existing.patientId, doctorId: existing.doctorId, startsAt: existing.startsAt },
   });
 
+  revalidateAfter("appointments");
   return NextResponse.json({ ok: true });
 }
 

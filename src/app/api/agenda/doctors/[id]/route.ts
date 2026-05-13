@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { loadClinicSession, requireRole } from "@/lib/agenda/api-helpers";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 export const dynamic = "force-dynamic";
 
@@ -62,5 +63,6 @@ export async function PATCH(req: Request, { params }: Params) {
     },
   });
 
+  revalidateAfter("team");
   return NextResponse.json({ doctor: updated });
 }

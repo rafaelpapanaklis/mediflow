@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { Plus, X, Edit, UserCheck, UserX, Trash2, Copy, Check, Stethoscope, Shield, ShieldCheck, Users as UsersIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -305,6 +306,7 @@ function MemberForm({
 interface Props { team: TeamMember[]; currentUserId: string; currentUserRole: string; clinicName: string }
 
 export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, clinicName }: Props) {
+  const router = useRouter();
   const askConfirm = useConfirm();
   const [team,       setTeam]       = useState<TeamMember[]>(initialTeam);
   const [showNew,    setShowNew]    = useState(false);
@@ -364,6 +366,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
       setShowNew(false);
       setForm(emptyForm());
       toast.success(`✅ Doctor ${data.firstName} ${data.lastName} creado`);
+      router.refresh();
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -384,6 +387,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
       setTeam(prev => prev.map(m => m.id === editMember.id ? { ...m, ...form } : m));
       setEditMember(null);
       toast.success("Datos actualizados");
+      router.refresh();
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -401,6 +405,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
       if (!res.ok) throw new Error();
       setTeam(prev => prev.map(t => t.id === m.id ? { ...t, isActive: !m.isActive } : t));
       toast.success(m.isActive ? "Doctor desactivado" : "Doctor reactivado");
+      router.refresh();
     } catch { toast.error("Error"); }
   }
 
@@ -456,6 +461,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
         setTeam(prev => prev.filter(t => t.id !== m.id));
         toast.success("Doctor eliminado");
       }
+      router.refresh();
     } catch (err: any) { toast.error(err.message); }
   }
 

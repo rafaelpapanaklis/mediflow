@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma, PatientStatus, Gender } from "@prisma/client";
-import { revalidatePath } from "next/cache";
 import { getAuthContext, buildPatientWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { validateCurpRecord, type CurpStatusValue } from "@/lib/validators/curp";
 import { logMutation } from "@/lib/audit";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 export const dynamic = "force-dynamic";
 
@@ -514,7 +514,6 @@ export async function POST(req: NextRequest) {
     after: { firstName: patient.firstName, lastName: patient.lastName, patientNumber: patient.patientNumber },
   });
 
-  revalidatePath("/dashboard/patients");
-  revalidatePath("/dashboard/clinical");
+  revalidateAfter("patients");
   return NextResponse.json(patient, { status: 201 });
 }

@@ -23,6 +23,7 @@ import { canOverrideOverlap } from "@/lib/agenda/transitions";
 import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
 import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
 import { logMutation } from "@/lib/audit";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 import type {
   AgendaDayResponse,
   AppointmentConflictError,
@@ -235,6 +236,7 @@ export async function POST(req: NextRequest) {
       after: { patientId: created.patientId, doctorId: created.doctorId, startsAt: created.startsAt, type: created.type, status: created.status },
     });
 
+    revalidateAfter("appointments");
     return NextResponse.json(
       { appointment: appointmentToDTO(created, session.clinic.category) },
       { status: 201 },
