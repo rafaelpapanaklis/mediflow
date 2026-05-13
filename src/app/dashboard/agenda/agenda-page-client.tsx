@@ -32,7 +32,7 @@ import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { slotIndexToUtc } from "@/lib/agenda/time-utils";
 import { updateWaitlist, type ApiError } from "@/lib/agenda/mutations";
-import { describeOverlapConflict } from "@/lib/agenda/conflict-copy";
+import { describeOverlapConflict, describeResourceUnavailable } from "@/lib/agenda/conflict-copy";
 import {
   detectOverlap,
   recomputeTimes,
@@ -385,6 +385,15 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
                 doctorId: optimisticDoctorId,
                 resourceId: newResourceId,
               }),
+            );
+          } else if (err?.error === "resource_unavailable") {
+            const resourceName =
+              state.resources.find((r) => r.id === newResourceId)?.name ?? null;
+            toast.error(
+              describeResourceUnavailable(
+                err.reason as "outside_schedule" | "resource_closed_this_day" | undefined,
+                resourceName,
+              ),
             );
           } else {
             toast.error(err?.reason ?? err?.error ?? "No se pudo reagendar");

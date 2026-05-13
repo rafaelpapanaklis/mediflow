@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 export const dynamic = "force-dynamic";
 
@@ -110,5 +111,6 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  revalidateAfter("clinicalNotes");
   return NextResponse.json({ note: record }, { status: 201 });
 }

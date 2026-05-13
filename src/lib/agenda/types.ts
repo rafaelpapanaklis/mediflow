@@ -40,6 +40,35 @@ export interface ResourceDTO {
   isActive?: boolean;
 }
 
+/** Una ventana horaria dentro de un día. */
+export interface ResourceScheduleWindow {
+  startTime: string;  // "HH:MM"
+  endTime: string;    // "HH:MM"
+}
+
+/**
+ * Horario semanal por Resource. 7 días (0=Mon..6=Sun, Monday-based).
+ * Array vacío en un día = cerrado ese día.
+ */
+export interface WeekScheduleDTO {
+  days: {
+    0: ResourceScheduleWindow[];
+    1: ResourceScheduleWindow[];
+    2: ResourceScheduleWindow[];
+    3: ResourceScheduleWindow[];
+    4: ResourceScheduleWindow[];
+    5: ResourceScheduleWindow[];
+    6: ResourceScheduleWindow[];
+  };
+}
+
+/** Respuesta del GET /api/agenda/resources/[id]/schedule. */
+export interface ResourceScheduleResponse {
+  resourceId: string;
+  alwaysOpen: boolean;
+  schedule: WeekScheduleDTO | null;
+}
+
 export interface DoctorColumnDTO {
   id: string;
   displayName: string;
