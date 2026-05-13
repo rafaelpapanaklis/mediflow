@@ -42,9 +42,15 @@ export function ImplantActions({ implant, onAction }: ImplantActionsProps) {
 
   return (
     <div className="flex flex-wrap gap-2 px-4 py-3 border-t border-[var(--border-soft,theme(colors.gray.200))] dark:border-gray-800">
-      <button type="button" className={neutralBtn} onClick={() => onAction("radiographs")}>
+      <button
+        type="button"
+        className={`${neutralBtn} opacity-50 cursor-not-allowed`}
+        disabled
+        title="Disponible en la siguiente fase"
+      >
         <Camera className="h-3.5 w-3.5" />
         Radiografías
+        <span className="text-[10px] text-muted-foreground ml-2">Próximamente</span>
       </button>
       <button type="button" className={neutralBtn} onClick={() => onAction("consent")}>
         <FileSignature className="h-3.5 w-3.5" />
