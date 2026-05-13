@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { patientSchema } from "@/lib/validations";
 import { validateCurpRecord } from "@/lib/validators/curp";
 import { logMutation } from "@/lib/audit";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -69,6 +70,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       after: updated as any,
     });
 
+    revalidateAfter("patients");
     return NextResponse.json(updated);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 });
@@ -105,5 +107,6 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     });
   }
 
+  revalidateAfter("patients");
   return NextResponse.json({ success: true });
 }

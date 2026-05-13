@@ -4,6 +4,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { loadClinicSession } from "@/lib/agenda/api-helpers";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +63,7 @@ export async function PATCH(req: Request, { params }: Params) {
     select: { id: true, name: true, kind: true, color: true, orderIndex: true },
   });
 
+  revalidateAfter("resources");
   return NextResponse.json({ resource: updated });
 }
 
@@ -115,5 +117,6 @@ export async function DELETE(_req: Request, { params }: Params) {
     data: { isActive: false },
   });
 
+  revalidateAfter("resources");
   return NextResponse.json({ ok: true });
 }

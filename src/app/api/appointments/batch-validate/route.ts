@@ -8,6 +8,7 @@ import type {
   BatchValidateInput,
   BatchValidateResult,
 } from "@/lib/agenda/types";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 export async function POST(req: NextRequest) {
   const session = await loadClinicSession();
@@ -93,5 +94,6 @@ export async function POST(req: NextRequest) {
   // TODO(M3.b): if body.notifyPatients y session.clinic.waConnected,
   //             enviar notificación a cada paciente afectado.
 
+  revalidateAfter("appointments");
   return NextResponse.json(result);
 }

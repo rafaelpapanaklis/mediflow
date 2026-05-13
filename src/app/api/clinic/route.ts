@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 async function getDbUser() {
   const supabase = createClient();
@@ -45,5 +46,6 @@ export async function PATCH(req: NextRequest) {
     data,
   });
 
+  revalidateAfter("clinic");
   return NextResponse.json(updated);
 }

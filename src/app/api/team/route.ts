@@ -3,6 +3,7 @@ import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { logMutation } from "@/lib/audit";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 const DOCTOR_COLORS = [
   "#3b82f6","#7c3aed","#059669","#e11d48","#d97706",
@@ -116,6 +117,8 @@ export async function POST(req: NextRequest) {
     action: "create",
     after: { firstName: newUser.firstName, lastName: newUser.lastName, email: newUser.email, role: newUser.role, especialidad: newUser.especialidad },
   });
+
+  revalidateAfter("team");
 
   return NextResponse.json({
     ...newUser,

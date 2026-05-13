@@ -5,7 +5,7 @@ import toast from "react-hot-toast";
 import { X } from "lucide-react";
 import { useAgenda } from "./agenda-provider";
 import { rescheduleAppointment, type ApiError } from "@/lib/agenda/mutations";
-import { describeOverlapConflict } from "@/lib/agenda/conflict-copy";
+import { describeOverlapConflict, describeResourceUnavailable } from "@/lib/agenda/conflict-copy";
 import { getTzParts } from "@/lib/agenda/time-utils";
 import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 
@@ -142,6 +142,15 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
             doctorId: form.doctorId,
             resourceId: form.resourceId || null,
           }),
+        );
+      } else if (e?.error === "resource_unavailable") {
+        const resourceName =
+          state.resources.find((r) => r.id === form.resourceId)?.name ?? null;
+        setConflict(
+          describeResourceUnavailable(
+            e.reason as "outside_schedule" | "resource_closed_this_day" | undefined,
+            resourceName,
+          ),
         );
       } else {
         const detail = e?.reason ?? e?.error ?? e?.message ?? "No se pudo actualizar";

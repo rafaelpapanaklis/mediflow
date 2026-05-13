@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { formatCurrency } from "@/lib/utils";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -64,6 +65,7 @@ const EMPTY_FORM: FormState = {
 };
 
 export function ProceduresClient({ initialProcedures }: Props) {
+  const router = useRouter();
   const askConfirm = useConfirm();
   const [procedures, setProcedures] = useState<Procedure[]>(initialProcedures);
   const [search, setSearch] = useState("");
@@ -158,6 +160,7 @@ export function ProceduresClient({ initialProcedures }: Props) {
           prev.map((p) => (p.id === updated.id ? updated : p))
         );
         toast.success("Procedimiento actualizado");
+        router.refresh();
       } else {
         const res = await fetch("/api/procedures", {
           method: "POST",
@@ -171,6 +174,7 @@ export function ProceduresClient({ initialProcedures }: Props) {
         const created: Procedure = await res.json();
         setProcedures((prev) => [created, ...prev]);
         toast.success("Procedimiento creado");
+        router.refresh();
       }
       setModalOpen(false);
       setEditing(null);
@@ -196,6 +200,7 @@ export function ProceduresClient({ initialProcedures }: Props) {
       });
       if (!res.ok) throw new Error();
       toast.success(next ? "Activado" : "Desactivado");
+      router.refresh();
     } catch {
       // revert
       setProcedures((prev) =>
@@ -217,6 +222,7 @@ export function ProceduresClient({ initialProcedures }: Props) {
       if (!res.ok) throw new Error();
       setProcedures((prev) => prev.filter((x) => x.id !== p.id));
       toast.success("Procedimiento eliminado");
+      router.refresh();
     } catch {
       toast.error("Error al eliminar");
     }

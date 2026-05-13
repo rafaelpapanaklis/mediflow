@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -24,6 +25,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     },
   });
 
+  revalidateAfter("packages");
   return NextResponse.json(updated);
 }
 
@@ -50,5 +52,6 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
 
   await prisma.servicePackage.deleteMany({ where: { id: params.id, clinicId: ctx.clinicId } });
 
+  revalidateAfter("packages");
   return NextResponse.json({ success: true });
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Plus, ChevronRight, AlertTriangle, CheckCircle, Clock, X, Activity } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
@@ -54,6 +55,7 @@ interface Props {
 }
 
 export function TreatmentsClient({ treatments: initial, patients, doctors, currentUserId, isAdmin, clinicSlug }: Props) {
+  const router = useRouter();
   const [treatments, setTreatments] = useState<Treatment[]>(initial);
   const [filter,     setFilter]     = useState<string>("ALL");
   const [showNew,    setShowNew]    = useState(false);
@@ -116,6 +118,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
       setShowNew(false);
       setForm({ patientId:"", doctorId:currentUserId, name:"", description:"", totalSessions:"6", sessionIntervalDays:"30", totalCost:"" });
       toast.success("Plan de tratamiento creado");
+      router.refresh();
     } catch (err: any) { toast.error(err.message); }
     finally { setSaving(false); }
   }
@@ -161,6 +164,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
       setSessionNote("");
       setSelInv([]);
       toast.success(data.completed ? "¡Tratamiento completado!" : `Sesión ${data.sessionNumber} registrada`);
+      router.refresh();
     } catch (err: any) { toast.error(err.message); }
     finally { setSaving(false); }
   }
@@ -175,6 +179,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
       setTreatments(prev => prev.map(t => t.id === treatmentId ? { ...t, status } : t));
       if (selected?.id === treatmentId) setSelected(prev => prev ? { ...prev, status } : null);
       toast.success("Estado actualizado");
+      router.refresh();
     } catch { toast.error("Error al actualizar"); }
   }
 
