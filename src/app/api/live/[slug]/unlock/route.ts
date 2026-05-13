@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { liveCookieName, verifyLivePassword, LIVE_UNLOCK_TTL_HOURS } from "@/lib/floor-plan/live-config";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,12 @@ interface Params { params: { slug: string } }
  * setea cookie httpOnly de 12h que el endpoint público lee como llave.
  */
 export async function POST(req: NextRequest, { params }: Params) {
+  // Endpoint publico (sin auth) que verifica password contra bcrypt hash —
+  // vulnerable a brute force. Limita a 10 intentos por IP cada 5 minutos.
+  // Es generoso para typos legitimos pero detiene ataques automatizados.
+  const rl = rateLimit(req, 10, 5 * 60 * 1000);
+  if (rl) return rl;
+
   const slug = (params.slug ?? "").toLowerCase();
   if (!slug) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
