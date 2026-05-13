@@ -43,6 +43,7 @@ import type { ImplantFull } from "@/lib/types/implants";
 import type { OrthoTabData } from "@/lib/orthodontics/load-data";
 import type { OrthoRedesignViewModel } from "@/components/specialties/orthodontics/redesign/types";
 import type { OrthoRedesignBundle } from "@/lib/orthodontics/redesign/loader";
+import type { PatientActivityCounts } from "@/lib/clinical-shared/get-patient-activity-counts";
 import {
   signTreatmentCard,
   saveTreatmentCardDraft,
@@ -333,6 +334,13 @@ interface Props {
    * treatmentStatus derivado. Cuando viene null se usa todo en empty state.
    */
   orthoRedesignBundle?: OrthoRedesignBundle | null;
+  /**
+   * Conteos por módulo del paciente actual. Se usan en el quick-nav para
+   * atenuar ítems de especialidades sin actividad. El módulo permanece
+   * visible (el clinic lo tiene activo) y clickable; la atenuación
+   * comunica "todavía sin registros".
+   */
+  activityCounts?: PatientActivityCounts;
 }
 
 export function PatientDetailClient({
@@ -347,6 +355,7 @@ export function PatientDetailClient({
   orthoData,
   orthoRedesignVM,
   orthoRedesignBundle,
+  activityCounts,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -958,6 +967,7 @@ export function PatientDetailClient({
           showEndodontics={showEndodontics}
           showImplants={showImplants}
           showOrthodontics={showOrthodontics}
+          activityCounts={activityCounts}
         />
 
         <div className={patientDetailStyles.mainColumn}>

@@ -24,6 +24,10 @@ import { loadEndoSoapPrefill } from "@/lib/endodontics/load-soap-prefill";
 import { loadEndoToothSummaries } from "@/lib/helpers/loadEndoToothData";
 import type { SoapPrefill, EndoToothSummary } from "@/lib/types/endodontics";
 import { getActiveClinicModuleKeys } from "@/lib/clinical-shared/get-active-clinic-modules";
+import {
+  getPatientActivityCounts,
+  type PatientActivityCounts,
+} from "@/lib/clinical-shared/get-patient-activity-counts";
 
 export default async function PatientDetailPage({ params }: { params: { id: string } }) {
   const user = await getCurrentUser();
@@ -72,7 +76,10 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   // activas (o todas, si la clínica está en trial vigente) y reusamos esa
   // lista para Pediatría / Periodoncia / prefill endo. Reemplaza tres
   // llamadas previas a canAccessModule() — mismo contrato, una query.
-  const clinicModuleKeys = await getActiveClinicModuleKeys(user.clinicId);
+  const [clinicModuleKeys, activityCounts] = await Promise.all([
+    getActiveClinicModuleKeys(user.clinicId),
+    getPatientActivityCounts({ clinicId: user.clinicId, patientId: patient.id }),
+  ]);
   const isDental = user.clinic.category === "DENTAL";
 
   // Pediatría — predicado puro existente: categoría DENTAL|MEDICINE +
@@ -248,6 +255,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           orthoData={orthoData}
           orthoRedesignVM={orthoRedesignVM}
           orthoRedesignBundle={orthoRedesignBundle}
+          activityCounts={activityCounts}
         />
       </ErrorBoundary>
     </div>
