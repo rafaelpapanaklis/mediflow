@@ -20,6 +20,13 @@ const SWATCH_COLORS = [
   "#16a34a", "#dc2626", "#ca8a04", "#0d9488",
 ];
 
+// Set reducido para el form "Añadir" — 8 colores distintos + opción
+// "sin color" (null). El picker del row de edición sigue usando los 12.
+const ADD_FORM_SWATCHES = [
+  "#7c3aed", "#2563eb", "#0891b2", "#059669",
+  "#ca8a04", "#ea580c", "#dc2626", "#db2777",
+];
+
 export interface ResourcesManagerProps {
   initialResources: ResourceDTO[];
   clinicId: string;
@@ -217,7 +224,7 @@ export function ResourcesManager({
     }
   }
 
-  async function handleAdd(name: string, kind: ResourceKind, color: string) {
+  async function handleAdd(name: string, kind: ResourceKind, color: string | null) {
     try {
       const created = await createResource({ name, kind, color });
       setResources((prev) => [...prev, { ...created, isActive: true }]);
@@ -471,14 +478,13 @@ function ResourceRow({
 
 interface ResourceAddFormProps {
   onCancel: () => void;
-  onSave: (name: string, kind: ResourceKind, color: string) => Promise<void>;
+  onSave: (name: string, kind: ResourceKind, color: string | null) => Promise<void>;
 }
 
 function ResourceAddForm({ onCancel, onSave }: ResourceAddFormProps) {
   const [name, setName] = useState("");
   const [kind, setKind] = useState<ResourceKind>("CHAIR");
-  const [color, setColor] = useState(SWATCH_COLORS[0]!);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [color, setColor] = useState<string | null>(ADD_FORM_SWATCHES[0]!);
   const [saving, setSaving] = useState(false);
 
   return (
@@ -492,67 +498,84 @@ function ResourceAddForm({ onCancel, onSave }: ResourceAddFormProps) {
         setSaving(false);
       }}
     >
-      <span style={{ position: "relative" }}>
-        <span
-          className={styles.swatch}
-          style={{ background: color }}
-          onClick={() => setPickerOpen((v) => !v)}
-          role="button"
-          tabIndex={0}
-          aria-label="Color"
+      <div className={styles.addFormRow}>
+        <input
+          type="text"
+          className={styles.addInput}
+          placeholder="Nombre (ej. Sillón 3)"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          autoFocus
         />
-        {pickerOpen && (
-          <div className={styles.swatchPicker}>
-            {SWATCH_COLORS.map((c) => (
-              <span
-                key={c}
-                className={`${styles.swatchOption} ${
-                  c === color ? styles.selected : ""
-                }`}
-                style={{ background: c }}
-                onClick={() => {
+        <label className={styles.addLabel} htmlFor="resource-add-kind">
+          Tipo
+        </label>
+        <select
+          id="resource-add-kind"
+          className={styles.kindSelect}
+          value={kind}
+          onChange={(e) => setKind(e.target.value as ResourceKind)}
+        >
+          <option value="CHAIR">Sillón</option>
+          <option value="ROOM">Sala</option>
+          <option value="EQUIPMENT">Equipo</option>
+        </select>
+      </div>
+      <div className={styles.addFormRow}>
+        <span className={styles.addLabel}>Color</span>
+        <div className={styles.swatchInlineRow} role="radiogroup" aria-label="Color del recurso">
+          {ADD_FORM_SWATCHES.map((c) => (
+            <span
+              key={c}
+              role="radio"
+              aria-checked={c === color}
+              aria-label={`Color ${c}`}
+              tabIndex={0}
+              className={`${styles.swatchInline} ${c === color ? styles.selected : ""}`}
+              style={{ background: c }}
+              onClick={() => setColor(c)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
                   setColor(c);
-                  setPickerOpen(false);
-                }}
-                role="button"
-                tabIndex={0}
-              />
-            ))}
-          </div>
-        )}
-      </span>
-      <input
-        type="text"
-        className={styles.addInput}
-        placeholder="Nombre (ej. Sillón 3)"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        autoFocus
-      />
-      <select
-        className={styles.kindSelect}
-        value={kind}
-        onChange={(e) => setKind(e.target.value as ResourceKind)}
-      >
-        <option value="CHAIR">Sillón</option>
-        <option value="ROOM">Sala</option>
-        <option value="EQUIPMENT">Equipo</option>
-      </select>
-      <button
-        type="button"
-        className={styles.addBtnCancel}
-        onClick={onCancel}
-        disabled={saving}
-      >
-        Cancelar
-      </button>
-      <button
-        type="submit"
-        className={styles.addBtnSave}
-        disabled={!name.trim() || saving}
-      >
-        {saving ? "…" : "Añadir"}
-      </button>
+                }
+              }}
+            />
+          ))}
+          <span
+            role="radio"
+            aria-checked={color === null}
+            aria-label="Sin color"
+            tabIndex={0}
+            title="Sin color"
+            className={`${styles.swatchInline} ${styles.swatchNone} ${color === null ? styles.selected : ""}`}
+            onClick={() => setColor(null)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setColor(null);
+              }
+            }}
+          />
+        </div>
+      </div>
+      <div className={styles.addFormActions}>
+        <button
+          type="button"
+          className={styles.addBtnCancel}
+          onClick={onCancel}
+          disabled={saving}
+        >
+          Cancelar
+        </button>
+        <button
+          type="submit"
+          className={styles.addBtnSave}
+          disabled={!name.trim() || saving}
+        >
+          {saving ? "Guardando…" : "Añadir"}
+        </button>
+      </div>
     </form>
   );
 }
