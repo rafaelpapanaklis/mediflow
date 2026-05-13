@@ -207,7 +207,7 @@ const TABS_BASE = [
   { id: "historia",      label: "Historia clínica"     },
   { id: "odontograma",   label: "Odontograma"          },
   { id: "expediente",    label: "Nueva consulta"       },
-  { id: "evolucion",     label: "Evolución / Notas"    },
+  { id: "evolucion",     label: "Notas SOAP"           },
   { id: "radiografias",  label: "Radiografías"         },
   { id: "tratamiento",   label: "Plan de tratamiento"  },
   { id: "referencias",   label: "Referencias"          },
@@ -1888,7 +1888,7 @@ export function PatientDetailClient({
               )}
               <div className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                <h2 className="text-sm font-bold">Evolución clínica — {records.length} consulta{records.length !== 1 ? "s" : ""}</h2>
+                <h2 className="text-sm font-bold">Notas SOAP — {records.length} consulta{records.length !== 1 ? "s" : ""}</h2>
                 <button onClick={() => setTab("expediente")} className="text-xs font-semibold text-brand-600 hover:underline">+ Nueva nota SOAP</button>
               </div>
               <div className="p-5">
@@ -2495,7 +2495,7 @@ export function PatientDetailClient({
       </Dialog>
 
       {/* Modal de detalle de nota SOAP — abre al hacer click en una row del
-       *  tab Evolución / Notas. */}
+       *  tab Notas SOAP. */}
       <NoteDetailModal
         open={noteDetailOpen !== null}
         note={noteDetailOpen}
