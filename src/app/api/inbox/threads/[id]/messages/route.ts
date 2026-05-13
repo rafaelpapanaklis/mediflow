@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { sendWhatsappMessage } from "@/lib/integrations/twilio-conversations";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    const denied = denyIfMissingPermission(dbUser, "inbox.view");
+    if (denied) return denied;
 
     const thread = await prisma.inboxThread.findFirst({
       where: { id: params.id, clinicId: dbUser.clinicId },
@@ -77,6 +80,8 @@ export async function POST(req: NextRequest, { params }: Params) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    const denied = denyIfMissingPermission(dbUser, "inbox.send");
+    if (denied) return denied;
 
     const body = await req.json().catch(() => null);
     const parsed = PostSchema.safeParse(body);
