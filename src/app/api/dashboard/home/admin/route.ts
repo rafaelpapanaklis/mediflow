@@ -240,7 +240,7 @@ async function buildAlerts(clinicId: string, trialEndsAt: Date | null): Promise<
   try {
     const lowStock = await prisma.$queryRaw<{ count: bigint }[]>`
       SELECT COUNT(*)::bigint AS count
-      FROM "inventory"
+      FROM "inventory_items"
       WHERE "clinicId" = ${clinicId}
         AND "quantity" <= "minQuantity"
     `;
