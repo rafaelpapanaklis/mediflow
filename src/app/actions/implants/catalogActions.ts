@@ -104,7 +104,7 @@ function toDto(row: {
 export async function listImplantCatalogModels(): Promise<
   ActionResult<CatalogModelDto[]>
 > {
-  const ctxRes = await getImplantActionContext();
+  const ctxRes = await getImplantActionContext({ write: false });
   if (isFailure(ctxRes)) return ctxRes;
   const { ctx } = ctxRes.data;
   const rows = await prisma.implantCatalogModel.findMany({

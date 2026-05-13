@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,9 @@ interface Params { params: { id: string } }
 export async function POST(req: NextRequest, { params }: Params) {
   const dbUser = await getDbUser();
   if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const denied = denyIfMissingPermission(dbUser, "medicalRecord.edit");
+  if (denied) return denied;
 
   const body = await req.json().catch(() => null);
   const parsed = AttachSchema.safeParse(body);

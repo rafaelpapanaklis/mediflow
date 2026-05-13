@@ -3,6 +3,7 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import {
   ClinicalNoteDocument,
   type ClinicalNoteDxRow,
@@ -23,9 +24,8 @@ interface Params { params: { id: string } }
  */
 export async function GET(_req: NextRequest, { params }: Params) {
   const user = await getCurrentUser();
-  if (!["SUPER_ADMIN", "ADMIN", "DOCTOR"].includes(user.role)) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  const denied = denyIfMissingPermission(user, "medicalRecord.view");
+  if (denied) return denied;
 
   const record = await prisma.medicalRecord.findFirst({
     where: { id: params.id, clinicId: user.clinicId },

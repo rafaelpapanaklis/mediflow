@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { PEDIATRIC_AUDIT_ACTIONS } from "@/lib/pediatrics/audit";
-import { auditPediatric, ensurePediatricRecord, fail, isFailure, loadPatientForPediatrics, ok, type ActionResult } from "./_helpers";
+import { auditPediatric, ensurePediatricRecord, fail, isFailure, loadPatientForPediatrics, ok, requirePediatricsPermission, type ActionResult } from "./_helpers";
 import { linkSessionToPlan } from "@/lib/clinical-shared/treatment-link/link";
 
 const behaviorSchema = z.object({
@@ -84,6 +84,8 @@ export async function captureBehavior(input: CaptureBehaviorInput): Promise<Acti
 export async function getBehaviorHistory(patientId: string): Promise<ActionResult<Array<{ id: string; scale: string; value: number; recordedAt: Date; notes: string | null }>>> {
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  const permRes = requirePediatricsPermission(ctx, { write: false });
+  if (isFailure(permRes)) return permRes;
 
   const rows = await prisma.behaviorAssessment.findMany({
     where: { patientId, clinicId: ctx.clinicId, deletedAt: null },

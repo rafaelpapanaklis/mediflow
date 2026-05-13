@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { PEDIATRIC_AUDIT_ACTIONS } from "@/lib/pediatrics/audit";
-import { auditPediatric, ensurePediatricRecord, fail, isFailure, loadPatientForPediatrics, ok, type ActionResult } from "./_helpers";
+import { auditPediatric, ensurePediatricRecord, fail, isFailure, loadPatientForPediatrics, ok, requirePediatricsPermission, type ActionResult } from "./_helpers";
 import { linkSessionToPlan } from "@/lib/clinical-shared/treatment-link/link";
 
 const fluorideSchema = z.object({
@@ -82,6 +82,8 @@ export async function applyFluoride(input: ApplyFluorideInput): Promise<ActionRe
 export async function getFluorideHistory(patientId: string): Promise<ActionResult<unknown[]>> {
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  const permRes = requirePediatricsPermission(ctx, { write: false });
+  if (isFailure(permRes)) return permRes;
   const rows = await prisma.fluorideApplication.findMany({
     where: { patientId, clinicId: ctx.clinicId, deletedAt: null },
     orderBy: { appliedAt: "desc" },

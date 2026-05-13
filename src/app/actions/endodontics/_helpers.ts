@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import type { AuthContext } from "@/lib/auth-context";
 import { getAuthContext } from "@/lib/auth-context";
 import { canAccessModule } from "@/lib/marketplace/access-control";
+import { hasPermission } from "@/lib/auth/permissions";
 
 export { ok, fail, isFailure, type ActionResult, type Success, type Failure } from "./result";
 import { fail, type ActionResult } from "./result";
@@ -23,9 +24,9 @@ export const ENDODONTICS_MODULE_KEY = "endodontics";
  * Retorna `{ ok: false, error }` si falla cualquier predicado. Una sola
  * llamada por server action; resto de la lógica usa el `ctx` retornado.
  */
-export async function getEndoActionContext(): Promise<
-  ActionResult<{ ctx: AuthContext }>
-> {
+export async function getEndoActionContext(
+  opts?: { write?: boolean },
+): Promise<ActionResult<{ ctx: AuthContext }>> {
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
 
@@ -36,6 +37,11 @@ export async function getEndoActionContext(): Promise<
   const access = await canAccessModule(ctx.clinicId, ENDODONTICS_MODULE_KEY);
   if (!access.hasAccess) {
     return fail("Módulo Endodoncia no activo para esta clínica");
+  }
+
+  const requiredKey = opts?.write === false ? "medicalRecord.view" : "medicalRecord.edit";
+  if (!hasPermission({ role: ctx.role as any, permissionsOverride: ctx.permissionsOverride }, requiredKey)) {
+    return fail(`Sin permisos: ${requiredKey}`);
   }
 
   return { ok: true, data: { ctx } };

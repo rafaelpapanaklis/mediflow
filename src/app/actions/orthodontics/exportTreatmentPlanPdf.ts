@@ -38,7 +38,7 @@ export type TreatmentPlanPdfData = {
 export async function exportTreatmentPlanPdf(
   input: unknown,
 ): Promise<ActionResult<TreatmentPlanPdfData>> {
-  const auth = await getOrthoActionContext();
+  const auth = await getOrthoActionContext({ write: false });
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
 

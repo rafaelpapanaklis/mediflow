@@ -19,7 +19,7 @@ export async function loadToothAction(
   patientId: string,
   toothFdi: number,
 ): Promise<ToothCenterViewData | null> {
-  const ctxRes = await getEndoActionContext();
+  const ctxRes = await getEndoActionContext({ write: false });
   if (isFailure(ctxRes)) return null;
   const { ctx } = ctxRes.data;
 

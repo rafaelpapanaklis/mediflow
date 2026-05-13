@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { PEDIATRIC_AUDIT_ACTIONS } from "@/lib/pediatrics/audit";
-import { auditPediatric, fail, isFailure, loadPatientForPediatrics, ok, type ActionResult } from "./_helpers";
+import { auditPediatric, fail, isFailure, loadPatientForPediatrics, ok, requirePediatricsPermission, type ActionResult } from "./_helpers";
 
 const pediatricRecordSchema = z.object({
   patientId: z.string().min(1),
@@ -119,6 +119,8 @@ export async function getPediatricRecord(patientId: string): Promise<ActionResul
   if (!patientId) return fail("ID requerido");
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  const permRes = requirePediatricsPermission(ctx, { write: false });
+  if (isFailure(permRes)) return permRes;
 
   const record = await prisma.pediatricRecord.findUnique({
     where: { patientId },

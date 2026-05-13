@@ -27,7 +27,7 @@ export async function exportPerioPatientReportPdf(
 ): Promise<ActionResult<PerioPdfResult>> {
   if (!patientId) return fail("patientId requerido");
 
-  const auth = await getPerioActionContext();
+  const auth = await getPerioActionContext({ write: false });
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
 
@@ -59,7 +59,7 @@ export async function exportPerioReferrerReportPdf(
 ): Promise<ActionResult<PerioPdfResult>> {
   if (!patientId) return fail("patientId requerido");
 
-  const auth = await getPerioActionContext();
+  const auth = await getPerioActionContext({ write: false });
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
 
@@ -95,7 +95,7 @@ export async function exportPerioPrePostComparePdf(args: {
     return fail("initialRecordId y postRecordId son requeridos");
   }
 
-  const auth = await getPerioActionContext();
+  const auth = await getPerioActionContext({ write: false });
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
 
