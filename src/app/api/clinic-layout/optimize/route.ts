@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { rateLimit } from "@/lib/rate-limit";
 import { chat } from "@/lib/integrations/claude";
+import { TREATMENT_KINDS } from "@/lib/agenda/types";
 
 export const dynamic = "force-dynamic";
 
@@ -103,7 +104,7 @@ export async function POST(req: NextRequest) {
       },
     }),
     prisma.resource.findMany({
-      where: { clinicId: dbUser.clinicId, kind: "CHAIR", isActive: true },
+      where: { clinicId: dbUser.clinicId, kind: { in: [...TREATMENT_KINDS] }, isActive: true },
       select: { id: true, name: true },
       orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
     }),

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { TREATMENT_KINDS } from "@/lib/agenda/types";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -396,7 +397,7 @@ export async function POST(req: NextRequest) {
       select: { id: true },
     }),
     prisma.resource.findMany({
-      where: { clinicId: clinic.id, kind: "CHAIR", isActive: true },
+      where: { clinicId: clinic.id, kind: { in: [...TREATMENT_KINDS] }, isActive: true },
       select: { id: true },
     }),
     prisma.cumsItem.findMany({

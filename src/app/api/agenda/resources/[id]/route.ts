@@ -8,7 +8,19 @@ import { revalidateAfter } from "@/lib/cache/revalidate";
 
 export const dynamic = "force-dynamic";
 
-const RESOURCE_KIND = z.enum(["CHAIR", "ROOM", "EQUIPMENT"]);
+const RESOURCE_KIND = z.enum([
+  // Legacy — tolerados en el API por si llegan payloads viejos durante el rollout.
+  "CHAIR",
+  "ROOM",
+  "EQUIPMENT",
+  // Vigentes — los únicos que ofrece la UI.
+  "CONSULTORIO_DENTAL",
+  "CONSULTORIO_GENERAL",
+  "SILLA_DENTAL",
+  "SALA_DE_ESPERA",
+  "RADIOGRAFIA",
+  "LABORATORIO",
+]);
 
 const PatchSchema = z
   .object({

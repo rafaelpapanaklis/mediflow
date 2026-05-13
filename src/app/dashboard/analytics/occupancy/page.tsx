@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { TREATMENT_KINDS } from "@/lib/agenda/types";
 import { OccupancyClient } from "./occupancy-client";
 
 export const metadata: Metadata = { title: "Ocupación — Analytics" };
@@ -15,7 +16,7 @@ export default async function OccupancyPage() {
 
   const [resources, doctors] = await Promise.all([
     prisma.resource.findMany({
-      where: { clinicId: user.clinicId, isActive: true, kind: "CHAIR" },
+      where: { clinicId: user.clinicId, isActive: true, kind: { in: [...TREATMENT_KINDS] } },
       select: { id: true, name: true },
       orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
     }),

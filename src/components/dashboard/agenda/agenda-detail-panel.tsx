@@ -35,7 +35,11 @@ import {
 import { possibleTransitions } from "@/lib/agenda/transitions";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { AgendaEditAppointmentModal } from "./agenda-edit-appointment-modal";
-import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
+import {
+  RESOURCE_KIND_LABELS,
+  type AgendaAppointmentDTO,
+  type AppointmentStatus,
+} from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
 
 interface ActionDef {
@@ -290,7 +294,7 @@ export function AgendaDetailPanel() {
           <span className={styles.detailRowValue}>{appt.reason ?? "Consulta"}</span>
         </div>
         <div className={styles.detailRow}>
-          <span className={styles.detailRowLabel}>{resource?.kind === "ROOM" ? "Sala" : resource?.kind === "EQUIPMENT" ? "Equipo" : "Sillón"}</span>
+          <span className={styles.detailRowLabel}>{resource ? RESOURCE_KIND_LABELS[resource.kind] : "Recurso"}</span>
           <span className={styles.detailRowValue}>{resourceLabel}</span>
         </div>
         <div className={styles.detailRow}>

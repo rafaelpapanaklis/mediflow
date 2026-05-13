@@ -12,7 +12,12 @@ import {
   updateResource,
   type ApiError,
 } from "@/lib/agenda/mutations";
-import type { ResourceDTO, ResourceKind } from "@/lib/agenda/types";
+import {
+  ACTIVE_RESOURCE_KINDS,
+  RESOURCE_KIND_LABELS,
+  type ResourceDTO,
+  type ResourceKind,
+} from "@/lib/agenda/types";
 import { ResourceScheduleDrawer } from "./resource-schedule-drawer";
 import styles from "./resources-manager.module.css";
 
@@ -462,9 +467,9 @@ function ResourceRow({
         }}
         disabled={archived || !canEdit}
       >
-        <option value="CHAIR">Sillón</option>
-        <option value="ROOM">Sala</option>
-        <option value="EQUIPMENT">Equipo</option>
+        {ACTIVE_RESOURCE_KINDS.map((k) => (
+          <option key={k} value={k}>{RESOURCE_KIND_LABELS[k]}</option>
+        ))}
       </select>
       {archived ? (
         <span className={styles.archivedBadge}>Archivado</span>
@@ -516,7 +521,7 @@ interface ResourceAddFormProps {
 
 function ResourceAddForm({ onCancel, onSave }: ResourceAddFormProps) {
   const [name, setName] = useState("");
-  const [kind, setKind] = useState<ResourceKind>("CHAIR");
+  const [kind, setKind] = useState<ResourceKind>("SILLA_DENTAL");
   const [color, setColor] = useState<string | null>(ADD_FORM_SWATCHES[0]!);
   const [saving, setSaving] = useState(false);
 
@@ -549,9 +554,9 @@ function ResourceAddForm({ onCancel, onSave }: ResourceAddFormProps) {
           value={kind}
           onChange={(e) => setKind(e.target.value as ResourceKind)}
         >
-          <option value="CHAIR">Sillón</option>
-          <option value="ROOM">Sala</option>
-          <option value="EQUIPMENT">Equipo</option>
+          {ACTIVE_RESOURCE_KINDS.map((k) => (
+            <option key={k} value={k}>{RESOURCE_KIND_LABELS[k]}</option>
+          ))}
         </select>
       </div>
       <div className={styles.addFormRow}>

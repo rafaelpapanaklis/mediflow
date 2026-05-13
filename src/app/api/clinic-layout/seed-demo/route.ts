@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { DEMO_ELEMENTS } from "@/lib/floor-plan/demo-layout";
+import { TREATMENT_KINDS } from "@/lib/agenda/types";
 
 export const dynamic = "force-dynamic";
 
@@ -44,9 +45,9 @@ export async function POST() {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
 
-    // 1. Crear/match Resources(kind=CHAIR) para cada sillón demo.
+    // 1. Crear/match Resources (lugares de tratamiento) para cada sillón demo.
     const existingChairs = await prisma.resource.findMany({
-      where: { clinicId: dbUser.clinicId, kind: "CHAIR" },
+      where: { clinicId: dbUser.clinicId, kind: { in: [...TREATMENT_KINDS] } },
       select: { id: true, name: true, isActive: true },
     });
     const labelToResourceId = new Map<string, string>();
@@ -70,7 +71,7 @@ export async function POST() {
         const created = await prisma.resource.create({
           data: {
             clinicId: dbUser.clinicId,
-            kind: "CHAIR",
+            kind: "SILLA_DENTAL",
             name: el.chairLabel,
             isActive: true,
             orderIndex: nextOrder++,
@@ -130,7 +131,7 @@ export async function POST() {
     });
 
     const allChairs = await prisma.resource.findMany({
-      where: { clinicId: dbUser.clinicId, kind: "CHAIR", isActive: true },
+      where: { clinicId: dbUser.clinicId, kind: { in: [...TREATMENT_KINDS] }, isActive: true },
       select: { id: true, name: true, color: true, orderIndex: true },
       orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
     });

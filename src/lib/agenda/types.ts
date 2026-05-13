@@ -11,7 +11,53 @@ export type AppointmentSource =
   | "WEBSITE"
   | "WHATSAPP";
 
-export type ResourceKind = "CHAIR" | "ROOM" | "EQUIPMENT";
+/**
+ * Tipos de recurso. Los tres primeros (CHAIR/ROOM/EQUIPMENT) son legacy:
+ * existen en el enum de Postgres por compat pero ya no se usan en la app
+ * (el backfill 20260513120100 los reescribe a los nuevos). El código
+ * nuevo debe usar los 6 valores explícitos.
+ */
+export type ResourceKind =
+  | "CHAIR"
+  | "ROOM"
+  | "EQUIPMENT"
+  | "CONSULTORIO_DENTAL"
+  | "CONSULTORIO_GENERAL"
+  | "SILLA_DENTAL"
+  | "SALA_DE_ESPERA"
+  | "RADIOGRAFIA"
+  | "LABORATORIO";
+
+/** Valores ofrecidos al usuario en formularios de creación/edición. */
+export const ACTIVE_RESOURCE_KINDS: readonly ResourceKind[] = [
+  "CONSULTORIO_DENTAL",
+  "CONSULTORIO_GENERAL",
+  "SILLA_DENTAL",
+  "SALA_DE_ESPERA",
+  "RADIOGRAFIA",
+  "LABORATORIO",
+];
+
+/** Labels en español para todos los kinds (incluye legacy para tolerar BD migrada a medias). */
+export const RESOURCE_KIND_LABELS: Record<ResourceKind, string> = {
+  CHAIR: "Sillón",
+  ROOM: "Sala",
+  EQUIPMENT: "Equipo",
+  CONSULTORIO_DENTAL: "Consultorio Dental",
+  CONSULTORIO_GENERAL: "Consultorio General",
+  SILLA_DENTAL: "Silla Dental",
+  SALA_DE_ESPERA: "Sala de Espera",
+  RADIOGRAFIA: "Radiografía",
+  LABORATORIO: "Laboratorio",
+};
+
+/**
+ * Kinds que representan lugares físicos donde se atiende al paciente.
+ * Usado por la agenda (columna "Por sillón"), el editor de layout y la
+ * vista live para no mezclar lugares de tratamiento con salas de espera,
+ * radiografía o laboratorio.
+ */
+export const TREATMENT_KINDS: readonly ResourceKind[] = ["SILLA_DENTAL", "CONSULTORIO_DENTAL"];
 
 export type WaitlistPriority = "LOW" | "NORMAL" | "HIGH";
 
