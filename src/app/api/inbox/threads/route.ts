@@ -77,6 +77,9 @@ export async function GET(req: NextRequest) {
       ];
     }
 
+    const patientId = sp.get("patientId");
+    if (patientId) where.patientId = patientId;
+
     const limit = Math.min(parseInt(sp.get("limit") ?? "100", 10) || 100, 200);
 
     const threads = await prisma.inboxThread.findMany({

@@ -3,7 +3,7 @@
 import { useCallback, useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Plus, Printer, Edit, Download } from "lucide-react";
+import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Plus, Printer, Edit, Download, Pill, HeartPulse, Play } from "lucide-react";
 import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
 import { ageFromDob, fmtMXN } from "@/lib/format";
 import { Odontogram } from "@/components/dashboard/odontogram/Odontogram";
@@ -43,6 +43,8 @@ import type { ImplantFull } from "@/lib/types/implants";
 import type { OrthoTabData } from "@/lib/orthodontics/load-data";
 import type { OrthoRedesignViewModel } from "@/components/specialties/orthodontics/redesign/types";
 import type { OrthoRedesignBundle } from "@/lib/orthodontics/redesign/loader";
+import type { PatientActivityCounts } from "@/lib/clinical-shared/get-patient-activity-counts";
+import { buildEmptySuggestion } from "@/lib/patient-detail/empty-suggestion";
 import {
   signTreatmentCard,
   saveTreatmentCardDraft,
@@ -207,7 +209,7 @@ const TABS_BASE = [
   { id: "historia",      label: "Historia clínica"     },
   { id: "odontograma",   label: "Odontograma"          },
   { id: "expediente",    label: "Nueva consulta"       },
-  { id: "evolucion",     label: "Evolución / Notas"    },
+  { id: "evolucion",     label: "Notas SOAP"           },
   { id: "radiografias",  label: "Radiografías"         },
   { id: "tratamiento",   label: "Plan de tratamiento"  },
   { id: "referencias",   label: "Referencias"          },
@@ -333,6 +335,13 @@ interface Props {
    * treatmentStatus derivado. Cuando viene null se usa todo en empty state.
    */
   orthoRedesignBundle?: OrthoRedesignBundle | null;
+  /**
+   * Conteos por módulo del paciente actual. Se usan en el quick-nav para
+   * atenuar ítems de especialidades sin actividad. El módulo permanece
+   * visible (el clinic lo tiene activo) y clickable; la atenuación
+   * comunica "todavía sin registros".
+   */
+  activityCounts?: PatientActivityCounts;
 }
 
 export function PatientDetailClient({
@@ -347,6 +356,7 @@ export function PatientDetailClient({
   orthoData,
   orthoRedesignVM,
   orthoRedesignBundle,
+  activityCounts,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -881,9 +891,6 @@ export function PatientDetailClient({
             email: patient.email ?? null,
             bloodType: patient.bloodType ?? null,
             status: patient.status ?? "ACTIVE",
-            allergies: patient.allergies ?? [],
-            chronicConditions: patient.chronicConditions ?? [],
-            currentMedications: patient.currentMedications ?? [],
           }}
           nextAppointment={nextAppt ? {
             id: nextAppt.id,
@@ -926,13 +933,6 @@ export function PatientDetailClient({
               CAMBRA {pediatricsData.latestCambra.category}
             </span>
           ) : null}
-          <button
-            type="button"
-            onClick={() => setTab("pediatria")}
-            className="ml-auto text-xs font-semibold text-violet-700 hover:underline dark:text-violet-200"
-          >
-            Ir a Pediatría →
-          </button>
         </div>
       )}
 
@@ -968,6 +968,7 @@ export function PatientDetailClient({
           showEndodontics={showEndodontics}
           showImplants={showImplants}
           showOrthodontics={showOrthodontics}
+          activityCounts={activityCounts}
         />
 
         <div className={patientDetailStyles.mainColumn}>
@@ -1049,22 +1050,45 @@ export function PatientDetailClient({
                   <div className="w-2 h-2 rounded-full bg-brand-500" />
                   <span className="text-xs font-bold">Resumen clínico</span>
                 </div>
-                {records.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Sin registros clínicos aún.</p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {[
-                      { label: "Motivo último consulta", val: records[0]?.subjective?.slice(0, 50) ?? "—" },
-                      { label: "Diagnóstico",            val: records[0]?.assessment?.slice(0, 50) ?? "—" },
-                      { label: "Plan",                   val: records[0]?.plan?.slice(0, 50) ?? "—" },
-                    ].map(r => (
-                      <div key={r.label} className="flex justify-between items-start py-1.5 border-b border-slate-50 text-xs">
-                        <span className="text-muted-foreground">{r.label}</span>
-                        <span className="font-semibold text-right max-w-[55%]">{r.val}</span>
+                <HistoriaTimeline
+                  patientId={patient.id}
+                  compact
+                  limit={8}
+                  onOpenSoap={(recordId) => {
+                    const record = records.find((r) => r.id === recordId);
+                    if (record) setNoteDetailOpen(record as ClinicalNote);
+                  }}
+                  onOpenXray={(fileId) => router.push(`/dashboard/xrays/${patient.id}?fileId=${fileId}`)}
+                  onOpenAppointment={() => setTab("agenda")}
+                  onOpenTreatment={() => setTab("tratamiento")}
+                  onOpenReferral={() => setTab("referencias")}
+                  emptyState={(() => {
+                    const ageYears = ageFromDob(patient.dob);
+                    const suggestion = buildEmptySuggestion({
+                      ageYears,
+                      isChild: Boolean(patient.isChild) || (ageYears !== null && ageYears < 18),
+                      dentition: pediatricsData?.dentition,
+                      hasPerioModule: perioData !== null && perioData !== undefined,
+                      hasOrthoModule: (orthoData !== null && orthoData !== undefined) || orthoRedesignVM !== null,
+                      hasEndoModule: endoSummaries !== null && endoSummaries !== undefined,
+                      hasImplantsModule: implants !== null && implants !== undefined,
+                      clinicSpecialty: specialty ?? "",
+                    });
+                    return (
+                      <div className="bg-card border border-dashed border-border rounded-xl p-4 text-center">
+                        <p className="text-xs font-semibold text-foreground mb-1">{suggestion.headline}</p>
+                        <p className="text-xs text-muted-foreground mb-3">{suggestion.hint}</p>
+                        <button
+                          type="button"
+                          onClick={() => setTab("expediente")}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-brand-600 text-white hover:bg-brand-700"
+                        >
+                          <Play size={12} aria-hidden /> Iniciar consulta
+                        </button>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    );
+                  })()}
+                />
                 {records[0]?.specialtyData?.periodontal && (
                   <div className="mt-3">
                     <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2">Semáforo clínico</div>
@@ -1082,14 +1106,30 @@ export function PatientDetailClient({
                   <div className="w-2 h-2 rounded-full bg-emerald-500" />
                   <span className="text-xs font-bold">Historia clínica</span>
                 </div>
+                {(patient.allergies?.length || patient.currentMedications?.length || patient.chronicConditions?.length) ? (
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    {patient.allergies?.map((a: string) => (
+                      <span key={`a-${a}`} className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700">
+                        <AlertTriangle size={11} aria-hidden /> {a}
+                      </span>
+                    ))}
+                    {patient.currentMedications?.map((m: string) => (
+                      <span key={`m-${m}`} className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                        <Pill size={11} aria-hidden /> {m}
+                      </span>
+                    ))}
+                    {patient.chronicConditions?.map((c: string) => (
+                      <span key={`c-${c}`} className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                        <HeartPulse size={11} aria-hidden /> {c}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="space-y-1.5 text-xs">
                   {[
-                    { label: "Enfermedades sistémicas", val: patient.chronicConditions?.join(", ") || "Ninguna" },
-                    { label: "Alergias",                val: patient.allergies?.join(", ") || "Ninguna" },
-                    { label: "Medicamentos",            val: patient.currentMedications?.join(", ") || "Ninguno" },
-                    { label: "Tipo de sangre",          val: patient.bloodType || "No registrado" },
-                    { label: "Seguro",                  val: patient.insuranceProvider || "Sin seguro" },
-                    { label: "Notas",                   val: patient.notes?.slice(0, 60) || "—" },
+                    { label: "Tipo de sangre", val: patient.bloodType || "No registrado" },
+                    { label: "Seguro",         val: patient.insuranceProvider || "Sin seguro" },
+                    { label: "Notas",          val: patient.notes?.slice(0, 60) || "—" },
                   ].map(r => (
                     <div key={r.label} className="flex justify-between items-start py-1.5 border-b border-slate-50">
                       <span className="text-muted-foreground">{r.label}</span>
@@ -1888,7 +1928,7 @@ export function PatientDetailClient({
               )}
               <div className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                <h2 className="text-sm font-bold">Evolución clínica — {records.length} consulta{records.length !== 1 ? "s" : ""}</h2>
+                <h2 className="text-sm font-bold">Notas SOAP — {records.length} consulta{records.length !== 1 ? "s" : ""}</h2>
                 <button onClick={() => setTab("expediente")} className="text-xs font-semibold text-brand-600 hover:underline">+ Nueva nota SOAP</button>
               </div>
               <div className="p-5">
@@ -2359,6 +2399,7 @@ export function PatientDetailClient({
             balance: totalBalance,
             pct: pctPaid,
           }}
+          patientId={patient.id}
           patientName={fullName}
           patientPhone={patient.phone ?? null}
           onReschedule={() => setTab("agenda")}
@@ -2495,7 +2536,7 @@ export function PatientDetailClient({
       </Dialog>
 
       {/* Modal de detalle de nota SOAP — abre al hacer click en una row del
-       *  tab Evolución / Notas. */}
+       *  tab Notas SOAP. */}
       <NoteDetailModal
         open={noteDetailOpen !== null}
         note={noteDetailOpen}

@@ -504,6 +504,21 @@
   background: transparent;
   border-color: transparent;
 }
+/* Item del quick-nav atenuado: módulo activo en la clínica pero sin
+ * registros del paciente. Sigue siendo clickable — el usuario entra al
+ * tab para crear el primer registro. */
+.navItemDimmed,
+.navItemDimmed:hover { opacity: 0.5; }
+.navItem.active.navItemDimmed { opacity: 1; }
+/* Subhead "ESPECIALIDADES" dentro del bloque Clínico — más sutil que el
+ * label de sección principal, con un tono brand para diferenciarlo. */
+.navSubhead {
+  margin-top: 8px;
+  color: var(--brand);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  opacity: 0.85;
+}
 .navItem svg { color: inherit; flex-shrink: 0; }
 .navItemLabel {
   flex: 1;

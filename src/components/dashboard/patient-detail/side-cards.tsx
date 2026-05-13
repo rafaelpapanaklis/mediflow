@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   CalendarClock,
   Receipt,
@@ -25,6 +26,7 @@ interface SideCardsProps {
     balance: number;
     pct: number;
   };
+  patientId: string;
   patientName: string;
   patientPhone: string | null;
   onReschedule: () => void;
@@ -57,6 +59,7 @@ function fmtMonthShort(iso: string): string {
 export function SideCards({
   nextAppointment,
   finance,
+  patientId,
   patientName,
   patientPhone,
   onReschedule,
@@ -147,25 +150,17 @@ export function SideCards({
         )}
       </section>
 
-      {/* Sugerencias IA */}
+      {/* Reglas automáticas */}
       <section className={`${styles.sideCard} ${styles.aiCard}`}>
         <header className={styles.sideCardHead}>
           <h3 className={styles.sideCardTitle}>
-            <Sparkles size={13} aria-hidden /> Sugerencias IA
+            <Sparkles size={13} aria-hidden /> Reglas automáticas
           </h3>
         </header>
         <p className={styles.aiText}>
-          {patientName.split(" ")[0]} no ha confirmado su próxima cita. Sugerencia:
-          enviar recordatorio por WhatsApp 24h antes para reducir riesgo de no-show.
+          {patientName.split(" ")[0]} recibirá un recordatorio por WhatsApp 24h
+          antes de su próxima cita (si la clínica tiene WhatsApp activado).
         </p>
-        <button
-          type="button"
-          className={`${styles.sideBtn} ${styles.fullWidth}`}
-          disabled={!patientPhone}
-          title={patientPhone ?? "Sin teléfono registrado"}
-        >
-          <MessageCircle size={11} aria-hidden /> Enviar por WhatsApp
-        </button>
       </section>
 
       {/* WhatsApp recientes */}
@@ -183,15 +178,13 @@ export function SideCards({
           )}
         </div>
         {patientPhone && (
-          <a
-            href={`https://wa.me/${patientPhone.replace(/\D/g, "")}`}
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            href={`/dashboard/inbox?patientId=${encodeURIComponent(patientId)}`}
             className={`${styles.sideBtn} ${styles.fullWidth}`}
             style={{ textDecoration: "none" }}
           >
             Abrir chat
-          </a>
+          </Link>
         )}
       </section>
     </aside>
