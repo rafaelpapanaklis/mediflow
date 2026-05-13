@@ -162,7 +162,8 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error ?? "No se pudo confirmar la factura");
       }
-      router.refresh();
+      // router.refresh() removido: causaba race con el refresh post-payment
+      // de handlePaymentSuccess. El refresh ocurre al cerrar el PaymentModal.
       setPaymentOpen(true);
     } catch (err: any) {
       toast.error(err.message ?? "Error");

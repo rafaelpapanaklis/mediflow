@@ -398,6 +398,17 @@ export function PatientDetailClient({
   const [consultClosed, setConsultClosed] = useState(false);
   const [noteDetailOpen, setNoteDetailOpen] = useState<ClinicalNote | null>(null);
   const [invoiceDetailOpen, setInvoiceDetailOpen] = useState<any | null>(null);
+  // Sincroniza el snapshot del modal con la versión fresca de invoices tras
+  // router.refresh(). Sin esto, el InvoiceDetailModal queda con un invoice
+  // stale (ej. status=DRAFT cuando el server ya pasó a PENDING/PAID),
+  // rompiendo el PaymentModal interno y el cálculo de balance.
+  useEffect(() => {
+    if (!invoiceDetailOpen) return;
+    const fresh = (invoices as any[]).find((i: any) => i.id === invoiceDetailOpen.id);
+    if (fresh && (fresh.status !== invoiceDetailOpen.status || fresh.paid !== invoiceDetailOpen.paid || fresh.balance !== invoiceDetailOpen.balance)) {
+      setInvoiceDetailOpen(fresh);
+    }
+  }, [invoices]);
   // Shortcut: cuando el usuario hace click en "Cobrar" desde HeroCard /
   // SideCards, abrir directo el InvoiceDetailModal con la factura más
   // relevante (DRAFT > PENDING/PARTIAL/OVERDUE). Si no hay ninguna
