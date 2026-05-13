@@ -51,10 +51,11 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
   const [procSearch, setProcSearch] = useState("");
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null);
 
-  // Receta NOM-024 — abre PrescriptionModal con el medical record id
-  // recién guardado. Reemplaza el grid inline de medications legacy.
+  // Receta NOM-024 — la receta se emite standalone (sin consulta asociada)
+  // para no contaminar el histórico clínico con medicalRecord huérfanos.
+  // Si el doctor quiere vincularla a una consulta, primero debe "Guardar
+  // consulta"; la vinculación post-guardado queda como follow-up.
   const [rxOpen, setRxOpen] = useState(false);
-  const [rxRecordId, setRxRecordId] = useState<string | null>(null);
   const [rxResult, setRxResult] = useState<{ id: string; verifyUrl: string } | null>(null);
 
   // Load procedure catalog on mount
@@ -206,32 +207,12 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
   }
 
   /**
-   * Para crear una receta NOM-024 necesitamos el medicalRecordId. El user
-   * puede haber editado SOAP sin guardar todavía — guardamos el record
-   * primero (mismo patrón que cardiology/pediatrics) y abrimos el modal
-   * con el id resultante. PrescriptionModal hace su propio POST a
-   * /api/prescriptions con FK a CUMS + firma opcional.
+   * Abre el modal de receta NOM-024 sin tocar el expediente clínico. La
+   * receta se emite standalone (medicalRecordId = null); PrescriptionModal
+   * hace su propio POST a /api/prescriptions con FK a CUMS + firma opcional.
    */
-  async function openPrescriptionModal() {
-    try {
-      const res = await fetch("/api/clinical", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          patientId,
-          subjective: form.subjective, objective: form.objective,
-          assessment: form.assessment, plan: form.plan,
-          autoInvoice: false, // no creamos factura aquí — se hace en handleSave
-          specialtyData: { type: "dental" },
-        }),
-      });
-      if (!res.ok) throw new Error("No se pudo guardar el expediente");
-      const record = await res.json();
-      setRxRecordId(record.id);
-      setRxOpen(true);
-      onSaved(record);
-    } catch (err: any) {
-      toast.error(err.message ?? "Error al preparar receta");
-    }
+  function openPrescriptionModal() {
+    setRxOpen(true);
   }
 
   function getSurfaceColor(num: number, surface: Surface): string {
@@ -863,15 +844,13 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
         </ButtonNew>
       </div>
 
-      {rxRecordId && (
-        <PrescriptionModal
-          open={rxOpen}
-          patientId={patientId}
-          medicalRecordId={rxRecordId}
-          onClose={() => setRxOpen(false)}
-          onCreated={(rx) => setRxResult(rx)}
-        />
-      )}
+      <PrescriptionModal
+        open={rxOpen}
+        patientId={patientId}
+        medicalRecordId={null}
+        onClose={() => setRxOpen(false)}
+        onCreated={(rx) => setRxResult(rx)}
+      />
     </form>
   );
 }

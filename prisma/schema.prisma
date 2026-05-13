@@ -1620,7 +1620,9 @@ model Coupon {
 // ── Prescription (receta médica con QR verificable) ───────────────────
 model Prescription {
   id               String    @id @default(cuid())
-  medicalRecordId  String
+  // Nullable: una receta puede emitirse standalone (re-emisión, urgencia, follow-up
+  // sin consulta formal). Si la consulta se elimina, la receta se conserva (SetNull).
+  medicalRecordId  String?
   patientId        String
   doctorId         String
   clinicId         String
@@ -1634,7 +1636,7 @@ model Prescription {
   cofeprisFolio    String?
   digitalSignature String?
 
-  medicalRecord MedicalRecord      @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
+  medicalRecord MedicalRecord?     @relation(fields: [medicalRecordId], references: [id], onDelete: SetNull)
   patient       Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
   doctor        User               @relation(fields: [doctorId], references: [id])
   clinic        Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)

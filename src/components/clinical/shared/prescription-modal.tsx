@@ -23,7 +23,12 @@ interface CertInfo {
 interface Props {
   open: boolean;
   patientId: string;
-  medicalRecordId: string;
+  /**
+   * Si la receta corresponde a una consulta guardada (flujo "Iniciar consulta"),
+   * pásalo. Si no, se emite standalone (caso "Crear receta" desde formularios
+   * clínicos) — el backend acepta `medicalRecordId` null.
+   */
+  medicalRecordId?: string | null;
   onClose: () => void;
   onCreated?: (rx: { id: string; verifyUrl: string }) => void;
 }
@@ -93,8 +98,8 @@ export function PrescriptionModal({ open, patientId, medicalRecordId, onClose, o
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          medicalRecordId,
           patientId,
+          medicalRecordId: medicalRecordId ?? undefined,
           items: items.map((it) => ({
             cumsKey: it.cumsKey,
             dosage: it.dosage,
