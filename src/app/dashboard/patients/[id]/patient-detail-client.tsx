@@ -346,7 +346,7 @@ interface Props {
 }
 
 export function PatientDetailClient({
-  patient, records: initialRecords, appointments, invoices,
+  patient, records: initialRecords, appointments, invoices: initialInvoices,
   doctors, currentUser, specialty, totalPaid, totalBalance, totalPlan, treatments, portalUrl,
   pediatricsData,
   pediatricsModuleActive = false,
@@ -398,6 +398,10 @@ export function PatientDetailClient({
   const [consultClosed, setConsultClosed] = useState(false);
   const [noteDetailOpen, setNoteDetailOpen] = useState<ClinicalNote | null>(null);
   const [invoiceDetailOpen, setInvoiceDetailOpen] = useState<any | null>(null);
+  const [invoices, setInvoices] = useState(initialInvoices);
+  useEffect(() => {
+    setInvoices(initialInvoices);
+  }, [initialInvoices]);
   // Sincroniza el snapshot del modal con la versión fresca de invoices tras
   // router.refresh(). Sin esto, el InvoiceDetailModal queda con un invoice
   // stale (ej. status=DRAFT cuando el server ya pasó a PENDING/PAID),
@@ -613,11 +617,8 @@ export function PatientDetailClient({
 
   function handleRecordSaved(record: any) {
     setRecords(prev => [record, ...prev]);
-    // Si /api/clinical creó una factura borrador, hay que refrescar el server
-    // component para que aparezca en la tabla y el HeroCard. La respuesta
-    // incluye draftInvoice pero no podemos hidratar el state local porque
-    // el shape no coincide con el que viene de la query inicial (payments[], etc).
     if (record?.draftInvoice) {
+      setInvoices(prev => [{ ...record.draftInvoice, payments: [] }, ...prev]);
       router.refresh();
     }
     toast.success("Expediente guardado");
