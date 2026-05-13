@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { fetchResources } from "@/lib/agenda/server";
-import { loadClinicSession, requireRole } from "@/lib/agenda/api-helpers";
+import { loadClinicSession } from "@/lib/agenda/api-helpers";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -18,18 +19,21 @@ const CreateSchema = z.object({
     .optional(),
 });
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await loadClinicSession();
   if (session instanceof NextResponse) return session;
-  const resources = await fetchResources(session.clinic.id);
+  const denied = denyIfMissingPermission(session.user, "resources.view");
+  if (denied) return denied;
+  const includeArchived = new URL(req.url).searchParams.get("includeArchived") === "1";
+  const resources = await fetchResources(session.clinic.id, { includeArchived });
   return NextResponse.json({ resources });
 }
 
 export async function POST(req: Request) {
   const session = await loadClinicSession();
   if (session instanceof NextResponse) return session;
-  const guard = requireRole(session, ["SUPER_ADMIN", "ADMIN"]);
-  if (guard) return guard;
+  const denied = denyIfMissingPermission(session.user, "resources.edit");
+  if (denied) return denied;
 
   const body = await req.json().catch(() => null);
   const parsed = CreateSchema.safeParse(body);

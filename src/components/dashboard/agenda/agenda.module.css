@@ -428,6 +428,11 @@
   font-family: var(--font-sora, "Sora", sans-serif);
   color: var(--text-1);
 }
+/* En modo "Por sillón" la card hereda el color del Resource (columna) en el
+   border-left. El statusColor sigue disponible para el avatar/indicators. */
+.appt[data-column-mode="resource"] {
+  border-left-color: var(--mf-resource-color, var(--mf-status-color, var(--brand)));
+}
 .appt:hover {
   box-shadow: 0 6px 16px -4px color-mix(in srgb, var(--mf-doc-color, var(--brand)) 35%, transparent);
   z-index: 3;

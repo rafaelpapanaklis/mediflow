@@ -132,10 +132,18 @@ export async function PUT(req: NextRequest) {
     }
 
     // Validar resourceIds: cada chair element debe apuntar a un Resource real
-    // de la misma clínica con kind=CHAIR.
+    // de la misma clínica con kind=CHAIR. Además, un mismo Resource no puede
+    // ocupar dos casillas del layout (sería ambiguo para drag-to-chair).
     const chairElements = parsed.data.elements.filter((e) => e.resourceId);
     if (chairElements.length > 0) {
-      const ids = Array.from(new Set(chairElements.map((e) => e.resourceId!)));
+      const uniqueIds = new Set(chairElements.map((e) => e.resourceId!));
+      if (uniqueIds.size !== chairElements.length) {
+        return NextResponse.json(
+          { error: "duplicate_resource_in_layout", hint: "Un sillón no puede ocupar dos casillas." },
+          { status: 400 },
+        );
+      }
+      const ids = Array.from(uniqueIds);
       const valid = await prisma.resource.findMany({
         where: { id: { in: ids }, clinicId: dbUser.clinicId, kind: "CHAIR" },
         select: { id: true },

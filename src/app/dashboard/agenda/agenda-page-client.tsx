@@ -31,7 +31,8 @@ import { AgendaWaitlistSidebar } from "@/components/dashboard/agenda/agenda-wait
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { slotIndexToUtc } from "@/lib/agenda/time-utils";
-import { updateWaitlist } from "@/lib/agenda/mutations";
+import { updateWaitlist, type ApiError } from "@/lib/agenda/mutations";
+import { describeOverlapConflict } from "@/lib/agenda/conflict-copy";
 import {
   detectOverlap,
   recomputeTimes,
@@ -376,10 +377,15 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
           }, 5000);
           undoTimerRef.current = { toastId, timeoutId };
         })
-        .catch((err: { error?: string; reason?: string }) => {
+        .catch((err: ApiError) => {
           dispatch({ type: "ROLLBACK_RESCHEDULE", original });
           if (err?.error === "appointment_overlap") {
-            toast.error("Conflicto detectado por el servidor");
+            toast.error(
+              describeOverlapConflict(err.conflictingAppointment, {
+                doctorId: optimisticDoctorId,
+                resourceId: newResourceId,
+              }),
+            );
           } else {
             toast.error(err?.reason ?? err?.error ?? "No se pudo reagendar");
           }
@@ -545,7 +551,9 @@ function computeColumns(
     });
   }
 
-  return state.resources.map((r) => {
+  // Mode "resource" = "Por sillón". Filtramos a kind=CHAIR para que ROOM/EQUIPMENT
+  // no se conviertan en columnas (ya están disponibles en el modal de gestión).
+  return state.resources.filter((r) => r.kind === "CHAIR").map((r) => {
     const apptsHere = state.appointments.filter((a) => a.resourceId === r.id);
     return {
       key: `resource:${r.id}`,

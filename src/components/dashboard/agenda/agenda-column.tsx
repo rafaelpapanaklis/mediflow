@@ -176,6 +176,8 @@ export function AgendaColumn({ column }: { column: AgendaColumnDescriptor }) {
           timezone={state.timezone}
           lane={lane}
           laneCount={laneCount}
+          columnMode={column.type}
+          resourceColor={column.color}
         />
       ))}
     </div>

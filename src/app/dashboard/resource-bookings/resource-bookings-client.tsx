@@ -15,7 +15,7 @@ interface Booking {
   endTime: string;
 }
 
-export function ResourcesClient({ initialBookings }: { initialBookings: Booking[] }) {
+export function ResourceBookingsClient({ initialBookings }: { initialBookings: Booking[] }) {
   const askConfirm = useConfirm();
   const [bookings, setBookings] = useState<Booking[]>(initialBookings);
   const [showAdd, setShowAdd] = useState(false);
@@ -37,7 +37,6 @@ export function ResourcesClient({ initialBookings }: { initialBookings: Booking[
       return;
     }
     try {
-      // Convert time strings (HH:MM) to full ISO datetime using today's date
       const today = new Date().toISOString().split("T")[0];
       const payload = {
         ...form,
@@ -84,15 +83,16 @@ export function ResourcesClient({ initialBookings }: { initialBookings: Booking[
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-extrabold">Recursos</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Reservas del día — {bookings.length} registradas</p>
+          <h1 className="text-2xl font-extrabold">Reservas legacy</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Reservas del día — {bookings.length} registradas · Página legacy (no aparece en menú)
+          </p>
         </div>
         <Button onClick={() => setShowAdd(true)}>
           <Plus className="w-5 h-5 mr-2" /> Nueva reserva
         </Button>
       </div>
 
-      {/* Timeline grouped by resource */}
       {grouped.length > 0 ? (
         <div className="space-y-6">
           {grouped.map(([resourceKey, items]) => (
@@ -131,7 +131,6 @@ export function ResourcesClient({ initialBookings }: { initialBookings: Booking[
         </div>
       )}
 
-      {/* Add Modal */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md">

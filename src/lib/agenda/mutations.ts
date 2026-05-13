@@ -13,6 +13,17 @@ export interface ApiError {
   error: string;
   reason?: string;
   issues?: unknown;
+  count?: number;
+  sample?: string[];
+  conflictingAppointment?: {
+    id: string;
+    patientName?: string | null;
+    doctorId: string;
+    resourceId: string | null;
+    startsAt: string;
+    endsAt: string;
+    status: string;
+  };
 }
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
@@ -23,6 +34,9 @@ async function jsonOrThrow<T>(res: Response): Promise<T> {
       error: body.error ?? "request_failed",
       reason: body.reason,
       issues: body.issues,
+      count: body.count,
+      sample: body.sample,
+      conflictingAppointment: body.conflictingAppointment,
     };
     throw err;
   }
@@ -117,6 +131,7 @@ export interface UpdateResourceInput {
   name?: string;
   kind?: ResourceKind;
   color?: string | null;
+  isActive?: boolean;
 }
 
 export async function updateResource(

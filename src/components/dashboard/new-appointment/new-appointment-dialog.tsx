@@ -18,6 +18,7 @@ import type {
   DoctorColumnDTO,
   ResourceDTO,
 } from "@/lib/agenda/types";
+import { describeOverlapConflict } from "@/lib/agenda/conflict-copy";
 import type {
   OpenNewAppointmentParams,
 } from "@/lib/new-appointment/types";
@@ -215,7 +216,10 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
       if (res.status === 409) {
         const body = (await res.json()) as AppointmentConflictError;
         toast.error(
-          `Conflicto: ya existe cita con ${body.conflictingAppointment.patientName} en ese horario.`,
+          describeOverlapConflict(body.conflictingAppointment, {
+            doctorId,
+            resourceId: resourceId || null,
+          }),
           { duration: 5000 },
         );
         setSubmitting(false);
