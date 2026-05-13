@@ -177,21 +177,21 @@ async function aggregatePreviousPeriodKpis(
         status: "NO_SHOW",
       },
     }),
-    prisma.invoice.aggregate({
+    prisma.payment.aggregate({
       where: {
-        clinicId,
-        createdAt: { gte: prevFrom, lt: prevTo },
-        status: { notIn: ["CANCELLED"] },
+        invoice: { clinicId, status: { notIn: ["CANCELLED"] } },
+        paidAt: { gte: prevFrom, lt: prevTo },
+        method: { not: "refund" },
       },
-      _sum: { paid: true },
-    }).catch(() => ({ _sum: { paid: null as number | null } })),
+      _sum: { amount: true },
+    }).catch(() => ({ _sum: { amount: null as number | null } })),
   ]);
 
   return {
     appointments: appts,
     completed,
     noShows,
-    revenueMXN: Number(invoiced._sum.paid ?? 0),
+    revenueMXN: Number(invoiced._sum.amount ?? 0),
   };
 }
 
@@ -207,16 +207,14 @@ async function buildRevenueSeries(
     ref.setMonth(ref.getMonth() - i);
     const { from, to } = periodRangeUtc("month", timezone, ref);
 
-    const agg = await prisma.invoice
-      .aggregate({
-        where: {
-          clinicId,
-          createdAt: { gte: from, lt: to },
-          status: { notIn: ["CANCELLED"] },
-        },
-        _sum: { paid: true },
-      })
-      .catch(() => ({ _sum: { paid: null as number | null } }));
+    const agg = await prisma.payment.aggregate({
+      where: {
+        invoice: { clinicId, status: { notIn: ["CANCELLED"] } },
+        paidAt: { gte: from, lt: to },
+        method: { not: "refund" },
+      },
+      _sum: { amount: true },
+    }).catch(() => ({ _sum: { amount: null as number | null } }));
 
     const monthLabel = new Intl.DateTimeFormat("es-MX", {
       timeZone: timezone,
@@ -228,7 +226,7 @@ async function buildRevenueSeries(
 
     out.push({
       month: monthLabel,
-      value: Number(agg._sum.paid ?? 0),
+      value: Number(agg._sum.amount ?? 0),
     });
   }
 

@@ -277,22 +277,20 @@ export async function aggregateAdminPeriodKpis(
         status: "NO_SHOW",
       },
     }),
-    prisma.invoice
-      .aggregate({
-        where: {
-          clinicId,
-          createdAt: { gte: from, lt: to },
-          status: { notIn: ["CANCELLED"] },
-        },
-        _sum: { paid: true },
-      })
-      .catch(() => ({ _sum: { paid: null as number | null } })),
+    prisma.payment.aggregate({
+      where: {
+        invoice: { clinicId, status: { notIn: ["CANCELLED"] } },
+        paidAt: { gte: from, lt: to },
+        method: { not: "refund" },
+      },
+      _sum: { amount: true },
+    }).catch(() => ({ _sum: { amount: null as number | null } })),
   ]);
 
   return {
     appointments: appts,
     completed,
     noShows,
-    revenueMXN: Number(invoicedAgg._sum.paid ?? 0),
+    revenueMXN: Number(invoicedAgg._sum.amount ?? 0),
   };
 }
