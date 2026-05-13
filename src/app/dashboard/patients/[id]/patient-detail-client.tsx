@@ -398,6 +398,19 @@ export function PatientDetailClient({
   const [consultClosed, setConsultClosed] = useState(false);
   const [noteDetailOpen, setNoteDetailOpen] = useState<ClinicalNote | null>(null);
   const [invoiceDetailOpen, setInvoiceDetailOpen] = useState<any | null>(null);
+  // Shortcut: cuando el usuario hace click en "Cobrar" desde HeroCard /
+  // SideCards, abrir directo el InvoiceDetailModal con la factura más
+  // relevante (DRAFT > PENDING/PARTIAL/OVERDUE). Si no hay ninguna
+  // procesable, fallback al tab Facturación para que pueda crear una.
+  const openChargeShortcut = () => {
+    const draft = invoices.find((inv: any) => inv.status === "DRAFT");
+    const pendingLike = invoices.find((inv: any) =>
+      inv.status === "PENDING" || inv.status === "PARTIAL" || inv.status === "OVERDUE",
+    );
+    const target = draft ?? pendingLike;
+    if (target) setInvoiceDetailOpen(target);
+    else setTab("facturacion");
+  };
   const [treatmentsModal, setTreatmentsModal] = useState<{
     open: boolean;
     appointmentId: string;
@@ -916,7 +929,7 @@ export function PatientDetailClient({
             // Por ahora redirige al tab Citas; en una futura iteración abrir picker inline.
             setTab("agenda");
           }}
-          onCharge={() => setTab("facturacion")}
+          onCharge={openChargeShortcut}
         />
       )}
 
@@ -2410,7 +2423,7 @@ export function PatientDetailClient({
           patientPhone={patient.phone ?? null}
           onReschedule={() => setTab("agenda")}
           onCancelAppt={() => setTab("agenda")}
-          onCharge={() => setTab("facturacion")}
+          onCharge={openChargeShortcut}
         />
       </div>
 
