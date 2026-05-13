@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { loadClinicSession } from "@/lib/agenda/api-helpers";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 export const dynamic = "force-dynamic";
 
@@ -102,6 +104,8 @@ export async function POST(req: NextRequest) {
         createdAt: true,
       },
     });
+    revalidateAfter("invoices");
+    revalidatePath(`/dashboard/patients/${appt.patientId}`);
     return NextResponse.json({ invoice }, { status: 201 });
   } catch (err) {
     // Race condition: otra request creó la invoice primero (P2002 sobre

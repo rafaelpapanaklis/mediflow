@@ -78,6 +78,16 @@ export const CACHE_GROUPS = {
     "/dashboard/patients",
     "/dashboard",
   ],
+  // Mutaciones de factura (crear, cobrar, marcar pagada, cancelar, reembolsar,
+  // editar precio, desde-cita). El path dinámico
+  // `/dashboard/patients/${patientId}` se invalida por separado en cada
+  // endpoint porque depende del invoice.patientId — no es parte del set
+  // estático del grupo.
+  invoices: [
+    "/dashboard",
+    "/dashboard/analytics",
+    "/dashboard/billing",
+  ],
 } as const satisfies Record<string, readonly string[]>;
 
 export type CacheGroup = keyof typeof CACHE_GROUPS;

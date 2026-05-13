@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { Printer, FileText, CreditCard, CheckCircle2, Pencil, Tag, XCircle, Undo2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -53,6 +54,7 @@ interface InvoiceDetailModalProps {
 type SubAction = null | "refund" | "edit-price" | "discount" | "cancel";
 
 export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMutated }: InvoiceDetailModalProps) {
+  const router = useRouter();
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [sub, setSub] = useState<SubAction>(null);
   const [busy, setBusy] = useState(false);
@@ -99,6 +101,11 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
       setSub(null);
       await onMutated();
       onClose();
+      // Forzamos refresh del segmento server-rendered actual además de la
+      // revalidatePath del endpoint. Así la página que monta el modal
+      // (patient-detail, billing, home) refleja la mutación sin que el
+      // parent tenga que cablear router.refresh() en onMutated.
+      router.refresh();
     } catch (err: any) {
       toast.error(err.message ?? "Error");
     } finally {
@@ -138,6 +145,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
     setPaymentOpen(false);
     onMutated();
     onClose();
+    router.refresh();
   }
 
   return (

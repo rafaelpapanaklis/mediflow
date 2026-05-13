@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { invoiceSchema } from "@/lib/validations";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 async function getCtx() {
   const supabase = createClient();
@@ -68,7 +69,8 @@ export async function POST(req: NextRequest) {
       after: { invoiceNumber: invoice.invoiceNumber, patientId: invoice.patientId, total: invoice.total },
     });
 
-    revalidatePath("/dashboard");
-  return NextResponse.json(invoice, { status: 201 });
+    revalidateAfter("invoices");
+    revalidatePath(`/dashboard/patients/${invoice.patientId}`);
+    return NextResponse.json(invoice, { status: 201 });
   } catch (err: any) { return NextResponse.json({ error: err.message }, { status: 400 }); }
 }

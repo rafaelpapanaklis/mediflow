@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 // Multi-tenant: clinicId siempre desde la sesión, nunca del body. Mismo
 // patrón que /api/invoices/[id]/route.ts.
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     after:  { status: "CANCELLED", reason: reasonText || undefined },
   });
 
-  revalidatePath("/dashboard/billing");
+  revalidateAfter("invoices");
   revalidatePath(`/dashboard/patients/${invoice.patientId}`);
   return NextResponse.json({ success: true });
 }
