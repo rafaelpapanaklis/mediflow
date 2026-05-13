@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { Printer, FileText, CreditCard, CheckCircle2, Pencil, Tag, XCircle, Undo2 } from "lucide-react";
+import { Printer, FileText, CreditCard, CheckCircle2, Pencil, Tag, XCircle, Undo2, Trash2, Send } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +54,7 @@ interface InvoiceDetailModalProps {
 type SubAction = null | "refund" | "edit-price" | "discount" | "cancel";
 
 export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMutated }: InvoiceDetailModalProps) {
+  const router = useRouter();
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [sub, setSub] = useState<SubAction>(null);
   const [busy, setBusy] = useState(false);
@@ -70,7 +72,11 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
   const isPending  = status === "PENDING" || status === "PARTIAL" || status === "OVERDUE";
   const isPaid     = status === "PAID";
   const isCancelled = status === "CANCELLED";
-  const canEditPrice = isPending && invoice.paid === 0;
+  // DRAFT: factura recién creada (vía autoInvoice / from-appointment). Antes
+  // de cobrar requiere "Confirmar" para pasar a PENDING. El usuario puede
+  // editar precio/descuento o eliminar el borrador completo desde aquí.
+  const isDraft    = status === "DRAFT";
+  const canEditPrice = (isPending || isDraft) && invoice.paid === 0;
   const s = INV_STATUS[status] ?? INV_STATUS.PENDING;
 
   function openSub(which: Exclude<SubAction, null>) {
@@ -82,7 +88,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
     setSub(which);
   }
 
-  async function callApi(path: string, method: "POST" | "PATCH", body?: any, successMsg?: string) {
+  async function callApi(path: string, method: "POST" | "PATCH" | "DELETE", body?: any, successMsg?: string) {
     if (!invoice) return;
     setBusy(true);
     try {
@@ -99,6 +105,11 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
       setSub(null);
       await onMutated();
       onClose();
+      // Forzamos refresh del segmento server-rendered actual además de la
+      // revalidatePath del endpoint. Así la página que monta el modal
+      // (patient-detail, billing, home) refleja la mutación sin que el
+      // parent tenga que cablear router.refresh() en onMutated.
+      router.refresh();
     } catch (err: any) {
       toast.error(err.message ?? "Error");
     } finally {
@@ -134,10 +145,44 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
     await callApi("/edit-price", "POST", { discount }, "Descuento aplicado");
   }
 
+  async function handleConfirmDraft() {
+    await callApi("/confirm", "POST", undefined, "Factura emitida");
+  }
+
+  // "Cobrar ahora" sobre un DRAFT: confirma el borrador (DRAFT → PENDING) y
+  // abre el PaymentModal inmediatamente. El snapshot local del invoice
+  // queda DRAFT pero el server ya está PENDING, así que el POST de payment
+  // lo acepta. router.refresh() actualiza la lista del parent al cerrar.
+  async function handleConfirmAndPay() {
+    if (!invoice) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}/confirm`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "No se pudo confirmar la factura");
+      }
+      // router.refresh() removido: causaba race con el refresh post-payment
+      // de handlePaymentSuccess. El refresh ocurre al cerrar el PaymentModal.
+      setPaymentOpen(true);
+    } catch (err: any) {
+      toast.error(err.message ?? "Error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteDraft() {
+    if (!invoice) return;
+    if (!confirm(`¿Eliminar el borrador ${invoice.invoiceNumber}? Esta acción no se puede deshacer.`)) return;
+    await callApi("", "DELETE", undefined, "Borrador eliminado");
+  }
+
   function handlePaymentSuccess() {
     setPaymentOpen(false);
     onMutated();
     onClose();
+    router.refresh();
   }
 
   return (
@@ -233,6 +278,30 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
           </div>
 
           <DialogFooter className="flex flex-wrap gap-2">
+            {/* BORRADOR — antes de cobrar requiere "Confirmar". Cobrar ahora
+                hace ambos pasos (confirm + payment) en un click. */}
+            {isDraft && (
+              <>
+                <Button onClick={handleConfirmAndPay} disabled={busy}>
+                  <CreditCard size={14} aria-hidden /> Cobrar ahora · {formatCurrency(invoice.total)}
+                </Button>
+                <Button variant="outline" onClick={handleConfirmDraft} disabled={busy}
+                  className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40">
+                  <Send size={14} aria-hidden /> Confirmar / Emitir
+                </Button>
+                <Button variant="outline" onClick={() => openSub("edit-price")} disabled={busy}>
+                  <Pencil size={14} aria-hidden /> Editar precio
+                </Button>
+                <Button variant="outline" onClick={() => openSub("discount")} disabled={busy}>
+                  <Tag size={14} aria-hidden /> Aplicar descuento
+                </Button>
+                <Button variant="outline" onClick={handleDeleteDraft} disabled={busy}
+                  className="border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950/40">
+                  <Trash2 size={14} aria-hidden /> Eliminar borrador
+                </Button>
+              </>
+            )}
+
             {/* PENDIENTE / PARCIAL */}
             {isPending && (
               <>

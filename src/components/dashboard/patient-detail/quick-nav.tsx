@@ -16,6 +16,7 @@ import {
   Anchor,
   Smile,
   ArrowUpRight,
+  Plus,
   type LucideIcon,
 } from "lucide-react";
 import type { PatientActivityCounts } from "@/lib/clinical-shared/get-patient-activity-counts";
@@ -254,6 +255,13 @@ export function QuickNav({
                       >
                         {item.count}
                       </span>
+                    )}
+                    {isDimmed && !item.count && (
+                      <Plus
+                        size={14}
+                        className={styles.navItemPlusIcon}
+                        aria-hidden
+                      />
                     )}
                   </button>
                 );

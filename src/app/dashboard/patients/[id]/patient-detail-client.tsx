@@ -14,6 +14,7 @@ import { SideCards } from "@/components/dashboard/patient-detail/side-cards";
 import { ConsultBar } from "@/components/dashboard/patient-detail/consult-bar";
 import { SoapEditorInline, type SoapDraft } from "@/components/dashboard/patient-detail/soap-editor-inline";
 import { NoteDetailModal, type ClinicalNote } from "@/components/dashboard/patient-detail/note-detail-modal";
+import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
 import { HistoriaTimeline } from "@/components/dashboard/patient-detail/historia-timeline";
 import patientDetailStyles from "@/components/dashboard/patient-detail/patient-detail.module.css";
 import { DentalForm }          from "@/components/clinical/dental-form";
@@ -396,6 +397,31 @@ export function PatientDetailClient({
   const [consultPaused, setConsultPaused] = useState(false);
   const [consultClosed, setConsultClosed] = useState(false);
   const [noteDetailOpen, setNoteDetailOpen] = useState<ClinicalNote | null>(null);
+  const [invoiceDetailOpen, setInvoiceDetailOpen] = useState<any | null>(null);
+  // Sincroniza el snapshot del modal con la versión fresca de invoices tras
+  // router.refresh(). Sin esto, el InvoiceDetailModal queda con un invoice
+  // stale (ej. status=DRAFT cuando el server ya pasó a PENDING/PAID),
+  // rompiendo el PaymentModal interno y el cálculo de balance.
+  useEffect(() => {
+    if (!invoiceDetailOpen) return;
+    const fresh = (invoices as any[]).find((i: any) => i.id === invoiceDetailOpen.id);
+    if (fresh && (fresh.status !== invoiceDetailOpen.status || fresh.paid !== invoiceDetailOpen.paid || fresh.balance !== invoiceDetailOpen.balance)) {
+      setInvoiceDetailOpen(fresh);
+    }
+  }, [invoices]);
+  // Shortcut: cuando el usuario hace click en "Cobrar" desde HeroCard /
+  // SideCards, abrir directo el InvoiceDetailModal con la factura más
+  // relevante (DRAFT > PENDING/PARTIAL/OVERDUE). Si no hay ninguna
+  // procesable, fallback al tab Facturación para que pueda crear una.
+  const openChargeShortcut = () => {
+    const draft = invoices.find((inv: any) => inv.status === "DRAFT");
+    const pendingLike = invoices.find((inv: any) =>
+      inv.status === "PENDING" || inv.status === "PARTIAL" || inv.status === "OVERDUE",
+    );
+    const target = draft ?? pendingLike;
+    if (target) setInvoiceDetailOpen(target);
+    else setTab("facturacion");
+  };
   const [treatmentsModal, setTreatmentsModal] = useState<{
     open: boolean;
     appointmentId: string;
@@ -914,7 +940,7 @@ export function PatientDetailClient({
             // Por ahora redirige al tab Citas; en una futura iteración abrir picker inline.
             setTab("agenda");
           }}
-          onCharge={() => setTab("facturacion")}
+          onCharge={openChargeShortcut}
         />
       )}
 
@@ -2368,7 +2394,11 @@ export function PatientDetailClient({
                   ) : invoices.map(inv => {
                     const s = INV_STATUS[inv.status] ?? INV_STATUS.PENDING;
                     return (
-                      <tr key={inv.id} className="border-b border-border/50 hover:bg-muted/20">
+                      <tr
+                        key={inv.id}
+                        className="border-b border-border/50 hover:bg-muted/20 cursor-pointer"
+                        onClick={() => setInvoiceDetailOpen(inv)}
+                      >
                         <td className="px-4 py-2 font-mono font-bold">{inv.invoiceNumber}</td>
                         <td className="px-4 py-2 text-muted-foreground">{formatDate(inv.createdAt)}</td>
                         <td className="px-4 py-2 font-bold">{formatCurrency(inv.total)}</td>
@@ -2404,7 +2434,7 @@ export function PatientDetailClient({
           patientPhone={patient.phone ?? null}
           onReschedule={() => setTab("agenda")}
           onCancelAppt={() => setTab("agenda")}
-          onCharge={() => setTab("facturacion")}
+          onCharge={openChargeShortcut}
         />
       </div>
 
@@ -2545,6 +2575,19 @@ export function PatientDetailClient({
           setRecords((prev) => prev.map((r) => (r.id === updated.id ? { ...r, ...updated } : r)));
           setNoteDetailOpen(null);
         }}
+      />
+
+      {/* Modal de detalle de factura — abre al hacer click en una row del
+       *  tab Facturación. Reusa el componente del módulo /dashboard/billing,
+       *  que ya soporta editar precio, descuento, cancelar, cobrar y
+       *  reembolsar. Tras una mutación, router.refresh() re-fetchea las
+       *  facturas desde el servidor. */}
+      <InvoiceDetailModal
+        open={invoiceDetailOpen !== null}
+        invoice={invoiceDetailOpen}
+        patientName={fullName}
+        onClose={() => setInvoiceDetailOpen(null)}
+        onMutated={() => router.refresh()}
       />
     </div>
   );

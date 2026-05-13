@@ -506,9 +506,13 @@
 }
 /* Item del quick-nav atenuado: módulo activo en la clínica pero sin
  * registros del paciente. Sigue siendo clickable — el usuario entra al
- * tab para crear el primer registro. */
-.navItemDimmed,
-.navItemDimmed:hover { opacity: 0.5; }
+ * tab para crear el primer registro. Opacidad 0.7 (más sutil que disabled
+ * 0.55) y hover sube a 1 para reforzar que es interactivo. */
+.navItemDimmed {
+  opacity: 0.7;
+  transition: opacity 0.15s ease-in-out;
+}
+.navItemDimmed:hover { opacity: 1; }
 .navItem.active.navItemDimmed { opacity: 1; }
 /* Subhead "ESPECIALIDADES" dentro del bloque Clínico — más sutil que el
  * label de sección principal, con un tono brand para diferenciarlo. */
@@ -541,6 +545,17 @@
 .tone-warning { background: var(--warning-soft); color: var(--warning); }
 .tone-success { background: var(--success-soft); color: var(--success); }
 .tone-brand { background: var(--brand-soft); color: var(--brand); }
+/* Icono "+" en items dimmed — affordance visual de "agregar primer
+ * registro". Reemplaza al counter cuando count === 0 (mutuamente
+ * exclusivos vía render). */
+.navItemPlusIcon {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--brand);
+  opacity: 0.85;
+  transition: opacity 0.15s ease-in-out;
+}
+.navItemDimmed:hover .navItemPlusIcon { opacity: 1; }
 
 /* ─────── SIDE CARDS ─────── */
 .sidePanel {

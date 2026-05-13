@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 async function getCtx() {
   const supabase = createClient();
@@ -87,8 +88,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     after:  { paid: newPaid, balance: Math.max(0, newBalance), status: newStatus, refund: { amount: amountRaw, reason: reason || undefined } },
   });
 
-  revalidatePath("/dashboard/billing");
-  revalidatePath("/dashboard");
+  revalidateAfter("invoices");
   revalidatePath(`/dashboard/patients/${invoice.patientId}`);
   return NextResponse.json({ success: true });
 }

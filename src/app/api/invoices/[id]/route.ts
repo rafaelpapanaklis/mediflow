@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 async function getCtx() {
   const supabase = createClient();
@@ -61,8 +62,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     after: { paid: newPaid, balance: Math.max(0, newBalance), status: newStatus, payment: { amount, method } },
   });
 
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/billing");
+  revalidateAfter("invoices");
   revalidatePath(`/dashboard/patients/${invoice.patientId}`);
   return NextResponse.json({ success: true });
 }
@@ -109,7 +109,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     after: updateData,
   });
 
-  revalidatePath("/dashboard/billing");
+  revalidateAfter("invoices");
   revalidatePath(`/dashboard/patients/${invoice.patientId}`);
   return NextResponse.json(updated);
 }
@@ -128,7 +128,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       entityType: "invoice", entityId: params.id, action: "delete",
       before: { status: invoice.status, invoiceNumber: invoice.invoiceNumber, total: invoice.total },
     });
-    revalidatePath("/dashboard/billing");
+    revalidateAfter("invoices");
     revalidatePath(`/dashboard/patients/${invoice.patientId}`);
     return NextResponse.json({ success: true, cancelled: true });
   }
@@ -142,7 +142,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     entityType: "invoice", entityId: params.id, action: "delete",
     before: { status: invoice.status, invoiceNumber: invoice.invoiceNumber },
   });
-  revalidatePath("/dashboard/billing");
+  revalidateAfter("invoices");
   revalidatePath(`/dashboard/patients/${invoice.patientId}`);
   return NextResponse.json({ success: true });
 }
