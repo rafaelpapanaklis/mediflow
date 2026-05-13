@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Inbox as InboxIcon,
   Clock,
@@ -125,6 +126,8 @@ function dayKey(iso: string): string {
 }
 
 export function InboxClient() {
+  const sp = useSearchParams();
+  const patientIdFilter = sp.get("patientId");
   const [threads, setThreads] = useState<Thread[]>([]);
   const [counts, setCounts] = useState<Counts>({ total: 0, byChannel: {} });
   const [folder, setFolder] = useState<string>("inbox");
@@ -167,6 +170,7 @@ export function InboxClient() {
       if (activeChannel) params.set("channel", activeChannel);
       if (activeAssignee) params.set("assignedTo", activeAssignee);
       if (search.trim()) params.set("search", search.trim());
+      if (patientIdFilter) params.set("patientId", patientIdFilter);
 
       const res = await fetch(`/api/inbox/threads?${params.toString()}`);
       if (!res.ok) {
@@ -186,7 +190,7 @@ export function InboxClient() {
     } finally {
       setLoadingList(false);
     }
-  }, [folder, activeChannel, activeAssignee, search]);
+  }, [folder, activeChannel, activeAssignee, search, patientIdFilter]);
 
   useEffect(() => {
     void fetchThreads();

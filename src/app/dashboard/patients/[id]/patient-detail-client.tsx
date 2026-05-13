@@ -2365,6 +2365,7 @@ export function PatientDetailClient({
             balance: totalBalance,
             pct: pctPaid,
           }}
+          patientId={patient.id}
           patientName={fullName}
           patientPhone={patient.phone ?? null}
           onReschedule={() => setTab("agenda")}

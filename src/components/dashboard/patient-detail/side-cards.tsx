@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   CalendarClock,
   Receipt,
@@ -25,6 +26,7 @@ interface SideCardsProps {
     balance: number;
     pct: number;
   };
+  patientId: string;
   patientName: string;
   patientPhone: string | null;
   onReschedule: () => void;
@@ -57,6 +59,7 @@ function fmtMonthShort(iso: string): string {
 export function SideCards({
   nextAppointment,
   finance,
+  patientId,
   patientName,
   patientPhone,
   onReschedule,
@@ -175,15 +178,13 @@ export function SideCards({
           )}
         </div>
         {patientPhone && (
-          <a
-            href={`https://wa.me/${patientPhone.replace(/\D/g, "")}`}
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            href={`/dashboard/inbox?patientId=${encodeURIComponent(patientId)}`}
             className={`${styles.sideBtn} ${styles.fullWidth}`}
             style={{ textDecoration: "none" }}
           >
             Abrir chat
-          </a>
+          </Link>
         )}
       </section>
     </aside>
