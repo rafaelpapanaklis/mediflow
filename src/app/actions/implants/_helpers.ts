@@ -16,6 +16,7 @@ import type { AuthContext } from "@/lib/auth-context";
 import { getAuthContext } from "@/lib/auth-context";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { IMPLANTS_MODULE_KEY } from "@/lib/implants/permissions";
+import { hasPermission } from "@/lib/auth/permissions";
 import type { ImplantStatus } from "@prisma/client";
 import { ok, fail, type ActionResult } from "./result";
 
@@ -24,10 +25,12 @@ import { ok, fail, type ActionResult } from "./result";
  *   1. Usuario logueado (getAuthContext).
  *   2. Categoría DENTAL (los otros sectores no aplican).
  *   3. Clínica con módulo `implants` activo (canAccessModule).
+ *   4. Permiso UI: medicalRecord.edit (default — actions mutativas) o
+ *      medicalRecord.view si se pasa `{ write: false }` (exports/lecturas).
  */
-export async function getImplantActionContext(): Promise<
-  ActionResult<{ ctx: AuthContext }>
-> {
+export async function getImplantActionContext(
+  opts?: { write?: boolean },
+): Promise<ActionResult<{ ctx: AuthContext }>> {
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
 
@@ -38,6 +41,11 @@ export async function getImplantActionContext(): Promise<
   const access = await canAccessModule(ctx.clinicId, IMPLANTS_MODULE_KEY);
   if (!access.hasAccess) {
     return fail("Módulo Implantología no activo para esta clínica");
+  }
+
+  const requiredKey = opts?.write === false ? "medicalRecord.view" : "medicalRecord.edit";
+  if (!hasPermission({ role: ctx.role as any, permissionsOverride: ctx.permissionsOverride }, requiredKey)) {
+    return fail(`Sin permisos: ${requiredKey}`);
   }
 
   return ok({ ctx });

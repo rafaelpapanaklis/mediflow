@@ -5,6 +5,7 @@ import type { AuthContext } from "@/lib/auth-context";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { isPediatric } from "@/lib/pediatrics/age";
 import { DEFAULT_PEDIATRICS_CUTOFF_YEARS, PEDIATRICS_MODULE_KEY } from "@/lib/pediatrics/permissions";
+import { hasPermission } from "@/lib/auth/permissions";
 
 export { ok, fail, isFailure, type ActionResult, type Success, type Failure } from "./result";
 import { ok, fail, type ActionResult } from "./result";
@@ -18,6 +19,23 @@ export type LoadedPatient = {
 };
 
 /**
+ * Verifica que el usuario tenga el permiso UI correspondiente al expediente
+ * pediátrico. WRITE actions (create/update/delete) requieren
+ * `medicalRecord.edit`; READ actions (history/get) pueden pasar
+ * `{ write: false }` para conformarse con `medicalRecord.view`.
+ */
+export function requirePediatricsPermission(
+  ctx: AuthContext,
+  opts?: { write?: boolean },
+): ActionResult<undefined> {
+  const requiredKey = opts?.write === false ? "medicalRecord.view" : "medicalRecord.edit";
+  if (!hasPermission({ role: ctx.role as any, permissionsOverride: ctx.permissionsOverride }, requiredKey)) {
+    return fail(`Sin permisos: ${requiredKey}`);
+  }
+  return ok(undefined);
+}
+
+/**
  * Verifica que el paciente exista, pertenezca al clinicId activo, esté
  * activo y elegible para el módulo Pediatría (categoría + módulo + edad).
  * Devuelve `{ ok: false, error }` con string si falla cualquier predicado.
@@ -29,7 +47,13 @@ export type LoadedPatient = {
 export async function loadPatientForPediatrics(args: {
   ctx: AuthContext;
   patientId: string;
+  write?: boolean;
 }): Promise<ActionResult<LoadedPatient>> {
+  const requiredKey = args.write === false ? "medicalRecord.view" : "medicalRecord.edit";
+  if (!hasPermission({ role: args.ctx.role as any, permissionsOverride: args.ctx.permissionsOverride }, requiredKey)) {
+    return fail(`Sin permisos: ${requiredKey}`);
+  }
+
   const patient = await prisma.patient.findUnique({
     where: { id: args.patientId },
     select: {

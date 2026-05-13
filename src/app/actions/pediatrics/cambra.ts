@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { scoreCambra } from "@/lib/pediatrics/cambra";
 import { PEDIATRIC_AUDIT_ACTIONS } from "@/lib/pediatrics/audit";
-import { auditPediatric, ensurePediatricRecord, fail, isFailure, loadPatientForPediatrics, ok, type ActionResult } from "./_helpers";
+import { auditPediatric, ensurePediatricRecord, fail, isFailure, loadPatientForPediatrics, ok, requirePediatricsPermission, type ActionResult } from "./_helpers";
 
 const cambraSchema = z.object({
   patientId: z.string().min(1),
@@ -76,6 +76,8 @@ export async function captureCambra(input: CaptureCambraInput): Promise<ActionRe
 export async function getCambraLatest(patientId: string): Promise<ActionResult<unknown>> {
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  const permRes = requirePediatricsPermission(ctx, { write: false });
+  if (isFailure(permRes)) return permRes;
   const row = await prisma.cariesRiskAssessment.findFirst({
     where: { patientId, clinicId: ctx.clinicId, deletedAt: null },
     orderBy: { scoredAt: "desc" },
@@ -86,6 +88,8 @@ export async function getCambraLatest(patientId: string): Promise<ActionResult<u
 export async function getCambraHistory(patientId: string): Promise<ActionResult<unknown[]>> {
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
+  const permRes = requirePediatricsPermission(ctx, { write: false });
+  if (isFailure(permRes)) return permRes;
   const rows = await prisma.cariesRiskAssessment.findMany({
     where: { patientId, clinicId: ctx.clinicId, deletedAt: null },
     orderBy: { scoredAt: "desc" },

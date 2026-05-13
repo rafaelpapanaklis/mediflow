@@ -76,7 +76,7 @@ export async function exportTreatmentReportPdf(
 ): Promise<ActionResult<EndoTreatmentReportPdfData>> {
   if (!treatmentId) return fail("treatmentId requerido");
 
-  const ctxRes = await getEndoActionContext();
+  const ctxRes = await getEndoActionContext({ write: false });
   if (isFailure(ctxRes)) return ctxRes;
   const { ctx } = ctxRes.data;
 
@@ -190,7 +190,7 @@ export async function exportLegalReportPdf(
 ): Promise<ActionResult<EndoLegalReportPdfData>> {
   if (!treatmentId) return fail("treatmentId requerido");
 
-  const ctxRes = await getEndoActionContext();
+  const ctxRes = await getEndoActionContext({ write: false });
   if (isFailure(ctxRes)) return ctxRes;
   const { ctx } = ctxRes.data;
 

@@ -7,15 +7,16 @@ import type { AuthContext } from "@/lib/auth-context";
 import { getAuthContext } from "@/lib/auth-context";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
+import { hasPermission } from "@/lib/auth/permissions";
 import { fail, type ActionResult } from "./result";
 
 /**
  * Auth + categoría DENTAL + módulo orthodontics activo. Una sola llamada
  * por server action; resto de la lógica usa el `ctx` retornado.
  */
-export async function getOrthoActionContext(): Promise<
-  ActionResult<{ ctx: AuthContext }>
-> {
+export async function getOrthoActionContext(
+  opts?: { write?: boolean },
+): Promise<ActionResult<{ ctx: AuthContext }>> {
   const ctx = await getAuthContext();
   if (!ctx) return fail("No autenticado");
 
@@ -26,6 +27,11 @@ export async function getOrthoActionContext(): Promise<
   const access = await canAccessModule(ctx.clinicId, ORTHODONTICS_MODULE_KEY);
   if (!access.hasAccess) {
     return fail("Módulo Ortodoncia no activo para esta clínica");
+  }
+
+  const requiredKey = opts?.write === false ? "medicalRecord.view" : "medicalRecord.edit";
+  if (!hasPermission({ role: ctx.role as any, permissionsOverride: ctx.permissionsOverride }, requiredKey)) {
+    return fail(`Sin permisos: ${requiredKey}`);
   }
 
   return { ok: true, data: { ctx } };

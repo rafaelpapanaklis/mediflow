@@ -25,7 +25,7 @@ export async function generateImplantPassport(
     return fail(parsed.error.errors[0]?.message ?? "Datos inválidos");
   }
 
-  const ctxRes = await getImplantActionContext();
+  const ctxRes = await getImplantActionContext({ write: false });
   if (isFailure(ctxRes)) return ctxRes;
   const { ctx } = ctxRes.data;
 

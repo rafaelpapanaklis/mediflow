@@ -33,7 +33,7 @@ export type FinancialAgreementPdfData = {
 export async function exportFinancialAgreementPdf(
   input: unknown,
 ): Promise<ActionResult<FinancialAgreementPdfData>> {
-  const auth = await getOrthoActionContext();
+  const auth = await getOrthoActionContext({ write: false });
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
 

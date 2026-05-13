@@ -24,7 +24,7 @@ const schema = z.object({
 export async function exportComparisonPdf(
   input: unknown,
 ): Promise<ActionResult<ComparisonPdfData>> {
-  const auth = await getOrthoActionContext();
+  const auth = await getOrthoActionContext({ write: false });
   if (isFailure(auth)) return auth;
   const { ctx } = auth.data;
 
