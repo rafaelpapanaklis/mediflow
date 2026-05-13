@@ -725,7 +725,7 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
                     </td>
                     <td className="px-3 py-1.5 text-right font-mono font-bold">{formatCurrency(p.price * p.quantity)}</td>
                     <td className="pr-2">
-                      <button onClick={() => removeProc(p.id)} className="text-rose-500 hover:text-rose-700 text-sm">×</button>
+                      <button type="button" onClick={() => removeProc(p.id)} className="text-rose-500 hover:text-rose-700 text-sm">×</button>
                     </td>
                   </tr>
                 ))}
@@ -786,6 +786,7 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
         title="💊 Receta médica"
         action={(
           <ButtonNew
+            type="button"
             size="sm"
             variant="ghost"
             icon={<FileText size={14} />}

@@ -283,7 +283,7 @@ export function PediatricsForm({ patientId, patient, onSaved }: Props) {
       <CardNew
         title="Plan y receta"
         action={
-          <ButtonNew size="sm" variant="ghost" icon={<FileText size={14} />} onClick={openPrescriptionModal}>
+          <ButtonNew type="button" size="sm" variant="ghost" icon={<FileText size={14} />} onClick={openPrescriptionModal}>
             Crear receta
           </ButtonNew>
         }
@@ -306,7 +306,7 @@ export function PediatricsForm({ patientId, patient, onSaved }: Props) {
       </CardNew>
 
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <ButtonNew variant="primary" onClick={handleSave} disabled={saving}>
+        <ButtonNew type="button" variant="primary" onClick={handleSave} disabled={saving}>
           {saving ? "Guardando…" : "Guardar consulta"}
         </ButtonNew>
       </div>

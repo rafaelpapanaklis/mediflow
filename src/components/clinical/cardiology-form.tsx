@@ -207,7 +207,7 @@ export function CardiologyForm({ patientId, onSaved }: Props) {
       <CardNew
         title="Escalas"
         action={
-          <ButtonNew size="sm" variant="ghost" icon={<Calculator size={14} />} onClick={() => setCalcOpen(true)}>
+          <ButtonNew type="button" size="sm" variant="ghost" icon={<Calculator size={14} />} onClick={() => setCalcOpen(true)}>
             Calculadoras clínicas
           </ButtonNew>
         }
@@ -239,7 +239,7 @@ export function CardiologyForm({ patientId, onSaved }: Props) {
       <CardNew
         title="Plan y receta"
         action={
-          <ButtonNew size="sm" variant="ghost" icon={<FileText size={14} />} onClick={openPrescriptionModal}>
+          <ButtonNew type="button" size="sm" variant="ghost" icon={<FileText size={14} />} onClick={openPrescriptionModal}>
             Crear receta
           </ButtonNew>
         }
@@ -262,7 +262,7 @@ export function CardiologyForm({ patientId, onSaved }: Props) {
       </CardNew>
 
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <ButtonNew variant="primary" onClick={handleSave} disabled={saving}>
+        <ButtonNew type="button" variant="primary" onClick={handleSave} disabled={saving}>
           {saving ? "Guardando…" : "Guardar consulta"}
         </ButtonNew>
       </div>
