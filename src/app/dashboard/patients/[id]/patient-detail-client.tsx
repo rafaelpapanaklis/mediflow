@@ -14,6 +14,7 @@ import { SideCards } from "@/components/dashboard/patient-detail/side-cards";
 import { ConsultBar } from "@/components/dashboard/patient-detail/consult-bar";
 import { SoapEditorInline, type SoapDraft } from "@/components/dashboard/patient-detail/soap-editor-inline";
 import { NoteDetailModal, type ClinicalNote } from "@/components/dashboard/patient-detail/note-detail-modal";
+import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
 import { HistoriaTimeline } from "@/components/dashboard/patient-detail/historia-timeline";
 import patientDetailStyles from "@/components/dashboard/patient-detail/patient-detail.module.css";
 import { DentalForm }          from "@/components/clinical/dental-form";
@@ -396,6 +397,7 @@ export function PatientDetailClient({
   const [consultPaused, setConsultPaused] = useState(false);
   const [consultClosed, setConsultClosed] = useState(false);
   const [noteDetailOpen, setNoteDetailOpen] = useState<ClinicalNote | null>(null);
+  const [invoiceDetailOpen, setInvoiceDetailOpen] = useState<any | null>(null);
   const [treatmentsModal, setTreatmentsModal] = useState<{
     open: boolean;
     appointmentId: string;
@@ -2368,7 +2370,11 @@ export function PatientDetailClient({
                   ) : invoices.map(inv => {
                     const s = INV_STATUS[inv.status] ?? INV_STATUS.PENDING;
                     return (
-                      <tr key={inv.id} className="border-b border-border/50 hover:bg-muted/20">
+                      <tr
+                        key={inv.id}
+                        className="border-b border-border/50 hover:bg-muted/20 cursor-pointer"
+                        onClick={() => setInvoiceDetailOpen(inv)}
+                      >
                         <td className="px-4 py-2 font-mono font-bold">{inv.invoiceNumber}</td>
                         <td className="px-4 py-2 text-muted-foreground">{formatDate(inv.createdAt)}</td>
                         <td className="px-4 py-2 font-bold">{formatCurrency(inv.total)}</td>
@@ -2545,6 +2551,19 @@ export function PatientDetailClient({
           setRecords((prev) => prev.map((r) => (r.id === updated.id ? { ...r, ...updated } : r)));
           setNoteDetailOpen(null);
         }}
+      />
+
+      {/* Modal de detalle de factura — abre al hacer click en una row del
+       *  tab Facturación. Reusa el componente del módulo /dashboard/billing,
+       *  que ya soporta editar precio, descuento, cancelar, cobrar y
+       *  reembolsar. Tras una mutación, router.refresh() re-fetchea las
+       *  facturas desde el servidor. */}
+      <InvoiceDetailModal
+        open={invoiceDetailOpen !== null}
+        invoice={invoiceDetailOpen}
+        patientName={fullName}
+        onClose={() => setInvoiceDetailOpen(null)}
+        onMutated={() => router.refresh()}
       />
     </div>
   );
