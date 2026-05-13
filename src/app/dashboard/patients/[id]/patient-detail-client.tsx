@@ -3,7 +3,7 @@
 import { useCallback, useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Plus, Printer, Edit, Download } from "lucide-react";
+import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Plus, Printer, Edit, Download, Pill, HeartPulse } from "lucide-react";
 import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
 import { ageFromDob, fmtMXN } from "@/lib/format";
 import { Odontogram } from "@/components/dashboard/odontogram/Odontogram";
@@ -881,9 +881,6 @@ export function PatientDetailClient({
             email: patient.email ?? null,
             bloodType: patient.bloodType ?? null,
             status: patient.status ?? "ACTIVE",
-            allergies: patient.allergies ?? [],
-            chronicConditions: patient.chronicConditions ?? [],
-            currentMedications: patient.currentMedications ?? [],
           }}
           nextAppointment={nextAppt ? {
             id: nextAppt.id,
@@ -926,13 +923,6 @@ export function PatientDetailClient({
               CAMBRA {pediatricsData.latestCambra.category}
             </span>
           ) : null}
-          <button
-            type="button"
-            onClick={() => setTab("pediatria")}
-            className="ml-auto text-xs font-semibold text-violet-700 hover:underline dark:text-violet-200"
-          >
-            Ir a Pediatría →
-          </button>
         </div>
       )}
 
@@ -1082,14 +1072,30 @@ export function PatientDetailClient({
                   <div className="w-2 h-2 rounded-full bg-emerald-500" />
                   <span className="text-xs font-bold">Historia clínica</span>
                 </div>
+                {(patient.allergies?.length || patient.currentMedications?.length || patient.chronicConditions?.length) ? (
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    {patient.allergies?.map((a: string) => (
+                      <span key={`a-${a}`} className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700">
+                        <AlertTriangle size={11} aria-hidden /> {a}
+                      </span>
+                    ))}
+                    {patient.currentMedications?.map((m: string) => (
+                      <span key={`m-${m}`} className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                        <Pill size={11} aria-hidden /> {m}
+                      </span>
+                    ))}
+                    {patient.chronicConditions?.map((c: string) => (
+                      <span key={`c-${c}`} className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                        <HeartPulse size={11} aria-hidden /> {c}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="space-y-1.5 text-xs">
                   {[
-                    { label: "Enfermedades sistémicas", val: patient.chronicConditions?.join(", ") || "Ninguna" },
-                    { label: "Alergias",                val: patient.allergies?.join(", ") || "Ninguna" },
-                    { label: "Medicamentos",            val: patient.currentMedications?.join(", ") || "Ninguno" },
-                    { label: "Tipo de sangre",          val: patient.bloodType || "No registrado" },
-                    { label: "Seguro",                  val: patient.insuranceProvider || "Sin seguro" },
-                    { label: "Notas",                   val: patient.notes?.slice(0, 60) || "—" },
+                    { label: "Tipo de sangre", val: patient.bloodType || "No registrado" },
+                    { label: "Seguro",         val: patient.insuranceProvider || "Sin seguro" },
+                    { label: "Notas",          val: patient.notes?.slice(0, 60) || "—" },
                   ].map(r => (
                     <div key={r.label} className="flex justify-between items-start py-1.5 border-b border-slate-50">
                       <span className="text-muted-foreground">{r.label}</span>
