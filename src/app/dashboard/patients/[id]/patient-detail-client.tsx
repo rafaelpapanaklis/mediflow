@@ -613,6 +613,13 @@ export function PatientDetailClient({
 
   function handleRecordSaved(record: any) {
     setRecords(prev => [record, ...prev]);
+    // Si /api/clinical creó una factura borrador, hay que refrescar el server
+    // component para que aparezca en la tabla y el HeroCard. La respuesta
+    // incluye draftInvoice pero no podemos hidratar el state local porque
+    // el shape no coincide con el que viene de la query inicial (payments[], etc).
+    if (record?.draftInvoice) {
+      router.refresh();
+    }
     toast.success("Expediente guardado");
     setTab("evolucion");
   }
