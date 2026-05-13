@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useAgenda } from "./agenda-provider";
@@ -101,6 +102,7 @@ function DoctorsPanel() {
 
 function DoctorRow({ doctor }: { doctor: DoctorColumnDTO }) {
   const { dispatch } = useAgenda();
+  const router = useRouter();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [savingActive, setSavingActive] = useState(false);
   const color = doctorColorFor(doctor.id, doctor.color);
@@ -112,6 +114,7 @@ function DoctorRow({ doctor }: { doctor: DoctorColumnDTO }) {
     try {
       await updateDoctor(doctor.id, { color: nextColor });
       toast.success("Color actualizado");
+      router.refresh();
     } catch (err) {
       dispatch({ type: "UPSERT_DOCTOR", doctor: original });
       const reason =
@@ -133,6 +136,7 @@ function DoctorRow({ doctor }: { doctor: DoctorColumnDTO }) {
     });
     try {
       await updateDoctor(doctor.id, { activeInAgenda: next });
+      router.refresh();
     } catch (err) {
       dispatch({ type: "UPSERT_DOCTOR", doctor: original });
       const reason =

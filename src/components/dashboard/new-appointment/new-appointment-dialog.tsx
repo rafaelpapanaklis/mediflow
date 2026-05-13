@@ -18,7 +18,9 @@ import type {
   DoctorColumnDTO,
   ResourceDTO,
 } from "@/lib/agenda/types";
-import { describeOverlapConflict } from "@/lib/agenda/conflict-copy";
+import { describeOverlapConflict, describeResourceUnavailable } from "@/lib/agenda/conflict-copy";
+import { getResourceSchedule } from "@/lib/agenda/mutations";
+import type { WeekScheduleDTO } from "@/lib/agenda/types";
 import type {
   OpenNewAppointmentParams,
 } from "@/lib/new-appointment/types";
@@ -68,6 +70,31 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
     longerBlockSuggestion: { minMin: number; maxMin: number } | null;
     primaryGuardianName: string | null;
   } | null>(null);
+
+  // Resource working hours. undefined = not yet loaded (or no resource).
+  // null = resource is always-open (no schedule rows). Object = schedule.
+  const [resourceSchedule, setResourceSchedule] = useState<
+    WeekScheduleDTO | null | undefined
+  >(undefined);
+
+  useEffect(() => {
+    if (!resourceId) {
+      setResourceSchedule(undefined);
+      return;
+    }
+    let cancelled = false;
+    setResourceSchedule(undefined);
+    getResourceSchedule(resourceId)
+      .then((body) => {
+        if (!cancelled) setResourceSchedule(body.schedule);
+      })
+      .catch(() => {
+        if (!cancelled) setResourceSchedule(null); // fail-open: no filter
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [resourceId]);
 
   useEffect(() => {
     if (!isOpen || boot) return;
@@ -224,6 +251,21 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
         );
         setSubmitting(false);
         return;
+      }
+      if (res.status === 422) {
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          reason?: "outside_schedule" | "resource_closed_this_day";
+        };
+        if (body?.error === "resource_unavailable") {
+          const resourceName =
+            boot?.resources.find((r) => r.id === resourceId)?.name ?? null;
+          toast.error(describeResourceUnavailable(body.reason, resourceName), {
+            duration: 5000,
+          });
+          setSubmitting(false);
+          return;
+        }
       }
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
@@ -395,6 +437,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                       doctors={boot.doctors}
                       value={slotIso}
                       onChange={setSlotIso}
+                      resourceSchedule={resourceSchedule}
                     />
                   </Field>
                 )}

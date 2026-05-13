@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 export async function PATCH(req: NextRequest) {
   const ctx = await getAuthContext();
@@ -34,6 +35,7 @@ export async function PATCH(req: NextRequest) {
     data,
   });
 
+  revalidateAfter("clinic");
   return NextResponse.json(clinic);
 }
 

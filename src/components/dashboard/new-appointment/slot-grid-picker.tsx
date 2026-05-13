@@ -11,9 +11,11 @@ import {
   formatSlotTime,
   type ClinicTimeConfig,
 } from "@/lib/agenda/time-utils";
+import { buildOpenSlotSet } from "@/lib/agenda/resource-schedule";
 import type {
   AgendaAppointmentDTO,
   DoctorColumnDTO,
+  WeekScheduleDTO,
 } from "@/lib/agenda/types";
 
 interface Props {
@@ -25,6 +27,11 @@ interface Props {
   doctors: DoctorColumnDTO[];
   value: string | null;
   onChange: (startsAtIso: string | null) => void;
+  /**
+   * Horario semanal del Resource seleccionado. `null` = recurso siempre
+   * disponible (sin filtrar). `undefined` = aún cargando o sin recurso.
+   */
+  resourceSchedule?: WeekScheduleDTO | null;
 }
 
 interface FetchedDay {
@@ -40,6 +47,7 @@ export function SlotGridPicker({
   config,
   value,
   onChange,
+  resourceSchedule,
 }: Props) {
   const [day, setDay] = useState<FetchedDay>({ appointments: [], loaded: false });
   const [loading, setLoading] = useState(false);
@@ -94,12 +102,21 @@ export function SlotGridPicker({
     [day.appointments, resourceId, dayStartUtcMs, config.slotMinutes, total],
   );
 
+  // Slots inside the resource's open windows. `null` = no filtering needed
+  // (resource has no schedule or no resource selected). Empty Set = resource
+  // is configured but closed that day.
+  const resourceOpenSlots = useMemo<Set<number> | null>(() => {
+    if (!resourceId || resourceSchedule === undefined) return null;
+    return buildOpenSlotSet(resourceSchedule, dateISO, config);
+  }, [resourceId, resourceSchedule, dateISO, config]);
+
   const isSlotFree = (idx: number): boolean => {
     for (let i = 0; i < slotsNeeded; i++) {
       const target = idx + i;
       if (target >= total) return false;
       if (occupiedDoctor.has(target)) return false;
       if (occupiedResource.has(target)) return false;
+      if (resourceOpenSlots && !resourceOpenSlots.has(target)) return false;
     }
     return true;
   };
@@ -116,7 +133,7 @@ export function SlotGridPicker({
     }
     return -1;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [total, occupiedDoctor, occupiedResource, slotsNeeded]);
+  }, [total, occupiedDoctor, occupiedResource, resourceOpenSlots, slotsNeeded]);
 
   const jumpToFirstFree = () => {
     if (firstFreeIdx < 0) return;

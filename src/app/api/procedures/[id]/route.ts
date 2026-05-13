@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
@@ -27,7 +27,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         ...(body.isActive !== undefined && { isActive: Boolean(body.isActive) }),
       },
     });
-    revalidatePath("/dashboard/settings");
+    revalidateAfter("procedures");
     return NextResponse.json(updated);
   } catch (err: any) {
     console.error("Update procedure error:", err);
@@ -42,7 +42,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
 
   try {
     await prisma.procedureCatalog.deleteMany({ where: { id: params.id, clinicId: ctx.clinicId } });
-    revalidatePath("/dashboard/settings");
+    revalidateAfter("procedures");
     return NextResponse.json({ success: true });
   } catch (err: any) {
     return NextResponse.json({ error: err.message ?? "Error" }, { status: 500 });

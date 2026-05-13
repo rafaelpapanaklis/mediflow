@@ -34,3 +34,23 @@ export function describeOverlapConflict(
   }
   return `Conflicto: ya existe una cita con ${name} en ese horario.`;
 }
+
+export type ResourceUnavailableReason =
+  | "outside_schedule"
+  | "resource_closed_this_day";
+
+/**
+ * Copy al usuario cuando el server rechaza la cita con 422 porque el slot
+ * cae fuera del horario configurado del Resource.
+ * Server response: `{ error: "resource_unavailable", reason, resourceName? }`.
+ */
+export function describeResourceUnavailable(
+  reason: ResourceUnavailableReason | undefined,
+  resourceName?: string | null,
+): string {
+  const name = resourceName?.trim() || "Este recurso";
+  if (reason === "resource_closed_this_day") {
+    return `${name} no atiende ese día.`;
+  }
+  return `${name} no está disponible a esa hora. Revisa el horario configurado.`;
+}

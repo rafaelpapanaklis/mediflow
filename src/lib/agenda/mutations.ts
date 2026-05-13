@@ -4,8 +4,10 @@ import type {
   ResourceDTO,
   DoctorColumnDTO,
   ResourceKind,
+  ResourceScheduleResponse,
   WaitlistEntryDTO,
   WaitlistPriority,
+  WeekScheduleDTO,
 } from "./types";
 
 export interface ApiError {
@@ -159,6 +161,29 @@ export async function reorderResources(orderedIds: string[]): Promise<void> {
     body: JSON.stringify({ orderedIds }),
   });
   await jsonOrThrow<{ ok: true }>(res);
+}
+
+/* ─────── Resource Schedule (working hours) ─────── */
+
+export async function getResourceSchedule(
+  resourceId: string,
+): Promise<ResourceScheduleResponse> {
+  const res = await fetch(`/api/agenda/resources/${resourceId}/schedule`, {
+    cache: "no-store",
+  });
+  return jsonOrThrow<ResourceScheduleResponse>(res);
+}
+
+export async function saveResourceSchedule(
+  resourceId: string,
+  schedule: WeekScheduleDTO | null,
+): Promise<ResourceScheduleResponse> {
+  const res = await fetch(`/api/agenda/resources/${resourceId}/schedule`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ schedule }),
+  });
+  return jsonOrThrow<ResourceScheduleResponse>(res);
 }
 
 /* ─────── Doctor patch (sólo color y activeInAgenda) ─────── */

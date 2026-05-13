@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { fetchResources } from "@/lib/agenda/server";
 import { loadClinicSession } from "@/lib/agenda/api-helpers";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 export const dynamic = "force-dynamic";
 
@@ -62,5 +63,6 @@ export async function POST(req: Request) {
     select: { id: true, name: true, kind: true, color: true, orderIndex: true },
   });
 
+  revalidateAfter("resources");
   return NextResponse.json({ resource: created }, { status: 201 });
 }

@@ -9,6 +9,9 @@ import {
 } from "@/lib/agenda/api-helpers";
 import { appointmentToDTO } from "@/lib/agenda/server";
 import { canOverrideOverlap } from "@/lib/agenda/transitions";
+import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
+import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 import type {
   AppointmentConflictError,
   AppointmentStatus,
@@ -113,6 +116,30 @@ export async function PATCH(
     return NextResponse.json({ error: "invalid_duration" }, { status: 400 });
   }
 
+  // Resource working-hours validation. Applies if the appointment ends up with
+  // a resourceId (either explicitly set in this PATCH or inherited from the
+  // existing record). overrideReason — current or already set on existing —
+  // bypasses the check.
+  const effectiveResourceId =
+    body.resourceId === undefined ? existing.resourceId : body.resourceId;
+  const effectiveOverride =
+    body.overrideReason !== undefined ? body.overrideReason : existing.overrideReason;
+  if (effectiveResourceId && !effectiveOverride) {
+    const schedule = await loadResourceSchedule(effectiveResourceId);
+    const valid = validateResourceSchedule(
+      newStarts,
+      newEnds,
+      schedule,
+      session.clinic.timezone,
+    );
+    if (!valid.ok) {
+      return NextResponse.json(
+        { error: "resource_unavailable", reason: valid.reason },
+        { status: 422 },
+      );
+    }
+  }
+
   if (body.reason !== undefined) {
     data.type = body.reason ?? "Consulta general";
   }
@@ -148,6 +175,7 @@ export async function PATCH(
       after: { startsAt: updated.startsAt, endsAt: updated.endsAt, doctorId: updated.doctorId, resourceId: updated.resourceId, type: updated.type, status: updated.status },
     });
 
+    revalidateAfter("appointments");
     return NextResponse.json(
       { appointment: appointmentToDTO(updated, session.clinic.category) },
     );
@@ -228,6 +256,7 @@ export async function DELETE(
     before: { status: existing.status, patientId: existing.patientId, doctorId: existing.doctorId, startsAt: existing.startsAt },
   });
 
+  revalidateAfter("appointments");
   return NextResponse.json({ ok: true });
 }
 

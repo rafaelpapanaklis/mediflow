@@ -3,6 +3,7 @@ import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { logMutation } from "@/lib/audit";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 function getAdminClient() {
   return createAdminClient(
@@ -90,6 +91,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     after: updated as any,
   });
 
+  revalidateAfter("team");
+
   return NextResponse.json(updated);
 }
 
@@ -119,6 +122,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       entityType: "user", entityId: params.id, action: "delete",
       before: { firstName: member.firstName, lastName: member.lastName, email: member.email, role: member.role, deactivated: true },
     });
+    revalidateAfter("team");
     return NextResponse.json({ deactivated: true, message: "Doctor desactivado (tiene registros históricos)" });
   }
 
@@ -136,5 +140,6 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   await supabaseAdmin.auth.admin.deleteUser(member.supabaseId);
   await prisma.user.deleteMany({ where: { id: params.id, clinicId: ctx!.clinicId } });
 
+  revalidateAfter("team");
   return NextResponse.json({ deleted: true });
 }

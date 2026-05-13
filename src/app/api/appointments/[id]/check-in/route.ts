@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { loadClinicSession, requireRole } from "@/lib/agenda/api-helpers";
+import { revalidateAfter } from "@/lib/cache/revalidate";
 
 export async function POST(
   _req: NextRequest,
@@ -50,6 +51,7 @@ export async function POST(
     },
   });
 
+  revalidateAfter("appointments");
   return NextResponse.json({
     ok: true,
     status: "CHECKED_IN",

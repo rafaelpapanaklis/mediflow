@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { Plus, GripVertical, Archive, RotateCcw, EyeOff, Eye } from "lucide-react";
+import { Plus, GripVertical, Archive, RotateCcw, EyeOff, Eye, Clock } from "lucide-react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import {
   createResource,
@@ -12,12 +13,20 @@ import {
   type ApiError,
 } from "@/lib/agenda/mutations";
 import type { ResourceDTO, ResourceKind } from "@/lib/agenda/types";
+import { ResourceScheduleDrawer } from "./resource-schedule-drawer";
 import styles from "./resources-manager.module.css";
 
 const SWATCH_COLORS = [
   "#7c3aed", "#2563eb", "#ea580c", "#0891b2",
   "#059669", "#db2777", "#9333ea", "#0284c7",
   "#16a34a", "#dc2626", "#ca8a04", "#0d9488",
+];
+
+// Set reducido para el form "Añadir" — 8 colores distintos + opción
+// "sin color" (null). El picker del row de edición sigue usando los 12.
+const ADD_FORM_SWATCHES = [
+  "#7c3aed", "#2563eb", "#0891b2", "#059669",
+  "#ca8a04", "#ea580c", "#dc2626", "#db2777",
 ];
 
 export interface ResourcesManagerProps {
@@ -42,12 +51,14 @@ export function ResourcesManager({
   variant = "page",
   onChange,
 }: ResourcesManagerProps) {
+  const router = useRouter();
   const askConfirm = useConfirm();
   const [resources, setResources] = useState<ResourceDTO[]>(initialResources);
   const [showArchived, setShowArchived] = useState(false);
   const [archivedLoaded, setArchivedLoaded] = useState(false);
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [scheduleResourceId, setScheduleResourceId] = useState<string | null>(null);
   const dragIndexRef = useRef<number | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const lastOrderRef = useRef<string[] | null>(null);
@@ -117,6 +128,7 @@ export function ResourcesManager({
     }
     try {
       await reorderResources(finalOrder);
+      router.refresh();
     } catch (err) {
       if (lastOrderRef.current) {
         const order = lastOrderRef.current;
@@ -148,6 +160,7 @@ export function ResourcesManager({
       if (patch.isActive !== undefined) apiPatch.isActive = patch.isActive;
       const updated = await updateResource(id, apiPatch);
       setResources((prev) => prev.map((r) => (r.id === id ? { ...optimistic, ...updated } : r)));
+      router.refresh();
     } catch (err) {
       setResources((prev) => prev.map((r) => (r.id === id ? original : r)));
       const reason = isApiError(err)
@@ -177,6 +190,7 @@ export function ResourcesManager({
     try {
       await deleteResource(id);
       toast.success("Recurso archivado");
+      router.refresh();
     } catch (err) {
       setResources(original);
       if (
@@ -208,6 +222,7 @@ export function ResourcesManager({
       const updated = await updateResource(id, { isActive: true });
       setResources((prev) => prev.map((r) => (r.id === id ? { ...r, ...updated, isActive: true } : r)));
       toast.success("Recurso restaurado");
+      router.refresh();
     } catch (err) {
       setResources(original);
       const reason = isApiError(err)
@@ -217,12 +232,13 @@ export function ResourcesManager({
     }
   }
 
-  async function handleAdd(name: string, kind: ResourceKind, color: string) {
+  async function handleAdd(name: string, kind: ResourceKind, color: string | null) {
     try {
       const created = await createResource({ name, kind, color });
       setResources((prev) => [...prev, { ...created, isActive: true }]);
       toast.success("Recurso añadido");
       setAdding(false);
+      router.refresh();
     } catch (err) {
       const reason = isApiError(err)
         ? err.reason ?? err.error ?? "No se pudo crear"
@@ -309,6 +325,7 @@ export function ResourcesManager({
             onUpdate={(patch) => void handleUpdate(r.id, patch)}
             onArchive={() => void handleArchive(r.id)}
             onRestore={() => void handleRestore(r.id)}
+            onOpenSchedule={() => setScheduleResourceId(r.id)}
           />
         ))}
 
@@ -329,6 +346,16 @@ export function ResourcesManager({
           )
         )}
       </div>
+
+      <ResourceScheduleDrawer
+        resource={
+          scheduleResourceId
+            ? resources.find((r) => r.id === scheduleResourceId) ?? null
+            : null
+        }
+        isOpen={!!scheduleResourceId}
+        onClose={() => setScheduleResourceId(null)}
+      />
     </div>
   );
 }
@@ -344,6 +371,7 @@ interface ResourceRowProps {
   onUpdate: (patch: Partial<ResourceDTO>) => void;
   onArchive: () => void;
   onRestore: () => void;
+  onOpenSchedule: () => void;
 }
 
 function ResourceRow({
@@ -357,6 +385,7 @@ function ResourceRow({
   onUpdate,
   onArchive,
   onRestore,
+  onOpenSchedule,
 }: ResourceRowProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [name, setName] = useState(resource.name);
@@ -442,6 +471,17 @@ function ResourceRow({
       ) : (
         <span />
       )}
+      {canEdit && !archived && (
+        <button
+          type="button"
+          className={styles.rowAction}
+          onClick={onOpenSchedule}
+          aria-label={`Horarios de ${resource.name}`}
+          title="Horarios"
+        >
+          <Clock size={12} />
+        </button>
+      )}
       {canEdit && (
         archived ? (
           <button
@@ -471,14 +511,13 @@ function ResourceRow({
 
 interface ResourceAddFormProps {
   onCancel: () => void;
-  onSave: (name: string, kind: ResourceKind, color: string) => Promise<void>;
+  onSave: (name: string, kind: ResourceKind, color: string | null) => Promise<void>;
 }
 
 function ResourceAddForm({ onCancel, onSave }: ResourceAddFormProps) {
   const [name, setName] = useState("");
   const [kind, setKind] = useState<ResourceKind>("CHAIR");
-  const [color, setColor] = useState(SWATCH_COLORS[0]!);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [color, setColor] = useState<string | null>(ADD_FORM_SWATCHES[0]!);
   const [saving, setSaving] = useState(false);
 
   return (
@@ -492,67 +531,84 @@ function ResourceAddForm({ onCancel, onSave }: ResourceAddFormProps) {
         setSaving(false);
       }}
     >
-      <span style={{ position: "relative" }}>
-        <span
-          className={styles.swatch}
-          style={{ background: color }}
-          onClick={() => setPickerOpen((v) => !v)}
-          role="button"
-          tabIndex={0}
-          aria-label="Color"
+      <div className={styles.addFormRow}>
+        <input
+          type="text"
+          className={styles.addInput}
+          placeholder="Nombre (ej. Sillón 3)"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          autoFocus
         />
-        {pickerOpen && (
-          <div className={styles.swatchPicker}>
-            {SWATCH_COLORS.map((c) => (
-              <span
-                key={c}
-                className={`${styles.swatchOption} ${
-                  c === color ? styles.selected : ""
-                }`}
-                style={{ background: c }}
-                onClick={() => {
+        <label className={styles.addLabel} htmlFor="resource-add-kind">
+          Tipo
+        </label>
+        <select
+          id="resource-add-kind"
+          className={styles.kindSelect}
+          value={kind}
+          onChange={(e) => setKind(e.target.value as ResourceKind)}
+        >
+          <option value="CHAIR">Sillón</option>
+          <option value="ROOM">Sala</option>
+          <option value="EQUIPMENT">Equipo</option>
+        </select>
+      </div>
+      <div className={styles.addFormRow}>
+        <span className={styles.addLabel}>Color</span>
+        <div className={styles.swatchInlineRow} role="radiogroup" aria-label="Color del recurso">
+          {ADD_FORM_SWATCHES.map((c) => (
+            <span
+              key={c}
+              role="radio"
+              aria-checked={c === color}
+              aria-label={`Color ${c}`}
+              tabIndex={0}
+              className={`${styles.swatchInline} ${c === color ? styles.selected : ""}`}
+              style={{ background: c }}
+              onClick={() => setColor(c)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
                   setColor(c);
-                  setPickerOpen(false);
-                }}
-                role="button"
-                tabIndex={0}
-              />
-            ))}
-          </div>
-        )}
-      </span>
-      <input
-        type="text"
-        className={styles.addInput}
-        placeholder="Nombre (ej. Sillón 3)"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        autoFocus
-      />
-      <select
-        className={styles.kindSelect}
-        value={kind}
-        onChange={(e) => setKind(e.target.value as ResourceKind)}
-      >
-        <option value="CHAIR">Sillón</option>
-        <option value="ROOM">Sala</option>
-        <option value="EQUIPMENT">Equipo</option>
-      </select>
-      <button
-        type="button"
-        className={styles.addBtnCancel}
-        onClick={onCancel}
-        disabled={saving}
-      >
-        Cancelar
-      </button>
-      <button
-        type="submit"
-        className={styles.addBtnSave}
-        disabled={!name.trim() || saving}
-      >
-        {saving ? "…" : "Añadir"}
-      </button>
+                }
+              }}
+            />
+          ))}
+          <span
+            role="radio"
+            aria-checked={color === null}
+            aria-label="Sin color"
+            tabIndex={0}
+            title="Sin color"
+            className={`${styles.swatchInline} ${styles.swatchNone} ${color === null ? styles.selected : ""}`}
+            onClick={() => setColor(null)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setColor(null);
+              }
+            }}
+          />
+        </div>
+      </div>
+      <div className={styles.addFormActions}>
+        <button
+          type="button"
+          className={styles.addBtnCancel}
+          onClick={onCancel}
+          disabled={saving}
+        >
+          Cancelar
+        </button>
+        <button
+          type="submit"
+          className={styles.addBtnSave}
+          disabled={!name.trim() || saving}
+        >
+          {saving ? "Guardando…" : "Añadir"}
+        </button>
+      </div>
     </form>
   );
 }
