@@ -20,6 +20,8 @@ import {
   todayInTz,
 } from "@/lib/agenda/time-utils";
 import { canOverrideOverlap } from "@/lib/agenda/transitions";
+import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
+import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
 import { logMutation } from "@/lib/audit";
 import type {
   AgendaDayResponse,
@@ -175,6 +177,28 @@ export async function POST(req: NextRequest) {
   }
   if (body.resourceId && !resource) {
     return NextResponse.json({ error: "resource_not_found" }, { status: 404 });
+  }
+
+  // Resource working-hours validation. A Resource without any schedule rows
+  // is treated as "always open" (backward-compat for resources created before
+  // this feature). overrideReason bypasses the check (admin escape hatch).
+  if (body.resourceId && !body.overrideReason) {
+    const schedule = await loadResourceSchedule(body.resourceId);
+    const valid = validateResourceSchedule(
+      startsAt,
+      endsAt,
+      schedule,
+      session.clinic.timezone,
+    );
+    if (!valid.ok) {
+      return NextResponse.json(
+        {
+          error: "resource_unavailable",
+          reason: valid.reason,
+        },
+        { status: 422 },
+      );
+    }
   }
 
   try {

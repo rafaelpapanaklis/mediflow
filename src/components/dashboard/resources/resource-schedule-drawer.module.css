@@ -1,0 +1,317 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 5, 10, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 200;
+  animation: schedFade 0.18s ease-out;
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(520px, 100vw);
+  background: var(--bg);
+  border-left: 1px solid var(--border-strong);
+  box-shadow: -16px 0 40px -8px rgba(0, 0, 0, 0.25);
+  z-index: 201;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-sora, "Sora", sans-serif);
+  color: var(--text-1);
+  animation: schedSlide 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes schedFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes schedSlide {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.headerInner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+.headerIcon {
+  color: var(--brand);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.title {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 0 2px;
+}
+.subtitle {
+  font-size: 12px;
+  color: var(--text-3);
+  margin: 0;
+  line-height: 1.4;
+}
+.closeBtn {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  color: var(--text-3);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.closeBtn:hover {
+  border-color: var(--border-strong);
+  color: var(--text-1);
+}
+.closeBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.loading {
+  text-align: center;
+  padding: 40px 0;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.banner {
+  padding: 16px;
+  border: 1px solid var(--border-brand);
+  background: var(--brand-softer);
+  border-radius: 8px;
+}
+.bannerTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--brand);
+  margin-bottom: 6px;
+}
+.bannerText {
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+.bannerBtn {
+  padding: 7px 12px;
+  background: var(--brand);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.bannerBtn:hover { background: #8b5cf6; }
+
+.quickActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.quickBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  font-family: inherit;
+}
+.quickBtn:hover {
+  border-color: var(--border-strong);
+  color: var(--text-1);
+}
+
+.dayBlock {
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--bg-elev);
+}
+.dayHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.dayLabel {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+  flex: 1;
+}
+.closedBadge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+  padding: 2px 7px;
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  background: var(--bg-elev-2);
+}
+.addWindowBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px dashed var(--border-soft);
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-2);
+  cursor: pointer;
+  font-family: inherit;
+}
+.addWindowBtn:hover {
+  border-color: var(--border-brand);
+  background: var(--brand-softer);
+  color: var(--brand);
+}
+
+.windowList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.windowRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.timeInput {
+  padding: 6px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 600;
+  color: var(--text-1);
+  width: 110px;
+}
+.timeInput:focus {
+  outline: none;
+  border-color: var(--border-brand);
+}
+.windowArrow {
+  color: var(--text-3);
+  font-size: 14px;
+  font-weight: 700;
+}
+.removeWindowBtn {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: var(--text-3);
+  cursor: pointer;
+  margin-left: auto;
+}
+.removeWindowBtn:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg-elev-2);
+}
+.footerRight {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+.cancelBtn {
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  font-family: inherit;
+}
+.cancelBtn:hover { color: var(--text-1); }
+.saveBtn {
+  padding: 8px 16px;
+  background: var(--brand);
+  color: #fff;
+  border: 1px solid var(--brand);
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}
+.saveBtn:hover { background: #8b5cf6; }
+.saveBtn:disabled {
+  background: var(--bg-elev-2);
+  color: var(--text-4);
+  border-color: var(--border-soft);
+  cursor: not-allowed;
+}
+.dangerBtn {
+  padding: 7px 12px;
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--danger);
+  cursor: pointer;
+  font-family: inherit;
+}
+.dangerBtn:hover {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+}
+.dangerBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

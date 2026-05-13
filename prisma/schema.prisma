@@ -1709,9 +1709,10 @@ model Resource {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  clinic       Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  clinic       Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointments Appointment[]
   cost         ResourceCost?
+  schedules    ResourceSchedule[]
 
   @@index([clinicId, isActive, orderIndex])
 }
@@ -1720,6 +1721,28 @@ enum ResourceKind {
   CHAIR
   ROOM
   EQUIPMENT
+}
+
+/// Horario semanal por Resource. Una row = una ventana (start–end) en un día.
+/// Multi-ventana permitida (mañana/tarde = 2 rows con mismo (resourceId, dayOfWeek)).
+/// Resource SIN rows = "siempre abierto" (backward-compat para Resources existentes).
+///
+/// dayOfWeek convention: 0=Monday, 1=Tuesday, ..., 6=Sunday (igual que ClinicSchedule).
+/// startTime/endTime: "HH:MM" 24h, en la timezone del clinic.
+model ResourceSchedule {
+  id         String @id @default(cuid())
+  resourceId String
+  dayOfWeek  Int
+  startTime  String @db.VarChar(5)
+  endTime    String @db.VarChar(5)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  resource Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@index([resourceId, dayOfWeek])
+  @@map("resource_schedules")
 }
 
 // ═══════════════════════════════════════════════════════════

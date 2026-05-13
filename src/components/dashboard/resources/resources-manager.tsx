@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { Plus, GripVertical, Archive, RotateCcw, EyeOff, Eye } from "lucide-react";
+import { Plus, GripVertical, Archive, RotateCcw, EyeOff, Eye, Clock } from "lucide-react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import {
   createResource,
@@ -12,6 +12,7 @@ import {
   type ApiError,
 } from "@/lib/agenda/mutations";
 import type { ResourceDTO, ResourceKind } from "@/lib/agenda/types";
+import { ResourceScheduleDrawer } from "./resource-schedule-drawer";
 import styles from "./resources-manager.module.css";
 
 const SWATCH_COLORS = [
@@ -55,6 +56,7 @@ export function ResourcesManager({
   const [archivedLoaded, setArchivedLoaded] = useState(false);
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [scheduleResourceId, setScheduleResourceId] = useState<string | null>(null);
   const dragIndexRef = useRef<number | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const lastOrderRef = useRef<string[] | null>(null);
@@ -316,6 +318,7 @@ export function ResourcesManager({
             onUpdate={(patch) => void handleUpdate(r.id, patch)}
             onArchive={() => void handleArchive(r.id)}
             onRestore={() => void handleRestore(r.id)}
+            onOpenSchedule={() => setScheduleResourceId(r.id)}
           />
         ))}
 
@@ -336,6 +339,16 @@ export function ResourcesManager({
           )
         )}
       </div>
+
+      <ResourceScheduleDrawer
+        resource={
+          scheduleResourceId
+            ? resources.find((r) => r.id === scheduleResourceId) ?? null
+            : null
+        }
+        isOpen={!!scheduleResourceId}
+        onClose={() => setScheduleResourceId(null)}
+      />
     </div>
   );
 }
@@ -351,6 +364,7 @@ interface ResourceRowProps {
   onUpdate: (patch: Partial<ResourceDTO>) => void;
   onArchive: () => void;
   onRestore: () => void;
+  onOpenSchedule: () => void;
 }
 
 function ResourceRow({
@@ -364,6 +378,7 @@ function ResourceRow({
   onUpdate,
   onArchive,
   onRestore,
+  onOpenSchedule,
 }: ResourceRowProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [name, setName] = useState(resource.name);
@@ -448,6 +463,17 @@ function ResourceRow({
         <span className={styles.archivedBadge}>Archivado</span>
       ) : (
         <span />
+      )}
+      {canEdit && !archived && (
+        <button
+          type="button"
+          className={styles.rowAction}
+          onClick={onOpenSchedule}
+          aria-label={`Horarios de ${resource.name}`}
+          title="Horarios"
+        >
+          <Clock size={12} />
+        </button>
       )}
       {canEdit && (
         archived ? (
