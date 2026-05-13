@@ -15,6 +15,7 @@ import {
   Zap,
   Anchor,
   Smile,
+  ArrowUpRight,
   type LucideIcon,
 } from "lucide-react";
 import styles from "./patient-detail.module.css";
@@ -51,6 +52,7 @@ interface QuickNavProps {
     evolucion?: number;
     radiografias?: number;
     tratamiento?: number;
+    referencias?: number;
     agenda?: number;
     facturacion?: number;
     pediatria?: number;
@@ -141,6 +143,7 @@ export function QuickNav({
     { id: "evolucion",    label: "Notas SOAP",      icon: Activity, count: counts.evolucion },
     { id: "radiografias", label: "Radiografías",    icon: FileImage, count: counts.radiografias },
     { id: "tratamiento",  label: "Plan tratamiento", icon: Pill, count: counts.tratamiento },
+    { id: "referencias",  label: "Referencias",     icon: ArrowUpRight, count: counts.referencias },
   );
 
   const sections: NavSection[] = [
