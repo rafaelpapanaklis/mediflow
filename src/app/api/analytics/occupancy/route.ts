@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { TREATMENT_KINDS } from "@/lib/agenda/types";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
     }),
     resourceId
       ? Promise.resolve(1)
-      : prisma.resource.count({ where: { clinicId, isActive: true, kind: "CHAIR" } }),
+      : prisma.resource.count({ where: { clinicId, isActive: true, kind: { in: [...TREATMENT_KINDS] } } }),
     prisma.appointment.findMany({
       where: {
         clinicId,

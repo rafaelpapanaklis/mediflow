@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { liveCookieName } from "@/lib/floor-plan/live-config";
+import { TREATMENT_KINDS } from "@/lib/agenda/types";
 
 export const dynamic = "force-dynamic";
 
@@ -103,7 +104,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       safe(
         () =>
           prisma.resource.findMany({
-            where: { clinicId: clinic.id, kind: "CHAIR", isActive: true },
+            where: { clinicId: clinic.id, kind: { in: [...TREATMENT_KINDS] }, isActive: true },
             select: { id: true, name: true, color: true, orderIndex: true },
             orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
           }),

@@ -40,7 +40,11 @@ import {
   type DroppableData,
 } from "@/lib/agenda/drag-utils";
 import { rescheduleAppointment } from "@/lib/agenda/mutations";
-import type { AgendaDayResponse } from "@/lib/agenda/types";
+import {
+  RESOURCE_KIND_LABELS,
+  TREATMENT_KINDS,
+  type AgendaDayResponse,
+} from "@/lib/agenda/types";
 import styles from "@/components/dashboard/agenda/agenda.module.css";
 
 interface Props {
@@ -560,9 +564,10 @@ function computeColumns(
     });
   }
 
-  // Mode "resource" = "Por sillón". Filtramos a kind=CHAIR para que ROOM/EQUIPMENT
-  // no se conviertan en columnas (ya están disponibles en el modal de gestión).
-  return state.resources.filter((r) => r.kind === "CHAIR").map((r) => {
+  // Mode "resource" = "Por sillón". Solo lugares de tratamiento dental
+  // (silla + consultorio dental); recepción/sala de espera/lab/radio se
+  // gestionan en el modal pero no son columnas de agenda.
+  return state.resources.filter((r) => TREATMENT_KINDS.includes(r.kind)).map((r) => {
     const apptsHere = state.appointments.filter((a) => a.resourceId === r.id);
     return {
       key: `resource:${r.id}`,
@@ -570,7 +575,7 @@ function computeColumns(
       doctorId: null,
       resourceId: r.id,
       title: r.name,
-      subtitle: r.kind === "ROOM" ? "Sala" : r.kind === "EQUIPMENT" ? "Equipo" : "Sillón",
+      subtitle: RESOURCE_KIND_LABELS[r.kind],
       color: r.color,
       occupancyPct: occupancyOf(apptsHere, slotsAvailablePerColumn, state.slotMinutes),
     };

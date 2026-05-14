@@ -1698,12 +1698,12 @@ enum AppointmentSource {
   WHATSAPP
 }
 
-/// Sillón / sala / equipo reservable.
+/// Recurso reservable (silla/consultorio/sala/etc).
 model Resource {
   id         String       @id @default(cuid())
   clinicId   String
   name       String       @db.VarChar(120)
-  kind       ResourceKind @default(CHAIR)
+  kind       ResourceKind @default(SILLA_DENTAL)
   color      String?      @db.VarChar(9)
   isActive   Boolean      @default(true)
   orderIndex Int          @default(0)
@@ -1719,10 +1719,20 @@ model Resource {
   @@index([clinicId, isActive, orderIndex])
 }
 
+/// Tipos de recurso. Los tres primeros (CHAIR/ROOM/EQUIPMENT) son legacy:
+/// se mantienen en el enum por compatibilidad con Postgres (no se pueden
+/// quitar valores de un enum en PG ≤16 sin DROP TYPE). El backfill de la
+/// migration 20260513120100 mapea filas existentes a los nuevos valores.
 enum ResourceKind {
   CHAIR
   ROOM
   EQUIPMENT
+  CONSULTORIO_DENTAL
+  CONSULTORIO_GENERAL
+  SILLA_DENTAL
+  SALA_DE_ESPERA
+  RADIOGRAFIA
+  LABORATORIO
 }
 
 /// Horario semanal por Resource. Una row = una ventana (start–end) en un día.

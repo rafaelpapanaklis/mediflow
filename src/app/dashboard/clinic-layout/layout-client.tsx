@@ -403,7 +403,7 @@ export function ClinicLayoutClient({
             const res = await fetch("/api/agenda/resources", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name: proposed, kind: "CHAIR" }),
+              body: JSON.stringify({ name: proposed, kind: "SILLA_DENTAL" }),
             });
             if (res.ok) {
               const data = await res.json();

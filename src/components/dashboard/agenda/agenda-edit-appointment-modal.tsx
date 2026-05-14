@@ -262,13 +262,13 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
               ))}
             </select>
           </Field>
-          <Field label="Sillón / Sala">
+          <Field label="Lugar de atención">
             <select
               value={form.resourceId}
               onChange={(e) => setForm({ ...form, resourceId: e.target.value })}
               style={inputStyle}
             >
-              <option value="">Sin sillón asignado</option>
+              <option value="">Sin lugar asignado</option>
               {state.resources.map((r) => (
                 <option key={r.id} value={r.id}>{r.name}</option>
               ))}

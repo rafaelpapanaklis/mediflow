@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { TREATMENT_KINDS } from "@/lib/agenda/types";
 
 export const dynamic = "force-dynamic";
 
@@ -75,7 +76,7 @@ export async function GET() {
         where: { clinicId: dbUser.clinicId },
       }),
       prisma.resource.findMany({
-        where: { clinicId: dbUser.clinicId, kind: "CHAIR", isActive: true },
+        where: { clinicId: dbUser.clinicId, kind: { in: [...TREATMENT_KINDS] }, isActive: true },
         select: { id: true, name: true, color: true, orderIndex: true },
         orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
       }),
@@ -146,7 +147,7 @@ export async function PUT(req: NextRequest) {
       }
       const ids = Array.from(uniqueIds);
       const valid = await prisma.resource.findMany({
-        where: { id: { in: ids }, clinicId: dbUser.clinicId, kind: "CHAIR" },
+        where: { id: { in: ids }, clinicId: dbUser.clinicId, kind: { in: [...TREATMENT_KINDS] } },
         select: { id: true },
       });
       if (valid.length !== ids.length) {

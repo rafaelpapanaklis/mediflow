@@ -48,10 +48,11 @@ export async function GET(req: NextRequest) {
   const monthStart = new Date(ref.getFullYear(), ref.getMonth(), 1);
   const monthEnd = new Date(ref.getFullYear(), ref.getMonth() + 1, 0, 23, 59, 59);
 
-  // Sillones de la clínica (clinicId directo).
+  // Todos los recursos activos de la clínica — costos aplican a cualquier
+  // tipo (silla, consultorio, sala de espera, lab, radio).
   console.time("resource-costs:resources");
   const resources = await prisma.resource.findMany({
-    where: { clinicId, kind: "CHAIR", isActive: true },
+    where: { clinicId, isActive: true },
     select: {
       id: true,
       name: true,
@@ -61,7 +62,7 @@ export async function GET(req: NextRequest) {
     orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
   });
   console.timeEnd("resource-costs:resources");
-  console.log(`resource-costs:chair-count=${resources.length} clinicId=${clinicId}`);
+  console.log(`resource-costs:resource-count=${resources.length} clinicId=${clinicId}`);
 
   // Revenue por sillón en el mes — 1 sola query con JOIN + GROUP BY en
   // SQL. Antes hacíamos findMany sin LIMIT cargando todas las invoices

@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { TREATMENT_KINDS } from "@/lib/agenda/types";
 import { ClinicLayoutClient } from "./layout-client";
 
 export const metadata: Metadata = { title: "Mi Clínica Visual — MediFlow" };
@@ -31,7 +32,7 @@ export default async function ClinicLayoutPage() {
       where: { clinicId: user.clinicId },
     }),
     prisma.resource.findMany({
-      where: { clinicId: user.clinicId, kind: "CHAIR", isActive: true },
+      where: { clinicId: user.clinicId, kind: { in: [...TREATMENT_KINDS] }, isActive: true },
       select: { id: true, name: true, color: true, orderIndex: true },
       orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
     }),
