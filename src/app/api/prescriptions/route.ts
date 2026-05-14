@@ -64,10 +64,14 @@ interface PrescriptionItemBody {
  * POST /api/prescriptions — crea receta NOM-024 completa.
  *
  * Body: {
- *   medicalRecordId, patientId,
+ *   patientId,                   // requerido
+ *   medicalRecordId?,            // opcional — receta standalone si se omite
  *   items: [{ cumsKey, dosage, duration?, quantity?, notes? }],
  *   indications?, cofeprisGroup?, cofeprisFolio?, expiresAt? (override)
  * }
+ *
+ * La receta puede emitirse standalone (sin consulta asociada) o
+ * vinculada a un MedicalRecord existente (flujo "Iniciar consulta").
  *
  * Compat: si llega `medications` (legacy JSON), lo guardamos también para
  * datos históricos. Si no llegan items nuevos pero sí medications, NO
@@ -84,9 +88,16 @@ export async function POST(req: NextRequest) {
   const { medicalRecordId, patientId, items, indications, cofeprisGroup, cofeprisFolio, expiresAt: expiresAtOverride } = body;
   const medicationsLegacy = body.medications;
 
-  if (!medicalRecordId || !patientId) {
-    return NextResponse.json({ error: "medicalRecordId y patientId requeridos" }, { status: 400 });
+  if (!patientId) {
+    return NextResponse.json({ error: "patientId requerido" }, { status: 400 });
   }
+
+  // Multi-tenant: el paciente debe pertenecer a la clínica del usuario.
+  const patient = await prisma.patient.findFirst({
+    where: { id: patientId, clinicId: ctx.clinicId },
+    select: { id: true },
+  });
+  if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
 
   // Items con FK a CUMS — preferido (NOM-024).
   const itemsArray: PrescriptionItemBody[] = Array.isArray(items) ? items : [];
@@ -105,12 +116,15 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Multi-tenant: el expediente debe pertenecer a la clínica del usuario.
-  const record = await prisma.medicalRecord.findFirst({
-    where: { id: medicalRecordId, clinicId: ctx.clinicId, patientId },
-    select: { id: true },
-  });
-  if (!record) return NextResponse.json({ error: "Expediente no encontrado" }, { status: 404 });
+  // Si la receta viene vinculada a una consulta, validar que pertenece a la
+  // clínica del usuario y al mismo paciente. Si es standalone, omitir.
+  if (medicalRecordId) {
+    const record = await prisma.medicalRecord.findFirst({
+      where: { id: medicalRecordId, clinicId: ctx.clinicId, patientId },
+      select: { id: true },
+    });
+    if (!record) return NextResponse.json({ error: "Expediente no encontrado" }, { status: 404 });
+  }
 
   // NOM-024: el médico debe tener cédula profesional registrada.
   const doctor = await prisma.user.findUnique({
@@ -147,7 +161,7 @@ export async function POST(req: NextRequest) {
   const created = await prisma.$transaction(async (tx) => {
     const rx = await tx.prescription.create({
       data: {
-        medicalRecordId,
+        medicalRecordId: medicalRecordId ?? null,
         patientId,
         doctorId: ctx.userId,
         clinicId: ctx.clinicId,

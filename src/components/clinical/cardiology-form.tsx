@@ -15,8 +15,9 @@ type RhythmType = "normal" | "sinus" | "afib" | "flutter" | "vtach" | "paced";
 export function CardiologyForm({ patientId, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [calcOpen, setCalcOpen] = useState(false);
+  // Receta standalone — no toca el expediente clínico para evitar
+  // medicalRecord huérfanos en el histórico.
   const [rxOpen, setRxOpen] = useState(false);
-  const [rxRecordId, setRxRecordId] = useState<string | null>(null);
   const [rxResult, setRxResult] = useState<{ id: string; verifyUrl: string } | null>(null);
 
   const [form, setForm] = useState({
@@ -90,28 +91,8 @@ export function CardiologyForm({ patientId, onSaved }: Props) {
     }
   }
 
-  async function openPrescriptionModal() {
-    // Guardar el expediente primero (es FK requerido por /api/prescriptions).
-    try {
-      const clinicalRes = await fetch("/api/clinical", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          patientId,
-          subjective: form.subjective,
-          assessment: "",
-          plan: form.plan,
-          specialtyData: { type: "cardiology", indications: form.indications },
-        }),
-      });
-      if (!clinicalRes.ok) throw new Error("No se pudo guardar el expediente");
-      const record = await clinicalRes.json();
-      setRxRecordId(record.id);
-      setRxOpen(true);
-      onSaved(record);
-    } catch (err: any) {
-      toast.error(err.message ?? "Error");
-    }
+  function openPrescriptionModal() {
+    setRxOpen(true);
   }
 
   const ekgRate = Number(form.ekg.rate) || 72;
@@ -226,7 +207,7 @@ export function CardiologyForm({ patientId, onSaved }: Props) {
       <CardNew
         title="Escalas"
         action={
-          <ButtonNew size="sm" variant="ghost" icon={<Calculator size={14} />} onClick={() => setCalcOpen(true)}>
+          <ButtonNew type="button" size="sm" variant="ghost" icon={<Calculator size={14} />} onClick={() => setCalcOpen(true)}>
             Calculadoras clínicas
           </ButtonNew>
         }
@@ -258,7 +239,7 @@ export function CardiologyForm({ patientId, onSaved }: Props) {
       <CardNew
         title="Plan y receta"
         action={
-          <ButtonNew size="sm" variant="ghost" icon={<FileText size={14} />} onClick={openPrescriptionModal}>
+          <ButtonNew type="button" size="sm" variant="ghost" icon={<FileText size={14} />} onClick={openPrescriptionModal}>
             Crear receta
           </ButtonNew>
         }
@@ -281,22 +262,20 @@ export function CardiologyForm({ patientId, onSaved }: Props) {
       </CardNew>
 
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <ButtonNew variant="primary" onClick={handleSave} disabled={saving}>
+        <ButtonNew type="button" variant="primary" onClick={handleSave} disabled={saving}>
           {saving ? "Guardando…" : "Guardar consulta"}
         </ButtonNew>
       </div>
 
       <CalculatorModal isOpen={calcOpen} onClose={() => setCalcOpen(false)} defaultSpecialty="cardiología" />
 
-      {rxRecordId && (
-        <PrescriptionModal
-          open={rxOpen}
-          patientId={patientId}
-          medicalRecordId={rxRecordId}
-          onClose={() => setRxOpen(false)}
-          onCreated={(rx) => setRxResult(rx)}
-        />
-      )}
+      <PrescriptionModal
+        open={rxOpen}
+        patientId={patientId}
+        medicalRecordId={null}
+        onClose={() => setRxOpen(false)}
+        onCreated={(rx) => setRxResult(rx)}
+      />
     </div>
   );
 }
