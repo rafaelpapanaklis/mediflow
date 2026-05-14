@@ -8,7 +8,7 @@ import { formatRelativeDate } from "@/lib/format";
 export default async function ChurnPage() {
   const now   = new Date();
   const prev7 = new Date(now); prev7.setDate(prev7.getDate()-7);
-  const prev3 = new Date(now); prev3.setDate(prev3.getDate()-3);
+  const next3 = new Date(now); next3.setDate(next3.getDate()+3);
 
   const allClinics = await prisma.clinic.findMany({
     include: {
@@ -25,7 +25,7 @@ export default async function ChurnPage() {
   const trialExpiring = allClinics.filter(c => {
     if (!c.trialEndsAt) return false;
     const d = new Date(c.trialEndsAt);
-    return d > now && d < prev3;
+    return d > now && d < next3;
   });
   const inactiveTrial = allClinics.filter(c => {
     const isTrial = c.trialEndsAt && new Date(c.trialEndsAt) > now;
