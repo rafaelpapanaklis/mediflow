@@ -42,9 +42,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const err = requireAdmin(ctx);
   if (err) return err;
 
+  // El body de la request solo se puede leer una vez. Antes lo leíamos dos
+  // veces (una dentro del guard de self-edit y otra para el update), lo que
+  // disparaba "Body has already been read" como excepción no manejada y
+  // devolvía 500 con body vacío al cliente — el frontend tronaba con
+  // "Unexpected end of JSON input" al editar la cédula del propio doctor.
+  const body = await req.json();
+
   // Prevent changing own role or deactivating self
-  if (params.id === ctx!.userId && req.method === "PATCH") {
-    const body = await req.json();
+  if (params.id === ctx!.userId) {
     if (body.role && body.role !== ctx!.role) {
       return NextResponse.json({ error: "No puedes cambiar tu propio rol" }, { status: 400 });
     }
@@ -52,8 +58,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ error: "No puedes desactivarte a ti mismo" }, { status: 400 });
     }
   }
-
-  const body = await req.json();
 
   // Verify member belongs to this clinic
   const member = await prisma.user.findFirst({
