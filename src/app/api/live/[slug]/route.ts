@@ -158,6 +158,15 @@ export async function GET(req: NextRequest, { params }: Params) {
       );
     };
 
+    // NOM-024: a.notes puede contener diagnostico clinico (PHI). Solo se
+    // permite como fallback de treatment cuando el owner eligio explicitamente
+    // mostrar info completa (showFull). En modo enmascarado, notes nunca se
+    // expone en la URL publica.
+    const resolveTreatment = (a: { type: string | null; notes: string | null }): string => {
+      const fallback = showFull ? a.notes : null;
+      return a.type || fallback || "Consulta";
+    };
+
     const liveAppointments = appointments
       .filter((a) => a.resourceId)
       .map((a) => {
@@ -167,7 +176,7 @@ export async function GET(req: NextRequest, { params }: Params) {
           resourceId: a.resourceId,
           patient: showFull ? fullName : maskInitials(fullName),
           ...(showFull ? { patientFull: fullName } : {}),
-          treatment: a.type || a.notes || "Consulta",
+          treatment: resolveTreatment(a),
           doctor: `${a.doctor?.firstName ?? ""} ${a.doctor?.lastName ?? ""}`.trim() || "—",
           start: a.startsAt.toISOString(),
           end: a.endsAt.toISOString(),
@@ -187,7 +196,7 @@ export async function GET(req: NextRequest, { params }: Params) {
         return {
           id: a.id,
           patient: showFull ? fullName : maskInitials(fullName),
-          treatment: a.type || a.notes || "Consulta",
+          treatment: resolveTreatment(a),
           doctor: `${a.doctor?.firstName ?? ""} ${a.doctor?.lastName ?? ""}`.trim() || "—",
           checkedInAt: a.checkedInAt?.toISOString() ?? null,
           scheduledAt: a.startsAt.toISOString(),
