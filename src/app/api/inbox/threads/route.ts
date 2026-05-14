@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +51,8 @@ export async function GET(req: NextRequest) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return jsonError("unauthorized", 401);
+    const denied = denyIfMissingPermission(dbUser, "inbox.view");
+    if (denied) return denied;
 
     const sp = req.nextUrl.searchParams;
     const where: Prisma.InboxThreadWhereInput = {
@@ -134,6 +137,8 @@ export async function POST(req: NextRequest) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return jsonError("unauthorized", 401);
+    const denied = denyIfMissingPermission(dbUser, "inbox.send");
+    if (denied) return denied;
     const body = await req.json().catch(() => null);
     const parsed = CreateSchema.safeParse(body);
     if (!parsed.success) {

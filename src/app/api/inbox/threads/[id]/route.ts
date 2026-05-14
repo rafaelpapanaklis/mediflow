@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    const denied = denyIfMissingPermission(dbUser, "inbox.view");
+    if (denied) return denied;
     const thread = await prisma.inboxThread.findFirst({
       where: { id: params.id, clinicId: dbUser.clinicId },
       include: {
@@ -71,6 +74,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    const denied = denyIfMissingPermission(dbUser, "inbox.send");
+    if (denied) return denied;
     const body = await req.json().catch(() => null);
     const parsed = PatchSchema.safeParse(body);
     if (!parsed.success) {
@@ -114,6 +119,10 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    // No hay perm dedicado para delete; usamos inbox.send como gate de
+    // escritura. READONLY queda fuera, que es el objetivo.
+    const denied = denyIfMissingPermission(dbUser, "inbox.send");
+    if (denied) return denied;
     await prisma.inboxThread.deleteMany({
       where: { id: params.id, clinicId: dbUser.clinicId },
     });
