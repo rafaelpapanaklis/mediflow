@@ -103,6 +103,7 @@ export const ALL_PERMISSIONS = {
   // Inbox / Mensajes
   "inbox.view":           "Ver inbox",
   "inbox.send":           "Enviar mensajes",
+  "inbox.delete":         "Borrar threads del inbox",
   "whatsapp.view":        "Ver WhatsApp",
   "whatsapp.send":        "Enviar WhatsApp",
   // Catálogo
@@ -161,7 +162,7 @@ export const PERMISSION_GROUPS: { title: string; keys: PermissionKey[] }[] = [
   { title: "Expediente",     keys: ["medicalRecord.view", "medicalRecord.edit"] },
   { title: "Recetas",        keys: ["prescription.view", "prescription.create"] },
   { title: "Radiografías",   keys: ["xrays.view", "xrays.upload", "xrays.analyze"] },
-  { title: "Comunicación",   keys: ["inbox.view", "inbox.send", "whatsapp.view", "whatsapp.send"] },
+  { title: "Comunicación",   keys: ["inbox.view", "inbox.send", "inbox.delete", "whatsapp.view", "whatsapp.send"] },
   { title: "Catálogo",       keys: ["treatments.view", "treatments.edit", "resources.view", "resources.edit", "inventory.view", "inventory.edit"] },
   { title: "Facturación",    keys: ["billing.view", "billing.create", "billing.charge", "billing.refund"] },
   { title: "Reportes y TV",  keys: ["analytics.view", "reports.view", "tvModes.view", "tvModes.edit"] },
