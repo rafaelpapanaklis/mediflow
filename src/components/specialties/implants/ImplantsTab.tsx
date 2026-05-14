@@ -8,7 +8,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import toast from "react-hot-toast";
 import { Anchor, MonitorSmartphone } from "lucide-react";
 import { ImplantsSubTabs } from "./ImplantsSubTabs";
 import { ImplantsListTab } from "./ImplantsListTab";
@@ -111,7 +110,8 @@ export function ImplantsTab(props: ImplantsTabProps) {
         setDialog("consent");
         return;
       case "radiographs":
-        toast(`"${action}" — disponible en la siguiente fase`);
+        // Boton deshabilitado en ImplantActions.tsx con badge "Proximamente";
+        // este branch queda como defensa por si alguien lo invoca por codigo.
         return;
     }
   };
