@@ -253,8 +253,9 @@ async function buildAlerts(clinicId: string, trialEndsAt: Date | null): Promise<
         href: "/dashboard/inventory?filter=low",
       });
     }
-  } catch {
-    /* skip */
+  } catch (err) {
+    console.error("[admin alerts] lowStock query failed:", err);
+    /* skip — la alerta se omite, no rompemos el endpoint */
   }
 
   // Facturas vencidas
@@ -285,8 +286,9 @@ async function buildAlerts(clinicId: string, trialEndsAt: Date | null): Promise<
         href: "/dashboard/billing?filter=overdue",
       });
     }
-  } catch {
-    /* skip */
+  } catch (err) {
+    console.error("[admin alerts] overdue invoices query failed:", err);
+    /* skip — la alerta se omite, no rompemos el endpoint */
   }
 
   // Trial vencimiento — recibimos trialEndsAt del session.clinic (loadClinicSession
