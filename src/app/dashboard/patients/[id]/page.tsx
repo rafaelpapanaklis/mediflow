@@ -169,9 +169,11 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
     }
   }
 
-  const totalPaid    = patient.invoices.reduce((s, i) => s + i.paid, 0);
-  const totalBalance = patient.invoices.reduce((s, i) => s + i.balance, 0);
-  const totalPlan    = patient.invoices.reduce((s, i) => s + i.total, 0);
+  // Nota: totales financieros (totalPaid/Balance/Plan) se derivan client-side
+  // desde el state local `invoices` (ver patient-detail-client.tsx) para que
+  // el card "Finanzas" y el sidebar "Estado de cuenta" se mantengan en sync
+  // ante mutaciones (cobrar/cancelar/editar/reembolsar) sin depender de un
+  // round-trip al server component.
 
   const lastVisit  = patient.appointments[0]?.startsAt?.toISOString() ?? null;
   const visitCount = patient.appointments.filter(a => a.status === "COMPLETED").length;
@@ -242,9 +244,6 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
             cedulaProfesional:  user.cedulaProfesional ?? null,
           }}
           specialty={user.clinic.specialty}
-          totalPaid={totalPaid}
-          totalBalance={totalBalance}
-          totalPlan={totalPlan}
           portalUrl={portalUrl}
           pediatricsData={pediatricsData}
           pediatricsModuleActive={pediatricsModuleActive}

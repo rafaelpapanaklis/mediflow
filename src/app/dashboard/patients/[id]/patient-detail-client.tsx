@@ -287,9 +287,6 @@ interface Props {
    *  de implantes (NOM-024 — firma legal del responsable de la cirugía). */
   currentUser:  { id: string; firstName: string; lastName: string; cedulaProfesional?: string | null };
   specialty:    string;
-  totalPaid:    number;
-  totalBalance: number;
-  totalPlan:    number;
   treatments:   any[];
   portalUrl?:   string | null;
   pediatricsData?: PediatricsTabData | null;
@@ -347,7 +344,7 @@ interface Props {
 
 export function PatientDetailClient({
   patient, records: initialRecords, appointments, invoices: initialInvoices,
-  doctors, currentUser, specialty, totalPaid, totalBalance, totalPlan, treatments, portalUrl,
+  doctors, currentUser, specialty, treatments, portalUrl,
   pediatricsData,
   pediatricsModuleActive = false,
   perioData,
@@ -613,6 +610,19 @@ export function PatientDetailClient({
   const color    = avatarColor(patient.id);
   const nextAppt = appointments.find(a => new Date(a.date) >= new Date() && !["CANCELLED","NO_SHOW"].includes(a.status));
   const lastAppt = appointments.find(a => new Date(a.date) < new Date() && a.status === "COMPLETED");
+  // Derivamos totales del state local `invoices` para que el card "Finanzas"
+  // y el sidebar "Estado de cuenta" reflejen mutaciones (cobrar/cancelar/
+  // editar/reembolsar) sin esperar al re-fetch del server component.
+  const { totalPlan, totalPaid, totalBalance } = useMemo(() => {
+    return (invoices as any[]).reduce(
+      (acc, inv) => ({
+        totalPlan:    acc.totalPlan    + (inv.total   ?? 0),
+        totalPaid:    acc.totalPaid    + (inv.paid    ?? 0),
+        totalBalance: acc.totalBalance + (inv.balance ?? 0),
+      }),
+      { totalPlan: 0, totalPaid: 0, totalBalance: 0 },
+    );
+  }, [invoices]);
   const pctPaid  = totalPlan > 0 ? Math.round((totalPaid / totalPlan) * 100) : 0;
 
   function handleRecordSaved(record: any) {
