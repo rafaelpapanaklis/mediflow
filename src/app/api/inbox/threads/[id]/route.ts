@@ -119,9 +119,10 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    // No hay perm dedicado para delete; usamos inbox.send como gate de
-    // escritura. READONLY queda fuera, que es el objetivo.
-    const denied = denyIfMissingPermission(dbUser, "inbox.send");
+    // Permission dedicado para borrar threads. Por default solo
+    // SUPER_ADMIN y ADMIN lo tienen; DOCTOR y RECEPTIONIST pueden
+    // enviar (inbox.send) pero no borrar.
+    const denied = denyIfMissingPermission(dbUser, "inbox.delete");
     if (denied) return denied;
     await prisma.inboxThread.deleteMany({
       where: { id: params.id, clinicId: dbUser.clinicId },
