@@ -27,11 +27,20 @@ export default async function ChurnPage() {
     const d = new Date(c.trialEndsAt);
     return d > now && d < next3;
   });
-  const inactiveTrial = allClinics.filter(c => {
-    const isTrial = c.trialEndsAt && new Date(c.trialEndsAt) > now;
-    const last    = c.users[0]?.lastLogin;
-    return isTrial && (!last || new Date(last) < prev7);
-  });
+  const inactiveTrial = allClinics
+    .filter(c => {
+      const isTrial = c.trialEndsAt && new Date(c.trialEndsAt) > now;
+      const last    = c.users[0]?.lastLogin;
+      return isTrial && (!last || new Date(last) < prev7);
+    })
+    // Orden determinista: el trial mas proximo a vencer arriba; tiebreaker
+    // por createdAt desc para que renders consecutivos sean estables.
+    .sort((a, b) => {
+      const ta = a.trialEndsAt ? new Date(a.trialEndsAt).getTime() : Infinity;
+      const tb = b.trialEndsAt ? new Date(b.trialEndsAt).getTime() : Infinity;
+      if (ta !== tb) return ta - tb;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
 
   function Section({
     title,
