@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   DndContext,
@@ -26,13 +26,14 @@ import { AgendaListView } from "@/components/dashboard/agenda/agenda-list-view";
 import { AgendaMonthView } from "@/components/dashboard/agenda/agenda-month-view";
 import { AgendaWeekView } from "@/components/dashboard/agenda/agenda-week-view";
 import { AgendaResourcesModal } from "@/components/dashboard/agenda/agenda-resources-modal";
+import { AgendaRescheduleConfirmModal } from "@/components/dashboard/agenda/agenda-reschedule-confirm-modal";
 import { AgendaValidateBanner } from "@/components/dashboard/agenda/agenda-validate-banner";
 import { AgendaWaitlistSidebar } from "@/components/dashboard/agenda/agenda-waitlist-sidebar";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { slotIndexToUtc } from "@/lib/agenda/time-utils";
 import { updateWaitlist, type ApiError } from "@/lib/agenda/mutations";
-import { describeOverlapConflict, describeResourceUnavailable } from "@/lib/agenda/conflict-copy";
+import { describeOverlapConflict } from "@/lib/agenda/conflict-copy";
 import {
   detectOverlap,
   recomputeTimes,
@@ -43,6 +44,7 @@ import { rescheduleAppointment } from "@/lib/agenda/mutations";
 import {
   RESOURCE_KIND_LABELS,
   TREATMENT_KINDS,
+  type AgendaAppointmentDTO,
   type AgendaDayResponse,
 } from "@/lib/agenda/types";
 import styles from "@/components/dashboard/agenda/agenda.module.css";
@@ -96,14 +98,16 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
   const detailOpen = state.selectedAppointmentId !== null;
 
   const [dragOverlap, setDragOverlap] = useState<DragOverlapState>({ overId: null, mode: null });
-  /** Timer de undo activo (toast id + timeout). */
-  const undoTimerRef = useRef<{ toastId: string; timeoutId: ReturnType<typeof setTimeout> } | null>(null);
-  useEffect(() => () => {
-    if (undoTimerRef.current) {
-      clearTimeout(undoTimerRef.current.timeoutId);
-      toast.dismiss(undoTimerRef.current.toastId);
-    }
-  }, []);
+  const [pendingReschedule, setPendingReschedule] = useState<{
+    original: AgendaAppointmentDTO;
+    newStartsAt: string;
+    newEndsAt: string;
+    newDoctorId: string | null;
+    newResourceId: string | null;
+    toDayISO: string;
+    doctorName: string;
+  } | null>(null);
+  const [rescheduling, setRescheduling] = useState(false);
 
   const handleDragStart = useCallback((_e: DragStartEvent) => {
     setDragOverlap({ overId: null, mode: null });
@@ -284,125 +288,18 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
         return;
       }
 
-      const optimisticDoctorId = newDoctorId ?? currentDoctorId ?? "";
-      dispatch({
-        type: "OPTIMISTIC_RESCHEDULE",
-        id: original.id,
-        doctorId: optimisticDoctorId,
-        resourceId: newResourceId,
-        startsAt: result.startsAt,
-        endsAt: result.endsAt,
+      const doctor = state.doctors.find((d) => d.id === (newDoctorId ?? currentDoctorId));
+      const doctorName = doctor?.shortName ?? doctor?.displayName ?? "Doctor";
+
+      setPendingReschedule({
+        original,
+        newStartsAt: result.startsAt,
+        newEndsAt: result.endsAt,
+        newDoctorId,
+        newResourceId,
+        toDayISO,
+        doctorName,
       });
-
-      const apiPayload: {
-        startsAt: string;
-        endsAt: string;
-        doctorId?: string;
-        resourceId?: string | null;
-      } = {
-        startsAt: result.startsAt,
-        endsAt: result.endsAt,
-      };
-      if (newDoctorId !== currentDoctorId && newDoctorId) {
-        apiPayload.doctorId = newDoctorId;
-      }
-      if (newResourceId !== currentResourceId) {
-        apiPayload.resourceId = newResourceId;
-      }
-
-      rescheduleAppointment(original.id, apiPayload)
-        .then((updated) => {
-          dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
-
-          // Undo toast 5s (audit ajuste 3): permite revertir el reschedule
-          // sin abrir modal previo (commit optimista directo).
-          if (undoTimerRef.current) {
-            clearTimeout(undoTimerRef.current.timeoutId);
-            toast.dismiss(undoTimerRef.current.toastId);
-          }
-          const toastId = toast.success(
-            (t) => (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-                <span>Cita movida</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    toast.dismiss(t.id);
-                    if (undoTimerRef.current) {
-                      clearTimeout(undoTimerRef.current.timeoutId);
-                      undoTimerRef.current = null;
-                    }
-                    // Revertir
-                    dispatch({ type: "OPTIMISTIC_RESCHEDULE",
-                      id: original.id,
-                      doctorId: currentDoctorId ?? "",
-                      resourceId: currentResourceId,
-                      startsAt: original.startsAt,
-                      endsAt: original.endsAt ?? original.startsAt,
-                    });
-                    void rescheduleAppointment(original.id, {
-                      startsAt: original.startsAt,
-                      endsAt: original.endsAt ?? original.startsAt,
-                      doctorId: currentDoctorId !== updated.doctor?.id ? (currentDoctorId ?? undefined) : undefined,
-                      resourceId: currentResourceId !== updated.resourceId ? currentResourceId : undefined,
-                    })
-                      .then((reverted) => {
-                        dispatch({ type: "REPLACE_APPOINTMENT", appointment: reverted });
-                        toast.success("Cambio deshecho");
-                      })
-                      .catch(() => {
-                        dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
-                        toast.error("No se pudo deshacer");
-                      });
-                  }}
-                  style={{
-                    background: "transparent",
-                    border: "1px solid currentColor",
-                    color: "inherit",
-                    padding: "2px 10px",
-                    borderRadius: 6,
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  Deshacer
-                </button>
-              </span>
-            ),
-            { duration: 5000 },
-          );
-          const timeoutId = setTimeout(() => {
-            // Tras 5s, sincronizamos con el server por si otros viewers
-            // tienen datos stale.
-            if (toDayISO !== state.dayISO) setDay(toDayISO);
-            else router.refresh();
-            undoTimerRef.current = null;
-          }, 5000);
-          undoTimerRef.current = { toastId, timeoutId };
-        })
-        .catch((err: ApiError) => {
-          dispatch({ type: "ROLLBACK_RESCHEDULE", original });
-          if (err?.error === "appointment_overlap") {
-            toast.error(
-              describeOverlapConflict(err.conflictingAppointment, {
-                doctorId: optimisticDoctorId,
-                resourceId: newResourceId,
-              }),
-            );
-          } else if (err?.error === "resource_unavailable") {
-            const resourceName =
-              state.resources.find((r) => r.id === newResourceId)?.name ?? null;
-            toast.error(
-              describeResourceUnavailable(
-                err.reason as "outside_schedule" | "resource_closed_this_day" | undefined,
-                resourceName,
-              ),
-            );
-          } else {
-            toast.error(err?.reason ?? err?.error ?? "No se pudo reagendar");
-          }
-        });
     },
     [
       state.appointments,
@@ -411,12 +308,64 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
       state.dayStart,
       state.slotMinutes,
       state.timezone,
-      dispatch,
-      setDay,
-      router,
+      state.doctors,
       openNewAppointment,
+      router,
     ],
   );
+
+  const handleConfirmReschedule = useCallback(async () => {
+    if (!pendingReschedule || rescheduling) return;
+    const { original, newStartsAt, newEndsAt, newDoctorId, newResourceId, toDayISO } = pendingReschedule;
+    setRescheduling(true);
+
+    const currentDoctorId = original.doctor?.id ?? null;
+    const currentResourceId = original.resourceId;
+    const optimisticDoctorId = newDoctorId ?? currentDoctorId ?? "";
+
+    dispatch({
+      type: "OPTIMISTIC_RESCHEDULE",
+      id: original.id,
+      doctorId: optimisticDoctorId,
+      resourceId: newResourceId,
+      startsAt: newStartsAt,
+      endsAt: newEndsAt,
+    });
+
+    const apiPayload: { startsAt: string; endsAt: string; doctorId?: string; resourceId?: string | null } = {
+      startsAt: newStartsAt,
+      endsAt: newEndsAt,
+    };
+    if (newDoctorId !== currentDoctorId && newDoctorId) apiPayload.doctorId = newDoctorId;
+    if (newResourceId !== currentResourceId) apiPayload.resourceId = newResourceId;
+
+    try {
+      const updated = await rescheduleAppointment(original.id, apiPayload);
+      dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
+      toast.success("Cita reprogramada");
+      setPendingReschedule(null);
+      if (toDayISO !== state.dayISO) setDay(toDayISO);
+      else router.refresh();
+    } catch (err) {
+      dispatch({ type: "ROLLBACK_RESCHEDULE", original });
+      const apiErr = err as ApiError;
+      if (apiErr?.error === "appointment_overlap") {
+        toast.error(describeOverlapConflict(apiErr.conflictingAppointment, {
+          doctorId: optimisticDoctorId,
+          resourceId: newResourceId,
+        }));
+      } else {
+        toast.error("No se pudo reprogramar la cita");
+      }
+    } finally {
+      setRescheduling(false);
+    }
+  }, [pendingReschedule, rescheduling, dispatch, state.dayISO, setDay, router]);
+
+  const handleCancelReschedule = useCallback(() => {
+    if (rescheduling) return;
+    setPendingReschedule(null);
+  }, [rescheduling]);
 
   const body = (
     <div className={styles.body}>
@@ -481,6 +430,18 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
       </DragOverlapContext.Provider>
       <AgendaDetailPanel />
       <AgendaResourcesModal />
+      {pendingReschedule && (
+        <AgendaRescheduleConfirmModal
+          open={true}
+          doctorName={pendingReschedule.doctorName}
+          originalStartsAt={pendingReschedule.original.startsAt}
+          newStartsAt={pendingReschedule.newStartsAt}
+          timezone={state.timezone}
+          submitting={rescheduling}
+          onConfirm={handleConfirmReschedule}
+          onCancel={handleCancelReschedule}
+        />
+      )}
       {highlightId && <AgendaHighlightListener highlightId={highlightId} />}
     </div>
   );
