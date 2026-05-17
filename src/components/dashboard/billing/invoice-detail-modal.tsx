@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { Printer, FileText, CreditCard, CheckCircle2, Pencil, Tag, XCircle, Undo2, Trash2, Send } from "lucide-react";
+import { Printer, FileText, CreditCard, CheckCircle2, Pencil, Tag, XCircle, Undo2, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -145,10 +145,6 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
     await callApi("/edit-price", "POST", { discount }, "Descuento aplicado");
   }
 
-  async function handleConfirmDraft() {
-    await callApi("/confirm", "POST", undefined, "Factura emitida");
-  }
-
   // "Cobrar ahora" sobre un DRAFT: confirma el borrador (DRAFT → PENDING) y
   // abre el PaymentModal inmediatamente. El snapshot local del invoice
   // queda DRAFT pero el server ya está PENDING, así que el POST de payment
@@ -284,10 +280,6 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
               <>
                 <Button onClick={handleConfirmAndPay} disabled={busy}>
                   <CreditCard size={14} aria-hidden /> Cobrar ahora · {formatCurrency(invoice.total)}
-                </Button>
-                <Button variant="outline" onClick={handleConfirmDraft} disabled={busy}
-                  className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40">
-                  <Send size={14} aria-hidden /> Confirmar / Emitir
                 </Button>
                 <Button variant="outline" onClick={() => openSub("edit-price")} disabled={busy}>
                   <Pencil size={14} aria-hidden /> Editar precio
