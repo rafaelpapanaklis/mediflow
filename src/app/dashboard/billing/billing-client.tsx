@@ -11,7 +11,6 @@ import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { fmtMXN, fmtMXNdec, formatRelativeDate } from "@/lib/format";
-import { useConfirm } from "@/components/ui/confirm-dialog";
 import { PaymentModal, type PaymentInvoice } from "@/components/dashboard/billing/payment-modal";
 import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
 
@@ -48,7 +47,6 @@ function patientNameOf(inv: any): string {
 }
 
 export function BillingClient({ invoices: initial, patients, totalPaid, totalPending, totalOverdue, monthInvoices, clinic }: Props) {
-  const askConfirm = useConfirm();
   const router = useRouter();
   const [invoices, setInvoices] = useState(initial);
   const [search, setSearch]     = useState("");
@@ -131,40 +129,6 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
       toast.error(err.message ?? "Error al crear factura");
     } finally {
       setLoadingNew(false);
-    }
-  }
-
-  async function confirmDraft(invoiceId: string) {
-    try {
-      const res = await fetch(`/api/invoices/${invoiceId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "PENDING" }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error);
-      setInvoices(prev => prev.map(i => i.id === invoiceId ? { ...i, status: "PENDING" } : i));
-      toast.success("Factura confirmada — ya puedes registrar pagos");
-      refresh();
-    } catch (err: any) {
-      toast.error(err.message ?? "Error al confirmar factura");
-    }
-  }
-
-  async function deleteDraft(invoiceId: string) {
-    if (!(await askConfirm({
-      title: "¿Eliminar factura borrador?",
-      description: "El borrador se quitará permanentemente. No afecta facturas timbradas.",
-      variant: "danger",
-      confirmText: "Eliminar",
-    }))) return;
-    try {
-      const res = await fetch(`/api/invoices/${invoiceId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error((await res.json()).error);
-      setInvoices(prev => prev.filter(i => i.id !== invoiceId));
-      toast.success("Factura borrador eliminada");
-      refresh();
-    } catch (err: any) {
-      toast.error(err.message ?? "Error");
     }
   }
 
@@ -340,16 +304,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                       style={{ textAlign: "right", whiteSpace: "nowrap" }}
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {isDraft ? (
-                        <span style={{ display: "inline-flex", gap: 6 }}>
-                          <button type="button" onClick={() => confirmDraft(inv.id)} className="btn-new btn-new--ghost btn-new--sm" style={{ color: "var(--success)" }}>
-                            Confirmar
-                          </button>
-                          <button type="button" onClick={() => deleteDraft(inv.id)} className="btn-new btn-new--ghost btn-new--sm" style={{ color: "var(--danger)" }}>
-                            Eliminar
-                          </button>
-                        </span>
-                      ) : canPay ? (
+                      {canPay ? (
                         <button
                           type="button"
                           onClick={(e) => openPaymentForRow(e, inv)}
