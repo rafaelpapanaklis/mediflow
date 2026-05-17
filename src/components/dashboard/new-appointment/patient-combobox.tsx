@@ -116,7 +116,7 @@ export function PatientCombobox({ value, onChange }: Props) {
   }
 
   return (
-    <div ref={containerRef} style={{ position: "relative" }}>
+    <div ref={containerRef} style={{ position: "relative", display: "flex", flexDirection: "column" }}>
       <div className="search-field" style={{ width: "100%" }}>
         <Search size={14} aria-hidden />
         <input
@@ -138,6 +138,15 @@ export function PatientCombobox({ value, onChange }: Props) {
           <Loader2 size={12} className="animate-spin" style={{ color: "var(--text-3)" }} />
         )}
       </div>
+
+      <button
+        type="button"
+        onClick={triggerCreate}
+        style={inlineCreateBtnStyle}
+      >
+        <UserPlus size={12} aria-hidden />
+        <span>Crear paciente nuevo</span>
+      </button>
 
       {open && (query.trim().length >= 2 || hits.length > 0) && (
         <div
@@ -254,4 +263,21 @@ const itemStyle: React.CSSProperties = {
   border: "none",
   cursor: "pointer",
   fontFamily: "inherit",
+};
+
+const inlineCreateBtnStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  marginTop: 6,
+  padding: "6px 10px",
+  background: "transparent",
+  border: "1px dashed var(--border-soft)",
+  borderRadius: 8,
+  color: "var(--brand)",
+  fontSize: 12,
+  fontWeight: 500,
+  cursor: "pointer",
+  fontFamily: "inherit",
+  alignSelf: "flex-start",
 };

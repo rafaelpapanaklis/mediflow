@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
-import { X, Loader2, Video, Footprints, MessageCircle, AlertTriangle, Baby } from "lucide-react";
+import { X, Loader2, Video, Footprints, MessageCircle, AlertTriangle, Baby, Calendar, Stethoscope, UserPlus } from "lucide-react";
 import toast from "react-hot-toast";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { PatientCombobox } from "./patient-combobox";
@@ -56,6 +56,9 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
   const [slotIso, setSlotIso] = useState<string | null>(null);
   const [isTeleconsult, setIsTeleconsult] = useState(false);
   const [isWalkIn, setIsWalkIn] = useState(false);
+  const [isCita, setIsCita] = useState(false);
+  const [isCheckGeneral, setIsCheckGeneral] = useState(false);
+  const [isNewPatient, setIsNewPatient] = useState(false);
   const [notifyPatient, setNotifyPatient] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   // Pediatrics — context derivado del paciente seleccionado. Se hidrata
@@ -141,6 +144,9 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
     setReason(params?.initialReason ?? "");
     setIsTeleconsult(false);
     setIsWalkIn(false);
+    setIsCita(false);
+    setIsCheckGeneral(false);
+    setIsNewPatient(false);
     setSubmitting(false);
     setPediatricContext(null);
 
@@ -218,6 +224,13 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
     if (!slotIso) return toast.error("Selecciona un horario");
     if (!boot) return;
 
+    const typeChips = [
+      isCita && "Cita",
+      isCheckGeneral && "Check General",
+      isNewPatient && "Paciente Nuevo",
+    ].filter(Boolean).join(" / ");
+    const finalReason = [typeChips, reason.trim()].filter(Boolean).join(" — ") || null;
+
     const startsAt = new Date(slotIso);
     const endsAt = new Date(startsAt.getTime() + duration * 60_000);
 
@@ -233,7 +246,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
           resourceId: resourceId || null,
           startsAt: startsAt.toISOString(),
           endsAt: endsAt.toISOString(),
-          reason: reason.trim() || null,
+          reason: finalReason,
           isTeleconsult,
           isWalkIn,
           notifyPatient,
@@ -443,6 +456,9 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                 )}
 
                 <div style={togglesRowStyle}>
+                  <ToggleChip active={isCita} icon={<Calendar size={12} />} label="Cita" onClick={() => setIsCita((v) => !v)} />
+                  <ToggleChip active={isCheckGeneral} icon={<Stethoscope size={12} />} label="Check General" onClick={() => setIsCheckGeneral((v) => !v)} />
+                  <ToggleChip active={isNewPatient} icon={<UserPlus size={12} />} label="Paciente Nuevo" onClick={() => setIsNewPatient((v) => !v)} />
                   <ToggleChip
                     active={isTeleconsult}
                     icon={<Video size={12} />}
