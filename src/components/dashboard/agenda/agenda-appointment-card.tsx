@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { Video, Footprints, AlertTriangle, Check, ArrowRight } from "lucide-react";
 import { useDraggable } from "@dnd-kit/core";
@@ -86,6 +86,23 @@ export function AgendaAppointmentCard({
       data: dragData,
       disabled: dragDisabled,
     });
+
+  // Hora target durante el drag. Se calcula a partir del transform.y
+  // dividido por la altura de un slot (CSS var --mf-agenda-slot-h).
+  // Solo se calcula mientras isDragging para no recomputar en cada render.
+  const dragTargetTime = useMemo(() => {
+    if (!isDragging || !transform) return null;
+    if (typeof window === "undefined") return null;
+    const slotHeightStr = getComputedStyle(document.documentElement)
+      .getPropertyValue("--mf-agenda-slot-h")
+      .trim();
+    const slotHeightPx = parseFloat(slotHeightStr) || 30;
+    const deltaSlots = Math.round(transform.y / slotHeightPx);
+    const minutesDelta = deltaSlots * slotMinutes;
+    const originalDate = new Date(appointment.startsAt);
+    const newDate = new Date(originalDate.getTime() + minutesDelta * 60_000);
+    return formatTimeInTz(newDate.toISOString(), timezone);
+  }, [isDragging, transform, appointment.startsAt, slotMinutes, timezone]);
 
   // -1 = día calendario distinto en tz (cita ajena a esta columna).
   // Slots negativos = mismo día pero antes del agendaDayStart → los
@@ -247,6 +264,11 @@ export function AgendaAppointmentCard({
       {...listeners}
       {...attributes}
     >
+      {dragTargetTime && (
+        <div className={styles.apptDragHourBadge} aria-hidden>
+          {dragTargetTime}
+        </div>
+      )}
       <AgendaStatusPopover appointment={appointment} />
       {nextStep && (
         <button

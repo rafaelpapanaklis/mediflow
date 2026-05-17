@@ -86,7 +86,7 @@ export function useDragOverlap(droppableId: string): DragOverlapMode {
 }
 
 function AgendaShell({ highlightId }: { highlightId: string | null }) {
-  const { state, dispatch, setDay } = useAgenda();
+  const { state, dispatch, setDay, invalidateRangeCache } = useAgenda();
   const router = useRouter();
   const { open: openNewAppointment } = useNewAppointmentDialog();
 
@@ -342,10 +342,15 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
     try {
       const updated = await rescheduleAppointment(original.id, apiPayload);
       dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
+      // Invalida el cache SWR del provider para que volver a este dia o
+      // cambiar de vista no restaure la version pre-mutacion del cacheRef.
+      // NO llamamos router.refresh() porque vuelve a hidratar initialPayload
+      // antes de que revalidatePath del endpoint haya completado, y termina
+      // sobrescribiendo el optimistic con datos viejos (bug observado).
+      invalidateRangeCache();
       toast.success("Cita reprogramada");
       setPendingReschedule(null);
       if (toDayISO !== state.dayISO) setDay(toDayISO);
-      else router.refresh();
     } catch (err) {
       dispatch({ type: "ROLLBACK_RESCHEDULE", original });
       const apiErr = err as ApiError;
@@ -360,7 +365,7 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
     } finally {
       setRescheduling(false);
     }
-  }, [pendingReschedule, rescheduling, dispatch, state.dayISO, setDay, router]);
+  }, [pendingReschedule, rescheduling, dispatch, state.dayISO, setDay, invalidateRangeCache]);
 
   const handleCancelReschedule = useCallback(() => {
     if (rescheduling) return;

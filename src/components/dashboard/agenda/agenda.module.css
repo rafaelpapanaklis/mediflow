@@ -417,9 +417,9 @@
   border-radius: 6px;
   padding: 3px 7px;
   display: flex; flex-direction: column; gap: 1px;
-  background: color-mix(in srgb, var(--mf-doc-color, var(--brand)) 8%, var(--bg-elev));
-  border: 1px solid color-mix(in srgb, var(--mf-doc-color, var(--brand)) 25%, transparent);
-  border-left: 4px solid var(--mf-status-color, var(--brand));
+  background: color-mix(in srgb, var(--mf-doc-color, var(--brand)) 16%, var(--bg-elev));
+  border: 1px solid color-mix(in srgb, var(--mf-doc-color, var(--brand)) 45%, transparent);
+  border-left: 5px solid var(--mf-status-color, var(--brand));
   box-shadow: 0 1px 2px rgba(15,10,30,0.04);
   transition: box-shadow 0.15s, transform 0.15s;
   overflow: hidden;
@@ -470,26 +470,33 @@
   min-width: 0;
 }
 .apptDocAvatar {
-  width: 14px; height: 14px;
+  width: 16px; height: 16px;
   border-radius: 50%;
   background: var(--mf-doc-color, var(--brand));
   color: #fff;
-  font-size: 8px; font-weight: 700;
+  font-size: 9px; font-weight: 800;
   display: grid; place-items: center;
   flex-shrink: 0;
 }
 .apptTime {
   font-family: var(--font-jetbrains-mono, monospace);
-  font-size: 9px; font-weight: 600;
-  color: var(--mf-doc-color, var(--brand));
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-1);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+  letter-spacing: -0.02em;
 }
 .apptName {
-  font-size: 11px; font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
   color: var(--text-1);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  min-width: 0; flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+  letter-spacing: -0.01em;
 }
 .apptRow2 {
   display: flex; align-items: center; gap: 4px;
@@ -497,12 +504,42 @@
   white-space: nowrap; overflow: hidden;
 }
 .apptTreatment {
-  font-size: 9px; font-weight: 500;
-  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
   border-radius: 3px;
-  background: color-mix(in srgb, var(--mf-doc-color, var(--brand)) 10%, transparent);
-  color: var(--mf-doc-color, var(--brand));
+  background: color-mix(in srgb, var(--mf-doc-color, var(--brand)) 18%, transparent);
+  color: color-mix(in srgb, var(--mf-doc-color, var(--brand)) 80%, var(--text-1));
   white-space: nowrap;
+}
+.apptDragHourBadge {
+  position: absolute;
+  top: -24px;
+  left: -2px;
+  padding: 4px 10px;
+  background: var(--mf-doc-color, var(--brand));
+  color: #fff;
+  font-family: var(--font-jetbrains-mono, monospace);
+  font-size: 12px;
+  font-weight: 800;
+  border-radius: 5px;
+  white-space: nowrap;
+  z-index: 100;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(15, 10, 30, 0.35);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.apptDragHourBadge::after {
+  content: "";
+  position: absolute;
+  bottom: -4px;
+  left: 12px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid var(--mf-doc-color, var(--brand));
 }
 
 /* ─────── DETAIL PANEL ─────────────────────────────────────────────── */

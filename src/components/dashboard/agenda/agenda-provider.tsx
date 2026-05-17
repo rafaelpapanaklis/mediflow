@@ -53,6 +53,12 @@ interface AgendaContextValue {
    * Día/Semana/Mes/Lista para warmar el cache antes del click.
    */
   prefetchView: (mode: AgendaViewMode) => void;
+  /**
+   * Limpia el cache SWR de rangos. Necesario tras mutaciones optimistic
+   * (reschedule, status change) para que router.refresh() o navegacion
+   * posterior no restaure datos pre-mutacion desde el cache.
+   */
+  invalidateRangeCache: () => void;
 }
 
 interface CacheEntry {
@@ -271,6 +277,10 @@ export function AgendaProvider({
     void fetchRangeData(mode, state.dayISO, state.filters, { backgroundOnly: true });
   }, [fetchRangeData, state.dayISO, state.filters]);
 
+  const invalidateRangeCache = useCallback(() => {
+    cacheRef.current.clear();
+  }, []);
+
   const ctx = useMemo<AgendaContextValue>(
     () => ({
       state, dispatch,
@@ -278,8 +288,9 @@ export function AgendaProvider({
       setSearchQuery, selectAppointment,
       openModal, closeModal, toggleWaitlist, togglePendingPanel,
       setFilters, clearFilters, prefetchView,
+      invalidateRangeCache,
     }),
-    [state, setDay, setViewMode, setColumnMode, setSearchQuery, selectAppointment, openModal, closeModal, toggleWaitlist, togglePendingPanel, setFilters, clearFilters, prefetchView],
+    [state, setDay, setViewMode, setColumnMode, setSearchQuery, selectAppointment, openModal, closeModal, toggleWaitlist, togglePendingPanel, setFilters, clearFilters, prefetchView, invalidateRangeCache],
   );
 
   return <AgendaContext.Provider value={ctx}>{children}</AgendaContext.Provider>;
