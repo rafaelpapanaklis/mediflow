@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { hasPermission } from "@/lib/auth/permissions";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 
 export const dynamic = "force-dynamic";
@@ -129,4 +130,57 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   revalidateAfter("clinicalNotes");
   return NextResponse.json({ note: updated });
+}
+
+/**
+ * DELETE /api/clinical-notes/[id]
+ * Borra una nota SOAP. Solo notas DRAFT — SIGNED es inalterable por NOM-024.
+ * Sólo el doctor dueño o admins. Multi-tenant por clinicId.
+ * Cascada: diagnósticos CIE-10 (MedicalRecordDiagnosis) por FK; prescriptions
+ * quedan con medicalRecordId=NULL (SetNull configurado en PR #32).
+ */
+export async function DELETE(req: NextRequest, { params }: Params) {
+  const dbUser = await getDbUser();
+  if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  if (!hasPermission(dbUser.role, "medicalRecord.delete")) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  const existing = await prisma.medicalRecord.findFirst({
+    where: { id: params.id, clinicId: dbUser.clinicId },
+    select: { id: true, doctorId: true, patientId: true, specialtyData: true },
+  });
+  if (!existing) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+
+  const status = ((existing.specialtyData ?? {}) as Record<string, unknown>).status;
+  if (status === "SIGNED") {
+    return NextResponse.json(
+      { error: "Las notas firmadas no se pueden eliminar (NOM-024)" },
+      { status: 400 },
+    );
+  }
+
+  const isOwner = existing.doctorId === dbUser.id;
+  const isAdmin = dbUser.role === "ADMIN" || dbUser.role === "SUPER_ADMIN";
+  if (!isOwner && !isAdmin) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  await prisma.medicalRecord.delete({ where: { id: params.id } });
+
+  await logMutation({
+    req,
+    clinicId: dbUser.clinicId,
+    userId: dbUser.id,
+    entityType: "record",
+    entityId: params.id,
+    action: "delete",
+    before: { patientId: existing.patientId, doctorId: existing.doctorId, status },
+  });
+
+  revalidateAfter("clinicalNotes");
+  return NextResponse.json({ success: true });
 }
