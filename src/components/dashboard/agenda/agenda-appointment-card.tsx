@@ -112,14 +112,24 @@ export function AgendaAppointmentCard({
   // se posicionan según --mf-slot-start; la columna extiende su
   // height para acomodarlos.
   if (rawSlot === -1) return null;
-  const startSlot = Math.max(0, rawSlot);
 
   const startMs = new Date(appointment.startsAt).getTime();
   const endMs = appointment.endsAt
     ? new Date(appointment.endsAt).getTime()
     : startMs + slotMinutes * 60_000;
   const durationMin = Math.max(slotMinutes, (endMs - startMs) / 60_000);
-  const slotsSpan = Math.max(1, durationMin / slotMinutes);
+  const totalDurationSlots = Math.ceil(durationMin / slotMinutes);
+
+  // Cuando la cita empieza ANTES del dayStart, rawSlot es negativo.
+  // En ese caso clampear startSlot a 0 pero TAMBIEN acortar la duracion
+  // visible para que el cuadro no se extienda mas alla del fin real.
+  // El rawEndSlot absoluto desde dayStart =  rawSlot + totalDurationSlots.
+  const totalSlotsInDay = ((24 - dayStart) * 60) / slotMinutes;
+  const rawEndSlot = rawSlot + totalDurationSlots;
+  if (rawEndSlot <= 0) return null; // cita totalmente antes del dayStart
+  const startSlot = Math.max(0, rawSlot);
+  const endSlot = Math.min(totalSlotsInDay, rawEndSlot);
+  const slotsSpan = Math.max(1, endSlot - startSlot);
 
   const compact = slotsSpan <= 1.5;
 

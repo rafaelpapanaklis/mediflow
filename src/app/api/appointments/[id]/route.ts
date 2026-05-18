@@ -12,6 +12,7 @@ import { canOverrideOverlap } from "@/lib/agenda/transitions";
 import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
 import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { getTzParts } from "@/lib/agenda/time-utils";
 import type {
   AppointmentConflictError,
   AppointmentStatus,
@@ -22,6 +23,22 @@ const APPT_INCLUDE = {
   patient: { select: { id: true, firstName: true, lastName: true } },
   doctor:  { select: { id: true, firstName: true, lastName: true } },
 } as const;
+
+function isWithinClinicHours(
+  startsAt: Date,
+  endsAt: Date,
+  timezone: string,
+  dayStart: number,
+  dayEnd: number,
+): { ok: true } | { ok: false; reason: "before_open" | "after_close" } {
+  const s = getTzParts(startsAt, timezone);
+  const e = getTzParts(endsAt, timezone);
+  const startMin = s.hour * 60 + s.minute;
+  const endMin = e.hour * 60 + e.minute;
+  if (startMin < dayStart * 60) return { ok: false, reason: "before_open" };
+  if (endMin > dayEnd * 60) return { ok: false, reason: "after_close" };
+  return { ok: true };
+}
 
 // ═════════════════════════════════════════════════════════════════
 // PATCH /api/appointments/:id
@@ -114,6 +131,27 @@ export async function PATCH(
   }
   if (newEnds <= newStarts) {
     return NextResponse.json({ error: "invalid_duration" }, { status: 400 });
+  }
+
+  if (!body.overrideReason) {
+    const hoursCheck = isWithinClinicHours(
+      newStarts,
+      newEnds,
+      session.clinic.timezone,
+      session.clinic.agendaDayStart,
+      session.clinic.agendaDayEnd,
+    );
+    if (hoursCheck.ok === false) {
+      return NextResponse.json(
+        {
+          error: "outside_clinic_hours",
+          reason: hoursCheck.reason,
+          clinicDayStart: session.clinic.agendaDayStart,
+          clinicDayEnd: session.clinic.agendaDayEnd,
+        },
+        { status: 422 },
+      );
+    }
   }
 
   // Resource working-hours validation. Applies if the appointment ends up with
