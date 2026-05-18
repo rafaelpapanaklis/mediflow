@@ -17,6 +17,30 @@ const CATEGORIES = [
   { id:"DENTAL", label:"Odontología" },
   { id:"OTHER",  label:"Otra" },
 ];
+const TIMEZONES = [
+  { id: "America/Mexico_City",  label: "Ciudad de Mexico (GMT-6)" },
+  { id: "America/Cancun",       label: "Cancun / Quintana Roo (GMT-5)" },
+  { id: "America/Merida",       label: "Merida / Yucatan (GMT-6)" },
+  { id: "America/Monterrey",    label: "Monterrey (GMT-6)" },
+  { id: "America/Hermosillo",   label: "Hermosillo / Sonora (GMT-7)" },
+  { id: "America/Mazatlan",     label: "Mazatlan / Sinaloa (GMT-7)" },
+  { id: "America/Tijuana",      label: "Tijuana / BC (GMT-8)" },
+  { id: "America/Bogota",       label: "Bogota - Colombia (GMT-5)" },
+  { id: "America/Lima",         label: "Lima - Peru (GMT-5)" },
+  { id: "America/Guatemala",    label: "Guatemala (GMT-6)" },
+  { id: "America/Costa_Rica",   label: "Costa Rica (GMT-6)" },
+  { id: "America/Santo_Domingo",label: "Santo Domingo - RD (GMT-4)" },
+  { id: "America/Caracas",      label: "Caracas - Venezuela (GMT-4)" },
+  { id: "America/La_Paz",       label: "La Paz - Bolivia (GMT-4)" },
+  { id: "America/Asuncion",     label: "Asuncion - Paraguay (GMT-4)" },
+  { id: "America/Santiago",     label: "Santiago - Chile (GMT-4)" },
+  { id: "America/Buenos_Aires", label: "Buenos Aires - Argentina (GMT-3)" },
+  { id: "America/Montevideo",   label: "Montevideo - Uruguay (GMT-3)" },
+  { id: "America/Sao_Paulo",    label: "Sao Paulo - Brasil (GMT-3)" },
+  { id: "Europe/Madrid",        label: "Madrid - Espana (GMT+1)" },
+  { id: "America/New_York",     label: "New York - US Eastern (GMT-5)" },
+  { id: "America/Los_Angeles",  label: "Los Angeles - US Pacific (GMT-8)" },
+];
 const REGIMENES   = [
   { clave:"601", desc:"General de Ley Personas Morales" },
   { clave:"612", desc:"Personas Físicas con Actividades Empresariales y Profesionales" },
@@ -68,7 +92,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
     try {
       const res = await fetch("/api/clinic", {
         method: "PATCH", headers: { "Content-Type":"application/json" },
-        body: JSON.stringify({ name:clinic.name, city:clinic.city, phone:clinic.phone, email:clinic.email, address:clinic.address, description:clinic.description, isPublic, category:clinic.category, clues:clinic.clues })
+        body: JSON.stringify({ name:clinic.name, city:clinic.city, phone:clinic.phone, email:clinic.email, address:clinic.address, description:clinic.description, isPublic, category:clinic.category, clues:clinic.clues, timezone:clinic.timezone })
       });
       if (!res.ok) throw new Error();
       toast.success("Datos de la clínica actualizados");
@@ -223,6 +247,19 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               value={clinic.category ?? "OTHER"} onChange={e => setClinic((c: any) => ({ ...c, category: e.target.value }))}>
               {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
             </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Zona horaria</Label>
+            <select
+              className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
+              value={clinic.timezone ?? "America/Mexico_City"}
+              onChange={e => setClinic((c: any) => ({ ...c, timezone: e.target.value }))}
+            >
+              {TIMEZONES.map(tz => <option key={tz.id} value={tz.id}>{tz.label}</option>)}
+            </select>
+            <div className="text-[11px] text-muted-foreground">
+              Afecta todos los horarios visibles: agenda, citas, recordatorios. Tras guardar, recarga la pagina.
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5"><Label>Ciudad</Label><Input value={clinic.city ?? ""} onChange={e => setClinic((c: any) => ({ ...c, city: e.target.value }))} /></div>

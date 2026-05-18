@@ -40,6 +40,9 @@ export async function PATCH(req: NextRequest) {
     const clues = typeof body.clues === "string" ? body.clues.trim() : "";
     data.clues = clues.length === 0 ? null : clues.slice(0, 11);
   }
+  if (body.timezone !== undefined && typeof body.timezone === "string" && body.timezone.length > 0) {
+    data.timezone = body.timezone;
+  }
 
   const updated = await prisma.clinic.update({
     where: { id: dbUser.clinicId },
