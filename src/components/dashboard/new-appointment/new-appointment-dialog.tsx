@@ -12,7 +12,6 @@ import { todayInTz } from "@/lib/agenda/time-utils";
 import {
   DURATION_PRESETS_MIN,
   defaultDurationFor,
-  type DurationPresetMin,
 } from "@/lib/new-appointment/duration-presets";
 import type {
   AppointmentConflictError,
@@ -54,6 +53,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
   const [reason, setReason] = useState("");
   const [dateISO, setDateISO] = useState("");
   const [duration, setDuration] = useState(30);
+  const [customDurationInput, setCustomDurationInput] = useState("");
   const [slotIso, setSlotIso] = useState<string | null>(null);
   const [isTeleconsult, setIsTeleconsult] = useState(false);
   const [isWalkIn, setIsWalkIn] = useState(false);
@@ -425,7 +425,10 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                         <button
                           key={d}
                           type="button"
-                          onClick={() => setDuration(d)}
+                          onClick={() => {
+                            setDuration(d);
+                            setCustomDurationInput("");
+                          }}
                           style={{
                             ...durationChipStyle,
                             background: duration === d ? "var(--brand-soft)" : "transparent",
@@ -441,13 +444,10 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                         min={5}
                         max={480}
                         step={5}
-                        value={
-                          DURATION_PRESETS_MIN.includes(duration as DurationPresetMin)
-                            ? ""
-                            : duration
-                        }
+                        value={customDurationInput}
                         onChange={(e) => {
                           const raw = e.target.value;
+                          setCustomDurationInput(raw);
                           if (raw === "") return;
                           const n = parseInt(raw, 10);
                           if (!Number.isFinite(n)) return;
@@ -460,15 +460,9 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                           ...durationChipStyle,
                           width: 60,
                           textAlign: "center" as const,
-                          background: DURATION_PRESETS_MIN.includes(duration as DurationPresetMin)
-                            ? "transparent"
-                            : "var(--brand-soft)",
-                          borderColor: DURATION_PRESETS_MIN.includes(duration as DurationPresetMin)
-                            ? "var(--border-soft)"
-                            : "var(--border-brand)",
-                          color: DURATION_PRESETS_MIN.includes(duration as DurationPresetMin)
-                            ? "var(--text-2)"
-                            : "var(--trial-accent-calm)",
+                          background: customDurationInput.length > 0 ? "var(--brand-soft)" : "transparent",
+                          borderColor: customDurationInput.length > 0 ? "var(--border-brand)" : "var(--border-soft)",
+                          color: customDurationInput.length > 0 ? "var(--trial-accent-calm)" : "var(--text-2)",
                         }}
                       />
                     </div>
