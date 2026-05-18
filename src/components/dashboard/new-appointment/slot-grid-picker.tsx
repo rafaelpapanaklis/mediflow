@@ -74,6 +74,7 @@ export function SlotGridPicker({
     () => slotIndexToUtc(0, dateISO, config).getTime(),
     [dateISO, config],
   );
+  const nowMs = Date.now();
   const slotsNeeded = Math.max(1, Math.ceil(durationMin / config.slotMinutes));
 
   const occupiedDoctor = useMemo(
@@ -111,6 +112,8 @@ export function SlotGridPicker({
   }, [resourceId, resourceSchedule, dateISO, config]);
 
   const isSlotFree = (idx: number): boolean => {
+    const slotUtcMs = dayStartUtcMs + idx * config.slotMinutes * 60_000;
+    if (slotUtcMs <= nowMs) return false;
     for (let i = 0; i < slotsNeeded; i++) {
       const target = idx + i;
       if (target >= total) return false;
