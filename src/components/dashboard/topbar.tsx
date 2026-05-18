@@ -22,7 +22,6 @@ const ROUTE_LABELS: Record<string, string> = {
   "/dashboard/appointments":  "Agenda",
   "/dashboard/patients":      "Pacientes",
   "/dashboard/whatsapp":      "Mensajes",
-  "/dashboard/clinical":      "Expedientes",
   "/dashboard/ai-assistant":  "IA asistente",
   "/dashboard/xrays":         "Radiografías",
   "/dashboard/before-after":  "Antes/Después",

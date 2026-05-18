@@ -2,7 +2,7 @@
  * Centralized revalidatePath helper for endpoints that mutate cross-screen data.
  *
  * Why: many panel mutations affect data shown on several screens (a new doctor
- * shows up in /dashboard/team, /dashboard/agenda, /dashboard/clinical, sidebar
+ * shows up in /dashboard/team, /dashboard/agenda, sidebar
  * counts, etc.). Manually listing paths in each endpoint drifts over time as
  * new pages start consuming the same data. Centralizing the path lists keeps
  * endpoints consistent and makes "when a new page consumes X, add it here"
@@ -24,7 +24,6 @@ export const CACHE_GROUPS = {
   team: [
     "/dashboard/team",
     "/dashboard/agenda",
-    "/dashboard/clinical",
     "/dashboard/settings",
     "/dashboard",
   ],
@@ -42,7 +41,6 @@ export const CACHE_GROUPS = {
   ],
   patients: [
     "/dashboard/patients",
-    "/dashboard/clinical",
     "/dashboard/billing",
     "/dashboard/agenda",
   ],
@@ -70,7 +68,6 @@ export const CACHE_GROUPS = {
   ],
   inbox: ["/dashboard/inbox", "/dashboard"],
   clinicalNotes: [
-    "/dashboard/clinical",
     "/dashboard/patients",
   ],
   referrals: [

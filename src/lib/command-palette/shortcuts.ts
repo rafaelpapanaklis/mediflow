@@ -8,7 +8,6 @@ const GO_TO_MAP: Record<string, string> = {
   p: "/dashboard/patients",
   m: "/dashboard/whatsapp",
   f: "/dashboard/billing",
-  e: "/dashboard/clinical",
   r: "/dashboard/xrays",
   i: "/dashboard/ai-assistant",
   s: "/dashboard/settings",

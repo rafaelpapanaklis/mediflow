@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
-  Plus, Search, FileText, Bot, Calendar, Pill,
+  Plus, Search, Bot, Calendar, Pill,
   X, Clock, User, ChevronRight,
 } from "lucide-react";
 
@@ -43,7 +43,6 @@ function CommandPalette({ onClose, clinicId }: { onClose: () => void; clinicId: 
   const QUICK_LINKS = [
     { icon:"📅", label:"Agenda de hoy",      path:"/dashboard/appointments" },
     { icon:"👥", label:"Pacientes",           path:"/dashboard/patients"     },
-    { icon:"📋", label:"Expedientes",         path:"/dashboard/clinical"     },
     { icon:"🤖", label:"Asistente IA",        path:"/dashboard/ai-assistant" },
     { icon:"📊", label:"Reportes",            path:"/dashboard/reports"      },
     { icon:"⚙️", label:"Configuración",       path:"/dashboard/settings"     },
@@ -171,12 +170,6 @@ export function QuickActionsBar({ currentUserId, clinicId, isAdmin }: QuickActio
       label: "Mi agenda",
       path: "/dashboard/appointments",
       onClick: () => router.push("/dashboard/appointments"),
-    },
-    {
-      icon: <FileText className="w-5 h-5" />,
-      label: "Expedientes",
-      path: "/dashboard/clinical",
-      onClick: () => router.push("/dashboard/clinical"),
     },
     {
       icon: <Bot className="w-5 h-5" />,
