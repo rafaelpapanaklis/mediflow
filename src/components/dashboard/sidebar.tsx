@@ -6,7 +6,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import {
   Home, Calendar, Users, MessageCircle, Inbox as InboxIcon,
-  Stethoscope, Sparkles, FileImage, Camera, FlaskConical, Dumbbell, Footprints,
+  Sparkles, FileImage, Camera, FlaskConical, Dumbbell, Footprints,
   Activity, Gift, DoorOpen, Package, Building2,
   CreditCard, BarChart3, Monitor, UserCog, Globe, ClipboardList, Settings,
   ShoppingBag, Baby, Zap, Smile, Anchor,
@@ -129,7 +129,6 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: "messages",     section: "workspace", label: "Mensajes",    href: "/dashboard/whatsapp",      icon: MessageCircle, countKey: "messagesUnread", permission: "whatsapp.view" },
   { id: "marketplace",  section: "workspace", label: "Marketplace", href: "/dashboard/marketplace",   icon: ShoppingBag,   permission: "marketplace.view" },
 
-  { id: "clinical",     section: "clinico", label: "Expedientes",  href: "/dashboard/clinical",     icon: Stethoscope, countKey: "clinicalDrafts", permission: "medicalRecord.view" },
   { id: "ai",           section: "clinico", label: "IA asistente", href: "/dashboard/ai-assistant", icon: Sparkles },
   { id: "xrays",        section: "clinico", label: "Radiografías", href: "/dashboard/xrays",
     icon: FileImage, countKey: "xraysUnanalyzed",

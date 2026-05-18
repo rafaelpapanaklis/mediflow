@@ -30,7 +30,6 @@ const SECTIONS: ShortcutSection[] = [
       { keys: ["G", "P"], label: "Pacientes" },
       { keys: ["G", "M"], label: "Mensajes" },
       { keys: ["G", "F"], label: "Facturación" },
-      { keys: ["G", "E"], label: "Expedientes" },
       { keys: ["G", "R"], label: "Radiografías" },
       { keys: ["G", "I"], label: "IA asistente" },
       { keys: ["G", "S"], label: "Configuración" },

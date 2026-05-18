@@ -120,7 +120,7 @@ export function HomeDoctor({ user, data }: Props) {
                 icon={FileText}
                 label={`nota${draftNotes === 1 ? "" : "s"} SOAP en borrador`}
                 count={draftNotes}
-                href="/dashboard/clinical?filter=draft"
+                href="/dashboard/patients"
                 ctaLabel="Completar"
                 tone="brand"
               />
@@ -136,7 +136,7 @@ export function HomeDoctor({ user, data }: Props) {
                 icon={FileSignature}
                 label={`consentimiento${unsignedConsents === 1 ? "" : "s"} sin firma`}
                 count={unsignedConsents}
-                href="/dashboard/clinical?filter=unsigned"
+                href="/dashboard/patients"
                 ctaLabel="Enviar firma digital"
                 tone="warning"
               />
