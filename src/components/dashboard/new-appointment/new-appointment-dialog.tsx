@@ -12,6 +12,7 @@ import { todayInTz } from "@/lib/agenda/time-utils";
 import {
   DURATION_PRESETS_MIN,
   defaultDurationFor,
+  type DurationPresetMin,
 } from "@/lib/new-appointment/duration-presets";
 import type {
   AppointmentConflictError,
@@ -435,6 +436,41 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                           {d}m
                         </button>
                       ))}
+                      <input
+                        type="number"
+                        min={5}
+                        max={480}
+                        step={5}
+                        value={
+                          DURATION_PRESETS_MIN.includes(duration as DurationPresetMin)
+                            ? ""
+                            : duration
+                        }
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === "") return;
+                          const n = parseInt(raw, 10);
+                          if (!Number.isFinite(n)) return;
+                          const clamped = Math.max(5, Math.min(480, n));
+                          setDuration(clamped);
+                        }}
+                        placeholder="min"
+                        aria-label="Duración personalizada en minutos"
+                        style={{
+                          ...durationChipStyle,
+                          width: 60,
+                          textAlign: "center" as const,
+                          background: DURATION_PRESETS_MIN.includes(duration as DurationPresetMin)
+                            ? "transparent"
+                            : "var(--brand-soft)",
+                          borderColor: DURATION_PRESETS_MIN.includes(duration as DurationPresetMin)
+                            ? "var(--border-soft)"
+                            : "var(--border-brand)",
+                          color: DURATION_PRESETS_MIN.includes(duration as DurationPresetMin)
+                            ? "var(--text-2)"
+                            : "var(--trial-accent-calm)",
+                        }}
+                      />
                     </div>
                   </Field>
                 </div>
