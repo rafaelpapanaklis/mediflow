@@ -11,13 +11,14 @@ import {
   CreditCard, BarChart3, Monitor, UserCog, Globe, ClipboardList, Settings,
   ShoppingBag, Baby, Zap, Smile, Anchor,
   ChevronDown, ChevronRight, Moon, Sun, LogOut, PanelLeftClose, PanelLeft,
-  X, type LucideIcon,
+  X, Plus, type LucideIcon,
 } from "lucide-react";
 import { useSidebarCounts } from "@/hooks/use-sidebar-counts";
 import { useActiveConsult } from "@/hooks/use-active-consult";
 import type { Role } from "@prisma/client";
 import { hasPermission, type PermissionKey } from "@/lib/auth/permissions";
 import { TrialSidebarStatus } from "@/components/dashboard/trial-sidebar-status";
+import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { PEDIATRICS_MODULE_KEY } from "@/lib/pediatrics/permissions";
 import { IMPLANTS_MODULE_KEY } from "@/lib/implants/permissions";
 import {
@@ -517,6 +518,17 @@ export function Sidebar(props: SidebarProps) {
     );
   };
 
+  const { open: openNewAppointment } = useNewAppointmentDialog();
+
+  const canCreateAppt = (() => {
+    if (props.user.role === "SUPER_ADMIN") return true;
+    const userForPerm = {
+      role: (props.user.role === "ACCOUNTANT" ? "READONLY" : props.user.role) as Role,
+      permissionsOverride: props.user.permissionsOverride ?? [],
+    };
+    return hasPermission(userForPerm, "agenda.create");
+  })();
+
   const sidebarInner = (
     <>
       <ClinicSwitcher
@@ -533,6 +545,91 @@ export function Sidebar(props: SidebarProps) {
           isInTrial={props.isInTrial ?? false}
           collapsed={collapsed}
         />
+      )}
+
+      {canCreateAppt && (
+        collapsed ? (
+          <Tooltip.Provider delayDuration={150}>
+            <Tooltip.Root>
+              <Tooltip.Trigger asChild>
+                <button
+                  type="button"
+                  onClick={() => openNewAppointment({ openAgendaAfter: true })}
+                  aria-label="Crear nueva cita"
+                  style={{
+                    margin: "8px auto 12px",
+                    width: 36,
+                    height: 36,
+                    display: "grid",
+                    placeItems: "center",
+                    background: "var(--brand)",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 8,
+                    cursor: "pointer",
+                    boxShadow: "0 4px 12px -2px color-mix(in srgb, var(--brand) 45%, transparent)",
+                    transition: "transform 0.12s, box-shadow 0.12s",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
+                >
+                  <Plus size={18} aria-hidden />
+                </button>
+              </Tooltip.Trigger>
+              <Tooltip.Portal>
+                <Tooltip.Content side="right" sideOffset={8} style={{
+                  background: "var(--bg-elev)",
+                  border: "1px solid var(--border-strong)",
+                  borderRadius: 6,
+                  padding: "4px 8px",
+                  fontSize: 11,
+                  fontWeight: 500,
+                  color: "var(--text-1)",
+                  boxShadow: "0 4px 12px rgba(15,10,30,0.15)",
+                  zIndex: 200,
+                }}>
+                  Nueva cita
+                </Tooltip.Content>
+              </Tooltip.Portal>
+            </Tooltip.Root>
+          </Tooltip.Provider>
+        ) : (
+          <button
+            type="button"
+            onClick={() => openNewAppointment({ openAgendaAfter: true })}
+            aria-label="Crear nueva cita"
+            style={{
+              margin: "10px 12px 14px",
+              padding: "9px 14px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              background: "var(--brand)",
+              color: "#fff",
+              border: "none",
+              borderRadius: 9,
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              letterSpacing: "-0.01em",
+              boxShadow: "0 4px 14px -2px color-mix(in srgb, var(--brand) 50%, transparent)",
+              transition: "transform 0.12s, box-shadow 0.12s, filter 0.12s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = "translateY(-1px)";
+              e.currentTarget.style.filter = "brightness(1.08)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.filter = "brightness(1)";
+            }}
+          >
+            <Plus size={15} aria-hidden />
+            Nueva cita
+          </button>
+        )
       )}
 
       <nav
