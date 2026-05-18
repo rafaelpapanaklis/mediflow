@@ -31,6 +31,7 @@ import { AgendaWaitlistSidebar } from "@/components/dashboard/agenda/agenda-wait
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { slotIndexToUtc } from "@/lib/agenda/time-utils";
+import { calendarDayISO } from "@/lib/agenda/date-ranges";
 import { updateWaitlist, type ApiError } from "@/lib/agenda/mutations";
 import { describeOverlapConflict, describeResourceUnavailable } from "@/lib/agenda/conflict-copy";
 import {
@@ -142,7 +143,7 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
         slotMinutes: state.slotMinutes,
         dayStart: state.dayStart,
         dayEnd: state.dayEnd,
-        fromDayISO: state.dayISO,
+        fromDayISO: calendarDayISO(original.startsAt, state.timezone),
         toDayISO,
         timezone: state.timezone,
       });
@@ -258,7 +259,7 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
         slotMinutes: state.slotMinutes,
         dayStart: state.dayStart,
         dayEnd: state.dayEnd,
-        fromDayISO: state.dayISO,
+        fromDayISO: calendarDayISO(original.startsAt, state.timezone),
         toDayISO,
         timezone: state.timezone,
       });
