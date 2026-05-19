@@ -110,7 +110,7 @@ export function QuickNav({
   const coreClinicalItems: NavItem[] = [
     { id: "resumen",    label: "Resumen",          icon: ClipboardList },
     { id: "historia",   label: "Historia clínica", icon: History, count: counts.historia },
-    { id: "expediente", label: "Nueva nota SOAP",  icon: Stethoscope },
+    { id: "expediente", label: "Nueva consulta",   icon: Stethoscope },
   ];
 
   // Especialidades — visibles según gating por módulo activo en la clínica.
