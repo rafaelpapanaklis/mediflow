@@ -20,7 +20,32 @@ export async function PATCH(req: NextRequest) {
   const dbUser = await getDbUser();
   if (!dbUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await req.json();
+  // SECURITY: solo admins pueden modificar configuracion de la clinica.
+  // RECEPTIONIST/DOCTOR no deben poder cambiar timezone/name/address.
+  if (dbUser.role !== "ADMIN" && dbUser.role !== "SUPER_ADMIN") {
+    return NextResponse.json(
+      { error: "Solo administradores pueden modificar la configuracion de la clinica" },
+      { status: 403 },
+    );
+  }
+
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
+  }
+
+  // Validar timezone IANA — string invalido tira Intl.DateTimeFormat con
+  // RangeError en cada render. Verificar antes de persistir.
+  if (body.timezone !== undefined) {
+    if (typeof body.timezone !== "string" || body.timezone.length === 0) {
+      return NextResponse.json({ error: "Zona horaria invalida" }, { status: 400 });
+    }
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: body.timezone });
+    } catch {
+      return NextResponse.json({ error: "Zona horaria no soportada (formato IANA)" }, { status: 400 });
+    }
+  }
 
   // Build update object — only update fields that were sent
   const data: Record<string, any> = {};

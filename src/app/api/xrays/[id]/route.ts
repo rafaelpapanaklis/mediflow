@@ -4,6 +4,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { logAudit } from "@/lib/audit";
+import { hasPermission } from "@/lib/auth/permissions";
 import { BUCKETS, extractStoragePath } from "@/lib/storage";
 
 /* ═══════════════════════════════════════════════════════════════════ */
@@ -74,6 +75,10 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  if (!hasPermission(ctx.role as any, "medicalRecord.delete")) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
   const file = await prisma.patientFile.findFirst({
     where: { id: params.id, clinicId: ctx.clinicId },
   });
@@ -96,5 +101,20 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   }
 
   await prisma.patientFile.deleteMany({ where: { id: params.id, clinicId: ctx.clinicId } });
+
+  await logAudit({
+    clinicId:   ctx.clinicId,
+    userId:     ctx.userId,
+    entityType: "patient-file",
+    entityId:   params.id,
+    action:     "delete",
+    changes: {
+      _deleted: {
+        before: { name: file.name, category: file.category, url: file.url },
+        after:  null,
+      },
+    },
+  });
+
   return NextResponse.json({ success: true });
 }

@@ -77,6 +77,19 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
+
+  // NOM-024: notas SIGNED son inalterables. Bloquear ANTES de owner check
+  // para evitar leak de existencia. Una nota firmada no debe poder modificarse
+  // por nadie (ni el doctor dueño, ni admin) — el equivalente PATCH del bloqueo
+  // que el handler DELETE ya implementa.
+  const currentStatus = ((existing.specialtyData ?? {}) as Record<string, unknown>).status;
+  if (currentStatus === "SIGNED") {
+    return NextResponse.json(
+      { error: "Las notas firmadas no se pueden editar (NOM-024 inalterable)" },
+      { status: 400 },
+    );
+  }
+
   // Sólo el doctor dueño o admins pueden editar.
   const isOwner = existing.doctorId === dbUser.id;
   const isAdmin = dbUser.role === "ADMIN" || dbUser.role === "SUPER_ADMIN";
@@ -96,7 +109,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const currentSpec = (existing.specialtyData ?? {}) as Record<string, unknown>;
   let nextSpec: Record<string, unknown> | undefined;
   if (parsed.data.specialtyData !== undefined) {
-    nextSpec = { ...currentSpec, ...parsed.data.specialtyData };
+    // SECURITY: strippear status/signedAt del payload para que solo el flujo
+    // controlado de parsed.data.status pueda mutar esos campos. Sin esto,
+    // un atacante con cookie valida puede forjar firmas retroactivas via
+    // specialtyData.{status,signedAt}.
+    const { status: _s, signedAt: _sa, ...safeSpec } =
+      parsed.data.specialtyData as Record<string, unknown>;
+    nextSpec = { ...currentSpec, ...safeSpec };
   }
   if (parsed.data.status !== undefined) {
     nextSpec = {
@@ -111,8 +130,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   // Capturamos before-state completo (los campos que pueden cambiar) para
   // diff confiable. La query existing arriba no incluye SOAP fields.
-  const beforeState = await prisma.medicalRecord.findUnique({
-    where: { id: params.id },
+  const beforeState = await prisma.medicalRecord.findFirst({
+    where: { id: params.id, clinicId: dbUser.clinicId },
     select: { subjective: true, objective: true, assessment: true, plan: true, specialtyData: true },
   });
 
