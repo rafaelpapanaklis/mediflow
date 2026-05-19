@@ -488,6 +488,66 @@ export function PatientDetailClient({
       toast.error(err.message ?? "Error al eliminar");
     }
   }
+
+  const [showNewTreatment, setShowNewTreatment] = useState(false);
+  const [savingTreatment, setSavingTreatment] = useState(false);
+  const [treatmentForm, setTreatmentForm] = useState({
+    doctorId: "",
+    name: "",
+    description: "",
+    totalSessions: "6",
+    sessionIntervalDays: "30",
+    totalCost: "",
+  });
+  useEffect(() => {
+    if (showNewTreatment) {
+      setTreatmentForm({
+        doctorId: doctors?.[0]?.id ?? "",
+        name: "",
+        description: "",
+        totalSessions: "6",
+        sessionIntervalDays: "30",
+        totalCost: "",
+      });
+    }
+  }, [showNewTreatment, doctors]);
+
+  async function handleCreateTreatment() {
+    if (!treatmentForm.name.trim()) {
+      toast.error("Ingresa un nombre para el plan");
+      return;
+    }
+    if (!treatmentForm.doctorId) {
+      toast.error("Selecciona un doctor");
+      return;
+    }
+    setSavingTreatment(true);
+    try {
+      const res = await fetch("/api/treatments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patientId: patient.id,
+          doctorId: treatmentForm.doctorId,
+          name: treatmentForm.name.trim(),
+          description: treatmentForm.description.trim() || null,
+          totalSessions: Math.max(1, Number(treatmentForm.totalSessions) || 1),
+          sessionIntervalDays: Math.max(1, Number(treatmentForm.sessionIntervalDays) || 30),
+          totalCost: Math.max(0, Number(treatmentForm.totalCost) || 0),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "No se pudo crear el plan");
+      toast.success("Plan de tratamiento creado");
+      setShowNewTreatment(false);
+      router.refresh();
+    } catch (err: any) {
+      toast.error(err.message ?? "Error al crear el plan");
+    } finally {
+      setSavingTreatment(false);
+    }
+  }
+
   const [treatmentsModal, setTreatmentsModal] = useState<{
     open: boolean;
     appointmentId: string;
@@ -2146,75 +2206,247 @@ export function PatientDetailClient({
           )}
 
           {/* ===== TAB: PLAN DE TRATAMIENTO ===== */}
-          {tab === "tratamiento" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-bold">Planes de tratamiento</h2>
-                <a href={`/dashboard/treatments?new=1&patientId=${patient.id}`} className="text-xs font-semibold text-brand-600 hover:underline">
-                  + Nuevo plan →
-                </a>
-              </div>
-              {treatments.length === 0 ? (
-                <div className="bg-card border border-border rounded-xl px-5 py-10 text-center text-muted-foreground">
-                  <div className="text-3xl mb-2">💊</div>
-                  <div className="text-sm font-semibold">Sin planes de tratamiento</div>
-                  <a href={`/dashboard/treatments?new=1&patientId=${patient.id}`} className="text-xs text-brand-600 hover:underline mt-1 block">
-                    Crear primer plan →
-                  </a>
+          {tab === "tratamiento" && (() => {
+            const pendingSessionsTotal = treatments
+              .filter((t: any) => t.status === "ACTIVE")
+              .reduce((acc: number, t: any) => acc + Math.max(0, (t.totalSessions || 0) - (t.sessions?.length || 0)), 0);
+            const activeCount = treatments.filter((t: any) => t.status === "ACTIVE").length;
+            const completedCount = treatments.filter((t: any) => t.status === "COMPLETED").length;
+
+            const COMMON_TREATMENTS = [
+              "Ortodoncia con brackets","Ortodoncia invisible","Implante dental",
+              "Rehabilitacion periodontal","Blanqueamiento dental","Tratamiento de conductos",
+              "Plan nutricional","Programa psicologico",
+            ];
+
+            return (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-bold">Tratamientos del paciente</h2>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewTreatment(true)}
+                    className="text-xs font-semibold bg-brand-600 text-white px-3 py-1.5 rounded-lg hover:bg-brand-700"
+                  >
+                    + Nuevo tratamiento
+                  </button>
                 </div>
-              ) : treatments.map((t: any) => {
-                const pct = t.totalSessions > 0 ? Math.round((t.sessions.length / t.totalSessions) * 100) : 0;
-                const STATUS_CFG: Record<string,{label:string;cls:string}> = {
-                  ACTIVE:    { label:"Activo",     cls:"bg-emerald-50 text-emerald-700 border-emerald-200" },
-                  COMPLETED: { label:"Completado", cls:"bg-muted text-muted-foreground border-border"      },
-                  ABANDONED: { label:"Abandonado", cls:"bg-rose-50 text-rose-700 border-rose-200"          },
-                  PAUSED:    { label:"Pausado",    cls:"bg-amber-50 text-amber-700 border-amber-200"       },
-                };
-                const cfg = STATUS_CFG[t.status] ?? STATUS_CFG.ACTIVE;
-                return (
-                  <div key={t.id} className="bg-card border border-border rounded-xl p-4">
-                    <div className="flex items-start justify-between gap-3 mb-3">
-                      <div>
-                        <div className="font-bold text-sm">{t.name}</div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          Dr/a. {t.doctor?.firstName} {t.doctor?.lastName}
+
+                {treatments.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="bg-brand-50 dark:bg-brand-950/30 border border-brand-200 dark:border-brand-800 rounded-xl p-3 text-center">
+                      <div className="text-xl font-bold text-brand-700 dark:text-brand-300">{pendingSessionsTotal}</div>
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground mt-0.5">Sesiones pendientes</div>
+                    </div>
+                    <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-center">
+                      <div className="text-xl font-bold text-emerald-700 dark:text-emerald-300">{activeCount}</div>
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground mt-0.5">Activos</div>
+                    </div>
+                    <div className="bg-muted border border-border rounded-xl p-3 text-center">
+                      <div className="text-xl font-bold text-muted-foreground">{completedCount}</div>
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground mt-0.5">Completados</div>
+                    </div>
+                  </div>
+                )}
+
+                {treatments.length === 0 ? (
+                  <div className="bg-card border border-border rounded-xl px-5 py-10 text-center text-muted-foreground">
+                    <div className="text-3xl mb-2">💊</div>
+                    <div className="text-sm font-semibold">Sin tratamientos registrados</div>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewTreatment(true)}
+                      className="text-xs text-brand-600 hover:underline mt-2 inline-block"
+                    >
+                      Crear primer tratamiento →
+                    </button>
+                  </div>
+                ) : treatments.map((t: any) => {
+                  const completed = t.sessions?.length ?? 0;
+                  const pct = t.totalSessions > 0 ? Math.round((completed / t.totalSessions) * 100) : 0;
+                  const pendingThis = Math.max(0, (t.totalSessions || 0) - completed);
+                  const STATUS_CFG: Record<string,{label:string;cls:string}> = {
+                    ACTIVE:    { label:"Activo",     cls:"bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800" },
+                    COMPLETED: { label:"Completado", cls:"bg-muted text-muted-foreground border-border" },
+                    ABANDONED: { label:"Abandonado", cls:"bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800" },
+                    PAUSED:    { label:"Pausado",    cls:"bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800" },
+                  };
+                  const cfg = STATUS_CFG[t.status] ?? STATUS_CFG.ACTIVE;
+                  return (
+                    <div key={t.id} className="bg-card border border-border rounded-xl p-4">
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div>
+                          <div className="font-bold text-sm">{t.name}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            Dr/a. {t.doctor?.firstName} {t.doctor?.lastName}
+                          </div>
+                          {t.description && (
+                            <div className="text-xs text-muted-foreground mt-1">{t.description}</div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${cfg.cls}`}>
+                            {cfg.label}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTreatment(t)}
+                            className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                            aria-label={`Eliminar plan ${t.name}`}
+                            title="Eliminar plan"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${cfg.cls}`}>
-                          {cfg.label}
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                          <div className="h-full bg-brand-500 rounded-full" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-xs font-bold text-muted-foreground">
+                          {completed}/{t.totalSessions}
                         </span>
+                      </div>
+                      <div className="flex gap-4 text-xs text-muted-foreground flex-wrap">
+                        <span>💰 {formatCurrency(t.totalCost)}</span>
+                        <span>📅 Cada {t.sessionIntervalDays} dias</span>
+                        {pendingThis > 0 && t.status === "ACTIVE" && (
+                          <span className="text-brand-600 dark:text-brand-400 font-semibold">⏳ {pendingThis} pendiente{pendingThis !== 1 ? "s" : ""}</span>
+                        )}
+                        {t.nextExpectedDate && (
+                          <span>⏰ Proxima: {new Date(t.nextExpectedDate).toLocaleDateString("es-MX",{day:"numeric",month:"short"})}</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {showNewTreatment && (
+                  <div
+                    style={{ position:"fixed", inset:0, background:"rgba(15,10,30,0.55)", backdropFilter:"blur(4px)", zIndex:80, display:"grid", placeItems:"center" }}
+                    onClick={() => !savingTreatment && setShowNewTreatment(false)}
+                  >
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      className="bg-card border border-border rounded-2xl w-[min(92vw,560px)] max-h-[90vh] overflow-auto"
+                    >
+                      <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+                        <h3 className="text-sm font-bold">Nuevo tratamiento para {patient.firstName} {patient.lastName}</h3>
                         <button
                           type="button"
-                          onClick={() => handleDeleteTreatment(t)}
-                          className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                          aria-label={`Eliminar plan ${t.name}`}
-                          title="Eliminar plan"
+                          onClick={() => !savingTreatment && setShowNewTreatment(false)}
+                          className="text-muted-foreground hover:text-foreground p-1"
+                          aria-label="Cerrar"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          ×
+                        </button>
+                      </div>
+                      <div className="p-5 space-y-3">
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Doctor</label>
+                          <select
+                            className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm"
+                            value={treatmentForm.doctorId}
+                            onChange={(e) => setTreatmentForm(f => ({ ...f, doctorId: e.target.value }))}
+                          >
+                            {(doctors ?? []).map((d: any) => (
+                              <option key={d.id} value={d.id}>Dr/a. {d.firstName} {d.lastName}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Nombre del tratamiento *</label>
+                          <input
+                            type="text"
+                            className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm"
+                            placeholder="Ej: Ortodoncia con brackets"
+                            value={treatmentForm.name}
+                            onChange={(e) => setTreatmentForm(f => ({ ...f, name: e.target.value }))}
+                          />
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {COMMON_TREATMENTS.slice(0, 5).map(t => (
+                              <button
+                                key={t}
+                                type="button"
+                                onClick={() => setTreatmentForm(f => ({ ...f, name: t }))}
+                                className="text-[10px] px-2 py-1 rounded-full border border-border bg-muted hover:bg-brand-50 hover:border-brand-300"
+                              >
+                                {t}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Descripcion (opcional)</label>
+                          <textarea
+                            className="flex w-full rounded-lg border border-border bg-card px-3 py-2 text-sm resize-none"
+                            rows={2}
+                            placeholder="Detalles del plan"
+                            value={treatmentForm.description}
+                            onChange={(e) => setTreatmentForm(f => ({ ...f, description: e.target.value }))}
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Total sesiones</label>
+                            <input
+                              type="number"
+                              min={1}
+                              max={100}
+                              className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm"
+                              value={treatmentForm.totalSessions}
+                              onChange={(e) => setTreatmentForm(f => ({ ...f, totalSessions: e.target.value }))}
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Dias entre sesiones</label>
+                            <input
+                              type="number"
+                              min={1}
+                              max={365}
+                              className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm"
+                              value={treatmentForm.sessionIntervalDays}
+                              onChange={(e) => setTreatmentForm(f => ({ ...f, sessionIntervalDays: e.target.value }))}
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Costo total (MXN)</label>
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm"
+                            placeholder="0.00"
+                            value={treatmentForm.totalCost}
+                            onChange={(e) => setTreatmentForm(f => ({ ...f, totalCost: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
+                        <button
+                          type="button"
+                          onClick={() => setShowNewTreatment(false)}
+                          disabled={savingTreatment}
+                          className="text-xs font-semibold border border-border px-4 py-2 rounded-lg hover:bg-muted disabled:opacity-50"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCreateTreatment}
+                          disabled={savingTreatment}
+                          className="text-xs font-semibold bg-brand-600 text-white px-4 py-2 rounded-lg hover:bg-brand-700 disabled:opacity-50"
+                        >
+                          {savingTreatment ? "Creando..." : "Crear tratamiento"}
                         </button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full bg-brand-500 rounded-full" style={{ width: `${pct}%` }} />
-                      </div>
-                      <span className="text-xs font-bold text-muted-foreground">
-                        {t.sessions.length}/{t.totalSessions} sesiones
-                      </span>
-                    </div>
-                    <div className="flex gap-4 text-xs text-muted-foreground">
-                      <span>💰 {formatCurrency(t.totalCost)}</span>
-                      <span>📅 Cada {t.sessionIntervalDays} días</span>
-                      {t.nextExpectedDate && (
-                        <span>⏰ Próxima: {new Date(t.nextExpectedDate).toLocaleDateString("es-MX",{day:"numeric",month:"short"})}</span>
-                      )}
-                    </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                )}
+              </div>
+            );
+          })()}
 
           {/* ===== TAB: CITAS ===== */}
           {/* ===== TAB: REFERENCIAS ===== */}
