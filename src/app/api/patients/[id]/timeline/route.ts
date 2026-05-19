@@ -96,7 +96,10 @@ export async function GET(req: NextRequest, { params }: Params) {
     wantAppt ? prisma.appointment.findMany({
       where: {
         clinicId: user.clinicId, patientId: params.id,
-        status: { in: ["COMPLETED", "CHECKED_OUT"] },
+        // Incluir TODAS las citas excepto canceladas/no-show, para que el
+        // historial muestre consultas previas (PENDING/SCHEDULED tambien
+        // si ya pasaron, ademas de COMPLETED/CHECKED_OUT).
+        status: { notIn: ["CANCELLED", "NO_SHOW"] },
         ...dateRange<"startsAt">("startsAt"),
       },
       select: {
@@ -181,12 +184,23 @@ export async function GET(req: NextRequest, { params }: Params) {
     });
   }
 
+  const APPT_STATUS_LABEL: Record<string, string> = {
+    COMPLETED: "completada",
+    CHECKED_OUT: "completada",
+    IN_PROGRESS: "en curso",
+    IN_CHAIR: "en consultorio",
+    CHECKED_IN: "registrada",
+    CONFIRMED: "confirmada",
+    SCHEDULED: "agendada",
+    PENDING: "pendiente",
+  };
   for (const a of apptRows) {
+    const statusLabel = APPT_STATUS_LABEL[a.status] ?? a.status.toLowerCase();
     events.push({
       id: `appt-${a.id}`,
       type: "appointment",
       date: a.startsAt.toISOString(),
-      title: "Cita completada",
+      title: `Cita ${statusLabel}`,
       summary: a.type ?? "Consulta",
       doctorName: a.doctor ? `Dr/a. ${a.doctor.firstName} ${a.doctor.lastName}` : null,
       meta: { entityId: a.id, status: a.status },

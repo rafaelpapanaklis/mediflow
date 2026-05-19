@@ -209,7 +209,7 @@ const TABS_BASE = [
   { id: "resumen",       label: "Resumen"             },
   { id: "historia",      label: "Historia clínica"     },
   { id: "odontograma",   label: "Odontograma"          },
-  { id: "expediente",    label: "Nueva consulta"       },
+  { id: "expediente",    label: "Nueva nota SOAP"      },
   { id: "evolucion",     label: "Notas SOAP"           },
   { id: "radiografias",  label: "Radiografías"         },
   { id: "tratamiento",   label: "Plan de tratamiento"  },
@@ -2150,7 +2150,7 @@ export function PatientDetailClient({
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold">Planes de tratamiento</h2>
-                <a href="/dashboard/treatments" className="text-xs font-semibold text-brand-600 hover:underline">
+                <a href={`/dashboard/treatments?new=1&patientId=${patient.id}`} className="text-xs font-semibold text-brand-600 hover:underline">
                   + Nuevo plan →
                 </a>
               </div>
@@ -2158,7 +2158,7 @@ export function PatientDetailClient({
                 <div className="bg-card border border-border rounded-xl px-5 py-10 text-center text-muted-foreground">
                   <div className="text-3xl mb-2">💊</div>
                   <div className="text-sm font-semibold">Sin planes de tratamiento</div>
-                  <a href="/dashboard/treatments" className="text-xs text-brand-600 hover:underline mt-1 block">
+                  <a href={`/dashboard/treatments?new=1&patientId=${patient.id}`} className="text-xs text-brand-600 hover:underline mt-1 block">
                     Crear primer plan →
                   </a>
                 </div>
