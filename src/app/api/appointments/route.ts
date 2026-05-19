@@ -81,8 +81,19 @@ export async function GET(req: NextRequest) {
   // del modal Nueva Cita para detectar conflictos de doctor/resource con
   // citas de otros doctores.
   const scope = sp.get("scope");
+  if (scope && scope !== "clinic") {
+    return NextResponse.json({ error: "invalid_scope" }, { status: 400 });
+  }
+  // SECURITY: scope=clinic permite ver todas las citas (necesario para
+  // SlotGridPicker que detecta conflictos cross-doctor). Solo permitido
+  // a roles administrativos. DOCTOR sigue scopeado a sus propias citas.
+  const canUseClinicScope =
+    session.user.role === "ADMIN" ||
+    session.user.role === "SUPER_ADMIN" ||
+    session.user.role === "RECEPTIONIST";
+  const effectiveScope = scope === "clinic" && canUseClinicScope ? "clinic" : null;
   const doctorIdScope =
-    scope === "clinic"
+    effectiveScope === "clinic"
       ? undefined
       : session.user.role === "DOCTOR"
       ? session.user.id
