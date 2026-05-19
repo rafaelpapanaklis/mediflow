@@ -37,17 +37,56 @@ type ToothSurfaces = Partial<Record<Surface, string>>;
 // Whole-tooth conditions (applied to entire tooth, not per-surface)
 const WHOLE_TOOTH_CONDITIONS = ["absent","extraction","implant","endo","crown"];
 
-interface Props { patientId: string; onSaved: (record: any) => void; isChild?: boolean }
+interface Props {
+  patientId: string;
+  onSaved: (record: any) => void;
+  isChild?: boolean;
+  /**
+   * Cuando se pasa un record existente, el form arranca en modo EDIT:
+   * pre-llena todos los campos con los datos del record y handleSave
+   * hace PATCH al record (no POST nuevo).
+   */
+  initialRecord?: {
+    id: string;
+    subjective: string | null;
+    objective: string | null;
+    assessment: string | null;
+    plan: string | null;
+    specialtyData?: any;
+  };
+}
 
-export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
+export function DentalForm({ patientId, onSaved, isChild = false, initialRecord }: Props) {
+  const isEditing = !!initialRecord;
+  const initialSpec = (initialRecord?.specialtyData ?? {}) as any;
   const [saving,     setSaving]     = useState(false);
   const [activeTool, setActiveTool] = useState<keyof typeof TOOTH_CONDITIONS>("caries");
   // NEW: per-surface odontogram — Record<toothNumber, { O?: condition, M?: condition, ... }>
-  const [odontogram, setOdontogram] = useState<Record<number, ToothSurfaces>>({});
+  const [odontogram, setOdontogram] = useState<Record<number, ToothSurfaces>>(() => {
+    const raw = initialSpec.odontogram as Record<string, ToothSurfaces> | undefined;
+    if (!raw) return {};
+    const result: Record<number, ToothSurfaces> = {};
+    for (const [k, v] of Object.entries(raw)) {
+      const n = Number(k);
+      if (!isNaN(n) && v) result[n] = v;
+    }
+    return result;
+  });
   const upperTeeth = isChild ? UPPER_PRIMARY : UPPER_TEETH;
   const lowerTeeth = isChild ? LOWER_PRIMARY : LOWER_TEETH;
   const [catalog, setCatalog] = useState<CatalogProcedure[]>([]);
-  const [selectedProcs, setSelectedProcs] = useState<SelectedProcedure[]>([]);
+  const [selectedProcs, setSelectedProcs] = useState<SelectedProcedure[]>(() => {
+    const raw = initialSpec.procedures;
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .filter((p: any) => p && typeof p === "object" && p.id && p.name)
+      .map((p: any) => ({
+        id: String(p.id),
+        name: String(p.name),
+        price: Number(p.price) || 0,
+        quantity: Number(p.quantity) || 1,
+      }));
+  });
   const [procSearch, setProcSearch] = useState("");
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null);
 
@@ -113,18 +152,18 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
     () => selectedProcs.reduce((sum, p) => sum + (p.price * p.quantity), 0),
     [selectedProcs]
   );
-  const [form, setForm] = useState({
-    subjective:  "",
-    objective:   "",
-    assessment:  "",
-    plan:        "",
-    periodontal: { plaque: "", calculus: "", gingival: "", pocketDepth: "", bleeding: false },
-    occlusal: { molarClass: "", bite: [] as string[], overbite: "", overjet: "" },
-    tmj: { opening: "", clicking: "", pain: "", guard: "" },
-    hygieneInstructions: [] as string[],
-    xrays:       "",
-    nextVisit:   "",
-  });
+  const [form, setForm] = useState(() => ({
+    subjective:  initialRecord?.subjective ?? "",
+    objective:   initialRecord?.objective ?? "",
+    assessment:  initialRecord?.assessment ?? "",
+    plan:        initialRecord?.plan ?? "",
+    periodontal: initialSpec.periodontal ?? { plaque: "", calculus: "", gingival: "", pocketDepth: "", bleeding: false },
+    occlusal:    initialSpec.occlusal ?? { molarClass: "", bite: [] as string[], overbite: "", overjet: "" },
+    tmj:         initialSpec.tmj ?? { opening: "", clicking: "", pain: "", guard: "" },
+    hygieneInstructions: Array.isArray(initialSpec.hygieneInstructions) ? initialSpec.hygieneInstructions : [],
+    xrays:       initialSpec.xrays ?? "",
+    nextVisit:   initialSpec.nextVisit ?? "",
+  }));
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
 
   function clickSurface(num: number, surface: Surface) {
@@ -170,40 +209,73 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
   }
 
   async function handleSave() {
-    if (!form.subjective && !form.assessment) { toast.error("Agrega al menos el motivo de consulta o diagnóstico"); return; }
+    if (!form.subjective && !form.assessment) {
+      toast.error("Agrega al menos el motivo de consulta o diagnóstico");
+      return;
+    }
     setSaving(true);
     try {
-      const res = await fetch("/api/clinical", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          patientId,
-          subjective: form.subjective, objective: form.objective,
-          assessment: form.assessment, plan: form.plan,
-          // When procedures have prices, also auto-create a draft invoice
-          autoInvoice: selectedProcs.length > 0,
-          specialtyData: {
-            type: "dental", odontogram,
-            procedures: selectedProcs, // array of {id, name, price, quantity}
-            proceduresTotal,
-            periodontal: form.periodontal,
-            occlusal: form.occlusal,
-            tmj: form.tmj,
-            hygieneInstructions: form.hygieneInstructions,
-            xrays: form.xrays, nextVisit: form.nextVisit,
-            // medications JSON legacy removidas — ahora se manejan vía
-            // /api/prescriptions con FK a CUMS desde PrescriptionModal.
-          },
-        }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error);
-      const record = await res.json();
-      onSaved(record);
-      if (selectedProcs.length > 0) {
-        toast.success(`✅ Expediente guardado y factura borrador creada por ${formatCurrency(proceduresTotal)}`);
+      const specialtyData = {
+        type: "dental",
+        odontogram,
+        procedures: selectedProcs,
+        proceduresTotal,
+        periodontal: form.periodontal,
+        occlusal: form.occlusal,
+        tmj: form.tmj,
+        hygieneInstructions: form.hygieneInstructions,
+        xrays: form.xrays,
+        nextVisit: form.nextVisit,
+      };
+
+      let record: any;
+      if (isEditing && initialRecord) {
+        // PATCH — actualiza el record existente. No incluye autoInvoice
+        // (la factura, si existia, ya se creo al crear la consulta original).
+        const res = await fetch(`/api/clinical-notes/${initialRecord.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subjective: form.subjective,
+            objective: form.objective,
+            assessment: form.assessment,
+            plan: form.plan,
+            specialtyData,
+          }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error ?? "Error al actualizar");
+        const body = await res.json();
+        record = body.note ?? body;
+        toast.success("Consulta actualizada");
       } else {
-        toast.success("Expediente dental guardado");
+        // POST — crea record nuevo. autoInvoice si hay procedimientos con precio.
+        const res = await fetch("/api/clinical", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            patientId,
+            subjective: form.subjective,
+            objective: form.objective,
+            assessment: form.assessment,
+            plan: form.plan,
+            autoInvoice: selectedProcs.length > 0,
+            specialtyData,
+          }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error ?? "Error al guardar");
+        record = await res.json();
+        if (selectedProcs.length > 0) {
+          toast.success(`✅ Expediente guardado y factura borrador creada por ${formatCurrency(proceduresTotal)}`);
+        } else {
+          toast.success("Expediente dental guardado");
+        }
       }
-    } catch (err: any) { toast.error(err.message ?? "Error al guardar"); } finally { setSaving(false); }
+      onSaved(record);
+    } catch (err: any) {
+      toast.error(err.message ?? (isEditing ? "Error al actualizar" : "Error al guardar"));
+    } finally {
+      setSaving(false);
+    }
   }
 
   /**
@@ -841,7 +913,9 @@ export function DentalForm({ patientId, onSaved, isChild = false }: Props) {
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
         <ButtonNew variant="primary" type="submit" disabled={saving}>
-          {saving ? "Guardando…" : "Guardar consulta"}
+          {saving
+            ? (isEditing ? "Guardando cambios…" : "Guardando…")
+            : (isEditing ? "Guardar cambios" : "Guardar consulta")}
         </ButtonNew>
       </div>
 
