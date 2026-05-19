@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Plus, ChevronRight, AlertTriangle, CheckCircle, Clock, X, Activity } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
@@ -56,6 +56,7 @@ interface Props {
 
 export function TreatmentsClient({ treatments: initial, patients, doctors, currentUserId, isAdmin, clinicSlug }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [treatments, setTreatments] = useState<Treatment[]>(initial);
   const [filter,     setFilter]     = useState<string>("ALL");
   const [showNew,    setShowNew]    = useState(false);
@@ -72,6 +73,25 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
     patientId: "", doctorId: currentUserId, name: "", description: "",
     totalSessions: "6", sessionIntervalDays: "30", totalCost: "",
   });
+
+  // Auto-open modal con patientId pre-llenado cuando se viene de
+  // /dashboard/patients/[id] tab Tratamiento boton "+ Nuevo plan".
+  // Limpia los query params tras consumir para no re-abrir en navegacion.
+  useEffect(() => {
+    const wantsNew = searchParams.get("new") === "1";
+    const patientIdParam = searchParams.get("patientId");
+    if (wantsNew) {
+      setShowNew(true);
+      if (patientIdParam) {
+        setForm((f) => ({ ...f, patientId: patientIdParam }));
+      }
+      // Limpiar URL sin recargar (replace history state).
+      const url = new URL(window.location.href);
+      url.searchParams.delete("new");
+      url.searchParams.delete("patientId");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [searchParams]);
 
   const now = new Date();
   const filtered = treatments.filter(t => {
