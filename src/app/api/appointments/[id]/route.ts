@@ -13,6 +13,10 @@ import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
 import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { getTzParts } from "@/lib/agenda/time-utils";
+import {
+  syncUpdateToGoogleCalendar,
+  syncDeleteFromGoogleCalendar,
+} from "@/lib/agenda/google-sync";
 import type {
   AppointmentConflictError,
   AppointmentStatus,
@@ -213,6 +217,31 @@ export async function PATCH(
       after: { startsAt: updated.startsAt, endsAt: updated.endsAt, doctorId: updated.doctorId, resourceId: updated.resourceId, type: updated.type, status: updated.status },
     });
 
+    // Google Calendar sync (best-effort)
+    try {
+      const updatedFull = await prisma.appointment.findUnique({
+        where: { id: params.id },
+        select: {
+          id: true, type: true, startsAt: true, endsAt: true, notes: true,
+          googleCalendarEventId: true,
+          patient: { select: { firstName: true, lastName: true } },
+          doctor:  { select: { firstName: true, lastName: true } },
+        },
+      });
+      if (updatedFull?.googleCalendarEventId) {
+        await syncUpdateToGoogleCalendar(session.clinic.id, updatedFull.googleCalendarEventId, {
+          id: updatedFull.id, type: updatedFull.type,
+          startsAt: updatedFull.startsAt, endsAt: updatedFull.endsAt,
+          notes: updatedFull.notes,
+          patientName: `${updatedFull.patient.firstName} ${updatedFull.patient.lastName}`,
+          doctorName: `${updatedFull.doctor.firstName} ${updatedFull.doctor.lastName}`,
+          doctorEmail: null,
+        });
+      }
+    } catch (err) {
+      console.error("GCal update wrapper error:", err);
+    }
+
     revalidateAfter("appointments");
     return NextResponse.json(
       { appointment: appointmentToDTO(updated, session.clinic.category) },
@@ -270,7 +299,7 @@ export async function DELETE(
 
   const existing = await prisma.appointment.findFirst({
     where: { id: params.id, clinicId: session.clinic.id },
-    select: { id: true, status: true, patientId: true, doctorId: true, startsAt: true },
+    select: { id: true, status: true, patientId: true, doctorId: true, startsAt: true, googleCalendarEventId: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -293,6 +322,20 @@ export async function DELETE(
     action: "delete",
     before: { status: existing.status, patientId: existing.patientId, doctorId: existing.doctorId, startsAt: existing.startsAt },
   });
+
+  // Google Calendar sync — borrar el evento del calendario si existia
+  try {
+    if (existing.googleCalendarEventId) {
+      await syncDeleteFromGoogleCalendar(session.clinic.id, existing.googleCalendarEventId);
+      // Limpiar el id para no reintentar si vuelven a llamar DELETE
+      await prisma.appointment.update({
+        where: { id: params.id },
+        data: { googleCalendarEventId: null },
+      });
+    }
+  } catch (err) {
+    console.error("GCal delete wrapper error:", err);
+  }
 
   revalidateAfter("appointments");
   return NextResponse.json({ ok: true });

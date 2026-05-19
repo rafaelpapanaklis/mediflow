@@ -25,6 +25,7 @@ import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
 import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
 import { logMutation } from "@/lib/audit";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { syncCreateToGoogleCalendar } from "@/lib/agenda/google-sync";
 import type {
   AgendaDayResponse,
   AppointmentConflictError,
@@ -282,6 +283,31 @@ export async function POST(req: NextRequest) {
       action: "create",
       after: { patientId: created.patientId, doctorId: created.doctorId, startsAt: created.startsAt, type: created.type, status: created.status },
     });
+
+    // Google Calendar sync (best-effort, no falla la creacion si Google falla)
+    try {
+      const fullAppt = await prisma.appointment.findUnique({
+        where: { id: created.id },
+        select: {
+          id: true, type: true, startsAt: true, endsAt: true, notes: true,
+          patient: { select: { firstName: true, lastName: true, email: true } },
+          doctor:  { select: { firstName: true, lastName: true, email: true } },
+        },
+      });
+      if (fullAppt) {
+        await syncCreateToGoogleCalendar(session.clinic.id, {
+          id: fullAppt.id, type: fullAppt.type,
+          startsAt: fullAppt.startsAt, endsAt: fullAppt.endsAt,
+          notes: fullAppt.notes,
+          patientName: `${fullAppt.patient.firstName} ${fullAppt.patient.lastName}`,
+          doctorName: `${fullAppt.doctor.firstName} ${fullAppt.doctor.lastName}`,
+          doctorEmail: fullAppt.doctor.email ?? null,
+          patientEmail: fullAppt.patient.email ?? null,
+        });
+      }
+    } catch (err) {
+      console.error("GCal sync wrapper error:", err);
+    }
 
     revalidateAfter("appointments");
     return NextResponse.json(
