@@ -17,6 +17,11 @@ const PatchSchema = z
     assessment: z.string().nullable().optional(),
     plan: z.string().nullable().optional(),
     status: z.enum(["DRAFT", "SIGNED"]).optional(),
+    // specialtyData: payload completo del form de especialidad
+    // (DentalForm.specialtyData con odontogram, procedures, periodontal,
+    // occlusal, tmj, hygieneInstructions, xrays, nextVisit, type).
+    // Se mergea con el existente para no perder campos no enviados.
+    specialtyData: z.record(z.any()).optional(),
   })
   .refine((v) => Object.keys(v).length > 0, "no fields to update");
 
@@ -85,13 +90,23 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (parsed.data.assessment !== undefined) data.assessment = parsed.data.assessment;
   if (parsed.data.plan !== undefined) data.plan = parsed.data.plan;
 
+  // Merge specialtyData: si viene specialtyData en el patch, hacer merge
+  // shallow con el existente para preservar status/signedAt/attachments.
+  // Si tambien viene status, ese tiene prioridad.
+  const currentSpec = (existing.specialtyData ?? {}) as Record<string, unknown>;
+  let nextSpec: Record<string, unknown> | undefined;
+  if (parsed.data.specialtyData !== undefined) {
+    nextSpec = { ...currentSpec, ...parsed.data.specialtyData };
+  }
   if (parsed.data.status !== undefined) {
-    const currentSpec = (existing.specialtyData ?? {}) as Record<string, unknown>;
-    data.specialtyData = {
-      ...currentSpec,
+    nextSpec = {
+      ...(nextSpec ?? currentSpec),
       status: parsed.data.status,
       ...(parsed.data.status === "SIGNED" ? { signedAt: new Date().toISOString() } : {}),
     };
+  }
+  if (nextSpec) {
+    data.specialtyData = nextSpec;
   }
 
   // Capturamos before-state completo (los campos que pueden cambiar) para

@@ -395,6 +395,16 @@ export function PatientDetailClient({
   const [consultPaused, setConsultPaused] = useState(false);
   const [consultClosed, setConsultClosed] = useState(false);
   const [noteDetailOpen, setNoteDetailOpen] = useState<ClinicalNote | null>(null);
+  const [expandedConsultas, setExpandedConsultas] = useState<Set<string>>(new Set());
+
+  function toggleConsulta(id: string) {
+    setExpandedConsultas(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
   const [invoiceDetailOpen, setInvoiceDetailOpen] = useState<any | null>(null);
   const [invoices, setInvoices] = useState(initialInvoices);
   useEffect(() => {
@@ -762,6 +772,15 @@ export function PatientDetailClient({
     toast.success("Expediente guardado");
     setTab("evolucion");
   }
+
+  const handleRecordUpdated = useCallback((updated: any) => {
+    setRecords(prev => prev.map(r => r.id === updated.id ? { ...r, ...updated } : r));
+    setExpandedConsultas(prev => {
+      const next = new Set(prev);
+      next.delete(updated.id);
+      return next;
+    });
+  }, []);
 
   async function createAppointment(e: React.FormEvent) {
     e.preventDefault();
@@ -2094,7 +2113,7 @@ export function PatientDetailClient({
 
           {/* ===== TAB: HISTORIAL DE CONSULTAS (expanded) ===== */}
           {tab === "historial-consultas" && (
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold">Historial de consultas — {records.length} total</h2>
                 <button
@@ -2117,42 +2136,11 @@ export function PatientDetailClient({
                   </button>
                 </div>
               ) : records.map((record: any, idx: number) => {
+                const isExpanded = expandedConsultas.has(record.id);
                 const noteStatus: "DRAFT" | "SIGNED" = record.specialtyData?.status ?? "DRAFT";
                 const isSigned = noteStatus === "SIGNED";
-                const sd = record.specialtyData ?? {};
-                const vitals = sd.vitals as Record<string, any> | undefined;
-                const anthro = sd.anthropometrics as Record<string, any> | undefined;
-                const scales = sd.scales as Record<string, any> | undefined;
-                const procedures = Array.isArray(sd.procedures) ? sd.procedures : [];
-                const medications = Array.isArray(sd.medications) ? sd.medications.filter((m: any) => m?.drug) : [];
-                const attachments = Array.isArray(sd.attachments) ? sd.attachments : [];
-                const icd10Legacy = Array.isArray(sd.icd10) ? sd.icd10 : [];
-                const odontogram = (sd.odontogram ?? {}) as Record<string, Record<string, string>>;
-                const odontogramTeeth = Object.entries(odontogram).filter(([_, surfaces]) =>
-                  surfaces && Object.values(surfaces).some(v => v)
-                );
-                const periodontal = sd.periodontal as Record<string, any> | undefined;
-                const occlusal = sd.occlusal as Record<string, any> | undefined;
-                const tmj = sd.tmj as Record<string, any> | undefined;
-                const hygieneInstructions = Array.isArray(sd.hygieneInstructions) ? sd.hygieneInstructions : [];
-                const xraysText = typeof sd.xrays === "string" ? sd.xrays : "";
-                const nextVisit = typeof sd.nextVisit === "string" ? sd.nextVisit : "";
-                const proceduresTotal = typeof sd.proceduresTotal === "number" ? sd.proceduresTotal : null;
-                const TOOTH_COLOR: Record<string, string> = {
-                  healthy: "bg-slate-100 text-slate-700 border-slate-300",
-                  caries: "bg-rose-100 text-rose-800 border-rose-300",
-                  restoration: "bg-blue-100 text-blue-800 border-blue-300",
-                  crown: "bg-amber-100 text-amber-800 border-amber-300",
-                  endo: "bg-violet-100 text-violet-800 border-violet-300",
-                  absent: "bg-slate-100 text-slate-500 border-slate-300",
-                  extraction: "bg-orange-100 text-orange-800 border-orange-300",
-                  implant: "bg-emerald-100 text-emerald-800 border-emerald-300",
-                };
-                const CONDITION_LABEL: Record<string, string> = {
-                  healthy: "Sano", caries: "Caries", restoration: "Restauracion",
-                  crown: "Corona", endo: "Endodoncia", absent: "Ausente",
-                  extraction: "Extraccion", implant: "Implante",
-                };
+                const specialtyType = record.specialtyData?.type ?? null;
+                const isDental = specialtyType === "dental" || currentSpecialty === "dental";
 
                 const visitDateLong = new Intl.DateTimeFormat("es-MX", {
                   day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
@@ -2160,282 +2148,71 @@ export function PatientDetailClient({
 
                 return (
                   <div key={record.id} className="bg-card border border-border rounded-xl overflow-hidden">
-                    <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border bg-muted/30">
+                    {/* Header colapsable */}
+                    <button
+                      type="button"
+                      onClick={() => toggleConsulta(record.id)}
+                      className="w-full flex items-center justify-between gap-3 px-5 py-3 border-b border-border bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+                      aria-expanded={isExpanded}
+                    >
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-blue-100 border-2 border-brand-500 flex items-center justify-center text-[10px] font-bold text-brand-700">
                           {records.length - idx}
                         </div>
                         <div>
-                          <div className="text-sm font-bold">{visitDateLong}</div>
+                          <div className="text-sm font-bold">Consulta · {visitDateLong}</div>
                           <div className="text-[11px] text-muted-foreground">
                             Dr/a. {record.doctor?.firstName} {record.doctor?.lastName}
                           </div>
                         </div>
                       </div>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                        isSigned
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800"
-                          : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800"
-                      }`}>
-                        {isSigned ? "Firmada" : "Borrador"}
-                      </span>
-                    </div>
+                      <div className="flex items-center gap-3">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                          isSigned
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800"
+                            : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800"
+                        }`}>
+                          {isSigned ? "Firmada" : "Borrador"}
+                        </span>
+                        <span className={`text-muted-foreground text-lg transition-transform ${isExpanded ? "rotate-180" : ""}`}>
+                          ⌄
+                        </span>
+                      </div>
+                    </button>
 
-                    <div className="p-5 space-y-3 text-xs">
-                      {record.subjective && (
-                        <section>
-                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-1">S — Subjetivo</h4>
-                          <p className="text-foreground whitespace-pre-line leading-relaxed">{record.subjective}</p>
-                        </section>
-                      )}
-                      {record.objective && (
-                        <section>
-                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-1">O — Objetivo</h4>
-                          <p className="text-foreground whitespace-pre-line leading-relaxed">{record.objective}</p>
-                        </section>
-                      )}
-                      {record.assessment && (
-                        <section>
-                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-1">A — Diagnostico (Assessment)</h4>
-                          <p className="text-foreground whitespace-pre-line leading-relaxed">{record.assessment}</p>
-                        </section>
-                      )}
-                      {record.plan && (
-                        <section>
-                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-1">P — Plan</h4>
-                          <p className="text-foreground whitespace-pre-line leading-relaxed">{record.plan}</p>
-                        </section>
-                      )}
-
-                      {vitals && Object.keys(vitals).length > 0 && (
-                        <section className="border-t border-border pt-3">
-                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Signos vitales</h4>
-                          <div className="grid grid-cols-3 gap-2">
-                            {Object.entries(vitals).filter(([_, v]) => v !== null && v !== "" && v !== undefined).map(([k, v]) => (
-                              <div key={k} className="bg-muted rounded-lg px-2 py-1.5">
-                                <div className="text-[10px] uppercase text-muted-foreground">{k}</div>
-                                <div className="font-mono font-bold">{String(v)}</div>
-                              </div>
-                            ))}
+                    {/* Body expandido: form completo con datos pre-llenados */}
+                    {isExpanded && (
+                      <div className="p-5 border-t border-border bg-background">
+                        {isDental ? (
+                          <DentalForm
+                            patientId={patient.id}
+                            isChild={!!patient.isChild}
+                            initialRecord={{
+                              id: record.id,
+                              subjective: record.subjective ?? null,
+                              objective: record.objective ?? null,
+                              assessment: record.assessment ?? null,
+                              plan: record.plan ?? null,
+                              specialtyData: record.specialtyData ?? {},
+                            }}
+                            onSaved={handleRecordUpdated}
+                          />
+                        ) : (
+                          <div className="bg-amber-50 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800 rounded-lg p-4 text-sm">
+                            <div className="font-semibold text-amber-800 dark:text-amber-300 mb-1">
+                              Edición no disponible para este tipo de consulta
+                            </div>
+                            <div className="text-xs text-amber-700 dark:text-amber-400">
+                              Solo las consultas dentales se pueden editar inline por ahora. Otros tipos (nutrición, psicología, medicina general) tendrán este flujo en próximos PRs.
+                            </div>
                           </div>
-                        </section>
-                      )}
+                        )}
+                      </div>
+                    )}
 
-                      {anthro && Object.keys(anthro).length > 0 && (
-                        <section className="border-t border-border pt-3">
-                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Antropometricos</h4>
-                          <div className="flex flex-wrap gap-2">
-                            {anthro.weight && <span className="bg-muted rounded-lg px-2 py-1">Peso: <strong>{anthro.weight}kg</strong></span>}
-                            {anthro.height && <span className="bg-muted rounded-lg px-2 py-1">Altura: <strong>{anthro.height}cm</strong></span>}
-                            {anthro.bmi && <span className="bg-muted rounded-lg px-2 py-1">IMC: <strong>{anthro.bmi}</strong></span>}
-                            {anthro.bodyFat && <span className="bg-muted rounded-lg px-2 py-1">Grasa: <strong>{anthro.bodyFat}%</strong></span>}
-                          </div>
-                        </section>
-                      )}
-
-                      {scales && Object.keys(scales).length > 0 && (
-                        <section className="border-t border-border pt-3">
-                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Escalas clinicas</h4>
-                          <div className="flex flex-wrap gap-2">
-                            {scales.phq9 && (
-                              <span className="bg-card border border-border rounded-lg px-2 py-1">
-                                PHQ-9: <strong>{scales.phq9.score}/27</strong> ({scales.phq9.severity})
-                              </span>
-                            )}
-                            {scales.gad7 && (
-                              <span className="bg-card border border-border rounded-lg px-2 py-1">
-                                GAD-7: <strong>{scales.gad7.score}/21</strong> ({scales.gad7.severity})
-                              </span>
-                            )}
-                            {scales.cambra && (
-                              <span className="bg-card border border-border rounded-lg px-2 py-1">
-                                CAMBRA: <strong>{scales.cambra.category}</strong>
-                              </span>
-                            )}
-                            {scales.frankl && (
-                              <span className="bg-card border border-border rounded-lg px-2 py-1">
-                                Frankl: <strong>{scales.frankl.score}</strong>
-                              </span>
-                            )}
-                          </div>
-                        </section>
-                      )}
-
-                      {procedures.length > 0 && (
-                        <section className="border-t border-border pt-3">
-                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Procedimientos ({procedures.length})</h4>
-                          <div className="flex flex-wrap gap-1.5">
-                            {procedures.map((p: any, i: number) => {
-                              const label = typeof p === "string" ? p : (p?.name ?? "Procedimiento");
-                              const tooth = typeof p === "object" && p?.tooth ? ` · Pieza #${p.tooth}` : "";
-                              const code = typeof p === "object" && p?.code ? ` (${p.code})` : "";
-                              return (
-                                <span key={i} className="text-[11px] font-semibold px-2 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800">
-                                  {label}{code}{tooth}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        </section>
-                      )}
-
-                      {medications.length > 0 && (
-                        <section className="border-t border-border pt-3">
-                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Medicamentos ({medications.length})</h4>
-                          <div className="space-y-1.5">
-                            {medications.map((m: any, i: number) => (
-                              <div key={i} className="bg-orange-50 border border-orange-200 dark:bg-orange-950/30 dark:border-orange-800 rounded-lg px-3 py-2 text-[11px]">
-                                <div className="font-bold text-orange-700 dark:text-orange-300">💊 {m.drug}</div>
-                                <div className="text-muted-foreground">
-                                  {m.dose && <span>{m.dose}</span>}
-                                  {m.frequency && <span> · {m.frequency}</span>}
-                                  {m.duration && <span> · por {m.duration}</span>}
-                                  {m.notes && <span> · {m.notes}</span>}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </section>
-                      )}
-
-                      {odontogramTeeth.length > 0 && (
-                        <section className="border-t border-border pt-3">
-                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Odontograma ({odontogramTeeth.length} piezas con hallazgos)</h4>
-                          <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
-                            {odontogramTeeth.map(([tooth, surfaces]) => {
-                              const surfaceEntries = Object.entries(surfaces).filter(([_, c]) => c);
-                              return (
-                                <div key={tooth} className="bg-muted rounded-lg px-2 py-1.5 border border-border">
-                                  <div className="font-mono font-bold text-[12px] mb-0.5">Pieza #{tooth}</div>
-                                  <div className="flex flex-wrap gap-1">
-                                    {surfaceEntries.map(([surface, condition]) => (
-                                      <span
-                                        key={surface}
-                                        className={`text-[10px] px-1.5 py-0.5 rounded border ${TOOTH_COLOR[condition as string] ?? "bg-muted"}`}
-                                        title={`${surface}: ${CONDITION_LABEL[condition as string] ?? condition}`}
-                                      >
-                                        {surface}: {CONDITION_LABEL[condition as string] ?? condition}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </section>
-                      )}
-
-                      {proceduresTotal !== null && proceduresTotal > 0 && (
-                        <section className="border-t border-border pt-3">
-                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Total procedimientos</h4>
-                          <div className="text-sm font-bold text-foreground">{formatCurrency(proceduresTotal)}</div>
-                        </section>
-                      )}
-
-                      {periodontal && Object.values(periodontal).some(v => v && v !== "" && v !== false) && (
-                        <section className="border-t border-border pt-3">
-                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Examen periodontal</h4>
-                          <div className="grid grid-cols-2 gap-2">
-                            {periodontal.plaque && <div className="bg-muted rounded-lg px-2 py-1"><span className="text-[10px] uppercase text-muted-foreground">Placa: </span><strong>{periodontal.plaque}</strong></div>}
-                            {periodontal.calculus && <div className="bg-muted rounded-lg px-2 py-1"><span className="text-[10px] uppercase text-muted-foreground">Calculo: </span><strong>{periodontal.calculus}</strong></div>}
-                            {periodontal.gingival && <div className="bg-muted rounded-lg px-2 py-1"><span className="text-[10px] uppercase text-muted-foreground">Gingival: </span><strong>{periodontal.gingival}</strong></div>}
-                            {periodontal.pocketDepth && <div className="bg-muted rounded-lg px-2 py-1"><span className="text-[10px] uppercase text-muted-foreground">Bolsa: </span><strong>{periodontal.pocketDepth}</strong></div>}
-                            {periodontal.bleeding && <div className="bg-rose-50 dark:bg-rose-950/30 rounded-lg px-2 py-1 col-span-2 text-rose-700 dark:text-rose-300"><strong>Sangrado al sondaje presente</strong></div>}
-                          </div>
-                        </section>
-                      )}
-
-                      {occlusal && (occlusal.molarClass || occlusal.overbite || occlusal.overjet || (Array.isArray(occlusal.bite) && occlusal.bite.length > 0)) && (
-                        <section className="border-t border-border pt-3">
-                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Oclusion</h4>
-                          <div className="flex flex-wrap gap-2">
-                            {occlusal.molarClass && <span className="bg-muted rounded-lg px-2 py-1">Clase molar: <strong>{occlusal.molarClass}</strong></span>}
-                            {occlusal.overbite && <span className="bg-muted rounded-lg px-2 py-1">Overbite: <strong>{occlusal.overbite}</strong></span>}
-                            {occlusal.overjet && <span className="bg-muted rounded-lg px-2 py-1">Overjet: <strong>{occlusal.overjet}</strong></span>}
-                            {Array.isArray(occlusal.bite) && occlusal.bite.map((b: string) => <span key={b} className="bg-muted rounded-lg px-2 py-1">{b}</span>)}
-                          </div>
-                        </section>
-                      )}
-
-                      {tmj && (tmj.opening || tmj.clicking || tmj.pain || tmj.guard) && (
-                        <section className="border-t border-border pt-3">
-                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">ATM (TMJ)</h4>
-                          <div className="grid grid-cols-2 gap-2">
-                            {tmj.opening && <div className="bg-muted rounded-lg px-2 py-1"><span className="text-[10px] uppercase text-muted-foreground">Apertura: </span><strong>{tmj.opening}</strong></div>}
-                            {tmj.clicking && <div className="bg-muted rounded-lg px-2 py-1"><span className="text-[10px] uppercase text-muted-foreground">Click: </span><strong>{tmj.clicking}</strong></div>}
-                            {tmj.pain && <div className="bg-muted rounded-lg px-2 py-1"><span className="text-[10px] uppercase text-muted-foreground">Dolor: </span><strong>{tmj.pain}</strong></div>}
-                            {tmj.guard && <div className="bg-muted rounded-lg px-2 py-1"><span className="text-[10px] uppercase text-muted-foreground">Guarda: </span><strong>{tmj.guard}</strong></div>}
-                          </div>
-                        </section>
-                      )}
-
-                      {hygieneInstructions.length > 0 && (
-                        <section className="border-t border-border pt-3">
-                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Instrucciones de higiene</h4>
-                          <ul className="list-disc list-inside space-y-0.5">
-                            {hygieneInstructions.map((h: string, i: number) => (
-                              <li key={i}>{h}</li>
-                            ))}
-                          </ul>
-                        </section>
-                      )}
-
-                      {xraysText && (
-                        <section className="border-t border-border pt-3">
-                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Radiografias</h4>
-                          <p className="whitespace-pre-line">{xraysText}</p>
-                        </section>
-                      )}
-
-                      {nextVisit && (
-                        <section className="border-t border-border pt-3">
-                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Proxima visita</h4>
-                          <p className="font-semibold text-brand-600 dark:text-brand-400">{nextVisit}</p>
-                        </section>
-                      )}
-
-                      {icd10Legacy.length > 0 && (
-                        <section className="border-t border-border pt-3">
-                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Diagnosticos CIE-10</h4>
-                          <ul className="space-y-1">
-                            {icd10Legacy.map((c: any, i: number) => (
-                              <li key={i} className="text-[11px]">
-                                <code className="font-mono font-bold">{c.code}</code> — {c.label}
-                              </li>
-                            ))}
-                          </ul>
-                        </section>
-                      )}
-
-                      {attachments.length > 0 && (
-                        <section className="border-t border-border pt-3">
-                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Adjuntos ({attachments.length})</h4>
-                          <div className="flex flex-wrap gap-2">
-                            {attachments.map((a: any) => (
-                              <a
-                                key={a.id}
-                                href={a.url ?? "#"}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[11px] px-2 py-1 rounded-lg border border-border bg-muted hover:bg-brand-50 hover:border-brand-300 flex items-center gap-1"
-                              >
-                                📎 {a.name}
-                              </a>
-                            ))}
-                          </div>
-                        </section>
-                      )}
-                    </div>
-
-                    <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border bg-muted/20">
-                      <button
-                        type="button"
-                        onClick={() => setNoteDetailOpen(record as ClinicalNote)}
-                        className="text-xs font-semibold text-brand-600 hover:underline"
-                      >
-                        Editar / Firmar
-                      </button>
-                      {(record.specialtyData?.status ?? "DRAFT") === "DRAFT" && (
+                    {/* Footer simple: solo eliminar borrador */}
+                    {!isExpanded && noteStatus === "DRAFT" && (
+                      <div className="flex items-center justify-end gap-2 px-5 py-2 border-t border-border bg-muted/20">
                         <button
                           type="button"
                           onClick={() => handleDeleteRecord(record)}
@@ -2443,8 +2220,8 @@ export function PatientDetailClient({
                         >
                           Eliminar borrador
                         </button>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
