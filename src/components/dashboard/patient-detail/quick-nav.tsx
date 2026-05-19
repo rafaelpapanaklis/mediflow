@@ -61,6 +61,7 @@ interface QuickNavProps {
   counts: {
     historia?: number;
     odontograma?: number;
+    historialConsultas?: number;
     evolucion?: number;
     radiografias?: number;
     tratamiento?: number;
@@ -111,6 +112,7 @@ export function QuickNav({
     { id: "resumen",    label: "Resumen",          icon: ClipboardList },
     { id: "historia",   label: "Historia clínica", icon: History, count: counts.historia },
     { id: "expediente", label: "Nueva consulta",   icon: Stethoscope },
+    { id: "historial-consultas", label: "Historial de consultas", icon: ClipboardList, count: counts.historialConsultas },
   ];
 
   // Especialidades — visibles según gating por módulo activo en la clínica.
