@@ -209,7 +209,7 @@ const TABS_BASE = [
   { id: "resumen",       label: "Resumen"             },
   { id: "historia",      label: "Historia clínica"     },
   { id: "odontograma",   label: "Odontograma"          },
-  { id: "expediente",    label: "Nueva nota SOAP"      },
+  { id: "expediente",    label: "Nueva consulta"       },
   { id: "evolucion",     label: "Notas SOAP"           },
   { id: "radiografias",  label: "Radiografías"         },
   { id: "tratamiento",   label: "Plan de tratamiento"  },
