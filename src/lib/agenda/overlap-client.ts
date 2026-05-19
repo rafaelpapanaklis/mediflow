@@ -106,9 +106,9 @@ export function buildOccupiedSlotSet(
     if (a.overrideReason) continue;
 
     const matchDoctor =
-      filter.doctorId == null || a.doctor?.id === filter.doctorId;
+      !filter.doctorId || a.doctor?.id === filter.doctorId;
     const matchResource =
-      filter.resourceId == null || a.resourceId === filter.resourceId;
+      !filter.resourceId || a.resourceId === filter.resourceId;
     if (!matchDoctor || !matchResource) continue;
 
     const aStartMs = new Date(a.startsAt).getTime();

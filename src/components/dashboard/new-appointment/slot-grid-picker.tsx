@@ -56,7 +56,7 @@ export function SlotGridPicker({
     if (!doctorId) return;
     setLoading(true);
     setDay({ appointments: [], loaded: false });
-    fetch(`/api/appointments?date=${dateISO}`, { credentials: "include" })
+    fetch(`/api/appointments?date=${dateISO}&scope=clinic`, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
       .then((body) => {
         if (body && Array.isArray(body.appointments)) {

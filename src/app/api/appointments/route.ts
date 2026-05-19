@@ -75,8 +75,17 @@ export async function GET(req: NextRequest) {
     ? (statusCsv.split(",").filter(Boolean) as AppointmentStatus[])
     : undefined;
 
+  // scope=clinic: cliente declara que necesita TODAS las citas de la
+  // clinica (no solo las del usuario logueado). Usado por el SlotGridPicker
+  // del modal Nueva Cita para detectar conflictos de doctor/resource con
+  // citas de otros doctores.
+  const scope = sp.get("scope");
   const doctorIdScope =
-    session.user.role === "DOCTOR" ? session.user.id : undefined;
+    scope === "clinic"
+      ? undefined
+      : session.user.role === "DOCTOR"
+      ? session.user.id
+      : undefined;
 
   const range = dayRangeUtc(dateISO, session.timeConfig);
 
