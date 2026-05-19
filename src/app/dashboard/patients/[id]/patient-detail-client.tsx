@@ -210,6 +210,7 @@ const TABS_BASE = [
   { id: "historia",      label: "Historia clínica"     },
   { id: "odontograma",   label: "Odontograma"          },
   { id: "expediente",    label: "Nueva consulta"       },
+  { id: "historial-consultas", label: "Historial de consultas" },
   { id: "evolucion",     label: "Notas SOAP"           },
   { id: "radiografias",  label: "Radiografías"         },
   { id: "tratamiento",   label: "Plan de tratamiento"  },
@@ -1120,6 +1121,7 @@ export function PatientDetailClient({
           onSelect={setTab}
           counts={{
             historia: records.length,
+            historialConsultas: records.length,
             evolucion: records.length,
             radiografias: filesLoaded ? files.length : undefined,
             tratamiento: treatments.length,
@@ -2060,6 +2062,243 @@ export function PatientDetailClient({
               {detectedSpecialty === "nutrition"  && <NutritionForm       patientId={patient.id} patient={patient} onSaved={handleRecordSaved} />}
               {detectedSpecialty === "psychology" && <PsychologyForm      patientId={patient.id} sessionNum={records.length + 1} onSaved={handleRecordSaved} />}
               {detectedSpecialty === "medicine"   && <GeneralMedicineForm patientId={patient.id} onSaved={handleRecordSaved} />}
+            </div>
+          )}
+
+          {/* ===== TAB: HISTORIAL DE CONSULTAS (expanded) ===== */}
+          {tab === "historial-consultas" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold">Historial de consultas — {records.length} total</h2>
+                <button
+                  onClick={() => setTab("expediente")}
+                  className="text-xs font-semibold text-brand-600 hover:underline"
+                >
+                  + Nueva consulta
+                </button>
+              </div>
+
+              {records.length === 0 ? (
+                <div className="bg-card border border-border rounded-xl px-5 py-10 text-center text-muted-foreground">
+                  <div className="text-3xl mb-2">📋</div>
+                  <div className="text-sm font-semibold">Sin consultas registradas</div>
+                  <button
+                    onClick={() => setTab("expediente")}
+                    className="text-xs text-brand-600 hover:underline mt-2 inline-block"
+                  >
+                    Registrar primera consulta →
+                  </button>
+                </div>
+              ) : records.map((record: any, idx: number) => {
+                const noteStatus: "DRAFT" | "SIGNED" = record.specialtyData?.status ?? "DRAFT";
+                const isSigned = noteStatus === "SIGNED";
+                const sd = record.specialtyData ?? {};
+                const vitals = sd.vitals as Record<string, any> | undefined;
+                const anthro = sd.anthropometrics as Record<string, any> | undefined;
+                const scales = sd.scales as Record<string, any> | undefined;
+                const procedures = Array.isArray(sd.procedures) ? sd.procedures : [];
+                const medications = Array.isArray(sd.medications) ? sd.medications.filter((m: any) => m?.drug) : [];
+                const attachments = Array.isArray(sd.attachments) ? sd.attachments : [];
+                const icd10Legacy = Array.isArray(sd.icd10) ? sd.icd10 : [];
+
+                const visitDateLong = new Intl.DateTimeFormat("es-MX", {
+                  day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+                }).format(new Date(record.visitDate));
+
+                return (
+                  <div key={record.id} className="bg-card border border-border rounded-xl overflow-hidden">
+                    <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border bg-muted/30">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-blue-100 border-2 border-brand-500 flex items-center justify-center text-[10px] font-bold text-brand-700">
+                          {records.length - idx}
+                        </div>
+                        <div>
+                          <div className="text-sm font-bold">{visitDateLong}</div>
+                          <div className="text-[11px] text-muted-foreground">
+                            Dr/a. {record.doctor?.firstName} {record.doctor?.lastName}
+                          </div>
+                        </div>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                        isSigned
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800"
+                          : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800"
+                      }`}>
+                        {isSigned ? "Firmada" : "Borrador"}
+                      </span>
+                    </div>
+
+                    <div className="p-5 space-y-3 text-xs">
+                      {record.subjective && (
+                        <section>
+                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-1">S — Subjetivo</h4>
+                          <p className="text-foreground whitespace-pre-line leading-relaxed">{record.subjective}</p>
+                        </section>
+                      )}
+                      {record.objective && (
+                        <section>
+                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-1">O — Objetivo</h4>
+                          <p className="text-foreground whitespace-pre-line leading-relaxed">{record.objective}</p>
+                        </section>
+                      )}
+                      {record.assessment && (
+                        <section>
+                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-1">A — Diagnostico (Assessment)</h4>
+                          <p className="text-foreground whitespace-pre-line leading-relaxed">{record.assessment}</p>
+                        </section>
+                      )}
+                      {record.plan && (
+                        <section>
+                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-1">P — Plan</h4>
+                          <p className="text-foreground whitespace-pre-line leading-relaxed">{record.plan}</p>
+                        </section>
+                      )}
+
+                      {vitals && Object.keys(vitals).length > 0 && (
+                        <section className="border-t border-border pt-3">
+                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Signos vitales</h4>
+                          <div className="grid grid-cols-3 gap-2">
+                            {Object.entries(vitals).filter(([_, v]) => v !== null && v !== "" && v !== undefined).map(([k, v]) => (
+                              <div key={k} className="bg-muted rounded-lg px-2 py-1.5">
+                                <div className="text-[10px] uppercase text-muted-foreground">{k}</div>
+                                <div className="font-mono font-bold">{String(v)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+
+                      {anthro && Object.keys(anthro).length > 0 && (
+                        <section className="border-t border-border pt-3">
+                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Antropometricos</h4>
+                          <div className="flex flex-wrap gap-2">
+                            {anthro.weight && <span className="bg-muted rounded-lg px-2 py-1">Peso: <strong>{anthro.weight}kg</strong></span>}
+                            {anthro.height && <span className="bg-muted rounded-lg px-2 py-1">Altura: <strong>{anthro.height}cm</strong></span>}
+                            {anthro.bmi && <span className="bg-muted rounded-lg px-2 py-1">IMC: <strong>{anthro.bmi}</strong></span>}
+                            {anthro.bodyFat && <span className="bg-muted rounded-lg px-2 py-1">Grasa: <strong>{anthro.bodyFat}%</strong></span>}
+                          </div>
+                        </section>
+                      )}
+
+                      {scales && Object.keys(scales).length > 0 && (
+                        <section className="border-t border-border pt-3">
+                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Escalas clinicas</h4>
+                          <div className="flex flex-wrap gap-2">
+                            {scales.phq9 && (
+                              <span className="bg-card border border-border rounded-lg px-2 py-1">
+                                PHQ-9: <strong>{scales.phq9.score}/27</strong> ({scales.phq9.severity})
+                              </span>
+                            )}
+                            {scales.gad7 && (
+                              <span className="bg-card border border-border rounded-lg px-2 py-1">
+                                GAD-7: <strong>{scales.gad7.score}/21</strong> ({scales.gad7.severity})
+                              </span>
+                            )}
+                            {scales.cambra && (
+                              <span className="bg-card border border-border rounded-lg px-2 py-1">
+                                CAMBRA: <strong>{scales.cambra.category}</strong>
+                              </span>
+                            )}
+                            {scales.frankl && (
+                              <span className="bg-card border border-border rounded-lg px-2 py-1">
+                                Frankl: <strong>{scales.frankl.score}</strong>
+                              </span>
+                            )}
+                          </div>
+                        </section>
+                      )}
+
+                      {procedures.length > 0 && (
+                        <section className="border-t border-border pt-3">
+                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Procedimientos ({procedures.length})</h4>
+                          <div className="flex flex-wrap gap-1.5">
+                            {procedures.map((p: any, i: number) => {
+                              const label = typeof p === "string" ? p : (p?.name ?? "Procedimiento");
+                              const tooth = typeof p === "object" && p?.tooth ? ` · Pieza #${p.tooth}` : "";
+                              const code = typeof p === "object" && p?.code ? ` (${p.code})` : "";
+                              return (
+                                <span key={i} className="text-[11px] font-semibold px-2 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800">
+                                  {label}{code}{tooth}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      )}
+
+                      {medications.length > 0 && (
+                        <section className="border-t border-border pt-3">
+                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Medicamentos ({medications.length})</h4>
+                          <div className="space-y-1.5">
+                            {medications.map((m: any, i: number) => (
+                              <div key={i} className="bg-orange-50 border border-orange-200 dark:bg-orange-950/30 dark:border-orange-800 rounded-lg px-3 py-2 text-[11px]">
+                                <div className="font-bold text-orange-700 dark:text-orange-300">💊 {m.drug}</div>
+                                <div className="text-muted-foreground">
+                                  {m.dose && <span>{m.dose}</span>}
+                                  {m.frequency && <span> · {m.frequency}</span>}
+                                  {m.duration && <span> · por {m.duration}</span>}
+                                  {m.notes && <span> · {m.notes}</span>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+
+                      {icd10Legacy.length > 0 && (
+                        <section className="border-t border-border pt-3">
+                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Diagnosticos CIE-10</h4>
+                          <ul className="space-y-1">
+                            {icd10Legacy.map((c: any, i: number) => (
+                              <li key={i} className="text-[11px]">
+                                <code className="font-mono font-bold">{c.code}</code> — {c.label}
+                              </li>
+                            ))}
+                          </ul>
+                        </section>
+                      )}
+
+                      {attachments.length > 0 && (
+                        <section className="border-t border-border pt-3">
+                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Adjuntos ({attachments.length})</h4>
+                          <div className="flex flex-wrap gap-2">
+                            {attachments.map((a: any) => (
+                              <a
+                                key={a.id}
+                                href={a.url ?? "#"}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[11px] px-2 py-1 rounded-lg border border-border bg-muted hover:bg-brand-50 hover:border-brand-300 flex items-center gap-1"
+                              >
+                                📎 {a.name}
+                              </a>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border bg-muted/20">
+                      <button
+                        type="button"
+                        onClick={() => setNoteDetailOpen(record as ClinicalNote)}
+                        className="text-xs font-semibold text-brand-600 hover:underline"
+                      >
+                        Editar / Firmar
+                      </button>
+                      {(record.specialtyData?.status ?? "DRAFT") === "DRAFT" && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteRecord(record)}
+                          className="text-xs font-semibold text-rose-600 hover:underline"
+                        >
+                          Eliminar borrador
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
 
