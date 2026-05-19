@@ -657,7 +657,9 @@ export function PatientDetailClient({
     }
   }
 
+  const [overrideSpecialty, setOverrideSpecialty] = useState<string | null>(null);
   const detectedSpecialty = detectSpecialty(specialty);
+  const currentSpecialty = overrideSpecialty ?? detectedSpecialty;
 
   const [evolutionPlans, setEvolutionPlans] = useState<any[]>([]);
   useEffect(() => {
@@ -2052,16 +2054,41 @@ export function PatientDetailClient({
           {/* ===== TAB: NUEVA CONSULTA (specialty form) ===== */}
           {tab === "expediente" && (
             <div className="bg-card border border-border rounded-xl p-5">
-              <h2 className="text-sm font-bold mb-4">
-                {detectedSpecialty === "dental"     ? "🦷 Nueva consulta dental" :
-                 detectedSpecialty === "nutrition"  ? "🥗 Nueva consulta nutricional" :
-                 detectedSpecialty === "psychology" ? "🧠 Nueva sesión" :
-                 "🩺 Nueva consulta médica"}
-              </h2>
-              {detectedSpecialty === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} />}
-              {detectedSpecialty === "nutrition"  && <NutritionForm       patientId={patient.id} patient={patient} onSaved={handleRecordSaved} />}
-              {detectedSpecialty === "psychology" && <PsychologyForm      patientId={patient.id} sessionNum={records.length + 1} onSaved={handleRecordSaved} />}
-              {detectedSpecialty === "medicine"   && <GeneralMedicineForm patientId={patient.id} onSaved={handleRecordSaved} />}
+              <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+                <h2 className="text-sm font-bold">
+                  {currentSpecialty === "dental"     ? "🦷 Nueva consulta dental" :
+                   currentSpecialty === "nutrition"  ? "🥗 Nueva consulta nutricional" :
+                   currentSpecialty === "psychology" ? "🧠 Nueva sesión" :
+                   "🩺 Nueva consulta médica"}
+                </h2>
+                <div className="flex items-center gap-2">
+                  <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Tipo</label>
+                  <select
+                    value={currentSpecialty}
+                    onChange={(e) => setOverrideSpecialty(e.target.value)}
+                    className="flex h-8 rounded-lg border border-border bg-card px-3 text-xs"
+                  >
+                    <option value="dental">Dental / Ortodoncia</option>
+                    <option value="nutrition">Nutricion</option>
+                    <option value="psychology">Psicologia</option>
+                    <option value="medicine">Medicina general</option>
+                  </select>
+                  {overrideSpecialty && overrideSpecialty !== detectedSpecialty && (
+                    <button
+                      type="button"
+                      onClick={() => setOverrideSpecialty(null)}
+                      className="text-[10px] text-muted-foreground hover:text-foreground underline"
+                      title="Volver al tipo default de la clinica"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+              </div>
+              {currentSpecialty === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} />}
+              {currentSpecialty === "nutrition"  && <NutritionForm       patientId={patient.id} patient={patient} onSaved={handleRecordSaved} />}
+              {currentSpecialty === "psychology" && <PsychologyForm      patientId={patient.id} sessionNum={records.length + 1} onSaved={handleRecordSaved} />}
+              {currentSpecialty === "medicine"   && <GeneralMedicineForm patientId={patient.id} onSaved={handleRecordSaved} />}
             </div>
           )}
 
@@ -2100,6 +2127,32 @@ export function PatientDetailClient({
                 const medications = Array.isArray(sd.medications) ? sd.medications.filter((m: any) => m?.drug) : [];
                 const attachments = Array.isArray(sd.attachments) ? sd.attachments : [];
                 const icd10Legacy = Array.isArray(sd.icd10) ? sd.icd10 : [];
+                const odontogram = (sd.odontogram ?? {}) as Record<string, Record<string, string>>;
+                const odontogramTeeth = Object.entries(odontogram).filter(([_, surfaces]) =>
+                  surfaces && Object.values(surfaces).some(v => v)
+                );
+                const periodontal = sd.periodontal as Record<string, any> | undefined;
+                const occlusal = sd.occlusal as Record<string, any> | undefined;
+                const tmj = sd.tmj as Record<string, any> | undefined;
+                const hygieneInstructions = Array.isArray(sd.hygieneInstructions) ? sd.hygieneInstructions : [];
+                const xraysText = typeof sd.xrays === "string" ? sd.xrays : "";
+                const nextVisit = typeof sd.nextVisit === "string" ? sd.nextVisit : "";
+                const proceduresTotal = typeof sd.proceduresTotal === "number" ? sd.proceduresTotal : null;
+                const TOOTH_COLOR: Record<string, string> = {
+                  healthy: "bg-slate-100 text-slate-700 border-slate-300",
+                  caries: "bg-rose-100 text-rose-800 border-rose-300",
+                  restoration: "bg-blue-100 text-blue-800 border-blue-300",
+                  crown: "bg-amber-100 text-amber-800 border-amber-300",
+                  endo: "bg-violet-100 text-violet-800 border-violet-300",
+                  absent: "bg-slate-100 text-slate-500 border-slate-300",
+                  extraction: "bg-orange-100 text-orange-800 border-orange-300",
+                  implant: "bg-emerald-100 text-emerald-800 border-emerald-300",
+                };
+                const CONDITION_LABEL: Record<string, string> = {
+                  healthy: "Sano", caries: "Caries", restoration: "Restauracion",
+                  crown: "Corona", endo: "Endodoncia", absent: "Ausente",
+                  extraction: "Extraccion", implant: "Implante",
+                };
 
                 const visitDateLong = new Intl.DateTimeFormat("es-MX", {
                   day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
@@ -2242,6 +2295,102 @@ export function PatientDetailClient({
                               </div>
                             ))}
                           </div>
+                        </section>
+                      )}
+
+                      {odontogramTeeth.length > 0 && (
+                        <section className="border-t border-border pt-3">
+                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Odontograma ({odontogramTeeth.length} piezas con hallazgos)</h4>
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
+                            {odontogramTeeth.map(([tooth, surfaces]) => {
+                              const surfaceEntries = Object.entries(surfaces).filter(([_, c]) => c);
+                              return (
+                                <div key={tooth} className="bg-muted rounded-lg px-2 py-1.5 border border-border">
+                                  <div className="font-mono font-bold text-[12px] mb-0.5">Pieza #{tooth}</div>
+                                  <div className="flex flex-wrap gap-1">
+                                    {surfaceEntries.map(([surface, condition]) => (
+                                      <span
+                                        key={surface}
+                                        className={`text-[10px] px-1.5 py-0.5 rounded border ${TOOTH_COLOR[condition as string] ?? "bg-muted"}`}
+                                        title={`${surface}: ${CONDITION_LABEL[condition as string] ?? condition}`}
+                                      >
+                                        {surface}: {CONDITION_LABEL[condition as string] ?? condition}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      )}
+
+                      {proceduresTotal !== null && proceduresTotal > 0 && (
+                        <section className="border-t border-border pt-3">
+                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Total procedimientos</h4>
+                          <div className="text-sm font-bold text-foreground">{formatCurrency(proceduresTotal)}</div>
+                        </section>
+                      )}
+
+                      {periodontal && Object.values(periodontal).some(v => v && v !== "" && v !== false) && (
+                        <section className="border-t border-border pt-3">
+                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Examen periodontal</h4>
+                          <div className="grid grid-cols-2 gap-2">
+                            {periodontal.plaque && <div className="bg-muted rounded-lg px-2 py-1"><span className="text-[10px] uppercase text-muted-foreground">Placa: </span><strong>{periodontal.plaque}</strong></div>}
+                            {periodontal.calculus && <div className="bg-muted rounded-lg px-2 py-1"><span className="text-[10px] uppercase text-muted-foreground">Calculo: </span><strong>{periodontal.calculus}</strong></div>}
+                            {periodontal.gingival && <div className="bg-muted rounded-lg px-2 py-1"><span className="text-[10px] uppercase text-muted-foreground">Gingival: </span><strong>{periodontal.gingival}</strong></div>}
+                            {periodontal.pocketDepth && <div className="bg-muted rounded-lg px-2 py-1"><span className="text-[10px] uppercase text-muted-foreground">Bolsa: </span><strong>{periodontal.pocketDepth}</strong></div>}
+                            {periodontal.bleeding && <div className="bg-rose-50 dark:bg-rose-950/30 rounded-lg px-2 py-1 col-span-2 text-rose-700 dark:text-rose-300"><strong>Sangrado al sondaje presente</strong></div>}
+                          </div>
+                        </section>
+                      )}
+
+                      {occlusal && (occlusal.molarClass || occlusal.overbite || occlusal.overjet || (Array.isArray(occlusal.bite) && occlusal.bite.length > 0)) && (
+                        <section className="border-t border-border pt-3">
+                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Oclusion</h4>
+                          <div className="flex flex-wrap gap-2">
+                            {occlusal.molarClass && <span className="bg-muted rounded-lg px-2 py-1">Clase molar: <strong>{occlusal.molarClass}</strong></span>}
+                            {occlusal.overbite && <span className="bg-muted rounded-lg px-2 py-1">Overbite: <strong>{occlusal.overbite}</strong></span>}
+                            {occlusal.overjet && <span className="bg-muted rounded-lg px-2 py-1">Overjet: <strong>{occlusal.overjet}</strong></span>}
+                            {Array.isArray(occlusal.bite) && occlusal.bite.map((b: string) => <span key={b} className="bg-muted rounded-lg px-2 py-1">{b}</span>)}
+                          </div>
+                        </section>
+                      )}
+
+                      {tmj && (tmj.opening || tmj.clicking || tmj.pain || tmj.guard) && (
+                        <section className="border-t border-border pt-3">
+                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">ATM (TMJ)</h4>
+                          <div className="grid grid-cols-2 gap-2">
+                            {tmj.opening && <div className="bg-muted rounded-lg px-2 py-1"><span className="text-[10px] uppercase text-muted-foreground">Apertura: </span><strong>{tmj.opening}</strong></div>}
+                            {tmj.clicking && <div className="bg-muted rounded-lg px-2 py-1"><span className="text-[10px] uppercase text-muted-foreground">Click: </span><strong>{tmj.clicking}</strong></div>}
+                            {tmj.pain && <div className="bg-muted rounded-lg px-2 py-1"><span className="text-[10px] uppercase text-muted-foreground">Dolor: </span><strong>{tmj.pain}</strong></div>}
+                            {tmj.guard && <div className="bg-muted rounded-lg px-2 py-1"><span className="text-[10px] uppercase text-muted-foreground">Guarda: </span><strong>{tmj.guard}</strong></div>}
+                          </div>
+                        </section>
+                      )}
+
+                      {hygieneInstructions.length > 0 && (
+                        <section className="border-t border-border pt-3">
+                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Instrucciones de higiene</h4>
+                          <ul className="list-disc list-inside space-y-0.5">
+                            {hygieneInstructions.map((h: string, i: number) => (
+                              <li key={i}>{h}</li>
+                            ))}
+                          </ul>
+                        </section>
+                      )}
+
+                      {xraysText && (
+                        <section className="border-t border-border pt-3">
+                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Radiografias</h4>
+                          <p className="whitespace-pre-line">{xraysText}</p>
+                        </section>
+                      )}
+
+                      {nextVisit && (
+                        <section className="border-t border-border pt-3">
+                          <h4 className="font-bold text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Proxima visita</h4>
+                          <p className="font-semibold text-brand-600 dark:text-brand-400">{nextVisit}</p>
                         </section>
                       )}
 
