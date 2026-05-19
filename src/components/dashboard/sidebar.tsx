@@ -178,7 +178,6 @@ const NAV_ITEMS: NavItemDef[] = [
     permission: "specialties.implants",
     moduleKey: IMPLANTS_MODULE_KEY },
 
-  { id: "treatments",   section: "catalogo", label: "Tratamientos", href: "/dashboard/treatments", icon: Activity, permission: "treatments.view" },
   { id: "packages",     section: "catalogo", label: "Paquetes",     href: "/dashboard/packages",
     icon: Gift, adminOnly: true,
     categories: ["AESTHETIC_MEDICINE", "BEAUTY_CENTER", "DERMATOLOGY", "HAIR_RESTORATION",

@@ -28,7 +28,6 @@ const ROUTE_LABELS: Record<string, string> = {
   "/dashboard/formulas":      "Fórmulas",
   "/dashboard/exercises":     "Ejercicios",
   "/dashboard/orthotics":     "Ortesis",
-  "/dashboard/treatments":    "Tratamientos",
   "/dashboard/packages":      "Paquetes",
   "/dashboard/resources":         "Recursos",
   "/dashboard/resource-bookings": "Reservas legacy",
