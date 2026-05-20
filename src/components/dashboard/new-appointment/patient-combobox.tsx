@@ -48,28 +48,13 @@ export function PatientCombobox({ value, onChange }: Props) {
     return () => window.clearTimeout(timer);
   }, [query, value]);
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    // 'click' se dispara DESPUES del onClick del button. Esto elimina la
-    // race condition que tenia 'pointerdown' (que se dispara ANTES del
-    // click y podia cerrar el dropdown antes que el button.onClick se
-    // procese). Con 'click', el button.onClick siempre se procesa
-    // primero — sin importar device (mouse/touch/stylus generan 'click'
-    // events uniformemente).
-    document.addEventListener("click", handler);
-    return () => document.removeEventListener("click", handler);
-  }, [open]);
-
   const triggerCreate = () => {
+    console.log("[PatientCombobox] triggerCreate called with query:", query);
     setOpen(false);
     openNewPatient({
       initialName: query,
       onCreated: (p) => {
+        console.log("[PatientCombobox] new patient created:", p);
         onChange(p);
         setQuery("");
       },
@@ -135,6 +120,17 @@ export function PatientCombobox({ value, onChange }: Props) {
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
+          onBlur={() => {
+            // Delay para que el onClick del button del hit (si el usuario click
+            // un resultado) se procese antes del cierre. Sin delay, el blur
+            // dispara setOpen(false) inmediatamente y el button se desmonta
+            // antes del onClick → patient no se selecciona.
+            console.log("[PatientCombobox] input onBlur — scheduling close in 250ms");
+            setTimeout(() => {
+              console.log("[PatientCombobox] closing dropdown after blur delay");
+              setOpen(false);
+            }, 250);
+          }}
           onKeyDown={onKeyDown}
           aria-autocomplete="list"
           aria-expanded={open}
@@ -172,7 +168,9 @@ export function PatientCombobox({ value, onChange }: Props) {
               role="option"
               aria-selected={activeIndex === i}
               onClick={() => {
+                console.log("[PatientCombobox] HIT CLICK:", hit.id, hit.name);
                 onChange({ id: hit.id, name: hit.name });
+                console.log("[PatientCombobox] onChange called, closing dropdown");
                 setOpen(false);
               }}
               onMouseEnter={() => setActiveIndex(i)}
