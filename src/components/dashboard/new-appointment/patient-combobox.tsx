@@ -50,13 +50,16 @@ export function PatientCombobox({ value, onChange }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    const handler = (e: MouseEvent) => {
+    const handler = (e: PointerEvent) => {
       if (!containerRef.current?.contains(e.target as Node)) {
         setOpen(false);
       }
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    // pointerdown cubre mouse + touch + stylus. mousedown NO se dispara
+    // en touch devices (tablets, iPads, touchscreen laptops), por eso
+    // este fix es mas robusto cross-device.
+    document.addEventListener("pointerdown", handler);
+    return () => document.removeEventListener("pointerdown", handler);
   }, [open]);
 
   const triggerCreate = () => {
@@ -165,7 +168,7 @@ export function PatientCombobox({ value, onChange }: Props) {
               type="button"
               role="option"
               aria-selected={activeIndex === i}
-              onMouseDown={(e) => e.preventDefault()}
+              onPointerDown={(e) => e.preventDefault()}
               onClick={() => {
                 onChange({ id: hit.id, name: hit.name });
                 setOpen(false);
@@ -198,7 +201,7 @@ export function PatientCombobox({ value, onChange }: Props) {
 
           <button
             type="button"
-            onMouseDown={(e) => e.preventDefault()}
+            onPointerDown={(e) => e.preventDefault()}
             onClick={triggerCreate}
             onMouseEnter={() => setActiveIndex(hits.length)}
             style={{
