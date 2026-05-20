@@ -123,7 +123,7 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
           }}
         >
           <Dialog.Title className="modal__title" style={{ display: "none" }}>Nuevo paciente</Dialog.Title>
-          <div className="modal__header">
+          <div className="modal__header" style={{ flexShrink: 0 }}>
             <div className="modal__title">Nuevo paciente</div>
             <Dialog.Close asChild>
               <button type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label="Cerrar">
@@ -132,8 +132,8 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
             </Dialog.Close>
           </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="modal__body">
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
+          <div className="modal__body" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
             {/* Sección: Identidad */}
             <div style={{ marginBottom: 22 }}>
               <div className="form-section__title">
@@ -287,7 +287,7 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
             </div>
           </div>
 
-          <div className="modal__footer">
+          <div className="modal__footer" style={{ flexShrink: 0 }}>
             <ButtonNew variant="ghost" onClick={onClose} type="button">Cancelar</ButtonNew>
             <ButtonNew variant="primary" type="submit" disabled={loading}>
               {loading ? "Guardando…" : "Crear paciente"}
