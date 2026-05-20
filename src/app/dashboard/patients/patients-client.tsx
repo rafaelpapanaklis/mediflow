@@ -527,13 +527,6 @@ export function PatientsClient({ doctors }: Props) {
 
   return (
     <div className={styles.page}>
-      <HeroStats
-        stats={stats}
-        loading={loading && !data}
-        onClick={handleStatClick}
-        activeFilter={quickFilter}
-      />
-
       <div className={styles.filtersRow}>
         <div className={styles.pillGroup}>
           {([

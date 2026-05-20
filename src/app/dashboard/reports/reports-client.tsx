@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   LineChart, Line, PieChart, Pie, Legend, CartesianGrid,
 } from "recharts";
-import { DollarSign, Users, Calendar as CalendarIcon, Percent } from "lucide-react";
+import { DollarSign, Users, Calendar as CalendarIcon, Percent, TrendingUp, TrendingDown, AlertCircle, Stethoscope, Activity, Building2 } from "lucide-react";
 import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { fmtMXN } from "@/lib/format";
@@ -12,6 +12,21 @@ interface Props {
   monthlyData: { label: string; revenue: number; patients: number; appointments: number }[];
   topTypes:    { type: string; _count: { id: number } }[];
   byStatus:    { status: string; _count: { id: number } }[];
+  patientStats: {
+    total: number;
+    newThisMonth: number;
+    newPctDelta: number;
+    withDebt: number;
+    withDebtAmount: number;
+    nextApptsToday: number;
+    nextApptsWeek: number;
+  };
+  clinicStats: {
+    activeDoctors: number;
+    totalResources: number;
+    resourcesByKind: { kind: string; _count: { id: number } }[];
+    topResources: { resourceId: string; name: string; kind: string; count: number }[];
+  };
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -29,7 +44,7 @@ const TOOLTIP_STYLE: React.CSSProperties = {
 };
 const AXIS_TICK = { fontSize: 10, fill: "var(--text-4)" } as any;
 
-export function ReportsClient({ monthlyData, topTypes, byStatus }: Props) {
+export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, clinicStats }: Props) {
   const totalRevenue  = monthlyData.reduce((s, d) => s + d.revenue, 0);
   const totalPatients = monthlyData.reduce((s, d) => s + d.patients, 0);
   const totalAppts    = monthlyData.reduce((s, d) => s + d.appointments, 0);
@@ -50,6 +65,79 @@ export function ReportsClient({ monthlyData, topTypes, byStatus }: Props) {
         <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
           Últimos 6 meses · Métricas de ingresos, pacientes y citas
         </p>
+      </div>
+
+      {/* Resumen actual de la clínica */}
+      <div style={{ marginBottom: 16 }}>
+        <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)", marginBottom: 10 }}>
+          📊 Resumen actual
+        </h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginBottom: 10 }}>
+          <KpiCard
+            label="Total pacientes"
+            value={patientStats.total.toLocaleString()}
+            icon={Users}
+            delta={{ value: `+${patientStats.newThisMonth} este mes`, direction: "up", sub: "" }}
+          />
+          <KpiCard
+            label="Nuevos este mes"
+            value={patientStats.newThisMonth.toLocaleString()}
+            icon={TrendingUp}
+            delta={{
+              value: patientStats.newPctDelta !== 0
+                ? `${patientStats.newPctDelta > 0 ? "+" : ""}${patientStats.newPctDelta}% vs mes anterior`
+                : "sin cambio",
+              direction: patientStats.newPctDelta < 0 ? "down" : "up",
+              sub: "",
+            }}
+          />
+          <KpiCard
+            label="Con deuda"
+            value={fmtMXN(patientStats.withDebtAmount)}
+            icon={AlertCircle}
+            delta={{ value: `${patientStats.withDebt} pacientes`, direction: "down", sub: "" }}
+          />
+          <KpiCard
+            label="Proximas citas"
+            value={`${patientStats.nextApptsToday} / ${patientStats.nextApptsWeek}`}
+            icon={CalendarIcon}
+            delta={{ value: "Hoy / Esta semana", direction: "up", sub: "" }}
+          />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14 }}>
+          <KpiCard
+            label="Doctores activos"
+            value={clinicStats.activeDoctors.toLocaleString()}
+            icon={Stethoscope}
+          />
+          <KpiCard
+            label="Recursos activos"
+            value={clinicStats.totalResources.toLocaleString()}
+            icon={Building2}
+            delta={{
+              value: `${clinicStats.resourcesByKind.length} tipos`,
+              direction: "up",
+              sub: "",
+            }}
+          />
+          <KpiCard
+            label="Top recurso (30d)"
+            value={clinicStats.topResources[0]?.name ?? "—"}
+            icon={Activity}
+            delta={{
+              value: clinicStats.topResources[0]
+                ? `${clinicStats.topResources[0].count} citas`
+                : "Sin uso",
+              direction: "up",
+              sub: "",
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Separator visual */}
+      <div style={{ marginBottom: 20, marginTop: 18, fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>
+        📈 Últimos 6 meses
       </div>
 
       {/* KPIs */}
@@ -185,6 +273,46 @@ export function ReportsClient({ monthlyData, topTypes, byStatus }: Props) {
           </tbody>
         </table>
       </CardNew>
+
+      {/* Uso de recursos / sillones — ultimos 30 dias */}
+      <div style={{ marginTop: 14 }}>
+        <CardNew title="Uso de sillones / consultorios" sub="Top 5 — últimos 30 días" noPad>
+          {clinicStats.topResources.length === 0 ? (
+            <div style={{ padding: 32, textAlign: "center", color: "var(--text-3)", fontSize: 12 }}>
+              Sin uso registrado en los últimos 30 días
+            </div>
+          ) : (
+            <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 14 }}>
+              {clinicStats.topResources.map((r, i) => {
+                const max = clinicStats.topResources[0].count;
+                const pct = max > 0 ? Math.round((r.count / max) * 100) : 0;
+                return (
+                  <div key={r.resourceId}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
+                      <span style={{ color: "var(--text-1)", fontWeight: 500 }}>
+                        {r.name}
+                        <span style={{ color: "var(--text-3)", fontWeight: 400, marginLeft: 6, fontSize: 11 }}>
+                          {r.kind}
+                        </span>
+                      </span>
+                      <span className="mono" style={{ color: "var(--text-2)", fontWeight: 600 }}>
+                        {r.count} citas
+                      </span>
+                    </div>
+                    <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
+                      <div style={{
+                        height: "100%", width: `${pct}%`,
+                        background: DS_COLORS[i % DS_COLORS.length],
+                        borderRadius: 2, transition: "width .3s",
+                      }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardNew>
+      </div>
     </div>
   );
 }
