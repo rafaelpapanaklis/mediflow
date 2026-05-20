@@ -165,6 +165,7 @@ export function PatientCombobox({ value, onChange }: Props) {
               type="button"
               role="option"
               aria-selected={activeIndex === i}
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
                 onChange({ id: hit.id, name: hit.name });
                 setOpen(false);
@@ -197,6 +198,7 @@ export function PatientCombobox({ value, onChange }: Props) {
 
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={triggerCreate}
             onMouseEnter={() => setActiveIndex(hits.length)}
             style={{
