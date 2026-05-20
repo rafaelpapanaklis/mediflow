@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
+import * as Dialog from "@radix-ui/react-dialog";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import toast from "react-hot-toast";
 
@@ -93,17 +94,43 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
     } finally { setLoading(false); }
   }
 
-  if (!open) return null;
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal__header">
-          <div className="modal__title">Nuevo paciente</div>
-          <button onClick={onClose} type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label="Cerrar">
-            <X size={14} />
-          </button>
-        </div>
+    <Dialog.Root open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15,10,30,0.55)",
+            backdropFilter: "blur(4px)",
+            zIndex: 90,
+          }}
+        />
+        <Dialog.Content
+          className="modal"
+          onEscapeKeyDown={onClose}
+          aria-describedby={undefined}
+          style={{
+            position: "fixed",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            zIndex: 91,
+            maxHeight: "92vh",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+          }}
+        >
+          <Dialog.Title className="modal__title" style={{ display: "none" }}>Nuevo paciente</Dialog.Title>
+          <div className="modal__header">
+            <div className="modal__title">Nuevo paciente</div>
+            <Dialog.Close asChild>
+              <button type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label="Cerrar">
+                <X size={14} />
+              </button>
+            </Dialog.Close>
+          </div>
 
         <form onSubmit={handleSubmit}>
           <div className="modal__body">
@@ -267,7 +294,8 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
             </ButtonNew>
           </div>
         </form>
-      </div>
-    </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
