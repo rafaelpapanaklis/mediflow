@@ -11,6 +11,7 @@ import { HeroCard } from "@/components/dashboard/patient-detail/hero-card";
 import { TreatmentsModal, type SuggestedTreatment } from "@/components/dashboard/patient-detail/treatments-modal";
 import { QuickNav } from "@/components/dashboard/patient-detail/quick-nav";
 import { SideCards } from "@/components/dashboard/patient-detail/side-cards";
+import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { ConsultBar } from "@/components/dashboard/patient-detail/consult-bar";
 import { SoapEditorInline, type SoapDraft } from "@/components/dashboard/patient-detail/soap-editor-inline";
 import { NoteDetailModal, type ClinicalNote } from "@/components/dashboard/patient-detail/note-detail-modal";
@@ -359,6 +360,7 @@ export function PatientDetailClient({
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { open: openNewAppointment } = useNewAppointmentDialog();
   const pediatricsState = derivePediatricsTabState({
     hasData:      Boolean(pediatricsData),
     moduleActive: pediatricsModuleActive,
@@ -580,13 +582,6 @@ export function PatientDetailClient({
     personalNonPathologicalHistory:  patient.personalNonPathologicalHistory ?? "",
   });
   const [editSaving, setEditSaving] = useState(false);
-  const [showNewAppt, setShowNewAppt] = useState(false);
-  const [apptForm, setApptForm] = useState({
-    doctorId: currentUser.id, type: "Consulta general",
-    date: new Date().toISOString().split("T")[0],
-    startTime: "09:00", endTime: "09:30", notes: "",
-  });
-  const [savingAppt, setSavingAppt] = useState(false);
   const [portalLink, setPortalLink] = useState<string | null>(portalUrl ?? null);
   const [generatingPortal, setGeneratingPortal] = useState(false);
   // Radiografias state
@@ -782,26 +777,15 @@ export function PatientDetailClient({
     });
   }, []);
 
-  async function createAppointment(e: React.FormEvent) {
-    e.preventDefault();
-    if (savingAppt) return;
-    setSavingAppt(true);
-    try {
-      const res = await fetch("/api/appointments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...apptForm, patientId: patient.id }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error);
-      toast.success("Cita agendada");
-      setShowNewAppt(false);
-      router.refresh();
-    } catch (err: any) {
-      toast.error(err.message ?? "Error al agendar");
-    } finally {
-      setSavingAppt(false);
-    }
-  }
+  const openNewAppointmentForPatient = useCallback(() => {
+    openNewAppointment({
+      initialPatient: { id: patient.id, name: `${patient.firstName} ${patient.lastName}`.trim() },
+      openAgendaAfter: false,
+      onCreated: () => {
+        router.refresh();
+      },
+    });
+  }, [openNewAppointment, patient.id, patient.firstName, patient.lastName, router]);
 
   const fullName = `${patient.firstName} ${patient.lastName}`;
   const ageNum = ageFromDob(patient.dob);
@@ -1101,10 +1085,7 @@ export function PatientDetailClient({
               router.push(`?appointment=${nextAppt.id}`);
             }
           }}
-          onReschedule={() => {
-            // Por ahora redirige al tab Citas; en una futura iteración abrir picker inline.
-            setTab("agenda");
-          }}
+          onReschedule={openNewAppointmentForPatient}
           onCharge={openChargeShortcut}
         />
       )}
@@ -2623,46 +2604,8 @@ export function PatientDetailClient({
             <div className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="flex items-center justify-between px-5 py-4 border-b border-border">
                 <h2 className="text-sm font-bold">Citas — {appointments.length} total</h2>
-                <button onClick={() => setShowNewAppt(true)} className="text-xs font-semibold text-brand-600 hover:underline">+ Agendar</button>
+                <button onClick={openNewAppointmentForPatient} className="text-xs font-semibold text-brand-600 hover:underline">+ Agendar</button>
               </div>
-
-              {showNewAppt && (
-                <div className="border-b border-border p-4 bg-brand-600/15">
-                  <h3 className="text-xs font-bold text-brand-700 mb-3">Nueva cita para {patient.firstName} {patient.lastName}</h3>
-                  <form onSubmit={createAppointment} className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-                    <div>
-                      <label className="text-[10px] font-bold text-muted-foreground">Doctor</label>
-                      <select className="flex h-8 w-full rounded-lg border border-border bg-card px-2 text-xs mt-0.5"
-                        value={apptForm.doctorId} onChange={e => setApptForm(f => ({ ...f, doctorId: e.target.value }))}>
-                        {doctors.map(d => <option key={d.id} value={d.id}>Dr/a. {d.firstName} {d.lastName}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-muted-foreground">Tipo</label>
-                      <select className="flex h-8 w-full rounded-lg border border-border bg-card px-2 text-xs mt-0.5"
-                        value={apptForm.type} onChange={e => setApptForm(f => ({ ...f, type: e.target.value }))}>
-                        {["Consulta general","Control","Urgencia","Primera vez","Cirugía","Seguimiento","Otro"].map(t => <option key={t}>{t}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-muted-foreground">Fecha</label>
-                      <input type="date" className="flex h-8 w-full rounded-lg border border-border bg-card px-2 text-xs mt-0.5"
-                        value={apptForm.date} onChange={e => setApptForm(f => ({ ...f, date: e.target.value }))} />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-muted-foreground">Hora inicio</label>
-                      <input type="time" className="flex h-8 w-full rounded-lg border border-border bg-card px-2 text-xs mt-0.5"
-                        value={apptForm.startTime} onChange={e => setApptForm(f => ({ ...f, startTime: e.target.value }))} />
-                    </div>
-                    <div className="col-span-2 lg:col-span-4 flex gap-2 mt-1">
-                      <button type="submit" disabled={savingAppt} className="text-xs font-bold bg-brand-600 text-white px-4 py-1.5 rounded-lg hover:bg-brand-700 disabled:opacity-50">
-                        {savingAppt ? "Agendando…" : "Confirmar cita"}
-                      </button>
-                      <button type="button" onClick={() => setShowNewAppt(false)} className="text-xs font-semibold border border-border px-4 py-1.5 rounded-lg hover:bg-muted">Cancelar</button>
-                    </div>
-                  </form>
-                </div>
-              )}
 
               <table className="w-full text-xs">
                 <thead>
@@ -2960,7 +2903,7 @@ export function PatientDetailClient({
           patientId={patient.id}
           patientName={fullName}
           patientPhone={patient.phone ?? null}
-          onReschedule={() => setTab("agenda")}
+          onReschedule={openNewAppointmentForPatient}
           onCancelAppt={() => setTab("agenda")}
           onCharge={openChargeShortcut}
         />
