@@ -31,7 +31,11 @@ export function TrialSidebarStatus({
 
   if (trial.absent) return null;
 
-  const expired = !isInTrial || trial.expired;
+  // SECURITY/UX: expired SOLO depende de trialEndsAt < now (trial.expired).
+  // No usar isInTrial porque ese flag es false cuando la clinica tiene
+  // suscripcion activa, lo que generaba "Prueba expirada" falso aunque
+  // el trial siguiera vigente con dias restantes.
+  const expired = trial.expired;
   const days    = trial.days;
 
   // Colores según urgencia (3 estados). Critical = rojo (≤3d), warning =

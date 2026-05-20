@@ -50,16 +50,19 @@ export function PatientCombobox({ value, onChange }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    const handler = (e: PointerEvent) => {
+    const handler = (e: MouseEvent) => {
       if (!containerRef.current?.contains(e.target as Node)) {
         setOpen(false);
       }
     };
-    // pointerdown cubre mouse + touch + stylus. mousedown NO se dispara
-    // en touch devices (tablets, iPads, touchscreen laptops), por eso
-    // este fix es mas robusto cross-device.
-    document.addEventListener("pointerdown", handler);
-    return () => document.removeEventListener("pointerdown", handler);
+    // 'click' se dispara DESPUES del onClick del button. Esto elimina la
+    // race condition que tenia 'pointerdown' (que se dispara ANTES del
+    // click y podia cerrar el dropdown antes que el button.onClick se
+    // procese). Con 'click', el button.onClick siempre se procesa
+    // primero — sin importar device (mouse/touch/stylus generan 'click'
+    // events uniformemente).
+    document.addEventListener("click", handler);
+    return () => document.removeEventListener("click", handler);
   }, [open]);
 
   const triggerCreate = () => {
@@ -168,7 +171,6 @@ export function PatientCombobox({ value, onChange }: Props) {
               type="button"
               role="option"
               aria-selected={activeIndex === i}
-              onPointerDown={(e) => e.stopPropagation()}
               onClick={() => {
                 onChange({ id: hit.id, name: hit.name });
                 setOpen(false);
@@ -201,7 +203,6 @@ export function PatientCombobox({ value, onChange }: Props) {
 
           <button
             type="button"
-            onPointerDown={(e) => e.stopPropagation()}
             onClick={triggerCreate}
             onMouseEnter={() => setActiveIndex(hits.length)}
             style={{
