@@ -16,7 +16,7 @@ interface Props {
 }
 
 const emptyForm = {
-  firstName: "", lastName: "", email: "", phone: "", gender: "OTHER",
+  firstName: "", lastName: "", email: "", phone: "", gender: "",
   dob: "", address: "", allergies: "", notes: "", isChild: false,
   // NOM-024
   curp: "", curpStatus: "PENDING" as "COMPLETE" | "PENDING" | "FOREIGN", passportNo: "",
@@ -36,7 +36,12 @@ function splitName(full: string): { firstName: string; lastName: string } {
 export function NewPatientModal({ open, onClose, onCreated, initialName, initialPhone, initialEmail }: Props) {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(emptyForm);
-  const set = (k: string, v: string | boolean) => setForm(f => ({ ...f, [k]: v }));
+  const [errors, setErrors] = useState<Record<string, boolean>>({});
+  const [noAllergies, setNoAllergies] = useState(false);
+  const set = (k: string, v: string | boolean) => {
+    setForm(f => ({ ...f, [k]: v }));
+    if (errors[k]) setErrors(e => { const next = { ...e }; delete next[k]; return next; });
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -49,11 +54,24 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
     if (initialPhone) next.phone = initialPhone;
     if (initialEmail) next.email = initialEmail;
     setForm(next);
+    setNoAllergies(false);
+    setErrors({});
   }, [open, initialName, initialPhone, initialEmail]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.firstName || !form.lastName) { toast.error("Nombre y apellido requeridos"); return; }
+    const newErrors: Record<string, boolean> = {};
+    if (!form.firstName.trim()) newErrors.firstName = true;
+    if (!form.lastName.trim()) newErrors.lastName = true;
+    if (!form.dob) newErrors.dob = true;
+    if (!form.phone.trim()) newErrors.phone = true;
+    if (!form.allergies.trim()) newErrors.allergies = true;
+    if (!form.gender) newErrors.gender = true;
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      toast.error("Completa los campos obligatorios marcados en rojo");
+      return;
+    }
     if (form.curpStatus === "COMPLETE") {
       if (!form.curp) { toast.error("CURP requerido (o marca 'no la tengo' / 'extranjero')"); return; }
       if (!CURP_RE.test(form.curp.toUpperCase())) { toast.error("CURP con formato inválido"); return; }
@@ -143,19 +161,20 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
                 <div className="field-new">
                   <label className="field-new__label">Nombre <span className="req">*</span></label>
-                  <input className="input-new" placeholder="Ana" value={form.firstName} onChange={e => set("firstName", e.target.value)} />
+                  <input className="input-new" placeholder="Ana" value={form.firstName} onChange={e => set("firstName", e.target.value)} style={{ borderColor: errors.firstName ? '#ef4444' : undefined }} />
                 </div>
                 <div className="field-new">
                   <label className="field-new__label">Apellido <span className="req">*</span></label>
-                  <input className="input-new" placeholder="García" value={form.lastName} onChange={e => set("lastName", e.target.value)} />
+                  <input className="input-new" placeholder="García" value={form.lastName} onChange={e => set("lastName", e.target.value)} style={{ borderColor: errors.lastName ? '#ef4444' : undefined }} />
                 </div>
                 <div className="field-new">
-                  <label className="field-new__label">Fecha de nacimiento</label>
-                  <input className="input-new" type="date" value={form.dob} onChange={e => set("dob", e.target.value)} />
+                  <label className="field-new__label">Fecha de nacimiento <span className="req">*</span></label>
+                  <input className="input-new" type="date" value={form.dob} onChange={e => set("dob", e.target.value)} style={{ borderColor: errors.dob ? '#ef4444' : undefined }} />
                 </div>
                 <div className="field-new">
-                  <label className="field-new__label">Género</label>
-                  <select className="input-new" value={form.gender} onChange={e => set("gender", e.target.value)}>
+                  <label className="field-new__label">Género <span className="req">*</span></label>
+                  <select className="input-new" value={form.gender} onChange={e => set("gender", e.target.value)} style={{ borderColor: errors.gender ? '#ef4444' : undefined }}>
+                    <option value="">Seleccionar…</option>
                     <option value="M">Masculino</option>
                     <option value="F">Femenino</option>
                     <option value="OTHER">Otro</option>
@@ -233,8 +252,8 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
                   <input className="input-new" type="email" placeholder="ana@email.com" value={form.email} onChange={e => set("email", e.target.value)} />
                 </div>
                 <div className="field-new">
-                  <label className="field-new__label">Teléfono</label>
-                  <input className="input-new" placeholder="+52 55…" value={form.phone} onChange={e => set("phone", e.target.value)} />
+                  <label className="field-new__label">Teléfono <span className="req">*</span></label>
+                  <input className="input-new" placeholder="+52 55…" value={form.phone} onChange={e => set("phone", e.target.value)} style={{ borderColor: errors.phone ? '#ef4444' : undefined }} />
                 </div>
                 <div className="field-new" style={{ gridColumn: "1 / -1" }}>
                   <label className="field-new__label">Dirección</label>
@@ -271,8 +290,31 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
                 </div>
               </div>
               <div className="field-new" style={{ marginBottom: 12 }}>
-                <label className="field-new__label">Alergias (separadas por coma)</label>
-                <input className="input-new" placeholder="Penicilina, Látex…" value={form.allergies} onChange={e => set("allergies", e.target.value)} />
+                <label className="field-new__label">Alergias (separadas por coma) <span className="req">*</span></label>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                  <input
+                    type="checkbox"
+                    id="no-allergies"
+                    checked={noAllergies}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setNoAllergies(checked);
+                      if (checked) { set("allergies", "N/A"); }
+                      else { set("allergies", ""); }
+                    }}
+                  />
+                  <label htmlFor="no-allergies" style={{ fontSize: 12, color: "var(--text-2)", cursor: "pointer" }}>
+                    N/A (no presenta alergias)
+                  </label>
+                </div>
+                <input
+                  className="input-new"
+                  placeholder="Penicilina, Látex…"
+                  value={form.allergies}
+                  onChange={e => set("allergies", e.target.value)}
+                  disabled={noAllergies}
+                  style={{ borderColor: errors.allergies ? '#ef4444' : undefined, opacity: noAllergies ? 0.6 : 1 }}
+                />
               </div>
               <div className="field-new">
                 <label className="field-new__label">Notas</label>
