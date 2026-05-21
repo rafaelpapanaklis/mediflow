@@ -1,14 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { useAgenda } from "./agenda-provider";
 import { AgendaTimeAxis } from "./agenda-time-axis";
 import { AgendaAppointmentCard } from "./agenda-appointment-card";
-import { todayInTz } from "@/lib/agenda/time-utils";
+import { slotIndexToUtc, todayInTz } from "@/lib/agenda/time-utils";
 import { calendarDayISO } from "@/lib/agenda/date-ranges";
 import { assignLanes } from "@/lib/agenda/lane-layout";
 import { useDragOverlap } from "@/app/dashboard/agenda/agenda-page-client";
+import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 import type { DroppableData } from "@/lib/agenda/drag-utils";
 import styles from "./agenda.module.css";
@@ -117,6 +118,8 @@ interface WeekDayColumnProps {
 
 function WeekDayColumn({ day, isToday, slotsTotal }: WeekDayColumnProps) {
   const { state, setDay } = useAgenda();
+  const { open: openNewAppointment } = useNewAppointmentDialog();
+  const colRef = useRef<HTMLDivElement | null>(null);
 
   // Filtramos las citas del rango (cargadas por el provider) que caen
   // exactamente en este día, en el timezone de la clínica.
@@ -143,6 +146,45 @@ function WeekDayColumn({ day, isToday, slotsTotal }: WeekDayColumnProps) {
     id: droppableId,
     data: droppableData,
   });
+
+  // Ref de medición compuesta con el setNodeRef del droppable (dnd-kit):
+  // necesitamos el rect del DOM para derivar el slot desde el click-Y,
+  // igual que agenda-column.tsx en vista Día.
+  const setRefs = useCallback(
+    (el: HTMLDivElement | null) => {
+      colRef.current = el;
+      setNodeRef(el);
+    },
+    [setNodeRef],
+  );
+
+  // Click en un slot vacío → abrir "Nueva cita" con el inicio EXACTO del
+  // slot pre-llenado. Vista Semana es columna unificada por día (sin split
+  // por doctor), así que initialSlot solo lleva startsAt (sin doctorId).
+  const handleClick = useCallback(
+    (e: React.MouseEvent) => {
+      if ((e.target as HTMLElement).closest(`.${styles.appt}`)) return;
+      setDay(day.iso);
+      const el = colRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const slotHeight = rect.height / slotsTotal;
+      const y = e.clientY - rect.top;
+      const slotIdx = Math.max(0, Math.min(slotsTotal - 1, Math.floor(y / slotHeight)));
+      const startsAt = slotIndexToUtc(slotIdx, day.iso, {
+        timezone: state.timezone,
+        slotMinutes: state.slotMinutes,
+        dayStart: state.dayStart,
+        dayEnd: state.dayEnd,
+      });
+      openNewAppointment({
+        initialSlot: { startsAt: startsAt.toISOString(), resourceId: null },
+        openAgendaAfter: true,
+      });
+    },
+    [openNewAppointment, setDay, day.iso, slotsTotal, state.timezone, state.slotMinutes, state.dayStart, state.dayEnd],
+  );
+
   const overlapMode = useDragOverlap(droppableId);
 
   const dropClass = isOver
@@ -163,12 +205,12 @@ function WeekDayColumn({ day, isToday, slotsTotal }: WeekDayColumnProps) {
 
   return (
     <div
-      ref={setNodeRef}
+      ref={setRefs}
       className={classes}
       style={{
         height: `calc(${slotsTotal} * var(--mf-agenda-slot-h))`,
       }}
-      onClick={() => setDay(day.iso)}
+      onClick={handleClick}
       role="grid"
       aria-label={`Día ${day.iso}`}
     >

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Zap } from "lucide-react";
 import {
   buildOccupiedSlotSet,
@@ -51,6 +51,7 @@ export function SlotGridPicker({
 }: Props) {
   const [day, setDay] = useState<FetchedDay>({ appointments: [], loaded: false });
   const [loading, setLoading] = useState(false);
+  const selectedRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (!doctorId) return;
@@ -130,6 +131,14 @@ export function SlotGridPicker({
     return Math.round((ms - dayStartUtcMs) / 60_000 / config.slotMinutes);
   }, [value, dayStartUtcMs, config.slotMinutes]);
 
+  // Cuando el slot llega pre-seleccionado (click en la agenda), scrollearlo
+  // a la vista — el grid tiene maxHeight + overflow y el slot podria quedar
+  // abajo del fold. block:"nearest" solo desplaza el contenedor del grid.
+  useEffect(() => {
+    if (valueIdx < 0) return;
+    selectedRef.current?.scrollIntoView({ block: "nearest" });
+  }, [valueIdx, day.loaded]);
+
   const firstFreeIdx = useMemo(() => {
     for (let i = 0; i < total; i++) {
       if (isSlotFree(i)) return i;
@@ -188,6 +197,7 @@ export function SlotGridPicker({
           return (
             <button
               key={idx}
+              ref={selected ? selectedRef : undefined}
               type="button"
               role="gridcell"
               aria-selected={selected}
