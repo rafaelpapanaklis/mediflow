@@ -62,6 +62,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
   const [isNewPatient, setIsNewPatient] = useState(false);
   const [notifyPatient, setNotifyPatient] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState<{ patient?: boolean; doctorId?: boolean; resourceId?: boolean; reason?: boolean; slot?: boolean }>({});
   // Pediatrics — context derivado del paciente seleccionado. Se hidrata
   // tras seleccionar paciente vía /api/pediatrics/context. Cuando no
   // aplica el módulo (gating), el endpoint devuelve { pediatric: false }
@@ -141,6 +142,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
   useEffect(() => {
     if (!isOpen || !boot) return;
 
+    setErrors({});
     setPatient(params?.initialPatient ?? null);
     setReason(params?.initialReason ?? "");
     setIsTeleconsult(false);
@@ -220,9 +222,17 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
   }, [patient]);
 
   const submit = async () => {
-    if (!patient) return toast.error("Selecciona un paciente");
-    if (!doctorId) return toast.error("Selecciona un profesional");
-    if (!slotIso) return toast.error("Selecciona un horario");
+    const newErrors: typeof errors = {};
+    if (!patient) newErrors.patient = true;
+    if (!doctorId) newErrors.doctorId = true;
+    if (boot && boot.resources.length > 0 && !resourceId) newErrors.resourceId = true;
+    if (!reason.trim()) newErrors.reason = true;
+    if (!slotIso) newErrors.slot = true;
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      toast.error("Completa los campos obligatorios marcados en rojo");
+      return;
+    }
     if (!boot) return;
 
     const typeChips = [
@@ -342,7 +352,9 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
             ) : (
               <>
                 <Field label="Paciente*">
-                  <PatientCombobox value={patient} onChange={setPatient} />
+                  <div style={{ borderRadius: 8, border: errors.patient ? "1px solid #ef4444" : "1px solid transparent" }}>
+                    <PatientCombobox value={patient} onChange={(p) => { setPatient(p); if (errors.patient) setErrors((er) => ({ ...er, patient: undefined })); }} />
+                  </div>
                 </Field>
 
                 <div style={gridTwo}>
@@ -350,7 +362,8 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                     <select
                       className="input-new"
                       value={doctorId}
-                      onChange={(e) => setDoctorId(e.target.value)}
+                      onChange={(e) => { setDoctorId(e.target.value); if (errors.doctorId) setErrors((er) => ({ ...er, doctorId: undefined })); }}
+                      style={{ borderColor: errors.doctorId ? "#ef4444" : undefined }}
                     >
                       {boot.doctors.length === 0 && <option value="">Sin profesionales activos</option>}
                       {boot.doctors.map((d) => (
@@ -361,11 +374,12 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                     </select>
                   </Field>
                   {boot.resources.length > 0 && (
-                    <Field label="Sillón / Sala">
+                    <Field label="Consultorio*">
                       <select
                         className="input-new"
                         value={resourceId}
-                        onChange={(e) => setResourceId(e.target.value)}
+                        onChange={(e) => { setResourceId(e.target.value); if (errors.resourceId) setErrors((er) => ({ ...er, resourceId: undefined })); }}
+                        style={{ borderColor: errors.resourceId ? "#ef4444" : undefined }}
                       >
                         <option value="">—</option>
                         {boot.resources.map((r) => (
@@ -397,12 +411,13 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                   </div>
                 ) : null}
 
-                <Field label="Motivo">
+                <Field label="Motivo*">
                   <input
                     type="text"
                     className="input-new"
                     value={reason}
-                    onChange={(e) => setReason(e.target.value)}
+                    onChange={(e) => { setReason(e.target.value); if (errors.reason) setErrors((er) => ({ ...er, reason: undefined })); }}
+                    style={{ borderColor: errors.reason ? "#ef4444" : undefined }}
                     placeholder="Consulta general, control, urgencia..."
                   />
                 </Field>
@@ -479,9 +494,14 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                       config={config}
                       doctors={boot.doctors}
                       value={slotIso}
-                      onChange={setSlotIso}
+                      onChange={(iso) => { setSlotIso(iso); if (errors.slot) setErrors((er) => ({ ...er, slot: undefined })); }}
                       resourceSchedule={resourceSchedule}
                     />
+                    {errors.slot && (
+                      <div style={{ fontSize: 11, color: "#ef4444", marginTop: 4 }}>
+                        Selecciona un horario
+                      </div>
+                    )}
                   </Field>
                 )}
 
@@ -521,7 +541,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
             <ButtonNew
               variant="primary"
               onClick={submit}
-              disabled={submitting || !boot || !patient || !doctorId || !slotIso}
+              disabled={submitting || !boot}
             >
               {submitting ? (
                 <>
