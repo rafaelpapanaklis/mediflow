@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
-import { X, Loader2, Video, Footprints, MessageCircle, AlertTriangle, Baby, Calendar, Stethoscope, UserPlus } from "lucide-react";
+import { X, Loader2, MessageCircle, AlertTriangle, Baby } from "lucide-react";
 import toast from "react-hot-toast";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { PatientCombobox } from "./patient-combobox";
@@ -24,6 +24,8 @@ import type { WeekScheduleDTO } from "@/lib/agenda/types";
 import type {
   OpenNewAppointmentParams,
 } from "@/lib/new-appointment/types";
+
+const REASON_PRESETS = ["Consulta General", "Primera Consulta", "Limpieza", "Resina", "Dolor", "Urgencia"];
 
 interface Props {
   isOpen: boolean;
@@ -55,11 +57,6 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
   const [duration, setDuration] = useState(30);
   const [customDurationInput, setCustomDurationInput] = useState("");
   const [slotIso, setSlotIso] = useState<string | null>(null);
-  const [isTeleconsult, setIsTeleconsult] = useState(false);
-  const [isWalkIn, setIsWalkIn] = useState(false);
-  const [isCita, setIsCita] = useState(false);
-  const [isCheckGeneral, setIsCheckGeneral] = useState(false);
-  const [isNewPatient, setIsNewPatient] = useState(false);
   const [notifyPatient, setNotifyPatient] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<{ patient?: boolean; doctorId?: boolean; resourceId?: boolean; reason?: boolean; slot?: boolean }>({});
@@ -145,11 +142,6 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
     setErrors({});
     setPatient(params?.initialPatient ?? null);
     setReason(params?.initialReason ?? "");
-    setIsTeleconsult(false);
-    setIsWalkIn(false);
-    setIsCita(false);
-    setIsCheckGeneral(false);
-    setIsNewPatient(false);
     setSubmitting(false);
     setPediatricContext(null);
 
@@ -235,12 +227,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
     }
     if (!boot) return;
 
-    const typeChips = [
-      isCita && "Cita",
-      isCheckGeneral && "Check General",
-      isNewPatient && "Paciente Nuevo",
-    ].filter(Boolean).join(" / ");
-    const finalReason = [typeChips, reason.trim()].filter(Boolean).join(" — ") || null;
+    const finalReason = reason.trim() || null;
 
     const startsAt = new Date(slotIso);
     const endsAt = new Date(startsAt.getTime() + duration * 60_000);
@@ -258,8 +245,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
           startsAt: startsAt.toISOString(),
           endsAt: endsAt.toISOString(),
           reason: finalReason,
-          isTeleconsult,
-          isWalkIn,
+          isTeleconsult: false,
           notifyPatient,
         }),
       });
@@ -420,6 +406,33 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                     style={{ borderColor: errors.reason ? "#ef4444" : undefined }}
                     placeholder="Consulta general, control, urgencia..."
                   />
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                    {REASON_PRESETS.map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => {
+                          setReason(r);
+                          if (errors.reason) setErrors((er) => ({ ...er, reason: undefined }));
+                        }}
+                        style={{
+                          padding: "4px 10px",
+                          background: reason === r ? "var(--brand-soft)" : "transparent",
+                          color: reason === r ? "var(--trial-accent-calm)" : "var(--text-2)",
+                          border: "1px solid",
+                          borderColor: reason === r ? "var(--border-brand)" : "var(--border-soft)",
+                          borderRadius: 999,
+                          fontSize: 11,
+                          fontWeight: 500,
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                          transition: "all 0.12s",
+                        }}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
                 </Field>
 
                 <div style={gridTwo}>
@@ -505,31 +518,16 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                   </Field>
                 )}
 
-                <div style={togglesRowStyle}>
-                  <ToggleChip active={isCita} icon={<Calendar size={12} />} label="Cita" onClick={() => setIsCita((v) => !v)} />
-                  <ToggleChip active={isCheckGeneral} icon={<Stethoscope size={12} />} label="Check General" onClick={() => setIsCheckGeneral((v) => !v)} />
-                  <ToggleChip active={isNewPatient} icon={<UserPlus size={12} />} label="Paciente Nuevo" onClick={() => setIsNewPatient((v) => !v)} />
-                  <ToggleChip
-                    active={isTeleconsult}
-                    icon={<Video size={12} />}
-                    label="Videollamada"
-                    onClick={() => setIsTeleconsult((v) => !v)}
-                  />
-                  <ToggleChip
-                    active={isWalkIn}
-                    icon={<Footprints size={12} />}
-                    label="Walk-in"
-                    onClick={() => setIsWalkIn((v) => !v)}
-                  />
-                  {boot.waConnected && (
+                {boot.waConnected && (
+                  <div style={togglesRowStyle}>
                     <ToggleChip
                       active={notifyPatient}
                       icon={<MessageCircle size={12} />}
                       label="Enviar WhatsApp"
                       onClick={() => setNotifyPatient((v) => !v)}
                     />
-                  )}
-                </div>
+                  </div>
+                )}
               </>
             )}
           </div>
