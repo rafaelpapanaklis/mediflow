@@ -32,6 +32,19 @@
     --info:         #2563eb;
     --info-soft:    rgba(37,99,235,0.10);
 
+    /* ── Violet ramp (rediseño popup Nueva cita) — alineada con
+       --brand (#7c3aed = violet-600). Es una rampa de marca fija (no cambia
+       por tema); usar para acentos. Superficies/texto/bordes siguen en tokens
+       semánticos (--bg-*, --text-*, --border-*) para que dark mode funcione. ── */
+    --violet-50:  #F5F3FF;
+    --violet-100: #EDE9FE;
+    --violet-200: #DDD6FE;
+    --violet-300: #C4B5FD;
+    --violet-400: #A78BFA;
+    --violet-500: #8B5CF6;
+    --violet-600: #7C3AED;
+    --violet-700: #6D28D9;
+
     --radius-sm: 6px;
     --radius:    10px;
     --radius-lg: 14px;

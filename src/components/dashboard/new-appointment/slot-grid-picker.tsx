@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Zap } from "lucide-react";
+import { Loader2, Zap, Sun, Sunset, Moon } from "lucide-react";
 import {
   buildOccupiedSlotSet,
 } from "@/lib/agenda/overlap-client";
@@ -32,6 +32,8 @@ interface Props {
    * disponible (sin filtrar). `undefined` = aún cargando o sin recurso.
    */
   resourceSchedule?: WeekScheduleDTO | null;
+  /** Agrupa los slots en Mañana / Tarde / Noche (rediseño popup Nueva cita). */
+  grouped?: boolean;
 }
 
 interface FetchedDay {
@@ -48,6 +50,7 @@ export function SlotGridPicker({
   value,
   onChange,
   resourceSchedule,
+  grouped = false,
 }: Props) {
   const [day, setDay] = useState<FetchedDay>({ appointments: [], loaded: false });
   const [loading, setLoading] = useState(false);
@@ -161,85 +164,128 @@ export function SlotGridPicker({
     );
   }
 
-  return (
-    <div>
-      <div style={headerRowStyle}>
-        <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-          {loading ? (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <Loader2 size={11} className="animate-spin" />
-              Cargando...
-            </span>
-          ) : (
-            `${config.slotMinutes} min · ${durationMin} min de duración`
-          )}
-        </div>
-        {firstFreeIdx >= 0 && firstFreeIdx !== valueIdx && (
-          <button
-            type="button"
-            onClick={jumpToFirstFree}
-            style={quickJumpStyle}
-          >
-            <Zap size={11} aria-hidden />
-            Primer slot libre: {formatSlotTime(slotIndexToUtc(firstFreeIdx, dateISO, config).toISOString(), config.timezone)}
-          </button>
+  const hourOf = (idx: number): number => {
+    const utc = slotIndexToUtc(idx, dateISO, config);
+    const label = formatSlotTime(utc.toISOString(), config.timezone);
+    return parseInt(label.slice(0, 2), 10);
+  };
+
+  const renderSlot = (idx: number) => {
+    const free = isSlotFree(idx);
+    const occupied = !free;
+    const selected = idx === valueIdx;
+    const slotUtc = slotIndexToUtc(idx, dateISO, config);
+    const label = formatSlotTime(slotUtc.toISOString(), config.timezone);
+
+    return (
+      <button
+        key={idx}
+        ref={selected ? selectedRef : undefined}
+        type="button"
+        role="gridcell"
+        aria-selected={selected}
+        aria-disabled={occupied}
+        disabled={occupied}
+        onClick={() => onChange(slotUtc.toISOString())}
+        style={{
+          ...slotBtnStyle,
+          background: selected
+            ? "var(--brand-soft)"
+            : occupied
+            ? "var(--bg-elev-2)"
+            : "var(--bg-elev)",
+          borderColor: selected ? "var(--border-brand)" : "var(--border-soft)",
+          color: selected
+            ? "var(--trial-accent-calm)"
+            : occupied
+            ? "var(--text-4)"
+            : "var(--text-1)",
+          cursor: occupied ? "not-allowed" : "pointer",
+          opacity: occupied ? 0.55 : 1,
+          boxShadow: selected ? "0 0 0 1px var(--border-brand) inset" : "none",
+        }}
+        onMouseEnter={(e) => {
+          if (occupied || selected) return;
+          e.currentTarget.style.background = "var(--bg-hover)";
+          e.currentTarget.style.borderColor = "var(--border-brand)";
+        }}
+        onMouseLeave={(e) => {
+          if (occupied || selected) return;
+          e.currentTarget.style.background = "var(--bg-elev)";
+          e.currentTarget.style.borderColor = "var(--border-soft)";
+        }}
+      >
+        {label}
+      </button>
+    );
+  };
+
+  const header = (
+    <div style={headerRowStyle}>
+      <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+        {loading ? (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <Loader2 size={11} className="animate-spin" />
+            Cargando...
+          </span>
+        ) : (
+          `${config.slotMinutes} min · ${durationMin} min de duración`
         )}
       </div>
+      {firstFreeIdx >= 0 && firstFreeIdx !== valueIdx && (
+        <button type="button" onClick={jumpToFirstFree} style={quickJumpStyle}>
+          <Zap size={11} aria-hidden />
+          Primer slot libre: {formatSlotTime(slotIndexToUtc(firstFreeIdx, dateISO, config).toISOString(), config.timezone)}
+        </button>
+      )}
+    </div>
+  );
 
+  if (grouped) {
+    const manana: number[] = [];
+    const tarde: number[] = [];
+    const noche: number[] = [];
+    for (let idx = 0; idx < total; idx++) {
+      const h = hourOf(idx);
+      if (h < 13) manana.push(idx);
+      else if (h < 18) tarde.push(idx);
+      else noche.push(idx);
+    }
+    const groups: { key: string; label: string; Icon: typeof Sun; idxs: number[] }[] = [
+      { key: "manana", label: "Mañana", Icon: Sun, idxs: manana },
+      { key: "tarde", label: "Tarde", Icon: Sunset, idxs: tarde },
+      { key: "noche", label: "Noche", Icon: Moon, idxs: noche },
+    ];
+    return (
+      <div>
+        {header}
+        <div style={groupedContainerStyle}>
+          {groups.map((g) =>
+            g.idxs.length === 0 ? null : (
+              <div key={g.key} style={{ marginBottom: 10 }}>
+                <div style={groupHeaderStyle}>
+                  <g.Icon size={11} aria-hidden />
+                  {g.label}
+                  <span style={groupCountStyle}>
+                    {g.idxs.filter((i) => isSlotFree(i)).length} libres
+                  </span>
+                </div>
+                <div style={groupGridStyle} role="grid" aria-label={`Slots ${g.label}`}>
+                  {g.idxs.map(renderSlot)}
+                </div>
+              </div>
+            ),
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {header}
       <div style={gridStyle} role="grid" aria-label="Slots disponibles">
-        {Array.from({ length: total }).map((_, idx) => {
-          const free = isSlotFree(idx);
-          const occupied = !free;
-          const selected = idx === valueIdx;
-          const slotUtc = slotIndexToUtc(idx, dateISO, config);
-          const label = formatSlotTime(slotUtc.toISOString(), config.timezone);
-
-          return (
-            <button
-              key={idx}
-              ref={selected ? selectedRef : undefined}
-              type="button"
-              role="gridcell"
-              aria-selected={selected}
-              aria-disabled={occupied}
-              disabled={occupied}
-              onClick={() => onChange(slotUtc.toISOString())}
-              style={{
-                ...slotBtnStyle,
-                background: selected
-                  ? "var(--brand-soft)"
-                  : occupied
-                  ? "var(--bg-elev-2)"
-                  : "var(--bg-elev)",
-                borderColor: selected
-                  ? "var(--border-brand)"
-                  : "var(--border-soft)",
-                color: selected
-                  ? "var(--trial-accent-calm)"
-                  : occupied
-                  ? "var(--text-4)"
-                  : "var(--text-1)",
-                cursor: occupied ? "not-allowed" : "pointer",
-                opacity: occupied ? 0.55 : 1,
-                boxShadow: selected
-                  ? "0 0 0 1px var(--border-brand) inset"
-                  : "none",
-              }}
-              onMouseEnter={(e) => {
-                if (occupied || selected) return;
-                e.currentTarget.style.background = "var(--bg-hover)";
-                e.currentTarget.style.borderColor = "var(--border-brand)";
-              }}
-              onMouseLeave={(e) => {
-                if (occupied || selected) return;
-                e.currentTarget.style.background = "var(--bg-elev)";
-                e.currentTarget.style.borderColor = "var(--border-soft)";
-              }}
-            >
-              {label}
-            </button>
-          );
-        })}
+        {Array.from({ length: total }, (_, idx) => renderSlot(idx))}
       </div>
     </div>
   );
@@ -301,4 +347,39 @@ const emptyHintStyle: React.CSSProperties = {
   background: "var(--bg-elev-2)",
   border: "1px dashed var(--border-soft)",
   borderRadius: 10,
+};
+
+const groupedContainerStyle: React.CSSProperties = {
+  maxHeight: 320,
+  overflowY: "auto",
+  padding: 12,
+  border: "1px solid var(--border-soft)",
+  borderRadius: 10,
+  background: "var(--bg)",
+};
+
+const groupHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  marginBottom: 6,
+  fontSize: 11,
+  fontWeight: 600,
+  color: "var(--text-3)",
+  textTransform: "uppercase",
+  letterSpacing: "0.06em",
+};
+
+const groupCountStyle: React.CSSProperties = {
+  fontWeight: 400,
+  textTransform: "none",
+  letterSpacing: 0,
+  marginLeft: 4,
+  color: "var(--text-4)",
+};
+
+const groupGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(72px, 1fr))",
+  gap: 4,
 };

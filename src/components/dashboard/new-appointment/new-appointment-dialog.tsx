@@ -5,10 +5,13 @@ import { useRouter } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X, Loader2, MessageCircle, AlertTriangle, Baby } from "lucide-react";
 import toast from "react-hot-toast";
-import { ButtonNew } from "@/components/ui/design-system/button-new";
-import { PatientCombobox } from "./patient-combobox";
 import { SlotGridPicker } from "./slot-grid-picker";
-import { todayInTz } from "@/lib/agenda/time-utils";
+import { PatientSearchField } from "./patient-search-field";
+import { MotivoField } from "./motivo-field";
+import { DateDropdown } from "./date-dropdown";
+import { DurationPicker } from "./duration-picker";
+import { SummaryFooter } from "./summary-footer";
+import { todayInTz, formatSlotTime } from "@/lib/agenda/time-utils";
 import {
   DURATION_PRESETS_MIN,
   defaultDurationFor,
@@ -325,22 +328,24 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
             <Dialog.Title style={titleStyle}>Nueva cita</Dialog.Title>
             <Dialog.Close asChild>
               <button type="button" aria-label="Cerrar" style={closeBtnStyle}>
-                <X size={16} />
+                <X size={18} />
               </button>
             </Dialog.Close>
           </header>
 
           <div style={bodyStyle}>
             {bootLoading || !boot ? (
-              <div style={{ padding: 40, textAlign: "center", color: "var(--text-2)" }}>
-                <Loader2 size={20} className="animate-spin" style={{ display: "inline-block" }} />
+              <div style={{ padding: 48, textAlign: "center", color: "var(--text-3)" }}>
+                <Loader2 size={22} className="animate-spin" style={{ display: "inline-block" }} />
               </div>
             ) : (
               <>
                 <Field label="Paciente*">
-                  <div style={{ borderRadius: 8, border: errors.patient ? "1px solid #ef4444" : "1px solid transparent" }}>
-                    <PatientCombobox value={patient} onChange={(p) => { setPatient(p); if (errors.patient) setErrors((er) => ({ ...er, patient: undefined })); }} />
-                  </div>
+                  <PatientSearchField
+                    value={patient}
+                    onChange={(p) => { setPatient(p); if (errors.patient) setErrors((er) => ({ ...er, patient: undefined })); }}
+                    error={errors.patient}
+                  />
                 </Field>
 
                 <div style={gridTwo}>
@@ -349,7 +354,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                       className="input-new"
                       value={doctorId}
                       onChange={(e) => { setDoctorId(e.target.value); if (errors.doctorId) setErrors((er) => ({ ...er, doctorId: undefined })); }}
-                      style={{ borderColor: errors.doctorId ? "#ef4444" : undefined }}
+                      style={{ borderColor: errors.doctorId ? "var(--danger)" : undefined }}
                     >
                       {boot.doctors.length === 0 && <option value="">Sin profesionales activos</option>}
                       {boot.doctors.map((d) => (
@@ -365,7 +370,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                         className="input-new"
                         value={resourceId}
                         onChange={(e) => { setResourceId(e.target.value); if (errors.resourceId) setErrors((er) => ({ ...er, resourceId: undefined })); }}
-                        style={{ borderColor: errors.resourceId ? "#ef4444" : undefined }}
+                        style={{ borderColor: errors.resourceId ? "var(--danger)" : undefined }}
                       >
                         <option value="">—</option>
                         {boot.resources.map((r) => (
@@ -398,102 +403,37 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                 ) : null}
 
                 <Field label="Motivo*">
-                  <input
-                    type="text"
-                    className="input-new"
+                  <MotivoField
                     value={reason}
-                    onChange={(e) => { setReason(e.target.value); if (errors.reason) setErrors((er) => ({ ...er, reason: undefined })); }}
-                    style={{ borderColor: errors.reason ? "#ef4444" : undefined }}
-                    placeholder="Consulta general, control, urgencia..."
+                    onChange={(v) => { setReason(v); if (errors.reason) setErrors((er) => ({ ...er, reason: undefined })); }}
+                    presets={REASON_PRESETS}
+                    error={errors.reason}
                   />
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
-                    {REASON_PRESETS.map((r) => (
-                      <button
-                        key={r}
-                        type="button"
-                        onClick={() => {
-                          setReason(r);
-                          if (errors.reason) setErrors((er) => ({ ...er, reason: undefined }));
-                        }}
-                        style={{
-                          padding: "4px 10px",
-                          background: reason === r ? "var(--brand-soft)" : "transparent",
-                          color: reason === r ? "var(--trial-accent-calm)" : "var(--text-2)",
-                          border: "1px solid",
-                          borderColor: reason === r ? "var(--border-brand)" : "var(--border-soft)",
-                          borderRadius: 999,
-                          fontSize: 11,
-                          fontWeight: 500,
-                          cursor: "pointer",
-                          fontFamily: "inherit",
-                          transition: "all 0.12s",
-                        }}
-                      >
-                        {r}
-                      </button>
-                    ))}
-                  </div>
                 </Field>
 
-                <div style={gridTwo}>
+                <div style={gridDateDur}>
                   <Field label="Fecha">
-                    <input
-                      type="date"
-                      className="input-new"
+                    <DateDropdown
                       value={dateISO}
-                      onChange={(e) => {
-                        setDateISO(e.target.value);
-                        setSlotIso(null);
-                      }}
+                      onChange={(iso) => { setDateISO(iso); setSlotIso(null); }}
+                      todayISO={todayInTz(boot.timezone)}
                     />
                   </Field>
                   <Field label="Duración">
-                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                      {DURATION_PRESETS_MIN.map((d) => (
-                        <button
-                          key={d}
-                          type="button"
-                          onClick={() => {
-                            setDuration(d);
-                            setCustomDurationInput("");
-                          }}
-                          style={{
-                            ...durationChipStyle,
-                            background: duration === d ? "var(--brand-soft)" : "transparent",
-                            borderColor: duration === d ? "var(--border-brand)" : "var(--border-soft)",
-                            color: duration === d ? "var(--trial-accent-calm)" : "var(--text-2)",
-                          }}
-                        >
-                          {d}m
-                        </button>
-                      ))}
-                      <input
-                        type="number"
-                        min={5}
-                        max={480}
-                        step={5}
-                        value={customDurationInput}
-                        onChange={(e) => {
-                          const raw = e.target.value;
-                          setCustomDurationInput(raw);
-                          if (raw === "") return;
-                          const n = parseInt(raw, 10);
-                          if (!Number.isFinite(n)) return;
-                          const clamped = Math.max(5, Math.min(480, n));
-                          setDuration(clamped);
-                        }}
-                        placeholder="min"
-                        aria-label="Duración personalizada en minutos"
-                        style={{
-                          ...durationChipStyle,
-                          width: 60,
-                          textAlign: "center" as const,
-                          background: customDurationInput.length > 0 ? "var(--brand-soft)" : "transparent",
-                          borderColor: customDurationInput.length > 0 ? "var(--border-brand)" : "var(--border-soft)",
-                          color: customDurationInput.length > 0 ? "var(--trial-accent-calm)" : "var(--text-2)",
-                        }}
-                      />
-                    </div>
+                    <DurationPicker
+                      presets={DURATION_PRESETS_MIN}
+                      duration={duration}
+                      customInput={customDurationInput}
+                      onSelectPreset={(d) => { setDuration(d); setCustomDurationInput(""); }}
+                      onCustomChange={(raw) => {
+                        setCustomDurationInput(raw);
+                        if (raw === "") return;
+                        const n = parseInt(raw, 10);
+                        if (!Number.isFinite(n)) return;
+                        const clamped = Math.max(5, Math.min(480, n));
+                        setDuration(clamped);
+                      }}
+                    />
                   </Field>
                 </div>
 
@@ -509,9 +449,10 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                       value={slotIso}
                       onChange={(iso) => { setSlotIso(iso); if (errors.slot) setErrors((er) => ({ ...er, slot: undefined })); }}
                       resourceSchedule={resourceSchedule}
+                      grouped
                     />
                     {errors.slot && (
-                      <div style={{ fontSize: 11, color: "#ef4444", marginTop: 4 }}>
+                      <div style={{ fontSize: 11, color: "var(--danger)", marginTop: 4 }}>
                         Selecciona un horario
                       </div>
                     )}
@@ -532,25 +473,19 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
             )}
           </div>
 
-          <footer style={footerStyle}>
-            <ButtonNew variant="ghost" onClick={onClose} disabled={submitting}>
-              Cancelar
-            </ButtonNew>
-            <ButtonNew
-              variant="primary"
-              onClick={submit}
-              disabled={submitting || !boot}
-            >
-              {submitting ? (
-                <>
-                  <Loader2 size={14} className="animate-spin" />
-                  Creando...
-                </>
-              ) : (
-                "Crear cita"
-              )}
-            </ButtonNew>
-          </footer>
+          <SummaryFooter
+            summary={summaryNode({
+              slotIso,
+              duration,
+              patientName: patient?.name ?? null,
+              doctorName: boot?.doctors.find((d) => d.id === doctorId)?.shortName ?? null,
+              timezone: boot?.timezone ?? null,
+            })}
+            submitting={submitting}
+            disabled={submitting || !boot}
+            onCancel={onClose}
+            onSubmit={submit}
+          />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
@@ -559,20 +494,59 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <span
         style={{
           fontSize: 11,
-          fontWeight: 500,
+          fontWeight: 600,
           textTransform: "uppercase",
-          letterSpacing: "0.04em",
+          letterSpacing: "0.06em",
           color: "var(--text-3)",
         }}
       >
         {label}
       </span>
       {children}
-    </label>
+    </div>
+  );
+}
+
+function summaryNode({
+  slotIso,
+  duration,
+  patientName,
+  doctorName,
+  timezone,
+}: {
+  slotIso: string | null;
+  duration: number;
+  patientName: string | null;
+  doctorName: string | null;
+  timezone: string | null;
+}): React.ReactNode {
+  if (!slotIso || !timezone) {
+    return <span style={{ color: "var(--text-3)" }}>Selecciona fecha y horario para crear la cita</span>;
+  }
+  const time = formatSlotTime(slotIso, timezone);
+  const firstName = patientName ? patientName.split(" ")[0] : null;
+  const bold: React.CSSProperties = { color: "var(--text-1)", fontWeight: 600 };
+  return (
+    <>
+      <b style={bold}>{time}</b>
+      {` · ${duration} min`}
+      {firstName ? (
+        <>
+          {" · "}
+          <b style={bold}>{firstName}</b>
+        </>
+      ) : null}
+      {doctorName ? (
+        <>
+          {" con "}
+          <b style={bold}>{doctorName}</b>
+        </>
+      ) : null}
+    </>
   );
 }
 
@@ -627,12 +601,12 @@ const dialogStyle: React.CSSProperties = {
   top: "50%",
   left: "50%",
   transform: "translate(-50%, -50%)",
-  width: "min(92vw, 720px)",
-  maxHeight: "92vh",
+  width: "min(94vw, 880px)",
+  maxHeight: "min(92vh, 980px)",
   background: "var(--bg-elev)",
   border: "1px solid var(--border-strong)",
-  borderRadius: 14,
-  boxShadow: "0 24px 60px -12px rgba(15,10,30,0.4)",
+  borderRadius: 16,
+  boxShadow: "0 24px 64px -16px rgba(15,10,30,0.45)",
   display: "flex",
   flexDirection: "column",
   zIndex: 71,
@@ -644,68 +618,55 @@ const headerStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  padding: "16px 20px",
+  padding: "18px 24px",
   borderBottom: "1px solid var(--border-soft)",
 };
 
 const titleStyle: React.CSSProperties = {
-  fontSize: 15,
+  fontSize: 17,
   fontWeight: 600,
+  letterSpacing: "-0.01em",
   color: "var(--text-1)",
   margin: 0,
 };
 
 const closeBtnStyle: React.CSSProperties = {
-  width: 28,
-  height: 28,
+  width: 32,
+  height: 32,
   display: "grid",
   placeItems: "center",
   background: "transparent",
   border: "1px solid transparent",
-  borderRadius: 6,
-  color: "var(--text-2)",
+  borderRadius: 8,
+  color: "var(--text-3)",
   cursor: "pointer",
 };
 
 const bodyStyle: React.CSSProperties = {
-  padding: 20,
+  padding: "20px 24px 24px",
   display: "flex",
   flexDirection: "column",
-  gap: 14,
+  gap: 18,
   overflowY: "auto",
 };
 
 const gridTwo: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "1fr 1fr",
-  gap: 12,
+  gap: 14,
+};
+
+const gridDateDur: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "280px 1fr",
+  gap: 14,
 };
 
 const togglesRowStyle: React.CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
   gap: 6,
-  paddingTop: 4,
-};
-
-const durationChipStyle: React.CSSProperties = {
-  height: 28,
-  padding: "0 10px",
-  border: "1px solid",
-  borderRadius: 6,
-  fontSize: 12,
-  fontWeight: 500,
-  fontFamily: "var(--font-jetbrains-mono, monospace)",
-  cursor: "pointer",
-  transition: "all 0.12s",
-};
-
-const footerStyle: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "flex-end",
-  gap: 8,
-  padding: "14px 20px",
-  borderTop: "1px solid var(--border-soft)",
+  paddingTop: 2,
 };
 
 const pediatricBannerStyle: React.CSSProperties = {
