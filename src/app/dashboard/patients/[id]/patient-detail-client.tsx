@@ -765,7 +765,7 @@ export function PatientDetailClient({
       router.refresh();
     }
     toast.success("Expediente guardado");
-    setTab("evolucion");
+    setTab("resumen");
   }
 
   const handleRecordUpdated = useCallback((updated: any) => {
