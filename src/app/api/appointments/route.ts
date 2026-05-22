@@ -138,7 +138,9 @@ export async function GET(req: NextRequest) {
     waitlistCount,
   };
 
-  return NextResponse.json(response);
+  return NextResponse.json(response, {
+    headers: { "Cache-Control": "no-store, must-revalidate" },
+  });
 }
 
 // ═════════════════════════════════════════════════════════════════

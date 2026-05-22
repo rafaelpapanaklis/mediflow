@@ -102,7 +102,14 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
   }, [resourceId]);
 
   useEffect(() => {
-    if (!isOpen || boot) return;
+    // Reset boot al cerrar el modal: así cada apertura re-fetchea doctores,
+    // recursos y config en vez de servir los datos de la primera apertura
+    // (evita selectores stale sin necesidad de hard refresh).
+    if (!isOpen) {
+      setBoot(null);
+      return;
+    }
+    if (boot) return;
     setBootLoading(true);
     fetch(`/api/appointments?date=${todayInTz("America/Mexico_City")}`, {
       credentials: "include",

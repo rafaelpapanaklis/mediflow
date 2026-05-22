@@ -4,5 +4,7 @@ import { loadClinicSession } from "@/lib/agenda/api-helpers";
 export async function GET() {
   const session = await loadClinicSession();
   if (session instanceof NextResponse) return session;
-  return NextResponse.json({ clinic: session.clinic });
+  return NextResponse.json({ clinic: session.clinic }, {
+    headers: { "Cache-Control": "no-store, must-revalidate" },
+  });
 }

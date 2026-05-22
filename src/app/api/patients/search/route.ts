@@ -8,7 +8,9 @@ export async function GET(req: NextRequest) {
 
   const q = (req.nextUrl.searchParams.get("q") ?? "").trim();
   if (q.length < 2) {
-    return NextResponse.json({ hits: [] });
+    return NextResponse.json({ hits: [] }, {
+      headers: { "Cache-Control": "no-store, must-revalidate" },
+    });
   }
 
   const tokens = q.split(/\s+/).filter(Boolean);
@@ -42,5 +44,7 @@ export async function GET(req: NextRequest) {
     phone: p.phone ?? null,
   }));
 
-  return NextResponse.json({ hits });
+  return NextResponse.json({ hits }, {
+    headers: { "Cache-Control": "no-store, must-revalidate" },
+  });
 }

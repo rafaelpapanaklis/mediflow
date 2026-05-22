@@ -39,7 +39,9 @@ export async function GET(req: Request) {
   if (denied) return denied;
   const includeArchived = new URL(req.url).searchParams.get("includeArchived") === "1";
   const resources = await fetchResources(session.clinic.id, { includeArchived });
-  return NextResponse.json({ resources });
+  return NextResponse.json({ resources }, {
+    headers: { "Cache-Control": "no-store, must-revalidate" },
+  });
 }
 
 export async function POST(req: Request) {

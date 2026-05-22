@@ -41,7 +41,9 @@ export async function GET(req: NextRequest) {
     orderBy: [{ role: "asc" }, { firstName: "asc" }],
   });
 
-  return NextResponse.json(team);
+  return NextResponse.json(team, {
+    headers: { "Cache-Control": "no-store, must-revalidate" },
+  });
 }
 
 export async function POST(req: NextRequest) {
