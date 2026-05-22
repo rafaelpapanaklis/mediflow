@@ -390,6 +390,27 @@
   .tableWrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .table { min-width: 920px; }
 }
+
+/* Laptops 1025-1366px: la tabla con 7+ columnas y la barra lateral del
+   dashboard no caben juntas. Activamos scroll horizontal y reducimos
+   padding de celdas para ganar espacio sin sacrificar legibilidad.
+   Nota de cascada: los overrides de padding/colActions/actions se scopean
+   bajo .tableWrap para ganar especificidad sobre las reglas base
+   (.table thead th, .table tbody td, .colActions, .actions) que aparecen
+   MÁS ABAJO en este archivo; con igual especificidad el orden de fuente
+   las anularía. El media query las limita a este rango de ancho. */
+@media (min-width: 1025px) and (max-width: 1366px) {
+  .tableWrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .table { min-width: 1080px; }
+  .tableWrap .table thead th { padding: 8px 10px; }
+  .tableWrap .table tbody td { padding: 8px 10px; }
+  .tableWrap .colActions { width: 180px; }
+  /* En laptops, las acciones siempre visibles para no necesitar hover
+     (en touchpad el hover es menos intuitivo que en desktop con mouse). */
+  .tableWrap .actions { opacity: 1; }
+}
+
+/* Desktop >=1367px: comportamiento actual. */
 .table {
   width: 100%;
   border-collapse: collapse;
