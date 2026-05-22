@@ -17,9 +17,9 @@ import { PermissionsModal } from "@/components/dashboard/team/permissions-modal"
 type RoleTone = "success" | "info" | "warning" | "brand" | "neutral";
 const ROLE_TONE: Record<string, { tone: RoleTone; label: string }> = {
   SUPER_ADMIN:  { tone: "brand",   label: "Super Admin" },
-  ADMIN:        { tone: "info",    label: "Admin" },
-  DOCTOR:       { tone: "success", label: "Doctor" },
-  RECEPTIONIST: { tone: "warning", label: "Recepcionista" },
+  ADMIN:        { tone: "info",    label: "Administrador/a" },
+  DOCTOR:       { tone: "success", label: "Doctor/a" },
+  RECEPTIONIST: { tone: "warning", label: "Recepción" },
   READONLY:     { tone: "neutral", label: "Solo lectura" },
 };
 
@@ -29,9 +29,9 @@ const DOCTOR_COLORS = [
   "#9333ea","#0284c7","#f97316","#84cc16",
 ];
 const ROLES = [
-  { value:"DOCTOR",       label:"Doctor",        icon:"🩺", desc:"Sus pacientes y citas" },
-  { value:"ADMIN",        label:"Administrador", icon:"🛡️", desc:"Acceso completo"        },
-  { value:"RECEPTIONIST", label:"Recepcionista", icon:"📋", desc:"Agenda y citas"          },
+  { value:"DOCTOR",       label:"Doctor/a",         icon:"🩺", desc:"Sus pacientes y citas" },
+  { value:"ADMIN",        label:"Administrador/a",  icon:"🛡️", desc:"Acceso completo"        },
+  { value:"RECEPTIONIST", label:"Recepción",        icon:"📋", desc:"Agenda y citas"          },
 ];
 // MediFlow es DENTAL — solo specialties dentales en el selector del
 // equipo. Si el SaaS expande a multi-specialty, restaurar la lista

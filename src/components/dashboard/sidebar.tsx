@@ -1069,7 +1069,7 @@ function SidebarFooter({
   const roleLabel: Record<UserRole, string> = {
     SUPER_ADMIN: "Owner",
     ADMIN: "Admin",
-    DOCTOR: "Doctor",
+    DOCTOR: "Doctor/a",
     RECEPTIONIST: "Recepción",
     READONLY: "Solo lectura",
     ACCOUNTANT: "Contabilidad",

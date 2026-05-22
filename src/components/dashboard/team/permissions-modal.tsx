@@ -14,8 +14,8 @@ import {
 import type { Role } from "@prisma/client";
 
 const ROLE_LABEL: Record<string, string> = {
-  SUPER_ADMIN: "Super Admin", ADMIN: "Admin", DOCTOR: "Doctor",
-  RECEPTIONIST: "Recepcionista", READONLY: "Solo lectura",
+  SUPER_ADMIN: "Super Admin", ADMIN: "Administrador/a", DOCTOR: "Doctor/a",
+  RECEPTIONIST: "Recepción", READONLY: "Solo lectura",
 };
 
 interface MemberLike {

@@ -337,7 +337,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                       </div>
                       <div>
                         <div className="text-sm font-bold">{member.firstName} {member.lastName}</div>
-                        <div className="text-xs text-muted-foreground">{member.role === "SUPER_ADMIN" ? "Admin" : member.role === "ADMIN" ? "Admin" : "Doctor"}</div>
+                        <div className="text-xs text-muted-foreground">{member.role === "SUPER_ADMIN" ? "Super Admin" : member.role === "ADMIN" ? "Administrador/a" : member.role === "RECEPTIONIST" ? "Recepción" : "Doctor/a"}</div>
                       </div>
                     </div>
 
