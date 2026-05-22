@@ -212,8 +212,16 @@ export function AgendaDetailPanel() {
   // primary actions y lo manejamos como botón aparte que abre el modal
   // de Nueva Cita pre-poblado.
   const isTerminal = appt.status === "CANCELLED" || appt.status === "NO_SHOW";
+  // CHECKED_IN ("En Sala de Espera") e IN_CHAIR se excluyen de los botones
+  // de acción: el primero es alcanzable por el chip del pipeline y el
+  // segundo se de-prioriza del flujo. La transición backend sigue válida.
   const primaryActions = validTargets.filter(
-    (s) => s !== "CANCELLED" && s !== "NO_SHOW" && !(isTerminal && s === "SCHEDULED"),
+    (s) =>
+      s !== "CANCELLED" &&
+      s !== "NO_SHOW" &&
+      s !== "CHECKED_IN" &&
+      s !== "IN_CHAIR" &&
+      !(isTerminal && s === "SCHEDULED"),
   );
   const dangerActions = validTargets.filter(
     (s) => s === "CANCELLED" || s === "NO_SHOW",
@@ -362,6 +370,16 @@ export function AgendaDetailPanel() {
         >
           <FileText size={12} aria-hidden /> Expediente
         </button>
+        {!isTerminal && (
+          <button
+            type="button"
+            className={styles.detailAction}
+            onClick={(e) => { e.stopPropagation(); setEditOpen(true); }}
+            title="Editar fecha, doctor, sillón, motivo"
+          >
+            <Pencil size={12} aria-hidden /> Editar
+          </button>
+        )}
         <button
           type="button"
           className={styles.detailAction}
@@ -379,16 +397,6 @@ export function AgendaDetailPanel() {
             title="Cobrar / facturar la cita"
           >
             <DollarSign size={12} aria-hidden /> Cobrar
-          </button>
-        )}
-        {!isTerminal && (
-          <button
-            type="button"
-            className={styles.detailAction}
-            onClick={(e) => { e.stopPropagation(); setEditOpen(true); }}
-            title="Editar fecha, doctor, sillón, motivo"
-          >
-            <Pencil size={12} aria-hidden /> Editar
           </button>
         )}
         {isTerminal && (

@@ -328,6 +328,13 @@ export function AgendaAppointmentCard({
           <span className={styles.apptTreatment}>{treatment}</span>
         </div>
       )}
+      {appointment.status === "COMPLETED" && (
+        <Check
+          size={14}
+          aria-hidden
+          style={{ position: "absolute", bottom: 2, left: 2, color: "#10b981" }}
+        />
+      )}
     </div>
   );
 }

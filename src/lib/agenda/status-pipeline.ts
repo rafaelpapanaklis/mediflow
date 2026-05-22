@@ -13,12 +13,12 @@ export const STATUS_PIPELINE: AppointmentStatus[] = [
 ];
 
 export const STATUS_LABELS: Record<AppointmentStatus, string> = {
-  SCHEDULED:    "Programada",
+  SCHEDULED:    "Pendiente",
   CONFIRMED:    "Confirmada",
-  CHECKED_IN:   "Check-in",
+  CHECKED_IN:   "En Sala de Espera",
   IN_CHAIR:     "En sillón",
-  IN_PROGRESS:  "En consulta",
-  COMPLETED:    "Completada",
+  IN_PROGRESS:  "En Consulta",
+  COMPLETED:    "Consulta Completada",
   CHECKED_OUT:  "Check-out",
   CANCELLED:    "Cancelada",
   NO_SHOW:      "No vino",
