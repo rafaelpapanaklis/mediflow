@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, CalendarPlus, Search, ListChecks, Users, Armchair } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarPlus, Search } from "lucide-react";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { useAgenda } from "./agenda-provider";
 import { AgendaFilterPills } from "./agenda-filter-pills";
@@ -43,7 +43,7 @@ function formatHumanDate(dayISO: string, timezone: string): string {
 }
 
 export function AgendaTopbar() {
-  const { state, setDay, setViewMode, setSearchQuery, toggleWaitlist, openModal, prefetchView } = useAgenda();
+  const { state, setDay, setViewMode, setSearchQuery, prefetchView } = useAgenda();
   const { open: openNew } = useNewAppointmentDialog();
 
   const today = todayInTz(state.timezone);
@@ -124,40 +124,6 @@ export function AgendaTopbar() {
           onChange={(e) => setSearchQuery(e.target.value)}
         />
       </div>
-
-      <button
-        type="button"
-        onClick={() => toggleWaitlist()}
-        className={`${styles.waitlistToggleBtn} ${state.waitlistOpen ? styles.active : ""}`}
-        aria-label="Lista de espera"
-        aria-pressed={state.waitlistOpen}
-        title="Lista de espera"
-      >
-        <ListChecks size={14} />
-        {state.waitlistCount > 0 && (
-          <span className={styles.waitlistToggleCount}>{state.waitlistCount}</span>
-        )}
-      </button>
-
-      <button
-        type="button"
-        onClick={() => openModal("team")}
-        className={styles.iconBtn}
-        aria-label="Gestionar equipo"
-        title="Equipo"
-      >
-        <Users size={14} />
-      </button>
-
-      <button
-        type="button"
-        onClick={() => openModal("resources")}
-        className={styles.iconBtn}
-        aria-label="Gestionar sillones / salas / equipos"
-        title="Recursos"
-      >
-        <Armchair size={14} />
-      </button>
 
       <button
         type="button"
