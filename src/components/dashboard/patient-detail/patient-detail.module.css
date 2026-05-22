@@ -227,9 +227,19 @@
   grid-template-columns: 220px 1fr;
 }
 .layoutWide .sidePanel { display: none; }
-@media (max-width: 1280px) {
+/* Laptop ≤1366px: el side-panel cae al flujo normal, en una fila nueva de
+   ancho completo DEBAJO del contenido (NO se oculta — Reglas 2 y 3). Las 4
+   cards se reparten en grid auto-fit para no apilarse demasiado alto. */
+@media (max-width: 1366px) {
   .layout { grid-template-columns: 200px 1fr; }
-  .sidePanel { display: none; }
+  .sidePanel {
+    grid-column: 1 / -1;
+    position: static;
+    top: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    align-items: start;
+  }
 }
 @media (max-width: 1024px) {
   .layout { grid-template-columns: 1fr; }

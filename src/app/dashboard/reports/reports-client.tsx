@@ -250,6 +250,7 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
 
       {/* Summary table */}
       <CardNew title="Resumen mensual" sub="Ingresos, pacientes, citas" noPad>
+        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
         <table className="table-new">
           <thead>
             <tr>
@@ -272,6 +273,7 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
             ))}
           </tbody>
         </table>
+        </div>
       </CardNew>
 
       {/* Uso de recursos / sillones — ultimos 30 dias */}

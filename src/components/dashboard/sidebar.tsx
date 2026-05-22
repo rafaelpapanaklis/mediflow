@@ -280,7 +280,7 @@ export function Sidebar(props: SidebarProps) {
   const counts = useSidebarCounts();
   const activeConsult = useActiveConsult().consult;
 
-  const [collapsed, setCollapsed] = useBooleanLocalStorage("sidebar-collapsed", false);
+  const [userCollapsed, setUserCollapsed] = useBooleanLocalStorage("sidebar-collapsed", false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const defaultAdminExpanded =
@@ -298,6 +298,19 @@ export function Sidebar(props: SidebarProps) {
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
+
+  // Auto icon-only en laptops 13-14" (1024-1366px): reusa el modo colapsado
+  // existente para que el sidebar no invada el ancho del contenido. Arriba de
+  // 1366px se respeta la preferencia manual (toggle) del usuario.
+  const [isLaptop, setIsLaptop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px) and (max-width: 1366px)");
+    const onChange = () => setIsLaptop(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  const collapsed = userCollapsed || isLaptop;
 
   useEffect(() => {
     if (!isMobile) setMobileOpen(false);
@@ -692,7 +705,7 @@ export function Sidebar(props: SidebarProps) {
 
       <SidebarFooter
         collapsed={collapsed}
-        onToggleCollapse={() => setCollapsed(!collapsed)}
+        onToggleCollapse={() => setUserCollapsed(!userCollapsed)}
         user={props.user}
       />
     </>

@@ -15,6 +15,13 @@
   --mf-detail-w: 0px;
 }
 
+/* Laptop ≤1366px: panel de detalle más angosto para darle más ancho a la
+   grilla del calendario (el sidebar del dashboard ya colapsa a icon-only en
+   este rango). No aplica con el panel cerrado (.detailClosed lo lleva a 0). */
+@media (max-width: 1366px) {
+  .page { --mf-detail-w: 280px; }
+}
+
 .body {
   grid-area: main;
   min-height: 0;
