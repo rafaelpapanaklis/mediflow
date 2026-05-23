@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import {
-  Home, Calendar, Users, MessageCircle, Inbox as InboxIcon,
+  Home, Calendar, Users, MessageCircle, MessageSquare, Inbox as InboxIcon,
   Sparkles, FileImage, Camera, FlaskConical, Dumbbell, Footprints,
   Activity, Gift, DoorOpen, Package, Building2,
   CreditCard, BarChart3, Monitor, UserCog, Globe, ClipboardList, Settings,
@@ -195,6 +195,8 @@ const NAV_ITEMS: NavItemDef[] = [
     icon: Truck, permission: "suppliers.view" },
   { id: "compras",      section: "catalogo", label: "Mis compras", href: "/dashboard/compras",
     icon: ShoppingCart, permission: "suppliers.view" },
+  { id: "proveedor-chat", section: "catalogo", label: "Chat proveedores", href: "/dashboard/proveedor-chat",
+    icon: MessageSquare, permission: "suppliers.view" },
 
   { id: "billing",        section: "admin", label: "Facturación",       href: "/dashboard/billing",       icon: CreditCard,     permission: "billing.view" },
   { id: "analytics",      section: "admin", label: "Analytics",         href: "/dashboard/analytics",     icon: BarChart3, adminOnly: true, permission: "analytics.view" },

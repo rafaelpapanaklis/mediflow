@@ -8,6 +8,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { SUPPLIER_PAYMENT_STATUS_LABELS } from "@/lib/suppliers/types";
 import type { SupplierOrderStatus, SupplierPaymentStatus } from "@/lib/suppliers/types";
 import { ORDER_STATUS_FLOW, STATUS_ACTION_LABELS } from "@/lib/suppliers/orders-shared";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export function OrderStatusActions({
   orderId,
@@ -19,6 +20,7 @@ export function OrderStatusActions({
   paymentStatus: SupplierPaymentStatus;
 }) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [saving, setSaving] = useState(false);
 
   async function patch(payload: { status?: SupplierOrderStatus; paymentStatus?: SupplierPaymentStatus }) {
@@ -58,10 +60,16 @@ export function OrderStatusActions({
               key={to}
               variant={to === "CANCELLED" ? "danger" : "primary"}
               disabled={saving}
-              onClick={() => {
+              onClick={async () => {
                 if (
                   to === "CANCELLED" &&
-                  !window.confirm("¿Cancelar este pedido? Esta acción no se puede deshacer.")
+                  !(await confirm({
+                    title: "¿Cancelar este pedido?",
+                    description: "Esta acción no se puede deshacer.",
+                    variant: "danger",
+                    confirmText: "Cancelar pedido",
+                    cancelText: "Volver",
+                  }))
                 ) {
                   return;
                 }
