@@ -239,6 +239,12 @@ model Clinic {
   patientShareLinks          PatientShareLink[]
   treatmentLinks             TreatmentLink[]
 
+  // Proveedores / Compras (marketplace B2B) — el proveedor es global; la
+  // clínica solo tiene carritos, pedidos y chats hacia proveedores.
+  supplierCarts  SupplierCart[]
+  supplierOrders SupplierOrder[]
+  supplierChats  SupplierChatThread[]
+
   @@map("clinics")
 }
 
@@ -267,6 +273,230 @@ enum Plan {
   BASIC
   PRO
   CLINIC
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PROVEEDORES / COMPRAS — marketplace B2B. El proveedor es GLOBAL (sin
+// clinicId): vende a cualquier clínica. Carrito, pedidos y chat son por
+// (clinicId, supplierId). Contrato compartido: src/lib/suppliers/types.ts
+// ═══════════════════════════════════════════════════════════════════════
+
+enum SupplierStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum SupplierUserRole {
+  OWNER
+  MANAGER
+  STAFF
+}
+
+enum SupplierOrderStatus {
+  PENDING
+  CONFIRMED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum SupplierPaymentStatus {
+  UNPAID
+  PAID
+}
+
+enum SupplierChatSender {
+  CLINIC
+  SUPPLIER
+}
+
+model Supplier {
+  id             String         @id @default(cuid())
+  businessName   String
+  slug           String         @unique
+  rfc            String?        @db.VarChar(13)
+  email          String
+  phone          String?
+  address        String?
+  city           String?
+  state          String?
+  logoUrl        String?
+  description    String?        @db.Text
+  categories     String[]       @default([])
+  paymentMethods String[]       @default([])
+  status         SupplierStatus @default(PENDING)
+  approvedAt     DateTime?
+  rejectedReason String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  users    SupplierUser[]
+  products SupplierProduct[]
+  orders   SupplierOrder[]
+  carts    SupplierCart[]
+  chats    SupplierChatThread[]
+
+  @@index([status])
+  @@map("suppliers")
+}
+
+model SupplierUser {
+  id         String           @id @default(cuid())
+  supplierId String
+  supabaseId String
+  email      String
+  firstName  String
+  lastName   String
+  role       SupplierUserRole @default(OWNER)
+  isActive   Boolean          @default(true)
+  lastLogin  DateTime?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@unique([supabaseId, supplierId])
+  @@index([supabaseId])
+  @@map("supplier_users")
+}
+
+model SupplierProduct {
+  id          String   @id @default(cuid())
+  supplierId  String
+  name        String
+  description String?  @db.Text
+  category    String?
+  sku         String?
+  price       Float
+  unit        String   @default("pza")
+  stock       Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  supplier   Supplier               @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  images     SupplierProductImage[]
+  cartItems  SupplierCartItem[]
+  orderItems SupplierOrderItem[]
+
+  @@index([supplierId, isActive])
+  @@map("supplier_products")
+}
+
+model SupplierProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  url       String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  product SupplierProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("supplier_product_images")
+}
+
+model SupplierCart {
+  id         String   @id @default(cuid())
+  clinicId   String
+  supplierId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  clinic   Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  supplier Supplier           @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  items    SupplierCartItem[]
+
+  @@unique([clinicId, supplierId])
+  @@map("supplier_carts")
+}
+
+model SupplierCartItem {
+  id        String   @id @default(cuid())
+  cartId    String
+  productId String
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+
+  cart    SupplierCart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product SupplierProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, productId])
+  @@map("supplier_cart_items")
+}
+
+model SupplierOrder {
+  id            String                @id @default(cuid())
+  orderNumber   String                @unique
+  clinicId      String
+  supplierId    String
+  status        SupplierOrderStatus   @default(PENDING)
+  paymentStatus SupplierPaymentStatus @default(UNPAID)
+  paymentMethod String?
+  subtotal      Float
+  total         Float
+  notes         String?               @db.Text
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  clinic   Clinic              @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  supplier Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  items    SupplierOrderItem[]
+
+  @@index([clinicId, status])
+  @@index([supplierId, status])
+  @@map("supplier_orders")
+}
+
+model SupplierOrderItem {
+  id          String  @id @default(cuid())
+  orderId     String
+  productId   String?
+  productName String
+  unitPrice   Float
+  quantity    Int
+  lineTotal   Float
+
+  order   SupplierOrder    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product SupplierProduct? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@map("supplier_order_items")
+}
+
+model SupplierChatThread {
+  id             String   @id @default(cuid())
+  clinicId       String
+  supplierId     String
+  lastMessageAt  DateTime @default(now())
+  clinicUnread   Int      @default(0)
+  supplierUnread Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  clinic   Clinic                @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  supplier Supplier              @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  messages SupplierChatMessage[]
+
+  @@unique([clinicId, supplierId])
+  @@index([clinicId, lastMessageAt(sort: Desc)])
+  @@index([supplierId, lastMessageAt(sort: Desc)])
+  @@map("supplier_chat_threads")
+}
+
+model SupplierChatMessage {
+  id        String             @id @default(cuid())
+  threadId  String
+  sender    SupplierChatSender
+  senderId  String
+  body      String             @db.Text
+  createdAt DateTime           @default(now())
+
+  thread SupplierChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
+  @@map("supplier_chat_messages")
 }
 
 model User {

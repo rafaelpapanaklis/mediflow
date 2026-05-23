@@ -76,6 +76,21 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Panel de proveedores (marketplace B2B). login/registro/pendiente son
+  // públicas. El resto refresca la cookie de Supabase; la verificación de
+  // auth + aprobación la hace src/app/proveedores/(panel)/layout.tsx vía
+  // getSupplierContext (mismo patrón que /dashboard con getCurrentUser).
+  if (pathname.startsWith("/proveedores")) {
+    if (
+      pathname === "/proveedores/login" ||
+      pathname === "/proveedores/registro" ||
+      pathname === "/proveedores/pendiente"
+    ) {
+      return NextResponse.next();
+    }
+    return await updateSession(request);
+  }
+
   if (pathname.startsWith("/dashboard")) {
     return await updateSession(request);
   }
@@ -84,5 +99,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/admin/:path*", "/api/admin/:path*"],
+  matcher: ["/dashboard/:path*", "/admin/:path*", "/api/admin/:path*", "/proveedores/:path*"],
 };

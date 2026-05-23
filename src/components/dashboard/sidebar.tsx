@@ -9,7 +9,7 @@ import {
   Sparkles, FileImage, Camera, FlaskConical, Dumbbell, Footprints,
   Activity, Gift, DoorOpen, Package, Building2,
   CreditCard, BarChart3, Monitor, UserCog, Globe, ClipboardList, Settings,
-  ShoppingBag, Baby, Zap, Smile, Anchor,
+  ShoppingBag, Baby, Zap, Smile, Anchor, Truck,
   ChevronDown, ChevronRight, Moon, Sun, LogOut, PanelLeftClose, PanelLeft,
   X, Plus, type LucideIcon,
 } from "lucide-react";
@@ -191,6 +191,8 @@ const NAV_ITEMS: NavItemDef[] = [
     icon: Package, adminOnly: true,
     categories: ["DENTAL", "MEDICINE", "PODIATRY", "DERMATOLOGY", "AESTHETIC_MEDICINE"],
     permission: "inventory.view" },
+  { id: "suppliers",    section: "catalogo", label: "Proveedores/Compras", href: "/dashboard/suppliers",
+    icon: Truck, permission: "suppliers.view" },
 
   { id: "billing",        section: "admin", label: "Facturación",       href: "/dashboard/billing",       icon: CreditCard,     permission: "billing.view" },
   { id: "analytics",      section: "admin", label: "Analytics",         href: "/dashboard/analytics",     icon: BarChart3, adminOnly: true, permission: "analytics.view" },
