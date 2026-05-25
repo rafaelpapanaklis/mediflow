@@ -47,7 +47,17 @@ export async function getCurrentUser() {
   });
 
   const user = candidates[0];
-  if (!user) redirect("/onboarding");
+  if (!user) {
+    // La sesión no tiene User de clínica. Antes de mandarla a onboarding,
+    // verifica si pertenece a un proveedor (SupplierUser activo) — misma query
+    // que getSupplierContext — y en ese caso mándala a su panel. /proveedores
+    // usa getSupplierContext (no getCurrentUser), así que no hay loop de redirect.
+    const supplierUser = await prisma.supplierUser.findFirst({
+      where: { supabaseId: supabaseUser.id, isActive: true },
+      select: { id: true },
+    });
+    redirect(supplierUser ? "/proveedores" : "/onboarding");
+  }
 
   if (activeClinicId) {
     console.warn("[AUTH-DEBUG getCurrentUser] cookie inválida, reseteada", JSON.stringify({
