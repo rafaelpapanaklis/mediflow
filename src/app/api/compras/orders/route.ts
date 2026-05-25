@@ -38,6 +38,16 @@ export async function POST(req: NextRequest) {
   if (!supplierId) return NextResponse.json({ error: "supplierId es requerido" }, { status: 400 });
 
   const result = await prisma.$transaction(async (tx) => {
+    // El proveedor debe seguir APPROVED al momento del checkout: si fue
+    // suspendido o rechazado tras agregarlo al carrito, no se permite pedir.
+    const supplier = await tx.supplier.findUnique({
+      where: { id: supplierId },
+      select: { status: true },
+    });
+    if (!supplier || supplier.status !== "APPROVED") {
+      return { unavailable: true as const };
+    }
+
     const cart = await tx.supplierCart.findUnique({
       where: { clinicId_supplierId: { clinicId: ctx.clinicId, supplierId } },
       include: { items: { include: { product: true } } },
@@ -73,6 +83,12 @@ export async function POST(req: NextRequest) {
     return { orderId: order.id };
   });
 
+  if ("unavailable" in result) {
+    return NextResponse.json(
+      { error: "Este proveedor no está disponible en este momento." },
+      { status: 409 },
+    );
+  }
   if ("empty" in result) {
     return NextResponse.json({ error: "El carrito está vacío" }, { status: 400 });
   }
