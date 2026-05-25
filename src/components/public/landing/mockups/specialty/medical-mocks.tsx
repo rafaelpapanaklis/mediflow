@@ -56,7 +56,7 @@ export const GeneralMock: React.FC = () => (
                 display: "grid",
                 placeItems: "center",
                 color: "#34d399",
-                fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+                fontFamily: "var(--font-sans, system-ui, sans-serif)",
                 fontWeight: 600,
                 fontSize: 11,
               }}
@@ -69,7 +69,7 @@ export const GeneralMock: React.FC = () => (
                   fontSize: 10,
                   color: "var(--fg-muted)",
                   marginBottom: 2,
-                  fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                  fontFamily: "var(--font-mono, ui-monospace, monospace)",
                   textTransform: "uppercase",
                   letterSpacing: "0.05em",
                 }}
@@ -108,7 +108,7 @@ export const GeneralMock: React.FC = () => (
                 borderRadius: 4,
                 background: "rgba(255,255,255,0.04)",
                 fontSize: 9,
-                fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                fontFamily: "var(--font-mono, ui-monospace, monospace)",
               }}
             >
               QR verificable
@@ -230,7 +230,7 @@ export const DermaMock: React.FC = () => {
                     fontSize: 10,
                     color: "var(--fg-muted)",
                     marginBottom: 4,
-                    fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                    fontFamily: "var(--font-mono, ui-monospace, monospace)",
                   }}
                 >
                   {l}
@@ -370,7 +370,7 @@ export const CardioMock: React.FC = () => (
             <span style={{ flex: 1, fontSize: 11, color: "var(--fg-muted)" }}>{l}</span>
             <span
               style={{
-                fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                fontFamily: "var(--font-mono, ui-monospace, monospace)",
                 color: c,
                 fontSize: 12,
               }}
@@ -391,7 +391,7 @@ export const CardioMock: React.FC = () => (
           <SectionTitle>CHA₂DS₂-VASc</SectionTitle>
           <div
             style={{
-              fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+              fontFamily: "var(--font-sans, system-ui, sans-serif)",
               fontWeight: 700,
               fontSize: 28,
               color: "#34d399",
@@ -524,7 +524,7 @@ export const GinecoMock: React.FC = () => (
                 background: "rgba(52,211,153,0.8)",
                 color: "white",
                 fontSize: 8,
-                fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                fontFamily: "var(--font-mono, ui-monospace, monospace)",
               }}
             >
               28w 2d
@@ -676,7 +676,7 @@ export const PedsMock: React.FC = () => (
                 style={{
                   color: e.startsWith("✓") ? "#34d399" : "var(--fg-muted)",
                   fontSize: 10,
-                  fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                  fontFamily: "var(--font-mono, ui-monospace, monospace)",
                 }}
               >
                 {e}
@@ -726,14 +726,14 @@ export const OftalmoMock: React.FC = () => (
                 style={{
                   fontSize: 10,
                   color: "var(--fg-muted)",
-                  fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                  fontFamily: "var(--font-mono, ui-monospace, monospace)",
                 }}
               >
                 {l}
               </div>
               <div
                 style={{
-                  fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+                  fontFamily: "var(--font-sans, system-ui, sans-serif)",
                   fontWeight: 700,
                   fontSize: 22,
                   color: "#34d399",
@@ -777,7 +777,7 @@ export const OftalmoMock: React.FC = () => (
               style={{
                 fontSize: 11,
                 color: "#34d399",
-                fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                fontFamily: "var(--font-mono, ui-monospace, monospace)",
               }}
             >
               14 mmHg
@@ -806,7 +806,7 @@ export const OftalmoMock: React.FC = () => (
               style={{
                 fontSize: 11,
                 color: "#34d399",
-                fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                fontFamily: "var(--font-mono, ui-monospace, monospace)",
               }}
             >
               16 mmHg
@@ -830,7 +830,7 @@ export const OftalmoMock: React.FC = () => (
             gap: 4,
             marginTop: 10,
             fontSize: 10,
-            fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+            fontFamily: "var(--font-mono, ui-monospace, monospace)",
           }}
         >
           <div style={{ color: "var(--fg-muted)" }}></div>

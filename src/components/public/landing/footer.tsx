@@ -73,7 +73,7 @@ export function Footer() {
               <h4
                 style={{
                   fontFamily:
-                    "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                    "var(--font-mono, ui-monospace, monospace)",
                   fontSize: 11,
                   fontWeight: 600,
                   textTransform: "uppercase",
@@ -166,7 +166,7 @@ export function Footer() {
                 fontSize: 12,
                 color: "var(--ld-fg-muted, var(--fg-muted))",
                 fontFamily:
-                  "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                  "var(--font-mono, ui-monospace, monospace)",
               }}
             >
               © 2026 MediFlow · Hecho en México 🇲🇽
@@ -192,7 +192,7 @@ export function Footer() {
                   color: "var(--ld-fg-muted, var(--fg-muted))",
                   textDecoration: "none",
                   fontFamily:
-                    "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                    "var(--font-mono, ui-monospace, monospace)",
                   letterSpacing: "0.04em",
                   transition: "color 0.2s",
                 }}

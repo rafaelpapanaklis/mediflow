@@ -221,7 +221,7 @@ export function SignupForm() {
           style={{
             margin: 0,
             marginBottom: 6,
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
             fontSize: 26,
             fontWeight: 600,
             letterSpacing: "-0.025em",

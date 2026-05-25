@@ -27,7 +27,7 @@
   height: calc(100dvh - 64px);
   background: var(--bg);
   color: var(--text-1);
-  font-family: var(--font-sora, "Sora", system-ui, sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
   font-size: 14px;
 }
 
@@ -99,7 +99,7 @@
 }
 .newConvBtn:hover { background: var(--brand-hover); transform: translateY(-1px); }
 .newConvBtn kbd {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 9px;
   padding: 1px 5px;
   background: rgba(255, 255, 255, 0.18);
@@ -180,7 +180,7 @@
 }
 .convItemActive .convItemTitle { color: var(--brand); }
 .convItemTime {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 9.5px;
   color: var(--text-3);
 }
@@ -245,7 +245,7 @@
 .chatMeta {
   font-size: 11px;
   color: var(--text-3);
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
 }
 .chatHeaderActions { display: flex; gap: 4px; }
 .iconBtn {
@@ -361,14 +361,14 @@
 }
 .messageName { font-weight: 700; color: var(--text-1); }
 .messageTimestamp {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 10px;
   color: var(--text-3);
 }
 .modelBadge {
   background: var(--brand-soft);
   color: var(--brand);
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 9px;
   padding: 1px 5px;
   border-radius: 4px;
@@ -382,7 +382,7 @@
   word-wrap: break-word;
 }
 .messageContent code {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   background: var(--bg-elev-2);
   padding: 1px 5px;
   border-radius: 4px;
@@ -477,7 +477,7 @@
   color: var(--brand);
 }
 .quickAction code {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-weight: 700;
   font-size: 10px;
   color: var(--brand);
@@ -588,7 +588,7 @@
   color: var(--text-3);
 }
 .composerHint kbd {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 9.5px;
   padding: 1px 4px;
   background: var(--bg-elev-2);
@@ -640,7 +640,7 @@
 }
 .slashItemBody { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .slashItemCmd {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 11.5px;
   font-weight: 700;
   color: var(--brand);

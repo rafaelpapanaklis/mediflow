@@ -64,7 +64,7 @@ export function WaitlistCard({ items, onAdd }: Props) {
                   fontSize: 11,
                   color: "var(--text-3)",
                   flexShrink: 0,
-                  fontFamily: "var(--font-jetbrains-mono, monospace)",
+                  fontFamily: "var(--font-mono, monospace)",
                 }}
               >
                 {formatRelative(it.since)}

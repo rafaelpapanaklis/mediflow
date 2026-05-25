@@ -1,5 +1,5 @@
-const MONO = "var(--font-jetbrains-mono, ui-monospace, monospace)";
-const DISPLAY = "var(--font-sora, 'Sora', sans-serif)";
+const MONO = "var(--font-mono, ui-monospace, monospace)";
+const DISPLAY = "var(--font-sans, system-ui, sans-serif)";
 
 interface Quote {
   q:      string;

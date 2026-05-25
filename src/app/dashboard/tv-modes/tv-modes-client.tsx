@@ -100,7 +100,7 @@ export function TvModesClient() {
   }
 
   return (
-    <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1200, margin: "0 auto", fontFamily: "var(--font-sora, 'Sora', sans-serif)" }}>
+    <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1200, margin: "0 auto", fontFamily: "var(--font-sans, system-ui, sans-serif)" }}>
       <header style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
         <div>
           <h1 style={{ fontSize: "clamp(18px, 1.5vw, 24px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
@@ -190,7 +190,7 @@ export function TvModesClient() {
                 border: "1px solid var(--border-soft)",
                 borderRadius: 8,
                 fontSize: 12,
-                fontFamily: "var(--font-jetbrains-mono, monospace)",
+                fontFamily: "var(--font-mono, monospace)",
                 color: "var(--text-2)",
                 marginBottom: 10,
               }}>
@@ -320,7 +320,7 @@ function TvDisplayModal({
           maxHeight: "calc(100vh - 64px)",
           display: "flex",
           flexDirection: "column",
-          fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+          fontFamily: "var(--font-sans, system-ui, sans-serif)",
         }}
       >
         <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-soft)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>

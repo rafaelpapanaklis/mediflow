@@ -11,7 +11,7 @@ export function Pill({ children }: { children: ReactNode }) {
         border: "1px solid rgba(124,58,237,0.25)",
         color: "var(--ld-brand-light, #a78bfa)",
         fontSize: 11,
-        fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+        fontFamily: "var(--font-mono, ui-monospace, monospace)",
         letterSpacing: "0.08em",
         textTransform: "uppercase",
         fontWeight: 500,

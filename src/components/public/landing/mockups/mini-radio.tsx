@@ -69,16 +69,16 @@ export function MiniRadio() {
         </g>
       </svg>
 
-      <div style={{ position: "absolute", top: 6, left: 8, fontSize: 8, color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)", letterSpacing: "0.1em" }}>
+      <div style={{ position: "absolute", top: 6, left: 8, fontSize: 8, color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-mono, ui-monospace, monospace)", letterSpacing: "0.1em" }}>
         BITEWING · 26/04/26
       </div>
-      <div style={{ position: "absolute", top: 6, right: 8, fontSize: 8, color: "#fbbf24", fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)" }}>
+      <div style={{ position: "absolute", top: 6, right: 8, fontSize: 8, color: "#fbbf24", fontFamily: "var(--font-mono, ui-monospace, monospace)" }}>
         2 hallazgos
       </div>
-      <div style={{ position: "absolute", bottom: 6, left: 8, fontSize: 9, color: "#fbbf24", fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)", background: "rgba(0,0,0,0.5)", padding: "2px 6px", borderRadius: 3 }}>
+      <div style={{ position: "absolute", bottom: 6, left: 8, fontSize: 9, color: "#fbbf24", fontFamily: "var(--font-mono, ui-monospace, monospace)", background: "rgba(0,0,0,0.5)", padding: "2px 6px", borderRadius: 3 }}>
         ⚠ Caries · 87%
       </div>
-      <div style={{ position: "absolute", bottom: 6, right: 8, fontSize: 9, color: "#34d399", fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)", background: "rgba(0,0,0,0.5)", padding: "2px 6px", borderRadius: 3 }}>
+      <div style={{ position: "absolute", bottom: 6, right: 8, fontSize: 9, color: "#34d399", fontFamily: "var(--font-mono, ui-monospace, monospace)", background: "rgba(0,0,0,0.5)", padding: "2px 6px", borderRadius: 3 }}>
         ✓ Empaste
       </div>
     </div>

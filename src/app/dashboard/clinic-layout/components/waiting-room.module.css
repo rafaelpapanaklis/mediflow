@@ -96,7 +96,7 @@
   color: #6B7A99;
 }
 .headerCount {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 10.5px;
   font-weight: 700;
   background: #4A90E2;
@@ -148,7 +148,7 @@
 }
 .item:last-child { border-bottom: none; }
 .position {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11px;
   font-weight: 800;
   color: #4A90E2;
@@ -183,7 +183,7 @@
   align-items: center;
   gap: 3px;
   font-size: 10px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono, ui-monospace, monospace);
   color: #F59E0B;
   font-weight: 700;
   background: rgba(245, 158, 11, 0.1);

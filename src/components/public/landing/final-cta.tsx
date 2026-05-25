@@ -37,7 +37,7 @@ export function FinalCTA() {
       >
         <h2
           style={{
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
             fontWeight: 700,
             fontSize: "clamp(32px, 5vw, 48px)",
             letterSpacing: "-0.035em",
@@ -114,7 +114,7 @@ export function FinalCTA() {
             flexWrap: "wrap",
             fontSize: 12,
             color: "var(--ld-fg-muted, var(--fg-muted))",
-            fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+            fontFamily: "var(--font-mono, ui-monospace, monospace)",
             letterSpacing: "0.02em",
           }}
         >

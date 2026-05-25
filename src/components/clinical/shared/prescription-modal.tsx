@@ -166,7 +166,7 @@ export function PrescriptionModal({ open, patientId, medicalRecordId, onClose, o
         background: "var(--bg-elev)", border: "1px solid var(--border-strong)",
         borderRadius: 14, width: "100%", maxWidth: 720, maxHeight: "90vh",
         display: "flex", flexDirection: "column", overflow: "hidden",
-        fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+        fontFamily: "var(--font-sans, system-ui, sans-serif)",
       }}>
         <header style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-soft)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <h3 id="rx-modal-title" style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>Nueva receta médica</h3>

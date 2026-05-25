@@ -134,7 +134,7 @@ export function SupplierRegistroForm() {
         >
           <h1
             style={{
-              fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+              fontFamily: "var(--font-sans, system-ui, sans-serif)",
               fontSize: 22,
               fontWeight: 600,
               letterSpacing: "-0.02em",
@@ -184,7 +184,7 @@ export function SupplierRegistroForm() {
       <div>
         <h1
           style={{
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
             fontSize: 28,
             fontWeight: 600,
             letterSpacing: "-0.025em",

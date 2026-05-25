@@ -93,7 +93,7 @@ export function PlanCard({
             fontWeight: 600,
             letterSpacing: "0.1em",
             textTransform: "uppercase",
-            fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+            fontFamily: "var(--font-mono, ui-monospace, monospace)",
           }}
         >
           Más popular
@@ -114,7 +114,7 @@ export function PlanCard({
             fontWeight: 600,
             letterSpacing: "0.1em",
             textTransform: "uppercase",
-            fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+            fontFamily: "var(--font-mono, ui-monospace, monospace)",
           }}
         >
           Más completa
@@ -165,7 +165,7 @@ export function PlanCard({
         />
         <div
           style={{
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
             fontWeight: 600,
             fontSize: 15,
             letterSpacing: "0.08em",
@@ -179,7 +179,7 @@ export function PlanCard({
       <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
         <span
           style={{
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
             fontWeight: 700,
             fontSize: 34,
             letterSpacing: "-0.04em",
@@ -196,7 +196,7 @@ export function PlanCard({
               color: "var(--ld-fg-muted)",
               fontSize: 12,
               fontFamily:
-                "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                "var(--font-mono, ui-monospace, monospace)",
               marginLeft: 2,
             }}
           >

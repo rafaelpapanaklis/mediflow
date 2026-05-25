@@ -40,7 +40,7 @@ export function BrowserFrame({ children, url = "app.mediflow.mx", style }: Brows
             marginLeft: "auto",
             marginRight: "auto",
             fontSize: 11,
-            fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+            fontFamily: "var(--font-mono, ui-monospace, monospace)",
             color: "rgba(255,255,255,0.4)",
             padding: "4px 10px",
             borderRadius: 6,

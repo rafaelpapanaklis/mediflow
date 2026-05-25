@@ -122,7 +122,7 @@ export function Cie10Selector({ diagnoses, onAdd, onRemove, disabled }: Props) {
                 <Star size={13} fill={dx.isPrimary ? "currentColor" : "none"} aria-hidden />
               </button>
               <code style={{
-                fontFamily: "var(--font-jetbrains-mono, monospace)",
+                fontFamily: "var(--font-mono, monospace)",
                 fontWeight: 700,
                 color: "var(--text-1, #0f172a)",
                 minWidth: 56,
@@ -241,7 +241,7 @@ export function Cie10Selector({ diagnoses, onAdd, onRemove, disabled }: Props) {
                   <Plus size={12} aria-hidden style={{ color: "var(--brand, #2563eb)" }} />
                 )}
                 <code style={{
-                  fontFamily: "var(--font-jetbrains-mono, monospace)",
+                  fontFamily: "var(--font-mono, monospace)",
                   fontWeight: 700,
                   minWidth: 56,
                 }}>

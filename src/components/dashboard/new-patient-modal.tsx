@@ -213,7 +213,7 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
                   </label>
                   <input
                     className="input-new"
-                    style={{ fontFamily: "var(--font-jetbrains-mono, monospace)", textTransform: "uppercase", letterSpacing: "0.04em" }}
+                    style={{ fontFamily: "var(--font-mono, monospace)", textTransform: "uppercase", letterSpacing: "0.04em" }}
                     placeholder="GOPA850623HDFRRR03"
                     maxLength={18}
                     value={form.curp}

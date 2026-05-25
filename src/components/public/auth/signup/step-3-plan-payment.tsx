@@ -523,7 +523,7 @@ export function Step3PlanPayment({
                       color: "var(--ld-fg-muted)",
                       lineHeight: 1.3,
                       fontFamily:
-                        "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                        "var(--font-mono, ui-monospace, monospace)",
                     }}
                   >
                     {label}
@@ -574,7 +574,7 @@ export function Step3PlanPayment({
                   color: "rgba(52,211,153,0.9)",
                   marginBottom: 10,
                   fontFamily:
-                    "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                    "var(--font-mono, ui-monospace, monospace)",
                   letterSpacing: "0.08em",
                   textTransform: "uppercase",
                 }}
@@ -713,7 +713,7 @@ function SectionHeader({
             letterSpacing: "0.12em",
             textTransform: "uppercase",
             fontFamily:
-              "var(--font-jetbrains-mono, ui-monospace, monospace)",
+              "var(--font-mono, ui-monospace, monospace)",
             color: "var(--ld-brand-light)",
             padding: "2px 8px",
             borderRadius: 100,
@@ -726,7 +726,7 @@ function SectionHeader({
         <h3
           style={{
             margin: 0,
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
             fontWeight: 600,
             fontSize: 19,
             letterSpacing: "-0.02em",
@@ -815,7 +815,7 @@ function BillingToggle({
                     background: "rgba(52,211,153,0.15)",
                     color: "#34d399",
                     fontFamily:
-                      "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                      "var(--font-mono, ui-monospace, monospace)",
                     fontWeight: 600,
                   }}
                 >
@@ -859,7 +859,7 @@ const brandBadgeStyle: React.CSSProperties = {
   fontWeight: 600,
   letterSpacing: "0.04em",
   textTransform: "uppercase",
-  fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+  fontFamily: "var(--font-mono, ui-monospace, monospace)",
   pointerEvents: "none",
 };
 

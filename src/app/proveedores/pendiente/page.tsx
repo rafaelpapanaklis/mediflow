@@ -56,7 +56,7 @@ export default async function SupplierPendingPage() {
         background:
           "radial-gradient(120% 120% at 50% 0%, var(--bg-hover) 0%, var(--bg-elev) 60%)",
         color: "var(--text-1)",
-        fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+        fontFamily: "var(--font-sans, system-ui, sans-serif)",
       }}
     >
       <div

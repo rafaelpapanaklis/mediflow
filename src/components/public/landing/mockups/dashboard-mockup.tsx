@@ -111,7 +111,7 @@ export function DashboardMockup({ scale = 1, animate = true }: { scale?: number;
       <div style={{ padding: "18px 22px", position: "relative", overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
           <div>
-            <div style={{ fontFamily: "var(--font-sora, 'Sora', sans-serif)", fontWeight: 600, fontSize: 18, letterSpacing: "-0.01em" }}>Agenda</div>
+            <div style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", fontWeight: 600, fontSize: 18, letterSpacing: "-0.01em" }}>Agenda</div>
             <div style={{ color: "var(--ld-fg-muted)", fontSize: 11, marginTop: 2 }}>Semana del 20 — 24 abril, 2026</div>
           </div>
           <div style={{ display: "flex", gap: 6 }}>
@@ -131,7 +131,7 @@ export function DashboardMockup({ scale = 1, animate = true }: { scale?: number;
             }}>
               <div style={{ fontSize: 10, color: "var(--ld-fg-muted)" }}>{l}</div>
               <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 4 }}>
-                <div style={{ fontFamily: "var(--font-sora, 'Sora', sans-serif)", fontWeight: 600, fontSize: 20 }}>{v}</div>
+                <div style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", fontWeight: 600, fontSize: 20 }}>{v}</div>
                 <div style={{ fontSize: 10, color: c, fontWeight: 500 }}>{d}</div>
               </div>
             </div>

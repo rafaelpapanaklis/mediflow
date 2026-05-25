@@ -16,7 +16,7 @@ export function SpecRelated({ currentSlug }: { currentSlug: string }) {
     >
       <div
         style={{
-          fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+          fontFamily: "var(--font-mono, ui-monospace, monospace)",
           fontSize: 11,
           color: "var(--ld-fg-muted, var(--fg-muted))",
           letterSpacing: "0.15em",
@@ -55,7 +55,7 @@ export function SpecRelated({ currentSlug }: { currentSlug: string }) {
                   fontSize: 11,
                   color: s.accent,
                   fontFamily:
-                    "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                    "var(--font-mono, ui-monospace, monospace)",
                   textTransform: "uppercase",
                   letterSpacing: "0.05em",
                 }}
@@ -64,7 +64,7 @@ export function SpecRelated({ currentSlug }: { currentSlug: string }) {
               </div>
               <div
                 style={{
-                  fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+                  fontFamily: "var(--font-sans, system-ui, sans-serif)",
                   fontWeight: 600,
                   fontSize: 16,
                   color: "var(--ld-fg, var(--fg))",

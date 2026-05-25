@@ -144,7 +144,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
               borderRadius: 14,
               boxShadow: "0 24px 60px -12px rgba(0,0,0,0.5)",
               zIndex: 201,
-              fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+              fontFamily: "var(--font-sans, system-ui, sans-serif)",
               animation: "mfConfirmSlide 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
             }}
           >

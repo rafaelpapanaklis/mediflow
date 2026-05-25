@@ -349,7 +349,7 @@ function EditCostModal({
           borderRadius: 14,
           width: "100%",
           maxWidth: 460,
-          fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+          fontFamily: "var(--font-sans, system-ui, sans-serif)",
         }}
       >
         <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-soft)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -434,7 +434,7 @@ function TotalCard({ label, value, tone, icon }: { label: string; value: string;
       display: "flex",
       flexDirection: "column",
       gap: 6,
-      fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+      fontFamily: "var(--font-sans, system-ui, sans-serif)",
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <div aria-hidden style={{
@@ -481,7 +481,7 @@ function Td({ children, align = "left", mono, color }: {
       padding: "10px 14px",
       textAlign: align,
       color: color ?? "var(--text-1)",
-      fontFamily: mono ? "var(--font-jetbrains-mono, monospace)" : "inherit",
+      fontFamily: mono ? "var(--font-mono, monospace)" : "inherit",
       fontVariantNumeric: mono ? "tabular-nums" : "normal",
     }}>{children}</td>
   );

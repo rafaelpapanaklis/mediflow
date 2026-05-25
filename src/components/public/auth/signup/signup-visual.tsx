@@ -40,7 +40,7 @@ export function SignupVisual() {
           borderRadius: 100,
           background: "rgba(52,211,153,0.1)",
           border: "1px solid rgba(52,211,153,0.3)",
-          fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+          fontFamily: "var(--font-mono, ui-monospace, monospace)",
           fontSize: 10.5,
           letterSpacing: "0.12em",
           textTransform: "uppercase",
@@ -67,7 +67,7 @@ export function SignupVisual() {
         <h1
           style={{
             margin: 0,
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
             fontWeight: 600,
             fontSize: "clamp(36px, 4.6vw, 52px)",
             letterSpacing: "-0.03em",
@@ -205,7 +205,7 @@ export function SignupVisual() {
             display: "grid",
             placeItems: "center",
             color: "#fff",
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
             fontWeight: 600,
             fontSize: 13,
             flexShrink: 0,

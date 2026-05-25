@@ -39,7 +39,7 @@
   --shadow-lg: 0 10px 40px rgba(15, 10, 30, 0.08);
 
   padding: clamp(16px, 1.6vw, 28px);
-  font-family: var(--font-sora, "Sora", system-ui, sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
   color: var(--text-1);
   font-size: 14px;
   background: var(--bg);
@@ -83,7 +83,7 @@
   --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.65);
 }
 
-.mono { font-family: var(--font-jetbrains-mono, "JetBrains Mono", ui-monospace, monospace); font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--font-mono, ui-monospace, monospace); font-variant-numeric: tabular-nums; }
 
 /* ─── Hero stats (4 cards) ─── */
 .heroGrid {
@@ -189,7 +189,7 @@
   border-style: solid;
 }
 .pillCount {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 10.5px;
   font-weight: 600;
   color: var(--text-3);
@@ -237,7 +237,7 @@
   right: 10px;
   top: 50%;
   transform: translateY(-50%);
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 10px;
   padding: 1px 5px;
   background: var(--bg-elev-2);
@@ -330,7 +330,7 @@
   box-shadow: 0 1px 4px rgba(15, 10, 30, 0.08);
 }
 .viewToggleBtn kbd {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 9px;
   padding: 1px 4px;
   background: rgba(15, 25, 50, 0.06);
@@ -575,14 +575,14 @@
 .patientMeta {
   font-size: 11px;
   color: var(--text-3);
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
 }
 
 .contactCell {
   font-size: 13px;
 }
 .contactPhone {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   color: var(--text-1);
   font-weight: 500;
 }
@@ -600,9 +600,9 @@
   font-weight: 600;
 }
 
-.balanceZero { color: var(--text-4); font-family: var(--font-jetbrains-mono, monospace); }
-.balancePositive { color: var(--text-2); font-family: var(--font-jetbrains-mono, monospace); }
-.balanceNegative { color: var(--red); font-weight: 700; font-family: var(--font-jetbrains-mono, monospace); }
+.balanceZero { color: var(--text-4); font-family: var(--font-mono, monospace); }
+.balancePositive { color: var(--text-2); font-family: var(--font-mono, monospace); }
+.balanceNegative { color: var(--red); font-weight: 700; font-family: var(--font-mono, monospace); }
 
 .doctorCell {
   display: inline-flex;
@@ -763,7 +763,7 @@
 .gridMeta {
   font-size: 11px;
   color: var(--text-3);
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
 }
 .gridTags {
   display: flex;
@@ -950,7 +950,7 @@
   flex-wrap: wrap;
   gap: 12px;
 }
-.pageInfo { font-family: var(--font-jetbrains-mono, monospace); }
+.pageInfo { font-family: var(--font-mono, monospace); }
 .pageControls {
   display: inline-flex;
   gap: 4px;
@@ -965,7 +965,7 @@
   background: var(--bg-elev);
   border: 1px solid var(--border-soft);
   border-radius: 6px;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 11px;
   color: var(--text-2);
   cursor: pointer;
@@ -985,7 +985,7 @@
 .pageEllipsis {
   padding: 0 4px;
   color: var(--text-4);
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
 }
 
 /* ─── Empty / error / loading ─── */
@@ -1002,7 +1002,7 @@
   color: var(--text-4);
 }
 .kbdHints kbd {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 9.5px;
   padding: 1px 5px;
   background: var(--bg-elev-2);

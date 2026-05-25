@@ -47,7 +47,7 @@ export function PrescriptionQR({
     <div className="card" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: "Sora, sans-serif", fontWeight: 600, fontSize: 15, color: "var(--text-1)" }}>
+          <div style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", fontWeight: 600, fontSize: 15, color: "var(--text-1)" }}>
             Receta médica digital
           </div>
           <div style={{ fontSize: 11, color: "var(--text-2)", fontFamily: "ui-monospace, monospace", marginTop: 4 }}>

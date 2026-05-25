@@ -994,7 +994,7 @@ export function XraysClient({
               aria-valuemin={50}
               aria-valuemax={150}
             />
-            <strong style={{ fontFamily: "var(--font-jetbrains-mono, monospace)" }}>{brightness}%</strong>
+            <strong style={{ fontFamily: "var(--font-mono, monospace)" }}>{brightness}%</strong>
           </label>
           <label className={styles.toolSlider}>
             Contraste
@@ -1006,7 +1006,7 @@ export function XraysClient({
               aria-valuemin={50}
               aria-valuemax={200}
             />
-            <strong style={{ fontFamily: "var(--font-jetbrains-mono, monospace)" }}>{contrast}%</strong>
+            <strong style={{ fontFamily: "var(--font-mono, monospace)" }}>{contrast}%</strong>
           </label>
           <span className={styles.toolSpacer} />
           <button

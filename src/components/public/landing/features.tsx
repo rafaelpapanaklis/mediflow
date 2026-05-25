@@ -3,8 +3,8 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { MiniRadio } from "./mockups/mini-radio";
 
-const MONO = "var(--font-jetbrains-mono, ui-monospace, monospace)";
-const SORA = "var(--font-sora, 'Sora', sans-serif)";
+const MONO = "var(--font-mono, ui-monospace, monospace)";
+const SORA = "var(--font-sans, system-ui, sans-serif)";
 
 type FeatureCardProps = {
   span?: number;

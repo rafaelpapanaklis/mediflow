@@ -337,7 +337,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                 border: "1px solid var(--border-soft)",
                 borderRadius: 6,
                 cursor: "pointer",
-                fontFamily: "var(--font-jetbrains-mono, monospace)",
+                fontFamily: "var(--font-mono, monospace)",
                 fontWeight: 500,
                 flexShrink: 0,
               }}
@@ -370,7 +370,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                     fontWeight: 600,
                     letterSpacing: "0.08em",
                     color: "var(--text-2)",
-                    fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+                    fontFamily: "var(--font-sans, system-ui, sans-serif)",
                   }}
                 >
                   {GROUP_LABELS[group]}
@@ -498,7 +498,7 @@ function CommandRow({
           fontSize: 10, padding: "2px 6px", borderRadius: 4,
           background: isActive ? "rgba(124,58,237,0.20)" : "var(--bg-hover)",
           color: isActive ? "var(--brand)" : "var(--text-2)",
-          fontFamily: "var(--font-jetbrains-mono, monospace)",
+          fontFamily: "var(--font-mono, monospace)",
           fontWeight: 500, border: "1px solid var(--border-soft)",
           flexShrink: 0, whiteSpace: "nowrap",
         }}>{item.shortcut}</kbd>
@@ -527,7 +527,7 @@ function FooterHint({ keys, label }: { keys: string[]; label: string }) {
           fontSize: 10, padding: "1px 5px", minWidth: 16,
           textAlign: "center", borderRadius: 4,
           background: "var(--bg-hover)", border: "1px solid var(--border-soft)",
-          color: "var(--text-2)", fontFamily: "var(--font-jetbrains-mono, monospace)",
+          color: "var(--text-2)", fontFamily: "var(--font-mono, monospace)",
           fontWeight: 500, display: "inline-block",
         }}>{k}</kbd>
       ))}

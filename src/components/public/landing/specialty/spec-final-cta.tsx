@@ -29,7 +29,7 @@ export function SpecFinalCTA({ spec }: { spec: Specialty }) {
       >
         <h2
           style={{
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
             fontWeight: 700,
             fontSize: 56,
             letterSpacing: "-0.04em",

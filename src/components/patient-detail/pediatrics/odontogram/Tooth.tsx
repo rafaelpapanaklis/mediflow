@@ -73,7 +73,7 @@ export const Tooth = memo(function Tooth(props: ToothProps) {
           dominantBaseline="middle"
           textAnchor="middle"
           fontSize={9}
-          fontFamily="var(--font-jetbrains-mono, ui-monospace, monospace)"
+          fontFamily="var(--font-mono, ui-monospace, monospace)"
           fill="var(--text-2)"
           aria-hidden
         >

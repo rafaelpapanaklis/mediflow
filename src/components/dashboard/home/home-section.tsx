@@ -29,7 +29,7 @@ export function HomeSection({
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
-        fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+        fontFamily: "var(--font-sans, system-ui, sans-serif)",
       }}
     >
       <header

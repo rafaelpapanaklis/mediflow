@@ -55,7 +55,7 @@ export function AgendaDayNav() {
           fontSize: 13,
           fontWeight: 600,
           color: "var(--text-1)",
-          fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+          fontFamily: "var(--font-sans, system-ui, sans-serif)",
         }}
       >
         {formatHumanDate(state.dayISO, state.timezone)}

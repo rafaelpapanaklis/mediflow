@@ -62,7 +62,7 @@ export function TaskRow({
         <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-1)" }}>
           <span
             style={{
-              fontFamily: "var(--font-jetbrains-mono, monospace)",
+              fontFamily: "var(--font-mono, monospace)",
               fontWeight: 600,
               color: toneColor[tone],
               marginRight: 4,

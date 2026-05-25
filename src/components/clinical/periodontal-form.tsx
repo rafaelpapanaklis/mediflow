@@ -162,7 +162,7 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
     height: 30,
     textAlign: "center",
     fontSize: 12,
-    fontFamily: "var(--font-jetbrains-mono, monospace)",
+    fontFamily: "var(--font-mono, monospace)",
     background: "var(--bg-elev)",
     border: "1px solid var(--border-soft)",
     borderRadius: 6,

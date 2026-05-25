@@ -195,7 +195,7 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
       <span style={{ color: "var(--text-3, #64748b)", fontWeight: 600 }}>{label}</span>
       <span style={{
         color: "var(--text-1, #0f172a)",
-        fontFamily: mono ? "var(--font-jetbrains-mono, monospace)" : "inherit",
+        fontFamily: mono ? "var(--font-mono, monospace)" : "inherit",
         wordBreak: "break-all",
       }}>{value}</span>
     </div>

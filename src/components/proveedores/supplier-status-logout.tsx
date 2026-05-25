@@ -27,7 +27,7 @@ export function SupplierStatusLogout() {
         color: "var(--text-2)",
         fontSize: 13,
         fontWeight: 600,
-        fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+        fontFamily: "var(--font-sans, system-ui, sans-serif)",
         cursor: "pointer",
         transition: "background 0.15s, color 0.15s, border-color 0.15s",
       }}

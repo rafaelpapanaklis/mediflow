@@ -57,7 +57,7 @@ export function CommandPaletteHint({ onClick, compact }: CommandPaletteHintProps
               background: "var(--bg-elev)",
               border: "1px solid var(--border-soft)",
               color: "var(--text-2)",
-              fontFamily: "var(--font-jetbrains-mono, monospace)",
+              fontFamily: "var(--font-mono, monospace)",
               fontWeight: 500,
               flexShrink: 0,
             }}

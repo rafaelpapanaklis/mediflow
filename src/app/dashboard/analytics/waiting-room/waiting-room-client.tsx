@@ -93,7 +93,7 @@ export function WaitingRoomClient() {
                     fontSize: 18,
                     fontWeight: 700,
                     color: "#dc2626",
-                    fontFamily: "var(--font-jetbrains-mono, monospace)",
+                    fontFamily: "var(--font-mono, monospace)",
                   }}>
                     {w.waitedMin}m
                   </div>
@@ -218,7 +218,7 @@ function Td({ children, align = "left", mono, color }: {
       padding: "10px 14px",
       textAlign: align,
       color: color ?? "var(--text-1)",
-      fontFamily: mono ? "var(--font-jetbrains-mono, monospace)" : "inherit",
+      fontFamily: mono ? "var(--font-mono, monospace)" : "inherit",
       fontVariantNumeric: mono ? "tabular-nums" : "normal",
     }}>{children}</td>
   );

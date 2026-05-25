@@ -58,7 +58,7 @@ export function LoginForm() {
       <div>
         <h1
           style={{
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
             fontSize: 28,
             fontWeight: 600,
             letterSpacing: "-0.025em",

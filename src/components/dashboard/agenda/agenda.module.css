@@ -51,7 +51,7 @@
   letter-spacing: -0.01em;
   padding-right: 12px;
   border-right: 1px solid var(--border-soft);
-  font-family: var(--font-sora, "Sora", sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
 }
 .viewTabs {
   display: inline-flex;
@@ -92,7 +92,7 @@
   font-size: 12px; font-weight: 600;
   min-width: 120px; text-align: center;
   letter-spacing: -0.01em;
-  font-family: var(--font-sora, "Sora", sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
 }
 .todayBtn {
   padding: 4px 9px;
@@ -248,7 +248,7 @@
   padding: 4px;
   z-index: 250;
   min-width: 140px;
-  font-family: var(--font-sora, "Sora", sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
 }
 .moreViewsItem {
   display: flex; align-items: center; gap: 6px;
@@ -381,7 +381,7 @@
   font-weight: 600; font-size: 12px;
   letter-spacing: -0.01em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  font-family: var(--font-sora, "Sora", sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
   color: var(--text-1);
 }
 .columnHeaderSub {
@@ -405,7 +405,7 @@
 }
 .columnHeaderPct {
   font-size: 9px; color: var(--text-3); font-weight: 600;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
 }
 
 /* Override densidad de la card (M5 v2)
@@ -432,7 +432,7 @@
   overflow: hidden;
   cursor: pointer;
   z-index: 1;
-  font-family: var(--font-sora, "Sora", sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
   color: var(--text-1);
 }
 /* En modo "Por sillón" la card hereda el color del Resource (columna) en el
@@ -486,7 +486,7 @@
   flex-shrink: 0;
 }
 .apptTime {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 11px;
   font-weight: 700;
   color: var(--text-1);
@@ -526,7 +526,7 @@
   padding: 4px 10px;
   background: var(--mf-doc-color, var(--brand));
   color: #fff;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 12px;
   font-weight: 800;
   border-radius: 5px;
@@ -589,12 +589,12 @@
   color: #fff; font-size: 14px; font-weight: 700;
   display: grid; place-items: center;
   flex-shrink: 0;
-  font-family: var(--font-sora, "Sora", sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
 }
 .detailName {
   font-size: 14px; font-weight: 700;
   letter-spacing: -0.01em;
-  font-family: var(--font-sora, "Sora", sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
 }
 .detailSub {
   font-size: 10px; color: var(--text-3);
@@ -608,13 +608,13 @@
   border-radius: 8px;
 }
 .detailTimeMain {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 16px; font-weight: 700;
   color: var(--brand);
   letter-spacing: -0.02em;
 }
 .detailTimeEnd {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 11px; color: var(--text-3); font-weight: 500;
   margin-left: 7px;
 }
@@ -861,7 +861,7 @@
   left: 0;
   right: 8px;
   text-align: right;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 10px;
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
@@ -996,7 +996,7 @@
   padding: 6px 4px;
   border-bottom: 1px solid var(--border-soft);
   margin-bottom: 6px;
-  font-family: var(--font-sora, "Sora", sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
 }
 .listItem {
   display: grid;
@@ -1011,7 +1011,7 @@
   background: color-mix(in srgb, var(--mf-doc-color, var(--brand)) 5%, var(--bg-elev));
   cursor: pointer;
   transition: box-shadow 0.12s, transform 0.12s, border-color 0.12s;
-  font-family: var(--font-sora, "Sora", sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
 }
 .listItem:hover {
   border-color: var(--border-strong);
@@ -1022,7 +1022,7 @@
   border-left-color: var(--mf-doc-color, var(--brand));
 }
 .listItemTime {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 12px; font-weight: 700;
   color: var(--text-1);
   font-variant-numeric: tabular-nums;
@@ -1087,7 +1087,7 @@
   color: var(--text-3);
   letter-spacing: 0.06em; text-transform: uppercase;
   text-align: center;
-  font-family: var(--font-sora, "Sora", sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
 }
 .monthGrid {
   display: grid;
@@ -1107,7 +1107,7 @@
   min-height: 70px;
   cursor: pointer;
   transition: border-color 0.12s, background 0.12s, transform 0.12s;
-  font-family: var(--font-sora, "Sora", sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
 }
 .monthDay:hover {
   border-color: var(--border-brand);
@@ -1180,7 +1180,7 @@
 .weekHeaderDay {
   font-size: 14px; font-weight: 700;
   color: var(--text-1);
-  font-family: var(--font-sora, "Sora", sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
   letter-spacing: -0.01em;
   line-height: 1;
 }
@@ -1210,7 +1210,7 @@
   overflow: hidden;
   display: flex; flex-direction: column;
   max-height: 80vh;
-  font-family: var(--font-sora, "Sora", sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
 }
 .modalHeader {
   padding: 14px 18px 10px;
@@ -1444,7 +1444,7 @@
   font-weight: 600;
   color: var(--text-1);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  font-family: var(--font-sora, "Sora", sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
 }
 .modalDoctorFullName {
   font-size: 10px;
@@ -1524,7 +1524,7 @@
   flex-direction: column;
   z-index: 30;
   box-shadow: 8px 0 16px rgba(15,10,30,0.04);
-  font-family: var(--font-sora, "Sora", sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
 }
 .waitlistHeader {
   display: flex; align-items: center; justify-content: space-between;
@@ -1545,7 +1545,7 @@
   color: var(--brand);
   font-size: 10px; font-weight: 700;
   padding: 0 5px;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
 }
 .waitlistClose {
   width: 24px; height: 24px;
@@ -1682,7 +1682,7 @@
   background: var(--brand);
   color: #fff;
   font-size: 8px; font-weight: 700;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
 }
 
 /* ─────── STATUS POPOVER (quick-change on card) ───────────────────── */
@@ -1718,7 +1718,7 @@
   padding: 6px;
   z-index: 250;
   min-width: 180px;
-  font-family: var(--font-sora, "Sora", sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
 }
 .statusPopoverTitle {
   font-size: 9px; font-weight: 700;
@@ -1775,7 +1775,7 @@
   overflow: hidden;
   display: flex; flex-direction: column;
   max-height: 85vh;
-  font-family: var(--font-sora, "Sora", sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
 }
 .validateSubtitle {
   font-size: 11px;
@@ -1809,7 +1809,7 @@
   flex-wrap: wrap;
 }
 .validateRowTime {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-weight: 600;
   color: var(--text-2);
 }
@@ -1877,7 +1877,7 @@
   background: color-mix(in srgb, var(--warning) 8%, var(--bg-elev));
   border-bottom: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
   padding: 10px 16px 12px;
-  font-family: var(--font-sora, "Sora", sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
   flex-shrink: 0;
 }
 .validateBannerHead {
@@ -1893,7 +1893,7 @@
 }
 .validateBannerTitle strong {
   font-weight: 700;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 13px;
 }
 .validateBannerActions {
@@ -1948,7 +1948,7 @@
   flex-wrap: wrap;
 }
 .validateBannerRowTime {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-weight: 700;
   color: var(--text-2);
 }

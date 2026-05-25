@@ -28,7 +28,7 @@ function Breadcrumb({ spec, accent }: { spec: Specialty; accent: string }) {
         border: `1px solid ${accent}33`,
         fontSize: 12,
         color: accent,
-        fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+        fontFamily: "var(--font-mono, ui-monospace, monospace)",
       }}
     >
       <span style={{ opacity: 0.7 }}>Especialidades</span>
@@ -74,7 +74,7 @@ export function SpecHero({ spec }: { spec: Specialty }) {
             <div
               style={{
                 fontFamily:
-                  "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                  "var(--font-mono, ui-monospace, monospace)",
                 fontSize: 11,
                 color: "var(--ld-fg-muted, var(--fg-muted))",
                 letterSpacing: "0.15em",
@@ -86,7 +86,7 @@ export function SpecHero({ spec }: { spec: Specialty }) {
             </div>
             <h1
               style={{
-                fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+                fontFamily: "var(--font-sans, system-ui, sans-serif)",
                 fontWeight: 700,
                 fontSize: "clamp(40px, 5vw, 64px)",
                 letterSpacing: "-0.04em",
@@ -213,7 +213,7 @@ export function SpecHero({ spec }: { spec: Specialty }) {
             >
               <div
                 style={{
-                  fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+                  fontFamily: "var(--font-sans, system-ui, sans-serif)",
                   fontWeight: 700,
                   fontSize: 32,
                   letterSpacing: "-0.03em",

@@ -83,7 +83,7 @@ export function EvolutionChart({
             style={{
               fontSize: 28,
               fontWeight: 600,
-              fontFamily: "Sora, sans-serif",
+              fontFamily: "var(--font-sans, system-ui, sans-serif)",
               color: "var(--text-1)",
               lineHeight: 1,
             }}

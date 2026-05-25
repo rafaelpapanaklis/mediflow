@@ -162,7 +162,7 @@ export function JourneyClient() {
                   <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{s.label}</div>
                   <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>{s.from} → {s.to}</div>
                 </div>
-                <div style={{ fontSize: 11, color: "var(--text-3)", fontFamily: "var(--font-jetbrains-mono, monospace)" }}>
+                <div style={{ fontSize: 11, color: "var(--text-3)", fontFamily: "var(--font-mono, monospace)" }}>
                   n={s.sample}
                 </div>
                 <div style={{
@@ -173,7 +173,7 @@ export function JourneyClient() {
                     : s.avgMin > 30 ? "#dc2626"
                     : s.avgMin > 15 ? "#d97706"
                     : "#10b981",
-                  fontFamily: "var(--font-jetbrains-mono, monospace)",
+                  fontFamily: "var(--font-mono, monospace)",
                   fontVariantNumeric: "tabular-nums",
                   display: "inline-flex",
                   alignItems: "center",
@@ -258,7 +258,7 @@ function FunnelView({
                   fontSize: 16,
                   fontWeight: 700,
                   color: "var(--text-1)",
-                  fontFamily: "var(--font-jetbrains-mono, monospace)",
+                  fontFamily: "var(--font-mono, monospace)",
                   fontVariantNumeric: "tabular-nums",
                 }}>
                   {step.count.toLocaleString("es-MX")}

@@ -145,7 +145,7 @@ export function InsightsPopover() {
               fontWeight: 700,
               display: "grid",
               placeItems: "center",
-              fontFamily: "var(--font-jetbrains-mono, monospace)",
+              fontFamily: "var(--font-mono, monospace)",
               border: "1px solid var(--bg-elev)",
             }}
           >
@@ -170,7 +170,7 @@ export function InsightsPopover() {
             zIndex: 100,
             display: "flex",
             flexDirection: "column",
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
           }}
         >
           <div
@@ -282,7 +282,7 @@ function InsightDetailModal({ insight, onClose }: { insight: InsightItem; onClos
           maxHeight: "calc(100vh - 64px)",
           display: "flex",
           flexDirection: "column",
-          fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+          fontFamily: "var(--font-sans, system-ui, sans-serif)",
         }}
       >
         <div

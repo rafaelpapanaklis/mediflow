@@ -166,14 +166,14 @@ export function ProceduresClient() {
                     <Td>
                       {p.fastest ? (
                         <span style={{ color: "var(--text-2)" }}>
-                          {p.fastest.name} <span style={{ color: "#10b981", fontFamily: "var(--font-jetbrains-mono, monospace)" }}>{p.fastest.avgMin}min</span>
+                          {p.fastest.name} <span style={{ color: "#10b981", fontFamily: "var(--font-mono, monospace)" }}>{p.fastest.avgMin}min</span>
                         </span>
                       ) : <span style={{ color: "var(--text-4)" }}>—</span>}
                     </Td>
                     <Td>
                       {p.slowest ? (
                         <span style={{ color: "var(--text-2)" }}>
-                          {p.slowest.name} <span style={{ color: "#dc2626", fontFamily: "var(--font-jetbrains-mono, monospace)" }}>{p.slowest.avgMin}min</span>
+                          {p.slowest.name} <span style={{ color: "#dc2626", fontFamily: "var(--font-mono, monospace)" }}>{p.slowest.avgMin}min</span>
                         </span>
                       ) : <span style={{ color: "var(--text-4)" }}>—</span>}
                     </Td>
@@ -197,7 +197,7 @@ function VarianceCell({ variance }: { variance: number | null }) {
   const color = variance === 0 ? "var(--text-3)" : variance > 0 ? "#dc2626" : "#10b981";
   const sign = variance > 0 ? "+" : "";
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color, fontWeight: 600, fontFamily: "var(--font-jetbrains-mono, monospace)" }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color, fontWeight: 600, fontFamily: "var(--font-mono, monospace)" }}>
       <Icon size={12} aria-hidden />
       {sign}{variance} min
     </span>
@@ -226,7 +226,7 @@ function Td({ children, align = "left", mono, color }: {
       padding: "10px 14px",
       textAlign: align,
       color: color ?? "var(--text-1)",
-      fontFamily: mono ? "var(--font-jetbrains-mono, monospace)" : "inherit",
+      fontFamily: mono ? "var(--font-mono, monospace)" : "inherit",
       fontVariantNumeric: mono ? "tabular-nums" : "normal",
     }}>{children}</td>
   );

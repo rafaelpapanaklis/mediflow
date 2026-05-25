@@ -27,7 +27,7 @@ export function Hero() {
           <div>
             <div style={{ marginBottom: 24 }}><Pill>Hecho en México · CFDI 4.0 nativo</Pill></div>
             <h1 style={{
-              fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+              fontFamily: "var(--font-sans, system-ui, sans-serif)",
               fontWeight: 700,
               fontSize: "clamp(40px, 6vw, 72px)",
               letterSpacing: "-0.045em",
@@ -67,7 +67,7 @@ export function Hero() {
 
             <div style={{ position: "absolute", top: 260, left: -20, width: 260, zIndex: 3 }}>
               <FloatCard title="factura · CFDI 4.0">
-                <div style={{ fontSize: 11, color: "var(--ld-fg-muted)", marginBottom: 8, fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)" }}>Folio AB-00342</div>
+                <div style={{ fontSize: 11, color: "var(--ld-fg-muted)", marginBottom: 8, fontFamily: "var(--font-mono, ui-monospace, monospace)" }}>Folio AB-00342</div>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
                   <span style={{ color: "var(--ld-fg)" }}>Consulta general</span>
                   <span style={{ color: "var(--ld-fg)" }}>$800.00</span>
@@ -77,7 +77,7 @@ export function Hero() {
                   <span style={{ color: "var(--ld-fg-muted)" }}>$128.00</span>
                 </div>
                 <div style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "8px 0" }} />
-                <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-sora, 'Sora', sans-serif)", fontWeight: 600, color: "var(--ld-fg)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-sans, system-ui, sans-serif)", fontWeight: 600, color: "var(--ld-fg)" }}>
                   <span>Total</span><span>$928.00</span>
                 </div>
                 <div style={{

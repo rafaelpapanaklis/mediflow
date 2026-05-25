@@ -92,7 +92,7 @@ export function Pricing() {
       >
         <div
           style={{
-            fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+            fontFamily: "var(--font-mono, ui-monospace, monospace)",
             fontSize: 11,
             color: "var(--ld-brand-light, var(--brand-light))",
             letterSpacing: "0.15em",
@@ -104,7 +104,7 @@ export function Pricing() {
         </div>
         <h2
           style={{
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
             fontWeight: 600,
             fontSize: "clamp(32px, 5vw, 48px)",
             letterSpacing: "-0.035em",
@@ -168,7 +168,7 @@ export function Pricing() {
                   letterSpacing: "0.08em",
                   textTransform: "uppercase",
                   fontFamily:
-                    "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                    "var(--font-mono, ui-monospace, monospace)",
                 }}
               >
                 Más popular
@@ -186,7 +186,7 @@ export function Pricing() {
             >
               <div
                 style={{
-                  fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+                  fontFamily: "var(--font-sans, system-ui, sans-serif)",
                   fontWeight: 600,
                   fontSize: 18,
                   letterSpacing: "0.05em",
@@ -233,7 +233,7 @@ export function Pricing() {
             >
               <span
                 style={{
-                  fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+                  fontFamily: "var(--font-sans, system-ui, sans-serif)",
                   fontWeight: 700,
                   fontSize: 48,
                   letterSpacing: "-0.04em",

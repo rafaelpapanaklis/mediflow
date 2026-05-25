@@ -80,7 +80,7 @@ export function TodayAppointmentRow({
         />
         <span
           style={{
-            fontFamily: "var(--font-jetbrains-mono, monospace)",
+            fontFamily: "var(--font-mono, monospace)",
             fontSize: 13,
             fontWeight: 500,
             color: "var(--text-1)",
@@ -148,7 +148,7 @@ export function TodayAppointmentRow({
             borderRadius: 4,
             background: "var(--brand-soft)",
             color: "var(--trial-accent-calm)",
-            fontFamily: "var(--font-jetbrains-mono, monospace)",
+            fontFamily: "var(--font-mono, monospace)",
             fontWeight: 500,
             whiteSpace: "nowrap",
             flexShrink: 0,
@@ -292,7 +292,7 @@ const dropdownStyle: React.CSSProperties = {
   boxShadow:
     "0 20px 50px -10px rgba(15,10,30,0.25), 0 8px 20px -8px rgba(15,10,30,0.15)",
   zIndex: 50,
-  fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+  fontFamily: "var(--font-sans, system-ui, sans-serif)",
 };
 
 const dropdownItemStyle: React.CSSProperties = {

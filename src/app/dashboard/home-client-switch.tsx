@@ -73,7 +73,7 @@ export function HomeClientSwitch({
             border: "1px solid var(--border-soft)",
             borderRadius: 10,
             padding: 3,
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
           }}
         >
           <SwitchButton

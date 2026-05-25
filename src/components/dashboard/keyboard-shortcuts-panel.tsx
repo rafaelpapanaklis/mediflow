@@ -131,7 +131,7 @@ export function KeyboardShortcutsPanel({ open, onOpenChange }: KeyboardShortcuts
                   fontSize: 15,
                   fontWeight: 600,
                   color: "var(--text-1)",
-                  fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+                  fontFamily: "var(--font-sans, system-ui, sans-serif)",
                   margin: 0,
                 }}
               >
@@ -175,7 +175,7 @@ export function KeyboardShortcutsPanel({ open, onOpenChange }: KeyboardShortcuts
                     textTransform: "uppercase",
                     color: "var(--text-2)",
                     margin: "0 0 8px 0",
-                    fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+                    fontFamily: "var(--font-sans, system-ui, sans-serif)",
                   }}
                 >
                   {sec.title}
@@ -207,7 +207,7 @@ export function KeyboardShortcutsPanel({ open, onOpenChange }: KeyboardShortcuts
                               background: "var(--bg-elev-2)",
                               border: "1px solid var(--border-soft)",
                               color: "var(--text-2)",
-                              fontFamily: "var(--font-jetbrains-mono, monospace)",
+                              fontFamily: "var(--font-mono, monospace)",
                               fontWeight: 500,
                               display: "inline-block",
                             }}
@@ -247,7 +247,7 @@ function InlineKbd({ children }: { children: React.ReactNode }) {
   return (
     <kbd
       style={{
-        fontFamily: "var(--font-jetbrains-mono, monospace)",
+        fontFamily: "var(--font-mono, monospace)",
         fontSize: 10,
         padding: "1px 5px",
         background: "var(--bg-hover)",

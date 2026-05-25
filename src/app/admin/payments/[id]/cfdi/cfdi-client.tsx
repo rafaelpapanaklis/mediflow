@@ -92,7 +92,7 @@ export function CfdiClient({ paymentId, clinic, amount, currency, periodStart, p
             <div
               style={{
                 ...VALUE_STYLE,
-                fontFamily: "var(--font-jetbrains-mono, monospace)",
+                fontFamily: "var(--font-mono, monospace)",
                 fontWeight: 600,
                 color: clinic.rfcEmisor ? "var(--success)" : "var(--danger)",
               }}
@@ -117,7 +117,7 @@ export function CfdiClient({ paymentId, clinic, amount, currency, periodStart, p
             <div
               style={{
                 ...VALUE_STYLE,
-                fontFamily: "var(--font-jetbrains-mono, monospace)",
+                fontFamily: "var(--font-mono, monospace)",
                 fontWeight: 600,
                 color: clinic.cpEmisor ? "var(--text-1)" : "var(--danger)",
               }}
@@ -158,7 +158,7 @@ export function CfdiClient({ paymentId, clinic, amount, currency, periodStart, p
                   background: "var(--bg-elev-2)",
                   padding: "2px 5px",
                   borderRadius: 4,
-                  fontFamily: "var(--font-jetbrains-mono, monospace)",
+                  fontFamily: "var(--font-mono, monospace)",
                   fontSize: 11,
                   color: "var(--brand)",
                   margin: "0 4px",
@@ -238,7 +238,7 @@ export function CfdiClient({ paymentId, clinic, amount, currency, periodStart, p
                 borderRadius: 10,
                 padding: 14,
                 lineHeight: 1.6,
-                fontFamily: "var(--font-jetbrains-mono, monospace)",
+                fontFamily: "var(--font-mono, monospace)",
                 margin: 0,
               }}
             >

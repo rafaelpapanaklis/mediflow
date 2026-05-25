@@ -30,7 +30,7 @@
      de Safari iOS al hacer scroll en mobile. */
   height: calc(100vh - 64px);
   height: calc(100dvh - 64px);
-  font-family: var(--font-sora, "Sora", system-ui, sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
   background: #faf9fc;
   color: var(--text-1);
 }
@@ -86,7 +86,7 @@
   flex-shrink: 0;
 }
 .topbarPatientId {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 10px;
   color: var(--text-3);
 }
@@ -225,7 +225,7 @@
   padding: 1px 5px;
   font-size: 8px;
   font-weight: 700;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   background: var(--brand);
   color: #fff;
   border-radius: 4px;
@@ -247,7 +247,7 @@
 }
 .xrayCardDate {
   font-size: 10px;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   color: var(--text-3);
 }
 .xrayCardFindings {
@@ -349,7 +349,7 @@
   gap: 5px;
 }
 .aiCount {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 10px;
   background: var(--brand);
   color: #fff;
@@ -443,7 +443,7 @@
   font-size: 10px;
   font-weight: 600;
   border-radius: 6px;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
 }
 
 .aiOverlay {
@@ -475,7 +475,7 @@
   padding: 2px 6px;
   font-size: 10px;
   font-weight: 700;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   border-radius: 4px;
   white-space: nowrap;
 }
@@ -502,7 +502,7 @@
   color: #fff;
 }
 .viewerInfoCardMeta {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 10px;
   color: var(--viewer-text-2);
 }
@@ -542,7 +542,7 @@
   padding: 4px 10px;
   color: var(--viewer-text-2);
   font-size: 10px;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
 }
 
 /* ─── Panel derecho (Findings / Mediciones / Notas) ────────── */
@@ -582,7 +582,7 @@
   background: var(--brand-soft);
   color: var(--brand);
   font-size: 9px;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   padding: 1px 5px;
   border-radius: 999px;
 }
@@ -613,7 +613,7 @@
   color: var(--brand);
 }
 .aiSummaryVersion {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 9.5px;
   color: var(--text-3);
 }
@@ -706,7 +706,7 @@
   color: #fff;
   font-weight: 700;
   font-size: 11px;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
 }
 .findingBody { min-width: 0; }
 .findingTitle {
@@ -818,7 +818,7 @@
   font-size: 12px;
 }
 .measurementValue {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   color: var(--brand);
   font-weight: 700;
 }

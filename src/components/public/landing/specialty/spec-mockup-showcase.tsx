@@ -30,7 +30,7 @@ export function SpecMockupShowcase({ spec }: { spec: Specialty }) {
         <div style={{ textAlign: "center", maxWidth: 640, margin: "0 auto 48px" }}>
           <div
             style={{
-              fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+              fontFamily: "var(--font-mono, ui-monospace, monospace)",
               fontSize: 11,
               color: accent,
               letterSpacing: "0.15em",
@@ -42,7 +42,7 @@ export function SpecMockupShowcase({ spec }: { spec: Specialty }) {
           </div>
           <h2
             style={{
-              fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+              fontFamily: "var(--font-sans, system-ui, sans-serif)",
               fontWeight: 600,
               fontSize: 44,
               letterSpacing: "-0.035em",

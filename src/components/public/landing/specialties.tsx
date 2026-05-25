@@ -30,8 +30,8 @@ const GROUP_COLOR: Record<SpecialtyCategory, string> = {
   "Bienestar":    "#fbbf24",
 };
 
-const MONO = "var(--font-jetbrains-mono, ui-monospace, monospace)";
-const DISPLAY = "var(--font-sora, 'Sora', sans-serif)";
+const MONO = "var(--font-mono, ui-monospace, monospace)";
+const DISPLAY = "var(--font-sans, system-ui, sans-serif)";
 
 export function Specialties() {
   const [activeCategory, setActiveCategory] = useState<SpecialtyCategory>("Dental");

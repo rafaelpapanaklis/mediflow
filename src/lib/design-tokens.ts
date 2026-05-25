@@ -82,8 +82,8 @@ export const shadow = {
 } as const;
 
 export const font = {
-  sora: "var(--font-sora, 'Sora', sans-serif)",
-  mono: "var(--font-jetbrains-mono, 'JetBrains Mono', monospace)",
+  sora: "var(--font-sans, system-ui, sans-serif)",
+  mono: "var(--font-mono, ui-monospace, monospace)",
 } as const;
 
 export const fontSize = {

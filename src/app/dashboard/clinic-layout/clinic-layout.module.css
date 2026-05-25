@@ -304,7 +304,7 @@
   color: var(--text-4);
 }
 .kbdHint kbd {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 10px;
   padding: 1px 5px;
   border-radius: 4px;
@@ -349,7 +349,7 @@
   box-shadow: 0 1px 4px rgba(30, 60, 120, 0.12);
 }
 .toolToggleBtn kbd {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 9px;
   padding: 1px 4px;
   border-radius: 3px;
@@ -489,7 +489,7 @@
   font-size: 7.5px;
   color: var(--blue);
   font-weight: 700;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 /* ─── Canvas ─── */
@@ -571,7 +571,7 @@
 .propTypePreviewMeta {
   font-size: 10.5px;
   color: var(--text-3);
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono, ui-monospace, monospace);
 }
 .propLabel {
   font-size: 10.5px;
@@ -677,7 +677,7 @@
   color: var(--text-2);
 }
 .propKbdRow code {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 10px;
   padding: 1px 5px;
   border-radius: 4px;

@@ -46,7 +46,7 @@ export function EfficiencyGauge({ score, monthAverage, label = "Eficiencia opera
         flexDirection: "column",
         alignItems: "center",
         gap: 12,
-        fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+        fontFamily: "var(--font-sans, system-ui, sans-serif)",
       }}
     >
       <div

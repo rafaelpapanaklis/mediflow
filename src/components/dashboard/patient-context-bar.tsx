@@ -61,7 +61,7 @@ export function PatientContextBar() {
           alignItems: "center",
           gap: 12,
           padding: "0 clamp(12px, 1.5vw, 24px)",
-          fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+          fontFamily: "var(--font-sans, system-ui, sans-serif)",
         }}
       >
         {/* LEFT */}
@@ -126,7 +126,7 @@ export function PatientContextBar() {
                 style={{
                   fontSize: 11,
                   color: "var(--text-2)",
-                  fontFamily: "var(--font-jetbrains-mono, monospace)",
+                  fontFamily: "var(--font-mono, monospace)",
                   flexShrink: 0,
                 }}
               >
@@ -174,7 +174,7 @@ export function PatientContextBar() {
           aria-live="off"
           aria-label={`Tiempo de consulta: ${timerText}`}
           style={{
-            fontFamily: "var(--font-jetbrains-mono, monospace)",
+            fontFamily: "var(--font-mono, monospace)",
             fontSize: 13, fontWeight: 500,
             color: "var(--text-1)",
             padding: "4px 10px",

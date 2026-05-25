@@ -49,7 +49,7 @@ export default async function VerifyPrescriptionPage({ params }: PageProps) {
         maxWidth: 720,
         margin: "0 auto",
         padding: "clamp(20px, 4vw, 48px)",
-        fontFamily: "var(--font-sora, 'Sora', system-ui, sans-serif)",
+        fontFamily: "var(--font-sans, system-ui, sans-serif)",
         color: "#0f172a",
         lineHeight: 1.6,
       }}

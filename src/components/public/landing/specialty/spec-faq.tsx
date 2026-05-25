@@ -12,7 +12,7 @@ export function SpecFAQ({ spec }: { spec: Specialty }) {
       <div style={{ textAlign: "center", marginBottom: 48 }}>
         <div
           style={{
-            fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+            fontFamily: "var(--font-mono, ui-monospace, monospace)",
             fontSize: 11,
             color: accent,
             letterSpacing: "0.15em",
@@ -24,7 +24,7 @@ export function SpecFAQ({ spec }: { spec: Specialty }) {
         </div>
         <h2
           style={{
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
             fontWeight: 600,
             fontSize: 40,
             letterSpacing: "-0.035em",
@@ -65,7 +65,7 @@ export function SpecFAQ({ spec }: { spec: Specialty }) {
               >
                 <div
                   style={{
-                    fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+                    fontFamily: "var(--font-sans, system-ui, sans-serif)",
                     fontWeight: 500,
                     fontSize: 16,
                     color: "var(--ld-fg, var(--fg))",

@@ -306,7 +306,7 @@ const popoverStyle: React.CSSProperties = {
   boxShadow: "0 16px 40px -8px rgba(15,10,30,0.30)",
   padding: 14,
   zIndex: 80,
-  fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+  fontFamily: "var(--font-sans, system-ui, sans-serif)",
 };
 
 const navBtnStyle: React.CSSProperties = {

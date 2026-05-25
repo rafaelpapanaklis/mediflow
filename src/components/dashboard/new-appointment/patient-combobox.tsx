@@ -188,7 +188,7 @@ export function PatientCombobox({ value, onChange }: Props) {
                     style={{
                       fontSize: 11,
                       color: "var(--text-3)",
-                      fontFamily: "var(--font-jetbrains-mono, monospace)",
+                      fontFamily: "var(--font-mono, monospace)",
                       marginTop: 2,
                     }}
                   >

@@ -127,7 +127,7 @@ export function TrialPill({
         color: s.text,
         fontSize: 12,
         fontWeight: 500,
-        fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+        fontFamily: "var(--font-sans, system-ui, sans-serif)",
         whiteSpace: "nowrap",
         flexShrink: 0,
         transition: "background 0.15s, border-color 0.15s",
@@ -165,7 +165,7 @@ export function TrialPill({
                   Prueba:{" "}
                   <strong
                     style={{
-                      fontFamily: "var(--font-jetbrains-mono, monospace)",
+                      fontFamily: "var(--font-mono, monospace)",
                       fontWeight: 600,
                       color: s.number,
                       fontVariantNumeric: "tabular-nums",
@@ -184,7 +184,7 @@ export function TrialPill({
             >
               <strong
                 style={{
-                  fontFamily: "var(--font-jetbrains-mono, monospace)",
+                  fontFamily: "var(--font-mono, monospace)",
                   fontWeight: 600,
                   color: s.number,
                   fontVariantNumeric: "tabular-nums",
@@ -199,7 +199,7 @@ export function TrialPill({
               className="mf-trial-pill__label-min"
               style={{
                 display: "none",
-                fontFamily: "var(--font-jetbrains-mono, monospace)",
+                fontFamily: "var(--font-mono, monospace)",
                 fontWeight: 600,
                 color: s.number,
                 fontVariantNumeric: "tabular-nums",
@@ -226,7 +226,7 @@ export function TrialPill({
               padding: 14,
               boxShadow:
                 "0 20px 50px -10px rgba(15,10,30,0.25), 0 8px 20px -8px rgba(15,10,30,0.15)",
-              fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+              fontFamily: "var(--font-sans, system-ui, sans-serif)",
             }}
           >
             <div
@@ -263,7 +263,7 @@ export function TrialPill({
                   Prueba gratis · Plan{" "}
                   <span
                     style={{
-                      fontFamily: "var(--font-jetbrains-mono, monospace)",
+                      fontFamily: "var(--font-mono, monospace)",
                       fontSize: 11,
                       padding: "1px 6px",
                       borderRadius: 4,
@@ -406,7 +406,7 @@ export function TrialPill({
             fontWeight: 700,
             letterSpacing: "0.06em",
             textTransform: "uppercase",
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
             marginRight: 4,
             flexShrink: 0,
           }}

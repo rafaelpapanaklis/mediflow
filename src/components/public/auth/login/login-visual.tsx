@@ -19,7 +19,7 @@ export function LoginVisual() {
             lineHeight: 1,
             color: "var(--ld-brand-light)",
             opacity: 0.4,
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
             fontWeight: 700,
             marginBottom: 16,
           }}
@@ -28,7 +28,7 @@ export function LoginVisual() {
         </div>
         <p
           style={{
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
             fontSize: 28,
             fontWeight: 500,
             letterSpacing: "-0.015em",
@@ -50,7 +50,7 @@ export function LoginVisual() {
               display: "grid",
               placeItems: "center",
               color: "#fff",
-              fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+              fontFamily: "var(--font-sans, system-ui, sans-serif)",
               fontWeight: 600,
               fontSize: 16,
               flexShrink: 0,
@@ -102,7 +102,7 @@ export function LoginVisual() {
         >
           <span
             style={{
-              fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+              fontFamily: "var(--font-sans, system-ui, sans-serif)",
               fontWeight: 700,
               fontSize: 18,
               letterSpacing: "-0.02em",

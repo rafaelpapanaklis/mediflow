@@ -209,7 +209,7 @@ export function DoctorsClient() {
                   </Td>
                   <Td align="right">
                     {d.avgSatisfaction != null ? (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "#d97706", fontWeight: 600, fontFamily: "var(--font-jetbrains-mono, monospace)" }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "#d97706", fontWeight: 600, fontFamily: "var(--font-mono, monospace)" }}>
                         <Star size={11} fill="currentColor" aria-hidden />
                         {d.avgSatisfaction.toFixed(1)}
                         <span style={{ fontSize: 10, color: "var(--text-4)", fontWeight: 500 }}>({d.satisfactionCount})</span>
@@ -256,7 +256,7 @@ function Td({ children, align = "left", mono, color }: {
       padding: "10px 14px",
       textAlign: align,
       color: color ?? "var(--text-1)",
-      fontFamily: mono ? "var(--font-jetbrains-mono, monospace)" : "inherit",
+      fontFamily: mono ? "var(--font-mono, monospace)" : "inherit",
       fontVariantNumeric: mono ? "tabular-nums" : "normal",
     }}>{children}</td>
   );

@@ -1,11 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { Sora, JetBrains_Mono } from "next/font/google";
+import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import { Toaster } from "react-hot-toast";
 import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 import "./globals.css";
 
-const sora = Sora({ subsets: ["latin"], variable: "--font-sora", display: "swap" });
-const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains-mono", display: "swap" });
+const sans = IBM_Plex_Sans({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700"], variable: "--font-sans", display: "swap" });
+const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-mono", display: "swap" });
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://mediflow-pi.vercel.app";
 
@@ -70,7 +70,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           })();
         `}} />
       </head>
-      <body className={`${sora.variable} ${jetbrainsMono.variable} antialiased font-sans bg-background text-foreground`}>
+      <body className={`${sans.variable} ${mono.variable} antialiased font-sans bg-background text-foreground`}>
         {/* Toaster centralizado: única posición (top-right), duraciones
             consistentes (3s success/info, 5s error). Estilos globales
             via className para que dark mode funcione automáticamente
@@ -90,7 +90,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               color: "var(--text-1)",
               border: "1px solid var(--border-soft)",
               boxShadow: "0 8px 24px -8px rgba(15,10,30,0.18)",
-              fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+              fontFamily: "var(--font-sans, system-ui, sans-serif)",
               padding: "10px 14px",
               fontSize: 13,
             },

@@ -52,7 +52,7 @@ export function SummaryCard({ plan, billing, planPrice }: SummaryCardProps) {
       >
         <div
           style={{
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
             fontWeight: 600,
             fontSize: 14.5,
             letterSpacing: "-0.01em",
@@ -67,7 +67,7 @@ export function SummaryCard({ plan, billing, planPrice }: SummaryCardProps) {
             letterSpacing: "0.12em",
             textTransform: "uppercase",
             fontFamily:
-              "var(--font-jetbrains-mono, ui-monospace, monospace)",
+              "var(--font-mono, ui-monospace, monospace)",
             color: "var(--ld-brand-light)",
           }}
         >
@@ -82,7 +82,7 @@ export function SummaryCard({ plan, billing, planPrice }: SummaryCardProps) {
             <span
               style={{
                 fontFamily:
-                  "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                  "var(--font-mono, ui-monospace, monospace)",
                 fontSize: 10.5,
                 fontWeight: 600,
                 letterSpacing: "0.08em",
@@ -127,14 +127,14 @@ export function SummaryCard({ plan, billing, planPrice }: SummaryCardProps) {
               color: "var(--ld-fg-muted)",
               fontSize: 12.5,
               fontFamily:
-                "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                "var(--font-mono, ui-monospace, monospace)",
             }}
           >
             ${planPrice}
           </span>
           <span
             style={{
-              fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+              fontFamily: "var(--font-sans, system-ui, sans-serif)",
               fontWeight: 700,
               fontSize: 26,
               letterSpacing: "-0.03em",
@@ -195,7 +195,7 @@ function Row({
           fontSize: 12.5,
           color: highlight ? "#34d399" : "var(--ld-fg)",
           fontFamily: mono
-            ? "var(--font-jetbrains-mono, ui-monospace, monospace)"
+            ? "var(--font-mono, ui-monospace, monospace)"
             : "inherit",
           fontWeight: highlight ? 500 : 400,
           textAlign: "right",

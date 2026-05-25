@@ -14,7 +14,7 @@ export const GenericAgenda: React.FC<GenericProps> = ({ accent }) => (
         marginBottom: 10,
         fontSize: 10,
         color: "var(--fg-muted)",
-        fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+        fontFamily: "var(--font-mono, ui-monospace, monospace)",
       }}
     >
       <div></div>
@@ -47,7 +47,7 @@ export const GenericAgenda: React.FC<GenericProps> = ({ accent }) => (
             style={{
               fontSize: 10,
               color: "var(--fg-muted)",
-              fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+              fontFamily: "var(--font-mono, ui-monospace, monospace)",
               padding: 6,
             }}
           >
@@ -83,7 +83,7 @@ export const GenericAgenda: React.FC<GenericProps> = ({ accent }) => (
                   style={{
                     fontSize: 9,
                     color: "var(--fg-muted)",
-                    fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                    fontFamily: "var(--font-mono, ui-monospace, monospace)",
                   }}
                 >
                   Consulta
@@ -141,7 +141,7 @@ export const GenericPacientes: React.FC<GenericProps> = ({ accent }) => (
           padding: "10px 14px",
           fontSize: 10,
           color: "var(--fg-muted)",
-          fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+          fontFamily: "var(--font-mono, ui-monospace, monospace)",
           textTransform: "uppercase",
           letterSpacing: "0.05em",
           borderBottom: "1px solid var(--app-border)",
@@ -180,7 +180,7 @@ export const GenericPacientes: React.FC<GenericProps> = ({ accent }) => (
           <div
             style={{
               color: "var(--fg-muted)",
-              fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+              fontFamily: "var(--font-mono, ui-monospace, monospace)",
               fontSize: 10.5,
             }}
           >
@@ -191,7 +191,7 @@ export const GenericPacientes: React.FC<GenericProps> = ({ accent }) => (
             style={{
               color: r[4] === "—" ? "var(--fg-muted)" : accent,
               fontSize: 10.5,
-              fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+              fontFamily: "var(--font-mono, ui-monospace, monospace)",
             }}
           >
             {r[4]}
@@ -205,7 +205,7 @@ export const GenericPacientes: React.FC<GenericProps> = ({ accent }) => (
                 background: r[6] + "22",
                 color: r[6],
                 fontSize: 9.5,
-                fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                fontFamily: "var(--font-mono, ui-monospace, monospace)",
               }}
             >
               ● {r[5]}
@@ -248,7 +248,7 @@ export const GenericFacturacion: React.FC<GenericProps> = ({ accent }) => (
             style={{
               fontSize: 10,
               color: "var(--fg-muted)",
-              fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+              fontFamily: "var(--font-mono, ui-monospace, monospace)",
               textTransform: "uppercase",
               letterSpacing: "0.04em",
             }}
@@ -257,7 +257,7 @@ export const GenericFacturacion: React.FC<GenericProps> = ({ accent }) => (
           </div>
           <div
             style={{
-              fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+              fontFamily: "var(--font-sans, system-ui, sans-serif)",
               fontWeight: 600,
               fontSize: 20,
               letterSpacing: "-0.02em",
@@ -282,7 +282,7 @@ export const GenericFacturacion: React.FC<GenericProps> = ({ accent }) => (
         style={{
           padding: "12px 14px",
           borderBottom: "1px solid var(--app-border)",
-          fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+          fontFamily: "var(--font-sans, system-ui, sans-serif)",
           fontWeight: 500,
           fontSize: 12.5,
           display: "flex",
@@ -294,7 +294,7 @@ export const GenericFacturacion: React.FC<GenericProps> = ({ accent }) => (
           style={{
             fontSize: 10,
             color: "var(--fg-muted)",
-            fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+            fontFamily: "var(--font-mono, ui-monospace, monospace)",
           }}
         >
           SAT · en línea ●
@@ -322,7 +322,7 @@ export const GenericFacturacion: React.FC<GenericProps> = ({ accent }) => (
         >
           <div
             style={{
-              fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+              fontFamily: "var(--font-mono, ui-monospace, monospace)",
               color: "var(--fg-muted)",
               fontSize: 10.5,
             }}
@@ -332,7 +332,7 @@ export const GenericFacturacion: React.FC<GenericProps> = ({ accent }) => (
           <div>{r[1]}</div>
           <div
             style={{
-              fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+              fontFamily: "var(--font-mono, ui-monospace, monospace)",
               fontSize: 11,
             }}
           >
@@ -346,7 +346,7 @@ export const GenericFacturacion: React.FC<GenericProps> = ({ accent }) => (
                 background: r[4] + "22",
                 color: r[4],
                 fontSize: 9.5,
-                fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                fontFamily: "var(--font-mono, ui-monospace, monospace)",
               }}
             >
               ● {r[3]}
@@ -391,7 +391,7 @@ export const GenericReportes: React.FC<GenericProps> = ({ accent }) => {
               style={{
                 fontSize: 10,
                 color: "var(--fg-muted)",
-                fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                fontFamily: "var(--font-mono, ui-monospace, monospace)",
                 textTransform: "uppercase",
                 letterSpacing: "0.04em",
               }}
@@ -401,7 +401,7 @@ export const GenericReportes: React.FC<GenericProps> = ({ accent }) => {
             <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 4 }}>
               <div
                 style={{
-                  fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+                  fontFamily: "var(--font-sans, system-ui, sans-serif)",
                   fontWeight: 600,
                   fontSize: 22,
                   letterSpacing: "-0.02em",
@@ -414,7 +414,7 @@ export const GenericReportes: React.FC<GenericProps> = ({ accent }) => {
                 style={{
                   fontSize: 10,
                   color: "#34d399",
-                  fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                  fontFamily: "var(--font-mono, ui-monospace, monospace)",
                 }}
               >
                 {delta}
@@ -434,7 +434,7 @@ export const GenericReportes: React.FC<GenericProps> = ({ accent }) => {
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
           <div
             style={{
-              fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+              fontFamily: "var(--font-sans, system-ui, sans-serif)",
               fontWeight: 500,
               fontSize: 12.5,
             }}
@@ -445,7 +445,7 @@ export const GenericReportes: React.FC<GenericProps> = ({ accent }) => {
             style={{
               fontSize: 10,
               color: accent,
-              fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+              fontFamily: "var(--font-mono, ui-monospace, monospace)",
             }}
           >
             MXN ●
@@ -476,7 +476,7 @@ export const GenericReportes: React.FC<GenericProps> = ({ accent }) => {
                 style={{
                   fontSize: 8.5,
                   color: "var(--fg-muted)",
-                  fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                  fontFamily: "var(--font-mono, ui-monospace, monospace)",
                 }}
               >
                 {["M", "A", "M", "J", "J", "A", "S", "O", "N", "D", "E", "F"][i]}

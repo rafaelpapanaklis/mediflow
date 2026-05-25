@@ -26,7 +26,7 @@ export function SpecTestimonial({ spec }: { spec: Specialty }) {
             border: "1px solid #34d39944",
             fontSize: 11,
             color: "#34d399",
-            fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+            fontFamily: "var(--font-mono, ui-monospace, monospace)",
             marginBottom: 24,
           }}
         >
@@ -34,7 +34,7 @@ export function SpecTestimonial({ spec }: { spec: Specialty }) {
         </div>
         <div
           style={{
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
             fontWeight: 500,
             fontSize: 28,
             letterSpacing: "-0.015em",
@@ -63,7 +63,7 @@ export function SpecTestimonial({ spec }: { spec: Specialty }) {
               display: "grid",
               placeItems: "center",
               color: "white",
-              fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+              fontFamily: "var(--font-sans, system-ui, sans-serif)",
               fontWeight: 600,
               fontSize: 15,
             }}

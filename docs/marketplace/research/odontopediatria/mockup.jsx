@@ -220,7 +220,7 @@ const PatientHeader = () => {
         style={{
           background: "linear-gradient(135deg, var(--brand) 0%, #a855f7 100%)",
           color: "#fff",
-          fontFamily: "Sora, sans-serif",
+          fontFamily: "var(--font-sans, system-ui, sans-serif)",
         }}
       >
         SM
@@ -229,7 +229,7 @@ const PatientHeader = () => {
         <div className="flex items-center gap-2">
           <h1
             className="truncate text-[clamp(15px,1.2vw,18px)] font-semibold leading-tight"
-            style={{ color: "var(--text-1)", fontFamily: "Sora, sans-serif" }}
+            style={{ color: "var(--text-1)", fontFamily: "var(--font-sans, system-ui, sans-serif)" }}
           >
             {PATIENT.fullName}
           </h1>
@@ -292,7 +292,7 @@ const ParentTabs = () => (
           className="relative flex shrink-0 items-center gap-1.5 px-3 py-2.5 text-[12.5px] font-medium transition-colors"
           style={{
             color: active ? "var(--brand)" : "var(--text-2)",
-            fontFamily: "Sora, sans-serif",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
           }}
         >
           {t.icon && <Icon name={t.icon} size={13} />}
@@ -357,7 +357,7 @@ const ContextItem = ({ label, value, sub, tone }) => {
       <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--text-3)" }}>
         {label}
       </span>
-      <span className="flex items-baseline gap-1.5 text-[13px] font-semibold" style={{ color: valueColor, fontFamily: "Sora, sans-serif" }}>
+      <span className="flex items-baseline gap-1.5 text-[13px] font-semibold" style={{ color: valueColor, fontFamily: "var(--font-sans, system-ui, sans-serif)" }}>
         {value}
         {sub && (
           <span className="text-[10.5px] font-normal" style={{ color: "var(--text-3)" }}>
@@ -395,7 +395,7 @@ const SubNav = ({ active, onChange }) => (
             color: isActive ? "var(--brand)" : "var(--text-2)",
             background: isActive ? "var(--brand-soft)" : "transparent",
             border: isActive ? "1px solid var(--border-brand)" : "1px solid transparent",
-            fontFamily: "Sora, sans-serif",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
           }}
         >
           <Icon name={t.icon} size={14} />
@@ -571,7 +571,7 @@ const Kpi = ({ title, value, sub, tone = "default", icon, action, actionLabel, c
           <div className="mt-1 flex items-baseline gap-2">
             <span
               className="text-[clamp(18px,1.7vw,22px)] font-semibold leading-tight"
-              style={{ color: "var(--text-1)", fontFamily: "Sora, sans-serif" }}
+              style={{ color: "var(--text-1)", fontFamily: "var(--font-sans, system-ui, sans-serif)" }}
             >
               {value}
             </span>
@@ -628,7 +628,7 @@ const OdontogramaSection = ({ onSelectTooth, selectedTooth }) => {
           <div>
             <h3
               className="text-[14px] font-semibold"
-              style={{ color: "var(--text-1)", fontFamily: "Sora, sans-serif" }}
+              style={{ color: "var(--text-1)", fontFamily: "var(--font-sans, system-ui, sans-serif)" }}
             >
               Odontograma pediátrico — dual
             </h3>
@@ -831,7 +831,7 @@ const EruptionSection = () => {
           <div>
             <h3
               className="text-[14px] font-semibold"
-              style={{ color: "var(--text-1)", fontFamily: "Sora, sans-serif" }}
+              style={{ color: "var(--text-1)", fontFamily: "var(--font-sans, system-ui, sans-serif)" }}
             >
               Cronología de erupción
             </h3>
@@ -881,7 +881,7 @@ const EruptionSection = () => {
               <EruptionRow key={e.fdi} entry={e} y={30 + i * ROW_H} x={x} labelW={LABEL_W} />
             ))}
             <line x1={LABEL_W} y1={30 + sup.length * ROW_H + 4} x2={W - 5} y2={30 + sup.length * ROW_H + 4} stroke="var(--border-soft)" strokeDasharray="3 3" />
-            <text x={LABEL_W} y={30 + sup.length * ROW_H + 18} style={{ fontSize: 9, fontFamily: "Sora, sans-serif", fill: "var(--text-3)", letterSpacing: 1 }}>
+            <text x={LABEL_W} y={30 + sup.length * ROW_H + 18} style={{ fontSize: 9, fontFamily: "var(--font-sans, system-ui, sans-serif)", fill: "var(--text-3)", letterSpacing: 1 }}>
               INFERIOR
             </text>
 
@@ -893,7 +893,7 @@ const EruptionSection = () => {
             {/* Needle: edad actual */}
             <line x1={NEEDLE} y1={20} x2={NEEDLE} y2={(sup.length + inf.length) * ROW_H + 30 + 24} stroke="var(--brand)" strokeWidth={2} strokeDasharray="4 3" />
             <circle cx={NEEDLE} cy={20} r={4} fill="var(--brand)" />
-            <text x={NEEDLE + 6} y={16} style={{ fontSize: 10, fontFamily: "Sora, sans-serif", fontWeight: 600, fill: "var(--brand)" }}>
+            <text x={NEEDLE + 6} y={16} style={{ fontSize: 10, fontFamily: "var(--font-sans, system-ui, sans-serif)", fontWeight: 600, fill: "var(--brand)" }}>
               hoy · 8a 2m
             </text>
           </svg>
@@ -943,7 +943,7 @@ const HabitsSection = ({ onOpenDrawer }) => {
         <div>
           <h3
             className="text-[14px] font-semibold"
-            style={{ color: "var(--text-1)", fontFamily: "Sora, sans-serif" }}
+            style={{ color: "var(--text-1)", fontFamily: "var(--font-sans, system-ui, sans-serif)" }}
           >
             Hábitos orales
           </h3>
@@ -975,7 +975,7 @@ const HabitsSection = ({ onOpenDrawer }) => {
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-[13px] font-semibold" style={{ color: "var(--text-1)", fontFamily: "Sora, sans-serif" }}>
+                  <span className="text-[13px] font-semibold" style={{ color: "var(--text-1)", fontFamily: "var(--font-sans, system-ui, sans-serif)" }}>
                     {h.type}
                   </span>
                   <Chip tone={tone}>{h.status}</Chip>
@@ -1008,7 +1008,7 @@ const BehaviorSection = ({ onOpenDrawer }) => {
       >
         <div className="mb-3 flex items-center justify-between">
           <div>
-            <h3 className="text-[14px] font-semibold" style={{ color: "var(--text-1)", fontFamily: "Sora, sans-serif" }}>
+            <h3 className="text-[14px] font-semibold" style={{ color: "var(--text-1)", fontFamily: "var(--font-sans, system-ui, sans-serif)" }}>
               Tendencia Frankl
             </h3>
             <p className="text-[11.5px]" style={{ color: "var(--text-3)" }}>
@@ -1051,7 +1051,7 @@ const BehaviorSection = ({ onOpenDrawer }) => {
         className="rounded-2xl p-5"
         style={{ background: "var(--bg-elev)", border: "1px solid var(--border-soft)" }}
       >
-        <h3 className="text-[13px] font-semibold" style={{ color: "var(--text-1)", fontFamily: "Sora, sans-serif" }}>
+        <h3 className="text-[13px] font-semibold" style={{ color: "var(--text-1)", fontFamily: "var(--font-sans, system-ui, sans-serif)" }}>
           Última evaluación
         </h3>
         <div className="mt-3 space-y-3 text-[12px]" style={{ color: "var(--text-2)" }}>
@@ -1135,7 +1135,7 @@ const PreventivePlanSection = ({ onOpenDrawer }) => {
     <div className="space-y-3 p-5">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-[14px] font-semibold" style={{ color: "var(--text-1)", fontFamily: "Sora, sans-serif" }}>
+          <h3 className="text-[14px] font-semibold" style={{ color: "var(--text-1)", fontFamily: "var(--font-sans, system-ui, sans-serif)" }}>
             Plan preventivo
           </h3>
           <p className="text-[11.5px]" style={{ color: "var(--text-3)" }}>
@@ -1169,7 +1169,7 @@ const PreventivePlanSection = ({ onOpenDrawer }) => {
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[13px] font-medium" style={{ color: "var(--text-1)", fontFamily: "Sora, sans-serif" }}>
+                <span className="text-[13px] font-medium" style={{ color: "var(--text-1)", fontFamily: "var(--font-sans, system-ui, sans-serif)" }}>
                   {p.item}
                 </span>
                 <Chip tone={priorityTone(p.priority)}>Prioridad {p.priority}</Chip>
@@ -1219,7 +1219,7 @@ const Siderail = ({ onOpenDrawer }) => (
           CP
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-[13px] font-semibold" style={{ color: "var(--text-1)", fontFamily: "Sora, sans-serif" }}>
+          <div className="text-[13px] font-semibold" style={{ color: "var(--text-1)", fontFamily: "var(--font-sans, system-ui, sans-serif)" }}>
             {PATIENT.tutor.name}
           </div>
           <div className="text-[11px]" style={{ color: "var(--text-3)" }}>
@@ -1293,7 +1293,7 @@ const Siderail = ({ onOpenDrawer }) => (
       <span className="text-[10.5px] font-semibold uppercase tracking-wider" style={{ color: "var(--brand)" }}>
         Próxima cita
       </span>
-      <div className="mt-1 text-[14px] font-semibold" style={{ color: "var(--brand)", fontFamily: "Sora, sans-serif" }}>
+      <div className="mt-1 text-[14px] font-semibold" style={{ color: "var(--brand)", fontFamily: "var(--font-sans, system-ui, sans-serif)" }}>
         {PATIENT.nextVisit}
       </div>
       <div className="mt-0.5 text-[11.5px]" style={{ color: "var(--text-2)" }}>
@@ -1371,7 +1371,7 @@ const Drawer = ({ open, ctx, onClose }) => {
             <div>
               <h2
                 className="text-[14px] font-semibold leading-tight"
-                style={{ color: "var(--text-1)", fontFamily: "Sora, sans-serif" }}
+                style={{ color: "var(--text-1)", fontFamily: "var(--font-sans, system-ui, sans-serif)" }}
               >
                 {DRAWER_TITLES[ctx] || "Nueva entrada"}
               </h2>
@@ -1529,7 +1529,7 @@ const Drawer = ({ open, ctx, onClose }) => {
 
 const Field = ({ label, hint, children }) => (
   <div>
-    <label className="block text-[11.5px] font-semibold" style={{ color: "var(--text-2)", fontFamily: "Sora, sans-serif" }}>
+    <label className="block text-[11.5px] font-semibold" style={{ color: "var(--text-2)", fontFamily: "var(--font-sans, system-ui, sans-serif)" }}>
       {label}
     </label>
     {hint && (
@@ -1611,7 +1611,7 @@ export default function App() {
 
         * { box-sizing: border-box; }
         body, .mediflow-shell {
-          font-family: 'Sora', system-ui, sans-serif;
+          font-family: var(--font-sans, system-ui, sans-serif);
           background: var(--bg);
           color: var(--text-1);
           background-image:
@@ -1630,10 +1630,10 @@ export default function App() {
           background-size: auto, auto, 32px 32px, 32px 32px;
         }
 
-        .mono { font-family: 'JetBrains Mono', monospace; }
+        .mono { font-family: var(--font-mono, monospace); }
 
         .btn-primary-new, .btn-secondary-new, .btn-ghost-new, .btn-icon-new, .btn-link-new {
-          font-family: 'Sora', sans-serif;
+          font-family: var(--font-sans, system-ui, sans-serif);
           font-weight: 500;
           font-size: 12.5px;
           display: inline-flex;
@@ -1705,7 +1705,7 @@ export default function App() {
           padding: 9px 12px;
           border-radius: 8px;
           font-size: 13px;
-          font-family: 'Sora', sans-serif;
+          font-family: var(--font-sans, system-ui, sans-serif);
           transition: all .15s ease;
         }
         .input-mock:focus {
@@ -1722,7 +1722,7 @@ export default function App() {
           border-bottom-width: 2px;
           border-radius: 4px;
           padding: 1px 5px;
-          font-family: 'JetBrains Mono', monospace;
+          font-family: var(--font-mono, monospace);
           font-size: 10px;
           color: var(--text-2);
         }
@@ -1755,7 +1755,7 @@ export default function App() {
           >
             <Icon name="sparkles" size={14} className="text-white" />
           </div>
-          <span className="text-[14px] font-semibold tracking-tight" style={{ fontFamily: "Sora, sans-serif" }}>
+          <span className="text-[14px] font-semibold tracking-tight" style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)" }}>
             MediFlow
           </span>
           <span className="text-[11px]" style={{ color: "var(--text-3)" }}>

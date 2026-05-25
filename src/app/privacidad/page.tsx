@@ -19,7 +19,7 @@ export default function PrivacidadPage() {
         maxWidth: 820,
         margin: "0 auto",
         padding: "clamp(20px, 4vw, 56px)",
-        fontFamily: "var(--font-sora, 'Sora', system-ui, sans-serif)",
+        fontFamily: "var(--font-sans, system-ui, sans-serif)",
         color: "var(--text-1, #0f172a)",
         lineHeight: 1.6,
       }}

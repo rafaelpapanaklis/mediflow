@@ -15,7 +15,7 @@ export function SpecFeatures({ spec }: { spec: Specialty }) {
       <div style={{ maxWidth: 640, marginBottom: 56 }}>
         <div
           style={{
-            fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+            fontFamily: "var(--font-mono, ui-monospace, monospace)",
             fontSize: 11,
             color: accent,
             letterSpacing: "0.15em",
@@ -27,7 +27,7 @@ export function SpecFeatures({ spec }: { spec: Specialty }) {
         </div>
         <h2
           style={{
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
             fontWeight: 600,
             fontSize: 48,
             letterSpacing: "-0.035em",
@@ -78,7 +78,7 @@ export function SpecFeatures({ spec }: { spec: Specialty }) {
             </div>
             <div
               style={{
-                fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+                fontFamily: "var(--font-sans, system-ui, sans-serif)",
                 fontWeight: 600,
                 fontSize: 17,
                 letterSpacing: "-0.02em",

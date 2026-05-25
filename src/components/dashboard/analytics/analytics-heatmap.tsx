@@ -38,7 +38,7 @@ export function AnalyticsHeatmap({ data, hours, daysES = DAYS_DEFAULT, onCellCli
         borderRadius: 14,
         padding: 18,
         position: "relative",
-        fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+        fontFamily: "var(--font-sans, system-ui, sans-serif)",
       }}
     >
       {/* Header con horas */}
@@ -178,7 +178,7 @@ export function AnalyticsHeatmap({ data, hours, daysES = DAYS_DEFAULT, onCellCli
             pointerEvents: "none",
             zIndex: 100,
             whiteSpace: "nowrap",
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
           }}
         >
           <strong>

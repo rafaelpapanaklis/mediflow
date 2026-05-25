@@ -128,7 +128,7 @@ export function EmptyStateNew({
         paddingInline: "clamp(16px, 3vw, 32px)",
         width: "100%",
         gap: sz.gapVertical,
-        fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+        fontFamily: "var(--font-sans, system-ui, sans-serif)",
       }}
     >
       <div

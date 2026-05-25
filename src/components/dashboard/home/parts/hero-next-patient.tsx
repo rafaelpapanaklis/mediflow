@@ -52,7 +52,7 @@ export function HeroNextPatient({ appt }: { appt: NextAppt }) {
         marginBottom: 18,
         boxShadow: "0 0 32px rgba(124,58,237,0.08)",
         overflow: "hidden",
-        fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+        fontFamily: "var(--font-sans, system-ui, sans-serif)",
       }}
     >
       <div
@@ -94,7 +94,7 @@ export function HeroNextPatient({ appt }: { appt: NextAppt }) {
               style={{
                 fontSize: 12,
                 color: "var(--text-2)",
-                fontFamily: "var(--font-jetbrains-mono, monospace)",
+                fontFamily: "var(--font-mono, monospace)",
                 marginTop: 4,
               }}
             >
@@ -109,7 +109,7 @@ export function HeroNextPatient({ appt }: { appt: NextAppt }) {
               lineHeight: 1.5,
             }}
           >
-            <strong style={{ fontFamily: "var(--font-jetbrains-mono, monospace)", fontWeight: 500 }}>
+            <strong style={{ fontFamily: "var(--font-mono, monospace)", fontWeight: 500 }}>
               {formatShortTime(appt.startsAt)}
             </strong>{" "}
             ·{" "}

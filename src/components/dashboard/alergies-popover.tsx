@@ -37,7 +37,7 @@ export function AlergiesPopover({ trigger, alerts }: AlergiesPopoverProps) {
               "0 20px 50px -10px rgba(15,10,30,0.25), 0 8px 20px -8px rgba(15,10,30,0.15)",
             fontSize: 12,
             color: "var(--text-1)",
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
           }}
         >
           <div

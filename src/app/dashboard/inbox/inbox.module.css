@@ -34,7 +34,7 @@
   height: calc(100dvh - 64px);
   background: var(--bg);
   color: var(--text-1);
-  font-family: var(--font-sora, "Sora", system-ui, sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
   font-size: 14px;
 }
 
@@ -113,7 +113,7 @@
 }
 .composeBtn:hover { background: var(--brand-hover); transform: translateY(-1px); }
 .composeBtn kbd {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 9px;
   padding: 1px 5px;
   background: rgba(255, 255, 255, 0.18);
@@ -168,7 +168,7 @@
   text-overflow: ellipsis;
 }
 .folderCount {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 10px;
   font-weight: 700;
   padding: 1px 6px;
@@ -250,7 +250,7 @@
   font-weight: 700;
 }
 .threadCount {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 11px;
   color: var(--text-3);
 }
@@ -392,7 +392,7 @@
 .threadUnread .threadName,
 .threadUnread .threadSubject { font-weight: 700; }
 .threadTime {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 10px;
   color: var(--text-3);
   flex-shrink: 0;
@@ -535,7 +535,7 @@
   gap: 10px;
   margin: 6px 0;
   color: var(--text-3);
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 10.5px;
 }
 .dayDivider::before, .dayDivider::after {
@@ -597,7 +597,7 @@
   letter-spacing: 0.06em;
 }
 .messageMeta {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 10px;
   color: var(--text-3);
   display: flex;
@@ -720,7 +720,7 @@
 }
 .sendBtn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
 .sendBtn kbd {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 8.5px;
   padding: 1px 4px;
   background: rgba(255, 255, 255, 0.18);

@@ -60,7 +60,7 @@ export function Repertorization({ constitutional, onRemedySelect }: Repertorizat
     <div className="card" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
-          <div style={{ fontFamily: "Sora, sans-serif", fontWeight: 600, fontSize: 15, color: "var(--text-1)" }}>
+          <div style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", fontWeight: 600, fontSize: 15, color: "var(--text-1)" }}>
             Repertorización
           </div>
           <div style={{ fontSize: 11, color: "var(--text-2)", marginTop: 2 }}>Boericke / Kent · IA sugiere remedios</div>
@@ -140,7 +140,7 @@ export function Repertorization({ constitutional, onRemedySelect }: Repertorizat
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontFamily: "Sora, sans-serif", fontWeight: 600, fontSize: 13, color: isTop ? "#fbbf24" : "var(--text-1)" }}>{r.name}</span>
+                      <span style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", fontWeight: 600, fontSize: 13, color: isTop ? "#fbbf24" : "var(--text-1)" }}>{r.name}</span>
                       <span className="badge-new" style={{ fontSize: 10 }}>{r.potency}</span>
                       {isTop && <span className="badge-new" style={{ fontSize: 10, background: "rgba(251,191,36,0.15)", color: "#fbbf24", borderColor: "rgba(251,191,36,0.4)" }}>Top</span>}
                     </div>

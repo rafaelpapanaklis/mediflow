@@ -186,7 +186,7 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
           width: "min(560px, 100%)",
           maxHeight: "90vh",
           overflow: "auto",
-          fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+          fontFamily: "var(--font-sans, system-ui, sans-serif)",
         }}
       >
         <header style={{

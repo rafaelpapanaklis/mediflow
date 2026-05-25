@@ -617,7 +617,7 @@ const dialogStyle: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
   zIndex: 71,
-  fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+  fontFamily: "var(--font-sans, system-ui, sans-serif)",
   overflow: "hidden",
 };
 

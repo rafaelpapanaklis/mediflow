@@ -5,7 +5,7 @@
   border: 1px solid var(--border-soft);
   border-radius: 14px;
   padding: 16px 18px;
-  font-family: var(--font-sora, "Sora", sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
   /* Tamaño más compacto para que 16 dientes entren en 1 fila sin scroll. */
   --mf-tooth-size: clamp(38px, 4vw, 56px);
 }
@@ -64,7 +64,7 @@
   flex-shrink: 0;
 }
 .chipKbd {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 9px;
   padding: 1px 5px;
   border-radius: 4px;
@@ -191,7 +191,7 @@
 }
 .tooth:hover { background: rgba(124, 58, 237, 0.04); }
 .toothNum {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 11px;
   font-weight: 600;
   color: var(--text-2);
@@ -223,7 +223,7 @@
   stroke: rgba(15,10,30,0.4);
 }
 .letter {
-  font-family: var(--font-sora, "Sora", sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
   font-size: 9px;
   font-weight: 600;
   fill: var(--text-3);
@@ -355,7 +355,7 @@
   font-weight: 600;
 }
 .stateGroupList {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 10.5px;
   color: var(--text-2);
   font-weight: 500;
@@ -379,7 +379,7 @@
   color: var(--mf-status-color);
   border: 1px dashed color-mix(in srgb, var(--mf-status-color) 50%, var(--border-soft));
   border-radius: 999px;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-weight: 500;
   opacity: 0.8;
 }
@@ -444,7 +444,7 @@
   font-weight: 600;
 }
 .statPillCount {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-weight: 700;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
@@ -480,7 +480,7 @@
 .planToggle.open svg { transform: rotate(180deg); }
 .planToggle svg { transition: transform 0.15s; }
 .planToggleCount {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   color: var(--text-3);
   font-size: 10px;
 }
@@ -519,7 +519,7 @@
   min-width: 240px;
   max-height: 320px;
   overflow-y: auto;
-  font-family: var(--font-sora, "Sora", sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
 }
 .historyEmpty {
   padding: 10px;
@@ -561,7 +561,7 @@
   text-overflow: ellipsis;
 }
 .historyItemDate {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 10px;
   color: var(--text-3);
   flex-shrink: 0;

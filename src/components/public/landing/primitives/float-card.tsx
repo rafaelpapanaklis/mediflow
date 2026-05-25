@@ -23,7 +23,7 @@ export function FloatCard({ title, children, style }: FloatCardProps) {
       {title && (
         <div
           style={{
-            fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+            fontFamily: "var(--font-mono, ui-monospace, monospace)",
             fontSize: 10,
             color: "rgba(245,245,247,0.4)",
             letterSpacing: "0.08em",

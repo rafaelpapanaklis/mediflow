@@ -36,7 +36,7 @@ export function Greeting({
           color: "var(--text-1)",
           margin: 0,
           letterSpacing: "-0.01em",
-          fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+          fontFamily: "var(--font-sans, system-ui, sans-serif)",
         }}
       >
         {greeting}, {first}.

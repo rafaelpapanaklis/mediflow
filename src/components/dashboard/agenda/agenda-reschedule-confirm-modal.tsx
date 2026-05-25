@@ -96,7 +96,7 @@ const dialogStyle: React.CSSProperties = {
   width: "min(92vw, 560px)", background: "var(--bg-elev)", border: "1px solid var(--border-strong)",
   borderRadius: 14, boxShadow: "0 24px 60px -12px rgba(15,10,30,0.4)",
   display: "flex", flexDirection: "column", zIndex: 81,
-  fontFamily: "var(--font-sora, 'Sora', sans-serif)", overflow: "hidden",
+  fontFamily: "var(--font-sans, system-ui, sans-serif)", overflow: "hidden",
 };
 const headerStyle: React.CSSProperties = {
   display: "flex", alignItems: "center", justifyContent: "space-between",

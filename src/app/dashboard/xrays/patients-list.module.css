@@ -14,7 +14,7 @@
   max-width: 1100px;
   margin: 0 auto;
   padding: 26px 28px 40px;
-  font-family: var(--font-sora, "Sora", system-ui, sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
   color: var(--text-1);
 }
 
@@ -115,7 +115,7 @@
 }
 .filterLabel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .filterCount {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 10px;
   font-weight: 700;
   padding: 1px 6px;
@@ -180,7 +180,7 @@
   gap: 6px;
 }
 .rowMetaId {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   background: var(--brand-softer);
   color: var(--brand);
   padding: 1px 6px;
@@ -200,7 +200,7 @@
   gap: 4px;
   font-size: 11.5px;
   font-weight: 700;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   color: var(--brand);
   background: var(--brand-soft);
   padding: 2px 8px;
@@ -212,7 +212,7 @@
   gap: 4px;
   font-size: 11.5px;
   font-weight: 600;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   color: var(--text-3);
   background: rgba(15, 10, 30, 0.05);
   padding: 2px 8px;

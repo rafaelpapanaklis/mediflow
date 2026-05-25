@@ -132,7 +132,7 @@ function BrandChip({ label, bg }: { label: string; bg: string }) {
         letterSpacing: "0.05em",
         display: "grid",
         placeItems: "center",
-        fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+        fontFamily: "var(--font-mono, ui-monospace, monospace)",
       }}
     >
       {label}
@@ -150,7 +150,7 @@ function PayPalMark() {
         color: "#fff",
         fontSize: 12,
         fontWeight: 700,
-        fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+        fontFamily: "var(--font-sans, system-ui, sans-serif)",
         letterSpacing: "-0.02em",
         display: "inline-flex",
         alignItems: "center",
@@ -175,7 +175,7 @@ function TrialBadge() {
         fontWeight: 600,
         letterSpacing: "0.08em",
         textTransform: "uppercase",
-        fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+        fontFamily: "var(--font-mono, ui-monospace, monospace)",
         pointerEvents: "none",
       }}
     >

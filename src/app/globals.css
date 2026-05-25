@@ -367,7 +367,7 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--text-1);
-  font-family: var(--font-sora, 'Sora', sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
 }
 .card__sub {
   font-size: 11px;
@@ -409,7 +409,7 @@
   border: 1px solid rgba(124,58,237,0.2);
 }
 .kpi__value {
-  font-family: var(--font-sora, 'Sora', sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
   font-size: 26px;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -421,7 +421,7 @@
   align-items: center;
   gap: 3px;
   font-size: 11px;
-  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   margin-top: 8px;
   font-weight: 500;
 }
@@ -465,7 +465,7 @@
   place-items: center;
   font-weight: 600;
   color: #fff;
-  font-family: var(--font-sora, 'Sora', sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
   font-size: 11px;
   flex-shrink: 0;
   background: linear-gradient(135deg, #a78bfa, #7c3aed);
@@ -673,7 +673,7 @@
   font-weight: 700;
 }
 .sidebar-new__brandname {
-  font-family: var(--font-sora, 'Sora', sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
   font-weight: 600;
   font-size: 14px;
   color: var(--text-1);
@@ -734,7 +734,7 @@
   padding: 1px 6px;
   border-radius: 4px;
   font-size: 10px;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-weight: 500;
 }
 .nav-item-new__dot {
@@ -784,7 +784,7 @@
 }
 .topbar-new__search kbd {
   margin-left: auto;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 10px;
   background: rgba(255,255,255,0.06);
   padding: 1px 5px;
@@ -872,7 +872,7 @@
   cursor: pointer;
   display: grid;
   place-items: center;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
 }
 .pagination__btn:hover:not(:disabled) { background: var(--bg-elev-2); color: var(--text-1); }
 .pagination__btn--active {
@@ -889,14 +889,14 @@
   background: rgba(255,255,255,0.06);
   border-radius: 4px;
   font-size: 10px;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   color: var(--text-3);
   font-weight: 500;
 }
 .tab-new--active .tab__count { color: var(--text-2); }
 
 /* mono utility ---------------------------------------------------- */
-.mono { font-family: var(--font-jetbrains-mono, monospace); }
+.mono { font-family: var(--font-mono, monospace); }
 
 /* Switch --------------------------------------------------------- */
 .switch {
@@ -990,7 +990,7 @@
 .modal__title {
   font-size: 15px;
   font-weight: 600;
-  font-family: var(--font-sora, 'Sora', sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
   color: var(--text-1);
 }
 .modal__body { padding: 22px; }
@@ -1865,7 +1865,7 @@
 .frankl-pill {
   width: 24px; height: 24px; border-radius: 50%;
   display: inline-grid; place-items: center;
-  font-family: var(--font-jetbrains-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-weight: 600; font-size: 11px;
   color: #fff;
 }
@@ -1993,7 +1993,7 @@
 .ped-eruption-chart__section-toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .ped-eruption-chart__counter {
   margin-left: auto;
-  font-family: var(--font-jetbrains-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11px;
   color: var(--text-2);
 }
@@ -2158,7 +2158,7 @@
 .pedi-sealant-card__cell--warn   { border-color: var(--warning); }
 .pedi-sealant-card__cell--danger { border-color: var(--danger); }
 .pedi-sealant-card__cell--empty  { opacity: 0.7; }
-.pedi-sealant-card__fdi      { font-family: var(--font-jetbrains-mono, ui-monospace, monospace); font-size: 11px; color: var(--text-2); }
+.pedi-sealant-card__fdi      { font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; color: var(--text-2); }
 .pedi-sealant-card__status   { display: flex; align-items: center; gap: 4px; font-weight: 600; text-transform: capitalize; }
 .pedi-sealant-card__material { color: var(--text-2); font-size: 10px; }
 .pedi-sealant-card__missing  { color: var(--text-2); font-style: italic; }
@@ -2232,7 +2232,7 @@
   transition: border-color 150ms ease-out, background-color 150ms ease-out;
 }
 .pedi-frankl-option__digit {
-  font-family: var(--font-jetbrains-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 22px; font-weight: 700;
   color: var(--text-1);
 }
@@ -2248,7 +2248,7 @@
 .pedi-form__venhamlist { display: flex; flex-direction: column; gap: 6px; }
 .pedi-form__venhamlist .pedi-pill { width: 100%; justify-content: flex-start; }
 .pedi-form__monodigit {
-  font-family: var(--font-jetbrains-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   width: 18px; display: inline-block; text-align: center;
   background: var(--bg-elev-2);
   padding: 1px 4px;
@@ -2309,7 +2309,7 @@
   border: 1px solid var(--border-soft);
   background: var(--bg-elev);
   color: var(--text-2);
-  font-family: var(--font-jetbrains-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11px;
   border-radius: 6px;
   cursor: pointer;
@@ -2462,7 +2462,7 @@
   color: var(--text-1);
 }
 .pedi-table th { font-weight: 600; color: var(--text-2); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
-.pedi-table__mono { font-family: var(--font-jetbrains-mono, ui-monospace, monospace); }
+.pedi-table__mono { font-family: var(--font-mono, ui-monospace, monospace); }
 .pedi-table__cap  { text-transform: capitalize; }
 
 /* Sub-nav y context-strip extras ------------------------------- */
@@ -2494,7 +2494,7 @@
 }
 .pedi-subnav__tab.is-active .pedi-subnav__count { background: var(--brand-soft); color: var(--brand); }
 
-.pedi-context-strip__mono { font-family: var(--font-jetbrains-mono, ui-monospace, monospace); }
+.pedi-context-strip__mono { font-family: var(--font-mono, ui-monospace, monospace); }
 .pedi-context-strip__cap  { text-transform: capitalize; }
 .pedi-context-strip__pill { font-size: 10px; width: 18px; height: 18px; }
 .pedi-context-strip__trend--up   { color: var(--success); }
@@ -2569,7 +2569,7 @@
 .ped-list-card__title-block { min-width: 0; flex: 1; }
 .ped-list-card__name { font-size: 14px; font-weight: 600; color: var(--text-1); }
 .ped-list-card__meta { display: flex; gap: 6px; align-items: center; font-size: 11px; color: var(--text-2); flex-wrap: wrap; }
-.ped-list-card__age { font-family: var(--font-jetbrains-mono, monospace); font-weight: 500; }
+.ped-list-card__age { font-family: var(--font-mono, monospace); font-weight: 500; }
 .ped-list-card__dot { color: var(--text-3); }
 .ped-list-card__dentition { text-transform: capitalize; }
 
@@ -2632,7 +2632,7 @@
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   font-size: 12px; color: var(--text-2); margin: 4px 0 0;
 }
-.ped-detail__age { font-family: var(--font-jetbrains-mono, monospace); font-weight: 500; }
+.ped-detail__age { font-family: var(--font-mono, monospace); font-weight: 500; }
 .ped-detail__sep { color: var(--text-3); }
 .ped-detail__dentition { text-transform: capitalize; }
 
@@ -2728,7 +2728,7 @@
 }
 .endo-mini-odo__fdi {
   font-size: 9px;
-  font-family: var(--font-jetbrains-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   color: var(--text-2);
 }
 .endo-mini-odo__legend {
@@ -2798,7 +2798,7 @@
   font-size: 10px; font-weight: 600; letter-spacing: 0.04em;
   text-transform: uppercase; color: var(--text-2);
 }
-.endo-table__mono { font-family: var(--font-jetbrains-mono, monospace); }
+.endo-table__mono { font-family: var(--font-mono, monospace); }
 
 .endo-result-pill {
   display: inline-flex; align-items: center;
@@ -2885,7 +2885,7 @@
 .endo-tooth-timeline__item--danger  .endo-tooth-timeline__icon { background: var(--danger-soft);  color: var(--danger); }
 
 .endo-tooth-timeline__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.endo-tooth-timeline__date  { font-size: 11px; color: var(--text-2); font-family: var(--font-jetbrains-mono, monospace); }
+.endo-tooth-timeline__date  { font-size: 11px; color: var(--text-2); font-family: var(--font-mono, monospace); }
 .endo-tooth-timeline__label { font-size: 13px; color: var(--text-1); font-weight: 500; }
 .endo-tooth-timeline__detail{ font-size: 11px; color: var(--text-3); }
 
@@ -2928,7 +2928,7 @@
 
 .endo-consent__legal {
   white-space: pre-wrap;
-  font-family: var(--font-sora, ui-sans-serif, system-ui), sans-serif;
+  font-family: var(--font-sans, ui-sans-serif, system-ui), sans-serif;
   font-size: 13px;
   line-height: 1.7;
   color: var(--text-1);
@@ -3020,7 +3020,7 @@
 }
 .endo-kpi__label { font-size: 11px; color: var(--text-2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
 .endo-kpi__value {
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 22px; font-weight: 700;
   color: var(--text-1);
   margin-top: 4px;

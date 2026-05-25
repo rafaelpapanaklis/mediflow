@@ -48,7 +48,7 @@ export function TvMarketingView({ clinicName, clinicLogo, config }: Props) {
         minHeight: "100vh",
         background: `linear-gradient(135deg, ${brandColor} 0%, ${brandColor}cc 100%)`,
         color: "#fff",
-        fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+        fontFamily: "var(--font-sans, system-ui, sans-serif)",
         padding: 48,
         display: "flex",
         flexDirection: "column",

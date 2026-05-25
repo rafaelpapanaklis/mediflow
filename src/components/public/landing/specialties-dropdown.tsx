@@ -153,7 +153,7 @@ export function SpecialtiesDropdown({ currentSlug, triggerColor }: SpecialtiesDr
                     letterSpacing: "0.08em",
                     textTransform: "uppercase",
                     fontWeight: 600,
-                    fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                    fontFamily: "var(--font-mono, ui-monospace, monospace)",
                     paddingBottom: 8,
                     marginBottom: 8,
                     borderBottom: `1px solid ${color}33`,

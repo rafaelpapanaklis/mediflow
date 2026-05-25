@@ -38,7 +38,7 @@ export const NutriMock: React.FC = () => (
               style={{
                 width: 70,
                 color: "#fbbf24",
-                fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                fontFamily: "var(--font-mono, ui-monospace, monospace)",
                 fontSize: 10,
               }}
             >
@@ -116,7 +116,7 @@ export const NutriMock: React.FC = () => (
               <div style={{ fontSize: 9, color: "var(--fg-muted)" }}>{l}</div>
               <div
                 style={{
-                  fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+                  fontFamily: "var(--font-sans, system-ui, sans-serif)",
                   fontWeight: 600,
                   fontSize: 14,
                   color: c,
@@ -224,7 +224,7 @@ export const FisioMock: React.FC = () => (
               <span
                 style={{
                   color: c,
-                  fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                  fontFamily: "var(--font-mono, ui-monospace, monospace)",
                   fontSize: 10,
                 }}
               >
@@ -331,7 +331,7 @@ export const EsteticaMock: React.FC = () => (
                   fontSize: 9,
                   color: "var(--fg-muted)",
                   marginBottom: 3,
-                  fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                  fontFamily: "var(--font-mono, ui-monospace, monospace)",
                 }}
               >
                 {p.l}
@@ -548,7 +548,7 @@ export const HomeopatiaMock: React.FC = () => (
               <div style={{ flex: 1 }}>
                 <div
                   style={{
-                    fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+                    fontFamily: "var(--font-sans, system-ui, sans-serif)",
                     fontWeight: 500,
                     fontSize: 12,
                     color: "var(--fg)",
@@ -561,7 +561,7 @@ export const HomeopatiaMock: React.FC = () => (
                   style={{
                     fontSize: 10,
                     color: "var(--fg-muted)",
-                    fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                    fontFamily: "var(--font-mono, ui-monospace, monospace)",
                   }}
                 >
                   Potencia sugerida: {pot}
@@ -569,7 +569,7 @@ export const HomeopatiaMock: React.FC = () => (
               </div>
               <div
                 style={{
-                  fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+                  fontFamily: "var(--font-sans, system-ui, sans-serif)",
                   fontWeight: 600,
                   fontSize: 16,
                   color: "#fbbf24",

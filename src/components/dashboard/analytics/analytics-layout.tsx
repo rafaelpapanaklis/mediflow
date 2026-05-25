@@ -51,7 +51,7 @@ export function AnalyticsLayout({ children, title, subtitle, rightActions }: Pro
         padding: "clamp(14px, 1.6vw, 28px)",
         maxWidth: 1500,
         margin: "0 auto",
-        fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+        fontFamily: "var(--font-sans, system-ui, sans-serif)",
       }}
     >
       {/* Sidebar tabs */}

@@ -72,7 +72,7 @@ export function AnalyticsCard({
         flexDirection: "column",
         gap: 8,
         minHeight: 120,
-        fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+        fontFamily: "var(--font-sans, system-ui, sans-serif)",
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

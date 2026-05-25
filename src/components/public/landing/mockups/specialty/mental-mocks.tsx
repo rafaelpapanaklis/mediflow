@@ -54,7 +54,7 @@ export const PsicoMock: React.FC = () => (
                 background: "rgba(56,189,248,0.2)",
                 display: "grid",
                 placeItems: "center",
-                fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+                fontFamily: "var(--font-sans, system-ui, sans-serif)",
                 fontWeight: 600,
                 fontSize: 10,
                 color: "#38bdf8",
@@ -68,7 +68,7 @@ export const PsicoMock: React.FC = () => (
                   fontSize: 9,
                   color: "var(--fg-muted)",
                   marginBottom: 2,
-                  fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                  fontFamily: "var(--font-mono, ui-monospace, monospace)",
                   textTransform: "uppercase",
                 }}
               >
@@ -152,7 +152,7 @@ export const PsicoMock: React.FC = () => (
                   style={{
                     fontSize: 9,
                     color: "var(--fg-muted)",
-                    fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                    fontFamily: "var(--font-mono, ui-monospace, monospace)",
                   }}
                 >
                   6/7 d
@@ -231,7 +231,7 @@ export const PsiqMock: React.FC = () => (
           <SectionTitle>Adherencia del paciente</SectionTitle>
           <div
             style={{
-              fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+              fontFamily: "var(--font-sans, system-ui, sans-serif)",
               fontWeight: 700,
               fontSize: 30,
               color: "#38bdf8",

@@ -22,7 +22,7 @@ export function Logo({ size = 20, color = "var(--ld-brand-light, #a78bfa)", show
       {showText && (
         <span
           style={{
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
             fontWeight: 600,
             letterSpacing: "-0.01em",
             fontSize: size * 0.85,

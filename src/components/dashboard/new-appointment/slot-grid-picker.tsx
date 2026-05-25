@@ -333,7 +333,7 @@ const slotBtnStyle: React.CSSProperties = {
   border: "1px solid",
   borderRadius: 6,
   fontSize: 12,
-  fontFamily: "var(--font-jetbrains-mono, monospace)",
+  fontFamily: "var(--font-mono, monospace)",
   fontVariantNumeric: "tabular-nums",
   fontWeight: 500,
   transition: "all 0.12s",

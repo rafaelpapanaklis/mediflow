@@ -356,7 +356,7 @@ function Field({ label, value, mono }: { label: string; value: string; mono?: bo
           fontSize: 13,
           fontWeight: 600,
           color: "var(--text-1)",
-          fontFamily: mono ? "var(--font-jetbrains-mono, monospace)" : undefined,
+          fontFamily: mono ? "var(--font-mono, monospace)" : undefined,
           letterSpacing: mono ? 1 : undefined,
         }}
       >

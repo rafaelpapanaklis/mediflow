@@ -213,7 +213,7 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--text-1);
-  font-family: var(--font-sora, 'Sora', sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
 }
 .card__sub {
   font-size: 11px;
@@ -255,7 +255,7 @@
   border: 1px solid rgba(124,58,237,0.2);
 }
 .kpi__value {
-  font-family: var(--font-sora, 'Sora', sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
   font-size: 26px;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -267,7 +267,7 @@
   align-items: center;
   gap: 3px;
   font-size: 11px;
-  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   margin-top: 8px;
   font-weight: 500;
 }
@@ -311,7 +311,7 @@
   place-items: center;
   font-weight: 600;
   color: #fff;
-  font-family: var(--font-sora, 'Sora', sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
   font-size: 11px;
   flex-shrink: 0;
   background: linear-gradient(135deg, #a78bfa, #7c3aed);
@@ -518,7 +518,7 @@
   font-weight: 700;
 }
 .sidebar-new__brandname {
-  font-family: var(--font-sora, 'Sora', sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
   font-weight: 600;
   font-size: 14px;
   color: var(--text-1);
@@ -579,7 +579,7 @@
   padding: 1px 6px;
   border-radius: 4px;
   font-size: 10px;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-weight: 500;
 }
 .nav-item-new__dot {
@@ -628,7 +628,7 @@
 }
 .topbar-new__search kbd {
   margin-left: auto;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   font-size: 10px;
   background: rgba(255,255,255,0.06);
   padding: 1px 5px;
@@ -716,7 +716,7 @@
   cursor: pointer;
   display: grid;
   place-items: center;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
 }
 .pagination__btn:hover:not(:disabled) { background: var(--bg-elev-2); color: var(--text-1); }
 .pagination__btn--active {
@@ -733,14 +733,14 @@
   background: rgba(255,255,255,0.06);
   border-radius: 4px;
   font-size: 10px;
-  font-family: var(--font-jetbrains-mono, monospace);
+  font-family: var(--font-mono, monospace);
   color: var(--text-3);
   font-weight: 500;
 }
 .tab-new--active .tab__count { color: var(--text-2); }
 
 /* mono utility ---------------------------------------------------- */
-.mono { font-family: var(--font-jetbrains-mono, monospace); }
+.mono { font-family: var(--font-mono, monospace); }
 
 /* Switch --------------------------------------------------------- */
 .switch {
@@ -833,7 +833,7 @@
 .modal__title {
   font-size: 15px;
   font-weight: 600;
-  font-family: var(--font-sora, 'Sora', sans-serif);
+  font-family: var(--font-sans, system-ui, sans-serif);
   color: var(--text-1);
 }
 .modal__body { padding: 22px; }

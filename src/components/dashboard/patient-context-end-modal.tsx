@@ -65,7 +65,7 @@ export function PatientContextEndModal({
             borderRadius: 14,
             boxShadow: "0 24px 60px -12px rgba(0,0,0,0.4)",
             overflow: "hidden",
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
           }}
         >
           <header
@@ -89,7 +89,7 @@ export function PatientContextEndModal({
                   {consult.patientName}
                 </strong>
                 {" · "}
-                <span style={{ fontFamily: "var(--font-jetbrains-mono, monospace)" }}>
+                <span style={{ fontFamily: "var(--font-mono, monospace)" }}>
                   {duration}
                 </span>
               </Dialog.Description>

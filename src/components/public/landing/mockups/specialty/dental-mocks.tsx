@@ -38,7 +38,7 @@ export const OdontogramMock: React.FC = () => {
           display: "grid",
           placeItems: "center",
           fontSize: 9,
-          fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+          fontFamily: "var(--font-mono, ui-monospace, monospace)",
           color: s ? colorMap[s] : "var(--fg-muted)",
           position: "relative",
           opacity: s === "missing" ? 0.3 : 1,
@@ -164,7 +164,7 @@ export const OdontogramMock: React.FC = () => {
                 <div
                   style={{
                     width: 28,
-                    fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                    fontFamily: "var(--font-mono, ui-monospace, monospace)",
                     color: "#a78bfa",
                   }}
                 >
@@ -178,7 +178,7 @@ export const OdontogramMock: React.FC = () => {
               style={{
                 marginTop: 10,
                 justifyContent: "flex-end",
-                fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+                fontFamily: "var(--font-sans, system-ui, sans-serif)",
                 fontWeight: 600,
                 fontSize: 14,
               }}
@@ -251,7 +251,7 @@ export const OdontogramMock: React.FC = () => {
                     background: "#ef4444",
                     color: "white",
                     fontSize: 8,
-                    fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                    fontFamily: "var(--font-mono, ui-monospace, monospace)",
                     whiteSpace: "nowrap",
                   }}
                 >
@@ -277,7 +277,7 @@ export const OdontogramMock: React.FC = () => {
                 <span
                   style={{
                     marginLeft: "auto",
-                    fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                    fontFamily: "var(--font-mono, ui-monospace, monospace)",
                     color: "var(--fg-muted)",
                   }}
                 >
@@ -361,7 +361,7 @@ export const OrthoMock: React.FC = () => {
                     borderRadius: 4,
                     background: "rgba(0,0,0,0.5)",
                     fontSize: 9,
-                    fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                    fontFamily: "var(--font-mono, ui-monospace, monospace)",
                     color: "white",
                   }}
                 >
@@ -470,7 +470,7 @@ export const EndoMock: React.FC = () => {
           fontSize: 10,
           color: "var(--fg-muted)",
           marginBottom: 6,
-          fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+          fontFamily: "var(--font-mono, ui-monospace, monospace)",
         }}
       >
         {label}
@@ -528,7 +528,7 @@ export const EndoMock: React.FC = () => {
                 background: f.color,
                 color: "white",
                 fontSize: 8,
-                fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                fontFamily: "var(--font-mono, ui-monospace, monospace)",
                 whiteSpace: "nowrap",
               }}
             >
@@ -547,7 +547,7 @@ export const EndoMock: React.FC = () => {
               background: "rgba(167,139,250,0.9)",
               color: "white",
               fontSize: 9,
-              fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+              fontFamily: "var(--font-mono, ui-monospace, monospace)",
             }}
           >
             IA ✓
@@ -637,7 +637,7 @@ export const PerioMock: React.FC = () => {
                 <div
                   style={{
                     fontSize: 9,
-                    fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                    fontFamily: "var(--font-mono, ui-monospace, monospace)",
                     color: "var(--fg-muted)",
                     marginBottom: 2,
                   }}
@@ -652,7 +652,7 @@ export const PerioMock: React.FC = () => {
                     display: "grid",
                     placeItems: "center",
                     fontSize: 10,
-                    fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                    fontFamily: "var(--font-mono, ui-monospace, monospace)",
                     color: "white",
                     fontWeight: 600,
                     position: "relative",
@@ -718,7 +718,7 @@ export const PerioMock: React.FC = () => {
             <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 4 }}>
               <div
                 style={{
-                  fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+                  fontFamily: "var(--font-sans, system-ui, sans-serif)",
                   fontWeight: 600,
                   fontSize: 18,
                   color: "var(--fg)",

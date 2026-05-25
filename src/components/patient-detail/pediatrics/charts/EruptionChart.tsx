@@ -149,7 +149,7 @@ export const EruptionChart = memo(function EruptionChart(props: EruptionChartPro
                       y={rowY + ROW_HEIGHT / 2 + 4}
                       textAnchor="end"
                       fontSize={11}
-                      fontFamily="var(--font-jetbrains-mono, ui-monospace, monospace)"
+                      fontFamily="var(--font-mono, ui-monospace, monospace)"
                       fill="var(--text-2)"
                     >
                       {r.fdi}

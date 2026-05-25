@@ -219,7 +219,7 @@ export function NoShowsClient() {
                     fontSize: 18,
                     fontWeight: 700,
                     color: u.probability >= 0.75 ? "#dc2626" : "#d97706",
-                    fontFamily: "var(--font-jetbrains-mono, monospace)",
+                    fontFamily: "var(--font-mono, monospace)",
                   }}>
                     {Math.round(u.probability * 100)}%
                   </div>
@@ -284,7 +284,7 @@ export function NoShowsClient() {
                   fontSize: 13,
                 }}>
                   <span style={{ color: "var(--text-1)" }}>{p.name}</span>
-                  <span style={{ color: "#dc2626", fontWeight: 600, fontFamily: "var(--font-jetbrains-mono, monospace)" }}>
+                  <span style={{ color: "#dc2626", fontWeight: 600, fontFamily: "var(--font-mono, monospace)" }}>
                     {p.count} no-show{p.count === 1 ? "" : "s"}
                   </span>
                 </div>

@@ -12,7 +12,7 @@ import {
 export const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div
     style={{
-      fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+      fontFamily: "var(--font-sans, system-ui, sans-serif)",
       fontWeight: 600,
       fontSize: 15,
       letterSpacing: "-0.01em",
@@ -36,7 +36,7 @@ export const Tag: React.FC<{ children: React.ReactNode; color?: string }> = ({
       color,
       background: color + "18",
       border: `1px solid ${color}33`,
-      fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+      fontFamily: "var(--font-mono, ui-monospace, monospace)",
     }}
   >
     {children}
@@ -78,7 +78,7 @@ const PreviewBadge = () => (
       border: "1px solid rgba(124,58,237,0.4)",
       fontSize: 10,
       color: "#c4b5fd",
-      fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+      fontFamily: "var(--font-mono, ui-monospace, monospace)",
       letterSpacing: "0.05em",
       backdropFilter: "blur(8px)",
     }}
@@ -102,7 +102,7 @@ const MiniLogo: React.FC<{ color: string }> = ({ color }) => (
       display: "inline-flex",
       alignItems: "center",
       gap: 6,
-      fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+      fontFamily: "var(--font-sans, system-ui, sans-serif)",
       fontWeight: 700,
       fontSize: 13,
       letterSpacing: "-0.02em",
@@ -195,7 +195,7 @@ export const MockShell: React.FC<MockShellProps> = ({
             padding: "8px 10px",
             fontSize: 9.5,
             color: "var(--fg-muted)",
-            fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+            fontFamily: "var(--font-mono, ui-monospace, monospace)",
             letterSpacing: "0.05em",
             textTransform: "uppercase",
           }}
@@ -230,7 +230,7 @@ export const MockShell: React.FC<MockShellProps> = ({
           <div>
             <div
               style={{
-                fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+                fontFamily: "var(--font-sans, system-ui, sans-serif)",
                 fontWeight: 600,
                 fontSize: 17,
                 letterSpacing: "-0.01em",

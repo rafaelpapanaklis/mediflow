@@ -34,7 +34,7 @@ export function DurationPicker({ presets, duration, customInput, onSelectPreset,
               borderRadius: 8,
               fontSize: 13,
               fontWeight: active ? 600 : 500,
-              fontFamily: "var(--font-jetbrains-mono, monospace)",
+              fontFamily: "var(--font-mono, monospace)",
               cursor: "pointer",
               transition: "all 0.12s",
             }}
@@ -76,7 +76,7 @@ export function DurationPicker({ presets, duration, customInput, onSelectPreset,
             fontWeight: 600,
             textAlign: "center",
             color: hasCustom ? "var(--trial-accent-calm)" : "var(--text-1)",
-            fontFamily: "var(--font-jetbrains-mono, monospace)",
+            fontFamily: "var(--font-mono, monospace)",
           }}
         />
         <span

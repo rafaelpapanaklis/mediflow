@@ -9,7 +9,7 @@ export function Divider({ label }: { label: string }) {
         fontSize: 11,
         letterSpacing: "0.06em",
         textTransform: "uppercase",
-        fontFamily: "var(--font-jetbrains-mono, ui-monospace, monospace)",
+        fontFamily: "var(--font-mono, ui-monospace, monospace)",
       }}
     >
       <div style={{ flex: 1, height: 1, background: "var(--ld-border)" }} />

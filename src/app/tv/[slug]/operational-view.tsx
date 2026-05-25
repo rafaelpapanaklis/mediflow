@@ -64,7 +64,7 @@ export function TvOperationalView({ clinicName, clinicLogo, clinicId }: Props) {
         minHeight: "100vh",
         background: "linear-gradient(135deg, #0F1A2E 0%, #1a2f4f 100%)",
         color: "#fff",
-        fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+        fontFamily: "var(--font-sans, system-ui, sans-serif)",
         padding: "32px 40px",
         display: "flex",
         flexDirection: "column",
@@ -177,7 +177,7 @@ function Column({ title, items, tone, accent, showWait }: {
               {showWait && item.waitedMin != null && (
                 <div style={{
                   fontSize: 18, fontWeight: 700, color: item.waitedMin > 20 ? "#dc2626" : colors.fg,
-                  fontFamily: "var(--font-jetbrains-mono, monospace)",
+                  fontFamily: "var(--font-mono, monospace)",
                   fontVariantNumeric: "tabular-nums",
                 }}>
                   {item.waitedMin}m

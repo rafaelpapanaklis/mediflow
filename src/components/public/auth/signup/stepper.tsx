@@ -64,7 +64,7 @@ export function Stepper({ step }: StepperProps) {
                   display: "grid",
                   placeItems: "center",
                   fontFamily:
-                    "var(--font-jetbrains-mono, ui-monospace, monospace)",
+                    "var(--font-mono, ui-monospace, monospace)",
                   fontSize: 12,
                   fontWeight: 600,
                   background: circleBg,

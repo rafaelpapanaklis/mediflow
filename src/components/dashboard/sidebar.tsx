@@ -423,7 +423,7 @@ export function Sidebar(props: SidebarProps) {
                 <span
                   aria-label={`${count} pendiente${count === 1 ? "" : "s"}`}
                   style={{
-                    fontFamily: "var(--font-jetbrains-mono, monospace)",
+                    fontFamily: "var(--font-mono, monospace)",
                     fontSize: 10,
                     fontWeight: 500,
                     padding: "1px 6px",
@@ -483,7 +483,7 @@ export function Sidebar(props: SidebarProps) {
                   fontSize: 12,
                   color: "var(--text-1)",
                   boxShadow: "0 6px 20px -4px rgba(15,10,30,0.18), 0 2px 8px -2px rgba(15,10,30,0.10)",
-                  fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+                  fontFamily: "var(--font-sans, system-ui, sans-serif)",
                   zIndex: 50,
                   display: "flex",
                   alignItems: "center",
@@ -494,7 +494,7 @@ export function Sidebar(props: SidebarProps) {
                 {count > 0 && (
                   <span
                     style={{
-                      fontFamily: "var(--font-jetbrains-mono, monospace)",
+                      fontFamily: "var(--font-mono, monospace)",
                       fontSize: 10,
                       padding: "1px 5px",
                       borderRadius: 10,
@@ -750,7 +750,7 @@ export function Sidebar(props: SidebarProps) {
                 flexDirection: "column",
                 paddingBlock: 14,
                 paddingInline: 10,
-                fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+                fontFamily: "var(--font-sans, system-ui, sans-serif)",
               }}
             >
               <button
@@ -886,7 +886,7 @@ function ClinicSwitcher({
     border: "none",
     borderRadius: 8,
     cursor: hasOthers ? "pointer" : "default",
-    fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+    fontFamily: "var(--font-sans, system-ui, sans-serif)",
     textAlign: "left",
   };
 
@@ -914,7 +914,7 @@ function ClinicSwitcher({
             borderRadius: 10, padding: 4,
             boxShadow: "0 20px 50px -10px rgba(15,10,30,0.25), 0 8px 20px -8px rgba(15,10,30,0.15)",
             zIndex: 50,
-            fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+            fontFamily: "var(--font-sans, system-ui, sans-serif)",
           }}
         >
           <div
@@ -1205,7 +1205,7 @@ function SidebarFooter({
               borderRadius: 10, padding: 4,
               boxShadow: "0 20px 50px -10px rgba(15,10,30,0.25), 0 8px 20px -8px rgba(15,10,30,0.15)",
               zIndex: 50,
-              fontFamily: "var(--font-sora, 'Sora', sans-serif)",
+              fontFamily: "var(--font-sans, system-ui, sans-serif)",
             }}
           >
             <DropdownMenu.Item

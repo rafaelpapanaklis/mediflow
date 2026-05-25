@@ -193,7 +193,7 @@ export function HomeReceptionist({ user, data }: Props) {
                   <span
                     style={{
                       color: "var(--text-2)",
-                      fontFamily: "var(--font-jetbrains-mono, monospace)",
+                      fontFamily: "var(--font-mono, monospace)",
                       fontSize: 11,
                     }}
                   >
