@@ -338,8 +338,10 @@ export function ChatWorkspace({
           ...target,
           lastMessageAt: msg.createdAt,
           messages: [msg],
-          clinicUnread: 0,
-          supplierUnread: 0,
+          // Optimista: solo el contador del propio lado se pone a 0 (acabo de
+          // leer el hilo). El del receptor lo reconcilia el siguiente poll —
+          // el servidor lo incrementa (ver POST .../messages).
+          ...(side === "CLINIC" ? { clinicUnread: 0 } : { supplierUnread: 0 }),
         };
         return [updated, ...prev.filter((t) => t.id !== selectedId)];
       });
