@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState, useCallback, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef, Fragment, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -26,6 +26,7 @@ import {
   PERIODONTICS_MODULE_KEY,
   ORTHODONTICS_MODULE_KEY,
 } from "@/lib/specialties/keys";
+import { setSidebarSectionCollapsed } from "@/app/actions/sidebar";
 
 // ═══════════════════════════════════════════════════════════════════
 // Tipos
@@ -90,6 +91,12 @@ export interface SidebarProps {
    * sección entera se oculta cuando ningún item pasa el filtro.
    */
   clinicModuleKeys?: string[];
+  /**
+   * Secciones del sidebar que el usuario tiene colapsadas (persistido en DB:
+   * User.sidebarCollapsed). Estado inicial server→client; el toggle se guarda
+   * con la server action. Valores: clinico | catalogo | specialties | admin.
+   */
+  sidebarCollapsed?: string[];
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -97,6 +104,17 @@ export interface SidebarProps {
 // ═══════════════════════════════════════════════════════════════════
 
 type Section = "workspace" | "clinico" | "catalogo" | "specialties" | "admin";
+
+// Secciones con título colapsable (todas menos "workspace", que no lleva
+// encabezado). El orden define el render en el nav.
+const COLLAPSIBLE_SECTIONS = ["clinico", "catalogo", "specialties", "admin"] as const;
+type CollapsibleSectionId = (typeof COLLAPSIBLE_SECTIONS)[number];
+const SECTION_LABELS: Record<CollapsibleSectionId, string> = {
+  clinico: "Clínico",
+  catalogo: "Catálogo",
+  specialties: "Especialidades",
+  admin: "Administración",
+};
 
 interface NavItemDef {
   id: string;
@@ -289,11 +307,41 @@ export function Sidebar(props: SidebarProps) {
   const [userCollapsed, setUserCollapsed] = useBooleanLocalStorage("sidebar-collapsed", false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const defaultAdminExpanded =
-    props.user.role === "SUPER_ADMIN" || props.user.role === "ADMIN";
-  const [adminExpanded, setAdminExpanded] = useBooleanLocalStorage(
-    "sidebar-admin-expanded",
-    defaultAdminExpanded,
+  // Secciones colapsadas (oculta sus items, deja el título). Estado inicial
+  // desde User.sidebarCollapsed (DB, server→client). El toggle es OPTIMISTA y
+  // se persiste con la server action sin recargar; si falla, se revierte.
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
+    () =>
+      new Set(
+        (props.sidebarCollapsed ?? []).filter((s) =>
+          (COLLAPSIBLE_SECTIONS as readonly string[]).includes(s),
+        ),
+      ),
+  );
+  const toggleSection = useCallback(
+    (section: CollapsibleSectionId) => {
+      const willCollapse = !collapsedSections.has(section);
+      setCollapsedSections((prev) => {
+        const next = new Set(prev);
+        if (willCollapse) next.add(section);
+        else next.delete(section);
+        return next;
+      });
+      void setSidebarSectionCollapsed(section, willCollapse)
+        .then((res) => {
+          if (!res?.ok) throw new Error(res?.error ?? "persist_failed");
+        })
+        .catch(() => {
+          // Revierte el optimismo si la persistencia falló.
+          setCollapsedSections((prev) => {
+            const next = new Set(prev);
+            if (willCollapse) next.delete(section);
+            else next.add(section);
+            return next;
+          });
+        });
+    },
+    [collapsedSections],
   );
 
   const [isMobile, setIsMobile] = useState(false);
@@ -517,24 +565,6 @@ export function Sidebar(props: SidebarProps) {
     [pathname, collapsed, activeConsult, getCount],
   );
 
-  const renderSectionLabel = (label: string) => {
-    if (collapsed) return null;
-    return (
-      <div
-        style={{
-          padding: "14px 10px 6px",
-          fontSize: 10,
-          fontWeight: 600,
-          letterSpacing: "0.08em",
-          textTransform: "uppercase",
-          color: "var(--text-3)",
-        }}
-      >
-        {label}
-      </div>
-    );
-  };
-
   const { open: openNewAppointment } = useNewAppointmentDialog();
 
   const canCreateAppt = (() => {
@@ -664,49 +694,30 @@ export function Sidebar(props: SidebarProps) {
       >
         {itemsBySection.workspace.map((it) => renderItem(it))}
 
-        {itemsBySection.clinico.length > 0 && (
-          <>
-            {renderSectionLabel("Clínico")}
-            {itemsBySection.clinico.map((it) => renderItem(it))}
-          </>
-        )}
-
-        {itemsBySection.catalogo.length > 0 && (
-          <>
-            {renderSectionLabel("Catálogo")}
-            {itemsBySection.catalogo.map((it) => renderItem(it))}
-          </>
-        )}
-
-        {itemsBySection.specialties.length > 0 && (
-          <>
-            {renderSectionLabel("Especialidades")}
-            {itemsBySection.specialties.map((it) => renderItem(it))}
-          </>
-        )}
-
-        {itemsBySection.admin.length > 0 && !collapsed && (
-          <AdminSection
-            expanded={adminExpanded}
-            onToggle={() => setAdminExpanded(!adminExpanded)}
-            items={itemsBySection.admin}
-            renderItem={renderItem}
-          />
-        )}
-
-        {collapsed && itemsBySection.specialties.length > 0 && (
-          <>
-            <div style={{ height: 8 }} />
-            {itemsBySection.specialties.map((it) => renderItem(it))}
-          </>
-        )}
-
-        {itemsBySection.admin.length > 0 && collapsed && (
-          <>
-            <div style={{ height: 8 }} />
-            {itemsBySection.admin.map((it) => renderItem(it))}
-          </>
-        )}
+        {collapsed
+          ? // Modo icon-only: items de cada sección, sin encabezado ni colapso.
+            COLLAPSIBLE_SECTIONS.map((sec) =>
+              itemsBySection[sec].length > 0 ? (
+                <Fragment key={sec}>
+                  <div style={{ height: 8 }} />
+                  {itemsBySection[sec].map((it) => renderItem(it))}
+                </Fragment>
+              ) : null,
+            )
+          : // Modo expandido: cada sección con título + chevron colapsable.
+            COLLAPSIBLE_SECTIONS.map((sec) =>
+              itemsBySection[sec].length > 0 ? (
+                <CollapsibleSection
+                  key={sec}
+                  id={sec}
+                  label={SECTION_LABELS[sec]}
+                  collapsed={collapsedSections.has(sec)}
+                  onToggle={() => toggleSection(sec)}
+                >
+                  {itemsBySection[sec].map((it) => renderItem(it))}
+                </CollapsibleSection>
+              ) : null,
+            )}
       </nav>
 
       <SidebarFooter
@@ -978,24 +989,26 @@ function ClinicSwitcher({
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// Admin section
+// Collapsible section (título + chevron; colapsa/expande sus items)
 // ═══════════════════════════════════════════════════════════════════
 
-function AdminSection({
-  expanded, onToggle, items, renderItem,
+function CollapsibleSection({
+  id, label, collapsed, onToggle, children,
 }: {
-  expanded: boolean;
+  id: CollapsibleSectionId;
+  label: string;
+  collapsed: boolean;
   onToggle: () => void;
-  items: NavItemDef[];
-  renderItem: (item: NavItemDef) => ReactNode;
+  children: ReactNode;
 }) {
+  const bodyId = `mf-sidebar-section-${id}`;
   return (
     <div style={{ marginTop: 6 }}>
       <button
         type="button"
         onClick={onToggle}
-        aria-expanded={expanded}
-        aria-controls="mf-sidebar-admin-items"
+        aria-expanded={!collapsed}
+        aria-controls={bodyId}
         style={{
           display: "flex",
           alignItems: "center",
@@ -1017,23 +1030,23 @@ function AdminSection({
         <ChevronRight
           size={12}
           aria-hidden
-          className="mf-sidebar-admin-chevron"
-          data-collapsed={!expanded}
+          className="mf-sidebar-section-chevron"
+          data-collapsed={collapsed}
           style={{ flexShrink: 0 }}
         />
-        Administración
+        {label}
       </button>
       <div
-        className="mf-sidebar-admin-body"
-        data-collapsed={!expanded}
-        id="mf-sidebar-admin-items"
+        className="mf-sidebar-section-body"
+        data-collapsed={collapsed}
+        id={bodyId}
       >
         <div
-          className="mf-sidebar-admin-inner"
+          className="mf-sidebar-section-inner"
           style={{ display: "flex", flexDirection: "column", gap: 2 }}
-          {...(!expanded ? ({ inert: "" } as any) : {})}
+          {...(collapsed ? ({ inert: "" } as any) : {})}
         >
-          {items.map((it) => renderItem(it))}
+          {children}
         </div>
       </div>
     </div>

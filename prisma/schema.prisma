@@ -544,6 +544,11 @@ model User {
   // por SUPER_ADMIN desde /dashboard/team. Ver src/lib/auth/permissions.ts.
   permissionsOverride String[] @default([])
 
+  // Secciones del sidebar que el usuario tiene colapsadas (oculta sus items y
+  // deja solo el título). Valores: "clinico" | "catalogo" | "specialties" |
+  // "admin". Persistente por cuenta → sobrevive logout/login y dispositivos.
+  sidebarCollapsed String[] @default([])
+
   clinic             Clinic              @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointments       Appointment[]
   records            MedicalRecord[]

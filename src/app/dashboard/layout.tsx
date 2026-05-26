@@ -111,6 +111,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         trialEndsAt={trialEndsAt}
         isInTrial={isInTrial}
         clinicModuleKeys={clinicModuleKeys}
+        sidebarCollapsed={(user as { sidebarCollapsed?: string[] }).sidebarCollapsed ?? []}
       />
       <div className="flex min-h-screen flex-1 flex-col lg:max-h-screen lg:overflow-y-auto">
         <GlobalAnnouncementBanner />

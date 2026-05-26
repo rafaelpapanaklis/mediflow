@@ -1555,23 +1555,23 @@
    Sidebar v2 — animaciones
    ═══════════════════════════════════════════════════════════════════ */
 
-.mf-sidebar-admin-body {
+.mf-sidebar-section-body {
   display: grid;
   grid-template-rows: 1fr;
   transition: grid-template-rows 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.mf-sidebar-admin-body[data-collapsed="true"] {
+.mf-sidebar-section-body[data-collapsed="true"] {
   grid-template-rows: 0fr;
 }
-.mf-sidebar-admin-body > .mf-sidebar-admin-inner {
+.mf-sidebar-section-body > .mf-sidebar-section-inner {
   overflow: hidden;
   min-height: 0;
 }
 
-.mf-sidebar-admin-chevron {
+.mf-sidebar-section-chevron {
   transition: transform 0.18s ease;
 }
-.mf-sidebar-admin-chevron[data-collapsed="true"] {
+.mf-sidebar-section-chevron[data-collapsed="true"] {
   transform: rotate(-90deg);
 }
 
@@ -1629,8 +1629,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mf-sidebar-admin-body,
-  .mf-sidebar-admin-chevron,
+  .mf-sidebar-section-body,
+  .mf-sidebar-section-chevron,
   .mf-sidebar-mobile-panel,
   .mf-sidebar-mobile-overlay {
     animation: none !important;
