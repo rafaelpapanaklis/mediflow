@@ -464,41 +464,48 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
 
       {/* Productos */}
       <div style={{ marginTop: 24 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 14 }}>
-          <h2 style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 18, margin: 0 }}>
-            Productos
-          </h2>
-          <span style={{ color: "var(--text-3)", fontSize: 13 }}>({filtered.length})</span>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+            marginBottom: 14,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <h2 style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 18, margin: 0 }}>
+              Productos
+            </h2>
+            <span style={{ color: "var(--text-3)", fontSize: 13 }}>({filtered.length})</span>
+          </div>
+
+          <div className="search-field" style={{ maxWidth: 360 }}>
+            <Search size={14} />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar producto…"
+            />
+          </div>
         </div>
 
-        {products.length > 0 && (
-          <div style={{ marginBottom: 16 }}>
-            <div className="search-field" style={{ maxWidth: 360 }}>
-              <Search size={14} />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar producto…"
+        {categories.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+            <CategoryChip
+              label="Todas"
+              active={activeCategory === null}
+              onClick={() => setActiveCategory(null)}
+            />
+            {categories.map((cat) => (
+              <CategoryChip
+                key={cat}
+                label={cat}
+                active={activeCategory === cat}
+                onClick={() => setActiveCategory(activeCategory === cat ? null : cat)}
               />
-            </div>
-
-            {categories.length > 0 && (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
-                <CategoryChip
-                  label="Todas"
-                  active={activeCategory === null}
-                  onClick={() => setActiveCategory(null)}
-                />
-                {categories.map((cat) => (
-                  <CategoryChip
-                    key={cat}
-                    label={cat}
-                    active={activeCategory === cat}
-                    onClick={() => setActiveCategory(activeCategory === cat ? null : cat)}
-                  />
-                ))}
-              </div>
-            )}
+            ))}
           </div>
         )}
 
