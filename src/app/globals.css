@@ -2,6 +2,46 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ════════════════════════════════════════════════════════════════════
+   Laboratorios Dentales — animaciones globales + tokens del módulo.
+   Reutiliza los tokens existentes (--text-*, --bg-*, --violet-*,
+   --success/--warning/--danger) y solo agrega lo que no existía:
+   el minimapa del mensajero y el gradiente del ETA hero.
+   ════════════════════════════════════════════════════════════════════ */
+@keyframes labRing {
+  0%   { transform: scale(0.6); opacity: 0.7; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+@keyframes labPulse {
+  0%, 100% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+  50%      { box-shadow: 0 0 0 6px transparent; opacity: 0.55; }
+}
+@keyframes labShimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position:  400px 0; }
+}
+
+@layer base {
+  :root {
+    /* Minimapa del mensajero (tracking en vivo) */
+    --lab-map-from:   #F5F3FF;
+    --lab-map-to:     #EDE9FE;
+    --lab-map-grid:   rgba(124, 58, 237, 0.06);
+    --lab-map-road:   #C4B5FD;
+    --lab-map-road-2: #DDD6FE;
+    /* ETA hero — gradiente oscuro aun en modo claro (igual en ambos temas) */
+    --lab-eta-from:   #1F1933;
+    --lab-eta-to:     #2D2244;
+  }
+  .dark {
+    --lab-map-from:   #15102A;
+    --lab-map-to:     #0F0B1F;
+    --lab-map-grid:   rgba(167, 139, 250, 0.10);
+    --lab-map-road:   #8B5CF6;
+    --lab-map-road-2: #5B21B6;
+  }
+}
+
 @layer base {
   :root {
     /* ── LIGHT MODE (default) ── */
