@@ -241,9 +241,11 @@ model Clinic {
 
   // Proveedores / Compras (marketplace B2B) — el proveedor es global; la
   // clínica solo tiene carritos, pedidos y chats hacia proveedores.
-  supplierCarts  SupplierCart[]
-  supplierOrders SupplierOrder[]
-  supplierChats  SupplierChatThread[]
+  supplierCarts   SupplierCart[]
+  supplierOrders  SupplierOrder[]
+  supplierChats   SupplierChatThread[]
+  dentalLabOrders DentalLabOrder[]
+  dentalLabChats  DentalLabChatThread[]
 
   @@map("clinics")
 }
@@ -499,6 +501,340 @@ model SupplierChatMessage {
   @@map("supplier_chat_messages")
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// Laboratorios Dentales — marketplace B2B de laboratorios (espejo de Supplier).
+// Prefijo DentalLab* para no chocar con el módulo de laboratorio clínico
+// existente (LabOrder/LabOrderStatus = estudios de paciente).
+// Contrato compartido: src/lib/laboratorios/types.ts
+// ════════════════════════════════════════════════════════════════════════
+
+enum DentalLabStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum DentalLabUserRole {
+  OWNER
+  MANAGER
+  STAFF
+}
+
+enum DentalLabOrderStatus {
+  SOLICITADA
+  RECIBIDA
+  ATENDIENDO
+  ENVIADA
+  ENTREGADA
+  CANCELADA
+}
+
+enum DentalLabTrafficLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum DentalLabTrafficSource {
+  MANUAL
+  AUTO
+}
+
+enum DentalLabOrderActor {
+  CLINIC
+  LAB
+  SYSTEM
+}
+
+enum DentalLabPaymentStatus {
+  UNPAID
+  PAID
+}
+
+enum DentalLabInvoiceStatus {
+  PAID
+  PENDING
+  OVERDUE
+}
+
+enum DentalLabChatSender {
+  CLINIC
+  LAB
+}
+
+model DentalLab {
+  id             String          @id @default(cuid())
+  name           String
+  slug           String          @unique
+  rfc            String?         @db.VarChar(13)
+  email          String
+  phone          String?
+  whatsapp       String?
+  website        String?
+  address        String?
+  city           String?
+  state          String?
+  logoUrl        String?
+  coverImageUrl  String?
+  description    String?         @db.Text
+  founded        Int?
+  services       String[]        @default([])
+  hours          Json?
+  coverageZones  String[]        @default([])
+  rating         Float?          @default(0)
+  ratingCount    Int             @default(0)
+  onTimePct      Int?
+  totalOrders    Int             @default(0)
+  status         DentalLabStatus @default(PENDING)
+  approvedAt     DateTime?
+  rejectedReason String?
+
+  trafficLevel     DentalLabTrafficLevel @default(LOW)
+  trafficManualMin Int?
+  trafficManualMax Int?
+  trafficNote      String?
+  trafficUpdatedAt DateTime              @default(now())
+
+  paySpeiEnabled         Boolean @default(false)
+  payCardEnabled         Boolean @default(false)
+  payCardStripeConnected Boolean @default(false)
+  payCashEnabled         Boolean @default(false)
+  payInvoiceEnabled      Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users          DentalLabUser[]
+  labServices    DentalLabService[]
+  orders         DentalLabOrder[]
+  chats          DentalLabChatThread[]
+  trafficHistory DentalLabTrafficHistory[]
+  bankAccounts   DentalLabBankAccount[]
+  fiscalData     DentalLabFiscalData?
+  invoices       DentalLabInvoice[]
+
+  @@index([status])
+  @@map("dental_labs")
+}
+
+model DentalLabUser {
+  id         String            @id @default(cuid())
+  labId      String
+  supabaseId String
+  email      String
+  firstName  String
+  lastName   String
+  role       DentalLabUserRole @default(OWNER)
+  isActive   Boolean           @default(true)
+  lastLogin  DateTime?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  lab DentalLab @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@unique([supabaseId, labId])
+  @@index([supabaseId])
+  @@map("dental_lab_users")
+}
+
+model DentalLabService {
+  id          String   @id @default(cuid())
+  labId       String
+  serviceKey  String
+  name        String
+  description String?  @db.Text
+  priceFrom   Float
+  unit        String   @default("pieza")
+  daysMin     Int?
+  daysMax     Int?
+  imageUrl    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lab    DentalLab        @relation(fields: [labId], references: [id], onDelete: Cascade)
+  orders DentalLabOrder[]
+
+  @@index([labId, isActive])
+  @@map("dental_lab_services")
+}
+
+model DentalLabOrder {
+  id            String                 @id @default(cuid())
+  orderNumber   String                 @unique
+  clinicId      String
+  labId         String
+  serviceId     String?
+  patientId     String?
+  patientName   String?
+  internalRef   String?
+  status        DentalLabOrderStatus   @default(SOLICITADA)
+  notes         String?                @db.Text
+  basePrice     Float                  @default(0)
+  extrasTotal   Float                  @default(0)
+  total         Float                  @default(0)
+  paymentStatus DentalLabPaymentStatus @default(UNPAID)
+  paymentMethod String?
+  priority      Boolean                @default(false)
+  pickupAt      DateTime?
+  etaAt         DateTime?
+  courier       Json?
+  deliveredAt   DateTime?
+  cancelledAt   DateTime?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  clinic  Clinic                @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  lab     DentalLab             @relation(fields: [labId], references: [id], onDelete: Restrict)
+  service DentalLabService?     @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  events  DentalLabOrderEvent[]
+  files   DentalLabOrderFile[]
+
+  @@index([clinicId, status])
+  @@index([labId, status])
+  @@map("dental_lab_orders")
+}
+
+model DentalLabOrderEvent {
+  id        String               @id @default(cuid())
+  orderId   String
+  status    DentalLabOrderStatus
+  at        DateTime?
+  eta       DateTime?
+  actorId   String?
+  actorName String?
+  actorRole DentalLabOrderActor?
+  detail    String?              @db.Text
+  createdAt DateTime             @default(now())
+
+  order DentalLabOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("dental_lab_order_events")
+}
+
+model DentalLabOrderFile {
+  id         String   @id @default(cuid())
+  orderId    String
+  url        String
+  name       String
+  fileType   String?
+  sizeBytes  Int?
+  uploadedAt DateTime @default(now())
+
+  order DentalLabOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("dental_lab_order_files")
+}
+
+model DentalLabTrafficHistory {
+  id        String                 @id @default(cuid())
+  labId     String
+  fromLevel DentalLabTrafficLevel?
+  toLevel   DentalLabTrafficLevel?
+  source    DentalLabTrafficSource
+  byUserId  String?
+  byName    String?
+  note      String?
+  at        DateTime               @default(now())
+
+  lab DentalLab @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@index([labId, at(sort: Desc)])
+  @@map("dental_lab_traffic_history")
+}
+
+model DentalLabBankAccount {
+  id            String   @id @default(cuid())
+  labId         String
+  bank          String
+  clabe         String   @db.VarChar(18)
+  accountNumber String?
+  holderName    String
+  isPrimary     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  lab DentalLab @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@index([labId])
+  @@map("dental_lab_bank_accounts")
+}
+
+model DentalLabFiscalData {
+  id                    String    @id @default(cuid())
+  labId                 String    @unique
+  legalName             String
+  rfc                   String    @db.VarChar(13)
+  taxRegimeCode         String
+  taxRegimeLabel        String
+  zipCode               String    @db.VarChar(5)
+  cfdiUseCode           String
+  cfdiUseLabel          String
+  state                 String?
+  certificateUrl        String?
+  certificateValidUntil DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  lab DentalLab @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@map("dental_lab_fiscal_data")
+}
+
+model DentalLabInvoice {
+  id         String                 @id @default(cuid())
+  labId      String
+  clinicId   String?
+  clinicName String
+  folio      String
+  amount     Float
+  status     DentalLabInvoiceStatus @default(PENDING)
+  issuedAt   DateTime               @default(now())
+  createdAt  DateTime               @default(now())
+
+  lab DentalLab @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@index([labId, status])
+  @@map("dental_lab_invoices")
+}
+
+model DentalLabChatThread {
+  id            String   @id @default(cuid())
+  clinicId      String
+  labId         String
+  orderId       String?
+  lastMessageAt DateTime @default(now())
+  clinicUnread  Int      @default(0)
+  labUnread     Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  clinic   Clinic                 @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  lab      DentalLab              @relation(fields: [labId], references: [id], onDelete: Cascade)
+  messages DentalLabChatMessage[]
+
+  @@unique([clinicId, labId])
+  @@index([clinicId, lastMessageAt(sort: Desc)])
+  @@index([labId, lastMessageAt(sort: Desc)])
+  @@map("dental_lab_chat_threads")
+}
+
+model DentalLabChatMessage {
+  id        String              @id @default(cuid())
+  threadId  String
+  sender    DentalLabChatSender
+  senderId  String
+  body      String              @db.Text
+  createdAt DateTime            @default(now())
+
+  thread DentalLabChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
+  @@map("dental_lab_chat_messages")
+}
+
 model User {
   id         String  @id @default(cuid())
   supabaseId String
@@ -595,8 +931,8 @@ model User {
   patientFlowsTriggered       PatientFlow[]          @relation("PatientFlowTriggeredBy")
 
   // Orthodontics Fase 1.5 rediseño completo.
-  orthoQuotesCreated          OrthoQuoteScenario[]     @relation("OrthoQuoteCreatedBy")
-  orthoSignAtHomeCreated      OrthoSignAtHomePackage[] @relation("OrthoSignAtHomeCreatedBy")
+  orthoQuotesCreated     OrthoQuoteScenario[]     @relation("OrthoQuoteCreatedBy")
+  orthoSignAtHomeCreated OrthoSignAtHomePackage[] @relation("OrthoSignAtHomeCreatedBy")
 
   // Implants module — see docs/marketplace/research/implantologia/SPEC.md §4
   implantsPlaced          Implant[]        @relation("ImplantPlacedBy")
@@ -4619,11 +4955,11 @@ model OrthodonticTreatmentPlan {
   phaseTransitions OrthoPhaseTransition[]
 
   // Fase 1.5 rediseño completo relations (Sección F/G/H).
-  quoteScenarios   OrthoQuoteScenario[]
-  retentionRegimen OrthoRetentionRegimen?
-  npsSchedules     OrthoNpsSchedule[]
+  quoteScenarios     OrthoQuoteScenario[]
+  retentionRegimen   OrthoRetentionRegimen?
+  npsSchedules       OrthoNpsSchedule[]
   signAtHomePackages OrthoSignAtHomePackage[]
-  referralCode     OrthoReferralCode?
+  referralCode       OrthoReferralCode?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -5216,29 +5552,29 @@ enum OrthoNpsStatus {
 }
 
 model OrthoQuoteScenario {
-  id              String                          @id @default(uuid())
+  id              String @id @default(uuid())
   treatmentPlanId String
   clinicId        String
 
-  label           String
-  paymentMode     OrthoQuoteScenarioPaymentMode
-  downPayment     Decimal                         @db.Decimal(10, 2)
-  monthlyAmount   Decimal                         @default(0) @db.Decimal(10, 2)
-  monthsCount     Int                             @default(0)
-  totalAmount     Decimal                         @db.Decimal(10, 2)
-  discountPct     Int?
+  label         String
+  paymentMode   OrthoQuoteScenarioPaymentMode
+  downPayment   Decimal                       @db.Decimal(10, 2)
+  monthlyAmount Decimal                       @default(0) @db.Decimal(10, 2)
+  monthsCount   Int                           @default(0)
+  totalAmount   Decimal                       @db.Decimal(10, 2)
+  discountPct   Int?
   /// Etiqueta visual: "Recomendado", "MSI 6 meses", "10% descuento", etc.
-  badge           String?
+  badge         String?
   /// Lista de líneas que se imprimen como features del escenario.
-  includes        String[]                        @default([])
-  notes           String?
-  status          OrthoQuoteScenarioStatus        @default(DRAFT)
-  presentedAt     DateTime?
-  acceptedAt      DateTime?
-  rejectedAt      DateTime?
+  includes      String[]                      @default([])
+  notes         String?
+  status        OrthoQuoteScenarioStatus      @default(DRAFT)
+  presentedAt   DateTime?
+  acceptedAt    DateTime?
+  rejectedAt    DateTime?
 
-  createdById     String?
-  createdBy       User?                           @relation("OrthoQuoteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String?
+  createdBy   User?   @relation("OrthoQuoteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
   clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
@@ -5252,32 +5588,32 @@ model OrthoQuoteScenario {
 }
 
 model OrthoSignAtHomePackage {
-  id              String                @id @default(uuid())
+  id              String @id @default(uuid())
   treatmentPlanId String
   patientId       String
   clinicId        String
 
   /// Token base64url 256 bits para el portal /share/p/sgnh_<id>.
-  token           String                @unique
-  expiresAt       DateTime
-  status          OrthoSignAtHomeStatus @default(PENDING)
+  token     String                @unique
+  expiresAt DateTime
+  status    OrthoSignAtHomeStatus @default(PENDING)
 
   /// IDs del escenario seleccionado y monto de enganche pre-cobrado.
   selectedQuoteScenarioId String?
   downPaymentAmount       Decimal? @db.Decimal(10, 2)
 
   /// IDs de los 3 documentos asociados (consents existentes).
-  contractDocId    String?
-  consentDocIds    String[] @default([])
-  paymentMethod    OrthoPaymentMethod?
+  contractDocId String?
+  consentDocIds String[]            @default([])
+  paymentMethod OrthoPaymentMethod?
 
-  sentAt           DateTime?
-  signedAt         DateTime?
-  paidAt           DateTime?
-  cfdiUuid         String?
+  sentAt   DateTime?
+  signedAt DateTime?
+  paidAt   DateTime?
+  cfdiUuid String?
 
-  createdById      String
-  createdBy        User    @relation("OrthoSignAtHomeCreatedBy", fields: [createdById], references: [id])
+  createdById String
+  createdBy   User   @relation("OrthoSignAtHomeCreatedBy", fields: [createdById], references: [id])
 
   treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
   patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -5296,16 +5632,16 @@ model OrthoRetentionRegimen {
   treatmentPlanId String @unique
   clinicId        String
 
-  upperRetainer        OrthoRetainerType?
-  upperDescription     String?
-  lowerRetainer        OrthoRetainerType?
-  lowerDescription     String?
-  fixedLingualPresent  Boolean                     @default(false)
-  fixedLingualGauge    OrthoRetainerArchwireGauge?
+  upperRetainer       OrthoRetainerType?
+  upperDescription    String?
+  lowerRetainer       OrthoRetainerType?
+  lowerDescription    String?
+  fixedLingualPresent Boolean                     @default(false)
+  fixedLingualGauge   OrthoRetainerArchwireGauge?
 
   /// Régimen de uso (texto editable). Default: "24/7 año 1 · nocturno años 2-5".
-  regimenDescription String @default("24/7 año 1 · nocturno años 2-5")
-  preSurveyEnabled  Boolean @default(true)
+  regimenDescription String  @default("24/7 año 1 · nocturno años 2-5")
+  preSurveyEnabled   Boolean @default(true)
 
   /// Fecha de debonding (aplica al avanzar fase a Retención).
   debondedAt DateTime?
@@ -5321,7 +5657,7 @@ model OrthoRetentionRegimen {
 }
 
 model OrthoRetainerCheckup {
-  id        String                      @id @default(uuid())
+  id        String @id @default(uuid())
   regimenId String
   clinicId  String
 
@@ -5344,21 +5680,21 @@ model OrthoRetainerCheckup {
 }
 
 model OrthoNpsSchedule {
-  id              String         @id @default(uuid())
+  id              String @id @default(uuid())
   treatmentPlanId String
   patientId       String
   clinicId        String
 
-  npsType     OrthoNpsType
-  scheduledAt DateTime
-  status      OrthoNpsStatus @default(SCHEDULED)
-  sentAt      DateTime?
-  respondedAt DateTime?
+  npsType               OrthoNpsType
+  scheduledAt           DateTime
+  status                OrthoNpsStatus @default(SCHEDULED)
+  sentAt                DateTime?
+  respondedAt           DateTime?
   /// Score 0-10. Cuando >=9 dispara trigger Google review.
-  npsScore       Int?
-  patientComment String?
+  npsScore              Int?
+  patientComment        String?
   /// True cuando se disparó automáticamente la solicitud de Google review.
-  googleReviewTriggered Boolean @default(false)
+  googleReviewTriggered Boolean        @default(false)
 
   treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
   patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -5379,10 +5715,10 @@ model OrthoReferralCode {
   clinicId        String
 
   /// Código personalizado del paciente (ej. "GABY26"). Único por clínica.
-  code         String
-  referralCount Int    @default(0)
+  code          String
+  referralCount Int     @default(0)
   /// Premio o descuento configurado (texto libre).
-  rewardLabel  String?
+  rewardLabel   String?
 
   treatmentPlan OrthodonticTreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
   patient       Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
