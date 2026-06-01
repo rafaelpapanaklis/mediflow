@@ -1,0 +1,17 @@
+import type { Metadata } from "next";
+import { AuthShell } from "@/components/public/auth/auth-shell";
+import { LoginVisual } from "@/components/public/auth/login/login-visual";
+import { LabLoginForm } from "@/components/laboratorios/lab-login-form";
+
+// Dynamic: el login no debe prerenderizarse (interactúa con sesión Supabase).
+export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Portal de laboratorios · MediFlow",
+  description: "Accede al panel de laboratorios dentales de MediFlow para gestionar tus servicios y órdenes.",
+  robots: { index: false, follow: false },
+};
+
+export default function LabLoginPage() {
+  return <AuthShell split="50/50" visual={<LoginVisual />} form={<LabLoginForm />} />;
+}
