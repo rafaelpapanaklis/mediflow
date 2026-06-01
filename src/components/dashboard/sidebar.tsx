@@ -215,6 +215,12 @@ const NAV_ITEMS: NavItemDef[] = [
     icon: ShoppingCart, permission: "suppliers.view" },
   { id: "proveedor-chat", section: "catalogo", label: "Chat proveedores", href: "/dashboard/proveedor-chat",
     icon: MessageSquare, permission: "suppliers.view" },
+  { id: "laboratorios",   section: "catalogo", label: "Laboratorios", href: "/dashboard/laboratorios",
+    icon: FlaskConical, permission: "suppliers.view" },
+  { id: "ordenes-laboratorio", section: "catalogo", label: "Mis órdenes de laboratorio", href: "/dashboard/ordenes-laboratorio",
+    icon: ClipboardList, permission: "suppliers.view" },
+  { id: "lab-chat",       section: "catalogo", label: "Chat con laboratorios", href: "/dashboard/lab-chat",
+    icon: MessageSquare, permission: "suppliers.view" },
 
   { id: "billing",        section: "admin", label: "Facturación",       href: "/dashboard/billing",       icon: CreditCard,     permission: "billing.view" },
   { id: "analytics",      section: "admin", label: "Analytics",         href: "/dashboard/analytics",     icon: BarChart3, adminOnly: true, permission: "analytics.view" },
