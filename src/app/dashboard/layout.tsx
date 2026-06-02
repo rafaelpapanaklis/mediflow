@@ -11,6 +11,7 @@ import { NewAppointmentProvider } from "@/components/dashboard/new-appointment/n
 import { NewPatientProvider } from "@/components/dashboard/new-patient/new-patient-provider";
 import { PatientContextBar } from "@/components/dashboard/patient-context-bar";
 import { ExpiredPlanModal } from "@/components/dashboard/expired-plan-modal";
+import { ChatLauncher } from "@/components/dashboard/chat/chat-launcher";
 import { prisma } from "@/lib/prisma";
 import { getActiveClinicModuleKeys } from "@/lib/clinical-shared/get-active-clinic-modules";
 
@@ -134,6 +135,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
       </div>
     </div>
     <ExpiredPlanModal isExpired={isExpired} currentPathname={pathname} />
+    {/* Ícono de chat flotante (FAB) permanente en todo el dashboard. Una sola
+        instancia aquí ⇒ visible exactamente una vez en cada ruta /dashboard/*. */}
+    <ChatLauncher />
     </NewAppointmentProvider>
     </NewPatientProvider>
     </ActiveConsultProvider>
