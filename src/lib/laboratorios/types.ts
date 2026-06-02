@@ -177,6 +177,7 @@ export interface DentalLabDTO {
   whatsapp: string | null;
   website: string | null;
   address: string | null;
+  mapsUrl?: string | null;
   city: string | null;
   state: string | null;
   logoUrl: string | null;
@@ -241,6 +242,8 @@ export interface DentalLabOrderDTO {
   id: string;
   orderNumber: string;
   clinicId: string;
+  clinicAddress?: string | null;
+  clinicMapsUrl?: string | null;
   labId: string;
   lab?: DentalLabDTO;
   serviceId: string | null;
