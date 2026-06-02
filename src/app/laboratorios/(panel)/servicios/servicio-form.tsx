@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Save, FlaskConical, DollarSign, Eye } from "lucide-react";
 import toast from "react-hot-toast";
 import { Drawer } from "@/components/ui/design-system/Drawer";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
@@ -120,6 +120,10 @@ export function ServicioForm(props: Props) {
       }
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div className="form-section__title">
+          <FlaskConical size={13} style={{ color: "var(--violet-400)" }} /> Datos del servicio
+          <span className="form-section__rule" />
+        </div>
         <div className="field-new">
           <label className="field-new__label">Tipo de servicio <span className="req">*</span></label>
           <select className="input-new" value={serviceKey} onChange={(e) => onKeyChange(e.target.value)}>
@@ -153,6 +157,10 @@ export function ServicioForm(props: Props) {
           />
         </div>
 
+        <div className="form-section__title">
+          <DollarSign size={13} style={{ color: "var(--success)" }} /> Precio y entrega
+          <span className="form-section__rule" />
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
           <div className="field-new">
             <label className="field-new__label">Precio desde (MXN) <span className="req">*</span></label>
@@ -218,7 +226,19 @@ export function ServicioForm(props: Props) {
           }}
         >
           <div>
-            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-1)" }}>Visible en el catálogo</div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 7,
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--text-1)",
+              }}
+            >
+              <Eye size={14} style={{ color: isActive ? "var(--violet-400)" : "var(--text-3)", transition: "color .15s" }} />
+              Visible en el catálogo
+            </div>
             <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>
               Si lo desactivas, las clínicas no podrán verlo ni solicitarlo.
             </div>
@@ -233,11 +253,12 @@ export function ServicioForm(props: Props) {
               width: 44,
               height: 24,
               borderRadius: 999,
-              border: "1px solid var(--border-strong)",
+              border: isActive ? "1px solid var(--border-brand)" : "1px solid var(--border-strong)",
               background: isActive ? "var(--brand)" : "var(--bg-elev-2)",
               position: "relative",
               cursor: "pointer",
-              transition: "background .15s",
+              transition: "background .15s, border-color .15s, box-shadow .15s",
+              boxShadow: isActive ? "0 0 0 3px var(--brand-soft)" : "none",
               flexShrink: 0,
             }}
           >

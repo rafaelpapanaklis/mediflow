@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { DENTAL_LAB_TRAFFIC, type DentalLabTrafficLevel } from "@/lib/laboratorios/types";
+import { Bike, Truck, Car, Gauge, Clock, type LucideIcon } from "lucide-react";
 
 const LEVELS: DentalLabTrafficLevel[] = ["LOW", "MEDIUM", "HIGH"];
 
@@ -14,6 +15,13 @@ const TONE_VARS: Record<"success" | "warning" | "danger", { color: string; soft:
   success: { color: "var(--success)", soft: "var(--success-soft)" },
   warning: { color: "var(--warning)", soft: "var(--warning-soft)" },
   danger: { color: "var(--danger)", soft: "var(--danger-soft)" },
+};
+
+// Icono de vehículo por nivel de tráfico (bici→despejado, moto→moderado, coche→denso).
+const VEHICLE_ICON: Record<"bike" | "motorcycle" | "car", LucideIcon> = {
+  bike: Bike,
+  motorcycle: Truck,
+  car: Car,
 };
 
 interface TrafficControlProps {
@@ -49,6 +57,8 @@ export function TrafficControl({
     note.trim() !== initialNote.trim();
 
   const meta = DENTAL_LAB_TRAFFIC[level];
+  const toneVars = TONE_VARS[meta.tone];
+  const MetaVehicleIcon = VEHICLE_ICON[meta.vehicle];
   const hasManual = minStr.trim() !== "" && maxStr.trim() !== "";
   const etaLabel = hasManual ? `${minStr.trim()}–${maxStr.trim()} min` : meta.rangeLabel;
 
@@ -95,6 +105,7 @@ export function TrafficControl({
           const m = DENTAL_LAB_TRAFFIC[lvl];
           const v = TONE_VARS[m.tone];
           const selected = lvl === level;
+          const VehicleIcon = VEHICLE_ICON[m.vehicle];
           return (
             <button
               key={lvl}
@@ -106,15 +117,33 @@ export function TrafficControl({
                 padding: "12px 14px",
                 borderRadius: "var(--radius)",
                 border: `1px solid ${selected ? v.color : "var(--border-soft)"}`,
-                background: selected ? v.soft : "transparent",
+                // Tinte muy sutil de su tono aun sin seleccionar; lleno al seleccionar.
+                background: selected
+                  ? v.soft
+                  : `color-mix(in srgb, ${v.soft} 35%, transparent)`,
                 cursor: canEdit ? "pointer" : "default",
                 display: "flex",
                 flexDirection: "column",
-                gap: 4,
-                transition: "border-color .15s, background .15s",
+                gap: 6,
+                boxShadow: selected ? `0 0 0 1px ${v.color}, 0 6px 16px -8px ${v.color}` : "none",
+                transition: "border-color .15s, background .15s, box-shadow .15s",
               }}
             >
               <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span
+                  style={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: 8,
+                    flexShrink: 0,
+                    display: "grid",
+                    placeItems: "center",
+                    background: v.soft,
+                    color: v.color,
+                  }}
+                >
+                  <VehicleIcon size={15} />
+                </span>
                 <span
                   style={{
                     width: 9,
@@ -134,20 +163,47 @@ export function TrafficControl({
         })}
       </div>
 
-      {/* ETA efectiva */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 12, color: "var(--text-3)" }}>Tiempo estimado de entrega:</span>
+      {/* ETA efectiva — mini-panel tintado del tono actual */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          flexWrap: "wrap",
+          padding: "10px 12px",
+          borderRadius: "var(--radius)",
+          background: `color-mix(in srgb, ${toneVars.soft} 60%, transparent)`,
+          border: `1px solid color-mix(in srgb, ${toneVars.color} 30%, transparent)`,
+        }}
+      >
+        <Clock size={15} style={{ color: toneVars.color, flexShrink: 0 }} />
+        <span style={{ fontSize: 12, color: "var(--text-2)" }}>Tiempo estimado de entrega:</span>
         <BadgeNew tone={meta.tone} dot>
           {etaLabel}
         </BadgeNew>
         {hasManual && <span style={{ fontSize: 11, color: "var(--text-3)" }}>(anulación manual)</span>}
       </div>
 
-      <p style={{ fontSize: 12, color: "var(--text-3)", margin: 0 }}>{meta.desc}</p>
+      {/* Nota descriptiva del nivel — panel tintado del tono actual */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "8px 12px",
+          borderRadius: "var(--radius)",
+          background: `color-mix(in srgb, ${toneVars.soft} 35%, transparent)`,
+          borderLeft: `2px solid ${toneVars.color}`,
+        }}
+      >
+        <MetaVehicleIcon size={14} style={{ color: toneVars.color, flexShrink: 0 }} />
+        <p style={{ fontSize: 12, color: "var(--text-2)", margin: 0 }}>{meta.desc}</p>
+      </div>
 
       {/* Anulación manual opcional */}
       <div className="form-section__title" style={{ marginTop: 4 }}>
-        Anulación manual (opcional) <span className="form-section__rule" />
+        <Gauge size={13} style={{ color: "var(--violet-400)" }} /> Anulación manual (opcional){" "}
+        <span className="form-section__rule" />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
         <div className="field-new">

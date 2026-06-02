@@ -24,6 +24,9 @@ import {
   Navigation,
   Gauge,
   Truck,
+  FlaskConical,
+  DollarSign,
+  Package,
 } from "lucide-react";
 import { CardNew, ButtonNew, BadgeNew } from "@/components/ui/design-system";
 import { fmtMXN } from "@/lib/format";
@@ -163,6 +166,15 @@ function TrafficBadge({ lab }: { lab: LabData }) {
   );
 }
 
+// Color-coding del tráfico (refuerzo visual [F]): tint suave de fondo, borde y
+// color de icono según el tono semántico del nivel (success / warning / danger).
+function trafficVars(tone: "success" | "warning" | "danger"): {
+  soft: string;
+  base: string;
+} {
+  return { soft: `var(--${tone}-soft)`, base: `var(--${tone})` };
+}
+
 function ServiceCard({
   service,
   onSelect,
@@ -171,18 +183,55 @@ function ServiceCard({
   onSelect: () => void;
 }) {
   const delivery = deliveryLabel(service);
+  const [hover, setHover] = useState(false);
 
   return (
     <div
       className="card"
-      style={{ display: "flex", flexDirection: "column", gap: 8, padding: 14, height: "100%" }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        padding: 14,
+        height: "100%",
+        borderColor: hover ? "var(--border-brand)" : undefined,
+        boxShadow: hover ? "0 12px 28px -16px rgba(124,58,237,0.55)" : undefined,
+        transform: hover ? "translateY(-2px)" : "translateY(0)",
+        transition: "transform .14s ease, box-shadow .14s ease, border-color .14s ease",
+      }}
     >
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
         <div
-          style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14, lineHeight: 1.3 }}
+          style={{
+            display: "inline-flex",
+            alignItems: "flex-start",
+            gap: 8,
+            color: "var(--text-1)",
+            fontWeight: 600,
+            fontSize: 14,
+            lineHeight: 1.3,
+            minWidth: 0,
+          }}
           title={service.name}
         >
-          {service.name}
+          <span
+            style={{
+              width: 26,
+              height: 26,
+              borderRadius: 8,
+              flexShrink: 0,
+              display: "grid",
+              placeItems: "center",
+              background: "var(--brand-soft)",
+              border: "1px solid var(--border-brand)",
+              color: "var(--violet-400)",
+            }}
+          >
+            <FlaskConical size={14} />
+          </span>
+          <span style={{ minWidth: 0 }}>{service.name}</span>
         </div>
         <BadgeNew tone="neutral">{serviceLabel(service.serviceKey)}</BadgeNew>
       </div>
@@ -217,7 +266,7 @@ function ServiceCard({
       )}
 
       <ButtonNew
-        variant="secondary"
+        variant={hover ? "primary" : "secondary"}
         size="sm"
         icon={<Send size={14} />}
         onClick={onSelect}
@@ -406,7 +455,10 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
               borderRadius: 12,
               overflow: "hidden",
               flexShrink: 0,
-              background: "var(--bg-elev-2)",
+              background: showLogo
+                ? "var(--bg-elev-2)"
+                : "linear-gradient(135deg, var(--violet-400), var(--brand))",
+              boxShadow: showLogo ? undefined : "0 8px 20px -10px rgba(124,58,237,0.6)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -420,7 +472,7 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                 style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
               />
             ) : (
-              <span style={{ color: "var(--text-2)", fontWeight: 700, fontSize: 24 }}>
+              <span style={{ color: "#fff", fontWeight: 700, fontSize: 24 }}>
                 {lab.name.charAt(0).toUpperCase()}
               </span>
             )}
@@ -558,7 +610,46 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
 
       {/* Ubicación del laboratorio + tráfico */}
       <div style={{ marginTop: 16 }}>
-        <CardNew title="Ubicación del laboratorio">
+        <CardNew>
+          {/* Acento superior [E] — única card destacada de la pantalla */}
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 3,
+              background: "linear-gradient(90deg, var(--violet-400), var(--brand))",
+            }}
+          />
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 12,
+              color: "var(--text-1)",
+              fontWeight: 600,
+              fontSize: 14,
+            }}
+          >
+            <span
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 9,
+                flexShrink: 0,
+                display: "grid",
+                placeItems: "center",
+                background: "var(--brand-soft)",
+                border: "1px solid var(--border-brand)",
+                color: "var(--violet-400)",
+              }}
+            >
+              <MapPin size={15} />
+            </span>
+            Ubicación del laboratorio
+          </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {hasLocation ? (
               <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 20px" }}>
@@ -588,16 +679,36 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
 
             <div
               style={{
+                position: "relative",
                 display: "flex",
                 alignItems: "flex-start",
                 gap: 10,
-                padding: "10px 12px",
+                padding: "12px 14px",
                 borderRadius: 10,
-                background: "var(--bg-elev)",
-                border: "1px solid var(--border-soft)",
+                overflow: "hidden",
+                background:
+                  "linear-gradient(135deg, var(--lab-map-from), var(--lab-map-to))",
+                border: `1px solid ${trafficVars(traffic.tone).base}`,
+                boxShadow: `inset 0 0 0 9999px ${trafficVars(traffic.tone).soft}`,
               }}
             >
-              <Gauge size={16} style={{ color: "var(--text-3)", marginTop: 2, flexShrink: 0 }} />
+              <span
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: 9,
+                  flexShrink: 0,
+                  marginTop: 1,
+                  display: "grid",
+                  placeItems: "center",
+                  background: trafficVars(traffic.tone).soft,
+                  border: `1px solid ${trafficVars(traffic.tone).base}`,
+                  color: trafficVars(traffic.tone).base,
+                  boxShadow: `0 0 12px -4px ${trafficVars(traffic.tone).base}`,
+                }}
+              >
+                <Gauge size={16} />
+              </span>
               <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <TrafficBadge lab={lab} />
@@ -605,7 +716,7 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                     tiempo estimado de recolección / entrega
                   </span>
                 </div>
-                <span style={{ color: "var(--text-3)", fontSize: 12, lineHeight: 1.45 }}>
+                <span style={{ color: "var(--text-2)", fontSize: 12, lineHeight: 1.45 }}>
                   {lab.trafficNote || traffic.desc}
                 </span>
               </div>
@@ -627,20 +738,35 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
           <CardNew>
             <div
               style={{
+                padding: "48px 24px",
+                textAlign: "center",
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
                 gap: 10,
-                padding: "32px 16px",
-                textAlign: "center",
-                color: "var(--text-3)",
               }}
             >
-              <Layers size={36} style={{ color: "var(--text-4)" }} />
-              <span style={{ fontSize: 14 }}>
+              <div
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 16,
+                  display: "grid",
+                  placeItems: "center",
+                  background: "var(--brand-soft)",
+                  border: "1px solid var(--border-brand)",
+                  color: "var(--violet-400)",
+                }}
+              >
+                <Layers size={26} />
+              </div>
+              <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>
+                Aún sin servicios con precio
+              </div>
+              <p style={{ color: "var(--text-3)", fontSize: 13, margin: 0, maxWidth: 340, lineHeight: 1.5 }}>
                 Este laboratorio aún no publicó servicios con precio. Puedes solicitar una orden
                 general con el botón “Solicitar orden”.
-              </span>
+              </p>
             </div>
           </CardNew>
         ) : (
@@ -678,7 +804,27 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
             }}
           >
             <div className="modal__header">
-              <Dialog.Title className="modal__title">Solicitar servicio</Dialog.Title>
+              <Dialog.Title
+                className="modal__title"
+                style={{ display: "inline-flex", alignItems: "center", gap: 9 }}
+              >
+                <span
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: 9,
+                    flexShrink: 0,
+                    display: "grid",
+                    placeItems: "center",
+                    color: "#fff",
+                    background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+                    boxShadow: "0 6px 16px -8px rgba(124,58,237,0.6)",
+                  }}
+                >
+                  <Send size={15} />
+                </span>
+                Solicitar servicio
+              </Dialog.Title>
               <Dialog.Close asChild>
                 <button type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label="Cerrar">
                   <X size={14} />
@@ -723,11 +869,21 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                       style={{
                         padding: "10px 12px",
                         borderRadius: 10,
-                        background: "var(--bg-elev)",
-                        border: "1px solid var(--border-soft)",
+                        background: "var(--brand-soft)",
+                        border: "1px solid var(--border-brand)",
                       }}
                     >
-                      <div style={{ color: "var(--text-3)", fontSize: 11, marginBottom: 4 }}>
+                      <div
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 5,
+                          color: "var(--violet-400)",
+                          fontSize: 11,
+                          marginBottom: 4,
+                        }}
+                      >
+                        <DollarSign size={12} />
                         Costo estimado
                       </div>
                       <div style={{ color: "var(--text-1)", fontWeight: 700, fontSize: 18 }}>
@@ -744,15 +900,25 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                       style={{
                         padding: "10px 12px",
                         borderRadius: 10,
-                        background: "var(--bg-elev)",
-                        border: "1px solid var(--border-soft)",
+                        background: trafficVars(traffic.tone).soft,
+                        border: `1px solid ${trafficVars(traffic.tone).base}`,
                       }}
                     >
-                      <div style={{ color: "var(--text-3)", fontSize: 11, marginBottom: 4 }}>
+                      <div
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 5,
+                          color: trafficVars(traffic.tone).base,
+                          fontSize: 11,
+                          marginBottom: 4,
+                        }}
+                      >
+                        <Truck size={12} />
                         Entrega estimada (ETA)
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <Truck size={14} style={{ color: "var(--text-3)" }} />
+                        <Truck size={14} style={{ color: trafficVars(traffic.tone).base }} />
                         <span style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>
                           {trafficEtaLabel(lab)}
                         </span>
@@ -773,11 +939,26 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                       gap: 10,
                       padding: "10px 12px",
                       borderRadius: 10,
-                      background: "var(--bg-elev)",
-                      border: "1px solid var(--border-soft)",
+                      background: "var(--info-soft)",
+                      border: "1px solid var(--info)",
                     }}
                   >
-                    <MapPin size={16} style={{ color: "var(--text-3)", marginTop: 2, flexShrink: 0 }} />
+                    <span
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 9,
+                        flexShrink: 0,
+                        marginTop: 1,
+                        display: "grid",
+                        placeItems: "center",
+                        background: "var(--info-soft)",
+                        border: "1px solid var(--info)",
+                        color: "var(--info)",
+                      }}
+                    >
+                      <Package size={15} />
+                    </span>
                     <div style={{ fontSize: 12, lineHeight: 1.5 }}>
                       <span style={{ color: "var(--text-2)" }}>Recolección: </span>
                       {clinic.address ? (
@@ -885,7 +1066,21 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                         }}
                         style={{ display: "none" }}
                       />
-                      <Upload size={18} />
+                      <span
+                        style={{
+                          width: 34,
+                          height: 34,
+                          borderRadius: 10,
+                          display: "grid",
+                          placeItems: "center",
+                          background: "var(--brand-soft)",
+                          border: "1px solid var(--border-brand)",
+                          color: "var(--violet-400)",
+                          marginBottom: 2,
+                        }}
+                      >
+                        <Upload size={18} />
+                      </span>
                       <span style={{ fontSize: 13, color: "var(--text-2)" }}>
                         Arrastra o haz clic para subir
                       </span>

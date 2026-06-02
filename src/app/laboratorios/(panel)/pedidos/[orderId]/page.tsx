@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, MapPin, FileText, Download } from "lucide-react";
+import { ArrowLeft, MapPin, FileText, Download, ClipboardList, Receipt, Clock, FlaskConical, Navigation } from "lucide-react";
 import { getDentalLabContext } from "@/lib/lab-auth";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency } from "@/lib/utils";
@@ -30,6 +30,19 @@ const ACTOR_LABELS: Record<DentalLabOrderActor, string> = {
   CLINIC: "Clínica",
   LAB: "Laboratorio",
   SYSTEM: "Sistema",
+};
+
+// Color del riel/punto del timeline según el tono semántico del estado.
+// (solo presentación — el mapeo tono↔estado lo define DENTAL_LAB_ORDER_STATUS)
+const TIMELINE_TONE_VARS: Record<
+  "info" | "brand" | "warning" | "success" | "neutral",
+  string
+> = {
+  info: "var(--info)",
+  brand: "var(--brand)",
+  warning: "var(--warning)",
+  success: "var(--success)",
+  neutral: "var(--text-3)",
 };
 
 export default async function LabOrderDetailPage({
@@ -84,6 +97,21 @@ export default async function LabOrderDetailPage({
         >
           <ArrowLeft size={14} />
         </Link>
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 12,
+            flexShrink: 0,
+            display: "grid",
+            placeItems: "center",
+            color: "#fff",
+            background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+            boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
+          }}
+        >
+          <ClipboardList size={20} />
+        </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <h1 className="mono" style={{ fontSize: 19, color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
             {order.orderNumber}
@@ -122,16 +150,47 @@ export default async function LabOrderDetailPage({
             {(order.clinic.address || order.clinic.mapsUrl) && (
               <div
                 style={{
-                  borderTop: "1px solid var(--border-soft)",
-                  paddingTop: 8,
-                  marginTop: 2,
+                  marginTop: 4,
+                  padding: "12px 12px",
+                  borderRadius: "var(--radius)",
+                  background: "var(--info-soft)",
+                  border: "1px solid rgba(59,130,246,0.2)",
                   display: "flex",
                   flexDirection: "column",
-                  gap: 4,
+                  gap: 6,
                 }}
               >
-                <div style={{ color: "var(--text-3)", fontSize: 11 }}>Dónde recoger el producto</div>
-                {order.clinic.address && <div style={{ color: "var(--text-2)" }}>{order.clinic.address}</div>}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    color: "var(--text-2)",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.4,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: 8,
+                      flexShrink: 0,
+                      display: "grid",
+                      placeItems: "center",
+                      background: "rgba(59,130,246,0.15)",
+                      color: "var(--info)",
+                    }}
+                  >
+                    <MapPin size={14} />
+                  </span>
+                  Dónde recoger el producto
+                </div>
+                {order.clinic.address && (
+                  <div style={{ color: "var(--text-1)", fontSize: 13 }}>{order.clinic.address}</div>
+                )}
                 {order.clinic.mapsUrl && (
                   <a
                     href={order.clinic.mapsUrl}
@@ -142,12 +201,13 @@ export default async function LabOrderDetailPage({
                       alignItems: "center",
                       gap: 6,
                       width: "fit-content",
-                      color: "var(--brand)",
-                      fontWeight: 500,
+                      color: "var(--info)",
+                      fontWeight: 600,
+                      fontSize: 13,
                       textDecoration: "none",
                     }}
                   >
-                    <MapPin size={13} />
+                    <Navigation size={13} />
                     Ver en Google Maps
                   </a>
                 )}
@@ -162,10 +222,27 @@ export default async function LabOrderDetailPage({
       {/* Servicio + paciente + desglose */}
       <CardNew title="Servicio solicitado">
         <div style={{ display: "flex", flexDirection: "column", gap: 14, fontSize: 13 }}>
-          <div>
-            <div style={{ color: "var(--text-3)", fontSize: 11, marginBottom: 2 }}>Servicio</div>
-            <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 15 }}>
-              {order.service?.name ?? "Servicio no especificado"}
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+            <span
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 10,
+                flexShrink: 0,
+                display: "grid",
+                placeItems: "center",
+                background: "var(--brand-soft)",
+                border: "1px solid var(--border-brand)",
+                color: "var(--violet-400)",
+              }}
+            >
+              <FlaskConical size={18} />
+            </span>
+            <div>
+              <div style={{ color: "var(--text-3)", fontSize: 11, marginBottom: 2 }}>Servicio</div>
+              <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 15 }}>
+                {order.service?.name ?? "Servicio no especificado"}
+              </div>
             </div>
           </div>
 
@@ -196,6 +273,22 @@ export default async function LabOrderDetailPage({
               gap: 6,
             }}
           >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                color: "var(--text-3)",
+                fontSize: 11,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: 0.4,
+                marginBottom: 2,
+              }}
+            >
+              <Receipt size={13} style={{ color: "var(--violet-400)" }} />
+              Desglose de precio
+            </div>
             <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-2)" }}>
               <span>Precio base</span>
               <span className="mono">{formatCurrency(order.basePrice)}</span>
@@ -206,9 +299,27 @@ export default async function LabOrderDetailPage({
                 <span className="mono">{formatCurrency(order.extrasTotal)}</span>
               </div>
             )}
-            <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-1)", fontWeight: 600 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                color: "var(--text-1)",
+                fontWeight: 600,
+                marginTop: 4,
+                padding: "10px 12px",
+                borderRadius: "var(--radius)",
+                background: "var(--brand-soft)",
+                border: "1px solid var(--border-brand)",
+              }}
+            >
               <span>Total</span>
-              <span className="mono" style={{ fontWeight: 700, fontSize: 14 }}>{formatCurrency(order.total)}</span>
+              <span
+                className="mono"
+                style={{ fontWeight: 700, fontSize: 16, color: "var(--violet-400)" }}
+              >
+                {formatCurrency(order.total)}
+              </span>
             </div>
           </div>
         </div>
@@ -217,8 +328,34 @@ export default async function LabOrderDetailPage({
       {/* Archivos adjuntos */}
       <CardNew title="Archivos adjuntos">
         {order.files.length === 0 ? (
-          <div style={{ color: "var(--text-3)", fontSize: 13 }}>
-            La clínica no adjuntó archivos a este pedido.
+          <div
+            style={{
+              padding: "48px 24px",
+              textAlign: "center",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <div
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 16,
+                display: "grid",
+                placeItems: "center",
+                background: "var(--brand-soft)",
+                border: "1px solid var(--border-brand)",
+                color: "var(--violet-400)",
+              }}
+            >
+              <FileText size={26} />
+            </div>
+            <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>Sin archivos adjuntos</div>
+            <p style={{ color: "var(--text-3)", fontSize: 13, margin: 0, maxWidth: 340, lineHeight: 1.5 }}>
+              La clínica no adjuntó archivos a este pedido. Si los envía, aparecerán aquí listos para descargar.
+            </p>
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -235,7 +372,19 @@ export default async function LabOrderDetailPage({
                   background: "var(--bg-elev)",
                 }}
               >
-                <div style={{ flexShrink: 0, color: "var(--text-3)", display: "grid", placeItems: "center" }}>
+                <div
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: 9,
+                    flexShrink: 0,
+                    color: "var(--violet-400)",
+                    background: "var(--brand-soft)",
+                    border: "1px solid var(--border-brand)",
+                    display: "grid",
+                    placeItems: "center",
+                  }}
+                >
                   <FileText size={16} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -289,23 +438,89 @@ export default async function LabOrderDetailPage({
       {/* Seguimiento (timeline de eventos) */}
       <CardNew title="Seguimiento del pedido">
         {order.events.length === 0 ? (
-          <div style={{ color: "var(--text-3)", fontSize: 13 }}>Sin eventos registrados todavía.</div>
+          <div
+            style={{
+              padding: "48px 24px",
+              textAlign: "center",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <div
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 16,
+                display: "grid",
+                placeItems: "center",
+                background: "var(--brand-soft)",
+                border: "1px solid var(--border-brand)",
+                color: "var(--violet-400)",
+              }}
+            >
+              <Clock size={26} />
+            </div>
+            <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>Aún no hay movimientos</div>
+            <p style={{ color: "var(--text-3)", fontSize: 13, margin: 0, maxWidth: 340, lineHeight: 1.5 }}>
+              El historial de este pedido se irá registrando aquí conforme cambie de estado.
+            </p>
+          </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {order.events.map((ev) => {
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {order.events.map((ev, idx) => {
               const meta = DENTAL_LAB_ORDER_STATUS[ev.status];
+              const dotColor = TIMELINE_TONE_VARS[meta.tone];
               const when = ev.at ?? ev.createdAt;
+              const isLast = idx === order.events.length - 1;
               const actorRoleLabel = ev.actorRole ? ACTOR_LABELS[ev.actorRole] : null;
               const who =
                 ev.actorName && actorRoleLabel
                   ? `${ev.actorName} · ${actorRoleLabel}`
                   : ev.actorName ?? actorRoleLabel ?? "—";
               return (
-                <div key={ev.id} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                  <div style={{ marginTop: 2, flexShrink: 0 }}>
-                    <BadgeNew tone={meta.tone} dot>{meta.label}</BadgeNew>
+                <div key={ev.id} style={{ display: "flex", gap: 14, alignItems: "stretch" }}>
+                  {/* Riel vertical + punto coloreado por tono del estado */}
+                  <div
+                    style={{
+                      position: "relative",
+                      width: 14,
+                      flexShrink: 0,
+                      display: "flex",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {!isLast && (
+                      <span
+                        style={{
+                          position: "absolute",
+                          top: 14,
+                          bottom: 0,
+                          width: 2,
+                          background: "var(--border-soft)",
+                        }}
+                      />
+                    )}
+                    <span
+                      style={{
+                        position: "relative",
+                        marginTop: 4,
+                        width: 12,
+                        height: 12,
+                        borderRadius: "50%",
+                        background: dotColor,
+                        border: "2px solid var(--bg-elev)",
+                        boxShadow: `0 0 0 3px color-mix(in srgb, ${dotColor} 22%, transparent)`,
+                        flexShrink: 0,
+                        alignSelf: "flex-start",
+                      }}
+                    />
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ flex: 1, minWidth: 0, paddingBottom: isLast ? 0 : 16 }}>
+                    <div style={{ marginBottom: 4 }}>
+                      <BadgeNew tone={meta.tone} dot>{meta.label}</BadgeNew>
+                    </div>
                     <div style={{ color: "var(--text-2)", fontSize: 12 }}>{who}</div>
                     {ev.detail && (
                       <div style={{ color: "var(--text-2)", fontSize: 13, marginTop: 2 }}>{ev.detail}</div>
@@ -327,13 +542,37 @@ export default async function LabOrderDetailPage({
           <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: 13 }}>
             {order.paymentMethod && (
               <div>
-                <div style={{ color: "var(--text-3)", fontSize: 11, marginBottom: 2 }}>Método de pago</div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    color: "var(--text-3)",
+                    fontSize: 11,
+                    marginBottom: 2,
+                  }}
+                >
+                  <Receipt size={12} style={{ color: "var(--violet-400)" }} />
+                  Método de pago
+                </div>
                 <div style={{ color: "var(--text-1)" }}>{order.paymentMethod}</div>
               </div>
             )}
             {order.notes && (
               <div>
-                <div style={{ color: "var(--text-3)", fontSize: 11, marginBottom: 2 }}>Notas</div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    color: "var(--text-3)",
+                    fontSize: 11,
+                    marginBottom: 2,
+                  }}
+                >
+                  <FileText size={12} style={{ color: "var(--violet-400)" }} />
+                  Notas
+                </div>
                 <p style={{ color: "var(--text-1)", whiteSpace: "pre-wrap", margin: 0 }}>{order.notes}</p>
               </div>
             )}

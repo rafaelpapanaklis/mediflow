@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import { Receipt, FileText } from "lucide-react";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import type { DentalLabFiscalDataDTO } from "@/lib/laboratorios/types";
@@ -101,11 +102,26 @@ export function FiscalForm({
   return (
     <CardNew>
       <div className="form-section__title">
-        Datos fiscales <span className="form-section__rule" />
+        <Receipt size={13} style={{ color: "var(--violet-400)" }} /> Datos fiscales{" "}
+        <span className="form-section__rule" />
       </div>
-      <p style={{ color: "var(--text-3)", fontSize: 12, marginTop: -4, marginBottom: 14 }}>
-        Se usan para emitir las facturas de tus servicios a las clínicas.
-      </p>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 10,
+          padding: "10px 12px",
+          marginBottom: 14,
+          borderRadius: "var(--radius)",
+          background: "var(--info-soft)",
+          border: "1px solid var(--border-soft)",
+        }}
+      >
+        <FileText size={15} style={{ color: "var(--info)", flexShrink: 0, marginTop: 1 }} />
+        <p style={{ color: "var(--text-2)", fontSize: 12, margin: 0, lineHeight: 1.5 }}>
+          Se usan para emitir las facturas de tus servicios a las clínicas.
+        </p>
+      </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <div className="field-new">

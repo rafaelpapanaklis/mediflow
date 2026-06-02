@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2, Pencil, Star, Loader2, Landmark, X } from "lucide-react";
+import { Plus, Trash2, Pencil, Star, Loader2, Landmark, X, CreditCard } from "lucide-react";
 import toast from "react-hot-toast";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
@@ -27,6 +27,7 @@ export function BancoForm({
   const [fields, setFields] = useState(blank());
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [hoverId, setHoverId] = useState<string | null>(null);
 
   async function reload() {
     const res = await fetch("/api/laboratorios/bank-accounts");
@@ -142,7 +143,8 @@ export function BancoForm({
   return (
     <CardNew>
       <div className="form-section__title">
-        Cuentas bancarias (SPEI) <span className="form-section__rule" />
+        <Landmark size={13} style={{ color: "var(--violet-400)" }} /> Cuentas bancarias (SPEI){" "}
+        <span className="form-section__rule" />
       </div>
       <p style={{ color: "var(--text-3)", fontSize: 12, marginTop: -4, marginBottom: 14 }}>
         Cuentas a las que las clínicas transferirán el pago de tus servicios.
@@ -152,23 +154,47 @@ export function BancoForm({
       {accounts.length === 0 ? (
         <div
           style={{
-            padding: "24px",
+            padding: "48px 24px",
             textAlign: "center",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 10,
             border: "1px dashed var(--border-strong)",
             borderRadius: 10,
-            color: "var(--text-3)",
-            fontSize: 13,
           }}
         >
-          Aún no agregas cuentas bancarias.
+          <div
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 16,
+              display: "grid",
+              placeItems: "center",
+              background: "var(--brand-soft)",
+              border: "1px solid var(--border-brand)",
+              color: "var(--violet-400)",
+            }}
+          >
+            <CreditCard size={26} />
+          </div>
+          <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>
+            Aún no agregas cuentas bancarias
+          </div>
+          <p style={{ color: "var(--text-3)", fontSize: 13, margin: 0, maxWidth: 340, lineHeight: 1.5 }}>
+            Agrega una cuenta CLABE para que las clínicas puedan transferirte el pago de tus servicios.
+          </p>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {accounts.map((a) => {
             const busy = busyId === a.id;
+            const hovered = hoverId === a.id;
             return (
               <div
                 key={a.id}
+                onMouseEnter={() => setHoverId(a.id)}
+                onMouseLeave={() => setHoverId((id) => (id === a.id ? null : id))}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -176,8 +202,11 @@ export function BancoForm({
                   gap: 12,
                   padding: "12px 14px",
                   borderRadius: 10,
-                  border: "1px solid var(--border-soft)",
+                  border: `1px solid ${hovered ? "var(--border-brand)" : "var(--border-soft)"}`,
                   background: "var(--bg-elev)",
+                  boxShadow: hovered ? "0 6px 16px -10px rgba(124,58,237,0.55)" : "none",
+                  transform: hovered ? "translateY(-1px)" : "none",
+                  transition: "transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease",
                   flexWrap: "wrap",
                 }}
               >
@@ -186,15 +215,15 @@ export function BancoForm({
                     style={{
                       width: 38,
                       height: 38,
-                      borderRadius: 8,
-                      background: "var(--bg-elev-2)",
-                      border: "1px solid var(--border-soft)",
+                      borderRadius: 10,
+                      background: "linear-gradient(135deg, var(--brand-softer), var(--brand-soft))",
+                      border: "1px solid var(--border-brand)",
                       display: "grid",
                       placeItems: "center",
                       flexShrink: 0,
                     }}
                   >
-                    <Landmark size={16} style={{ color: "var(--text-3)" }} />
+                    <Landmark size={16} style={{ color: "var(--violet-400)" }} />
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -268,7 +297,22 @@ export function BancoForm({
           }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
+              <span
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 7,
+                  display: "grid",
+                  placeItems: "center",
+                  background: "var(--brand-soft)",
+                  border: "1px solid var(--border-brand)",
+                  color: "var(--violet-400)",
+                  flexShrink: 0,
+                }}
+              >
+                {editingId ? <Pencil size={13} /> : <Plus size={13} />}
+              </span>
               {editingId ? "Editar cuenta" : "Nueva cuenta"}
             </div>
             <button

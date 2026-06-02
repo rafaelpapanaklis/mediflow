@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { Settings } from "lucide-react";
 import { getDentalLabContext } from "@/lib/lab-auth";
 import { prisma } from "@/lib/prisma";
 import type { DentalLabBankAccountDTO, DentalLabFiscalDataDTO } from "@/lib/laboratorios/types";
@@ -55,13 +56,30 @@ export default async function LabConfiguracionPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 760 }}>
-      <div>
-        <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
-          Configuración
-        </h1>
-        <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, marginBottom: 0 }}>
-          Administra el perfil de tu laboratorio, los datos fiscales y las cuentas para recibir pagos.
-        </p>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 14,
+            flexShrink: 0,
+            display: "grid",
+            placeItems: "center",
+            color: "#fff",
+            background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+            boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
+          }}
+        >
+          <Settings size={22} />
+        </div>
+        <div>
+          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+            Configuración
+          </h1>
+          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, marginBottom: 0 }}>
+            Administra el perfil de tu laboratorio, los datos fiscales y las cuentas para recibir pagos.
+          </p>
+        </div>
       </div>
 
       <PerfilForm

@@ -76,11 +76,12 @@ function LabLogo({ lab }: { lab: Lab }) {
         width: 48,
         height: 48,
         borderRadius: 10,
-        background: "var(--bg-elev-2)",
-        border: "1px solid var(--border-soft)",
+        background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+        border: "1px solid var(--border-brand)",
+        boxShadow: "0 6px 16px -8px rgba(124,58,237,0.55)",
         display: "grid",
         placeItems: "center",
-        color: "var(--text-2)",
+        color: "#fff",
         fontWeight: 600,
         fontSize: 18,
         flexShrink: 0,
@@ -108,9 +109,10 @@ function LabCard({ lab }: { lab: Lab }) {
         style={{
           cursor: "pointer",
           height: "100%",
-          transition: "border-color .12s, transform .12s",
+          transition: "border-color .12s, transform .12s, box-shadow .12s",
           borderColor: hover ? "var(--border-brand)" : undefined,
-          transform: hover ? "translateY(-1px)" : undefined,
+          transform: hover ? "translateY(-2px)" : undefined,
+          boxShadow: hover ? "0 12px 28px -14px rgba(124,58,237,0.55)" : undefined,
         }}
       >
         <div className="card__body" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -216,7 +218,7 @@ function LabCard({ lab }: { lab: Lab }) {
             }}
           >
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <Layers size={12} />
+              <Layers size={12} style={{ color: "var(--violet-400)" }} />
               {lab.serviceCount} {lab.serviceCount === 1 ? "servicio" : "servicios"}
             </span>
             <BadgeNew tone={DENTAL_LAB_TRAFFIC[lab.trafficLevel].tone} dot>
@@ -262,21 +264,38 @@ export function LaboratoriosClient({ initialLabs }: { initialLabs: Lab[] }) {
   return (
     <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
       {/* Header */}
-      <div style={{ marginBottom: 22 }}>
-        <h1
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 22 }}>
+        <div
           style={{
-            fontSize: "clamp(16px, 1.4vw, 22px)",
-            color: "var(--text-1)",
-            fontWeight: 600,
-            margin: 0,
+            width: 44,
+            height: 44,
+            borderRadius: 14,
+            flexShrink: 0,
+            display: "grid",
+            placeItems: "center",
+            color: "#fff",
+            background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+            boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
           }}
         >
-          Laboratorios
-        </h1>
-        <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
-          {initialLabs.length}{" "}
-          {initialLabs.length === 1 ? "laboratorio disponible" : "laboratorios disponibles"}
-        </p>
+          <FlaskConical size={22} />
+        </div>
+        <div>
+          <h1
+            style={{
+              fontSize: "clamp(16px, 1.4vw, 22px)",
+              color: "var(--text-1)",
+              fontWeight: 600,
+              margin: 0,
+            }}
+          >
+            Laboratorios
+          </h1>
+          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
+            {initialLabs.length}{" "}
+            {initialLabs.length === 1 ? "laboratorio disponible" : "laboratorios disponibles"}
+          </p>
+        </div>
       </div>
 
       {/* Filters */}
@@ -314,13 +333,15 @@ export function LaboratoriosClient({ initialLabs }: { initialLabs: Lab[] }) {
       {/* Content */}
       {initialLabs.length === 0 ? (
         <EmptyState
-          icon={<FlaskConical size={32} style={{ color: "var(--text-4)" }} />}
-          text="Aún no hay laboratorios disponibles"
+          icon={<FlaskConical size={26} />}
+          title="Aún no hay laboratorios disponibles"
+          text="En cuanto haya laboratorios dados de alta aparecerán aquí para que puedas explorarlos y solicitar órdenes."
         />
       ) : filtered.length === 0 ? (
         <EmptyState
-          icon={<Search size={32} style={{ color: "var(--text-4)" }} />}
-          text="Sin resultados"
+          icon={<Search size={26} />}
+          title="Sin resultados"
+          text="No encontramos laboratorios con esos criterios. Prueba con otra búsqueda o quita los filtros de servicio."
         />
       ) : (
         <div
@@ -356,11 +377,12 @@ function ServiceChip({
         padding: "5px 12px",
         borderRadius: 999,
         fontSize: 12,
-        fontWeight: 500,
+        fontWeight: active ? 600 : 500,
         cursor: "pointer",
-        color: active ? "var(--brand)" : "var(--text-2)",
+        color: active ? "var(--violet-400)" : "var(--text-2)",
         background: active ? "var(--brand-soft)" : "var(--bg-elev)",
         border: `1px solid ${active ? "var(--border-brand)" : "var(--border-soft)"}`,
+        boxShadow: active ? "0 0 0 3px var(--brand-softer)" : undefined,
         transition: "all .12s",
       }}
     >
@@ -369,11 +391,44 @@ function ServiceChip({
   );
 }
 
-function EmptyState({ icon, text }: { icon: React.ReactNode; text: string }) {
+function EmptyState({
+  icon,
+  title,
+  text,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  text: string;
+}) {
   return (
-    <div style={{ padding: "64px 24px", textAlign: "center" }}>
-      <div style={{ marginBottom: 12 }}>{icon}</div>
-      <p style={{ color: "var(--text-3)", fontSize: 13, margin: 0 }}>{text}</p>
+    <div
+      style={{
+        padding: "48px 24px",
+        textAlign: "center",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 10,
+      }}
+    >
+      <div
+        style={{
+          width: 56,
+          height: 56,
+          borderRadius: 16,
+          display: "grid",
+          placeItems: "center",
+          background: "var(--brand-soft)",
+          border: "1px solid var(--border-brand)",
+          color: "var(--violet-400)",
+        }}
+      >
+        {icon}
+      </div>
+      <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>{title}</div>
+      <p style={{ color: "var(--text-3)", fontSize: 13, margin: 0, maxWidth: 340, lineHeight: 1.5 }}>
+        {text}
+      </p>
     </div>
   );
 }

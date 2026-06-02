@@ -2,7 +2,16 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { DollarSign, ClipboardList, Wrench, ArrowRight } from "lucide-react";
+import {
+  DollarSign,
+  ClipboardList,
+  Wrench,
+  ArrowRight,
+  LayoutDashboard,
+  Gauge,
+  Layers,
+  Package,
+} from "lucide-react";
 import { getDentalLabContext } from "@/lib/lab-auth";
 import { getDentalLabDashboardData } from "@/lib/laboratorios/dashboard";
 import { formatCurrency } from "@/lib/utils";
@@ -68,20 +77,69 @@ export default async function LabHomePage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      <div>
-        <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
-          Hola, {ctx.lab.name}
-        </h1>
-        <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, marginBottom: 0, textTransform: "capitalize" }}>
-          {fechaStr}
-        </p>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 14,
+            flexShrink: 0,
+            display: "grid",
+            placeItems: "center",
+            color: "#fff",
+            background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+            boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
+          }}
+        >
+          <LayoutDashboard size={22} />
+        </div>
+        <div>
+          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+            Hola, {ctx.lab.name}
+          </h1>
+          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, marginBottom: 0, textTransform: "capitalize" }}>
+            {fechaStr}
+          </p>
+        </div>
       </div>
 
       {/* Control de tráfico del día */}
-      <CardNew
-        title="Nivel de tráfico hoy"
-        sub="Ajusta el tiempo estimado de entrega que ven las clínicas."
-      >
+      <CardNew>
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 3,
+            background: "linear-gradient(90deg, var(--violet-400), var(--brand))",
+          }}
+        />
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
+          <div
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 10,
+              flexShrink: 0,
+              display: "grid",
+              placeItems: "center",
+              background: "linear-gradient(135deg, var(--lab-map-from), var(--lab-map-to))",
+              border: "1px solid var(--border-brand)",
+              color: "var(--violet-400)",
+            }}
+          >
+            <Gauge size={18} />
+          </div>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)", letterSpacing: "-0.01em" }}>
+              Nivel de tráfico hoy
+            </div>
+            <div style={{ fontSize: 13, color: "var(--text-3)", marginTop: 2 }}>
+              Ajusta el tiempo estimado de entrega que ven las clínicas.
+            </div>
+          </div>
+        </div>
         <TrafficControl
           canEdit={canEditTraffic}
           initialLevel={ctx.lab.trafficLevel}
@@ -109,15 +167,59 @@ export default async function LabHomePage() {
       </div>
 
       {/* Pedidos por estatus */}
-      <CardNew
-        title="Pedidos por estatus"
-        sub={`${data.totalOrders} pedido${data.totalOrders === 1 ? "" : "s"} en total`}
-      >
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <CardNew>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+          <div
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 10,
+              flexShrink: 0,
+              display: "grid",
+              placeItems: "center",
+              background: "var(--brand-soft)",
+              border: "1px solid var(--border-brand)",
+              color: "var(--violet-400)",
+            }}
+          >
+            <Layers size={18} />
+          </div>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)", letterSpacing: "-0.01em" }}>
+              Pedidos por estatus
+            </div>
+            <div style={{ fontSize: 13, color: "var(--text-3)", marginTop: 2 }}>
+              {`${data.totalOrders} pedido${data.totalOrders === 1 ? "" : "s"} en total`}
+            </div>
+          </div>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
+            gap: 10,
+          }}
+        >
           {STATUS_ORDER.map((s) => (
-            <BadgeNew key={s} tone={DENTAL_LAB_ORDER_STATUS[s].tone} dot>
-              {DENTAL_LAB_ORDER_STATUS[s].label}: {data.statusCounts[s]}
-            </BadgeNew>
+            <div
+              key={s}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+                padding: "12px 14px",
+                borderRadius: "var(--radius)",
+                background: "var(--bg-elev-2)",
+                border: "1px solid var(--border-soft)",
+              }}
+            >
+              <BadgeNew tone={DENTAL_LAB_ORDER_STATUS[s].tone} dot>
+                {DENTAL_LAB_ORDER_STATUS[s].label}
+              </BadgeNew>
+              <span style={{ fontSize: 22, fontWeight: 700, color: "var(--text-1)", letterSpacing: "-0.02em" }}>
+                {data.statusCounts[s]}
+              </span>
+            </div>
           ))}
         </div>
       </CardNew>
@@ -135,8 +237,36 @@ export default async function LabHomePage() {
         }
       >
         {data.recentOrders.length === 0 ? (
-          <div style={{ padding: 40, textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
-            Aún no has recibido pedidos.
+          <div
+            style={{
+              padding: "48px 24px",
+              textAlign: "center",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <div
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 16,
+                display: "grid",
+                placeItems: "center",
+                background: "var(--brand-soft)",
+                border: "1px solid var(--border-brand)",
+                color: "var(--violet-400)",
+              }}
+            >
+              <Package size={26} />
+            </div>
+            <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>
+              Aún no has recibido pedidos
+            </div>
+            <p style={{ color: "var(--text-3)", fontSize: 13, margin: 0, maxWidth: 340, lineHeight: 1.5 }}>
+              Cuando una clínica te envíe una solicitud, aparecerá aquí para que la atiendas.
+            </p>
           </div>
         ) : (
           <div style={{ overflowX: "auto" }}>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Search, Wrench, Trash2, Pencil, Eye, EyeOff, Clock } from "lucide-react";
+import { Plus, Search, Wrench, Trash2, Pencil, Eye, EyeOff, Clock, DollarSign, BadgeCheck } from "lucide-react";
 import toast from "react-hot-toast";
 import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { CardNew } from "@/components/ui/design-system/card-new";
@@ -141,15 +141,32 @@ export function ServiciosClient({ initialServices }: { initialServices: DentalLa
           flexWrap: "wrap",
         }}
       >
-        <div>
-          <h1 style={{ fontSize: "clamp(16px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
-            Servicios
-          </h1>
-          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
-            {services.length === 0
-              ? "Tu catálogo está vacío"
-              : `${services.length} ${services.length === 1 ? "servicio" : "servicios"} en tu catálogo`}
-          </p>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 14,
+              flexShrink: 0,
+              display: "grid",
+              placeItems: "center",
+              color: "#fff",
+              background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+              boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
+            }}
+          >
+            <Wrench size={22} />
+          </div>
+          <div>
+            <h1 style={{ fontSize: "clamp(16px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+              Servicios
+            </h1>
+            <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
+              {services.length === 0
+                ? "Tu catálogo está vacío"
+                : `${services.length} ${services.length === 1 ? "servicio" : "servicios"} en tu catálogo`}
+            </p>
+          </div>
         </div>
         <ButtonNew variant="primary" icon={<Plus size={14} />} onClick={() => setForm({ mode: "create" })}>
           Nuevo servicio
@@ -159,8 +176,8 @@ export function ServiciosClient({ initialServices }: { initialServices: DentalLa
       {/* KPIs */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginBottom: 20 }}>
         <KpiCard label="Total servicios" value={String(kpis.total)} icon={Wrench} />
-        <KpiCard label="Activos" value={String(kpis.activos)} icon={Eye} />
-        <KpiCard label="Precio promedio" value={fmtMXN(kpis.avgPrice)} icon={Wrench} />
+        <KpiCard label="Activos" value={String(kpis.activos)} icon={BadgeCheck} />
+        <KpiCard label="Precio promedio" value={fmtMXN(kpis.avgPrice)} icon={DollarSign} />
         <KpiCard label="Entrega promedio" value={kpis.avgDays != null ? `${kpis.avgDays} días` : "—"} icon={Clock} />
       </div>
 
@@ -181,6 +198,7 @@ export function ServiciosClient({ initialServices }: { initialServices: DentalLa
               type="button"
               onClick={() => setTab(t.id)}
               className={`segment-new__btn ${tab === t.id ? "segment-new__btn--active" : ""}`}
+              style={tab === t.id ? { color: "var(--violet-400)", fontWeight: 600 } : undefined}
             >
               {t.label}
             </button>
@@ -191,17 +209,46 @@ export function ServiciosClient({ initialServices }: { initialServices: DentalLa
       {/* Lista */}
       <CardNew noPad>
         {filtered.length === 0 ? (
-          <div style={{ padding: "48px 24px", textAlign: "center" }}>
-            <Wrench size={32} style={{ color: "var(--text-4)", margin: "0 auto 12px" }} />
-            <p style={{ color: "var(--text-3)", fontSize: 13 }}>
+          <div
+            style={{
+              padding: "48px 24px",
+              textAlign: "center",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <div
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 16,
+                display: "grid",
+                placeItems: "center",
+                background: "var(--brand-soft)",
+                border: "1px solid var(--border-brand)",
+                color: "var(--violet-400)",
+              }}
+            >
+              <Wrench size={26} />
+            </div>
+            <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>
               {search
-                ? "Sin resultados para tu búsqueda"
+                ? "Sin resultados"
                 : tab === "todos"
-                  ? "Todavía no tienes servicios"
-                  : "No hay servicios en este estado"}
+                  ? "Aún no tienes servicios"
+                  : "Nada por aquí todavía"}
+            </div>
+            <p style={{ color: "var(--text-3)", fontSize: 13, margin: 0, maxWidth: 340, lineHeight: 1.5 }}>
+              {search
+                ? "Prueba con otro nombre o tipo de servicio para encontrar lo que buscas."
+                : tab === "todos"
+                  ? "Crea tu primer servicio para empezar a recibir órdenes en tu catálogo."
+                  : "No hay servicios en este estado por ahora."}
             </p>
             {services.length === 0 && (
-              <div style={{ marginTop: 12 }}>
+              <div style={{ marginTop: 4 }}>
                 <ButtonNew variant="primary" size="sm" icon={<Plus size={14} />} onClick={() => setForm({ mode: "create" })}>
                   Agregar primer servicio
                 </ButtonNew>
@@ -232,14 +279,14 @@ export function ServiciosClient({ initialServices }: { initialServices: DentalLa
                             width: 40,
                             height: 40,
                             borderRadius: 8,
-                            background: "var(--bg-elev-2)",
-                            border: "1px solid var(--border-soft)",
+                            background: "var(--brand-soft)",
+                            border: "1px solid var(--border-brand)",
                             display: "grid",
                             placeItems: "center",
                             flexShrink: 0,
                           }}
                         >
-                          <Wrench size={16} style={{ color: "var(--text-4)" }} />
+                          <Wrench size={16} style={{ color: "var(--violet-400)" }} />
                         </div>
                         <div style={{ minWidth: 0 }}>
                           <button

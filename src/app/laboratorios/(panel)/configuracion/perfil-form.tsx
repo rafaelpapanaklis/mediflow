@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import { ShieldCheck, BadgeCheck, Building2, MapPin, Navigation } from "lucide-react";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
@@ -139,7 +140,10 @@ export function PerfilForm({ canEdit, initial }: { canEdit: boolean; initial: Pe
       {!canEdit && (
         <div
           style={{
-            padding: "10px 14px",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "12px 14px",
             borderRadius: 10,
             background: "var(--warning-soft)",
             border: "1px solid rgba(245,158,11,0.25)",
@@ -147,14 +151,18 @@ export function PerfilForm({ canEdit, initial }: { canEdit: boolean; initial: Pe
             fontSize: 12,
           }}
         >
-          Solo el propietario o un gerente del laboratorio puede editar la configuración. Tienes acceso de solo lectura.
+          <ShieldCheck size={16} style={{ flexShrink: 0 }} />
+          <span>
+            Solo el propietario o un gerente del laboratorio puede editar la configuración. Tienes acceso de solo lectura.
+          </span>
         </div>
       )}
 
       {/* Estado de la cuenta (solo lectura) */}
       <CardNew>
         <div className="form-section__title">
-          Estado de la cuenta <span className="form-section__rule" />
+          <BadgeCheck size={13} style={{ color: "var(--success)" }} /> Estado de la cuenta{" "}
+          <span className="form-section__rule" />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 13 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
@@ -177,7 +185,8 @@ export function PerfilForm({ canEdit, initial }: { canEdit: boolean; initial: Pe
       {/* Datos del laboratorio */}
       <CardNew>
         <div className="form-section__title">
-          Datos del laboratorio <span className="form-section__rule" />
+          <Building2 size={13} style={{ color: "var(--violet-400)" }} /> Datos del laboratorio{" "}
+          <span className="form-section__rule" />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div className="field-new">
@@ -232,7 +241,8 @@ export function PerfilForm({ canEdit, initial }: { canEdit: boolean; initial: Pe
       {/* Contacto y ubicación */}
       <CardNew>
         <div className="form-section__title">
-          Contacto y ubicación <span className="form-section__rule" />
+          <MapPin size={13} style={{ color: "var(--info)" }} /> Contacto y ubicación{" "}
+          <span className="form-section__rule" />
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
           <div className="field-new">
@@ -291,7 +301,9 @@ export function PerfilForm({ canEdit, initial }: { canEdit: boolean; initial: Pe
             />
           </div>
           <div className="field-new" style={{ gridColumn: "1 / -1" }}>
-            <label className="field-new__label">Link de Google Maps</label>
+            <label className="field-new__label" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <Navigation size={12} style={{ color: "var(--info)" }} /> Link de Google Maps
+            </label>
             <input
               className="input-new"
               type="url"
