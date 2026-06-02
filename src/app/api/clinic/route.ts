@@ -52,6 +52,7 @@ export async function PATCH(req: NextRequest) {
   if (body.name        !== undefined) data.name        = body.name;
   if (body.city        !== undefined) data.city        = body.city        || null;
   if (body.address     !== undefined) data.address     = body.address     || null;
+  if (body.mapsUrl     !== undefined) data.mapsUrl     = body.mapsUrl     || null;
   if (body.phone       !== undefined) data.phone       = body.phone       || null;
   if (body.email       !== undefined) data.email       = body.email       || null;
   if (body.description !== undefined) data.description = body.description || null;

@@ -92,7 +92,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
     try {
       const res = await fetch("/api/clinic", {
         method: "PATCH", headers: { "Content-Type":"application/json" },
-        body: JSON.stringify({ name:clinic.name, city:clinic.city, phone:clinic.phone, email:clinic.email, address:clinic.address, description:clinic.description, isPublic, category:clinic.category, clues:clinic.clues, timezone:clinic.timezone })
+        body: JSON.stringify({ name:clinic.name, city:clinic.city, phone:clinic.phone, email:clinic.email, address:clinic.address, mapsUrl:clinic.mapsUrl, description:clinic.description, isPublic, category:clinic.category, clues:clinic.clues, timezone:clinic.timezone })
       });
       if (!res.ok) throw new Error();
       toast.success("Datos de la clínica actualizados");
@@ -264,6 +264,17 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5"><Label>Ciudad</Label><Input value={clinic.city ?? ""} onChange={e => setClinic((c: any) => ({ ...c, city: e.target.value }))} /></div>
             <div className="space-y-1.5"><Label>Dirección</Label><Input value={clinic.address ?? ""} onChange={e => setClinic((c: any) => ({ ...c, address: e.target.value }))} /></div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Link de Google Maps de tu clínica</Label>
+            <Input
+              placeholder="https://maps.app.goo.gl/…"
+              value={clinic.mapsUrl ?? ""}
+              onChange={e => setClinic((c: any) => ({ ...c, mapsUrl: e.target.value }))}
+            />
+            <div className="text-[11px] text-muted-foreground">
+              Pega el enlace de Google Maps; el laboratorio lo usará para recoger el producto en tu clínica.
+            </div>
           </div>
           <div className="space-y-1.5"><Label>Teléfono</Label><Input value={clinic.phone ?? ""} onChange={e => setClinic((c: any) => ({ ...c, phone: e.target.value }))} /></div>
           <div className="space-y-1.5"><Label>Email de contacto</Label><Input type="email" value={clinic.email ?? ""} onChange={e => setClinic((c: any) => ({ ...c, email: e.target.value }))} /></div>
