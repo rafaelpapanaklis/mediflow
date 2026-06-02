@@ -16,6 +16,7 @@ import {
   type DentalLabOrderStatus,
   type DentalLabPaymentStatus,
 } from "@/lib/laboratorios/types";
+import { TrafficControl } from "./traffic-control";
 
 // Etiquetas/tonos de pago: no viven en el contrato, se definen aquí (inline).
 const PAYMENT_LABELS: Record<DentalLabPaymentStatus, string> = {
@@ -54,6 +55,17 @@ export default async function LabHomePage() {
     year: "numeric",
   });
 
+  const canEditTraffic =
+    ctx.status === "APPROVED" && (ctx.role === "OWNER" || ctx.role === "MANAGER");
+  const trafficUpdatedLabel = ctx.lab.trafficUpdatedAt
+    ? new Date(ctx.lab.trafficUpdatedAt).toLocaleString("es-MX", {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       <div>
@@ -64,6 +76,21 @@ export default async function LabHomePage() {
           {fechaStr}
         </p>
       </div>
+
+      {/* Control de tráfico del día */}
+      <CardNew
+        title="Nivel de tráfico hoy"
+        sub="Ajusta el tiempo estimado de entrega que ven las clínicas."
+      >
+        <TrafficControl
+          canEdit={canEditTraffic}
+          initialLevel={ctx.lab.trafficLevel}
+          initialManualMin={ctx.lab.trafficManualMin}
+          initialManualMax={ctx.lab.trafficManualMax}
+          initialNote={ctx.lab.trafficNote ?? ""}
+          updatedAtLabel={trafficUpdatedLabel}
+        />
+      </CardNew>
 
       {/* KPIs */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 14 }}>

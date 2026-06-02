@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { CardNew } from "@/components/ui/design-system/card-new";
@@ -19,6 +19,9 @@ interface PerfilInitial {
   website: string;
   description: string;
   address: string;
+  // Opcional: la página de configuración (otro dueño) no lo pasa en `initial`,
+  // así que el formulario lo carga por su cuenta vía GET /api/laboratorios/profile.
+  mapsUrl?: string;
   city: string;
   state: string;
   founded: number | null;
@@ -42,9 +45,41 @@ export function PerfilForm({ canEdit, initial }: { canEdit: boolean; initial: Pe
   const [website, setWebsite] = useState(initial.website);
   const [description, setDescription] = useState(initial.description);
   const [address, setAddress] = useState(initial.address);
+  const [mapsUrl, setMapsUrl] = useState(initial.mapsUrl ?? "");
+  // `initial` no trae mapsUrl (lo construye otra página): lo cargamos por GET
+  // solo para PREFILL/mostrar. El guardado NUNCA manda mapsUrl salvo que el
+  // usuario lo edite (mapsTouched) — así una carga vacía o un GET fallido jamás
+  // pisan el valor ya guardado, y el input del usuario nunca se descarta.
+  const [mapsTouched, setMapsTouched] = useState(false);
+  const mapsTouchedRef = useRef(false);
   const [city, setCity] = useState(initial.city);
   const [state, setState] = useState(initial.state);
   const [founded, setFounded] = useState(initial.founded != null ? String(initial.founded) : "");
+
+  // Prefill best-effort del mapsUrl actual (no viene en `initial`). Si falla,
+  // el input queda vacío pero el guardado no manda mapsUrl (no está tocado), así
+  // que no se pierde nada. No pisamos lo que el usuario ya esté escribiendo.
+  useEffect(() => {
+    if (initial.mapsUrl !== undefined) return;
+    let active = true;
+    fetch("/api/laboratorios/profile")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!active || !d || mapsTouchedRef.current) return;
+        if (typeof d.mapsUrl === "string") setMapsUrl(d.mapsUrl);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function onMapsChange(v: string) {
+    mapsTouchedRef.current = true;
+    setMapsTouched(true);
+    setMapsUrl(v);
+  }
 
   async function save() {
     if (!name.trim()) {
@@ -58,23 +93,33 @@ export function PerfilForm({ canEdit, initial }: { canEdit: boolean; initial: Pe
         return;
       }
     }
+    const mapsTrimmed = mapsUrl.trim();
+    if (mapsTouched && mapsTrimmed !== "" && !/^https?:\/\//i.test(mapsTrimmed)) {
+      toast.error("El enlace de Google Maps debe empezar con http:// o https://.");
+      return;
+    }
     setSaving(true);
     try {
+      const payload: Record<string, unknown> = {
+        name,
+        rfc,
+        phone,
+        whatsapp,
+        website,
+        description,
+        address,
+        city,
+        state,
+        founded: founded.trim() === "" ? null : Math.floor(Number(founded)),
+      };
+      // Solo mandamos mapsUrl si el usuario lo editó; si no lo tocó, lo omitimos
+      // y el backend deja el valor guardado intacto (undefined = no cambiar).
+      if (mapsTouched) payload.mapsUrl = mapsUrl;
+
       const res = await fetch("/api/laboratorios/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          rfc,
-          phone,
-          whatsapp,
-          website,
-          description,
-          address,
-          city,
-          state,
-          founded: founded.trim() === "" ? null : Math.floor(Number(founded)),
-        }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
@@ -244,6 +289,20 @@ export function PerfilForm({ canEdit, initial }: { canEdit: boolean; initial: Pe
               onChange={(e) => setAddress(e.target.value)}
               disabled={!canEdit || saving}
             />
+          </div>
+          <div className="field-new" style={{ gridColumn: "1 / -1" }}>
+            <label className="field-new__label">Link de Google Maps</label>
+            <input
+              className="input-new"
+              type="url"
+              value={mapsUrl}
+              onChange={(e) => onMapsChange(e.target.value)}
+              disabled={!canEdit || saving}
+              placeholder="https://maps.google.com/…"
+            />
+            <span style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
+              Pega el enlace de tu ubicación para que las clínicas te encuentren.
+            </span>
           </div>
         </div>
       </CardNew>

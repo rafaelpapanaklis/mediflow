@@ -54,9 +54,28 @@ export async function PATCH(req: NextRequest) {
   const whatsapp = str(b.whatsapp);
   const website = str(b.website);
   const address = str(b.address);
+  const mapsUrl = str(b.mapsUrl);
   const city = str(b.city);
   const state = str(b.state);
   const description = str(b.description);
+
+  // mapsUrl: si viene con valor, exige una URL http(s) válida (evita guardar
+  // esquemas peligrosos como javascript:/data: que luego se renderizan como href).
+  if (mapsUrl !== undefined && mapsUrl !== "") {
+    let validUrl = false;
+    try {
+      const u = new URL(mapsUrl);
+      validUrl = u.protocol === "http:" || u.protocol === "https:";
+    } catch {
+      validUrl = false;
+    }
+    if (!validUrl) {
+      return NextResponse.json(
+        { error: "El enlace de Google Maps no es válido." },
+        { status: 400 },
+      );
+    }
+  }
 
   // founded: año opcional. undefined = no cambiar; ""/null = limpiar; entero válido.
   let founded: number | null | undefined = undefined;
@@ -79,6 +98,7 @@ export async function PATCH(req: NextRequest) {
     whatsapp,
     website,
     address,
+    mapsUrl,
     city,
     state,
     description,
@@ -97,6 +117,7 @@ export async function PATCH(req: NextRequest) {
       ...(whatsapp !== undefined ? { whatsapp: whatsapp || null } : {}),
       ...(website !== undefined ? { website: website || null } : {}),
       ...(address !== undefined ? { address: address || null } : {}),
+      ...(mapsUrl !== undefined ? { mapsUrl: mapsUrl || null } : {}),
       ...(city !== undefined ? { city: city || null } : {}),
       ...(state !== undefined ? { state: state || null } : {}),
       ...(description !== undefined ? { description: description || null } : {}),
