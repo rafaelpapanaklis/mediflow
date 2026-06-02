@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getSupplierContext } from "@/lib/supplier-auth";
 import { prisma } from "@/lib/prisma";
 import { canTransition } from "@/lib/suppliers/orders-shared";
+import { isB2BPaymentMethod } from "@/lib/payments-b2b";
 import type { SupplierOrderStatus, SupplierPaymentStatus } from "@/lib/suppliers/types";
 
 export const dynamic = "force-dynamic";
@@ -52,10 +53,17 @@ export async function PATCH(
   } catch {
     return NextResponse.json({ error: "Cuerpo de la solicitud inválido." }, { status: 400 });
   }
-  const payload = (body ?? {}) as { status?: unknown; paymentStatus?: unknown };
+  const payload = (body ?? {}) as {
+    status?: unknown;
+    paymentStatus?: unknown;
+    paymentMethod?: unknown;
+  };
 
   const nextStatus = typeof payload.status === "string" ? payload.status : undefined;
   const nextPayment = typeof payload.paymentStatus === "string" ? payload.paymentStatus : undefined;
+  // El vendedor puede precisar con qué método se liquidó al marcar pagado.
+  const nextMethod =
+    typeof payload.paymentMethod === "string" ? payload.paymentMethod : undefined;
 
   if (nextStatus === undefined && nextPayment === undefined) {
     return NextResponse.json({ error: "Nada que actualizar." }, { status: 400 });
@@ -66,11 +74,14 @@ export async function PATCH(
   if (nextPayment !== undefined && !(VALID_PAYMENTS as readonly string[]).includes(nextPayment)) {
     return NextResponse.json({ error: "Estado de pago inválido." }, { status: 400 });
   }
+  if (nextMethod !== undefined && !isB2BPaymentMethod(nextMethod)) {
+    return NextResponse.json({ error: "Método de pago inválido." }, { status: 400 });
+  }
 
   // Multi-tenant: confirmar que el pedido es de ESTE proveedor antes de tocarlo.
   const order = await prisma.supplierOrder.findFirst({
     where: { id: params.orderId, supplierId: ctx.supplierId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, paymentMethod: true },
   });
   if (!order) return NextResponse.json({ error: "Pedido no encontrado." }, { status: 404 });
 
@@ -86,11 +97,28 @@ export async function PATCH(
     );
   }
 
+  // El vendedor marca pagado a mano SOLO transferencia/efectivo. MercadoPago
+  // lo confirma exclusivamente el webhook, así que bloqueamos el PAID manual
+  // sobre órdenes cuyo método efectivo es MercadoPago (regla del spec).
+  const effectiveMethod = nextMethod ?? order.paymentMethod;
+  if (nextPayment === "PAID" && effectiveMethod === "MERCADOPAGO") {
+    return NextResponse.json(
+      { error: "Las órdenes con MercadoPago se marcan como pagadas al confirmarse el pago en línea." },
+      { status: 409 },
+    );
+  }
+
+  // El vendedor marca pagado a mano (transferencia/efectivo). MercadoPago lo
+  // hace el webhook. Al pasar a PAID sellamos paidAt; al volver a UNPAID lo
+  // limpiamos para no dejar una fecha de pago colgada.
   const updated = await prisma.supplierOrder.update({
     where: { id: order.id },
     data: {
       ...(nextStatus !== undefined ? { status: nextStatus as SupplierOrderStatus } : {}),
       ...(nextPayment !== undefined ? { paymentStatus: nextPayment as SupplierPaymentStatus } : {}),
+      ...(nextPayment === "PAID" ? { paidAt: new Date() } : {}),
+      ...(nextPayment === "UNPAID" ? { paidAt: null } : {}),
+      ...(nextMethod !== undefined ? { paymentMethod: nextMethod } : {}),
     },
     include: {
       clinic: { select: { name: true } },

@@ -28,8 +28,8 @@ import {
   type SupplierPaymentStatus,
   SUPPLIER_ORDER_STATUS_LABELS,
   SUPPLIER_PAYMENT_STATUS_LABELS,
-  SUPPLIER_PAYMENT_METHOD_OPTIONS,
 } from "@/lib/suppliers/types";
+import { B2B_PAYMENT_METHOD_LABELS, type B2BPaymentMethod } from "@/lib/payments-b2b";
 
 type BadgeTone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
 
@@ -547,11 +547,12 @@ function CheckoutModal({
 }) {
   const open = cart !== null;
 
-  // Opciones de pago: las del proveedor si existen, si no el catálogo global.
-  const paymentOptions: readonly string[] =
-    cart?.supplier?.paymentMethods && cart.supplier.paymentMethods.length > 0
-      ? cart.supplier.paymentMethods
-      : SUPPLIER_PAYMENT_METHOD_OPTIONS;
+  // Métodos de pago: SÓLO los que el proveedor tiene habilitados (rails B2B).
+  const s = cart?.supplier;
+  const paymentOptions: B2BPaymentMethod[] = [];
+  if (s?.payTransferEnabled) paymentOptions.push("TRANSFER");
+  if (s?.payMercadoPagoEnabled) paymentOptions.push("MERCADOPAGO");
+  if (s?.payCashEnabled) paymentOptions.push("CASH");
 
   const [paymentMethod, setPaymentMethod] = useState<string>("");
   const [notes, setNotes] = useState("");
@@ -566,6 +567,8 @@ function CheckoutModal({
     setNotes("");
     setSubmitting(false);
   }
+
+  const noMethods = paymentOptions.length === 0;
 
   async function submit() {
     if (!cart) return;
@@ -628,21 +631,65 @@ function CheckoutModal({
 
           <div className="modal__body">
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-              {/* Método de pago */}
-              <div className="field-new">
-                <label className="field-new__label">Método de pago</label>
-                <select
-                  className="input-new"
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
+              {noMethods ? (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: 10,
+                    padding: "10px 12px",
+                    background: "var(--warning-soft)",
+                    border: "1px solid rgba(245,158,11,0.25)",
+                    borderRadius: 10,
+                  }}
                 >
-                  {paymentOptions.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  <Info size={16} style={{ color: "#fcd34d", flexShrink: 0, marginTop: 1 }} />
+                  <span style={{ fontSize: 12, color: "#fcd34d", lineHeight: 1.5 }}>
+                    Este proveedor aún no ha configurado métodos de pago. Contáctalo por chat para
+                    coordinar el pago.
+                  </span>
+                </div>
+              ) : (
+                <>
+                  {/* Método de pago */}
+                  <div className="field-new">
+                    <label className="field-new__label">Método de pago</label>
+                    <select
+                      className="input-new"
+                      value={paymentMethod}
+                      onChange={(e) => setPaymentMethod(e.target.value)}
+                    >
+                      {paymentOptions.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {B2B_PAYMENT_METHOD_LABELS[opt]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Aviso según método elegido */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 10,
+                      padding: "10px 12px",
+                      background: "var(--bg-elev-2)",
+                      border: "1px solid var(--border-soft)",
+                      borderRadius: 10,
+                    }}
+                  >
+                    <Info size={16} style={{ color: "var(--text-3)", flexShrink: 0, marginTop: 1 }} />
+                    <span style={{ fontSize: 12, color: "var(--text-2)", lineHeight: 1.5 }}>
+                      {paymentMethod === "MERCADOPAGO"
+                        ? "Podrás pagar en línea con MercadoPago desde el detalle del pedido."
+                        : paymentMethod === "TRANSFER"
+                          ? "Verás los datos bancarios (CLABE) del proveedor en el detalle del pedido."
+                          : "Pagas en efectivo al recibir el pedido."}
+                    </span>
+                  </div>
+                </>
+              )}
 
               {/* Notas */}
               <div className="field-new">
@@ -655,24 +702,6 @@ function CheckoutModal({
                   onChange={(e) => setNotes(e.target.value)}
                 />
               </div>
-
-              {/* Aviso de pago offline */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: 10,
-                  padding: "10px 12px",
-                  background: "var(--bg-elev-2)",
-                  border: "1px solid var(--border-soft)",
-                  borderRadius: 10,
-                }}
-              >
-                <Info size={16} style={{ color: "var(--text-3)", flexShrink: 0, marginTop: 1 }} />
-                <span style={{ fontSize: 12, color: "var(--text-2)", lineHeight: 1.5 }}>
-                  El pago se acuerda directamente con el proveedor (no hay cobro en línea).
-                </span>
-              </div>
             </div>
           </div>
 
@@ -682,7 +711,7 @@ function CheckoutModal({
                 Cancelar
               </ButtonNew>
             </Dialog.Close>
-            <ButtonNew variant="primary" onClick={submit} disabled={submitting}>
+            <ButtonNew variant="primary" onClick={submit} disabled={submitting || noMethods}>
               {submitting ? "Creando…" : "Confirmar pedido"}
             </ButtonNew>
           </div>

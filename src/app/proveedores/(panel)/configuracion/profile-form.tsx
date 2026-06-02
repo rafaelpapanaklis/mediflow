@@ -3,12 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import { Landmark, Wallet, Banknote } from "lucide-react";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import {
   SUPPLIER_CATEGORY_OPTIONS,
-  SUPPLIER_PAYMENT_METHOD_OPTIONS,
   SUPPLIER_STATUS_LABELS,
 } from "@/lib/suppliers/types";
 import type { SupplierStatus } from "@/lib/suppliers/types";
@@ -25,7 +25,10 @@ interface ProfileInitial {
   state: string;
   description: string;
   categories: string[];
-  paymentMethods: string[];
+  payTransferEnabled: boolean;
+  payMercadoPagoEnabled: boolean;
+  payCashEnabled: boolean;
+  mpConnected: boolean;
 }
 
 const STATUS_TONE: Record<SupplierStatus, "success" | "warning" | "danger"> = {
@@ -47,7 +50,14 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
   const [state, setState] = useState(initial.state);
   const [description, setDescription] = useState(initial.description);
   const [categories, setCategories] = useState<string[]>(initial.categories);
-  const [paymentMethods, setPaymentMethods] = useState<string[]>(initial.paymentMethods);
+
+  // ── Cobros B2B ──────────────────────────────────────────────────────
+  const [payTransferEnabled, setPayTransferEnabled] = useState(initial.payTransferEnabled);
+  const [payMercadoPagoEnabled, setPayMercadoPagoEnabled] = useState(initial.payMercadoPagoEnabled);
+  const [payCashEnabled, setPayCashEnabled] = useState(initial.payCashEnabled);
+  // El token guardado nunca llega al cliente; sólo sabemos si está conectado.
+  const [mpConnected, setMpConnected] = useState(initial.mpConnected);
+  const [mpToken, setMpToken] = useState(""); // vacío = no cambiar al guardar
 
   function toggle(list: string[], setList: (v: string[]) => void, value: string) {
     if (!canEdit) return;
@@ -73,17 +83,48 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
           state,
           description,
           categories,
-          paymentMethods,
+          payTransferEnabled,
+          payMercadoPagoEnabled,
+          payCashEnabled,
+          // Sólo enviamos el token si el proveedor escribió uno nuevo.
+          ...(mpToken.trim() ? { mpAccessToken: mpToken.trim() } : {}),
         }),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.error ?? "No se pudo guardar el perfil.");
       }
+      if (mpToken.trim()) {
+        setMpConnected(true);
+        setMpToken("");
+      }
       toast.success("Perfil actualizado");
       router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Error al guardar");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function disconnectMp() {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/proveedores/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mpAccessToken: "" }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error ?? "No se pudo desconectar MercadoPago.");
+      }
+      setMpConnected(false);
+      setMpToken("");
+      toast.success("MercadoPago desconectado");
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error al desconectar");
     } finally {
       setSaving(false);
     }
@@ -246,24 +287,91 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
         </div>
       </CardNew>
 
-      {/* Métodos de pago */}
+      {/* Cobros — métodos de pago B2B que aceptas de las clínicas */}
       <CardNew>
         <div className="form-section__title">
-          Métodos de pago aceptados <span className="form-section__rule" />
+          Cobros (pagos de clínicas) <span className="form-section__rule" />
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {SUPPLIER_PAYMENT_METHOD_OPTIONS.map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              className="tag-new"
-              style={chip(paymentMethods.includes(opt))}
-              disabled={!canEdit || saving}
-              onClick={() => toggle(paymentMethods, setPaymentMethods, opt)}
+        <p style={{ color: "var(--text-3)", fontSize: 12, marginTop: -4, marginBottom: 14 }}>
+          Activa los métodos por los que aceptas recibir el pago de tus pedidos. Las clínicas sólo
+          verán los que tengas habilitados al hacer el checkout.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <PayToggle
+            icon={<Landmark size={16} style={{ color: "var(--violet-400)" }} />}
+            title="Transferencia (SPEI)"
+            subtitle="La clínica transfiere a tus cuentas CLABE."
+            checked={payTransferEnabled}
+            disabled={!canEdit || saving}
+            onChange={setPayTransferEnabled}
+          />
+          <PayToggle
+            icon={<Wallet size={16} style={{ color: "var(--violet-400)" }} />}
+            title="MercadoPago"
+            subtitle="Cobro en línea directo a tu cuenta de MercadoPago."
+            checked={payMercadoPagoEnabled}
+            disabled={!canEdit || saving}
+            onChange={setPayMercadoPagoEnabled}
+          />
+          <PayToggle
+            icon={<Banknote size={16} style={{ color: "var(--violet-400)" }} />}
+            title="Efectivo"
+            subtitle="La clínica paga en efectivo al recibir el pedido."
+            checked={payCashEnabled}
+            disabled={!canEdit || saving}
+            onChange={setPayCashEnabled}
+          />
+
+          {/* Token de MercadoPago (sólo si el método está activo) */}
+          {payMercadoPagoEnabled && (
+            <div
+              style={{
+                marginTop: 4,
+                padding: 14,
+                borderRadius: 10,
+                border: "1px solid var(--border-soft)",
+                background: "var(--bg-elev)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+              }}
             >
-              {opt}
-            </button>
-          ))}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
+                  Access Token de MercadoPago
+                </span>
+                <BadgeNew tone={mpConnected ? "success" : "warning"} dot>
+                  {mpConnected ? "Conectado" : "Sin conectar"}
+                </BadgeNew>
+              </div>
+              <div className="field-new">
+                <input
+                  className="input-new"
+                  type="password"
+                  value={mpToken}
+                  onChange={(e) => setMpToken(e.target.value)}
+                  disabled={!canEdit || saving}
+                  autoComplete="off"
+                  placeholder={
+                    mpConnected
+                      ? "Token guardado — escribe uno nuevo para reemplazarlo"
+                      : "Pega tu Access Token (APP_USR-…)"
+                  }
+                />
+              </div>
+              <p style={{ fontSize: 11, color: "var(--text-3)", margin: 0, lineHeight: 1.5 }}>
+                El cobro va directo a tu cuenta. Tu token nunca se muestra ni se comparte con las
+                clínicas; sólo se guarda de forma segura.
+              </p>
+              {canEdit && mpConnected && (
+                <div>
+                  <ButtonNew variant="ghost" type="button" onClick={disconnectMp} disabled={saving}>
+                    Desconectar MercadoPago
+                  </ButtonNew>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </CardNew>
 
@@ -275,5 +383,88 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
         </div>
       )}
     </div>
+  );
+}
+
+// ── Fila de método de cobro con switch on/off ───────────────────────────
+function PayToggle({
+  icon,
+  title,
+  subtitle,
+  checked,
+  disabled,
+  onChange,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => !disabled && onChange(!checked)}
+      disabled={disabled}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "12px 14px",
+        borderRadius: 10,
+        border: `1px solid ${checked ? "var(--border-brand)" : "var(--border-soft)"}`,
+        background: checked ? "var(--brand-soft)" : "var(--bg-elev)",
+        cursor: disabled ? "default" : "pointer",
+        textAlign: "left",
+        width: "100%",
+        transition: "border-color .15s, background .15s",
+        fontFamily: "inherit",
+      }}
+    >
+      <span
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: 10,
+          display: "grid",
+          placeItems: "center",
+          background: "var(--bg-elev-2)",
+          border: "1px solid var(--border-soft)",
+          flexShrink: 0,
+        }}
+      >
+        {icon}
+      </span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{title}</span>
+        <span style={{ display: "block", fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>{subtitle}</span>
+      </span>
+      <span
+        aria-hidden
+        style={{
+          width: 38,
+          height: 22,
+          borderRadius: 999,
+          background: checked ? "var(--violet-500, #7c3aed)" : "var(--border-strong)",
+          position: "relative",
+          flexShrink: 0,
+          transition: "background .15s",
+        }}
+      >
+        <span
+          style={{
+            position: "absolute",
+            top: 2,
+            left: checked ? 18 : 2,
+            width: 18,
+            height: 18,
+            borderRadius: "50%",
+            background: "#fff",
+            transition: "left .15s",
+          }}
+        />
+      </span>
+    </button>
   );
 }

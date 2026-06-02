@@ -14,10 +14,12 @@ export function OrderStatusActions({
   orderId,
   status,
   paymentStatus,
+  paymentMethod,
 }: {
   orderId: string;
   status: SupplierOrderStatus;
   paymentStatus: SupplierPaymentStatus;
+  paymentMethod: string | null;
 }) {
   const router = useRouter();
   const confirm = useConfirm();
@@ -46,6 +48,8 @@ export function OrderStatusActions({
 
   const nextStatuses = ORDER_STATUS_FLOW[status];
   const togglePayment: SupplierPaymentStatus = paymentStatus === "PAID" ? "UNPAID" : "PAID";
+  // MercadoPago se marca pagado solo por el webhook; el vendedor no lo toca a mano.
+  const isMercadoPago = paymentMethod === "MERCADOPAGO";
 
   return (
     <CardNew title="Acciones">
@@ -83,9 +87,16 @@ export function OrderStatusActions({
 
         <div style={{ borderTop: "1px solid var(--border-soft)", margin: "4px 0" }} />
 
-        <ButtonNew variant="secondary" disabled={saving} onClick={() => patch({ paymentStatus: togglePayment })}>
-          {paymentStatus === "PAID" ? "Marcar como sin pagar" : "Marcar como pagado"}
-        </ButtonNew>
+        {isMercadoPago ? (
+          <p style={{ fontSize: 11, color: "var(--text-3)", margin: 0, lineHeight: 1.5 }}>
+            El pago por MercadoPago se marca automáticamente al confirmarse en línea. No es necesario
+            marcarlo a mano.
+          </p>
+        ) : (
+          <ButtonNew variant="secondary" disabled={saving} onClick={() => patch({ paymentStatus: togglePayment })}>
+            {paymentStatus === "PAID" ? "Marcar como no pagada" : "Marcar como pagada"}
+          </ButtonNew>
+        )}
         <p style={{ fontSize: 11, color: "var(--text-3)", margin: 0 }}>
           Pago actual: {SUPPLIER_PAYMENT_STATUS_LABELS[paymentStatus]}
         </p>

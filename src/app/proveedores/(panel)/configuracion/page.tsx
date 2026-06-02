@@ -3,16 +3,33 @@ export const dynamic = "force-dynamic";
 import { redirect } from "next/navigation";
 import { getSupplierContext } from "@/lib/supplier-auth";
 import { prisma } from "@/lib/prisma";
+import type { SupplierBankAccountDTO } from "@/lib/suppliers/types";
 import { ProfileForm } from "./profile-form";
+import { BancoForm } from "./banco-form";
 
 export default async function SupplierConfigPage() {
   const ctx = await getSupplierContext();
   if (!ctx) redirect("/proveedores/login");
 
-  const supplier = await prisma.supplier.findUnique({ where: { id: ctx.supplierId } });
+  const [supplier, bankAccounts] = await Promise.all([
+    prisma.supplier.findUnique({ where: { id: ctx.supplierId } }),
+    prisma.supplierBankAccount.findMany({
+      where: { supplierId: ctx.supplierId },
+      orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+    }),
+  ]);
   if (!supplier) redirect("/proveedores/login");
 
   const canEdit = ctx.role === "OWNER" || ctx.role === "MANAGER";
+
+  const bankAccountDTOs: SupplierBankAccountDTO[] = bankAccounts.map((a) => ({
+    id: a.id,
+    bank: a.bank,
+    clabe: a.clabe,
+    accountNumber: a.accountNumber ?? null,
+    holderName: a.holderName,
+    isPrimary: a.isPrimary,
+  }));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 760 }}>
@@ -39,9 +56,14 @@ export default async function SupplierConfigPage() {
           state: supplier.state ?? "",
           description: supplier.description ?? "",
           categories: supplier.categories,
-          paymentMethods: supplier.paymentMethods,
+          payTransferEnabled: supplier.payTransferEnabled,
+          payMercadoPagoEnabled: supplier.payMercadoPagoEnabled,
+          payCashEnabled: supplier.payCashEnabled,
+          mpConnected: Boolean(supplier.mpAccessToken),
         }}
       />
+
+      <BancoForm canEdit={canEdit} initial={bankAccountDTOs} />
     </div>
   );
 }

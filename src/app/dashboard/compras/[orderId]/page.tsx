@@ -14,6 +14,8 @@ import {
   type SupplierPaymentStatus,
 } from "@/lib/suppliers/types";
 import { orderInclude, toSupplierOrderDTO } from "@/lib/suppliers/serializers";
+import { B2B_PAYMENT_METHOD_LABELS, isB2BPaymentMethod } from "@/lib/payments-b2b";
+import { PayWithMercadoPago } from "./pay-mercadopago";
 
 export const metadata: Metadata = { title: "Pedido — MediFlow" };
 
@@ -47,6 +49,34 @@ export default async function Page({ params }: { params: { orderId: string } }) 
 
   const dto = toSupplierOrderDTO(order);
   const supplierName = dto.supplier?.businessName ?? "Proveedor";
+
+  // Datos para mostrar "cómo pagar" según el método elegido.
+  const method = dto.paymentMethod;
+  const methodLabel =
+    method && isB2BPaymentMethod(method)
+      ? B2B_PAYMENT_METHOD_LABELS[method]
+      : (method ?? "Por acordar con el proveedor");
+  const isPaid = dto.paymentStatus === "PAID";
+
+  // Cuentas bancarias del proveedor (sólo se necesitan para transferencia).
+  const bankAccounts =
+    method === "TRANSFER"
+      ? await prisma.supplierBankAccount.findMany({
+          where: { supplierId: order.supplierId },
+          orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+        })
+      : [];
+
+  const mpAvailable = Boolean(dto.supplier?.payMercadoPagoEnabled);
+  const fmtPaidAt = dto.paidAt
+    ? new Date(dto.paidAt).toLocaleString("es-MX", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 880 }}>
@@ -125,9 +155,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
         <dl style={{ display: "flex", flexDirection: "column", gap: 14, margin: 0 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             <dt style={{ fontSize: 12, color: "var(--text-3)" }}>Método de pago</dt>
-            <dd style={{ fontSize: 14, color: "var(--text-1)", margin: 0 }}>
-              {dto.paymentMethod ?? "Por acordar con el proveedor"}
-            </dd>
+            <dd style={{ fontSize: 14, color: "var(--text-1)", margin: 0 }}>{methodLabel}</dd>
           </div>
 
           {dto.notes && (
@@ -144,10 +172,87 @@ export default async function Page({ params }: { params: { orderId: string } }) 
             <dd style={{ fontSize: 14, color: "var(--text-1)", margin: 0 }}>{fmtFullDate(dto.createdAt)}</dd>
           </div>
         </dl>
+      </CardNew>
 
-        <p style={{ fontSize: 12, color: "var(--text-3)", margin: "16px 0 0", lineHeight: 1.5 }}>
-          El pago se coordina directamente con el proveedor; no hay cobro en línea.
-        </p>
+      {/* ── Cómo pagar ── */}
+      <CardNew title="Pago">
+        {isPaid ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <BadgeNew tone="success" dot>
+              Pagado
+            </BadgeNew>
+            {fmtPaidAt && (
+              <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0 }}>
+                Pago registrado el {fmtPaidAt}.
+              </p>
+            )}
+          </div>
+        ) : method === "TRANSFER" ? (
+          bankAccounts.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <p style={{ fontSize: 13, color: "var(--text-2)", margin: 0, lineHeight: 1.5 }}>
+                Transfiere el total de <strong>{fmtMXNdec(dto.total)}</strong> a la cuenta del
+                proveedor y avísale por chat con tu comprobante.
+              </p>
+              {bankAccounts.map((a) => (
+                <div
+                  key={a.id}
+                  style={{
+                    padding: "12px 14px",
+                    borderRadius: 10,
+                    border: "1px solid var(--border-soft)",
+                    background: "var(--bg-elev)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 4,
+                  }}
+                >
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
+                    {a.bank}
+                    {a.isPrimary ? " · Principal" : ""}
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--text-3)" }}>Titular: {a.holderName}</div>
+                  <div className="mono" style={{ fontSize: 12, color: "var(--text-2)" }}>
+                    CLABE {a.clabe}
+                  </div>
+                  {a.accountNumber && (
+                    <div className="mono" style={{ fontSize: 12, color: "var(--text-3)" }}>
+                      Cuenta {a.accountNumber}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0, lineHeight: 1.5 }}>
+              El proveedor aún no ha registrado sus datos bancarios. Contáctalo por chat para
+              coordinar la transferencia.
+            </p>
+          )
+        ) : method === "CASH" ? (
+          <p style={{ fontSize: 13, color: "var(--text-2)", margin: 0, lineHeight: 1.5 }}>
+            Paga en efectivo al recibir el pedido. El proveedor marcará la orden como pagada.
+          </p>
+        ) : method === "MERCADOPAGO" ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <p style={{ fontSize: 13, color: "var(--text-2)", margin: 0, lineHeight: 1.5 }}>
+              Paga en línea con MercadoPago de forma segura. El cobro va directo al proveedor.
+            </p>
+            {mpAvailable ? (
+              <div>
+                <PayWithMercadoPago orderId={dto.id} />
+              </div>
+            ) : (
+              <p style={{ fontSize: 12, color: "var(--text-3)", margin: 0 }}>
+                El proveedor desactivó MercadoPago. Contáctalo por chat para otra forma de pago.
+              </p>
+            )}
+          </div>
+        ) : (
+          <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0, lineHeight: 1.5 }}>
+            Coordina el pago directamente con el proveedor.
+          </p>
+        )}
       </CardNew>
 
       <div>

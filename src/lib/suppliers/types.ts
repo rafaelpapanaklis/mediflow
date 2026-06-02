@@ -106,6 +106,13 @@ export interface SupplierDTO {
   description: string | null;
   categories: string[];
   paymentMethods: string[];
+  // ── Métodos de pago B2B habilitados (rails reales clínica → proveedor).
+  //    Booleanos canónicos; el catálogo `paymentMethods` de arriba es la
+  //    lista descriptiva (registro/browse). El token de MercadoPago NUNCA
+  //    cruza la red — el cliente solo sabe si está conectado vía el flag. ──
+  payTransferEnabled: boolean;
+  payMercadoPagoEnabled: boolean;
+  payCashEnabled: boolean;
   status: SupplierStatus;
   approvedAt: string | null;
   rejectedReason: string | null;
@@ -175,12 +182,26 @@ export interface SupplierOrderDTO {
   status: SupplierOrderStatus;
   paymentStatus: SupplierPaymentStatus;
   paymentMethod: string | null;
+  paidAt: string | null;
+  mpPreferenceId: string | null;
+  mpPaymentId: string | null;
   subtotal: number;
   total: number;
   notes: string | null;
   items: SupplierOrderItemDTO[];
   createdAt: string;
   updatedAt: string;
+}
+
+// ── Cuenta bancaria SPEI del proveedor (espejo de DentalLabBankAccountDTO).
+//    Las clínicas transfieren a estas cuentas cuando el método es TRANSFER. ──
+export interface SupplierBankAccountDTO {
+  id: string;
+  bank: string;
+  clabe: string;
+  accountNumber: string | null;
+  holderName: string;
+  isPrimary: boolean;
 }
 
 export interface SupplierChatMessageDTO {
@@ -223,12 +244,13 @@ export const SUPPLIER_CATEGORY_OPTIONS = [
   "Otros",
 ] as const;
 
+// Alineado 1:1 con los métodos B2B canónicos (TRANSFER / MERCADOPAGO / CASH
+// de src/lib/payments-b2b.ts). Lista descriptiva usada por el registro y el
+// browse; los rails reales se controlan con los flags pay*Enabled del proveedor.
 export const SUPPLIER_PAYMENT_METHOD_OPTIONS = [
   "Transferencia (SPEI)",
-  "Tarjeta de crédito/débito",
+  "MercadoPago",
   "Efectivo",
-  "Crédito 30 días",
-  "PayPal",
 ] as const;
 
 // ── Labels legibles para badges de UI. ───────────────────────────────

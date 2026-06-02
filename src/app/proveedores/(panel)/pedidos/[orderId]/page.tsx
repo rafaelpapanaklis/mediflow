@@ -104,6 +104,7 @@ export default async function SupplierOrderDetailPage({
           orderId={order.id}
           status={order.status}
           paymentStatus={order.paymentStatus}
+          paymentMethod={order.paymentMethod}
         />
       </div>
 

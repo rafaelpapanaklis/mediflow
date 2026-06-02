@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { makeSupplierOrderNumber } from "@/lib/suppliers/types";
 import { orderInclude, toSupplierOrderDTO } from "@/lib/suppliers/serializers";
+import { isB2BPaymentMethod, type B2BPaymentMethod } from "@/lib/payments-b2b";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -20,32 +21,51 @@ export async function GET() {
 }
 
 // POST /api/compras/orders — checkout de UN proveedor. Body: { supplierId,
-// paymentMethod?, notes? }. Crea el SupplierOrder + items (precio/nombre
-// congelados al momento) y vacía el carrito de (clinicId, supplierId). No hay
-// pasarela: paymentStatus arranca UNPAID y el pago se acuerda offline/por chat.
+// paymentMethod, notes? }. paymentMethod DEBE ser un método B2B
+// (TRANSFER/MERCADOPAGO/CASH) que el proveedor tenga habilitado. Crea el
+// SupplierOrder + items (precio/nombre congelados al momento) y vacía el
+// carrito de (clinicId, supplierId). El pago arranca UNPAID: transferencia y
+// efectivo los marca el vendedor a mano; MercadoPago lo confirma el webhook.
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const body = await req.json().catch(() => null);
   const supplierId = typeof body?.supplierId === "string" ? body.supplierId : "";
-  const paymentMethod =
-    typeof body?.paymentMethod === "string" && body.paymentMethod.trim()
-      ? body.paymentMethod.trim()
-      : null;
+  const paymentMethodRaw =
+    typeof body?.paymentMethod === "string" ? body.paymentMethod.trim() : "";
   const notes =
     typeof body?.notes === "string" && body.notes.trim() ? body.notes.trim() : null;
   if (!supplierId) return NextResponse.json({ error: "supplierId es requerido" }, { status: 400 });
+  if (!isB2BPaymentMethod(paymentMethodRaw)) {
+    return NextResponse.json({ error: "Selecciona un método de pago válido." }, { status: 400 });
+  }
+  const paymentMethod: B2BPaymentMethod = paymentMethodRaw;
 
   const result = await prisma.$transaction(async (tx) => {
     // El proveedor debe seguir APPROVED al momento del checkout: si fue
     // suspendido o rechazado tras agregarlo al carrito, no se permite pedir.
     const supplier = await tx.supplier.findUnique({
       where: { id: supplierId },
-      select: { status: true },
+      select: {
+        status: true,
+        payTransferEnabled: true,
+        payMercadoPagoEnabled: true,
+        payCashEnabled: true,
+      },
     });
     if (!supplier || supplier.status !== "APPROVED") {
       return { unavailable: true as const };
+    }
+
+    // El método elegido debe estar habilitado por el proveedor.
+    const enabledByMethod: Record<B2BPaymentMethod, boolean> = {
+      TRANSFER: supplier.payTransferEnabled,
+      MERCADOPAGO: supplier.payMercadoPagoEnabled,
+      CASH: supplier.payCashEnabled,
+    };
+    if (!enabledByMethod[paymentMethod]) {
+      return { methodDisabled: true as const };
     }
 
     const cart = await tx.supplierCart.findUnique({
@@ -86,6 +106,12 @@ export async function POST(req: NextRequest) {
   if ("unavailable" in result) {
     return NextResponse.json(
       { error: "Este proveedor no está disponible en este momento." },
+      { status: 409 },
+    );
+  }
+  if ("methodDisabled" in result) {
+    return NextResponse.json(
+      { error: "El proveedor no acepta este método de pago." },
       { status: 409 },
     );
   }
