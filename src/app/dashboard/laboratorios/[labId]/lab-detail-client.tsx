@@ -41,6 +41,7 @@ import {
   type DentalLabTrafficLevel,
 } from "@/lib/laboratorios/types";
 import { B2B_PAYMENT_METHOD_LABELS, type B2BPaymentMethod } from "@/lib/payments-b2b";
+import { OrderChatDock } from "@/components/laboratorios/order-chat-dock";
 
 // services en el header son keys del catálogo (s1..s9). Label corto + fallback.
 function serviceLabel(key: string): string {
@@ -327,6 +328,8 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
   const [files, setFiles] = useState<File[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // Chat embebido: el botón "Chatear" abre el OrderChatDock flotante sin salir de la ficha.
+  const [chatOpen, setChatOpen] = useState(false);
 
   const locationLabel = [lab.city, lab.state].filter(Boolean).join(", ");
   const showLogo = !!lab.logoUrl && !logoError;
@@ -596,16 +599,17 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
         </div>
 
         <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          {/* Chat clínica↔laboratorio (espejo del botón de proveedores). La ruta
-              /dashboard/lab-chat/[labId] la provee el módulo de chat de labs. */}
-          <Link
-            href={`/dashboard/lab-chat/${lab.id}`}
+          {/* Chat clínica↔laboratorio embebido: abre el OrderChatDock flotante
+              (mismo del detalle de orden) sin salir de la ficha. */}
+          <button
+            type="button"
+            onClick={() => setChatOpen(true)}
             className="btn-new btn-new--secondary"
-            style={{ textDecoration: "none" }}
+            style={{ cursor: "pointer" }}
           >
             <MessageCircle size={14} />
             Chatear
-          </Link>
+          </button>
           <ButtonNew variant="primary" icon={<Send size={14} />} onClick={() => openModal("")}>
             Solicitar orden
           </ButtonNew>
@@ -1281,6 +1285,17 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+
+      {/* Chat embebido flotante con minimizar — reusa /api/lab-chat (mismo hilo
+          clínica↔lab que el detalle de orden y la página de chat). */}
+      {chatOpen && (
+        <OrderChatDock
+          side="CLINIC"
+          counterpartId={lab.id}
+          counterpartName={lab.name}
+          counterpartLogoUrl={lab.logoUrl}
+        />
+      )}
     </div>
   );
 }
