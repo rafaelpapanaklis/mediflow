@@ -8,7 +8,16 @@ import { formatCurrency } from "@/lib/utils";
 import { formatRelativeDate } from "@/lib/format";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
-import { ClipboardList, Package } from "lucide-react";
+import { KpiCard } from "@/components/ui/design-system/kpi-card";
+import {
+  ClipboardList,
+  Package,
+  ChevronRight,
+  Clock,
+  CheckCircle2,
+  Receipt,
+  Building2,
+} from "lucide-react";
 import {
   DENTAL_LAB_ORDER_STATUS,
   type DentalLabOrderStatus,
@@ -23,6 +32,9 @@ const PAYMENT_TONE: Record<DentalLabPaymentStatus, "warning" | "success"> = {
   UNPAID: "warning",
   PAID: "success",
 };
+
+// Estatus que cuentan como "en proceso" para el KPI (sobre los datos ya cargados).
+const IN_PROGRESS: DentalLabOrderStatus[] = ["RECIBIDA", "ATENDIENDO", "ENVIADA"];
 
 const FILTERS: { value: DentalLabOrderStatus | "ALL"; label: string }[] = [
   { value: "ALL", label: "Todos" },
@@ -57,35 +69,80 @@ export default async function LabOrdersPage({
     },
   });
 
+  // KPIs derivados SOLO de los datos ya cargados (respetan el filtro activo).
+  const totalShown = orders.length;
+  const inProgressCount = orders.filter((o) => IN_PROGRESS.indexOf(o.status) !== -1).length;
+  const deliveredCount = orders.filter((o) => o.status === "ENTREGADA").length;
+  const totalAmount = orders.reduce((sum, o) => sum + o.total, 0);
+  const viewLabel = active === "ALL" ? "Total recibidos" : "En este filtro";
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+      {/* HERO con icon-chip + glow violeta */}
+      <div style={{ position: "relative" }}>
         <div
+          aria-hidden
           style={{
-            width: 44,
-            height: 44,
-            borderRadius: 14,
-            flexShrink: 0,
-            display: "grid",
-            placeItems: "center",
-            color: "#fff",
-            background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
-            boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
+            position: "absolute",
+            top: -28,
+            left: -20,
+            width: 240,
+            height: 160,
+            pointerEvents: "none",
+            background:
+              "radial-gradient(120px 90px at 40px 60px, rgba(124,58,237,0.18), transparent 70%)",
           }}
-        >
-          <ClipboardList size={22} />
-        </div>
-        <div>
-          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
-            Pedidos recibidos
-          </h1>
-          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, marginBottom: 0 }}>
-            Gestiona las órdenes que las clínicas te han enviado.
-          </p>
+        />
+        <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 14 }}>
+          <div
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 14,
+              flexShrink: 0,
+              display: "grid",
+              placeItems: "center",
+              color: "#fff",
+              background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+              boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
+            }}
+          >
+            <ClipboardList size={22} />
+          </div>
+          <div>
+            <h1
+              style={{
+                fontSize: 22,
+                letterSpacing: "-0.02em",
+                color: "var(--text-1)",
+                fontWeight: 600,
+                margin: 0,
+              }}
+            >
+              Pedidos recibidos
+            </h1>
+            <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, marginBottom: 0 }}>
+              Gestiona las órdenes que las clínicas te han enviado.
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Filtros por estado */}
+      {/* KPIs — métricas sobre los pedidos ya cargados */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+          gap: 14,
+        }}
+      >
+        <KpiCard label={viewLabel} value={String(totalShown)} icon={Package} />
+        <KpiCard label="En proceso" value={String(inProgressCount)} icon={Clock} />
+        <KpiCard label="Entregadas" value={String(deliveredCount)} icon={CheckCircle2} />
+        <KpiCard label="Monto total" value={formatCurrency(totalAmount)} icon={Receipt} />
+      </div>
+
+      {/* Filtros por estado (segmented chips) */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {FILTERS.map((f) => {
           const isActive = f.value === active;
@@ -129,8 +186,8 @@ export default async function LabOrdersPage({
         })}
       </div>
 
-      <CardNew noPad>
-        {orders.length === 0 ? (
+      {orders.length === 0 ? (
+        <CardNew noPad>
           <div
             style={{
               padding: "48px 24px",
@@ -164,57 +221,120 @@ export default async function LabOrdersPage({
                 : "No hay pedidos con este estado por ahora. Prueba con otro filtro para ver más órdenes."}
             </p>
           </div>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table className="table-new">
-              <thead>
-                <tr>
-                  <th>Pedido</th>
-                  <th>Clínica</th>
-                  <th>Servicio</th>
-                  <th>Total</th>
-                  <th>Estado</th>
-                  <th>Pago</th>
-                  <th>Fecha</th>
-                </tr>
-              </thead>
-              <tbody>
-                {orders.map((o) => (
-                  <tr key={o.id}>
-                    <td>
-                      <Link
-                        href={`/laboratorios/pedidos/${o.id}`}
-                        className="mono"
-                        style={{ color: "var(--text-1)", fontWeight: 500, textDecoration: "none" }}
-                      >
-                        {o.orderNumber}
-                      </Link>
-                    </td>
-                    <td style={{ color: "var(--text-1)" }}>{o.clinic.name}</td>
-                    <td style={{ color: "var(--text-2)" }}>{o.service?.name ?? "—"}</td>
-                    <td className="mono" style={{ color: "var(--text-1)", fontWeight: 500 }}>
-                      {formatCurrency(o.total)}
-                    </td>
-                    <td>
-                      <BadgeNew tone={DENTAL_LAB_ORDER_STATUS[o.status].tone} dot>
-                        {DENTAL_LAB_ORDER_STATUS[o.status].label}
-                      </BadgeNew>
-                    </td>
-                    <td>
-                      <BadgeNew tone={PAYMENT_TONE[o.paymentStatus]}>
-                        {PAYMENT_LABELS[o.paymentStatus]}
-                      </BadgeNew>
-                    </td>
-                    <td className="mono" style={{ color: "var(--text-3)" }}>
-                      {formatRelativeDate(o.createdAt)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </CardNew>
+        </CardNew>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {orders.map((o) => {
+            const statusMeta = DENTAL_LAB_ORDER_STATUS[o.status];
+            return (
+              <Link
+                key={o.id}
+                href={`/laboratorios/pedidos/${o.id}`}
+                className="ped-list-card"
+                style={{
+                  position: "relative",
+                  overflow: "hidden",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 16,
+                  padding: "14px 18px 14px 20px",
+                }}
+              >
+                {/* Acento superior */}
+                <span
+                  aria-hidden
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: 3,
+                    background: "linear-gradient(90deg, var(--violet-400), var(--brand))",
+                  }}
+                />
+
+                {/* Identidad del pedido */}
+                <div style={{ minWidth: 0, flex: "1 1 220px", display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span className="mono" style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>
+                      {o.orderNumber}
+                    </span>
+                    <BadgeNew tone={statusMeta.tone} dot>
+                      {statusMeta.label}
+                    </BadgeNew>
+                    <BadgeNew tone={PAYMENT_TONE[o.paymentStatus]}>
+                      {PAYMENT_LABELS[o.paymentStatus]}
+                    </BadgeNew>
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      color: "var(--text-2)",
+                      fontSize: 13,
+                      minWidth: 0,
+                    }}
+                  >
+                    <Building2 size={14} style={{ color: "var(--violet-400)", flexShrink: 0 }} />
+                    <span
+                      style={{
+                        color: "var(--text-1)",
+                        fontWeight: 500,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {o.clinic.name}
+                    </span>
+                    {o.service?.name ? (
+                      <>
+                        <span style={{ color: "var(--text-4)" }}>·</span>
+                        <span
+                          style={{
+                            color: "var(--text-3)",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {o.service.name}
+                        </span>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Fecha relativa */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    color: "var(--text-3)",
+                    fontSize: 12,
+                    flexShrink: 0,
+                  }}
+                >
+                  <Clock size={13} style={{ flexShrink: 0 }} />
+                  <span className="mono">{formatRelativeDate(o.createdAt)}</span>
+                </div>
+
+                {/* Total */}
+                <div style={{ textAlign: "right", flexShrink: 0, minWidth: 96 }}>
+                  <div style={{ color: "var(--text-4)", fontSize: 11, marginBottom: 2 }}>Total</div>
+                  <div className="mono" style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 15 }}>
+                    {formatCurrency(o.total)}
+                  </div>
+                </div>
+
+                <ChevronRight size={18} style={{ color: "var(--text-4)", flexShrink: 0 }} />
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

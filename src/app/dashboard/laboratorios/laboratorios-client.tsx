@@ -2,8 +2,21 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Search, FlaskConical, MapPin, Layers, Star } from "lucide-react";
-import { BadgeNew } from "@/components/ui/design-system";
+import {
+  Search,
+  FlaskConical,
+  MapPin,
+  Layers,
+  Star,
+  Bike,
+  Truck,
+  Car,
+  Gauge,
+  Building2,
+  ChevronRight,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { BadgeNew, KpiCard } from "@/components/ui/design-system";
 import {
   DENTAL_LAB_SERVICES,
   DENTAL_LAB_TRAFFIC,
@@ -19,6 +32,20 @@ function serviceLabel(key: string): string {
 
 // Orden canónico del catálogo, para ordenar los chips de filtro de forma estable.
 const SERVICE_ORDER: string[] = DENTAL_LAB_SERVICES.map((s) => s.key);
+
+// Icono de vehículo del mensajero según el tráfico del lab. Mapea el campo
+// vehicle del catálogo (bike → Bike, motorcycle → Truck, car → Car) a un
+// icono lucide existente, reforzando el color-coding [F].
+const TRAFFIC_VEHICLE_ICON: Record<"bike" | "motorcycle" | "car", LucideIcon> = {
+  bike: Bike,
+  motorcycle: Truck,
+  car: Car,
+};
+
+// Color-coding del tráfico: tint suave + color base por tono semántico.
+function trafficVars(tone: "success" | "warning" | "danger"): { soft: string; base: string } {
+  return { soft: `var(--${tone}-soft)`, base: `var(--${tone})` };
+}
 
 interface Lab {
   id: string;
@@ -58,9 +85,9 @@ function LabLogo({ lab }: { lab: Lab }) {
         alt={lab.name}
         onError={() => setErr(true)}
         style={{
-          width: 48,
-          height: 48,
-          borderRadius: 10,
+          width: 52,
+          height: 52,
+          borderRadius: 12,
           objectFit: "cover",
           background: "var(--bg-elev-2)",
           border: "1px solid var(--border-soft)",
@@ -73,17 +100,17 @@ function LabLogo({ lab }: { lab: Lab }) {
   return (
     <div
       style={{
-        width: 48,
-        height: 48,
-        borderRadius: 10,
+        width: 52,
+        height: 52,
+        borderRadius: 12,
         background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
         border: "1px solid var(--border-brand)",
         boxShadow: "0 6px 16px -8px rgba(124,58,237,0.55)",
         display: "grid",
         placeItems: "center",
         color: "#fff",
-        fontWeight: 600,
-        fontSize: 18,
+        fontWeight: 700,
+        fontSize: 20,
         flexShrink: 0,
       }}
     >
@@ -96,6 +123,9 @@ function LabCard({ lab }: { lab: Lab }) {
   const [hover, setHover] = useState(false);
   const location = [lab.city, lab.state].filter(Boolean).join(", ");
   const showRating = lab.rating != null && lab.rating > 0;
+  const traffic = DENTAL_LAB_TRAFFIC[lab.trafficLevel];
+  const tv = trafficVars(traffic.tone);
+  const VehicleIcon = TRAFFIC_VEHICLE_ICON[traffic.vehicle];
 
   return (
     <Link
@@ -109,13 +139,33 @@ function LabCard({ lab }: { lab: Lab }) {
         style={{
           cursor: "pointer",
           height: "100%",
-          transition: "border-color .12s, transform .12s, box-shadow .12s",
+          position: "relative",
+          overflow: "hidden",
+          transition:
+            "transform .14s ease, box-shadow .14s ease, border-color .14s ease",
           borderColor: hover ? "var(--border-brand)" : undefined,
           transform: hover ? "translateY(-2px)" : undefined,
-          boxShadow: hover ? "0 12px 28px -14px rgba(124,58,237,0.55)" : undefined,
+          boxShadow: hover ? "0 12px 28px -16px rgba(124,58,237,0.55)" : undefined,
         }}
       >
-        <div className="card__body" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {/* Acento superior de la card */}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 3,
+            background: "linear-gradient(90deg, var(--violet-400), var(--brand))",
+            opacity: hover ? 1 : 0.85,
+            transition: "opacity .14s ease",
+          }}
+        />
+
+        <div
+          className="card__body"
+          style={{ display: "flex", flexDirection: "column", gap: 12 }}
+        >
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <LabLogo lab={lab} />
             <div style={{ minWidth: 0, flex: 1 }}>
@@ -123,7 +173,8 @@ function LabCard({ lab }: { lab: Lab }) {
                 style={{
                   color: "var(--text-1)",
                   fontWeight: 600,
-                  fontSize: 14,
+                  fontSize: 15,
+                  letterSpacing: "-0.01em",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
@@ -136,7 +187,7 @@ function LabCard({ lab }: { lab: Lab }) {
                   display: "flex",
                   alignItems: "center",
                   gap: 10,
-                  marginTop: 2,
+                  marginTop: 3,
                   color: "var(--text-3)",
                   fontSize: 12,
                 }}
@@ -150,9 +201,13 @@ function LabCard({ lab }: { lab: Lab }) {
                       minWidth: 0,
                     }}
                   >
-                    <MapPin size={12} />
+                    <MapPin size={12} style={{ color: "var(--violet-400)", flexShrink: 0 }} />
                     <span
-                      style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                      style={{
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
                     >
                       {location}
                     </span>
@@ -166,9 +221,10 @@ function LabCard({ lab }: { lab: Lab }) {
                       gap: 3,
                       flexShrink: 0,
                       color: "var(--text-2)",
+                      fontWeight: 600,
                     }}
                   >
-                    <Star size={12} style={{ color: "#f5a623" }} />
+                    <Star size={12} style={{ color: "#f5a623", fill: "#f5a623" }} />
                     {lab.rating!.toFixed(1)}
                   </span>
                 )}
@@ -196,7 +252,7 @@ function LabCard({ lab }: { lab: Lab }) {
           {lab.services.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {lab.services.slice(0, 3).map((key) => (
-                <BadgeNew key={key} tone="neutral">
+                <BadgeNew key={key} tone="brand">
                   {serviceLabel(key)}
                 </BadgeNew>
               ))}
@@ -206,24 +262,88 @@ function LabCard({ lab }: { lab: Lab }) {
             </div>
           )}
 
+          {/* Panel de tráfico color-coded: tint + borde + icono de vehículo */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "8px 10px",
+              borderRadius: 10,
+              background: tv.soft,
+              border: `1px solid ${tv.base}`,
+            }}
+          >
+            <span
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 9,
+                flexShrink: 0,
+                display: "grid",
+                placeItems: "center",
+                background: tv.soft,
+                border: `1px solid ${tv.base}`,
+                color: tv.base,
+                boxShadow: `0 0 12px -4px ${tv.base}`,
+              }}
+            >
+              <VehicleIcon size={15} />
+            </span>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  color: "var(--text-1)",
+                  fontWeight: 600,
+                  fontSize: 13,
+                }}
+              >
+                <Gauge size={13} style={{ color: tv.base, flexShrink: 0 }} />
+                {trafficEtaLabel(lab)}
+              </div>
+              <div style={{ color: "var(--text-3)", fontSize: 11, marginTop: 1 }}>
+                {traffic.label}
+              </div>
+            </div>
+            <BadgeNew tone={traffic.tone} dot>
+              {traffic.label.replace("Tráfico ", "")}
+            </BadgeNew>
+          </div>
+
           <div
             style={{
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
               gap: 8,
-              color: "var(--text-3)",
-              fontSize: 12,
               marginTop: "auto",
             }}
           >
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                color: "var(--text-3)",
+                fontSize: 12,
+              }}
+            >
               <Layers size={12} style={{ color: "var(--violet-400)" }} />
               {lab.serviceCount} {lab.serviceCount === 1 ? "servicio" : "servicios"}
             </span>
-            <BadgeNew tone={DENTAL_LAB_TRAFFIC[lab.trafficLevel].tone} dot>
-              {trafficEtaLabel(lab)}
-            </BadgeNew>
+            {/* CTA visual: <span> (no <button>) para no anidar interactivos
+                dentro del <Link> que envuelve la card; la navegación la
+                resuelve ese Link a /dashboard/laboratorios/[labId]. */}
+            <span
+              className={`btn-new btn-new--${hover ? "primary" : "secondary"} btn-new--sm`}
+              style={{ flexShrink: 0 }}
+            >
+              Ver laboratorio
+              <ChevronRight size={14} />
+            </span>
           </div>
         </div>
       </div>
@@ -249,6 +369,26 @@ export function LaboratoriosClient({ initialLabs }: { initialLabs: Lab[] }) {
     });
   }, [initialLabs]);
 
+  // KPIs derivados solo de datos YA disponibles (sin queries nuevas).
+  const kpis = useMemo(() => {
+    let fast = 0;
+    let rated = 0;
+    let ratingSum = 0;
+    for (const l of initialLabs) {
+      if (l.trafficLevel === "LOW") fast++;
+      if (l.rating != null && l.rating > 0) {
+        rated++;
+        ratingSum += l.rating;
+      }
+    }
+    return {
+      total: initialLabs.length,
+      categories: services.length,
+      fast,
+      avgRating: rated > 0 ? ratingSum / rated : null,
+    };
+  }, [initialLabs, services]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return initialLabs.filter((l) => {
@@ -263,45 +403,93 @@ export function LaboratoriosClient({ initialLabs }: { initialLabs: Lab[] }) {
 
   return (
     <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 22 }}>
+      {/* HERO */}
+      <div style={{ position: "relative", marginBottom: 22 }}>
+        {/* Glow violeta de fondo */}
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            top: -40,
+            left: -20,
+            width: 320,
+            height: 180,
+            borderRadius: "50%",
+            pointerEvents: "none",
+            background:
+              "radial-gradient(closest-side, rgba(124,58,237,0.16), transparent)",
+            filter: "blur(8px)",
+            zIndex: 0,
+          }}
+        />
         <div
           style={{
-            width: 44,
-            height: 44,
-            borderRadius: 14,
-            flexShrink: 0,
-            display: "grid",
-            placeItems: "center",
-            color: "#fff",
-            background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
-            boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
+            position: "relative",
+            zIndex: 1,
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
           }}
         >
-          <FlaskConical size={22} />
-        </div>
-        <div>
-          <h1
+          <div
             style={{
-              fontSize: "clamp(16px, 1.4vw, 22px)",
-              color: "var(--text-1)",
-              fontWeight: 600,
-              margin: 0,
+              width: 40,
+              height: 40,
+              borderRadius: 12,
+              flexShrink: 0,
+              display: "grid",
+              placeItems: "center",
+              color: "#fff",
+              background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+              boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
             }}
           >
-            Laboratorios
-          </h1>
-          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
-            {initialLabs.length}{" "}
-            {initialLabs.length === 1 ? "laboratorio disponible" : "laboratorios disponibles"}
-          </p>
+            <FlaskConical size={22} />
+          </div>
+          <div>
+            <h1
+              style={{
+                fontSize: 22,
+                color: "var(--text-1)",
+                fontWeight: 600,
+                letterSpacing: "-0.02em",
+                margin: 0,
+              }}
+            >
+              Laboratorios
+            </h1>
+            <p style={{ color: "var(--text-3)", fontSize: 14, marginTop: 4 }}>
+              Explora laboratorios dentales y solicita órdenes en minutos.
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Filters */}
+      {/* KPIs — solo con datos ya disponibles */}
+      {initialLabs.length > 0 && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+            gap: 14,
+            marginBottom: 20,
+          }}
+        >
+          <KpiCard label="Laboratorios" value={String(kpis.total)} icon={Building2} />
+          <KpiCard label="Tipos de servicio" value={String(kpis.categories)} icon={Layers} />
+          <KpiCard label="Entrega rápida" value={String(kpis.fast)} icon={Bike} />
+          <KpiCard
+            label="Rating promedio"
+            value={kpis.avgRating != null ? kpis.avgRating.toFixed(1) : "—"}
+            icon={Star}
+          />
+        </div>
+      )}
+
+      {/* Filtros */}
       {initialLabs.length > 0 && (
         <div style={{ marginBottom: 18 }}>
-          <div className="search-field" style={{ maxWidth: 360 }}>
+          <div className="search-field" style={{ maxWidth: 380 }}>
             <Search size={14} />
             <input
               value={search}
@@ -330,7 +518,7 @@ export function LaboratoriosClient({ initialLabs }: { initialLabs: Lab[] }) {
         </div>
       )}
 
-      {/* Content */}
+      {/* Contenido */}
       {initialLabs.length === 0 ? (
         <EmptyState
           icon={<FlaskConical size={26} />}
@@ -347,7 +535,7 @@ export function LaboratoriosClient({ initialLabs }: { initialLabs: Lab[] }) {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
             gap: 16,
           }}
         >

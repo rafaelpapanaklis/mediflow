@@ -6,7 +6,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Landmark, Banknote, CreditCard, CheckCircle2, Info } from "lucide-react";
+import { Landmark, Banknote, CreditCard, CheckCircle2, Info, ClipboardList, ArrowLeft } from "lucide-react";
 import { CardNew, BadgeNew } from "@/components/ui/design-system";
 import { fmtMXNdec } from "@/lib/format";
 import {
@@ -17,6 +17,12 @@ import {
 import { B2B_PAYMENT_METHOD_LABELS, isB2BPaymentMethod } from "@/lib/payments-b2b";
 import { CancelOrderButton } from "../ordenes-client";
 import { PayWithMercadoPago } from "./pay-mercadopago-button";
+import {
+  OrderTrackingHero,
+  OrderRouteMap,
+  type OrderTrackingProps,
+} from "@/components/laboratorios/order-route-map";
+import { OrderChatDock } from "@/components/laboratorios/order-chat-dock";
 
 export const metadata: Metadata = { title: "Orden — MediFlow" };
 
@@ -34,14 +40,24 @@ const PAYMENT_STATUS_LABELS: Record<DentalLabPaymentStatus, string> = {
 
 const orderInclude = {
   // select (no include): traemos SOLO lo que la página necesita — nunca el
-  // mpAccessToken del lab. Las cuentas bancarias alimentan la transferencia.
+  // mpAccessToken del lab. Las cuentas bancarias alimentan la transferencia;
+  // logoUrl/trafficLevel/address/mapsUrl alimentan el mapa + hero + chat dock.
   lab: {
     select: {
+      id: true,
       name: true,
+      logoUrl: true,
+      trafficLevel: true,
+      address: true,
+      mapsUrl: true,
+      city: true,
+      state: true,
       payMercadoPagoEnabled: true,
       bankAccounts: { orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] },
     },
   },
+  // La propia clínica (destino del recorrido) — solo datos de ubicación/logo.
+  clinic: { select: { name: true, address: true, mapsUrl: true, logoUrl: true } },
   events: true,
   files: true,
 } satisfies Prisma.DentalLabOrderInclude;
@@ -95,31 +111,88 @@ export default async function Page({ params }: { params: { orderId: string } }) 
   // cargar el token (sensible) en esta página solo para este chequeo.
   const mpReady = Boolean(order.lab?.payMercadoPagoEnabled);
 
+  // ── Props del seguimiento (banda hero + mapa A→B: LAB → CLÍNICA). ──
+  const tracking: OrderTrackingProps = {
+    status,
+    trafficLevel: order.lab?.trafficLevel ?? null,
+    etaAt: order.etaAt ? order.etaAt.toISOString() : null,
+    pickupAt: order.pickupAt ? order.pickupAt.toISOString() : null,
+    courier: (order.courier as unknown as OrderTrackingProps["courier"]) ?? null,
+    origin: { label: "LAB", name: labName, mapsUrl: order.lab?.mapsUrl ?? null },
+    destination: {
+      label: "CLÍNICA",
+      name: order.clinic?.name ?? "Tu clínica",
+      mapsUrl: order.clinic?.mapsUrl ?? null,
+    },
+  };
+  const showTracking = status !== "CANCELADA";
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 880 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 920 }}>
       <Link
         href="/dashboard/ordenes-laboratorio"
-        style={{ fontSize: 13, color: "var(--text-3)", textDecoration: "none" }}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          fontSize: 13,
+          color: "var(--text-3)",
+          textDecoration: "none",
+          width: "fit-content",
+        }}
       >
-        ← Volver a órdenes de laboratorio
+        <ArrowLeft size={14} />
+        Volver a órdenes de laboratorio
       </Link>
 
-      <header style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
-          Orden {order.orderNumber}
-        </h1>
-        <p style={{ fontSize: 14, color: "var(--text-3)", margin: 0 }}>
-          {labName} · {fmtFullDate(order.createdAt.toISOString())}
-        </p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          <BadgeNew tone={statusMeta.tone} dot>
-            {statusMeta.label}
-          </BadgeNew>
-          <BadgeNew tone={PAYMENT_STATUS_TONES[order.paymentStatus]} dot>
-            {PAYMENT_STATUS_LABELS[order.paymentStatus]}
-          </BadgeNew>
+      {/* ── Hero / encabezado ── */}
+      <header style={{ display: "flex", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
+        <div
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 13,
+            flexShrink: 0,
+            display: "grid",
+            placeItems: "center",
+            color: "#fff",
+            background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+            boxShadow: "0 10px 24px -8px rgba(124,58,237,0.7)",
+          }}
+        >
+          <ClipboardList size={22} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h1
+            className="mono"
+            style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}
+          >
+            {order.orderNumber}
+          </h1>
+          <p style={{ fontSize: 14, color: "var(--text-3)", margin: "4px 0 0" }}>
+            {labName} · {fmtFullDate(order.createdAt.toISOString())}
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+            <BadgeNew tone={statusMeta.tone} dot>
+              {statusMeta.label}
+            </BadgeNew>
+            <BadgeNew tone={PAYMENT_STATUS_TONES[order.paymentStatus]} dot>
+              {PAYMENT_STATUS_LABELS[order.paymentStatus]}
+            </BadgeNew>
+            {order.priority && <BadgeNew tone="warning">Prioritario</BadgeNew>}
+          </div>
         </div>
       </header>
+
+      {/* ── Banda de seguimiento (hero oscuro) + mapa A→B ── */}
+      {showTracking && (
+        <>
+          <OrderTrackingHero {...tracking} />
+          <CardNew title="Ruta del mensajero" sub="LAB → CLÍNICA · vista ilustrativa del recorrido">
+            <OrderRouteMap {...tracking} />
+          </CardNew>
+        </>
+      )}
 
       <CardNew title="Importe">
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -137,15 +210,21 @@ export default async function Page({ params }: { params: { orderId: string } }) 
             style={{
               display: "flex",
               justifyContent: "space-between",
+              alignItems: "center",
               fontSize: 15,
               fontWeight: 600,
               color: "var(--text-1)",
-              paddingTop: 6,
-              borderTop: "1px solid var(--border-soft)",
+              marginTop: 4,
+              padding: "10px 12px",
+              borderRadius: "var(--radius)",
+              background: "var(--brand-soft)",
+              border: "1px solid var(--border-brand)",
             }}
           >
             <span>Total</span>
-            <span>{fmtMXNdec(order.total)}</span>
+            <span className="mono" style={{ fontSize: 16, fontWeight: 700, color: "var(--violet-400)" }}>
+              {fmtMXNdec(order.total)}
+            </span>
           </div>
         </div>
       </CardNew>
@@ -387,6 +466,15 @@ export default async function Page({ params }: { params: { orderId: string } }) 
       <CardNew title="Acciones">
         <CancelOrderButton orderId={order.id} status={status} />
       </CardNew>
+
+      {/* ── Chat embebido clínica↔laboratorio (minimizable a burbuja) ── */}
+      <OrderChatDock
+        side="CLINIC"
+        counterpartId={order.labId}
+        counterpartName={labName}
+        counterpartLogoUrl={order.lab?.logoUrl ?? null}
+        orderNumber={order.orderNumber}
+      />
     </div>
   );
 }

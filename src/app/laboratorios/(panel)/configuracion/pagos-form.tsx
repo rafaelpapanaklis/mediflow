@@ -64,7 +64,24 @@ function MethodRow({
         {icon}
       </span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{title}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{title}</span>
+          {checked && (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                fontSize: 10.5,
+                fontWeight: 600,
+                letterSpacing: "0.02em",
+                color: "var(--success)",
+              }}
+            >
+              <CheckCircle2 size={12} /> Activo
+            </span>
+          )}
+        </div>
         <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2, lineHeight: 1.4 }}>{desc}</div>
       </div>
       <input
@@ -143,6 +160,17 @@ export function PagosForm({ canEdit, initial }: { canEdit: boolean; initial: Pag
 
   return (
     <CardNew>
+      <span
+        aria-hidden
+        style={{
+          position: "absolute",
+          insetInline: 0,
+          top: 0,
+          height: 3,
+          background: "linear-gradient(90deg, var(--violet-400), var(--brand))",
+          pointerEvents: "none",
+        }}
+      />
       <div className="form-section__title">
         <Wallet size={13} style={{ color: "var(--violet-400)" }} /> Métodos de pago{" "}
         <span className="form-section__rule" />

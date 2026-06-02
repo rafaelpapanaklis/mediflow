@@ -24,10 +24,13 @@ import {
   Navigation,
   Gauge,
   Truck,
+  Bike,
+  Car,
   FlaskConical,
   DollarSign,
   Package,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { CardNew, ButtonNew, BadgeNew } from "@/components/ui/design-system";
 import { fmtMXN } from "@/lib/format";
 import {
@@ -178,6 +181,19 @@ function trafficVars(tone: "success" | "warning" | "danger"): {
   return { soft: `var(--${tone}-soft)`, base: `var(--${tone})` };
 }
 
+// Icono de vehículo por nivel de tráfico (color-coding [F]): el mensajero usa
+// bici en tráfico bajo, moto en medio, coche en alto. Mapea
+// DENTAL_LAB_TRAFFIC[level].vehicle → icono lucide.
+const TRAFFIC_VEHICLE_ICON: Record<"bike" | "motorcycle" | "car", LucideIcon> = {
+  bike: Bike,
+  motorcycle: Truck,
+  car: Car,
+};
+
+function trafficVehicleIcon(level: DentalLabTrafficLevel): LucideIcon {
+  return TRAFFIC_VEHICLE_ICON[DENTAL_LAB_TRAFFIC[level].vehicle] ?? Gauge;
+}
+
 function ServiceCard({
   service,
   onSelect,
@@ -205,6 +221,20 @@ function ServiceCard({
         transition: "transform .14s ease, box-shadow .14s ease, border-color .14s ease",
       }}
     >
+      {/* Acento superior que se revela al hacer hover (consistencia con la card destacada) */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 3,
+          background: "linear-gradient(90deg, var(--violet-400), var(--brand))",
+          opacity: hover ? 1 : 0,
+          transition: "opacity .14s ease",
+        }}
+      />
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
         <div
           style={{
@@ -308,6 +338,8 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
     [services, serviceId],
   );
   const traffic = DENTAL_LAB_TRAFFIC[lab.trafficLevel];
+  // Icono de vehículo del mensajero según el nivel de tráfico (color-coding [F]).
+  const TrafficVehicle = trafficVehicleIcon(lab.trafficLevel);
 
   function openModal(id: string) {
     setServiceId(id);
@@ -445,6 +477,7 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
       {/* Encabezado de la ficha */}
       <div
         style={{
+          position: "relative",
           display: "flex",
           alignItems: "flex-start",
           justifyContent: "space-between",
@@ -453,7 +486,23 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
           marginBottom: 16,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
+        {/* Glow violeta de fondo (decorativo) */}
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            top: -40,
+            left: -30,
+            width: 260,
+            height: 160,
+            pointerEvents: "none",
+            background:
+              "radial-gradient(closest-side, color-mix(in srgb, var(--brand) 16%, transparent), transparent)",
+            filter: "blur(6px)",
+            zIndex: 0,
+          }}
+        />
+        <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
           <div
             style={{
               position: "relative",
@@ -546,7 +595,7 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+        <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {/* Chat clínica↔laboratorio (espejo del botón de proveedores). La ruta
               /dashboard/lab-chat/[labId] la provee el módulo de chat de labs. */}
           <Link
@@ -714,7 +763,7 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                   boxShadow: `0 0 12px -4px ${trafficVars(traffic.tone).base}`,
                 }}
               >
-                <Gauge size={16} />
+                <TrafficVehicle size={16} />
               </span>
               <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -734,7 +783,22 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
 
       {/* Servicios */}
       <div style={{ marginTop: 24 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+          <span
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 9,
+              flexShrink: 0,
+              display: "grid",
+              placeItems: "center",
+              background: "var(--brand-soft)",
+              border: "1px solid var(--border-brand)",
+              color: "var(--violet-400)",
+            }}
+          >
+            <Layers size={15} />
+          </span>
           <h2 style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 18, margin: 0 }}>
             Servicios
           </h2>
@@ -949,11 +1013,11 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                           marginBottom: 4,
                         }}
                       >
-                        <Truck size={12} />
+                        <TrafficVehicle size={12} />
                         Entrega estimada (ETA)
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <Truck size={14} style={{ color: trafficVars(traffic.tone).base }} />
+                        <TrafficVehicle size={14} style={{ color: trafficVars(traffic.tone).base }} />
                         <span style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>
                           {trafficEtaLabel(lab)}
                         </span>

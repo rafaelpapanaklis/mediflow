@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Search, Wrench, Trash2, Pencil, Eye, EyeOff, Clock, DollarSign, BadgeCheck } from "lucide-react";
+import { Plus, Search, FlaskConical, Layers, Trash2, Pencil, Eye, EyeOff, Clock, DollarSign, BadgeCheck } from "lucide-react";
 import toast from "react-hot-toast";
 import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { CardNew } from "@/components/ui/design-system/card-new";
@@ -44,6 +44,7 @@ export function ServiciosClient({ initialServices }: { initialServices: DentalLa
   const [tab, setTab] = useState<Tab>("todos");
   const [search, setSearch] = useState("");
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  const [hoverId, setHoverId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(null);
 
   const kpis = useMemo(() => {
@@ -129,7 +130,23 @@ export function ServiciosClient({ initialServices }: { initialServices: DentalLa
   }
 
   return (
-    <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
+    <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto", position: "relative" }}>
+      {/* Glow violeta de fondo */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          top: -40,
+          left: -20,
+          width: 360,
+          height: 220,
+          pointerEvents: "none",
+          background: "radial-gradient(closest-side, rgba(124,58,237,0.16), transparent 70%)",
+          filter: "blur(8px)",
+          zIndex: 0,
+        }}
+      />
+
       {/* Header */}
       <div
         style={{
@@ -139,14 +156,16 @@ export function ServiciosClient({ initialServices }: { initialServices: DentalLa
           marginBottom: 22,
           gap: 24,
           flexWrap: "wrap",
+          position: "relative",
+          zIndex: 1,
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <div
             style={{
-              width: 44,
-              height: 44,
-              borderRadius: 14,
+              width: 40,
+              height: 40,
+              borderRadius: 12,
               flexShrink: 0,
               display: "grid",
               placeItems: "center",
@@ -155,13 +174,13 @@ export function ServiciosClient({ initialServices }: { initialServices: DentalLa
               boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
             }}
           >
-            <Wrench size={22} />
+            <FlaskConical size={20} />
           </div>
           <div>
-            <h1 style={{ fontSize: "clamp(16px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+            <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
               Servicios
             </h1>
-            <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
+            <p style={{ color: "var(--text-3)", fontSize: 14, marginTop: 4 }}>
               {services.length === 0
                 ? "Tu catálogo está vacío"
                 : `${services.length} ${services.length === 1 ? "servicio" : "servicios"} en tu catálogo`}
@@ -174,15 +193,24 @@ export function ServiciosClient({ initialServices }: { initialServices: DentalLa
       </div>
 
       {/* KPIs */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginBottom: 20 }}>
-        <KpiCard label="Total servicios" value={String(kpis.total)} icon={Wrench} />
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+          gap: 14,
+          marginBottom: 20,
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
+        <KpiCard label="Total servicios" value={String(kpis.total)} icon={Layers} />
         <KpiCard label="Activos" value={String(kpis.activos)} icon={BadgeCheck} />
         <KpiCard label="Precio promedio" value={fmtMXN(kpis.avgPrice)} icon={DollarSign} />
         <KpiCard label="Entrega promedio" value={kpis.avgDays != null ? `${kpis.avgDays} días` : "—"} icon={Clock} />
       </div>
 
       {/* Filtros */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap", alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap", alignItems: "center", position: "relative", zIndex: 1 }}>
         <div className="search-field">
           <Search size={14} />
           <input
@@ -207,7 +235,20 @@ export function ServiciosClient({ initialServices }: { initialServices: DentalLa
       </div>
 
       {/* Lista */}
+      <div style={{ position: "relative", zIndex: 1 }}>
       <CardNew noPad>
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 3,
+            background: "linear-gradient(90deg, var(--violet-400), var(--brand))",
+            zIndex: 1,
+          }}
+        />
         {filtered.length === 0 ? (
           <div
             style={{
@@ -231,7 +272,7 @@ export function ServiciosClient({ initialServices }: { initialServices: DentalLa
                 color: "var(--violet-400)",
               }}
             >
-              <Wrench size={26} />
+              <FlaskConical size={26} />
             </div>
             <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>
               {search
@@ -270,15 +311,25 @@ export function ServiciosClient({ initialServices }: { initialServices: DentalLa
             <tbody>
               {filtered.map((s) => {
                 const busy = busyIds.has(s.id);
+                const hovered = hoverId === s.id;
                 return (
-                  <tr key={s.id}>
+                  <tr
+                    key={s.id}
+                    onMouseEnter={() => setHoverId(s.id)}
+                    onMouseLeave={() => setHoverId((id) => (id === s.id ? null : id))}
+                    style={{
+                      background: hovered ? "var(--brand-soft)" : undefined,
+                      boxShadow: hovered ? "inset 3px 0 0 var(--violet-400)" : "inset 3px 0 0 transparent",
+                      transition: "background .14s ease, box-shadow .14s ease",
+                    }}
+                  >
                     <td>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <div
                           style={{
                             width: 40,
                             height: 40,
-                            borderRadius: 8,
+                            borderRadius: 10,
                             background: "var(--brand-soft)",
                             border: "1px solid var(--border-brand)",
                             display: "grid",
@@ -286,7 +337,7 @@ export function ServiciosClient({ initialServices }: { initialServices: DentalLa
                             flexShrink: 0,
                           }}
                         >
-                          <Wrench size={16} style={{ color: "var(--violet-400)" }} />
+                          <FlaskConical size={16} style={{ color: "var(--violet-400)" }} />
                         </div>
                         <div style={{ minWidth: 0 }}>
                           <button
@@ -324,12 +375,35 @@ export function ServiciosClient({ initialServices }: { initialServices: DentalLa
                         </div>
                       </div>
                     </td>
-                    <td style={{ color: "var(--text-2)" }}>{serviceLabel(s.serviceKey)}</td>
+                    <td>
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          padding: "3px 9px",
+                          borderRadius: 999,
+                          fontSize: 11,
+                          fontWeight: 500,
+                          color: "var(--violet-400)",
+                          background: "var(--brand-soft)",
+                          border: "1px solid var(--border-brand)",
+                        }}
+                      >
+                        <Layers size={11} />
+                        {serviceLabel(s.serviceKey)}
+                      </span>
+                    </td>
                     <td style={{ textAlign: "right" }} className="mono">
                       {fmtMXNdec(s.priceFrom)}
                       <span style={{ color: "var(--text-4)", fontSize: 11 }}> /{s.unit}</span>
                     </td>
-                    <td style={{ color: "var(--text-2)" }}>{entregaLabel(s)}</td>
+                    <td>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--text-2)" }}>
+                        <Clock size={12} style={{ color: "var(--text-4)" }} />
+                        {entregaLabel(s)}
+                      </span>
+                    </td>
                     <td>
                       <BadgeNew tone={s.isActive ? "success" : "neutral"} dot>
                         {s.isActive ? "Activo" : "Inactivo"}
@@ -378,6 +452,7 @@ export function ServiciosClient({ initialServices }: { initialServices: DentalLa
           </table>
         )}
       </CardNew>
+      </div>
 
       {form &&
         (form.mode === "edit" ? (

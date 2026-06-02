@@ -65,21 +65,38 @@ export function OrdenesClient({ orders }: Props) {
           flexWrap: "wrap",
         }}
       >
-        <div>
-          <h1
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 14, minWidth: 0 }}>
+          <div
             style={{
-              fontSize: 22,
-              letterSpacing: "-0.02em",
-              color: "var(--text-1)",
-              fontWeight: 600,
-              margin: 0,
+              width: 44,
+              height: 44,
+              borderRadius: 13,
+              flexShrink: 0,
+              display: "grid",
+              placeItems: "center",
+              color: "#fff",
+              background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+              boxShadow: "0 10px 24px -8px rgba(124,58,237,0.7)",
             }}
           >
-            Órdenes de laboratorio
-          </h1>
-          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
-            El historial de tus órdenes enviadas a laboratorios dentales.
-          </p>
+            <Package size={22} />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <h1
+              style={{
+                fontSize: 22,
+                letterSpacing: "-0.02em",
+                color: "var(--text-1)",
+                fontWeight: 600,
+                margin: 0,
+              }}
+            >
+              Órdenes de laboratorio
+            </h1>
+            <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
+              El historial de tus órdenes enviadas a laboratorios dentales.
+            </p>
+          </div>
         </div>
         <ButtonNew
           variant="secondary"

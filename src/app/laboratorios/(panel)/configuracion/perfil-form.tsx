@@ -35,6 +35,24 @@ const STATUS_TONE: Record<DentalLabStatus, "success" | "warning" | "danger"> = {
   SUSPENDED: "danger",
 };
 
+// Barra superior de acento para las cards de sección (.card ya es
+// position:relative + overflow:hidden). Puramente decorativa.
+function CardAccent() {
+  return (
+    <span
+      aria-hidden
+      style={{
+        position: "absolute",
+        insetInline: 0,
+        top: 0,
+        height: 3,
+        background: "linear-gradient(90deg, var(--violet-400), var(--brand))",
+        pointerEvents: "none",
+      }}
+    />
+  );
+}
+
 export function PerfilForm({ canEdit, initial }: { canEdit: boolean; initial: PerfilInitial }) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
@@ -160,6 +178,7 @@ export function PerfilForm({ canEdit, initial }: { canEdit: boolean; initial: Pe
 
       {/* Estado de la cuenta (solo lectura) */}
       <CardNew>
+        <CardAccent />
         <div className="form-section__title">
           <BadgeCheck size={13} style={{ color: "var(--success)" }} /> Estado de la cuenta{" "}
           <span className="form-section__rule" />
@@ -177,13 +196,26 @@ export function PerfilForm({ canEdit, initial }: { canEdit: boolean; initial: Pe
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
             <span style={{ color: "var(--text-3)" }}>URL pública</span>
-            <span className="mono" style={{ color: "var(--text-2)" }}>/{initial.slug}</span>
+            <span
+              className="mono"
+              style={{
+                color: "var(--violet-400)",
+                background: "var(--brand-soft)",
+                border: "1px solid var(--border-brand)",
+                borderRadius: 8,
+                padding: "2px 8px",
+                fontSize: 12,
+              }}
+            >
+              /{initial.slug}
+            </span>
           </div>
         </div>
       </CardNew>
 
       {/* Datos del laboratorio */}
       <CardNew>
+        <CardAccent />
         <div className="form-section__title">
           <Building2 size={13} style={{ color: "var(--violet-400)" }} /> Datos del laboratorio{" "}
           <span className="form-section__rule" />
@@ -240,6 +272,7 @@ export function PerfilForm({ canEdit, initial }: { canEdit: boolean; initial: Pe
 
       {/* Contacto y ubicación */}
       <CardNew>
+        <CardAccent />
         <div className="form-section__title">
           <MapPin size={13} style={{ color: "var(--info)" }} /> Contacto y ubicación{" "}
           <span className="form-section__rule" />

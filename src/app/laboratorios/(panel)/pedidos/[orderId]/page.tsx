@@ -17,6 +17,12 @@ import {
 } from "@/lib/laboratorios/types";
 import { B2B_PAYMENT_METHOD_LABELS, isB2BPaymentMethod } from "@/lib/payments-b2b";
 import { OrderStatusActions } from "./order-status-actions";
+import {
+  OrderTrackingHero,
+  OrderRouteMap,
+  type OrderTrackingProps,
+} from "@/components/laboratorios/order-route-map";
+import { OrderChatDock } from "@/components/laboratorios/order-chat-dock";
 
 // Etiqueta legible del método de pago: usa el catálogo B2B si el valor es
 // uno de los métodos canónicos; si no, muestra el texto crudo guardado.
@@ -65,8 +71,10 @@ export default async function LabOrderDetailPage({
     where: { id: params.orderId, labId: ctx.labId },
     include: {
       clinic: {
-        select: { name: true, city: true, state: true, address: true, mapsUrl: true, phone: true, email: true },
+        select: { name: true, city: true, state: true, address: true, mapsUrl: true, phone: true, email: true, logoUrl: true },
       },
+      // El propio laboratorio (origen del recorrido) — datos de ubicación/logo + tráfico.
+      lab: { select: { name: true, logoUrl: true, trafficLevel: true, address: true, mapsUrl: true } },
       service: { select: { name: true, unit: true } },
       events: { orderBy: { createdAt: "asc" } },
       files: { orderBy: { uploadedAt: "asc" } },
@@ -83,6 +91,18 @@ export default async function LabOrderDetailPage({
   });
 
   const clinicLocation = [order.clinic.city, order.clinic.state].filter(Boolean).join(", ");
+
+  // ── Props del seguimiento (banda hero + mapa A→B: LAB → CLÍNICA). ──
+  const tracking: OrderTrackingProps = {
+    status: order.status,
+    trafficLevel: order.lab?.trafficLevel ?? null,
+    etaAt: order.etaAt ? order.etaAt.toISOString() : null,
+    pickupAt: order.pickupAt ? order.pickupAt.toISOString() : null,
+    courier: (order.courier as unknown as OrderTrackingProps["courier"]) ?? null,
+    origin: { label: "LAB", name: order.lab?.name ?? "Tu laboratorio", mapsUrl: order.lab?.mapsUrl ?? null },
+    destination: { label: "CLÍNICA", name: order.clinic.name, mapsUrl: order.clinic.mapsUrl ?? null },
+  };
+  const showTracking = order.status !== "CANCELADA";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 1000 }}>
@@ -137,6 +157,16 @@ export default async function LabOrderDetailPage({
           </BadgeNew>
         </div>
       </div>
+
+      {/* Banda de seguimiento (hero oscuro) + mapa A→B */}
+      {showTracking && (
+        <>
+          <OrderTrackingHero {...tracking} />
+          <CardNew title="Ruta del mensajero" sub="LAB → CLÍNICA · vista ilustrativa del recorrido">
+            <OrderRouteMap {...tracking} />
+          </CardNew>
+        </>
+      )}
 
       {/* Cliente + acciones */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16, alignItems: "start" }}>
@@ -600,6 +630,15 @@ export default async function LabOrderDetailPage({
           </div>
         </CardNew>
       )}
+
+      {/* Chat embebido laboratorio↔clínica (minimizable a burbuja) */}
+      <OrderChatDock
+        side="LAB"
+        counterpartId={order.clinicId}
+        counterpartName={order.clinic.name}
+        counterpartLogoUrl={order.clinic.logoUrl ?? null}
+        orderNumber={order.orderNumber}
+      />
     </div>
   );
 }

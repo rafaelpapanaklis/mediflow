@@ -57,9 +57,26 @@ export default async function LabConfiguracionPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 760 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+      <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 14 }}>
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            top: -28,
+            left: -32,
+            width: 240,
+            height: 160,
+            pointerEvents: "none",
+            background:
+              "radial-gradient(closest-side, rgba(124,58,237,0.18), transparent 75%)",
+            filter: "blur(4px)",
+            zIndex: 0,
+          }}
+        />
         <div
           style={{
+            position: "relative",
+            zIndex: 1,
             width: 44,
             height: 44,
             borderRadius: 14,
@@ -73,7 +90,7 @@ export default async function LabConfiguracionPage() {
         >
           <Settings size={22} />
         </div>
-        <div>
+        <div style={{ position: "relative", zIndex: 1 }}>
           <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
             Configuración
           </h1>

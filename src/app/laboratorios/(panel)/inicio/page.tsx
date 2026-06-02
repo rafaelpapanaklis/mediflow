@@ -11,6 +11,10 @@ import {
   Gauge,
   Layers,
   Package,
+  Truck,
+  Receipt,
+  FlaskConical,
+  ChevronRight,
 } from "lucide-react";
 import { getDentalLabContext } from "@/lib/lab-auth";
 import { getDentalLabDashboardData } from "@/lib/laboratorios/dashboard";
@@ -46,6 +50,18 @@ const STATUS_ORDER: DentalLabOrderStatus[] = [
   "CANCELADA",
 ];
 
+// Tono semántico → variable CSS de color, para tintar los tiles por estatus.
+const TONE_COLOR_VAR: Record<
+  (typeof DENTAL_LAB_ORDER_STATUS)[DentalLabOrderStatus]["tone"],
+  string
+> = {
+  info: "var(--info)",
+  brand: "var(--brand)",
+  warning: "var(--warning)",
+  success: "var(--success)",
+  neutral: "var(--text-4)",
+};
+
 export default async function LabHomePage() {
   const ctx = await getDentalLabContext();
   if (!ctx) redirect("/laboratorios/login");
@@ -77,9 +93,24 @@ export default async function LabHomePage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+      <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 14 }}>
+        {/* Glow violeta de fondo del hero */}
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            top: -40,
+            left: -30,
+            width: 280,
+            height: 180,
+            pointerEvents: "none",
+            background:
+              "radial-gradient(60% 70% at 20% 30%, rgba(124,58,237,0.18), transparent 70%)",
+          }}
+        />
         <div
           style={{
+            position: "relative",
             width: 44,
             height: 44,
             borderRadius: 14,
@@ -93,7 +124,7 @@ export default async function LabHomePage() {
         >
           <LayoutDashboard size={22} />
         </div>
-        <div>
+        <div style={{ position: "relative" }}>
           <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
             Hola, {ctx.lab.name}
           </h1>
@@ -151,7 +182,7 @@ export default async function LabHomePage() {
       </CardNew>
 
       {/* KPIs */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 14 }}>
         <KpiCard
           label="Ventas del mes"
           value={formatCurrency(data.salesThisMonth)}
@@ -163,11 +194,23 @@ export default async function LabHomePage() {
           }
         />
         <KpiCard label="Pedidos por atender" value={String(data.pendingOrders)} icon={ClipboardList} />
+        <KpiCard label="En proceso" value={String(data.activeOrders)} icon={Truck} />
         <KpiCard label="Servicios activos" value={String(data.activeServices)} icon={Wrench} />
+        <KpiCard label="Pedidos totales" value={String(data.totalOrders)} icon={Receipt} />
       </div>
 
       {/* Pedidos por estatus */}
       <CardNew>
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 3,
+            background: "linear-gradient(90deg, var(--violet-400), var(--brand))",
+          }}
+        />
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
           <div
             style={{
@@ -200,27 +243,31 @@ export default async function LabHomePage() {
             gap: 10,
           }}
         >
-          {STATUS_ORDER.map((s) => (
-            <div
-              key={s}
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 6,
-                padding: "12px 14px",
-                borderRadius: "var(--radius)",
-                background: "var(--bg-elev-2)",
-                border: "1px solid var(--border-soft)",
-              }}
-            >
-              <BadgeNew tone={DENTAL_LAB_ORDER_STATUS[s].tone} dot>
-                {DENTAL_LAB_ORDER_STATUS[s].label}
-              </BadgeNew>
-              <span style={{ fontSize: 22, fontWeight: 700, color: "var(--text-1)", letterSpacing: "-0.02em" }}>
-                {data.statusCounts[s]}
-              </span>
-            </div>
-          ))}
+          {STATUS_ORDER.map((s) => {
+            const toneColor = TONE_COLOR_VAR[DENTAL_LAB_ORDER_STATUS[s].tone];
+            return (
+              <div
+                key={s}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  padding: "12px 14px",
+                  borderRadius: "var(--radius)",
+                  background: "var(--bg-elev-2)",
+                  border: "1px solid var(--border-soft)",
+                  borderLeft: `3px solid color-mix(in srgb, ${toneColor} 55%, transparent)`,
+                }}
+              >
+                <BadgeNew tone={DENTAL_LAB_ORDER_STATUS[s].tone} dot>
+                  {DENTAL_LAB_ORDER_STATUS[s].label}
+                </BadgeNew>
+                <span style={{ fontSize: 22, fontWeight: 700, color: "var(--text-1)", letterSpacing: "-0.02em" }}>
+                  {data.statusCounts[s]}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </CardNew>
 
@@ -280,6 +327,7 @@ export default async function LabHomePage() {
                   <th>Estado</th>
                   <th>Pago</th>
                   <th>Fecha</th>
+                  <th aria-label="Abrir" />
                 </tr>
               </thead>
               <tbody>
@@ -288,10 +336,38 @@ export default async function LabHomePage() {
                     <td>
                       <Link
                         href={`/laboratorios/pedidos/${o.id}`}
-                        className="mono"
-                        style={{ color: "var(--text-1)", fontWeight: 500, textDecoration: "none" }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          textDecoration: "none",
+                        }}
                       >
-                        {o.orderNumber}
+                        <span
+                          style={{
+                            width: 30,
+                            height: 30,
+                            borderRadius: 9,
+                            flexShrink: 0,
+                            display: "grid",
+                            placeItems: "center",
+                            background: "var(--brand-soft)",
+                            border: "1px solid var(--border-brand)",
+                            color: "var(--violet-400)",
+                          }}
+                        >
+                          <FlaskConical size={15} />
+                        </span>
+                        <span style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
+                          <span className="mono" style={{ color: "var(--text-1)", fontWeight: 500 }}>
+                            {o.orderNumber}
+                          </span>
+                          {o.patientName && (
+                            <span style={{ fontSize: 11, color: "var(--text-3)" }}>
+                              {o.patientName}
+                            </span>
+                          )}
+                        </span>
                       </Link>
                     </td>
                     <td style={{ color: "var(--text-1)" }}>{o.clinicName}</td>
@@ -311,6 +387,20 @@ export default async function LabHomePage() {
                     </td>
                     <td className="mono" style={{ color: "var(--text-3)" }}>
                       {formatRelativeDate(o.createdAt)}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      <Link
+                        href={`/laboratorios/pedidos/${o.id}`}
+                        aria-label={`Abrir pedido ${o.orderNumber}`}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          color: "var(--text-4)",
+                          textDecoration: "none",
+                        }}
+                      >
+                        <ChevronRight size={16} />
+                      </Link>
                     </td>
                   </tr>
                 ))}

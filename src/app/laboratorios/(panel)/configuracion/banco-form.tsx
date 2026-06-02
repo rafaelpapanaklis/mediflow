@@ -142,6 +142,17 @@ export function BancoForm({
 
   return (
     <CardNew>
+      <span
+        aria-hidden
+        style={{
+          position: "absolute",
+          insetInline: 0,
+          top: 0,
+          height: 3,
+          background: "linear-gradient(90deg, var(--violet-400), var(--brand))",
+          pointerEvents: "none",
+        }}
+      />
       <div className="form-section__title">
         <Landmark size={13} style={{ color: "var(--violet-400)" }} /> Cuentas bancarias (SPEI){" "}
         <span className="form-section__rule" />
