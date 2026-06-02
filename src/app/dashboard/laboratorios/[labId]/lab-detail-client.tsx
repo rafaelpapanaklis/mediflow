@@ -37,6 +37,7 @@ import {
   DENTAL_LAB_FILE_MAX_MB,
   type DentalLabTrafficLevel,
 } from "@/lib/laboratorios/types";
+import { B2B_PAYMENT_METHOD_LABELS, type B2BPaymentMethod } from "@/lib/payments-b2b";
 
 // services en el header son keys del catálogo (s1..s9). Label corto + fallback.
 function serviceLabel(key: string): string {
@@ -69,6 +70,8 @@ interface LabData {
   trafficManualMax: number | null;
   trafficNote: string | null;
   trafficUpdatedAt: string;
+  // Métodos de pago B2B habilitados por el lab (orden canónico).
+  paymentMethods: B2BPaymentMethod[];
 }
 
 interface ServiceData {
@@ -289,6 +292,8 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
   const [internalRef, setInternalRef] = useState("");
   const [notes, setNotes] = useState("");
   const [priority, setPriority] = useState(false);
+  // Método de pago: por defecto el primero habilitado por el lab (si hay).
+  const [paymentMethod, setPaymentMethod] = useState<string>(lab.paymentMethods[0] ?? "");
   const [files, setFiles] = useState<File[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -315,6 +320,7 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
     setInternalRef("");
     setNotes("");
     setPriority(false);
+    setPaymentMethod(lab.paymentMethods[0] ?? "");
     setFiles([]);
     setDragOver(false);
   }
@@ -367,6 +373,7 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
           internalRef: internalRef.trim() || undefined,
           notes: notes.trim() || undefined,
           priority,
+          paymentMethod: paymentMethod || undefined,
         }),
       });
       if (!res.ok) {
@@ -856,6 +863,34 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                       ))}
                     </select>
                   </div>
+
+                  {/* Método de pago: entre los habilitados por el lab. */}
+                  {lab.paymentMethods.length > 0 ? (
+                    <div>
+                      <label style={labelStyle} htmlFor="lab-order-payment">
+                        Método de pago
+                      </label>
+                      <select
+                        id="lab-order-payment"
+                        value={paymentMethod}
+                        onChange={(e) => setPaymentMethod(e.target.value)}
+                        style={inputStyle}
+                      >
+                        {lab.paymentMethods.map((m) => (
+                          <option key={m} value={m}>
+                            {B2B_PAYMENT_METHOD_LABELS[m]}
+                          </option>
+                        ))}
+                      </select>
+                      <span style={{ display: "block", color: "var(--text-4)", fontSize: 11, marginTop: 4 }}>
+                        La orden se crea sin pagar; coordinas el pago según el método elegido.
+                      </span>
+                    </div>
+                  ) : (
+                    <div style={{ color: "var(--text-3)", fontSize: 12, lineHeight: 1.5 }}>
+                      Este laboratorio aún no configuró métodos de pago; se acuerda directamente con él.
+                    </div>
+                  )}
 
                   {/* Resumen: costo + ETA + recolección */}
                   <div

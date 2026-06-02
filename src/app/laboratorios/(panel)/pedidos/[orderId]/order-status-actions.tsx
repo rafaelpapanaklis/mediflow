@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
-import { Send, X, BadgeCheck } from "lucide-react";
-import type { DentalLabOrderStatus } from "@/lib/laboratorios/types";
+import { Send, X, BadgeCheck, DollarSign } from "lucide-react";
+import type { DentalLabOrderStatus, DentalLabPaymentStatus } from "@/lib/laboratorios/types";
 import {
   nextLabStatuses,
   DENTAL_LAB_STATUS_ACTION_LABELS,
@@ -16,21 +16,23 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 export function OrderStatusActions({
   orderId,
   status,
+  paymentStatus,
 }: {
   orderId: string;
   status: DentalLabOrderStatus;
+  paymentStatus: DentalLabPaymentStatus;
 }) {
   const router = useRouter();
   const confirm = useConfirm();
   const [saving, setSaving] = useState(false);
 
-  async function patch(next: DentalLabOrderStatus) {
+  async function patch(payload: { status?: DentalLabOrderStatus; paymentStatus?: DentalLabPaymentStatus }) {
     setSaving(true);
     try {
       const res = await fetch(`/api/laboratorios/orders/${orderId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: next }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -48,6 +50,7 @@ export function OrderStatusActions({
   const nextStatuses = nextLabStatuses(status);
 
   const isDelivered = status === "ENTREGADA";
+  const isUnpaid = paymentStatus === "UNPAID";
 
   return (
     <CardNew>
@@ -129,12 +132,32 @@ export function OrderStatusActions({
                 ) {
                   return;
                 }
-                patch(to);
+                patch({ status: to });
               }}
             >
               {DENTAL_LAB_STATUS_ACTION_LABELS[to]}
             </ButtonNew>
           ))
+        )}
+
+        {/* Pago: solo el vendedor marca a mano (transferencia/efectivo). El pago
+            por MercadoPago lo confirma el webhook. Aparece solo si está sin pagar. */}
+        {isUnpaid && (
+          <>
+            <div style={{ borderTop: "1px solid var(--border-soft)", margin: "4px 0" }} />
+            <ButtonNew
+              variant="secondary"
+              icon={<DollarSign size={15} />}
+              style={{ width: "100%", justifyContent: "center" }}
+              disabled={saving}
+              onClick={() => patch({ paymentStatus: "PAID" })}
+            >
+              Marcar como pagada
+            </ButtonNew>
+            <p style={{ fontSize: 11, color: "var(--text-3)", margin: 0, textAlign: "center" }}>
+              Confirma que recibiste el pago de esta orden.
+            </p>
+          </>
         )}
       </div>
     </CardNew>

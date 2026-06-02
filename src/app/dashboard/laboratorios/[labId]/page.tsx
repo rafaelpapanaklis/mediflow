@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
+import { dentalLabEnabledB2BMethods } from "@/lib/laboratorios/types";
 import { LabDetailClient } from "./lab-detail-client";
 
 export default async function LabDetailPage({ params }: { params: { labId: string } }) {
@@ -49,6 +50,8 @@ export default async function LabDetailPage({ params }: { params: { labId: strin
     trafficManualMax: lab.trafficManualMax,
     trafficNote: lab.trafficNote,
     trafficUpdatedAt: lab.trafficUpdatedAt.toISOString(),
+    // Métodos de pago B2B habilitados por el lab (para el selector del modal).
+    paymentMethods: dentalLabEnabledB2BMethods(lab),
   };
 
   const services = lab.labServices.map((s) => ({

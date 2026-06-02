@@ -98,6 +98,7 @@ function toDentalLabOrderDTO(o: OrderWith): DentalLabOrderDTO {
     total: o.total,
     paymentStatus: o.paymentStatus,
     paymentMethod: o.paymentMethod,
+    paidAt: o.paidAt ? iso(o.paidAt) : null,
     priority: o.priority,
     pickupAt: o.pickupAt ? iso(o.pickupAt) : null,
     etaAt: o.etaAt ? iso(o.etaAt) : null,

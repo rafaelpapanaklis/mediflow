@@ -50,6 +50,8 @@
 //   PATCH /api/admin/laboratorios/[id]         → { status, rejectedReason? }
 // ═══════════════════════════════════════════════════════════════════════
 
+import { type B2BPaymentMethod } from "@/lib/payments-b2b";
+
 // ── Enums (espejo 1:1 de los enums Prisma; como union types para poder
 //    importarlos desde componentes "use client" sin el runtime de Prisma). ──
 export type DentalLabStatus = "PENDING" | "APPROVED" | "REJECTED" | "SUSPENDED";
@@ -258,6 +260,7 @@ export interface DentalLabOrderDTO {
   total: number;
   paymentStatus: DentalLabPaymentStatus;
   paymentMethod: string | null;
+  paidAt: string | null;
   priority: boolean;
   pickupAt: string | null;
   etaAt: string | null;
@@ -365,6 +368,43 @@ export function makeDentalLabOrderNumber(): string {
 /** Referencia interna de paciente sugerida: "REF-####". */
 export function makeInternalRef(): string {
   return `REF-${Math.floor(1000 + Math.random() * 9000)}`;
+}
+
+// ── Métodos de pago B2B del laboratorio ─────────────────────────────────
+// El lab habilita métodos con tres banderas booleanas. El método B2B
+// canónico TRANSFER se mapea a la bandera SPEI del lab (sus cuentas CLABE).
+// Esta es la ÚNICA fuente de verdad del mapeo método↔bandera; la usan el
+// panel del lab (config), el POST de creación de orden y el detalle clínica.
+export interface DentalLabPayFlags {
+  paySpeiEnabled: boolean;
+  payMercadoPagoEnabled: boolean;
+  payCashEnabled: boolean;
+}
+
+/** ¿El lab tiene habilitado ESTE método B2B? */
+export function isDentalLabMethodEnabled(
+  method: B2BPaymentMethod,
+  flags: DentalLabPayFlags,
+): boolean {
+  switch (method) {
+    case "TRANSFER":
+      return flags.paySpeiEnabled;
+    case "MERCADOPAGO":
+      return flags.payMercadoPagoEnabled;
+    case "CASH":
+      return flags.payCashEnabled;
+    default:
+      return false;
+  }
+}
+
+/** Métodos B2B habilitados por el lab, en orden canónico. */
+export function dentalLabEnabledB2BMethods(flags: DentalLabPayFlags): B2BPaymentMethod[] {
+  const out: B2BPaymentMethod[] = [];
+  if (flags.paySpeiEnabled) out.push("TRANSFER");
+  if (flags.payMercadoPagoEnabled) out.push("MERCADOPAGO");
+  if (flags.payCashEnabled) out.push("CASH");
+  return out;
 }
 
 /** Slug estable a partir del nombre del lab (sin acentos, kebab-case). */

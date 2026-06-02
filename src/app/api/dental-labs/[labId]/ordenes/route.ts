@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { makeDentalLabOrderNumber } from "@/lib/laboratorios/types";
+import { makeDentalLabOrderNumber, isDentalLabMethodEnabled } from "@/lib/laboratorios/types";
+import { isB2BPaymentMethod } from "@/lib/payments-b2b";
 
 // POST /api/dental-labs/[labId]/ordenes — la clínica solicita una orden a un
 // laboratorio. Crea el DentalLabOrder en status SOLICITADA + su primer
@@ -13,7 +14,7 @@ import { makeDentalLabOrderNumber } from "@/lib/laboratorios/types";
 //   - labId SIEMPRE del path — NUNCA del body.
 //   - serviceId (si viene) debe ser un servicio activo de ESTE lab.
 //
-// Body: { serviceId?, patientName?, internalRef?, notes?, priority? }
+// Body: { serviceId?, paymentMethod?, patientName?, internalRef?, notes?, priority? }
 export async function POST(
   req: NextRequest,
   { params }: { params: { labId: string } }
@@ -24,9 +25,15 @@ export async function POST(
   const labId = params.labId;
 
   // El laboratorio debe existir y seguir APPROVED al momento de solicitar.
+  // Traemos sus banderas de pago para validar el método elegido por la clínica.
   const lab = await prisma.dentalLab.findFirst({
     where: { id: labId, status: "APPROVED" },
-    select: { id: true },
+    select: {
+      id: true,
+      paySpeiEnabled: true,
+      payMercadoPagoEnabled: true,
+      payCashEnabled: true,
+    },
   });
   if (!lab) {
     return NextResponse.json(
@@ -51,6 +58,23 @@ export async function POST(
   const notes =
     typeof body?.notes === "string" && body.notes.trim() ? body.notes.trim() : null;
   const priority = body?.priority === true;
+
+  // Método de pago elegido por la clínica (opcional). Debe ser un método B2B
+  // canónico Y estar habilitado por ESTE lab. paymentStatus arranca UNPAID.
+  const paymentMethodRaw =
+    typeof body?.paymentMethod === "string" && body.paymentMethod.trim()
+      ? body.paymentMethod.trim()
+      : null;
+  let paymentMethod: string | null = null;
+  if (paymentMethodRaw !== null) {
+    if (!isB2BPaymentMethod(paymentMethodRaw) || !isDentalLabMethodEnabled(paymentMethodRaw, lab)) {
+      return NextResponse.json(
+        { error: "Método de pago no disponible para este laboratorio." },
+        { status: 400 }
+      );
+    }
+    paymentMethod = paymentMethodRaw;
+  }
 
   // Si viene serviceId, debe ser un servicio ACTIVO de este lab. Congela el
   // precio base al momento de solicitar.
@@ -87,6 +111,7 @@ export async function POST(
       internalRef,
       notes,
       priority,
+      paymentMethod,
       status: "SOLICITADA",
       basePrice,
       total: basePrice,

@@ -15,7 +15,14 @@ import {
   type DentalLabPaymentStatus,
   type DentalLabOrderActor,
 } from "@/lib/laboratorios/types";
+import { B2B_PAYMENT_METHOD_LABELS, isB2BPaymentMethod } from "@/lib/payments-b2b";
 import { OrderStatusActions } from "./order-status-actions";
+
+// Etiqueta legible del método de pago: usa el catálogo B2B si el valor es
+// uno de los métodos canónicos; si no, muestra el texto crudo guardado.
+function paymentMethodLabel(method: string): string {
+  return isB2BPaymentMethod(method) ? B2B_PAYMENT_METHOD_LABELS[method] : method;
+}
 
 const PAYMENT_LABELS: Record<DentalLabPaymentStatus, string> = {
   UNPAID: "Sin pagar",
@@ -216,7 +223,11 @@ export default async function LabOrderDetailPage({
           </div>
         </CardNew>
 
-        <OrderStatusActions orderId={order.id} status={order.status} />
+        <OrderStatusActions
+          orderId={order.id}
+          status={order.status}
+          paymentStatus={order.paymentStatus}
+        />
       </div>
 
       {/* Servicio + paciente + desglose */}
@@ -555,7 +566,17 @@ export default async function LabOrderDetailPage({
                   <Receipt size={12} style={{ color: "var(--violet-400)" }} />
                   Método de pago
                 </div>
-                <div style={{ color: "var(--text-1)" }}>{order.paymentMethod}</div>
+                <div style={{ color: "var(--text-1)" }}>{paymentMethodLabel(order.paymentMethod)}</div>
+                {order.paidAt && (
+                  <div className="mono" style={{ color: "var(--text-3)", fontSize: 11, marginTop: 2 }}>
+                    Pagado el{" "}
+                    {new Date(order.paidAt).toLocaleDateString("es-MX", {
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </div>
+                )}
               </div>
             )}
             {order.notes && (

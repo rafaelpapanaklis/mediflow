@@ -5,6 +5,9 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 // GET /api/laboratorios/profile → perfil del laboratorio en sesión.
+// El access token de MercadoPago NUNCA se devuelve en claro: se reemplaza por
+// el booleano `mpConnected` (¿hay token guardado?) para que el formulario sepa
+// si ya está conectado sin exponer la credencial al cliente.
 export async function GET() {
   const ctx = await getDentalLabContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado." }, { status: 401 });
@@ -12,9 +15,11 @@ export async function GET() {
   const lab = await prisma.dentalLab.findUnique({ where: { id: ctx.labId } });
   if (!lab) return NextResponse.json({ error: "Laboratorio no encontrado." }, { status: 404 });
 
-  return NextResponse.json(lab, {
-    headers: { "Cache-Control": "no-store, must-revalidate" },
-  });
+  const { mpAccessToken, ...safe } = lab;
+  return NextResponse.json(
+    { ...safe, mpConnected: Boolean(mpAccessToken) },
+    { headers: { "Cache-Control": "no-store, must-revalidate" } },
+  );
 }
 
 // PATCH /api/laboratorios/profile → editar datos del laboratorio.
@@ -91,6 +96,50 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
+  // ── Métodos de pago B2B (clínica → laboratorio). ──
+  // Banderas booleanas: undefined = no cambiar. TRANSFER usa la bandera SPEI.
+  const bool = (v: unknown): boolean | undefined => (typeof v === "boolean" ? v : undefined);
+  const paySpeiEnabled = bool(b.paySpeiEnabled);
+  const payMercadoPagoEnabled = bool(b.payMercadoPagoEnabled);
+  const payCashEnabled = bool(b.payCashEnabled);
+
+  // mpAccessToken: string no vacío = guardar token nuevo; null explícito =
+  // desconectar; "" o undefined = no cambiar (guardar el form sin re-teclear el
+  // token NUNCA lo borra). El token nunca se devuelve en claro (ver más abajo).
+  let mpAccessToken: string | null | undefined = undefined;
+  if (b.mpAccessToken === null) {
+    mpAccessToken = null;
+  } else if (typeof b.mpAccessToken === "string" && b.mpAccessToken.trim() !== "") {
+    mpAccessToken = b.mpAccessToken.trim();
+  }
+
+  // Invariante de negocio: MercadoPago NO puede quedar habilitado sin un Access
+  // Token (entrante o ya guardado). El form del cliente ya lo valida, pero es
+  // bypasseable, así que esta es la fuente de verdad. Solo leemos el estado
+  // actual si la petición toca algo de MercadoPago.
+  if (payMercadoPagoEnabled !== undefined || mpAccessToken !== undefined) {
+    const current = await prisma.dentalLab.findUnique({
+      where: { id: ctx.labId },
+      select: { payMercadoPagoEnabled: true, mpAccessToken: true },
+    });
+    const finalMpEnabled =
+      payMercadoPagoEnabled !== undefined
+        ? payMercadoPagoEnabled
+        : Boolean(current?.payMercadoPagoEnabled);
+    const finalHasToken =
+      mpAccessToken === null
+        ? false
+        : typeof mpAccessToken === "string"
+          ? true // ya validado como no vacío arriba
+          : Boolean(current?.mpAccessToken);
+    if (finalMpEnabled && !finalHasToken) {
+      return NextResponse.json(
+        { error: "Para habilitar MercadoPago, agrega tu Access Token." },
+        { status: 400 },
+      );
+    }
+  }
+
   const willUpdate = [
     name,
     rfc,
@@ -103,6 +152,10 @@ export async function PATCH(req: NextRequest) {
     state,
     description,
     founded,
+    paySpeiEnabled,
+    payMercadoPagoEnabled,
+    payCashEnabled,
+    mpAccessToken,
   ].some((v) => v !== undefined);
   if (!willUpdate) {
     return NextResponse.json({ error: "Nada que actualizar." }, { status: 400 });
@@ -122,8 +175,14 @@ export async function PATCH(req: NextRequest) {
       ...(state !== undefined ? { state: state || null } : {}),
       ...(description !== undefined ? { description: description || null } : {}),
       ...(founded !== undefined ? { founded } : {}),
+      ...(paySpeiEnabled !== undefined ? { paySpeiEnabled } : {}),
+      ...(payMercadoPagoEnabled !== undefined ? { payMercadoPagoEnabled } : {}),
+      ...(payCashEnabled !== undefined ? { payCashEnabled } : {}),
+      ...(mpAccessToken !== undefined ? { mpAccessToken } : {}),
     },
   });
 
-  return NextResponse.json(lab);
+  // Igual que el GET: nunca devolvemos el token en claro, solo `mpConnected`.
+  const { mpAccessToken: savedToken, ...safe } = lab;
+  return NextResponse.json({ ...safe, mpConnected: Boolean(savedToken) });
 }

@@ -8,7 +8,9 @@ import type { DentalLabOrderDTO } from "@/lib/laboratorios/types";
 // lab, el servicio, la línea de tiempo (events) y los archivos. Mantiene la
 // MISMA forma que el DTO declarado en `@/lib/laboratorios/types`.
 const orderInclude = {
-  lab: true,
+  // El serializer no expone el lab; traemos solo id/nombre para no cargar
+  // campos sensibles (mpAccessToken) en memoria innecesariamente.
+  lab: { select: { id: true, name: true } },
   service: true,
   events: { orderBy: { createdAt: "asc" } },
   files: { orderBy: { uploadedAt: "asc" } },
@@ -37,6 +39,7 @@ function toDentalLabOrderDTO(o: OrderWith): DentalLabOrderDTO {
     total: o.total,
     paymentStatus: o.paymentStatus,
     paymentMethod: o.paymentMethod,
+    paidAt: o.paidAt ? iso(o.paidAt) : null,
     priority: o.priority,
     pickupAt: o.pickupAt ? iso(o.pickupAt) : null,
     etaAt: o.etaAt ? iso(o.etaAt) : null,

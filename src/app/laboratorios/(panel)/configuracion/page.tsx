@@ -9,6 +9,7 @@ import type { DentalLabBankAccountDTO, DentalLabFiscalDataDTO } from "@/lib/labo
 import { PerfilForm } from "./perfil-form";
 import { FiscalForm } from "./fiscal-form";
 import { BancoForm } from "./banco-form";
+import { PagosForm } from "./pagos-form";
 
 export const metadata: Metadata = {
   title: "Configuración · Laboratorio — MediFlow",
@@ -102,6 +103,16 @@ export default async function LabConfiguracionPage() {
       />
 
       <FiscalForm canEdit={canEdit} initial={fiscalInitial} />
+
+      <PagosForm
+        canEdit={canEdit}
+        initial={{
+          paySpeiEnabled: lab.paySpeiEnabled,
+          payMercadoPagoEnabled: lab.payMercadoPagoEnabled,
+          payCashEnabled: lab.payCashEnabled,
+          mpConnected: Boolean(lab.mpAccessToken),
+        }}
+      />
 
       <BancoForm canEdit={canEdit} initial={accountsInitial} />
     </div>

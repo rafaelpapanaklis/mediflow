@@ -6,6 +6,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { Landmark, Banknote, CreditCard, CheckCircle2, Info } from "lucide-react";
 import { CardNew, BadgeNew } from "@/components/ui/design-system";
 import { fmtMXNdec } from "@/lib/format";
 import {
@@ -13,7 +14,9 @@ import {
   type DentalLabOrderStatus,
   type DentalLabPaymentStatus,
 } from "@/lib/laboratorios/types";
+import { B2B_PAYMENT_METHOD_LABELS, isB2BPaymentMethod } from "@/lib/payments-b2b";
 import { CancelOrderButton } from "../ordenes-client";
+import { PayWithMercadoPago } from "./pay-mercadopago-button";
 
 export const metadata: Metadata = { title: "Orden — MediFlow" };
 
@@ -30,7 +33,15 @@ const PAYMENT_STATUS_LABELS: Record<DentalLabPaymentStatus, string> = {
 };
 
 const orderInclude = {
-  lab: true,
+  // select (no include): traemos SOLO lo que la página necesita — nunca el
+  // mpAccessToken del lab. Las cuentas bancarias alimentan la transferencia.
+  lab: {
+    select: {
+      name: true,
+      payMercadoPagoEnabled: true,
+      bankAccounts: { orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] },
+    },
+  },
   events: true,
   files: true,
 } satisfies Prisma.DentalLabOrderInclude;
@@ -69,6 +80,20 @@ export default async function Page({ params }: { params: { orderId: string } }) 
     if (ta !== tb) return ta - tb;
     return a.createdAt.getTime() - b.createdAt.getTime();
   });
+
+  // ── Datos de pago para la sección "Cómo pagar". ──
+  const method = order.paymentMethod;
+  const methodLabel = method
+    ? isB2BPaymentMethod(method)
+      ? B2B_PAYMENT_METHOD_LABELS[method]
+      : method
+    : null;
+  const isPaid = order.paymentStatus === "PAID";
+  const bankAccounts = order.lab?.bankAccounts ?? [];
+  // El lab puede cobrar por MP si lo tiene habilitado. La invariante del server
+  // (PATCH /profile) garantiza que habilitado ⇒ hay token, así que no hace falta
+  // cargar el token (sensible) en esta página solo para este chequeo.
+  const mpReady = Boolean(order.lab?.payMercadoPagoEnabled);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 880 }}>
@@ -122,6 +147,152 @@ export default async function Page({ params }: { params: { orderId: string } }) 
             <span>Total</span>
             <span>{fmtMXNdec(order.total)}</span>
           </div>
+        </div>
+      </CardNew>
+
+      <CardNew title="Cómo pagar">
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <span style={{ fontSize: 12, color: "var(--text-3)" }}>Método de pago</span>
+              <span style={{ fontSize: 14, color: "var(--text-1)", fontWeight: 500 }}>
+                {methodLabel ?? "Por acordar con el laboratorio"}
+              </span>
+            </div>
+            <BadgeNew tone={PAYMENT_STATUS_TONES[order.paymentStatus]} dot>
+              {PAYMENT_STATUS_LABELS[order.paymentStatus]}
+            </BadgeNew>
+          </div>
+
+          {isPaid ? (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "12px 14px",
+                borderRadius: 10,
+                background: "var(--success-soft)",
+                border: "1px solid var(--success)",
+                color: "var(--text-1)",
+                fontSize: 13,
+              }}
+            >
+              <CheckCircle2 size={18} style={{ color: "var(--success)", flexShrink: 0 }} />
+              <span>
+                Pago confirmado
+                {order.paidAt ? ` el ${fmtFullDate(order.paidAt.toISOString())}` : ""}.
+              </span>
+            </div>
+          ) : method === "TRANSFER" ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-2)", fontSize: 13 }}>
+                <Landmark size={15} style={{ color: "var(--violet-400)" }} />
+                Transfiere por SPEI a la cuenta del laboratorio:
+              </div>
+              {bankAccounts.length === 0 ? (
+                <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0 }}>
+                  El laboratorio aún no registró sus cuentas bancarias. Escríbele para coordinar el pago.
+                </p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {bankAccounts.map((acc) => (
+                    <div
+                      key={acc.id}
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 4,
+                        padding: "12px 14px",
+                        borderRadius: 10,
+                        border: "1px solid var(--border-soft)",
+                        background: "var(--bg-elev)",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
+                          {acc.bank}
+                        </span>
+                        {acc.isPrimary && (
+                          <BadgeNew tone="brand" dot>
+                            Principal
+                          </BadgeNew>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--text-3)" }}>{acc.holderName}</div>
+                      <div className="mono" style={{ fontSize: 13, color: "var(--text-1)" }}>
+                        CLABE {acc.clabe}
+                      </div>
+                      {acc.accountNumber && (
+                        <div className="mono" style={{ fontSize: 11, color: "var(--text-4)" }}>
+                          Cuenta {acc.accountNumber}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p style={{ fontSize: 11, color: "var(--text-4)", margin: 0, lineHeight: 1.5 }}>
+                Usa el número de orden {order.orderNumber} como referencia de tu transferencia.
+              </p>
+            </div>
+          ) : method === "CASH" ? (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "12px 14px",
+                borderRadius: 10,
+                background: "var(--info-soft)",
+                border: "1px solid var(--info)",
+                color: "var(--text-1)",
+                fontSize: 13,
+              }}
+            >
+              <Banknote size={18} style={{ color: "var(--info)", flexShrink: 0 }} />
+              <span>Paga en efectivo al recibir el trabajo.</span>
+            </div>
+          ) : method === "MERCADOPAGO" ? (
+            mpReady ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-2)", fontSize: 13 }}>
+                  <CreditCard size={15} style={{ color: "var(--violet-400)" }} />
+                  Paga en línea de forma segura con MercadoPago.
+                </div>
+                <PayWithMercadoPago orderId={order.id} />
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "12px 14px",
+                  borderRadius: 10,
+                  background: "var(--warning-soft)",
+                  border: "1px solid var(--warning)",
+                  color: "var(--text-1)",
+                  fontSize: 13,
+                }}
+              >
+                <Info size={18} style={{ color: "var(--warning)", flexShrink: 0 }} />
+                <span>El laboratorio aún no terminó de configurar MercadoPago. Escríbele para coordinar el pago.</span>
+              </div>
+            )
+          ) : (
+            <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0 }}>
+              El método de pago se acordará directamente con el laboratorio.
+            </p>
+          )}
         </div>
       </CardNew>
 
@@ -181,13 +352,6 @@ export default async function Page({ params }: { params: { orderId: string } }) 
 
       <CardNew title="Detalles de la orden">
         <dl style={{ display: "flex", flexDirection: "column", gap: 14, margin: 0 }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <dt style={{ fontSize: 12, color: "var(--text-3)" }}>Método de pago</dt>
-            <dd style={{ fontSize: 14, color: "var(--text-1)", margin: 0 }}>
-              {order.paymentMethod ?? "Por acordar con el laboratorio"}
-            </dd>
-          </div>
-
           {order.patientName && (
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               <dt style={{ fontSize: 12, color: "var(--text-3)" }}>Paciente</dt>
@@ -218,10 +382,6 @@ export default async function Page({ params }: { params: { orderId: string } }) 
             </dd>
           </div>
         </dl>
-
-        <p style={{ fontSize: 12, color: "var(--text-3)", margin: "16px 0 0", lineHeight: 1.5 }}>
-          El pago se coordina directamente con el laboratorio; no hay cobro en línea.
-        </p>
       </CardNew>
 
       <CardNew title="Acciones">
