@@ -4,7 +4,11 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Search, FlaskConical, MapPin, Layers, Star } from "lucide-react";
 import { BadgeNew } from "@/components/ui/design-system";
-import { DENTAL_LAB_SERVICES } from "@/lib/laboratorios/types";
+import {
+  DENTAL_LAB_SERVICES,
+  DENTAL_LAB_TRAFFIC,
+  type DentalLabTrafficLevel,
+} from "@/lib/laboratorios/types";
 
 // services es un String[] de keys del catálogo fijo (s1..s9). Mostramos el
 // label corto; si la key no estuviera en el catálogo, caemos a la key cruda.
@@ -27,7 +31,20 @@ interface Lab {
   description: string | null;
   rating: number | null;
   onTimePct: number | null;
+  trafficLevel: DentalLabTrafficLevel;
+  trafficManualMin: number | null;
+  trafficManualMax: number | null;
   serviceCount: number;
+}
+
+// Rango ETA del mensajero según tráfico (override manual en minutos si existe).
+function trafficEtaLabel(lab: Lab): string {
+  const lo = lab.trafficManualMin;
+  const hi = lab.trafficManualMax;
+  if (lo != null && hi != null) {
+    return lo === hi ? `${lo} min` : `${lo}–${hi} min`;
+  }
+  return DENTAL_LAB_TRAFFIC[lab.trafficLevel].rangeLabel;
 }
 
 function LabLogo({ lab }: { lab: Lab }) {
@@ -191,16 +208,20 @@ function LabCard({ lab }: { lab: Lab }) {
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 6,
+              justifyContent: "space-between",
+              gap: 8,
               color: "var(--text-3)",
               fontSize: 12,
               marginTop: "auto",
             }}
           >
-            <Layers size={12} />
-            <span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <Layers size={12} />
               {lab.serviceCount} {lab.serviceCount === 1 ? "servicio" : "servicios"}
             </span>
+            <BadgeNew tone={DENTAL_LAB_TRAFFIC[lab.trafficLevel].tone} dot>
+              {trafficEtaLabel(lab)}
+            </BadgeNew>
           </div>
         </div>
       </div>

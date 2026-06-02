@@ -26,6 +26,9 @@ export default async function LaboratoriosPage() {
       description: true,
       rating: true,
       onTimePct: true,
+      trafficLevel: true,
+      trafficManualMin: true,
+      trafficManualMax: true,
       _count: { select: { labServices: true } },
     },
   });
@@ -41,6 +44,9 @@ export default async function LaboratoriosPage() {
     description: l.description,
     rating: l.rating,
     onTimePct: l.onTimePct,
+    trafficLevel: l.trafficLevel,
+    trafficManualMin: l.trafficManualMin,
+    trafficManualMax: l.trafficManualMax,
     serviceCount: l._count.labServices,
   }));
 

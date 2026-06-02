@@ -6,7 +6,10 @@ import { notFound } from "next/navigation";
 import { LabDetailClient } from "./lab-detail-client";
 
 export default async function LabDetailPage({ params }: { params: { labId: string } }) {
-  await getCurrentUser(); // exige sesión de clínica
+  // Sesión de clínica. El usuario trae la clínica activa incluida → de ahí
+  // sacamos la dirección de recolección (clinicId SIEMPRE de sesión, nunca del
+  // request, igual que getAuthContext en el POST de órdenes).
+  const me = await getCurrentUser();
 
   const lab = await prisma.dentalLab.findFirst({
     where: { id: params.labId, status: "APPROVED" },
@@ -28,6 +31,7 @@ export default async function LabDetailPage({ params }: { params: { labId: strin
     city: lab.city,
     state: lab.state,
     address: lab.address,
+    mapsUrl: lab.mapsUrl,
     phone: lab.phone,
     whatsapp: lab.whatsapp,
     website: lab.website,
@@ -39,6 +43,12 @@ export default async function LabDetailPage({ params }: { params: { labId: strin
     onTimePct: lab.onTimePct,
     totalOrders: lab.totalOrders,
     founded: lab.founded,
+    // Tráfico del lab → ETA de recolección/entrega del mensajero.
+    trafficLevel: lab.trafficLevel,
+    trafficManualMin: lab.trafficManualMin,
+    trafficManualMax: lab.trafficManualMax,
+    trafficNote: lab.trafficNote,
+    trafficUpdatedAt: lab.trafficUpdatedAt.toISOString(),
   };
 
   const services = lab.labServices.map((s) => ({
@@ -53,5 +63,11 @@ export default async function LabDetailPage({ params }: { params: { labId: strin
     imageUrl: s.imageUrl,
   }));
 
-  return <LabDetailClient lab={data} services={services} />;
+  // Dirección de recolección = la de la clínica en sesión.
+  const clinic = {
+    address: me.clinic?.address ?? null,
+    mapsUrl: me.clinic?.mapsUrl ?? null,
+  };
+
+  return <LabDetailClient lab={data} services={services} clinic={clinic} />;
 }
