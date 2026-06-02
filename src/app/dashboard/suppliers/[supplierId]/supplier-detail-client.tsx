@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import {
@@ -13,6 +13,7 @@ import {
   Minus,
   ShoppingCart,
   Package,
+  Search,
 } from "lucide-react";
 import { CardNew, ButtonNew, BadgeNew } from "@/components/ui/design-system";
 import { fmtMXN } from "@/lib/format";
@@ -241,6 +242,29 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
   const [qty, setQty] = useState<Record<string, number>>({});
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [logoError, setLogoError] = useState(false);
+  const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of products) {
+      const c = p.category?.trim();
+      if (c) set.add(c);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [products]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return products.filter((p) => {
+      if (activeCategory && p.category?.trim() !== activeCategory) return false;
+      if (!q) return true;
+      const haystack = [p.name, p.description ?? "", p.sku ?? "", p.category ?? ""]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [products, search, activeCategory]);
 
   const locationLabel = [supplier.city, supplier.state].filter(Boolean).join(", ");
   const showLogo = !!supplier.logoUrl && !logoError;
@@ -440,12 +464,50 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
 
       {/* Productos */}
       <div style={{ marginTop: 24 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 14 }}>
-          <h2 style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 18, margin: 0 }}>
-            Productos
-          </h2>
-          <span style={{ color: "var(--text-3)", fontSize: 13 }}>({products.length})</span>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+            marginBottom: 14,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <h2 style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 18, margin: 0 }}>
+              Productos
+            </h2>
+            <span style={{ color: "var(--text-3)", fontSize: 13 }}>({filtered.length})</span>
+          </div>
+
+          <div className="search-field" style={{ maxWidth: 360 }}>
+            <Search size={14} />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar producto…"
+            />
+          </div>
         </div>
+
+        {categories.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+            <CategoryChip
+              label="Todas"
+              active={activeCategory === null}
+              onClick={() => setActiveCategory(null)}
+            />
+            {categories.map((cat) => (
+              <CategoryChip
+                key={cat}
+                label={cat}
+                active={activeCategory === cat}
+                onClick={() => setActiveCategory(activeCategory === cat ? null : cat)}
+              />
+            ))}
+          </div>
+        )}
 
         {products.length === 0 ? (
           <CardNew>
@@ -466,6 +528,23 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
               </span>
             </div>
           </CardNew>
+        ) : filtered.length === 0 ? (
+          <CardNew>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 10,
+                padding: "32px 16px",
+                textAlign: "center",
+                color: "var(--text-3)",
+              }}
+            >
+              <Search size={36} style={{ color: "var(--text-4)" }} />
+              <span style={{ fontSize: 14 }}>Sin resultados</span>
+            </div>
+          </CardNew>
         ) : (
           <div
             style={{
@@ -474,7 +553,7 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
               gap: 16,
             }}
           >
-            {products.map((p) => (
+            {filtered.map((p) => (
               <ProductCard
                 key={p.id}
                 product={p}
@@ -488,5 +567,35 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
         )}
       </div>
     </div>
+  );
+}
+
+function CategoryChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: "5px 12px",
+        borderRadius: 999,
+        fontSize: 12,
+        fontWeight: 500,
+        cursor: "pointer",
+        color: active ? "var(--brand)" : "var(--text-2)",
+        background: active ? "var(--brand-soft)" : "var(--bg-elev)",
+        border: `1px solid ${active ? "var(--border-brand)" : "var(--border-soft)"}`,
+        transition: "all .12s",
+      }}
+    >
+      {label}
+    </button>
   );
 }
