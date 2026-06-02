@@ -2,7 +2,14 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { DollarSign, ClipboardList, Package, ArrowRight } from "lucide-react";
+import {
+  DollarSign,
+  ClipboardList,
+  Package,
+  ArrowRight,
+  LayoutDashboard,
+  ChevronRight,
+} from "lucide-react";
 import { getSupplierContext } from "@/lib/supplier-auth";
 import { getSupplierDashboardData } from "@/lib/suppliers/dashboard";
 import { formatCurrency } from "@/lib/utils";
@@ -37,13 +44,45 @@ export default async function SupplierHomePage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      <div>
-        <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
-          Hola, {ctx.supplier.businessName}
-        </h1>
-        <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, marginBottom: 0, textTransform: "capitalize" }}>
-          {fechaStr}
-        </p>
+      <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 14 }}>
+        {/* Glow violeta de fondo del hero */}
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            top: -40,
+            left: -30,
+            width: 280,
+            height: 180,
+            pointerEvents: "none",
+            background:
+              "radial-gradient(60% 70% at 20% 30%, rgba(124,58,237,0.18), transparent 70%)",
+          }}
+        />
+        <div
+          style={{
+            position: "relative",
+            width: 44,
+            height: 44,
+            borderRadius: 14,
+            flexShrink: 0,
+            display: "grid",
+            placeItems: "center",
+            color: "#fff",
+            background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+            boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
+          }}
+        >
+          <LayoutDashboard size={22} />
+        </div>
+        <div style={{ position: "relative" }}>
+          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+            Hola, {ctx.supplier.businessName}
+          </h1>
+          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, marginBottom: 0, textTransform: "capitalize" }}>
+            {fechaStr}
+          </p>
+        </div>
       </div>
 
       {/* KPIs */}
@@ -76,8 +115,36 @@ export default async function SupplierHomePage() {
         }
       >
         {data.recentOrders.length === 0 ? (
-          <div style={{ padding: 40, textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
-            Aún no has recibido pedidos.
+          <div
+            style={{
+              padding: "48px 24px",
+              textAlign: "center",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <div
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 16,
+                display: "grid",
+                placeItems: "center",
+                background: "var(--brand-soft)",
+                border: "1px solid var(--border-brand)",
+                color: "var(--violet-400)",
+              }}
+            >
+              <Package size={26} />
+            </div>
+            <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>
+              Aún no has recibido pedidos
+            </div>
+            <p style={{ color: "var(--text-3)", fontSize: 13, margin: 0, maxWidth: 340, lineHeight: 1.5 }}>
+              Cuando una clínica te envíe una solicitud de compra, aparecerá aquí para que la atiendas.
+            </p>
           </div>
         ) : (
           <div style={{ overflowX: "auto" }}>
@@ -91,6 +158,7 @@ export default async function SupplierHomePage() {
                   <th>Estado</th>
                   <th>Pago</th>
                   <th>Fecha</th>
+                  <th aria-label="Abrir" />
                 </tr>
               </thead>
               <tbody>
@@ -99,10 +167,31 @@ export default async function SupplierHomePage() {
                     <td>
                       <Link
                         href={`/proveedores/pedidos/${o.id}`}
-                        className="mono"
-                        style={{ color: "var(--text-1)", fontWeight: 500, textDecoration: "none" }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          textDecoration: "none",
+                        }}
                       >
-                        {o.orderNumber}
+                        <span
+                          style={{
+                            width: 30,
+                            height: 30,
+                            borderRadius: 9,
+                            flexShrink: 0,
+                            display: "grid",
+                            placeItems: "center",
+                            background: "var(--brand-soft)",
+                            border: "1px solid var(--border-brand)",
+                            color: "var(--violet-400)",
+                          }}
+                        >
+                          <Package size={15} />
+                        </span>
+                        <span className="mono" style={{ color: "var(--text-1)", fontWeight: 500 }}>
+                          {o.orderNumber}
+                        </span>
                       </Link>
                     </td>
                     <td style={{ color: "var(--text-1)" }}>{o.clinicName}</td>
@@ -122,6 +211,20 @@ export default async function SupplierHomePage() {
                     </td>
                     <td className="mono" style={{ color: "var(--text-3)" }}>
                       {formatRelativeDate(o.createdAt)}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      <Link
+                        href={`/proveedores/pedidos/${o.id}`}
+                        aria-label={`Abrir pedido ${o.orderNumber}`}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          color: "var(--text-4)",
+                          textDecoration: "none",
+                        }}
+                      >
+                        <ChevronRight size={16} />
+                      </Link>
                     </td>
                   </tr>
                 ))}

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { Settings, X, CheckCircle2, DollarSign } from "lucide-react";
 import { SUPPLIER_PAYMENT_STATUS_LABELS } from "@/lib/suppliers/types";
 import type { SupplierOrderStatus, SupplierPaymentStatus } from "@/lib/suppliers/types";
 import { ORDER_STATUS_FLOW, STATUS_ACTION_LABELS } from "@/lib/suppliers/orders-shared";
@@ -50,19 +51,73 @@ export function OrderStatusActions({
   const togglePayment: SupplierPaymentStatus = paymentStatus === "PAID" ? "UNPAID" : "PAID";
   // MercadoPago se marca pagado solo por el webhook; el vendedor no lo toca a mano.
   const isMercadoPago = paymentMethod === "MERCADOPAGO";
+  const isDelivered = status === "DELIVERED";
+  const isPaid = paymentStatus === "PAID";
 
   return (
-    <CardNew title="Acciones">
+    <CardNew>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          marginBottom: 14,
+        }}
+      >
+        <div
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 10,
+            flexShrink: 0,
+            display: "grid",
+            placeItems: "center",
+            color: "#fff",
+            background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+            boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
+          }}
+        >
+          <Settings size={17} />
+        </div>
+        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)" }}>Acciones</div>
+      </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {nextStatuses.length === 0 ? (
-          <p style={{ fontSize: 12, color: "var(--text-3)", margin: 0 }}>
-            Este pedido está {status === "DELIVERED" ? "entregado" : "cancelado"}; no hay más acciones de estado.
-          </p>
+          <div
+            style={{
+              padding: "28px 16px",
+              textAlign: "center",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 14,
+                display: "grid",
+                placeItems: "center",
+                background: isDelivered ? "var(--success-soft)" : "var(--bg-elev-2)",
+                border: `1px solid ${isDelivered ? "var(--success)" : "var(--border-soft)"}`,
+                color: isDelivered ? "var(--success)" : "var(--text-3)",
+              }}
+            >
+              <CheckCircle2 size={24} />
+            </div>
+            <p style={{ fontSize: 12, color: "var(--text-3)", margin: 0, maxWidth: 280, lineHeight: 1.5 }}>
+              Este pedido está {isDelivered ? "entregado" : "cancelado"}; no hay más acciones de estado.
+            </p>
+          </div>
         ) : (
           nextStatuses.map((to) => (
             <ButtonNew
               key={to}
               variant={to === "CANCELLED" ? "danger" : "primary"}
+              icon={to === "CANCELLED" ? <X size={15} /> : <CheckCircle2 size={15} />}
+              style={{ width: "100%", justifyContent: "center" }}
               disabled={saving}
               onClick={async () => {
                 if (
@@ -93,11 +148,27 @@ export function OrderStatusActions({
             marcarlo a mano.
           </p>
         ) : (
-          <ButtonNew variant="secondary" disabled={saving} onClick={() => patch({ paymentStatus: togglePayment })}>
+          <ButtonNew
+            variant="secondary"
+            icon={<DollarSign size={15} />}
+            style={{ width: "100%", justifyContent: "center" }}
+            disabled={saving}
+            onClick={() => patch({ paymentStatus: togglePayment })}
+          >
             {paymentStatus === "PAID" ? "Marcar como no pagada" : "Marcar como pagada"}
           </ButtonNew>
         )}
-        <p style={{ fontSize: 11, color: "var(--text-3)", margin: 0 }}>
+        <p
+          style={{
+            fontSize: 11,
+            margin: 0,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            color: isPaid ? "var(--success)" : "var(--text-3)",
+          }}
+        >
+          {isPaid && <CheckCircle2 size={12} />}
           Pago actual: {SUPPLIER_PAYMENT_STATUS_LABELS[paymentStatus]}
         </p>
       </div>

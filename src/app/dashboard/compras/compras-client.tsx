@@ -13,6 +13,9 @@ import {
   ChevronRight,
   X,
   Info,
+  Building2,
+  Clock,
+  CreditCard,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { KpiCard } from "@/components/ui/design-system/kpi-card";
@@ -141,9 +144,10 @@ export function ComprasClient({ carts, orders }: Props) {
 
   return (
     <div>
-      {/* Header */}
+      {/* HERO con icon-chip + glow violeta */}
       <div
         style={{
+          position: "relative",
           display: "flex",
           alignItems: "flex-start",
           justifyContent: "space-between",
@@ -152,21 +156,51 @@ export function ComprasClient({ carts, orders }: Props) {
           flexWrap: "wrap",
         }}
       >
-        <div>
-          <h1
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            top: -40,
+            left: -30,
+            width: 280,
+            height: 180,
+            pointerEvents: "none",
+            background:
+              "radial-gradient(60% 70% at 20% 30%, rgba(124,58,237,0.18), transparent 70%)",
+          }}
+        />
+        <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 14 }}>
+          <div
             style={{
-              fontSize: 22,
-              letterSpacing: "-0.02em",
-              color: "var(--text-1)",
-              fontWeight: 600,
-              margin: 0,
+              width: 44,
+              height: 44,
+              borderRadius: 14,
+              flexShrink: 0,
+              display: "grid",
+              placeItems: "center",
+              color: "#fff",
+              background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+              boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
             }}
           >
-            Compras
-          </h1>
-          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
-            Tu carrito y el historial de pedidos a proveedores.
-          </p>
+            <ShoppingCart size={22} />
+          </div>
+          <div>
+            <h1
+              style={{
+                fontSize: 22,
+                letterSpacing: "-0.02em",
+                color: "var(--text-1)",
+                fontWeight: 600,
+                margin: 0,
+              }}
+            >
+              Compras
+            </h1>
+            <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, marginBottom: 0 }}>
+              Tu carrito y el historial de pedidos a proveedores.
+            </p>
+          </div>
         </div>
         <ButtonNew
           variant="secondary"
@@ -181,7 +215,7 @@ export function ComprasClient({ carts, orders }: Props) {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
           gap: 14,
           marginBottom: 20,
         }}
@@ -214,24 +248,48 @@ export function ComprasClient({ carts, orders }: Props) {
       {/* ── Tab Carrito ── */}
       {tab === "carrito" &&
         (carts.length === 0 ? (
-          <CardNew>
-            <div style={{ padding: 48, textAlign: "center", color: "var(--text-3)" }}>
-              <ShoppingCart size={32} style={{ color: "var(--text-4)", margin: "0 auto 12px" }} />
+          <CardNew noPad>
+            <div
+              style={{
+                padding: "48px 24px",
+                textAlign: "center",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
               <div
                 style={{
-                  color: "var(--text-2)",
-                  fontSize: 14,
-                  fontWeight: 500,
-                  marginBottom: 4,
+                  width: 56,
+                  height: 56,
+                  borderRadius: 16,
+                  display: "grid",
+                  placeItems: "center",
+                  background: "var(--brand-soft)",
+                  border: "1px solid var(--border-brand)",
+                  color: "var(--violet-400)",
                 }}
               >
+                <ShoppingCart size={26} />
+              </div>
+              <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>
                 Tu carrito está vacío
               </div>
-              <div style={{ fontSize: 12, marginBottom: 16 }}>
-                Explora el catálogo de proveedores y agrega productos.
-              </div>
+              <p
+                style={{
+                  color: "var(--text-3)",
+                  fontSize: 13,
+                  margin: 0,
+                  maxWidth: 340,
+                  lineHeight: 1.5,
+                }}
+              >
+                Explora el catálogo de proveedores y agrega productos para armar tu pedido.
+              </p>
               <ButtonNew
                 variant="primary"
+                size="sm"
                 icon={<Store size={14} />}
                 onClick={() => router.push("/dashboard/suppliers")}
               >
@@ -254,6 +312,18 @@ export function ComprasClient({ carts, orders }: Props) {
                     </span>
                   }
                 >
+                  {/* Acento superior de la card */}
+                  <span
+                    aria-hidden
+                    style={{
+                      position: "absolute",
+                      insetInline: 0,
+                      top: 0,
+                      height: 3,
+                      background: "linear-gradient(90deg, var(--violet-400), var(--brand))",
+                      pointerEvents: "none",
+                    }}
+                  />
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     {cart.items.map((item) => {
                       const product = item.product;
@@ -297,14 +367,14 @@ export function ComprasClient({ carts, orders }: Props) {
                                 width: 52,
                                 height: 52,
                                 borderRadius: 8,
-                                background: "var(--bg-elev)",
-                                border: "1px solid var(--border-soft)",
+                                background: "var(--brand-soft)",
+                                border: "1px solid var(--border-brand)",
                                 display: "grid",
                                 placeItems: "center",
                                 flexShrink: 0,
                               }}
                             >
-                              <Package size={20} style={{ color: "var(--text-4)" }} />
+                              <Package size={20} style={{ color: "var(--violet-400)" }} />
                             </div>
                           )}
 
@@ -413,6 +483,7 @@ export function ComprasClient({ carts, orders }: Props) {
                     </div>
                     <ButtonNew
                       variant="primary"
+                      icon={<CreditCard size={14} />}
                       onClick={() => setCheckoutCart(cart)}
                     >
                       Realizar pedido
@@ -427,22 +498,46 @@ export function ComprasClient({ carts, orders }: Props) {
       {/* ── Tab Mis pedidos ── */}
       {tab === "pedidos" &&
         (orders.length === 0 ? (
-          <CardNew>
-            <div style={{ padding: 48, textAlign: "center", color: "var(--text-3)" }}>
-              <Package size={32} style={{ color: "var(--text-4)", margin: "0 auto 12px" }} />
+          <CardNew noPad>
+            <div
+              style={{
+                padding: "48px 24px",
+                textAlign: "center",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
               <div
                 style={{
-                  color: "var(--text-2)",
-                  fontSize: 14,
-                  fontWeight: 500,
-                  marginBottom: 4,
+                  width: 56,
+                  height: 56,
+                  borderRadius: 16,
+                  display: "grid",
+                  placeItems: "center",
+                  background: "var(--brand-soft)",
+                  border: "1px solid var(--border-brand)",
+                  color: "var(--violet-400)",
                 }}
               >
+                <Package size={26} />
+              </div>
+              <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>
                 Aún no tienes pedidos
               </div>
-              <div style={{ fontSize: 12 }}>
-                Cuando realices un pedido a un proveedor aparecerá aquí.
-              </div>
+              <p
+                style={{
+                  color: "var(--text-3)",
+                  fontSize: 13,
+                  margin: 0,
+                  maxWidth: 340,
+                  lineHeight: 1.5,
+                }}
+              >
+                Cuando realices un pedido a un proveedor aparecerá aquí para que puedas darle
+                seguimiento.
+              </p>
             </div>
           </CardNew>
         ) : (
@@ -455,33 +550,46 @@ export function ComprasClient({ carts, orders }: Props) {
                   key={order.id}
                   type="button"
                   onClick={() => router.push(`/dashboard/compras/${order.id}`)}
-                  className="card"
+                  className="ped-list-card"
                   style={{
                     textAlign: "left",
                     cursor: "pointer",
-                    padding: "14px 18px",
-                    display: "flex",
+                    position: "relative",
+                    overflow: "hidden",
+                    flexDirection: "row",
                     alignItems: "center",
-                    gap: 14,
-                    border: "1px solid var(--border-soft)",
-                    background: "var(--bg-elev)",
-                    color: "inherit",
-                    transition: "border-color .15s",
+                    gap: 16,
+                    padding: "14px 18px 14px 20px",
+                    width: "100%",
                   }}
                 >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        flexWrap: "wrap",
-                        marginBottom: 4,
-                      }}
-                    >
+                  {/* Acento superior */}
+                  <span
+                    aria-hidden
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: 3,
+                      background: "linear-gradient(90deg, var(--violet-400), var(--brand))",
+                    }}
+                  />
+
+                  {/* Identidad del pedido */}
+                  <div
+                    style={{
+                      minWidth: 0,
+                      flex: "1 1 220px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 6,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <span
                         className="mono"
-                        style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}
+                        style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}
                       >
                         {order.orderNumber}
                       </span>
@@ -492,29 +600,69 @@ export function ComprasClient({ carts, orders }: Props) {
                         {SUPPLIER_PAYMENT_STATUS_LABELS[order.paymentStatus]}
                       </BadgeNew>
                     </div>
-                    <div style={{ fontSize: 11, color: "var(--text-3)" }}>
-                      {businessName}
-                      <span style={{ margin: "0 6px" }}>·</span>
-                      {formatRelativeDate(order.createdAt)}
-                      <span style={{ margin: "0 6px" }}>·</span>
-                      {itemCount} {itemCount === 1 ? "producto" : "productos"}
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        color: "var(--text-2)",
+                        fontSize: 13,
+                        minWidth: 0,
+                      }}
+                    >
+                      <Building2 size={14} style={{ color: "var(--violet-400)", flexShrink: 0 }} />
+                      <span
+                        style={{
+                          color: "var(--text-1)",
+                          fontWeight: 500,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {businessName}
+                      </span>
+                      <span style={{ color: "var(--text-4)" }}>·</span>
+                      <span
+                        style={{
+                          color: "var(--text-3)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {itemCount} {itemCount === 1 ? "producto" : "productos"}
+                      </span>
                     </div>
                   </div>
 
+                  {/* Fecha relativa */}
                   <div
-                    className="mono"
                     style={{
-                      fontSize: 14,
-                      fontWeight: 600,
-                      color: "var(--text-1)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      color: "var(--text-3)",
+                      fontSize: 12,
                       flexShrink: 0,
-                      textAlign: "right",
                     }}
                   >
-                    {fmtMXNdec(order.total)}
+                    <Clock size={13} style={{ flexShrink: 0 }} />
+                    <span className="mono">{formatRelativeDate(order.createdAt)}</span>
                   </div>
 
-                  <ChevronRight size={14} style={{ color: "var(--text-3)", flexShrink: 0 }} />
+                  {/* Total */}
+                  <div style={{ textAlign: "right", flexShrink: 0, minWidth: 96 }}>
+                    <div style={{ color: "var(--text-4)", fontSize: 11, marginBottom: 2 }}>Total</div>
+                    <div
+                      className="mono"
+                      style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 15 }}
+                    >
+                      {fmtMXNdec(order.total)}
+                    </div>
+                  </div>
+
+                  <ChevronRight size={18} style={{ color: "var(--text-4)", flexShrink: 0 }} />
                 </button>
               );
             })}
@@ -651,6 +799,12 @@ function CheckoutModal({
                 </div>
               ) : (
                 <>
+                  <div className="form-section__title">
+                    <CreditCard size={15} style={{ color: "var(--violet-400)" }} />
+                    <span>Pago</span>
+                    <span className="form-section__rule" />
+                  </div>
+
                   {/* Método de pago */}
                   <div className="field-new">
                     <label className="field-new__label">Método de pago</label>

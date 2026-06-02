@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import {
@@ -13,8 +13,13 @@ import {
   Minus,
   ShoppingCart,
   Package,
+  Boxes,
+  Store,
+  Tag,
+  DollarSign,
+  CheckCircle2,
 } from "lucide-react";
-import { CardNew, ButtonNew, BadgeNew } from "@/components/ui/design-system";
+import { CardNew, ButtonNew, BadgeNew, KpiCard } from "@/components/ui/design-system";
 import { fmtMXN } from "@/lib/format";
 
 interface SupplierData {
@@ -60,6 +65,14 @@ const clamp2: React.CSSProperties = {
   overflow: "hidden",
 };
 
+const contactItemStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  color: "var(--text-2)",
+  fontSize: 13,
+};
+
 function ImageFallback({ size = 40 }: { size?: number }) {
   return (
     <div
@@ -92,6 +105,7 @@ function ProductCard({
   loading: boolean;
 }) {
   const [imgError, setImgError] = useState(false);
+  const [hover, setHover] = useState(false);
   const outOfStock = product.stock === 0;
   const firstImage = product.images[0]?.url;
   const showImg = !!firstImage && !imgError;
@@ -99,8 +113,37 @@ function ProductCard({
   return (
     <div
       className="card"
-      style={{ display: "flex", flexDirection: "column", overflow: "hidden", padding: 0 }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        padding: 0,
+        height: "100%",
+        position: "relative",
+        borderColor: hover ? "var(--border-brand)" : undefined,
+        transform: hover ? "translateY(-2px)" : "translateY(0)",
+        boxShadow: hover ? "0 12px 28px -16px rgba(124,58,237,0.55)" : undefined,
+        transition: "transform .14s ease, box-shadow .14s ease, border-color .14s ease",
+      }}
     >
+      {/* Acento superior revelado en hover (consistente con la card destacada) */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 3,
+          zIndex: 1,
+          background: "linear-gradient(90deg, var(--violet-400), var(--brand))",
+          opacity: hover ? 1 : 0,
+          transition: "opacity .14s ease",
+          pointerEvents: "none",
+        }}
+      />
       <div
         style={{
           position: "relative",
@@ -130,7 +173,18 @@ function ProductCard({
         </div>
 
         {product.category && (
-          <div style={{ color: "var(--text-3)", fontSize: 12 }}>{product.category}</div>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              color: "var(--text-3)",
+              fontSize: 12,
+            }}
+          >
+            <Tag size={12} />
+            {product.category}
+          </div>
         )}
 
         {product.description && (
@@ -140,6 +194,7 @@ function ProductCard({
         )}
 
         <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginTop: "auto" }}>
+          <span style={{ color: "var(--text-3)", fontSize: 12 }}>desde</span>
           <span style={{ color: "var(--text-1)", fontWeight: 700, fontSize: 18 }}>
             {fmtMXN(product.price)}
           </span>
@@ -148,11 +203,17 @@ function ProductCard({
 
         <div>
           {outOfStock ? (
-            <BadgeNew tone="danger">Sin stock</BadgeNew>
+            <BadgeNew tone="danger" dot>
+              Sin stock
+            </BadgeNew>
           ) : product.stock <= 5 ? (
-            <BadgeNew tone="warning">Pocas piezas</BadgeNew>
+            <BadgeNew tone="warning" dot>
+              Pocas piezas
+            </BadgeNew>
           ) : (
-            <BadgeNew tone="success">Disponible</BadgeNew>
+            <BadgeNew tone="success" dot>
+              Disponible
+            </BadgeNew>
           )}
         </div>
 
@@ -221,7 +282,7 @@ function ProductCard({
 
           <div style={{ flex: 1 }}>
             <ButtonNew
-              variant="primary"
+              variant={hover && !outOfStock ? "primary" : "secondary"}
               size="sm"
               icon={<ShoppingCart size={14} />}
               disabled={outOfStock || loading}
@@ -244,6 +305,16 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
 
   const locationLabel = [supplier.city, supplier.state].filter(Boolean).join(", ");
   const showLogo = !!supplier.logoUrl && !logoError;
+
+  // KPIs derivados de los datos que la página YA carga (sin queries nuevas).
+  const availableCount = useMemo(
+    () => products.filter((p) => p.stock > 0).length,
+    [products],
+  );
+  const minPrice = useMemo(
+    () => (products.length ? Math.min(...products.map((p) => p.price)) : null),
+    [products],
+  );
 
   async function addToCart(productId: string) {
     setLoadingId(productId);
@@ -285,9 +356,10 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
         Proveedores
       </Link>
 
-      {/* Encabezado de la ficha */}
+      {/* Encabezado de la ficha (hero con glow violeta) */}
       <div
         style={{
+          position: "relative",
           display: "flex",
           alignItems: "flex-start",
           justifyContent: "space-between",
@@ -296,7 +368,32 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
           marginBottom: 16,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
+        {/* Glow violeta de fondo (decorativo) */}
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            top: -40,
+            left: -30,
+            width: 260,
+            height: 160,
+            pointerEvents: "none",
+            background:
+              "radial-gradient(closest-side, color-mix(in srgb, var(--brand) 16%, transparent), transparent)",
+            filter: "blur(6px)",
+            zIndex: 0,
+          }}
+        />
+        <div
+          style={{
+            position: "relative",
+            zIndex: 1,
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+            minWidth: 0,
+          }}
+        >
           <div
             style={{
               position: "relative",
@@ -305,7 +402,10 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
               borderRadius: 12,
               overflow: "hidden",
               flexShrink: 0,
-              background: "var(--bg-elev-2)",
+              background: showLogo
+                ? "var(--bg-elev-2)"
+                : "linear-gradient(135deg, var(--violet-400), var(--brand))",
+              boxShadow: showLogo ? undefined : "0 8px 20px -10px rgba(124,58,237,0.6)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -319,7 +419,7 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
                 style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
               />
             ) : (
-              <span style={{ color: "var(--text-2)", fontWeight: 700, fontSize: 24 }}>
+              <span style={{ color: "#fff", fontWeight: 700, fontSize: 24 }}>
                 {supplier.businessName.charAt(0).toUpperCase()}
               </span>
             )}
@@ -331,26 +431,36 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
                 color: "var(--text-1)",
                 fontWeight: 600,
                 fontSize: "clamp(18px,1.6vw,24px)",
+                letterSpacing: "-0.02em",
                 margin: 0,
               }}
             >
               {supplier.businessName}
             </h1>
-            {locationLabel && (
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 5,
-                  color: "var(--text-3)",
-                  fontSize: 13,
-                  marginTop: 4,
-                }}
-              >
-                <MapPin size={13} />
-                {locationLabel}
-              </div>
-            )}
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "4px 14px",
+                marginTop: 4,
+                color: "var(--text-3)",
+                fontSize: 13,
+              }}
+            >
+              {locationLabel && (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                  <MapPin size={13} />
+                  {locationLabel}
+                </span>
+              )}
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                <Boxes size={13} />
+                {products.length} producto{products.length === 1 ? "" : "s"}
+              </span>
+            </div>
+
             {supplier.categories.length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
                 {supplier.categories.map((c) => (
@@ -363,18 +473,90 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
           </div>
         </div>
 
-        <Link
-          href={`/dashboard/proveedor-chat/${supplier.id}`}
-          className="btn-new btn-new--primary"
-          style={{ textDecoration: "none", flexShrink: 0 }}
+        <div
+          style={{
+            position: "relative",
+            zIndex: 1,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexShrink: 0,
+          }}
         >
-          <MessageCircle size={14} />
-          Chatear
-        </Link>
+          <Link
+            href={`/dashboard/proveedor-chat/${supplier.id}`}
+            className="btn-new btn-new--secondary"
+            style={{ textDecoration: "none" }}
+          >
+            <MessageCircle size={14} />
+            Chatear
+          </Link>
+          <Link
+            href="/dashboard/compras"
+            className="btn-new btn-new--primary"
+            style={{ textDecoration: "none" }}
+          >
+            <ShoppingCart size={14} />
+            Ver carrito
+          </Link>
+        </div>
+      </div>
+
+      {/* KPIs del proveedor (solo datos ya cargados) */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+          gap: 14,
+          marginBottom: 16,
+        }}
+      >
+        <KpiCard label="Productos" value={String(products.length)} icon={Boxes} />
+        <KpiCard label="Disponibles" value={String(availableCount)} icon={CheckCircle2} />
+        <KpiCard
+          label="Desde"
+          value={minPrice != null ? fmtMXN(minPrice) : "—"}
+          icon={DollarSign}
+        />
       </div>
 
       {/* Datos de contacto / compra */}
       <CardNew>
+        {/* Acento superior — única card destacada del bloque de contacto */}
+        <span
+          aria-hidden
+          style={{
+            position: "absolute",
+            insetInline: 0,
+            top: 0,
+            height: 3,
+            background: "linear-gradient(90deg, var(--violet-400), var(--brand))",
+            pointerEvents: "none",
+          }}
+        />
+        <div
+          className="form-section__title"
+          style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}
+        >
+          <span
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 9,
+              flexShrink: 0,
+              display: "grid",
+              placeItems: "center",
+              background: "var(--brand-soft)",
+              border: "1px solid var(--border-brand)",
+              color: "var(--violet-400)",
+            }}
+          >
+            <Store size={15} />
+          </span>
+          Datos de contacto
+          <span className="form-section__rule" />
+        </div>
+
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {supplier.description && (
             <p style={{ color: "var(--text-2)", fontSize: 14, lineHeight: 1.6, margin: 0 }}>
@@ -384,44 +566,20 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 20px" }}>
             {supplier.phone && (
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  color: "var(--text-2)",
-                  fontSize: 13,
-                }}
-              >
+              <span style={contactItemStyle}>
                 <Phone size={14} style={{ color: "var(--text-3)" }} />
                 {supplier.phone}
-              </div>
+              </span>
             )}
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                color: "var(--text-2)",
-                fontSize: 13,
-              }}
-            >
+            <span style={contactItemStyle}>
               <Mail size={14} style={{ color: "var(--text-3)" }} />
               {supplier.email}
-            </div>
+            </span>
             {supplier.address && (
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  color: "var(--text-2)",
-                  fontSize: 13,
-                }}
-              >
+              <span style={contactItemStyle}>
                 <MapPin size={14} style={{ color: "var(--text-3)" }} />
                 {supplier.address}
-              </div>
+              </span>
             )}
           </div>
 
@@ -440,8 +598,31 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
 
       {/* Productos */}
       <div style={{ marginTop: 24 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 14 }}>
-          <h2 style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 18, margin: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+          <span
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 9,
+              flexShrink: 0,
+              display: "grid",
+              placeItems: "center",
+              background: "var(--brand-soft)",
+              border: "1px solid var(--border-brand)",
+              color: "var(--violet-400)",
+            }}
+          >
+            <Boxes size={15} />
+          </span>
+          <h2
+            style={{
+              color: "var(--text-1)",
+              fontWeight: 600,
+              fontSize: 18,
+              letterSpacing: "-0.02em",
+              margin: 0,
+            }}
+          >
             Productos
           </h2>
           <span style={{ color: "var(--text-3)", fontSize: 13 }}>({products.length})</span>
@@ -451,19 +632,43 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
           <CardNew>
             <div
               style={{
+                padding: "48px 24px",
+                textAlign: "center",
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
                 gap: 10,
-                padding: "32px 16px",
-                textAlign: "center",
-                color: "var(--text-3)",
               }}
             >
-              <Package size={36} style={{ color: "var(--text-4)" }} />
-              <span style={{ fontSize: 14 }}>
-                Este proveedor aún no tiene productos publicados
-              </span>
+              <div
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 16,
+                  display: "grid",
+                  placeItems: "center",
+                  background: "var(--brand-soft)",
+                  border: "1px solid var(--border-brand)",
+                  color: "var(--violet-400)",
+                }}
+              >
+                <Package size={26} />
+              </div>
+              <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>
+                Aún sin productos publicados
+              </div>
+              <p
+                style={{
+                  color: "var(--text-3)",
+                  fontSize: 13,
+                  margin: 0,
+                  maxWidth: 340,
+                  lineHeight: 1.5,
+                }}
+              >
+                Este proveedor aún no tiene productos en su catálogo. Vuelve más tarde o
+                escríbele directamente para consultar disponibilidad.
+              </p>
             </div>
           </CardNew>
         ) : (

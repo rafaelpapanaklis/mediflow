@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Search, Package, Trash2, Pencil, Eye, EyeOff } from "lucide-react";
+import { Plus, Search, Package, Trash2, Pencil, Eye, EyeOff, Tag, DollarSign, PackageOpen } from "lucide-react";
 import toast from "react-hot-toast";
 import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { CardNew } from "@/components/ui/design-system/card-new";
@@ -27,6 +27,7 @@ export function ProductosClient({ initialProducts }: { initialProducts: Supplier
   const [tab, setTab] = useState<Tab>("todos");
   const [search, setSearch] = useState("");
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  const [hoverId, setHoverId] = useState<string | null>(null);
 
   const kpis = useMemo(() => {
     const activos = products.filter((p) => p.isActive).length;
@@ -100,7 +101,23 @@ export function ProductosClient({ initialProducts }: { initialProducts: Supplier
   }
 
   return (
-    <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
+    <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto", position: "relative" }}>
+      {/* Glow violeta de fondo */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          top: -40,
+          left: -20,
+          width: 360,
+          height: 220,
+          pointerEvents: "none",
+          background: "radial-gradient(closest-side, rgba(124,58,237,0.16), transparent 70%)",
+          filter: "blur(8px)",
+          zIndex: 0,
+        }}
+      />
+
       {/* Header */}
       <div
         style={{
@@ -110,17 +127,36 @@ export function ProductosClient({ initialProducts }: { initialProducts: Supplier
           marginBottom: 22,
           gap: 24,
           flexWrap: "wrap",
+          position: "relative",
+          zIndex: 1,
         }}
       >
-        <div>
-          <h1 style={{ fontSize: "clamp(16px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
-            Productos
-          </h1>
-          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
-            {products.length === 0
-              ? "Tu catálogo está vacío"
-              : `${products.length} ${products.length === 1 ? "producto" : "productos"} en tu catálogo`}
-          </p>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 12,
+              flexShrink: 0,
+              display: "grid",
+              placeItems: "center",
+              color: "#fff",
+              background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+              boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
+            }}
+          >
+            <Package size={20} />
+          </div>
+          <div>
+            <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+              Productos
+            </h1>
+            <p style={{ color: "var(--text-3)", fontSize: 14, marginTop: 4 }}>
+              {products.length === 0
+                ? "Tu catálogo está vacío"
+                : `${products.length} ${products.length === 1 ? "producto" : "productos"} en tu catálogo`}
+            </p>
+          </div>
         </div>
         <ButtonNew variant="primary" icon={<Plus size={14} />} onClick={() => router.push("/proveedores/productos/nuevo")}>
           Nuevo producto
@@ -128,15 +164,24 @@ export function ProductosClient({ initialProducts }: { initialProducts: Supplier
       </div>
 
       {/* KPIs */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginBottom: 20 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+          gap: 14,
+          marginBottom: 20,
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
         <KpiCard label="Total productos" value={String(kpis.total)} icon={Package} />
         <KpiCard label="Activos" value={String(kpis.activos)} icon={Eye} />
-        <KpiCard label="Sin stock" value={String(kpis.sinStock)} icon={Package} />
-        <KpiCard label="Valor inventario" value={fmtMXN(kpis.valor)} icon={Package} />
+        <KpiCard label="Sin stock" value={String(kpis.sinStock)} icon={PackageOpen} />
+        <KpiCard label="Valor inventario" value={fmtMXN(kpis.valor)} icon={DollarSign} />
       </div>
 
       {/* Filtros */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap", alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap", alignItems: "center", position: "relative", zIndex: 1 }}>
         <div className="search-field">
           <Search size={14} />
           <input
@@ -152,6 +197,7 @@ export function ProductosClient({ initialProducts }: { initialProducts: Supplier
               type="button"
               onClick={() => setTab(t.id)}
               className={`segment-new__btn ${tab === t.id ? "segment-new__btn--active" : ""}`}
+              style={tab === t.id ? { color: "var(--violet-400)", fontWeight: 600 } : undefined}
             >
               {t.label}
             </button>
@@ -160,150 +206,225 @@ export function ProductosClient({ initialProducts }: { initialProducts: Supplier
       </div>
 
       {/* Lista */}
-      <CardNew noPad>
-        {filtered.length === 0 ? (
-          <div style={{ padding: "48px 24px", textAlign: "center" }}>
-            <Package size={32} style={{ color: "var(--text-4)", margin: "0 auto 12px" }} />
-            <p style={{ color: "var(--text-3)", fontSize: 13 }}>
-              {search
-                ? "Sin resultados para tu búsqueda"
-                : tab === "todos"
-                  ? "Todavía no tienes productos"
-                  : "No hay productos en este estado"}
-            </p>
-            {products.length === 0 && (
-              <div style={{ marginTop: 12 }}>
-                <ButtonNew variant="primary" size="sm" icon={<Plus size={14} />} onClick={() => router.push("/proveedores/productos/nuevo")}>
-                  Agregar primer producto
-                </ButtonNew>
+      <div style={{ position: "relative", zIndex: 1 }}>
+        <CardNew noPad>
+          <div
+            aria-hidden
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 3,
+              background: "linear-gradient(90deg, var(--violet-400), var(--brand))",
+              zIndex: 1,
+            }}
+          />
+          {filtered.length === 0 ? (
+            <div
+              style={{
+                padding: "48px 24px",
+                textAlign: "center",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
+              <div
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 16,
+                  display: "grid",
+                  placeItems: "center",
+                  background: "var(--brand-soft)",
+                  border: "1px solid var(--border-brand)",
+                  color: "var(--violet-400)",
+                }}
+              >
+                <Package size={26} />
               </div>
-            )}
-          </div>
-        ) : (
-          <table className="table-new">
-            <thead>
-              <tr>
-                <th>Producto</th>
-                <th>Categoría</th>
-                <th style={{ textAlign: "right" }}>Precio</th>
-                <th style={{ textAlign: "right" }}>Stock</th>
-                <th>Estado</th>
-                <th style={{ textAlign: "right" }}>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((p) => {
-                const busy = busyIds.has(p.id);
-                const thumb = p.images[0]?.url;
-                return (
-                  <tr key={p.id}>
-                    <td>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        {thumb ? (
-                          <img
-                            src={thumb}
-                            alt=""
-                            style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover", border: "1px solid var(--border-soft)", flexShrink: 0 }}
-                          />
-                        ) : (
-                          <div
+              <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>
+                {search
+                  ? "Sin resultados"
+                  : tab === "todos"
+                    ? "Aún no tienes productos"
+                    : "Nada por aquí todavía"}
+              </div>
+              <p style={{ color: "var(--text-3)", fontSize: 13, margin: 0, maxWidth: 340, lineHeight: 1.5 }}>
+                {search
+                  ? "Prueba con otro nombre, SKU o categoría para encontrar lo que buscas."
+                  : tab === "todos"
+                    ? "Agrega tu primer producto para empezar a recibir pedidos de las clínicas."
+                    : "No hay productos en este estado por ahora."}
+              </p>
+              {products.length === 0 && (
+                <div style={{ marginTop: 4 }}>
+                  <ButtonNew variant="primary" size="sm" icon={<Plus size={14} />} onClick={() => router.push("/proveedores/productos/nuevo")}>
+                    Agregar primer producto
+                  </ButtonNew>
+                </div>
+              )}
+            </div>
+          ) : (
+            <table className="table-new">
+              <thead>
+                <tr>
+                  <th>Producto</th>
+                  <th>Categoría</th>
+                  <th style={{ textAlign: "right" }}>Precio</th>
+                  <th style={{ textAlign: "right" }}>Stock</th>
+                  <th>Estado</th>
+                  <th style={{ textAlign: "right" }}>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((p) => {
+                  const busy = busyIds.has(p.id);
+                  const hovered = hoverId === p.id;
+                  const thumb = p.images[0]?.url;
+                  return (
+                    <tr
+                      key={p.id}
+                      onMouseEnter={() => setHoverId(p.id)}
+                      onMouseLeave={() => setHoverId((id) => (id === p.id ? null : id))}
+                      style={{
+                        background: hovered ? "var(--brand-soft)" : undefined,
+                        boxShadow: hovered ? "inset 3px 0 0 var(--violet-400)" : "inset 3px 0 0 transparent",
+                        transition: "background .14s ease, box-shadow .14s ease",
+                      }}
+                    >
+                      <td>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          {thumb ? (
+                            <img
+                              src={thumb}
+                              alt=""
+                              style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover", border: "1px solid var(--border-soft)", flexShrink: 0 }}
+                            />
+                          ) : (
+                            <div
+                              style={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: 10,
+                                background: "var(--brand-soft)",
+                                border: "1px solid var(--border-brand)",
+                                display: "grid",
+                                placeItems: "center",
+                                flexShrink: 0,
+                              }}
+                            >
+                              <Package size={16} style={{ color: "var(--violet-400)" }} />
+                            </div>
+                          )}
+                          <div style={{ minWidth: 0 }}>
+                            <button
+                              type="button"
+                              onClick={() => router.push(`/proveedores/productos/${p.id}`)}
+                              style={{
+                                fontWeight: 500,
+                                color: "var(--text-1)",
+                                background: "transparent",
+                                border: "none",
+                                padding: 0,
+                                cursor: "pointer",
+                                textAlign: "left",
+                                fontFamily: "inherit",
+                                fontSize: 12,
+                              }}
+                              title="Editar producto"
+                            >
+                              {p.name}
+                            </button>
+                            {p.sku && (
+                              <div style={{ fontSize: 11, color: "var(--text-3)" }}>SKU: {p.sku}</div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        {p.category ? (
+                          <span
                             style={{
-                              width: 40,
-                              height: 40,
-                              borderRadius: 8,
-                              background: "var(--bg-elev-2)",
-                              border: "1px solid var(--border-soft)",
-                              display: "grid",
-                              placeItems: "center",
-                              flexShrink: 0,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              padding: "3px 9px",
+                              borderRadius: 999,
+                              fontSize: 11,
+                              fontWeight: 500,
+                              color: "var(--violet-400)",
+                              background: "var(--brand-soft)",
+                              border: "1px solid var(--border-brand)",
                             }}
                           >
-                            <Package size={16} style={{ color: "var(--text-4)" }} />
-                          </div>
+                            <Tag size={11} />
+                            {p.category}
+                          </span>
+                        ) : (
+                          <span style={{ color: "var(--text-4)" }}>—</span>
                         )}
-                        <div style={{ minWidth: 0 }}>
+                      </td>
+                      <td style={{ textAlign: "right" }} className="mono">
+                        {fmtMXNdec(p.price)}
+                        <span style={{ color: "var(--text-4)", fontSize: 11 }}> /{p.unit}</span>
+                      </td>
+                      <td style={{ textAlign: "right" }} className="mono">
+                        <span style={{ color: p.stock === 0 ? "var(--danger)" : "var(--text-1)", fontWeight: 600 }}>
+                          {p.stock}
+                        </span>
+                      </td>
+                      <td>
+                        <BadgeNew tone={p.isActive ? "success" : "neutral"} dot>
+                          {p.isActive ? "Activo" : "Inactivo"}
+                        </BadgeNew>
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <div style={{ display: "inline-flex", gap: 4 }}>
                           <button
                             type="button"
                             onClick={() => router.push(`/proveedores/productos/${p.id}`)}
-                            style={{
-                              fontWeight: 500,
-                              color: "var(--text-1)",
-                              background: "transparent",
-                              border: "none",
-                              padding: 0,
-                              cursor: "pointer",
-                              textAlign: "left",
-                              fontFamily: "inherit",
-                              fontSize: 12,
-                            }}
-                            title="Editar producto"
+                            className="btn-new btn-new--ghost btn-new--sm"
+                            style={{ padding: 0, width: 28 }}
+                            aria-label="Editar"
+                            title="Editar"
                           >
-                            {p.name}
+                            <Pencil size={12} />
                           </button>
-                          {p.sku && (
-                            <div style={{ fontSize: 11, color: "var(--text-3)" }}>SKU: {p.sku}</div>
-                          )}
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => toggleActive(p)}
+                            className="btn-new btn-new--ghost btn-new--sm"
+                            style={{ padding: 0, width: 28 }}
+                            aria-label={p.isActive ? "Desactivar" : "Activar"}
+                            title={p.isActive ? "Desactivar" : "Activar"}
+                          >
+                            {p.isActive ? <EyeOff size={12} /> : <Eye size={12} />}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => remove(p)}
+                            className="btn-new btn-new--ghost btn-new--sm"
+                            style={{ padding: 0, width: 28, color: "var(--danger)" }}
+                            aria-label="Eliminar"
+                            title="Eliminar"
+                          >
+                            <Trash2 size={12} />
+                          </button>
                         </div>
-                      </div>
-                    </td>
-                    <td style={{ color: "var(--text-2)" }}>{p.category ?? "—"}</td>
-                    <td style={{ textAlign: "right" }} className="mono">
-                      {fmtMXNdec(p.price)}
-                      <span style={{ color: "var(--text-4)", fontSize: 11 }}> /{p.unit}</span>
-                    </td>
-                    <td style={{ textAlign: "right" }} className="mono">
-                      <span style={{ color: p.stock === 0 ? "var(--danger)" : "var(--text-1)", fontWeight: 600 }}>
-                        {p.stock}
-                      </span>
-                    </td>
-                    <td>
-                      <BadgeNew tone={p.isActive ? "success" : "neutral"} dot>
-                        {p.isActive ? "Activo" : "Inactivo"}
-                      </BadgeNew>
-                    </td>
-                    <td style={{ textAlign: "right" }}>
-                      <div style={{ display: "inline-flex", gap: 4 }}>
-                        <button
-                          type="button"
-                          onClick={() => router.push(`/proveedores/productos/${p.id}`)}
-                          className="btn-new btn-new--ghost btn-new--sm"
-                          style={{ padding: 0, width: 28 }}
-                          aria-label="Editar"
-                          title="Editar"
-                        >
-                          <Pencil size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => toggleActive(p)}
-                          className="btn-new btn-new--ghost btn-new--sm"
-                          style={{ padding: 0, width: 28 }}
-                          aria-label={p.isActive ? "Desactivar" : "Activar"}
-                          title={p.isActive ? "Desactivar" : "Activar"}
-                        >
-                          {p.isActive ? <EyeOff size={12} /> : <Eye size={12} />}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => remove(p)}
-                          className="btn-new btn-new--ghost btn-new--sm"
-                          style={{ padding: 0, width: 28, color: "var(--danger)" }}
-                          aria-label="Eliminar"
-                          title="Eliminar"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </CardNew>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </CardNew>
+      </div>
     </div>
   );
 }

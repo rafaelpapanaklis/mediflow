@@ -3,7 +3,18 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { Landmark, Wallet, Banknote } from "lucide-react";
+import {
+  Landmark,
+  Wallet,
+  Banknote,
+  ShieldCheck,
+  BadgeCheck,
+  Building2,
+  MapPin,
+  Tag,
+  CreditCard,
+  CheckCircle2,
+} from "lucide-react";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
@@ -37,6 +48,24 @@ const STATUS_TONE: Record<SupplierStatus, "success" | "warning" | "danger"> = {
   REJECTED: "danger",
   SUSPENDED: "danger",
 };
+
+// Barra superior de acento para las cards de sección (.card ya es
+// position:relative + overflow:hidden). Puramente decorativa.
+function CardAccent() {
+  return (
+    <span
+      aria-hidden
+      style={{
+        position: "absolute",
+        insetInline: 0,
+        top: 0,
+        height: 3,
+        background: "linear-gradient(90deg, var(--violet-400), var(--brand))",
+        pointerEvents: "none",
+      }}
+    />
+  );
+}
 
 export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: ProfileInitial }) {
   const router = useRouter();
@@ -145,7 +174,10 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
       {!canEdit && (
         <div
           style={{
-            padding: "10px 14px",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "12px 14px",
             borderRadius: 10,
             background: "var(--warning-soft)",
             border: "1px solid rgba(245,158,11,0.25)",
@@ -153,14 +185,19 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
             fontSize: 12,
           }}
         >
-          Solo el propietario o un gerente del negocio puede editar el perfil. Tienes acceso de solo lectura.
+          <ShieldCheck size={16} style={{ flexShrink: 0 }} />
+          <span>
+            Solo el propietario o un gerente del negocio puede editar el perfil. Tienes acceso de solo lectura.
+          </span>
         </div>
       )}
 
       {/* Estado de la cuenta (solo lectura) */}
       <CardNew>
+        <CardAccent />
         <div className="form-section__title">
-          Estado de la cuenta <span className="form-section__rule" />
+          <BadgeCheck size={13} style={{ color: "var(--success)" }} /> Estado de la cuenta{" "}
+          <span className="form-section__rule" />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 13 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
@@ -175,15 +212,29 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
             <span style={{ color: "var(--text-3)" }}>URL pública</span>
-            <span className="mono" style={{ color: "var(--text-2)" }}>/{initial.slug}</span>
+            <span
+              className="mono"
+              style={{
+                color: "var(--violet-400)",
+                background: "var(--brand-soft)",
+                border: "1px solid var(--border-brand)",
+                borderRadius: 8,
+                padding: "2px 8px",
+                fontSize: 12,
+              }}
+            >
+              /{initial.slug}
+            </span>
           </div>
         </div>
       </CardNew>
 
       {/* Datos del negocio */}
       <CardNew>
+        <CardAccent />
         <div className="form-section__title">
-          Datos del negocio <span className="form-section__rule" />
+          <Building2 size={13} style={{ color: "var(--violet-400)" }} /> Datos del negocio{" "}
+          <span className="form-section__rule" />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div className="field-new">
@@ -223,8 +274,10 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
 
       {/* Contacto y ubicación */}
       <CardNew>
+        <CardAccent />
         <div className="form-section__title">
-          Contacto y ubicación <span className="form-section__rule" />
+          <MapPin size={13} style={{ color: "var(--info)" }} /> Contacto y ubicación{" "}
+          <span className="form-section__rule" />
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
           <div className="field-new">
@@ -268,8 +321,10 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
 
       {/* Categorías */}
       <CardNew>
+        <CardAccent />
         <div className="form-section__title">
-          Categorías <span className="form-section__rule" />
+          <Tag size={13} style={{ color: "var(--violet-400)" }} /> Categorías{" "}
+          <span className="form-section__rule" />
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {SUPPLIER_CATEGORY_OPTIONS.map((opt) => (
@@ -289,8 +344,10 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
 
       {/* Cobros — métodos de pago B2B que aceptas de las clínicas */}
       <CardNew>
+        <CardAccent />
         <div className="form-section__title">
-          Cobros (pagos de clínicas) <span className="form-section__rule" />
+          <Wallet size={13} style={{ color: "var(--violet-400)" }} /> Cobros (pagos de clínicas){" "}
+          <span className="form-section__rule" />
         </div>
         <p style={{ color: "var(--text-3)", fontSize: 12, marginTop: -4, marginBottom: 14 }}>
           Activa los métodos por los que aceptas recibir el pago de tus pedidos. Las clínicas sólo
@@ -337,16 +394,18 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
               }}
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
-                  Access Token de MercadoPago
-                </span>
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
+                  <CreditCard size={15} style={{ color: "var(--violet-400)" }} />
+                  Conexión con MercadoPago
+                </div>
                 <BadgeNew tone={mpConnected ? "success" : "warning"} dot>
                   {mpConnected ? "Conectado" : "Sin conectar"}
                 </BadgeNew>
               </div>
               <div className="field-new">
+                <label className="field-new__label">Access Token</label>
                 <input
-                  className="input-new"
+                  className="input-new mono"
                   type="password"
                   value={mpToken}
                   onChange={(e) => setMpToken(e.target.value)}
@@ -354,12 +413,13 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
                   autoComplete="off"
                   placeholder={
                     mpConnected
-                      ? "Token guardado — escribe uno nuevo para reemplazarlo"
+                      ? "•••••••• (guardado) — pega uno nuevo para reemplazar"
                       : "Pega tu Access Token (APP_USR-…)"
                   }
                 />
               </div>
-              <p style={{ fontSize: 11, color: "var(--text-3)", margin: 0, lineHeight: 1.5 }}>
+              <p style={{ fontSize: 11, color: "var(--text-3)", margin: 0, lineHeight: 1.5, display: "inline-flex", alignItems: "center", gap: 5 }}>
+                <ShieldCheck size={12} style={{ color: "var(--success)", flexShrink: 0 }} />
                 El cobro va directo a tu cuenta. Tu token nunca se muestra ni se comparte con las
                 clínicas; sólo se guarda de forma segura.
               </p>
@@ -429,15 +489,33 @@ function PayToggle({
           borderRadius: 10,
           display: "grid",
           placeItems: "center",
-          background: "var(--bg-elev-2)",
-          border: "1px solid var(--border-soft)",
+          background: checked ? "var(--brand-softer)" : "var(--bg-elev-2)",
+          border: `1px solid ${checked ? "var(--border-brand)" : "var(--border-soft)"}`,
           flexShrink: 0,
+          transition: "background .15s, border-color .15s",
         }}
       >
         {icon}
       </span>
       <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{title}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{title}</span>
+          {checked && (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                fontSize: 10.5,
+                fontWeight: 600,
+                letterSpacing: "0.02em",
+                color: "var(--success)",
+              }}
+            >
+              <CheckCircle2 size={12} /> Activo
+            </span>
+          )}
+        </span>
         <span style={{ display: "block", fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>{subtitle}</span>
       </span>
       <span

@@ -2,7 +2,18 @@
 
 import { useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Plus, Loader2, Save, X, ImageOff } from "lucide-react";
+import {
+  ArrowLeft,
+  Loader2,
+  Save,
+  X,
+  ImageOff,
+  Package,
+  DollarSign,
+  Eye,
+  ImagePlus,
+  Upload,
+} from "lucide-react";
 import toast from "react-hot-toast";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { CardNew } from "@/components/ui/design-system/card-new";
@@ -15,6 +26,24 @@ import {
 
 const MAX_IMAGES = 8;
 const UNIT_OPTIONS = ["pza", "caja", "kit", "paquete", "frasco", "rollo", "par", "blíster", "ml", "g", "unidad"];
+
+// Barra superior de acento para las cards de sección (.card ya es
+// position:relative + overflow:hidden). Puramente decorativa.
+function CardAccent() {
+  return (
+    <span
+      aria-hidden
+      style={{
+        position: "absolute",
+        insetInline: 0,
+        top: 0,
+        height: 3,
+        background: "linear-gradient(90deg, var(--violet-400), var(--brand))",
+        pointerEvents: "none",
+      }}
+    />
+  );
+}
 
 type Props =
   | { mode: "create"; product?: undefined }
@@ -42,6 +71,7 @@ export function ProductoForm(props: Props) {
 
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
 
   const totalImages = editing ? images.length : pending.length;
 
@@ -224,24 +254,59 @@ export function ProductoForm(props: Props) {
         type="button"
         onClick={() => router.push("/proveedores/productos")}
         className="btn-new btn-new--ghost btn-new--sm"
-        style={{ marginBottom: 14, paddingLeft: 6 }}
+        style={{ marginBottom: 16, paddingLeft: 6 }}
       >
         <ArrowLeft size={14} /> Volver a productos
       </button>
-      <div style={{ marginBottom: 22 }}>
-        <h1 style={{ fontSize: "clamp(16px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
-          {editing ? "Editar producto" : "Nuevo producto"}
-        </h1>
-        <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
-          {editing
-            ? "Actualiza los datos y las fotos de tu producto."
-            : "Captura los datos de tu producto y agrega fotos para mostrarlo a las clínicas."}
-        </p>
+      <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 14, marginBottom: 22 }}>
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            top: -40,
+            left: -30,
+            width: 280,
+            height: 180,
+            pointerEvents: "none",
+            background: "radial-gradient(60% 70% at 20% 30%, rgba(124,58,237,0.18), transparent 70%)",
+          }}
+        />
+        <div
+          style={{
+            position: "relative",
+            width: 44,
+            height: 44,
+            borderRadius: 14,
+            flexShrink: 0,
+            display: "grid",
+            placeItems: "center",
+            color: "#fff",
+            background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+            boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
+          }}
+        >
+          <Package size={22} />
+        </div>
+        <div style={{ position: "relative" }}>
+          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+            {editing ? "Editar producto" : "Nuevo producto"}
+          </h1>
+          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, marginBottom: 0 }}>
+            {editing
+              ? "Actualiza los datos y las fotos de tu producto."
+              : "Captura los datos de tu producto y agrega fotos para mostrarlo a las clínicas."}
+          </p>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
         {/* Información */}
-        <CardNew title="Información">
+        <CardNew>
+          <CardAccent />
+          <div className="form-section__title">
+            <Package size={13} style={{ color: "var(--violet-400)" }} /> Información del producto
+            <span className="form-section__rule" />
+          </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "14px" }}>
             <div className="field-new">
               <label className="field-new__label">Nombre <span className="req">*</span></label>
@@ -263,7 +328,7 @@ export function ProductoForm(props: Props) {
                 onChange={(e) => setDescription(e.target.value)}
               />
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
               <div className="field-new">
                 <label className="field-new__label">Categoría</label>
                 <select className="input-new" value={category} onChange={(e) => setCategory(e.target.value)}>
@@ -288,8 +353,13 @@ export function ProductoForm(props: Props) {
         </CardNew>
 
         {/* Precio e inventario */}
-        <CardNew title="Precio e inventario">
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+        <CardNew>
+          <CardAccent />
+          <div className="form-section__title">
+            <DollarSign size={13} style={{ color: "var(--success)" }} /> Precio e inventario
+            <span className="form-section__rule" />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 14 }}>
             <div className="field-new">
               <label className="field-new__label">Precio (MXN) <span className="req">*</span></label>
               <input
@@ -337,7 +407,19 @@ export function ProductoForm(props: Props) {
             }}
           >
             <div>
-              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-1)" }}>Visible en el marketplace</div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 7,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "var(--text-1)",
+                }}
+              >
+                <Eye size={14} style={{ color: isActive ? "var(--violet-400)" : "var(--text-3)", transition: "color .15s" }} />
+                Visible en el marketplace
+              </div>
               <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>
                 Si lo desactivas, las clínicas no podrán verlo ni pedirlo.
               </div>
@@ -352,11 +434,12 @@ export function ProductoForm(props: Props) {
                 width: 44,
                 height: 24,
                 borderRadius: 999,
-                border: "1px solid var(--border-strong)",
+                border: isActive ? "1px solid var(--border-brand)" : "1px solid var(--border-strong)",
                 background: isActive ? "var(--brand)" : "var(--bg-elev-2)",
                 position: "relative",
                 cursor: "pointer",
-                transition: "background .15s",
+                transition: "background .15s, border-color .15s, box-shadow .15s",
+                boxShadow: isActive ? "0 0 0 3px var(--brand-soft)" : "none",
                 flexShrink: 0,
               }}
             >
@@ -377,57 +460,111 @@ export function ProductoForm(props: Props) {
         </CardNew>
 
         {/* Imágenes */}
-        <CardNew title="Imágenes" sub={`Hasta ${MAX_IMAGES} fotos · JPG, PNG, WebP o GIF (máx 10 MB c/u)`}>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-            {editing
-              ? images.map((img) => (
-                  <div key={img.id} className="product-thumb">
-                    <img src={img.url} alt="" />
-                    <button
-                      type="button"
-                      onClick={() => removeImage(img)}
-                      aria-label="Quitar imagen"
-                      className="product-thumb__remove"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))
-              : pending.map((p, idx) => (
-                  <div key={p.preview} className="product-thumb">
-                    <img src={p.preview} alt="" />
-                    <button
-                      type="button"
-                      onClick={() => removePending(idx)}
-                      aria-label="Quitar imagen"
-                      className="product-thumb__remove"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))}
+        <CardNew>
+          <CardAccent />
+          <div className="form-section__title">
+            <ImagePlus size={13} style={{ color: "var(--info)" }} /> Imágenes
+            <span className="form-section__rule" />
+          </div>
+          <p style={{ fontSize: 12, color: "var(--text-3)", margin: "0 0 14px" }}>
+            Hasta {MAX_IMAGES} fotos · JPG, PNG, WebP o GIF (máx 10 MB c/u)
+          </p>
 
-            <button
-              type="button"
-              onClick={openPicker}
-              disabled={uploading || totalImages >= MAX_IMAGES}
+          {/* Dropzone estilo labs: borde dashed + chip Upload violeta, drag-over con brand-soft */}
+          <button
+            type="button"
+            onClick={openPicker}
+            disabled={uploading || totalImages >= MAX_IMAGES}
+            onDragOver={(e) => {
+              if (uploading || totalImages >= MAX_IMAGES) return;
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              if (uploading || totalImages >= MAX_IMAGES) return;
+              handleFiles(e.dataTransfer.files);
+            }}
+            aria-label="Agregar imágenes"
+            style={{
+              width: "100%",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 10,
+              padding: "26px 18px",
+              borderRadius: 14,
+              border: `1.5px dashed ${dragOver ? "var(--border-brand)" : "var(--border-strong)"}`,
+              background: dragOver ? "var(--brand-soft)" : "var(--bg-elev)",
+              color: "var(--text-3)",
+              cursor: uploading || totalImages >= MAX_IMAGES ? "not-allowed" : "pointer",
+              opacity: totalImages >= MAX_IMAGES ? 0.55 : 1,
+              transition: "background .14s ease, border-color .14s ease",
+            }}
+          >
+            <span
+              aria-hidden
               style={{
-                width: 92,
-                height: 92,
-                borderRadius: 10,
-                border: "1px dashed var(--border-strong)",
-                background: "var(--bg-elev)",
-                color: "var(--text-3)",
+                width: 44,
+                height: 44,
+                borderRadius: 12,
                 display: "grid",
                 placeItems: "center",
-                cursor: uploading || totalImages >= MAX_IMAGES ? "not-allowed" : "pointer",
-                opacity: totalImages >= MAX_IMAGES ? 0.5 : 1,
+                background: "var(--brand-soft)",
+                border: "1px solid var(--border-brand)",
+                color: "var(--violet-400)",
               }}
-              aria-label="Agregar imágenes"
             >
-              {uploading ? <Loader2 className="animate-spin" size={18} /> : <Plus size={18} />}
-            </button>
-          </div>
+              {uploading ? <Loader2 className="animate-spin" size={20} /> : <Upload size={20} />}
+            </span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
+              {totalImages >= MAX_IMAGES
+                ? `Límite de ${MAX_IMAGES} imágenes alcanzado`
+                : uploading
+                  ? "Subiendo…"
+                  : "Arrastra fotos aquí o haz clic para subir"}
+            </span>
+            {totalImages < MAX_IMAGES && !uploading && (
+              <span style={{ fontSize: 12, color: "var(--text-3)" }}>
+                {totalImages}/{MAX_IMAGES} agregadas
+              </span>
+            )}
+          </button>
+
+          {/* Preview de imágenes con thumbnails y botón quitar */}
+          {totalImages > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 14 }}>
+              {editing
+                ? images.map((img) => (
+                    <div key={img.id} className="product-thumb">
+                      <img src={img.url} alt="" />
+                      <button
+                        type="button"
+                        onClick={() => removeImage(img)}
+                        aria-label="Quitar imagen"
+                        className="product-thumb__remove"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))
+                : pending.map((p, idx) => (
+                    <div key={p.preview} className="product-thumb">
+                      <img src={p.preview} alt="" />
+                      <button
+                        type="button"
+                        onClick={() => removePending(idx)}
+                        aria-label="Quitar imagen"
+                        className="product-thumb__remove"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+            </div>
+          )}
 
           {totalImages === 0 && !uploading && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, color: "var(--text-4)", fontSize: 12 }}>

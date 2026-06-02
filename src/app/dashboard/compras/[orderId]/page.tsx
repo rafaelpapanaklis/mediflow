@@ -3,6 +3,19 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import {
+  ArrowLeft,
+  Receipt,
+  Store,
+  Package,
+  ClipboardList,
+  Truck,
+  CheckCircle2,
+  Building2,
+  Clock,
+  FileText,
+  DollarSign,
+} from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { CardNew, BadgeNew } from "@/components/ui/design-system";
@@ -33,6 +46,15 @@ const PAYMENT_STATUS_TONES: Record<SupplierPaymentStatus, BadgeTone> = {
   UNPAID: "warning",
   PAID: "success",
 };
+
+// Pasos del stepper de avance del pedido (derivado de order.status — sin query).
+// CANCELLED es terminal y se trata aparte (no forma parte del riel).
+const STATUS_STEPS: { key: SupplierOrderStatus; label: string; Icon: typeof Package }[] = [
+  { key: "PENDING", label: "Pendiente", Icon: ClipboardList },
+  { key: "CONFIRMED", label: "Confirmado", Icon: CheckCircle2 },
+  { key: "SHIPPED", label: "Enviado", Icon: Truck },
+  { key: "DELIVERED", label: "Entregado", Icon: Package },
+];
 
 const fmtFullDate = (iso: string): string =>
   new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
@@ -78,23 +100,94 @@ export default async function Page({ params }: { params: { orderId: string } }) 
       })
     : null;
 
+  // Índice del paso actual dentro del riel del stepper (−1 si está cancelado).
+  const isCancelled = dto.status === "CANCELLED";
+  const currentStepIdx = STATUS_STEPS.findIndex((s) => s.key === dto.status);
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 880 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 880 }}>
       <Link
         href="/dashboard/compras"
-        style={{ fontSize: 13, color: "var(--text-3)", textDecoration: "none" }}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          width: "fit-content",
+          fontSize: 13,
+          color: "var(--text-3)",
+          textDecoration: "none",
+        }}
       >
-        ← Volver a compras
+        <ArrowLeft size={14} />
+        Volver a compras
       </Link>
 
-      <header style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
-          Pedido {dto.orderNumber}
-        </h1>
-        <p style={{ fontSize: 14, color: "var(--text-3)", margin: 0 }}>
-          {supplierName} · {fmtFullDate(dto.createdAt)}
-        </p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      {/* ── Hero con glow violeta + icon-chip gradiente + número mono + badges ── */}
+      <div
+        style={{
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          gap: 14,
+          flexWrap: "wrap",
+        }}
+      >
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            top: -40,
+            left: -30,
+            width: 280,
+            height: 180,
+            pointerEvents: "none",
+            background:
+              "radial-gradient(60% 70% at 20% 30%, rgba(124,58,237,0.18), transparent 70%)",
+          }}
+        />
+        <div
+          aria-hidden
+          style={{
+            position: "relative",
+            width: 44,
+            height: 44,
+            borderRadius: 14,
+            flexShrink: 0,
+            display: "grid",
+            placeItems: "center",
+            color: "#fff",
+            background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+            boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
+          }}
+        >
+          <Receipt size={22} />
+        </div>
+        <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
+          <h1
+            className="mono"
+            style={{
+              fontSize: 22,
+              letterSpacing: "-0.02em",
+              color: "var(--text-1)",
+              fontWeight: 600,
+              margin: 0,
+            }}
+          >
+            {dto.orderNumber}
+          </h1>
+          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, marginBottom: 0 }}>
+            {supplierName} · {fmtFullDate(dto.createdAt)}
+          </p>
+        </div>
+        <div
+          style={{
+            position: "relative",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+            alignItems: "center",
+          }}
+        >
           <BadgeNew tone={ORDER_STATUS_TONES[dto.status]} dot>
             {SUPPLIER_ORDER_STATUS_LABELS[dto.status]}
           </BadgeNew>
@@ -102,90 +195,385 @@ export default async function Page({ params }: { params: { orderId: string } }) 
             {SUPPLIER_PAYMENT_STATUS_LABELS[dto.paymentStatus]}
           </BadgeNew>
         </div>
-      </header>
+      </div>
 
-      <CardNew title="Productos">
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          {dto.items.map((item) => (
-            <div
-              key={item.id}
+      {/* ── Stepper horizontal de avance (derivado de order.status, sin query) ── */}
+      <CardNew title="Estado del pedido">
+        <span
+          aria-hidden
+          style={{
+            position: "absolute",
+            insetInline: 0,
+            top: 0,
+            height: 3,
+            background: "linear-gradient(90deg, var(--violet-400), var(--brand))",
+            pointerEvents: "none",
+          }}
+        />
+        {isCancelled ? (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              padding: "12px 14px",
+              borderRadius: "var(--radius)",
+              background: "var(--danger-soft)",
+              border: "1px solid rgba(239,68,68,0.25)",
+            }}
+          >
+            <span
               style={{
-                display: "flex",
-                alignItems: "baseline",
-                justifyContent: "space-between",
-                gap: 16,
-                padding: "10px 0",
-                borderBottom: "1px solid var(--border-soft)",
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                flexShrink: 0,
+                display: "grid",
+                placeItems: "center",
+                background: "rgba(239,68,68,0.15)",
+                color: "var(--danger)",
               }}
             >
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 14, color: "var(--text-1)" }}>{item.productName}</div>
-                <div style={{ fontSize: 12, color: "var(--text-3)" }}>
-                  {item.quantity} × {fmtMXNdec(item.unitPrice)}
-                </div>
+              <Clock size={18} />
+            </span>
+            <div>
+              <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>
+                Pedido cancelado
               </div>
-              <div style={{ fontSize: 14, color: "var(--text-1)", whiteSpace: "nowrap" }}>
-                {fmtMXNdec(item.lineTotal)}
-              </div>
+              <p style={{ color: "var(--text-3)", fontSize: 13, margin: 0 }}>
+                Este pedido fue cancelado y ya no avanzará en el proceso.
+              </p>
             </div>
-          ))}
+          </div>
+        ) : (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 0,
+              overflowX: "auto",
+            }}
+          >
+            {STATUS_STEPS.map((step, idx) => {
+              const done = idx < currentStepIdx;
+              const active = idx === currentStepIdx;
+              const reached = done || active;
+              const StepIcon = step.Icon;
+              const isLast = idx === STATUS_STEPS.length - 1;
+              return (
+                <div
+                  key={step.key}
+                  style={{
+                    flex: 1,
+                    minWidth: 88,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    position: "relative",
+                  }}
+                >
+                  {/* Línea de conexión hacia el siguiente paso */}
+                  {!isLast && (
+                    <span
+                      aria-hidden
+                      style={{
+                        position: "absolute",
+                        top: 18,
+                        left: "50%",
+                        right: "-50%",
+                        height: 2,
+                        background: done ? "var(--brand)" : "var(--border-soft)",
+                      }}
+                    />
+                  )}
+                  <span
+                    style={{
+                      position: "relative",
+                      zIndex: 1,
+                      width: 38,
+                      height: 38,
+                      borderRadius: "50%",
+                      display: "grid",
+                      placeItems: "center",
+                      background: reached ? "var(--brand-soft)" : "var(--bg-elev)",
+                      border: `1px solid ${reached ? "var(--border-brand)" : "var(--border-soft)"}`,
+                      color: reached ? "var(--violet-400)" : "var(--text-3)",
+                      boxShadow: active
+                        ? "0 0 0 4px color-mix(in srgb, var(--violet-400) 18%, transparent)"
+                        : "none",
+                    }}
+                  >
+                    <StepIcon size={17} />
+                  </span>
+                  <div
+                    style={{
+                      marginTop: 8,
+                      fontSize: 12,
+                      textAlign: "center",
+                      fontWeight: active ? 600 : 500,
+                      color: reached ? "var(--text-1)" : "var(--text-3)",
+                    }}
+                  >
+                    {step.label}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardNew>
+
+      {/* ── Proveedor ── */}
+      <CardNew title="Proveedor">
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span
+            style={{
+              width: 42,
+              height: 42,
+              borderRadius: 12,
+              flexShrink: 0,
+              display: "grid",
+              placeItems: "center",
+              background: "var(--brand-soft)",
+              border: "1px solid var(--border-brand)",
+              color: "var(--violet-400)",
+            }}
+          >
+            <Store size={20} />
+          </span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 15 }}>
+              {supplierName}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                color: "var(--text-3)",
+                fontSize: 12,
+                marginTop: 2,
+              }}
+            >
+              <Building2 size={12} />
+              Proveedor del marketplace
+            </div>
+          </div>
+        </div>
+      </CardNew>
+
+      {/* ── Artículos ── */}
+      <CardNew title="Artículos" sub={`${dto.items.length} producto${dto.items.length === 1 ? "" : "s"}`}>
+        <span
+          aria-hidden
+          style={{
+            position: "absolute",
+            insetInline: 0,
+            top: 0,
+            height: 3,
+            background: "linear-gradient(90deg, var(--violet-400), var(--brand))",
+            pointerEvents: "none",
+          }}
+        />
+        <div style={{ overflowX: "auto" }}>
+          <table className="table-new">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th style={{ textAlign: "center" }}>Cantidad</th>
+                <th style={{ textAlign: "right" }}>Precio unit.</th>
+                <th style={{ textAlign: "right" }}>Importe</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dto.items.map((item) => (
+                <tr key={item.id}>
+                  <td>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span
+                        style={{
+                          width: 34,
+                          height: 34,
+                          borderRadius: 9,
+                          flexShrink: 0,
+                          display: "grid",
+                          placeItems: "center",
+                          background: "var(--brand-soft)",
+                          border: "1px solid var(--border-brand)",
+                          color: "var(--violet-400)",
+                        }}
+                      >
+                        <Package size={16} />
+                      </span>
+                      <span style={{ color: "var(--text-1)" }}>{item.productName}</span>
+                    </div>
+                  </td>
+                  <td style={{ textAlign: "center", color: "var(--text-2)" }}>{item.quantity}</td>
+                  <td className="mono" style={{ textAlign: "right", color: "var(--text-2)" }}>
+                    {fmtMXNdec(item.unitPrice)}
+                  </td>
+                  <td className="mono" style={{ textAlign: "right", color: "var(--text-1)" }}>
+                    {fmtMXNdec(item.lineTotal)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--text-3)" }}>
+        {/* Footer destacado Subtotal / Total */}
+        <div
+          style={{
+            marginTop: 14,
+            padding: "14px 16px",
+            borderRadius: "var(--radius)",
+            background: "var(--brand-soft)",
+            border: "1px solid var(--border-brand)",
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              fontSize: 13,
+              color: "var(--text-2)",
+            }}
+          >
             <span>Subtotal</span>
-            <span>{fmtMXNdec(dto.subtotal)}</span>
+            <span className="mono">{fmtMXNdec(dto.subtotal)}</span>
           </div>
           <div
             style={{
               display: "flex",
               justifyContent: "space-between",
-              fontSize: 15,
-              fontWeight: 600,
+              alignItems: "center",
               color: "var(--text-1)",
+              fontWeight: 600,
             }}
           >
             <span>Total</span>
-            <span>{fmtMXNdec(dto.total)}</span>
+            <span className="mono" style={{ fontWeight: 700, fontSize: 17, color: "var(--violet-400)" }}>
+              {fmtMXNdec(dto.total)}
+            </span>
           </div>
         </div>
       </CardNew>
 
+      {/* ── Detalles del pedido (método de pago / notas) ── */}
       <CardNew title="Detalles del pedido">
-        <dl style={{ display: "flex", flexDirection: "column", gap: 14, margin: 0 }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <dt style={{ fontSize: 12, color: "var(--text-3)" }}>Método de pago</dt>
-            <dd style={{ fontSize: 14, color: "var(--text-1)", margin: 0 }}>{methodLabel}</dd>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, fontSize: 13 }}>
+          <div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                color: "var(--text-3)",
+                fontSize: 11,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: 0.4,
+                marginBottom: 3,
+              }}
+            >
+              <DollarSign size={12} style={{ color: "var(--violet-400)" }} />
+              Método de pago
+            </div>
+            <div style={{ color: "var(--text-1)", fontSize: 14 }}>{methodLabel}</div>
           </div>
 
           {dto.notes && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <dt style={{ fontSize: 12, color: "var(--text-3)" }}>Notas</dt>
-              <dd style={{ fontSize: 14, color: "var(--text-1)", margin: 0, whiteSpace: "pre-wrap" }}>
+            <div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  color: "var(--text-3)",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.4,
+                  marginBottom: 3,
+                }}
+              >
+                <FileText size={12} style={{ color: "var(--violet-400)" }} />
+                Notas
+              </div>
+              <p
+                style={{
+                  color: "var(--text-1)",
+                  fontSize: 14,
+                  margin: 0,
+                  whiteSpace: "pre-wrap",
+                }}
+              >
                 {dto.notes}
-              </dd>
+              </p>
             </div>
           )}
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <dt style={{ fontSize: 12, color: "var(--text-3)" }}>Fecha de creación</dt>
-            <dd style={{ fontSize: 14, color: "var(--text-1)", margin: 0 }}>{fmtFullDate(dto.createdAt)}</dd>
+          <div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                color: "var(--text-3)",
+                fontSize: 11,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: 0.4,
+                marginBottom: 3,
+              }}
+            >
+              <Clock size={12} style={{ color: "var(--violet-400)" }} />
+              Fecha de creación
+            </div>
+            <div style={{ color: "var(--text-1)", fontSize: 14 }}>{fmtFullDate(dto.createdAt)}</div>
           </div>
-        </dl>
+        </div>
       </CardNew>
 
       {/* ── Cómo pagar ── */}
       <CardNew title="Pago">
         {isPaid ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <BadgeNew tone="success" dot>
-              Pagado
-            </BadgeNew>
-            {fmtPaidAt && (
-              <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0 }}>
-                Pago registrado el {fmtPaidAt}.
-              </p>
-            )}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              padding: "12px 14px",
+              borderRadius: "var(--radius)",
+              background: "var(--success-soft)",
+              border: "1px solid rgba(34,197,94,0.22)",
+            }}
+          >
+            <span
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                flexShrink: 0,
+                display: "grid",
+                placeItems: "center",
+                background: "rgba(34,197,94,0.15)",
+                color: "var(--success)",
+              }}
+            >
+              <CheckCircle2 size={18} />
+            </span>
+            <div>
+              <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>Pedido pagado</div>
+              {fmtPaidAt && (
+                <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0 }}>
+                  Pago registrado el {fmtPaidAt}.
+                </p>
+              )}
+            </div>
           </div>
         ) : method === "TRANSFER" ? (
           bankAccounts.length > 0 ? (
@@ -256,7 +644,10 @@ export default async function Page({ params }: { params: { orderId: string } }) 
       </CardNew>
 
       <div>
-        <Link href={`/dashboard/proveedor-chat/${dto.supplierId}`} className="btn-new btn-new--secondary">
+        <Link
+          href={`/dashboard/proveedor-chat/${dto.supplierId}`}
+          className="btn-new btn-new--secondary"
+        >
           Contactar al proveedor
         </Link>
       </div>

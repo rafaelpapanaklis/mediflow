@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { redirect } from "next/navigation";
+import { Settings } from "lucide-react";
 import { getSupplierContext } from "@/lib/supplier-auth";
 import { prisma } from "@/lib/prisma";
 import type { SupplierBankAccountDTO } from "@/lib/suppliers/types";
@@ -33,13 +34,47 @@ export default async function SupplierConfigPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 760 }}>
-      <div>
-        <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
-          Configuración
-        </h1>
-        <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, marginBottom: 0 }}>
-          Administra los datos de tu negocio que ven las clínicas.
-        </p>
+      <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 14 }}>
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            top: -28,
+            left: -32,
+            width: 240,
+            height: 160,
+            pointerEvents: "none",
+            background:
+              "radial-gradient(closest-side, rgba(124,58,237,0.18), transparent 75%)",
+            filter: "blur(4px)",
+            zIndex: 0,
+          }}
+        />
+        <div
+          style={{
+            position: "relative",
+            zIndex: 1,
+            width: 44,
+            height: 44,
+            borderRadius: 14,
+            flexShrink: 0,
+            display: "grid",
+            placeItems: "center",
+            color: "#fff",
+            background: "linear-gradient(135deg, var(--violet-400), var(--brand))",
+            boxShadow: "0 8px 20px -8px rgba(124,58,237,0.6)",
+          }}
+        >
+          <Settings size={22} />
+        </div>
+        <div style={{ position: "relative", zIndex: 1 }}>
+          <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
+            Configuración
+          </h1>
+          <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, marginBottom: 0 }}>
+            Administra los datos de tu negocio que ven las clínicas, las cuentas y los métodos para recibir pagos.
+          </p>
+        </div>
       </div>
 
       <ProfileForm
