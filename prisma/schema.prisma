@@ -329,6 +329,10 @@ model Supplier {
   description    String?        @db.Text
   categories     String[]       @default([])
   paymentMethods String[]       @default([])
+  payTransferEnabled    Boolean @default(false)
+  payCashEnabled        Boolean @default(false)
+  payMercadoPagoEnabled Boolean @default(false)
+  mpAccessToken         String?
   status         SupplierStatus @default(PENDING)
   approvedAt     DateTime?
   rejectedReason String?
@@ -340,6 +344,7 @@ model Supplier {
   orders   SupplierOrder[]
   carts    SupplierCart[]
   chats    SupplierChatThread[]
+  bankAccounts SupplierBankAccount[]
 
   @@index([status])
   @@map("suppliers")
@@ -438,6 +443,9 @@ model SupplierOrder {
   status        SupplierOrderStatus   @default(PENDING)
   paymentStatus SupplierPaymentStatus @default(UNPAID)
   paymentMethod String?
+  mpPreferenceId String?
+  mpPaymentId    String?
+  paidAt         DateTime?
   subtotal      Float
   total         Float
   notes         String?               @db.Text
@@ -500,6 +508,23 @@ model SupplierChatMessage {
 
   @@index([threadId, createdAt])
   @@map("supplier_chat_messages")
+}
+
+model SupplierBankAccount {
+  id            String   @id @default(cuid())
+  supplierId    String
+  bank          String
+  clabe         String   @db.VarChar(18)
+  accountNumber String?
+  holderName    String
+  isPrimary     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@index([supplierId])
+  @@map("supplier_bank_accounts")
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -603,6 +628,8 @@ model DentalLab {
   payCardStripeConnected Boolean @default(false)
   payCashEnabled         Boolean @default(false)
   payInvoiceEnabled      Boolean @default(false)
+  payMercadoPagoEnabled  Boolean @default(false)
+  mpAccessToken          String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -682,6 +709,9 @@ model DentalLabOrder {
   pickupAt      DateTime?
   etaAt         DateTime?
   courier       Json?
+  mpPreferenceId String?
+  mpPaymentId    String?
+  paidAt         DateTime?
   deliveredAt   DateTime?
   cancelledAt   DateTime?
   createdAt     DateTime               @default(now())
