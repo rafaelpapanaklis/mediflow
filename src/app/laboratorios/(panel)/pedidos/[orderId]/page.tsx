@@ -2,10 +2,11 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, MapPin, FileText, Download } from "lucide-react";
 import { getDentalLabContext } from "@/lib/lab-auth";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency } from "@/lib/utils";
+import { formatBytes } from "@/lib/plans";
 import { formatRelativeDate } from "@/lib/format";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
@@ -43,9 +44,12 @@ export default async function LabOrderDetailPage({
     // Multi-tenant: el pedido debe pertenecer a este laboratorio.
     where: { id: params.orderId, labId: ctx.labId },
     include: {
-      clinic: { select: { name: true, city: true, state: true, phone: true, email: true } },
+      clinic: {
+        select: { name: true, city: true, state: true, address: true, mapsUrl: true, phone: true, email: true },
+      },
       service: { select: { name: true, unit: true } },
       events: { orderBy: { createdAt: "asc" } },
+      files: { orderBy: { uploadedAt: "asc" } },
     },
   });
   if (!order) notFound();
@@ -115,6 +119,40 @@ export default async function LabOrderDetailPage({
                 <span style={{ color: "var(--text-3)" }}>Email:</span> {order.clinic.email}
               </div>
             )}
+            {(order.clinic.address || order.clinic.mapsUrl) && (
+              <div
+                style={{
+                  borderTop: "1px solid var(--border-soft)",
+                  paddingTop: 8,
+                  marginTop: 2,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4,
+                }}
+              >
+                <div style={{ color: "var(--text-3)", fontSize: 11 }}>Dónde recoger el producto</div>
+                {order.clinic.address && <div style={{ color: "var(--text-2)" }}>{order.clinic.address}</div>}
+                {order.clinic.mapsUrl && (
+                  <a
+                    href={order.clinic.mapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      width: "fit-content",
+                      color: "var(--brand)",
+                      fontWeight: 500,
+                      textDecoration: "none",
+                    }}
+                  >
+                    <MapPin size={13} />
+                    Ver en Google Maps
+                  </a>
+                )}
+              </div>
+            )}
           </div>
         </CardNew>
 
@@ -174,6 +212,78 @@ export default async function LabOrderDetailPage({
             </div>
           </div>
         </div>
+      </CardNew>
+
+      {/* Archivos adjuntos */}
+      <CardNew title="Archivos adjuntos">
+        {order.files.length === 0 ? (
+          <div style={{ color: "var(--text-3)", fontSize: 13 }}>
+            La clínica no adjuntó archivos a este pedido.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {order.files.map((file) => (
+              <div
+                key={file.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: "1px solid var(--border-soft)",
+                  background: "var(--bg-elev)",
+                }}
+              >
+                <div style={{ flexShrink: 0, color: "var(--text-3)", display: "grid", placeItems: "center" }}>
+                  <FileText size={16} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div
+                    style={{
+                      color: "var(--text-1)",
+                      fontSize: 13,
+                      fontWeight: 500,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {file.name}
+                  </div>
+                  {file.sizeBytes != null && (
+                    <div className="mono" style={{ color: "var(--text-3)", fontSize: 11, marginTop: 2 }}>
+                      {formatBytes(file.sizeBytes)}
+                    </div>
+                  )}
+                </div>
+                <a
+                  href={file.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download={file.name}
+                  style={{
+                    flexShrink: 0,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "6px 12px",
+                    borderRadius: 8,
+                    border: "1px solid var(--border-soft)",
+                    background: "var(--bg-elev)",
+                    color: "var(--text-1)",
+                    fontSize: 12,
+                    fontWeight: 500,
+                    textDecoration: "none",
+                  }}
+                >
+                  <Download size={13} />
+                  Descargar
+                </a>
+              </div>
+            ))}
+          </div>
+        )}
       </CardNew>
 
       {/* Seguimiento (timeline de eventos) */}
