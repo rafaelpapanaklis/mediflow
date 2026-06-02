@@ -56,7 +56,16 @@ export async function getCurrentUser() {
       where: { supabaseId: supabaseUser.id, isActive: true },
       select: { id: true },
     });
-    redirect(supplierUser ? "/proveedores" : "/onboarding");
+    if (supplierUser) redirect("/proveedores");
+    // Chequeo simétrico de laboratorio: si la sesión pertenece a un DentalLabUser
+    // activo, mándala a su panel. /laboratorios usa getDentalLabContext (no
+    // getCurrentUser), así que no hay loop de redirect — igual que /proveedores.
+    const labUser = await prisma.dentalLabUser.findFirst({
+      where: { supabaseId: supabaseUser.id, isActive: true },
+      select: { id: true },
+    });
+    if (labUser) redirect("/laboratorios");
+    redirect("/onboarding");
   }
 
   if (activeClinicId) {
