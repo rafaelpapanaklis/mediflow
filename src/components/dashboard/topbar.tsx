@@ -13,6 +13,8 @@ import { TrialPill } from "./trial-pill";
 import { WaitingRoomAlert } from "./waiting-room-alert";
 import { useCommandPalette } from "@/hooks/use-command-palette";
 import { useActiveConsult } from "@/hooks/use-active-consult";
+import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
+import { useNewPatientDialog } from "@/components/dashboard/new-patient/new-patient-provider";
 import { useGoToShortcuts, useCreateShortcuts } from "@/lib/command-palette/shortcuts";
 import type { ClinicPlan } from "./sidebar";
 
@@ -76,13 +78,15 @@ export function Topbar({
   const { open: paletteOpen, setOpen: setPaletteOpen } = useCommandPalette();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const { consult } = useActiveConsult();
+  const { open: openAppt } = useNewAppointmentDialog();
+  const { open: openPatient } = useNewPatientDialog();
   const modalsClosed = !paletteOpen && !shortcutsOpen;
 
   useGoToShortcuts({ enabled: modalsClosed });
   useCreateShortcuts({
     enabled: modalsClosed,
-    onCreateAppointment: () => router.push("/dashboard/appointments?new=1"),
-    onCreatePatient:     () => router.push("/dashboard/patients?new=1"),
+    onCreateAppointment: () => openAppt({ openAgendaAfter: true }),
+    onCreatePatient:     () => openPatient(),
     onCreateInvoice:     () => router.push("/dashboard/billing?new=1"),
     onCreateSoap: () => {
       if (consult) {

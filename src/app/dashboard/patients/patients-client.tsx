@@ -256,6 +256,8 @@ export function PatientsClient({ doctors }: Props) {
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Bump para forzar un refetch de la lista client-fetched sin cambiar filtros/página.
+  const [reloadKey, setReloadKey] = useState(0);
 
   // Modal
   const [newPatientOpen, setNewPatientOpen] = useState(false);
@@ -329,7 +331,7 @@ export function PatientsClient({ doctors }: Props) {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [queryString, page]);
+  }, [queryString, page, reloadKey]);
 
   const handleSort = useCallback((col: SortCol) => {
     if (sortCol !== col) {
@@ -360,6 +362,41 @@ export function PatientsClient({ doctors }: Props) {
       return next;
     });
   }, []);
+
+  const reload = useCallback(() => setReloadKey((k) => k + 1), []);
+
+  // Toggle VIP con update OPTIMISTA: la lista es client-fetched, así que
+  // reflejamos el cambio en `data` al instante y revertimos si el PATCH falla.
+  const handleToggleVip = useCallback((patientId: string) => {
+    const target = data?.patients.find((p) => p.id === patientId);
+    if (!target) return;
+    const willBeVip = !target.isVip;
+    const newTags = target.isVip
+      ? target.tags.filter((t) => t !== "VIP")
+      : [...target.tags, "VIP"];
+    setData((prev) =>
+      prev
+        ? { ...prev, patients: prev.patients.map((p) => (p.id === patientId ? { ...p, isVip: willBeVip, tags: newTags } : p)) }
+        : prev,
+    );
+    fetch(`/api/patients/${patientId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tags: newTags }),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error();
+        toast.success(willBeVip ? "Marcado VIP" : "VIP removido");
+      })
+      .catch(() => {
+        setData((prev) =>
+          prev
+            ? { ...prev, patients: prev.patients.map((p) => (p.id === patientId ? { ...p, isVip: target.isVip, tags: target.tags } : p)) }
+            : prev,
+        );
+        toast.error("Error");
+      });
+  }, [data]);
 
   const patients = data?.patients ?? [];
   const allSelected = patients.length > 0 && patients.every((p) => selected.has(p.id));
@@ -715,6 +752,7 @@ export function PatientsClient({ doctors }: Props) {
           onSort={handleSort}
           onToggleAll={toggleAll}
           onToggleOne={toggleOne}
+          onToggleVip={handleToggleVip}
         />
       ) : (
         <PatientsGrid
@@ -782,8 +820,9 @@ export function PatientsClient({ doctors }: Props) {
         onClose={() => setNewPatientOpen(false)}
         onCreated={() => {
           setNewPatientOpen(false);
-          router.refresh();
           setPage(1);
+          // Lista client-fetched: router.refresh() no recarga las filas; forzamos refetch.
+          reload();
         }}
       />
     </div>
@@ -890,7 +929,7 @@ function StatCard({
 
 function PatientsTable({
   patients, loading, search, columnsVisible, selected, allSelected,
-  focusedIdx, sortCol, sortDir, onSort, onToggleAll, onToggleOne,
+  focusedIdx, sortCol, sortDir, onSort, onToggleAll, onToggleOne, onToggleVip,
 }: {
   patients: PatientRow[];
   loading: boolean;
@@ -904,6 +943,7 @@ function PatientsTable({
   onSort: (col: SortCol) => void;
   onToggleAll: () => void;
   onToggleOne: (id: string, idx: number, withShift: boolean) => void;
+  onToggleVip: (id: string) => void;
 }) {
   if (loading && patients.length === 0) {
     return (
@@ -961,6 +1001,7 @@ function PatientsTable({
               isSelected={selected.has(p.id)}
               isFocused={focusedIdx === idx}
               onToggle={onToggleOne}
+              onToggleVip={onToggleVip}
             />
           ))}
         </tbody>
@@ -995,7 +1036,7 @@ function SortHeader({
 }
 
 function PatientRowComp({
-  patient: p, idx, search, columnsVisible, isSelected, isFocused, onToggle,
+  patient: p, idx, search, columnsVisible, isSelected, isFocused, onToggle, onToggleVip,
 }: {
   patient: PatientRow;
   idx: number;
@@ -1004,6 +1045,7 @@ function PatientRowComp({
   isSelected: boolean;
   isFocused: boolean;
   onToggle: (id: string, idx: number, withShift: boolean) => void;
+  onToggleVip: (id: string) => void;
 }) {
   const router = useRouter();
   const visibleCol = (id: ColumnId) => columnsVisible.includes(id);
@@ -1155,14 +1197,7 @@ function PatientRowComp({
             title={p.isVip ? "Quitar VIP" : "Marcar VIP"}
             onClick={(e) => {
               e.stopPropagation();
-              const newTags = p.isVip ? p.tags.filter((t) => t !== "VIP") : [...p.tags, "VIP"];
-              fetch(`/api/patients/${p.id}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ tags: newTags }),
-              })
-                .then((r) => { if (r.ok) toast.success(p.isVip ? "VIP removido" : "Marcado VIP"); })
-                .catch(() => toast.error("Error"));
+              onToggleVip(p.id);
             }}
           >
             <Star size={13} fill={p.isVip ? "currentColor" : "none"} aria-hidden />

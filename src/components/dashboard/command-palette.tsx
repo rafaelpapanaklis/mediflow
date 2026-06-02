@@ -12,6 +12,8 @@ import type {
 import { buildGlobalActions, buildActiveConsultActions } from "@/lib/command-palette/actions";
 import { fuzzyScore } from "@/lib/command-palette/fuzzy";
 import { useActiveConsult } from "@/hooks/use-active-consult";
+import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
+import { useNewPatientDialog } from "@/components/dashboard/new-patient/new-patient-provider";
 import { useDebouncedValue } from "@/hooks/use-command-palette";
 
 interface CommandPaletteProps {
@@ -40,6 +42,8 @@ const GROUP_ORDER: CommandGroup[] = [
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const router = useRouter();
   const { consult: activeConsult } = useActiveConsult();
+  const { open: openAppt } = useNewAppointmentDialog();
+  const { open: openPatient } = useNewPatientDialog();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
@@ -99,8 +103,16 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         router.push(href);
       },
       activeConsultPatientId: activeConsult?.patientId ?? null,
+      openNewAppointment: () => {
+        onOpenChange(false);
+        openAppt({ openAgendaAfter: true });
+      },
+      openNewPatient: () => {
+        onOpenChange(false);
+        openPatient();
+      },
     }),
-    [onOpenChange, router, activeConsult],
+    [onOpenChange, router, activeConsult, openAppt, openPatient],
   );
 
   const items: CommandItem[] = useMemo(() => {

@@ -24,6 +24,11 @@ export interface CommandContext {
   close: () => void;
   push: (href: string) => void;
   activeConsultPatientId: string | null;
+  /** Abren los diálogos MODERNOS (provider en el layout root) en vez de navegar
+   *  a la página legacy con ?new=1. Opcionales: si el ctx no los provee, las
+   *  acciones caen al push legacy. */
+  openNewAppointment?: () => void;
+  openNewPatient?: () => void;
 }
 
 export interface RemoteSearchResult {

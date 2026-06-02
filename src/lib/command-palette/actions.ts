@@ -16,7 +16,7 @@ export function buildGlobalActions(): CommandItem[] {
       shortcut: "C",
       tone: "brand",
       keywords: ["agendar", "reservar", "programar", "cita"],
-      run: (ctx) => ctx.push("/dashboard/appointments?new=1"),
+      run: (ctx) => (ctx.openNewAppointment ? ctx.openNewAppointment() : ctx.push("/dashboard/appointments?new=1")),
     },
     {
       id: "create:patient",
@@ -26,7 +26,7 @@ export function buildGlobalActions(): CommandItem[] {
       shortcut: "N",
       tone: "brand",
       keywords: ["registrar", "agregar", "paciente"],
-      run: (ctx) => ctx.push("/dashboard/patients?new=1"),
+      run: (ctx) => (ctx.openNewPatient ? ctx.openNewPatient() : ctx.push("/dashboard/patients?new=1")),
     },
     {
       id: "create:invoice",

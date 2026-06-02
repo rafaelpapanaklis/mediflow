@@ -8,6 +8,7 @@
 // patient-detail (siempre visible a la izquierda) sigue siendo el camino.
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Activity,
   Camera,
@@ -182,12 +183,11 @@ export function OrthodonticsModuleSidebar(props: OrthodonticsModuleSidebarProps)
 }
 
 function RefreshIndicator() {
+  const router = useRouter();
   return (
     <button
       type="button"
-      onClick={() => {
-        if (typeof window !== "undefined") window.location.reload();
-      }}
+      onClick={() => router.refresh()}
       className="w-full flex items-center gap-2 text-[11px] text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
     >
       <RefreshCw size={11} aria-hidden />

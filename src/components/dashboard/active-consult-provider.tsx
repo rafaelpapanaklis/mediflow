@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import type { ActiveConsult } from "@/hooks/use-active-consult";
 
@@ -67,6 +68,7 @@ export function ActiveConsultProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState<boolean>(true);
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
   const channelRef = useRef<BroadcastChannel | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     let cancelled = false;
@@ -163,11 +165,13 @@ export function ActiveConsultProvider({ children }: { children: ReactNode }) {
         type: "start",
         consult: data.consult,
       } satisfies ConsultBroadcast);
+      // Refresca vistas derivadas server-rendered (context bar, contadores).
+      router.refresh();
     } catch (err) {
       toast.error("No se pudo iniciar la consulta. Intenta de nuevo.");
       console.error("[ActiveConsult] startConsult failed", err);
     }
-  }, []);
+  }, [router]);
 
   const endConsult = useCallback(async () => {
     try {
@@ -180,11 +184,13 @@ export function ActiveConsultProvider({ children }: { children: ReactNode }) {
       channelRef.current?.postMessage({
         type: "end",
       } satisfies ConsultBroadcast);
+      // Refresca vistas derivadas server-rendered tras cerrar la consulta.
+      router.refresh();
     } catch (err) {
       toast.error("No se pudo cerrar la consulta. Intenta de nuevo.");
       console.error("[ActiveConsult] endConsult failed", err);
     }
-  }, []);
+  }, [router]);
 
   return (
     <ActiveConsultContext.Provider

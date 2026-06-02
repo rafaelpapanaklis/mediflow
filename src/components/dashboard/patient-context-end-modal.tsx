@@ -38,6 +38,7 @@ export function PatientContextEndModal({
 
   const handleJustClose = async () => {
     await endConsult();
+    router.refresh();
     onOpenChange(false);
     toast.success("Consulta cerrada");
   };

@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import type {
   NewPatientContextValue,
   OpenNewPatientParams,
@@ -23,6 +24,7 @@ interface DialogState extends OpenNewPatientParams {
 
 export function NewPatientProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<DialogState>({ isOpen: false });
+  const router = useRouter();
 
   const open = useCallback((params?: OpenNewPatientParams) => {
     setState({ isOpen: true, ...params });
@@ -41,10 +43,15 @@ export function NewPatientProvider({ children }: { children: ReactNode }) {
   // (legacy de NewPatientDialog). NewPatientModal devuelve el patient
   // completo desde la API. Mapeamos para mantener compat.
   const handleCreated = useCallback((patient: { id: string; firstName: string; lastName: string | null }) => {
-    if (!state.onCreated) return;
-    const fullName = [patient.firstName, patient.lastName].filter(Boolean).join(" ").trim();
-    state.onCreated({ id: patient.id, name: fullName });
-  }, [state]);
+    if (state.onCreated) {
+      const fullName = [patient.firstName, patient.lastName].filter(Boolean).join(" ").trim();
+      state.onCreated({ id: patient.id, name: fullName });
+    }
+    // Red de seguridad: refresca SIEMPRE las vistas server-rendered (listas,
+    // contadores, context bar) tras crear un paciente, aunque el opener no
+    // pase onCreated. Síntoma #1: registrar paciente sin recargar.
+    router.refresh();
+  }, [state, router]);
 
   return (
     <NewPatientContext.Provider value={ctx}>

@@ -567,6 +567,13 @@ export function PatientDetailClient({
     treatments: SuggestedTreatment[];
   }>({ open: false, appointmentId: "", treatments: [] });
   const [records, setRecords] = useState(initialRecords);
+  // Sincroniza con props frescas tras router.refresh()/navegación (mismo patrón
+  // que `invoices` arriba). Sin esto el historial de Consultas queda en un
+  // "snapshot" del primer render. Las escrituras optimistas (add/update/delete
+  // vía setRecords) se conservan porque ocurren ANTES del siguiente refresh.
+  useEffect(() => {
+    setRecords(initialRecords);
+  }, [initialRecords]);
   const [showEdit, setShowEdit] = useState(false);
   const [editForm, setEditForm] = useState({
     firstName: patient.firstName, lastName: patient.lastName,

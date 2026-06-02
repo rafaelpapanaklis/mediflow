@@ -6,6 +6,7 @@ import {
   Plus, Search, Bot, Calendar, Pill,
   X, Clock, User, ChevronRight,
 } from "lucide-react";
+import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 
 interface Patient { id: string; firstName: string; lastName: string; patientNumber: string; phone?: string | null }
 interface QuickActionsProps {
@@ -20,6 +21,7 @@ function CommandPalette({ onClose, clinicId }: { onClose: () => void; clinicId: 
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading,  setLoading]  = useState(false);
   const router = useRouter();
+  const { open: openAppt } = useNewAppointmentDialog();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
@@ -87,10 +89,10 @@ function CommandPalette({ onClose, clinicId }: { onClose: () => void; clinicId: 
                   </div>
                   <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                     {[
-                      { label:"Expediente", path:`/dashboard/patients/${p.id}` },
-                      { label:"Cita",       path:`/dashboard/appointments?new=1&patientId=${p.id}` },
+                      { label:"Expediente", onClick: () => go(`/dashboard/patients/${p.id}`) },
+                      { label:"Cita",       onClick: () => { openAppt({ initialPatient: { id: p.id, name: `${p.firstName} ${p.lastName}`.trim() }, openAgendaAfter: true }); onClose(); } },
                     ].map(a => (
-                      <button key={a.label} onClick={() => go(a.path)}
+                      <button key={a.label} onClick={a.onClick}
                         className="text-xs font-semibold px-2.5 py-1.5 bg-card border border-border rounded-lg hover:border-brand-400 hover:text-brand-600 transition-colors">
                         {a.label}
                       </button>
@@ -137,6 +139,7 @@ function CommandPalette({ onClose, clinicId }: { onClose: () => void; clinicId: 
 export function QuickActionsBar({ currentUserId, clinicId, isAdmin }: QuickActionsProps) {
   const [showPalette, setShowPalette] = useState(false);
   const router = useRouter();
+  const { open: openAppt } = useNewAppointmentDialog();
   const pathname = usePathname();
 
   // Cmd+K / Ctrl+K global shortcut
@@ -155,7 +158,7 @@ export function QuickActionsBar({ currentUserId, clinicId, isAdmin }: QuickActio
     {
       icon: <Plus className="w-5 h-5" />,
       label: "Nueva cita",
-      onClick: () => router.push("/dashboard/appointments?new=1"),
+      onClick: () => openAppt({ openAgendaAfter: true }),
       primary: true,
       // primary is always highlighted regardless of path
     },
