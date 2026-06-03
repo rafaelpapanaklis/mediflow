@@ -1,6 +1,5 @@
 // src/components/dashboard/home/home-admin.tsx
 "use client";
-import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
   DollarSign, Calendar, TrendingUp, UserX, ChevronRight,
@@ -9,33 +8,12 @@ import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { HomeSection } from "./home-section";
 import { Greeting } from "./parts/greeting";
 import { AdminPeriodToggle } from "./parts/admin-period-toggle";
-import { AdminAlertRow } from "./parts/admin-alert-row";
 import { TeamPerformanceTable } from "./parts/team-performance-table";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { HomeQuickActions } from "./parts/home-quick-actions";
-import { EmptyActionItemsAllClear } from "@/components/dashboard/empty-states";
+import { RevenueTrendCard } from "./parts/revenue-trend-card";
+import { UpcomingAppointmentsCard } from "./parts/upcoming-appointments-card";
 import type { HomeAdminData, AdminPeriod } from "@/lib/home/types";
-
-// recharts pesa ~95kb min+gz — dynamic import lo saca del bundle inicial
-// del dashboard. La gráfica aparece después del primer paint con un
-// skeleton suave.
-const RevenueAreaChart = dynamic(
-  () => import("@/components/dashboard/revenue-area-chart").then((m) => m.RevenueAreaChart),
-  {
-    ssr: false,
-    loading: () => (
-      <div
-        style={{
-          height: 220,
-          background: "var(--bg-elev-2)",
-          borderRadius: 8,
-          opacity: 0.5,
-        }}
-        aria-hidden
-      />
-    ),
-  },
-);
 
 interface Props {
   user: { displayName: string };
@@ -43,13 +21,6 @@ interface Props {
   data: HomeAdminData;
   period: AdminPeriod;
 }
-
-const PERIOD_SUBTITLE: Record<AdminPeriod, string> = {
-  day:     "Hoy",
-  month:   "Este mes",
-  quarter: "Últimos 3 meses",
-  year:    "Últimos 12 meses",
-};
 
 function iconForKpi(label: string) {
   const l = label.toLowerCase();
@@ -62,7 +33,6 @@ function iconForKpi(label: string) {
 
 export function HomeAdmin({ clinic, data, period }: Props) {
   const router = useRouter();
-  const noAlerts = data.alerts.length === 0;
 
   return (
     <>
@@ -125,60 +95,14 @@ export function HomeAdmin({ clinic, data, period }: Props) {
         }}
         className="mf-home-admin-grid"
       >
-        <HomeSection
-          title="Tendencia de ingresos"
-          subtitle={PERIOD_SUBTITLE[period]}
-          noPad
-        >
-          <div style={{ padding: 18 }}>
-            {data.revenueSeries.length === 0 ? (
-              <div
-                style={{
-                  padding: "48px 16px",
-                  textAlign: "center",
-                  color: "var(--text-2)",
-                  fontSize: 13,
-                }}
-              >
-                Aún no hay suficiente historial para graficar.
-              </div>
-            ) : (
-              <RevenueAreaChart
-                data={data.revenueSeries.map((p) => ({
-                  label: p.month,
-                  value: p.value,
-                }))}
-              />
-            )}
-          </div>
-        </HomeSection>
+        <RevenueTrendCard
+          initialData={data.revenueSeries.map((p) => ({
+            label: p.month,
+            value: p.value,
+          }))}
+        />
 
-        <HomeSection
-          title="Alertas operativas"
-          subtitle={
-            noAlerts
-              ? "Todo en orden"
-              : `${data.alerts.length} pendiente${data.alerts.length === 1 ? "" : "s"}`
-          }
-          noPad
-        >
-          {noAlerts ? (
-            <EmptyActionItemsAllClear size="sm" />
-          ) : (
-            <div>
-              {data.alerts.map((a, i) => (
-                <div
-                  key={a.id}
-                  style={{
-                    borderBottom: i === data.alerts.length - 1 ? "none" : undefined,
-                  }}
-                >
-                  <AdminAlertRow alert={a} />
-                </div>
-              ))}
-            </div>
-          )}
-        </HomeSection>
+        <UpcomingAppointmentsCard />
       </div>
 
       <HomeSection
