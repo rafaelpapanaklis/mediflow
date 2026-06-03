@@ -103,7 +103,26 @@ export function AgendaProvider({
 
   useEffect(() => {
     dispatch({ type: "LOAD_DAY", payload: initialPayload, dayISO: initialDayISO });
-  }, [initialPayload, initialDayISO]);
+    // Reactividad al crear/editar citas: cuando el servidor manda un
+    // initialPayload nuevo (router.refresh() o navegacion tras crear una
+    // cita) los datos del SSR son la verdad. Pero el data-loader de abajo
+    // se vuelve a ejecutar (sus deps incluyen initialPayload.appointments) y,
+    // si encuentra la entrada del dia sembrada en el mount anterior (citas
+    // viejas, ts < 30s), dispatch SET_APPOINTMENTS la STALE y sobrescribe lo
+    // que acabamos de cargar con LOAD_DAY → la cita nueva no aparece hasta
+    // recargar la pagina (bug reportado por los doctores).
+    //
+    // Fix raiz: al recibir datos frescos del servidor purgamos el cacheRef y
+    // re-sembramos SOLO la entrada del dia actual con las citas del SSR. Asi
+    // la vista Dia sirve datos frescos sin red, y Semana/Mes (cuyo rango no
+    // lo cubre un SSR de un solo dia) refetchean fresco via /api/agenda/range.
+    // Cubre TODOS los flujos de creacion (topbar, slot, panel, sidebar
+    // global, atajos del home) sin tener que cablear cada opener.
+    const range = viewRangeISO("day", initialDayISO, state.timezone);
+    const key = `${range.from}|${range.to}|||`;
+    cacheRef.current.clear();
+    cacheRef.current.set(key, { data: initialPayload.appointments, ts: Date.now() });
+  }, [initialPayload, initialDayISO, state.timezone]);
 
   // ── Unified data loader ─────────────────────────────────────────────
   // Recarga citas según viewMode + dayISO + filtros. La página inicial
