@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import toast from "react-hot-toast";
-import { ExternalLink, Copy, Eye, EyeOff, Plus, Trash2, Upload } from "lucide-react";
+import { ExternalLink, Copy, Eye, Plus, Trash2, Upload, Check, Sparkles, RefreshCw, Users, ImagePlus } from "lucide-react";
 
 interface Clinic {
   id: string; name: string; slug: string; phone: string|null; email: string|null;
@@ -11,11 +11,13 @@ interface Clinic {
   landingServices: any; landingWhatsapp: string|null; landingInstagram: string|null;
   landingFacebook: string|null; landingTiktok: string|null; landingMapEmbed: string|null;
   landingTagline: string|null;
+  landingTemplate: string|null; landingYearsExperience: number|null; landingPatients: string|null;
 }
 
 interface Props { clinic: Clinic; appUrl: string }
 
 const TABS = [
+  { id:"plantilla",    label:"Plantilla"       },
   { id:"general",      label:"General"         },
   { id:"servicios",    label:"Servicios"       },
   { id:"testimonios",  label:"Testimonios"     },
@@ -24,10 +26,50 @@ const TABS = [
   { id:"redes",        label:"Redes y contacto"},
 ];
 
+const TEMPLATES = [
+  { id:"classic",    name:"Clásico",    desc:"Limpio y profesional, el estándar de MediFlow." },
+  { id:"futurista",  name:"Futurista",  desc:"Moderno, con acentos de neón y gradientes." },
+  { id:"healthtech", name:"Healthtech", desc:"Tecnológico y confiable, look de clínica moderna." },
+  { id:"calido",     name:"Cálido",     desc:"Tonos suaves y acogedores que transmiten cercanía." },
+];
+
+// Mini-mock CSS de cada plantilla (no usa fotos reales) para el selector.
+function TemplateThumb({ variant }: { variant: string }) {
+  const v: Record<string, { bg:string; bar:string; chip:string; text:string }> = {
+    classic:    { bg:"bg-gradient-to-br from-blue-500 to-blue-700",                  bar:"bg-white/90",  chip:"bg-white/70",       text:"bg-white/40" },
+    futurista:  { bg:"bg-gradient-to-br from-fuchsia-600 via-violet-700 to-slate-900", bar:"bg-cyan-300",  chip:"bg-fuchsia-300/80", text:"bg-white/30" },
+    healthtech: { bg:"bg-gradient-to-br from-emerald-400 to-teal-700",               bar:"bg-white/90",  chip:"bg-emerald-100/80", text:"bg-white/40" },
+    calido:     { bg:"bg-gradient-to-br from-amber-300 via-rose-300 to-orange-400",  bar:"bg-white/95",  chip:"bg-rose-100/90",    text:"bg-amber-900/25" },
+  };
+  const s = v[variant] ?? v.classic;
+  return (
+    <div className={`relative w-full aspect-[16/10] rounded-lg overflow-hidden p-2 flex flex-col gap-1.5 ${s.bg}`}>
+      <div className="flex items-center gap-1">
+        <div className={`h-1.5 w-6 rounded-full ${s.bar}`} />
+        <div className="ml-auto flex gap-1">
+          <div className={`h-1.5 w-3 rounded-full ${s.chip}`} />
+          <div className={`h-1.5 w-3 rounded-full ${s.chip}`} />
+        </div>
+      </div>
+      <div className="flex-1 flex flex-col justify-center gap-1">
+        <div className={`h-2 w-2/3 rounded ${s.bar}`} />
+        <div className={`h-1.5 w-1/2 rounded ${s.text}`} />
+        <div className={`mt-1 h-2 w-10 rounded ${s.chip}`} />
+      </div>
+      <div className="flex gap-1">
+        <div className={`h-3 flex-1 rounded ${s.text}`} />
+        <div className={`h-3 flex-1 rounded ${s.text}`} />
+        <div className={`h-3 flex-1 rounded ${s.text}`} />
+      </div>
+    </div>
+  );
+}
+
 export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
   const [clinic, setClinic] = useState(initial);
-  const [tab, setTab]       = useState("general");
+  const [tab, setTab]       = useState("plantilla");
   const [saving, setSaving] = useState(false);
+  const [templateSel, setTemplateSel] = useState(initial.landingTemplate ?? "classic");
 
   const landingUrl = `${appUrl}/${clinic.slug}`;
 
@@ -35,7 +77,7 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
     setClinic(c => ({ ...c, [key]: value }));
   }
 
-  async function save(data: Record<string, any>) {
+  async function save(data: Record<string, any>, successMsg = "✅ Guardado") {
     setSaving(true);
     try {
       const res = await fetch("/api/clinic-landing", {
@@ -46,7 +88,7 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
       if (!res.ok) throw new Error((await res.json()).error);
       const updated = await res.json();
       setClinic(c => ({ ...c, ...updated }));
-      toast.success("✅ Guardado");
+      toast.success(successMsg);
     } catch(e: any) { toast.error(e.message); }
     finally { setSaving(false); }
   }
@@ -59,6 +101,18 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
     if (!res.ok) throw new Error("Error al subir imagen");
     const { url } = await res.json();
     return url;
+  }
+
+  // ── Plantilla: previsualizar (sin publicar) y aplicar (publica)
+  function previewTemplate(id: string = templateSel) {
+    window.open(`/${clinic.slug}?preview=${id}`, "_blank", "noopener");
+  }
+
+  async function applyTemplate() {
+    const name = TEMPLATES.find(t => t.id === templateSel)?.name ?? templateSel;
+    updateLocal("landingTemplate", templateSel);
+    if (!clinic.landingActive) updateLocal("landingActive", true);
+    await save({ landingTemplate: templateSel, landingActive: true }, `✨ Tu sitio ahora usa la plantilla ${name}`);
   }
 
   // ── Servicios state
@@ -133,6 +187,62 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
         ))}
       </div>
 
+      {/* ── PLANTILLA ── */}
+      {tab === "plantilla" && (
+        <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
+          <div>
+            <h3 className="font-bold flex items-center gap-1.5"><Sparkles size={16} className="text-brand-600"/> Plantilla de tu sitio</h3>
+            <p className="text-xs text-muted-foreground">Elige el estilo visual de tu página pública. Previsualiza sin publicar y aplica cuando estés listo.</p>
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {TEMPLATES.map(t => {
+              const selected = templateSel === t.id;
+              return (
+                <div key={t.id} role="button" tabIndex={0} aria-pressed={selected}
+                  onClick={() => setTemplateSel(t.id)}
+                  onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setTemplateSel(t.id); } }}
+                  className={`cursor-pointer rounded-2xl border p-2.5 transition-all outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 ${selected ? "border-brand-500 ring-2 ring-brand-500/40 bg-brand-600/5" : "border-border hover:border-brand-300"}`}>
+                  <div className="relative">
+                    <TemplateThumb variant={t.id} />
+                    {selected && (
+                      <div className="absolute top-1.5 right-1.5 bg-brand-600 text-white rounded-full p-0.5 shadow">
+                        <Check size={12}/>
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <span className="text-sm font-bold">{t.name}</span>
+                    {clinic.landingTemplate === t.id && (
+                      <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-500/15 px-1.5 py-0.5 rounded-full">Activa</span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{t.desc}</p>
+                  <button type="button" onClick={e => { e.stopPropagation(); previewTemplate(t.id); }}
+                    className="mt-2 w-full flex items-center justify-center gap-1 text-[11px] font-semibold text-brand-600 border border-brand-300 rounded-lg py-1 hover:bg-brand-600/10">
+                    <Eye size={12}/> Previsualizar
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button type="button" onClick={() => previewTemplate()}
+              className="flex items-center gap-1.5 text-sm font-semibold border border-border px-4 py-2.5 rounded-xl hover:bg-muted">
+              <Eye size={15}/> Previsualizar selección
+            </button>
+            <button type="button" onClick={applyTemplate} disabled={saving}
+              className="flex items-center gap-1.5 text-sm font-bold text-white bg-brand-600 px-4 py-2.5 rounded-xl disabled:opacity-50">
+              <Check size={15}/> {saving ? "Aplicando…" : "Aplicar / Usar esta plantilla"}
+            </button>
+            {!clinic.landingActive && (
+              <span className="text-xs text-amber-600">Aplicar también publicará tu sitio.</span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── GENERAL ── */}
       {tab === "general" && (
         <div className="bg-card border border-border rounded-2xl p-5 space-y-5">
@@ -161,6 +271,40 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
               className="mt-2 text-xs font-semibold bg-brand-600 text-white px-3 py-1.5 rounded-lg">Guardar</button>
           </div>
 
+          {/* Sobre la clínica + estadísticas */}
+          <div className="border-t border-border pt-5">
+            <label className="text-sm font-semibold block mb-1">Sobre la clínica</label>
+            <p className="text-xs text-muted-foreground mb-2">Descripción de tu clínica para tu página pública</p>
+            <textarea value={clinic.description ?? ""}
+              onChange={e => updateLocal("description", e.target.value)}
+              placeholder="Somos una clínica dedicada a…" rows={3}
+              className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background resize-none" />
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <div>
+                <label className="text-sm font-semibold block mb-1">Años de experiencia</label>
+                <input type="number" min={0} value={clinic.landingYearsExperience ?? ""}
+                  onChange={e => updateLocal("landingYearsExperience", e.target.value === "" ? null : Math.trunc(Number(e.target.value)))}
+                  placeholder="12"
+                  className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background" />
+              </div>
+              <div>
+                <label className="text-sm font-semibold block mb-1">Pacientes atendidos</label>
+                <input value={clinic.landingPatients ?? ""}
+                  onChange={e => updateLocal("landingPatients", e.target.value)}
+                  placeholder="8,500+"
+                  className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background" />
+              </div>
+            </div>
+            <button onClick={() => save({
+              description: clinic.description,
+              landingYearsExperience: clinic.landingYearsExperience,
+              landingPatients: clinic.landingPatients,
+            })} disabled={saving}
+              className="mt-3 text-xs font-semibold bg-brand-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-50">
+              Guardar información
+            </button>
+          </div>
+
           {/* Cover photo */}
           <div>
             <label className="text-sm font-semibold block mb-1">Foto de portada</label>
@@ -173,7 +317,7 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
               </div>
             )}
             <label className="flex items-center gap-2 text-sm font-semibold border border-border rounded-xl px-4 py-3 cursor-pointer hover:bg-muted w-fit">
-              <Upload size={16}/> {clinic.landingCoverUrl ? "Cambiar foto" : "Subir foto de portada"}
+              <Upload size={16}/> {clinic.landingCoverUrl ? "Reemplazar foto" : "Subir foto de portada"}
               <input type="file" accept="image/*" className="hidden" onChange={async e => {
                 const file = e.target.files?.[0]; if (!file) return;
                 try {
@@ -361,42 +505,71 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
       {/* ── GALERÍA ── */}
       {tab === "galeria" && (
         <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
-          <div>
-            <h3 className="font-bold">Galería de fotos</h3>
-            <p className="text-xs text-muted-foreground">Fotos de tu clínica, equipo o resultados (máx 12)</p>
-          </div>
-          <label className="flex items-center gap-2 text-sm font-semibold border border-border rounded-xl px-4 py-3 cursor-pointer hover:bg-muted w-fit">
-            <Upload size={16}/> Subir fotos
-            <input type="file" accept="image/*" multiple className="hidden" onChange={async e => {
-              const files = Array.from(e.target.files ?? []);
-              if (!files.length) return;
-              const urls: string[] = [];
-              for (const file of files.slice(0, 12 - clinic.landingGallery.length)) {
-                try { urls.push(await uploadImage(file, "gallery")); } catch {}
-              }
-              const newGallery = [...clinic.landingGallery, ...urls];
-              updateLocal("landingGallery", newGallery);
-              await save({ landingGallery: newGallery });
-            }} />
-          </label>
-          {clinic.landingGallery.length > 0 && (
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-              {clinic.landingGallery.map((url, i) => (
-                <div key={i} className="relative aspect-square">
-                  <img src={url} alt={`Foto ${i+1}`} className="w-full h-full object-cover rounded-xl" />
-                  <button onClick={async () => {
-                    const newGallery = clinic.landingGallery.filter((_,j) => j !== i);
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="font-bold">Galería de fotos</h3>
+              <p className="text-xs text-muted-foreground">Fotos de tu clínica, instalaciones o resultados (máx 12)</p>
+            </div>
+            <label className={`flex items-center gap-1.5 text-sm font-semibold rounded-xl px-3 py-2 cursor-pointer shrink-0 ${clinic.landingGallery.length >= 12 ? "opacity-50 pointer-events-none border border-border" : "bg-brand-600 text-white"}`}>
+              <ImagePlus size={15}/> Agregar foto
+              <input type="file" accept="image/*" className="hidden" disabled={clinic.landingGallery.length >= 12}
+                onChange={async e => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!file) return;
+                  if (clinic.landingGallery.length >= 12) { toast.error("Máximo 12 fotos"); return; }
+                  try {
+                    const url = await uploadImage(file, "gallery");
+                    const newGallery = [...clinic.landingGallery, url];
                     updateLocal("landingGallery", newGallery);
                     await save({ landingGallery: newGallery });
-                  }} className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-lg">
-                    <Trash2 size={10}/>
-                  </button>
+                  } catch { toast.error("Error al subir"); }
+                }} />
+            </label>
+          </div>
+
+          {/* Nota: las fotos de los doctores viven en Equipo */}
+          <div className="flex items-center gap-2 text-xs bg-brand-600/10 border border-brand-200 dark:border-brand-800 rounded-xl px-3 py-2">
+            <Users size={14} className="text-brand-600 shrink-0"/>
+            <span className="text-muted-foreground">
+              Las fotos de los doctores se suben en{" "}
+              <a href="/dashboard/team" className="font-semibold text-brand-600 hover:underline">Equipo</a>.
+            </span>
+          </div>
+
+          {clinic.landingGallery.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              {clinic.landingGallery.map((url, i) => (
+                <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-border group">
+                  <img src={url} alt={`Foto ${i+1}`} className="w-full h-full object-cover" />
+                  <div className="absolute inset-x-0 bottom-0 flex divide-x divide-white/20 bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <label className="flex-1 flex items-center justify-center gap-1 text-[11px] font-semibold text-white py-1.5 cursor-pointer hover:bg-white/10">
+                      <RefreshCw size={11}/> Reemplazar
+                      <input type="file" accept="image/*" className="hidden" onChange={async e => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (!file) return;
+                        try {
+                          const newUrl = await uploadImage(file, "gallery");
+                          const newGallery = clinic.landingGallery.map((u,j) => j===i ? newUrl : u);
+                          updateLocal("landingGallery", newGallery);
+                          await save({ landingGallery: newGallery });
+                        } catch { toast.error("Error al subir"); }
+                      }} />
+                    </label>
+                    <button onClick={async () => {
+                      const newGallery = clinic.landingGallery.filter((_,j) => j !== i);
+                      updateLocal("landingGallery", newGallery);
+                      await save({ landingGallery: newGallery });
+                    }} className="flex-1 flex items-center justify-center gap-1 text-[11px] font-semibold text-white py-1.5 hover:bg-red-600/60">
+                      <Trash2 size={11}/> Eliminar
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
-          )}
-          {clinic.landingGallery.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground text-sm">Sin fotos — sube la primera imagen</div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground text-sm">Sin fotos — agrega tu primera imagen</div>
           )}
         </div>
       )}

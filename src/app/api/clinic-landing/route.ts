@@ -7,6 +7,7 @@ const ALLOWED = [
   "landingTestimonials","landingFaqs","landingServices","landingHours",
   "landingWhatsapp","landingInstagram","landingFacebook","landingTiktok",
   "landingMapEmbed","landingTagline",
+  "description","landingTemplate","landingYearsExperience","landingPatients",
 ];
 
 export async function PATCH(req: NextRequest) {
