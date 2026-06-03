@@ -111,6 +111,11 @@ model Clinic {
   landingMapEmbed     String?
   landingTagline      String?
 
+  // Landing — selector de plantilla pública (T1 fundación)
+  landingTemplate        String?  @default("classic")
+  landingYearsExperience Int?
+  landingPatients        String?
+
   // AI Assistant usage tracking
   aiTokensUsed  Int      @default(0)
   aiTokensLimit Int      @default(50000)

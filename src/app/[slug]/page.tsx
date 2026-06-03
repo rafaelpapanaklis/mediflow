@@ -14,6 +14,9 @@ import {
   SITE_URL,
 } from "@/lib/seo";
 import { getSession } from "@/lib/auth";
+import { TemplateFuturista } from "./templates/template-futurista";
+import { TemplateHealthtech } from "./templates/template-healthtech";
+import { TemplateCalido } from "./templates/template-calido";
 
 const CATEGORY_HIGHLIGHTS: Record<string, string[]> = {
   DENTAL: ["Odontograma digital", "Radiografías", "Plan de tratamiento por pieza", "Evaluación periodontal"],
@@ -48,7 +51,7 @@ const NON_SPECIALTY_RESERVED = [
   "reservar","pago","consent","clinicas","teleconsulta","roadmap",
 ];
 
-interface Props { params: { slug: string } }
+interface Props { params: { slug: string }; searchParams?: { preview?: string } }
 
 export function generateStaticParams() {
   return SPECIALTY_SLUGS.map((slug) => ({ slug }));
@@ -80,7 +83,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function ClinicLandingPage({ params }: Props) {
+export default async function ClinicLandingPage({ params, searchParams }: Props) {
   // 1) Reserved slugs
   if (NON_SPECIALTY_RESERVED.includes(params.slug)) notFound();
 
@@ -154,5 +157,11 @@ export default async function ClinicLandingPage({ params }: Props) {
   const category = (clinic as any).category ?? "OTHER";
   const highlights = CATEGORY_HIGHLIGHTS[category] ?? CATEGORY_HIGHLIGHTS.OTHER;
 
+  // Dispatcher de plantillas: ?preview= (vista previa) gana sobre el valor
+  // persistido en landingTemplate; "classic" cae en la landing original.
+  const tpl = (searchParams?.preview ?? c.landingTemplate ?? "classic");
+  if (tpl === "futurista")  return <TemplateFuturista clinic={c} highlights={highlights} />;
+  if (tpl === "healthtech") return <TemplateHealthtech clinic={c} highlights={highlights} />;
+  if (tpl === "calido")     return <TemplateCalido clinic={c} highlights={highlights} />;
   return <ClinicLandingClient clinic={c} highlights={highlights} />;
 }
