@@ -355,18 +355,11 @@ export function Sidebar(props: SidebarProps) {
     return () => mq.removeEventListener("change", onChange);
   }, []);
 
-  // Auto icon-only en laptops 13-14" (1024-1366px): reusa el modo colapsado
-  // existente para que el sidebar no invada el ancho del contenido. Arriba de
-  // 1366px se respeta la preferencia manual (toggle) del usuario.
-  const [isLaptop, setIsLaptop] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width: 1024px) and (max-width: 1366px)");
-    const onChange = () => setIsLaptop(mq.matches);
-    onChange();
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
-  const collapsed = userCollapsed || isLaptop;
+  // En laptops/tablets/desktop el sidebar SIEMPRE muestra etiquetas; solo se
+  // colapsa a icon-only si el usuario lo pide manualmente (toggle). En teléfonos
+  // (isMobile, <=1023.98px) se usa el drawer. El ancho expandido ya se reduce
+  // a 196px vía CSS (@media max-width:1280px) sin ocultar los nombres.
+  const collapsed = userCollapsed;
 
   useEffect(() => {
     if (!isMobile) setMobileOpen(false);
@@ -1120,36 +1113,78 @@ function SidebarFooter({
         gap: 4,
       }}
     >
-      <button
-        type="button"
-        onClick={toggleTheme}
-        aria-label={isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+      <div
         style={{
           display: "flex",
+          flexDirection: collapsed ? "column" : "row",
           alignItems: "center",
-          gap: collapsed ? 0 : 10,
-          justifyContent: collapsed ? "center" : "flex-start",
-          padding: collapsed ? "8px 0" : "7px 10px",
-          borderRadius: 8,
-          background: "transparent",
-          border: "none",
-          color: "var(--text-3)",
-          fontSize: 12,
-          cursor: "pointer",
-          fontFamily: "inherit",
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = "var(--bg-hover)";
-          e.currentTarget.style.color = "var(--text-1)";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "transparent";
-          e.currentTarget.style.color = "var(--text-3)";
+          gap: collapsed ? 4 : 6,
         }}
       >
-        {isDark ? <Sun size={14} aria-hidden /> : <Moon size={14} aria-hidden />}
-        {!collapsed && (isDark ? "Modo claro" : "Modo oscuro")}
-      </button>
+        <button
+          type="button"
+          onClick={toggleTheme}
+          aria-label={isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+          style={{
+            flex: collapsed ? undefined : 1,
+            display: "flex",
+            alignItems: "center",
+            gap: collapsed ? 0 : 10,
+            justifyContent: collapsed ? "center" : "flex-start",
+            padding: collapsed ? "8px 0" : "7px 10px",
+            borderRadius: 8,
+            background: "transparent",
+            border: "none",
+            color: "var(--text-3)",
+            fontSize: 12,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "var(--bg-hover)";
+            e.currentTarget.style.color = "var(--text-1)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "transparent";
+            e.currentTarget.style.color = "var(--text-3)";
+          }}
+        >
+          {isDark ? <Sun size={14} aria-hidden /> : <Moon size={14} aria-hidden />}
+          {!collapsed && (isDark ? "Modo claro" : "Modo oscuro")}
+        </button>
+
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          aria-label={collapsed ? "Expandir sidebar" : "Colapsar sidebar"}
+          aria-pressed={collapsed}
+          style={{
+            flexShrink: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: collapsed ? "100%" : 34,
+            padding: collapsed ? "8px 0" : "7px 0",
+            borderRadius: 8,
+            background: "transparent",
+            border: "none",
+            color: "var(--text-3)",
+            fontSize: 12,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "var(--bg-hover)";
+            e.currentTarget.style.color = "var(--text-1)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "transparent";
+            e.currentTarget.style.color = "var(--text-3)";
+          }}
+        >
+          {collapsed ? <PanelLeft size={14} aria-hidden /> : <PanelLeftClose size={14} aria-hidden />}
+        </button>
+      </div>
 
       <DropdownMenu.Root>
         <DropdownMenu.Trigger
@@ -1243,38 +1278,6 @@ function SidebarFooter({
           </DropdownMenu.Content>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
-
-      <button
-        type="button"
-        onClick={onToggleCollapse}
-        aria-label={collapsed ? "Expandir sidebar" : "Colapsar sidebar"}
-        aria-pressed={collapsed}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: collapsed ? 0 : 10,
-          justifyContent: collapsed ? "center" : "flex-start",
-          padding: collapsed ? "8px 0" : "7px 10px",
-          borderRadius: 8,
-          background: "transparent",
-          border: "none",
-          color: "var(--text-3)",
-          fontSize: 12,
-          cursor: "pointer",
-          fontFamily: "inherit",
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = "var(--bg-hover)";
-          e.currentTarget.style.color = "var(--text-1)";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "transparent";
-          e.currentTarget.style.color = "var(--text-3)";
-        }}
-      >
-        {collapsed ? <PanelLeft size={14} aria-hidden /> : <PanelLeftClose size={14} aria-hidden />}
-        {!collapsed && "Colapsar"}
-      </button>
     </div>
   );
 }
