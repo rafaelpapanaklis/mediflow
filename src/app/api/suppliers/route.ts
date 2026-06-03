@@ -31,6 +31,14 @@ export async function GET(req: NextRequest) {
     orderBy: { businessName: "asc" },
   });
 
-  const dtos = suppliers.map((s) => toSupplierDTO(s));
+  // Favoritos de la clínica de sesión → set de supplierId para marcar
+  // `isFavorite` en cada DTO. clinicId SIEMPRE de la sesión, nunca del request.
+  const favorites = await prisma.supplierFavorite.findMany({
+    where: { clinicId: ctx.clinicId },
+    select: { supplierId: true },
+  });
+  const favSet = new Set(favorites.map((f) => f.supplierId));
+
+  const dtos = suppliers.map((s) => toSupplierDTO(s, { isFavorite: favSet.has(s.id) }));
   return NextResponse.json(dtos);
 }

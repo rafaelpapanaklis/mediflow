@@ -9,8 +9,8 @@ export const metadata: Metadata = { title: "Proveedores — MediFlow" };
 
 export default async function SuppliersPage() {
   // Exige sesión de clínica. El proveedor es global (sin clinicId),
-  // así que solo necesitamos validar que haya usuario autenticado.
-  await getCurrentUser();
+  // así que solo necesitamos la sesión para resolver sus favoritos.
+  const user = await getCurrentUser();
 
   const suppliers = await prisma.supplier.findMany({
     where: { status: "APPROVED" },
@@ -24,9 +24,18 @@ export default async function SuppliersPage() {
       state: true,
       categories: true,
       description: true,
+      rating: true,
+      ratingCount: true,
       _count: { select: { products: true } },
     },
   });
+
+  // Favoritos de la clínica de sesión → marca el corazón en cada tarjeta.
+  const favorites = await prisma.supplierFavorite.findMany({
+    where: { clinicId: user.clinicId },
+    select: { supplierId: true },
+  });
+  const favSet = new Set(favorites.map((f) => f.supplierId));
 
   const data = suppliers.map((s) => ({
     id: s.id,
@@ -38,6 +47,9 @@ export default async function SuppliersPage() {
     categories: s.categories,
     description: s.description,
     productCount: s._count.products,
+    rating: s.rating,
+    ratingCount: s.ratingCount,
+    isFavorite: favSet.has(s.id),
   }));
 
   return <SuppliersClient initialSuppliers={data} />;
