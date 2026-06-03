@@ -26,7 +26,9 @@ export default async function SuppliersPage() {
       description: true,
       rating: true,
       ratingCount: true,
-      _count: { select: { products: true } },
+      // Solo productos activos, para que el contador de la tarjeta coincida
+      // con lo que muestra la ficha del proveedor (que filtra isActive).
+      _count: { select: { products: { where: { isActive: true } } } },
     },
   });
 
