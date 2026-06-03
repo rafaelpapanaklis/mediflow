@@ -29,6 +29,7 @@ import {
 import { orderInclude, toSupplierOrderDTO } from "@/lib/suppliers/serializers";
 import { B2B_PAYMENT_METHOD_LABELS, isB2BPaymentMethod } from "@/lib/payments-b2b";
 import { PayWithMercadoPago } from "./pay-mercadopago";
+import { OrderActions } from "./order-actions";
 
 export const metadata: Metadata = { title: "Pedido — MediFlow" };
 
@@ -643,7 +644,8 @@ export default async function Page({ params }: { params: { orderId: string } }) 
         )}
       </CardNew>
 
-      <div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+        <OrderActions orderId={dto.id} />
         <Link
           href={`/dashboard/proveedor-chat/${dto.supplierId}`}
           className="btn-new btn-new--secondary"

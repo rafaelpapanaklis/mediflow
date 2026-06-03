@@ -16,6 +16,7 @@ import {
   Building2,
   Clock,
   CreditCard,
+  RotateCcw,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { KpiCard } from "@/components/ui/design-system/kpi-card";
@@ -132,6 +133,25 @@ export function ComprasClient({ carts, orders }: Props) {
       toast.error(err instanceof Error ? err.message : "Error al quitar");
     } finally {
       clearBusy(itemId);
+    }
+  }
+
+  async function reorder(orderId: string) {
+    if (busy.has(orderId)) return;
+    markBusy(orderId);
+    try {
+      const res = await fetch(`/api/compras/orders/${orderId}/reorder`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error ?? "No se pudo reordenar este pedido.");
+      }
+      toast.success("Productos agregados al carrito");
+      setTab("carrito");
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al reordenar");
+    } finally {
+      clearBusy(orderId);
     }
   }
 
@@ -546,10 +566,17 @@ export function ComprasClient({ carts, orders }: Props) {
               const businessName = order.supplier?.businessName ?? "Proveedor";
               const itemCount = order.items.reduce((s, it) => s + it.quantity, 0);
               return (
-                <button
+                <div
                   key={order.id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => router.push(`/dashboard/compras/${order.id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      router.push(`/dashboard/compras/${order.id}`);
+                    }
+                  }}
                   className="ped-list-card"
                   style={{
                     textAlign: "left",
@@ -662,8 +689,20 @@ export function ComprasClient({ carts, orders }: Props) {
                     </div>
                   </div>
 
+                  <ButtonNew
+                    variant="ghost"
+                    size="sm"
+                    aria-label="Reordenar"
+                    title="Volver a agregar estos productos al carrito"
+                    disabled={busy.has(order.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      reorder(order.id);
+                    }}
+                    icon={<RotateCcw size={14} />}
+                  />
                   <ChevronRight size={18} style={{ color: "var(--text-4)", flexShrink: 0 }} />
-                </button>
+                </div>
               );
             })}
           </div>
