@@ -1,15 +1,14 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X, Edit, UserCheck, UserX, Trash2, Copy, Check, Stethoscope, Shield, ShieldCheck, Users as UsersIcon } from "lucide-react";
+import { Plus, X, Edit, UserCheck, UserX, Trash2, Copy, Check, Stethoscope, Shield, ShieldCheck, Users as UsersIcon, Camera, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
 import { CardNew }   from "@/components/ui/design-system/card-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
-import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import toast from "react-hot-toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { PermissionsModal } from "@/components/dashboard/team/permissions-modal";
@@ -298,6 +297,180 @@ function MemberForm({
           {loading ? "Guardando…" : isEdit ? "Guardar cambios" : "Crear doctor"}
         </Button>
       </div>
+    </div>
+  );
+}
+
+// ── MemberPhoto — avatar con foto subible por miembro ───────────────────────
+// Si el miembro tiene avatarUrl muestra la imagen; si no, las iniciales sobre
+// su color de agenda. El botón de cámara abre un file picker oculto, sube el
+// archivo a POST /api/landing-upload (field="avatar") y persiste la URL con
+// PATCH /api/team/[id] {avatarUrl}. "Quitar foto" hace PATCH {avatarUrl:null}.
+// El clinic se resuelve por sesión en el server — aquí solo va el id en la URL.
+// onChange actualiza el estado del padre para que la foto se vea al instante;
+// esas fotos también alimentan la sección "Equipo" de la landing (users[].avatarUrl).
+const MAX_AVATAR_BYTES = 8 * 1024 * 1024; // ~8MB en cliente (el server admite hasta 50MB)
+
+function memberInitials(first: string, last: string) {
+  return `${first?.[0] ?? ""}${last?.[0] ?? ""}`.toUpperCase() || "?";
+}
+
+// Las iniciales van sobre el color del doctor (DOCTOR_COLORS). Algunos colores
+// son claros (p.ej. lima #84cc16) y el blanco no se lee — elegimos texto oscuro
+// o claro según la luminancia del fondo para que siempre tenga contraste.
+function readableOn(hex: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return "#fff";
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return luminance > 0.6 ? "#1f2937" : "#fff";
+}
+
+function MemberPhoto({
+  member, onChange,
+}: {
+  member: TeamMember;
+  onChange: (avatarUrl: string | null) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const fullName = `${member.firstName} ${member.lastName}`;
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    // Reset para poder volver a elegir el mismo archivo después de un error.
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Solo se permiten imágenes");
+      return;
+    }
+    if (file.size > MAX_AVATAR_BYTES) {
+      toast.error("La imagen es muy grande (máx 8MB)");
+      return;
+    }
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("field", "avatar");
+      const up = await fetch("/api/landing-upload", { method: "POST", body: fd });
+      const upData = await up.json();
+      if (!up.ok) throw new Error(upData.error ?? "Error al subir la imagen");
+
+      const res = await fetch(`/api/team/${member.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatarUrl: upData.url }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error al guardar la foto");
+
+      onChange(upData.url);
+      toast.success("Foto actualizada");
+    } catch (err: any) {
+      toast.error(err.message ?? "No se pudo subir la foto");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function removePhoto() {
+    setUploading(true);
+    try {
+      const res = await fetch(`/api/team/${member.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatarUrl: null }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error al quitar la foto");
+      onChange(null);
+      toast.success("Foto eliminada");
+    } catch (err: any) {
+      toast.error(err.message ?? "No se pudo quitar la foto");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+      <div style={{ position: "relative", width: 64, height: 64 }}>
+        <div
+          style={{
+            width: 64, height: 64, borderRadius: "50%", overflow: "hidden",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            background: member.color || "var(--brand)",
+            color: readableOn(member.color || "#7c3aed"), fontSize: 20, fontWeight: 700, letterSpacing: "0.02em",
+          }}
+        >
+          {member.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={member.avatarUrl}
+              alt={`Foto de ${fullName}`}
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
+          ) : (
+            memberInitials(member.firstName, member.lastName)
+          )}
+        </div>
+
+        {/* Spinner mientras sube */}
+        {uploading && (
+          <div style={{
+            position: "absolute", inset: 0, borderRadius: "50%",
+            background: "rgba(0,0,0,0.45)", display: "flex",
+            alignItems: "center", justifyContent: "center",
+          }}>
+            <Loader2 size={20} color="#fff" className="animate-spin" />
+          </div>
+        )}
+
+        {/* Botón cámara */}
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+          aria-label={member.avatarUrl ? `Cambiar foto de ${fullName}` : `Subir foto de ${fullName}`}
+          title="Subir foto"
+          style={{
+            position: "absolute", right: -2, bottom: -2,
+            width: 26, height: 26, borderRadius: "50%",
+            background: "var(--brand)", color: "#fff",
+            border: "2px solid var(--bg-elev)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: uploading ? "default" : "pointer",
+            padding: 0,
+          }}
+        >
+          <Camera size={13} />
+        </button>
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={handleFile}
+        />
+      </div>
+
+      {member.avatarUrl && !uploading && (
+        <button
+          type="button"
+          onClick={removePhoto}
+          aria-label={`Quitar foto de ${fullName}`}
+          style={{
+            fontSize: 11, color: "var(--text-3)", background: "none",
+            border: "none", cursor: "pointer", textDecoration: "underline",
+          }}
+        >
+          Quitar foto
+        </button>
+      )}
     </div>
   );
 }
@@ -599,7 +772,12 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
             return (
               <div key={m.id} className="card" style={{ padding: 20, opacity: m.isActive ? 1 : 0.5 }}>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
-                  <AvatarNew name={fullName} size="lg" />
+                  <MemberPhoto
+                    member={m}
+                    onChange={url =>
+                      setTeam(prev => prev.map(t => (t.id === m.id ? { ...t, avatarUrl: url } : t)))
+                    }
+                  />
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 12, flexWrap: "wrap", justifyContent: "center" }}>
                     <h3 style={{ fontSize: 14, color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
                       {fullName}
