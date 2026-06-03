@@ -250,6 +250,8 @@ model Clinic {
   supplierCarts   SupplierCart[]
   supplierOrders  SupplierOrder[]
   supplierChats   SupplierChatThread[]
+  supplierReviews   SupplierReview[]
+  supplierFavorites SupplierFavorite[]
   dentalLabOrders DentalLabOrder[]
   dentalLabChats  DentalLabChatThread[]
 
@@ -341,6 +343,16 @@ model Supplier {
   status         SupplierStatus @default(PENDING)
   approvedAt     DateTime?
   rejectedReason String?
+
+  // Perfil extendido + reputación (T1 mejoras proveedores)
+  whatsapp       String?
+  website        String?
+  mapsUrl        String?
+  minOrderAmount Int?
+  shippingNote   String?
+  rating         Float   @default(0)
+  ratingCount    Int     @default(0)
+
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -350,6 +362,8 @@ model Supplier {
   carts    SupplierCart[]
   chats    SupplierChatThread[]
   bankAccounts SupplierBankAccount[]
+  reviews      SupplierReview[]
+  favorites    SupplierFavorite[]
 
   @@index([status])
   @@map("suppliers")
@@ -530,6 +544,37 @@ model SupplierBankAccount {
 
   @@index([supplierId])
   @@map("supplier_bank_accounts")
+}
+
+model SupplierReview {
+  id         String   @id @default(cuid())
+  supplierId String
+  clinicId   String
+  orderId    String?  @unique
+  rating     Int
+  comment    String?
+  createdAt  DateTime @default(now())
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  clinic   Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([supplierId])
+  @@index([clinicId])
+  @@map("supplier_reviews")
+}
+
+model SupplierFavorite {
+  id         String   @id @default(cuid())
+  clinicId   String
+  supplierId String
+  createdAt  DateTime @default(now())
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  clinic   Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@unique([clinicId, supplierId])
+  @@index([clinicId])
+  @@map("supplier_favorites")
 }
 
 // ════════════════════════════════════════════════════════════════════════

@@ -2,38 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import type {
-  SupplierDTO,
   SupplierProductDTO,
   SupplierProductImageDTO,
 } from "@/lib/suppliers/types";
-
-// Mapea un Supplier de Prisma al DTO de red (sin el array products, que va
-// aparte en la respuesta). Fechas Date → ISO string.
-function toSupplierDTO(s: any): SupplierDTO {
-  return {
-    id: s.id,
-    businessName: s.businessName,
-    slug: s.slug,
-    rfc: s.rfc,
-    email: s.email,
-    phone: s.phone,
-    address: s.address,
-    city: s.city,
-    state: s.state,
-    logoUrl: s.logoUrl,
-    description: s.description,
-    categories: s.categories,
-    paymentMethods: s.paymentMethods,
-    payTransferEnabled: s.payTransferEnabled,
-    payMercadoPagoEnabled: s.payMercadoPagoEnabled,
-    payCashEnabled: s.payCashEnabled,
-    status: s.status,
-    approvedAt: s.approvedAt ? s.approvedAt.toISOString() : null,
-    rejectedReason: s.rejectedReason,
-    createdAt: s.createdAt.toISOString(),
-    updatedAt: s.updatedAt.toISOString(),
-  };
-}
+import { toSupplierDTO } from "@/lib/suppliers/serializers";
 
 function toImageDTO(img: any): SupplierProductImageDTO {
   return {

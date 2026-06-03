@@ -8,7 +8,7 @@
 // compilación) y se usa desde rutas + server pages. Nunca importarlo desde
 // un componente "use client"; ahí se importan los DTO de `./types`.
 
-import type { Prisma, Supplier, SupplierOrderItem } from "@prisma/client";
+import type { Prisma, Supplier, SupplierOrderItem, SupplierReview } from "@prisma/client";
 import type {
   SupplierDTO,
   SupplierProductDTO,
@@ -17,6 +17,7 @@ import type {
   SupplierCartDTO,
   SupplierOrderItemDTO,
   SupplierOrderDTO,
+  SupplierReviewDTO,
 } from "./types";
 
 // ── Includes canónicos ────────────────────────────────────────────────
@@ -44,7 +45,7 @@ type ProductWithImages = Prisma.SupplierProductGetPayload<{ include: { images: t
 const iso = (d: Date): string => d.toISOString();
 
 // ── Mapeadores ────────────────────────────────────────────────────────
-export function toSupplierDTO(s: Supplier): SupplierDTO {
+export function toSupplierDTO(s: Supplier, opts?: { isFavorite?: boolean }): SupplierDTO {
   return {
     id: s.id,
     businessName: s.businessName,
@@ -65,8 +66,33 @@ export function toSupplierDTO(s: Supplier): SupplierDTO {
     status: s.status,
     approvedAt: s.approvedAt ? iso(s.approvedAt) : null,
     rejectedReason: s.rejectedReason,
+    whatsapp: s.whatsapp,
+    website: s.website,
+    mapsUrl: s.mapsUrl,
+    minOrderAmount: s.minOrderAmount,
+    shippingNote: s.shippingNote,
+    rating: s.rating,
+    ratingCount: s.ratingCount,
+    isFavorite: opts?.isFavorite ?? false,
     createdAt: iso(s.createdAt),
     updatedAt: iso(s.updatedAt),
+  };
+}
+
+/**
+ * Reseña Prisma → DTO. Acepta opcionalmente la clínica incluida
+ * (`include: { clinic: { select: { name: true } } }`) para exponer su nombre;
+ * con una SupplierReview pelada, `clinicName` queda undefined.
+ */
+export function toSupplierReviewDTO(
+  r: SupplierReview & { clinic?: { name: string } | null },
+): SupplierReviewDTO {
+  return {
+    id: r.id,
+    rating: r.rating,
+    comment: r.comment,
+    clinicName: r.clinic?.name,
+    createdAt: iso(r.createdAt),
   };
 }
 

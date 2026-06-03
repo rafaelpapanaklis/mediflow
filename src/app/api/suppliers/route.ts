@@ -1,34 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import type { SupplierDTO } from "@/lib/suppliers/types";
-
-// Mapea un Supplier de Prisma al DTO de red (fechas Date → ISO string).
-function toSupplierDTO(s: any): SupplierDTO {
-  return {
-    id: s.id,
-    businessName: s.businessName,
-    slug: s.slug,
-    rfc: s.rfc,
-    email: s.email,
-    phone: s.phone,
-    address: s.address,
-    city: s.city,
-    state: s.state,
-    logoUrl: s.logoUrl,
-    description: s.description,
-    categories: s.categories,
-    paymentMethods: s.paymentMethods,
-    payTransferEnabled: s.payTransferEnabled,
-    payMercadoPagoEnabled: s.payMercadoPagoEnabled,
-    payCashEnabled: s.payCashEnabled,
-    status: s.status,
-    approvedAt: s.approvedAt ? s.approvedAt.toISOString() : null,
-    rejectedReason: s.rejectedReason,
-    createdAt: s.createdAt.toISOString(),
-    updatedAt: s.updatedAt.toISOString(),
-  };
-}
+import { toSupplierDTO } from "@/lib/suppliers/serializers";
 
 // GET /api/suppliers — proveedores APPROVED para el directorio de la clínica.
 export async function GET(req: NextRequest) {
@@ -58,6 +31,6 @@ export async function GET(req: NextRequest) {
     orderBy: { businessName: "asc" },
   });
 
-  const dtos = suppliers.map(toSupplierDTO);
+  const dtos = suppliers.map((s) => toSupplierDTO(s));
   return NextResponse.json(dtos);
 }

@@ -116,8 +116,29 @@ export interface SupplierDTO {
   status: SupplierStatus;
   approvedAt: string | null;
   rejectedReason: string | null;
+  // ── Perfil extendido + reputación (T1 mejoras proveedores). ──
+  //    `isFavorite` se calcula por clínica de sesión (no es columna del
+  //    proveedor); el serializer lo deja en false si no se le pasa. ──
+  whatsapp: string | null;
+  website: string | null;
+  mapsUrl: string | null;
+  minOrderAmount: number | null;
+  shippingNote: string | null;
+  rating: number;
+  ratingCount: number;
+  isFavorite: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+// ── Reseña de un proveedor dejada por una clínica (1 por pedido como máximo).
+//    `clinicName` es opcional: se incluye solo cuando la query trae la clínica. ──
+export interface SupplierReviewDTO {
+  id: string;
+  rating: number;
+  comment: string | null;
+  clinicName?: string;
+  createdAt: string;
 }
 
 export interface SupplierProductImageDTO {
