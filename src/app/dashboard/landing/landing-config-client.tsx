@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import toast from "react-hot-toast";
-import { ExternalLink, Copy, Eye, Plus, Trash2, Upload, Check, Sparkles, RefreshCw, Users, ImagePlus } from "lucide-react";
+import { ExternalLink, Copy, Eye, Plus, Trash2, Upload, Check, Sparkles, RefreshCw, Users, ImagePlus, ChevronLeft, ChevronRight, Star } from "lucide-react";
 
 interface Clinic {
   id: string; name: string; slug: string; phone: string|null; email: string|null;
@@ -132,6 +132,20 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
   function addFaq() { setFaqs(f => [...f, { question:"", answer:"" }]); }
   function removeFaq(i: number) { setFaqs(f => f.filter((_,j) => j !== i)); }
   function updateFaq(i: number, k: string, v: string) { setFaqs(f => f.map((x,j) => j===i ? {...x,[k]:v} : x)); }
+
+  // ── Galería: reordenar (intercambia i con su vecino) y elegir portada
+  async function moveGalleryPhoto(i: number, dir: -1 | 1) {
+    const j = i + dir;
+    if (j < 0 || j >= clinic.landingGallery.length) return;
+    const nuevo = [...clinic.landingGallery];
+    [nuevo[i], nuevo[j]] = [nuevo[j], nuevo[i]];
+    updateLocal("landingGallery", nuevo);
+    await save({ landingGallery: nuevo }, "✅ Orden actualizado");
+  }
+  async function setGalleryCover(url: string) {
+    updateLocal("landingCoverUrl", url);
+    await save({ landingCoverUrl: url }, "✅ Portada actualizada");
+  }
 
   return (
     <div className="flex-1 min-w-0 p-4 sm:p-6 space-y-5 max-w-4xl">
@@ -537,36 +551,86 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
             </span>
           </div>
 
+          {/* Ayuda: cómo ordenar y qué es la portada */}
+          {clinic.landingGallery.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Usa las flechas para ordenar las fotos. La portada es la foto grande que se muestra al inicio de tu página.
+            </p>
+          )}
+
           {clinic.landingGallery.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {clinic.landingGallery.map((url, i) => (
-                <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-border group">
-                  <img src={url} alt={`Foto ${i+1}`} className="w-full h-full object-cover" />
-                  <div className="absolute inset-x-0 bottom-0 flex divide-x divide-white/20 bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <label className="flex-1 flex items-center justify-center gap-1 text-[11px] font-semibold text-white py-1.5 cursor-pointer hover:bg-white/10">
-                      <RefreshCw size={11}/> Reemplazar
-                      <input type="file" accept="image/*" className="hidden" onChange={async e => {
-                        const file = e.target.files?.[0];
-                        e.target.value = "";
-                        if (!file) return;
-                        try {
-                          const newUrl = await uploadImage(file, "gallery");
-                          const newGallery = clinic.landingGallery.map((u,j) => j===i ? newUrl : u);
+              {clinic.landingGallery.map((url, i) => {
+                const isCover = url === clinic.landingCoverUrl;
+                const isFirst = i === 0;
+                const isLast  = i === clinic.landingGallery.length - 1;
+                return (
+                  <div key={i}
+                    className={`relative aspect-square rounded-xl overflow-hidden border ${isCover ? "border-brand-500 ring-2 ring-brand-500/50" : "border-border"}`}>
+                    <img src={url} alt={`Foto ${i+1}`} className="w-full h-full object-cover" />
+
+                    {/* Badge de posición — SIEMPRE visible */}
+                    <span className="absolute top-1.5 left-1.5 bg-black/65 text-white text-[11px] font-bold rounded-md px-1.5 py-0.5 leading-none">
+                      #{i+1}
+                    </span>
+
+                    {/* Portada — badge si ya lo es, botón "Usar como portada" si no */}
+                    {isCover ? (
+                      <span className="absolute top-1.5 right-1.5 flex items-center gap-1 bg-brand-600 text-white text-[10px] font-bold rounded-md px-1.5 py-0.5 leading-none shadow">
+                        <Star size={10} className="fill-current"/> Portada
+                      </span>
+                    ) : (
+                      <button type="button" onClick={() => setGalleryCover(url)} disabled={saving}
+                        aria-label="Usar como portada" title="Usar como portada"
+                        className="absolute top-1.5 right-1.5 flex items-center gap-1 bg-black/65 hover:bg-brand-600 text-white text-[10px] font-semibold rounded-md px-1.5 py-0.5 leading-none transition-colors disabled:opacity-50">
+                        <Star size={10}/> Portada
+                      </button>
+                    )}
+
+                    {/* Flechas de reordenar — SIEMPRE visibles (deshabilitadas en los extremos) */}
+                    <div className="absolute top-1/2 -translate-y-1/2 inset-x-1.5 flex justify-between pointer-events-none">
+                      <button type="button" onClick={() => moveGalleryPhoto(i, -1)} disabled={saving || isFirst}
+                        aria-label="Mover una posición a la izquierda" title="Mover a la izquierda"
+                        className="pointer-events-auto bg-black/55 hover:bg-black/85 text-white rounded-full p-1 transition-colors disabled:opacity-30 disabled:pointer-events-none disabled:cursor-not-allowed">
+                        <ChevronLeft size={16}/>
+                      </button>
+                      <button type="button" onClick={() => moveGalleryPhoto(i, 1)} disabled={saving || isLast}
+                        aria-label="Mover una posición a la derecha" title="Mover a la derecha"
+                        className="pointer-events-auto bg-black/55 hover:bg-black/85 text-white rounded-full p-1 transition-colors disabled:opacity-30 disabled:pointer-events-none disabled:cursor-not-allowed">
+                        <ChevronRight size={16}/>
+                      </button>
+                    </div>
+
+                    {/* Barra de acciones — SIEMPRE visible */}
+                    <div className="absolute inset-x-0 bottom-0 flex divide-x divide-white/20 bg-black/65">
+                      <label aria-label="Reemplazar foto" title="Reemplazar"
+                        className="flex-1 flex items-center justify-center gap-1 text-[11px] font-semibold text-white py-1.5 cursor-pointer hover:bg-white/15">
+                        <RefreshCw size={12}/> <span className="hidden sm:inline">Reemplazar</span>
+                        <input type="file" accept="image/*" className="hidden" onChange={async e => {
+                          const file = e.target.files?.[0];
+                          e.target.value = "";
+                          if (!file) return;
+                          try {
+                            const newUrl = await uploadImage(file, "gallery");
+                            const newGallery = clinic.landingGallery.map((u,j) => j===i ? newUrl : u);
+                            updateLocal("landingGallery", newGallery);
+                            await save({ landingGallery: newGallery });
+                          } catch { toast.error("Error al subir"); }
+                        }} />
+                      </label>
+                      <button type="button" aria-label="Eliminar foto" title="Eliminar"
+                        onClick={async () => {
+                          const newGallery = clinic.landingGallery.filter((_,j) => j !== i);
                           updateLocal("landingGallery", newGallery);
                           await save({ landingGallery: newGallery });
-                        } catch { toast.error("Error al subir"); }
-                      }} />
-                    </label>
-                    <button onClick={async () => {
-                      const newGallery = clinic.landingGallery.filter((_,j) => j !== i);
-                      updateLocal("landingGallery", newGallery);
-                      await save({ landingGallery: newGallery });
-                    }} className="flex-1 flex items-center justify-center gap-1 text-[11px] font-semibold text-white py-1.5 hover:bg-red-600/60">
-                      <Trash2 size={11}/> Eliminar
-                    </button>
+                        }}
+                        className="flex-1 flex items-center justify-center gap-1 text-[11px] font-semibold text-white py-1.5 hover:bg-red-600/70">
+                        <Trash2 size={12}/> <span className="hidden sm:inline">Eliminar</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-8 text-muted-foreground text-sm">Sin fotos — agrega tu primera imagen</div>
