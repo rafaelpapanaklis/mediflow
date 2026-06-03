@@ -33,6 +33,15 @@ export default async function SupplierDetailPage({ params }: { params: { supplie
     email: supplier.email,
     categories: supplier.categories,
     paymentMethods: supplier.paymentMethods,
+    // Perfil extendido + reputación (columnas del proveedor; los datos
+    // por-clínica —favorito, reseñas, canReview— los trae la ruta GET).
+    whatsapp: supplier.whatsapp,
+    website: supplier.website,
+    mapsUrl: supplier.mapsUrl,
+    minOrderAmount: supplier.minOrderAmount,
+    shippingNote: supplier.shippingNote,
+    rating: supplier.rating,
+    ratingCount: supplier.ratingCount,
   };
 
   const products = supplier.products.map((p) => ({

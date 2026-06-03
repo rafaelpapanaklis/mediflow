@@ -4,8 +4,9 @@ import { prisma } from "@/lib/prisma";
 import type {
   SupplierProductDTO,
   SupplierProductImageDTO,
+  SupplierReviewDTO,
 } from "@/lib/suppliers/types";
-import { toSupplierDTO } from "@/lib/suppliers/serializers";
+import { toSupplierDTO, toSupplierReviewDTO } from "@/lib/suppliers/serializers";
 
 function toImageDTO(img: any): SupplierProductImageDTO {
   return {
@@ -35,7 +36,9 @@ function toProductDTO(p: any): SupplierProductDTO {
   };
 }
 
-// GET /api/suppliers/[supplierId] — ficha del proveedor + sus productos activos.
+// GET /api/suppliers/[supplierId] — ficha del proveedor + productos activos,
+// reputación (reseñas) y datos por-clínica (favorito + si puede reseñar).
+// El clinicId SIEMPRE sale de la sesión (getAuthContext), nunca del request.
 export async function GET(
   req: NextRequest,
   { params }: { params: { supplierId: string } }
@@ -60,8 +63,50 @@ export async function GET(
 
   const products: SupplierProductDTO[] = supplier.products.map(toProductDTO);
 
+  // ── Favorito de la clínica en sesión (no es columna del proveedor). ──
+  const favorite = await prisma.supplierFavorite.findFirst({
+    where: { clinicId: ctx.clinicId, supplierId: params.supplierId },
+    select: { id: true },
+  });
+  const isFavorite = !!favorite;
+
+  // ── Reseñas del proveedor (más recientes primero) con el nombre de la clínica. ──
+  const reviewRows = await prisma.supplierReview.findMany({
+    where: { supplierId: params.supplierId },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    include: { clinic: { select: { name: true } } },
+  });
+  const reviews: SupplierReviewDTO[] = reviewRows.map(toSupplierReviewDTO);
+
+  // ── ¿Puede reseñar? Necesita un pedido DELIVERED de esta clínica+proveedor
+  //    que todavía NO tenga reseña (SupplierReview.orderId es @unique). ──
+  const deliveredOrders = await prisma.supplierOrder.findMany({
+    where: { clinicId: ctx.clinicId, supplierId: params.supplierId, status: "DELIVERED" },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+  let reviewableOrderId: string | null = null;
+  if (deliveredOrders.length > 0) {
+    const reviewed = await prisma.supplierReview.findMany({
+      where: {
+        clinicId: ctx.clinicId,
+        supplierId: params.supplierId,
+        orderId: { in: deliveredOrders.map((o) => o.id) },
+      },
+      select: { orderId: true },
+    });
+    const reviewedIds = reviewed.map((r) => r.orderId);
+    const found = deliveredOrders.find((o) => !reviewedIds.includes(o.id));
+    reviewableOrderId = found ? found.id : null;
+  }
+  const canReview = reviewableOrderId !== null;
+
   return NextResponse.json({
-    supplier: toSupplierDTO(supplier),
+    supplier: toSupplierDTO(supplier, { isFavorite }),
     products,
+    reviews,
+    canReview,
+    reviewableOrderId,
   });
 }

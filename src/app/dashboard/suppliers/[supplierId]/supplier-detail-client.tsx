@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import {
@@ -18,6 +18,13 @@ import {
   Tag,
   DollarSign,
   CheckCircle2,
+  Navigation,
+  Globe,
+  Heart,
+  Star,
+  Truck,
+  Send,
+  Loader2,
 } from "lucide-react";
 import { CardNew, ButtonNew, BadgeNew, KpiCard } from "@/components/ui/design-system";
 import { fmtMXN } from "@/lib/format";
@@ -34,6 +41,54 @@ interface SupplierData {
   email: string;
   categories: string[];
   paymentMethods: string[];
+  // Perfil extendido + reputación (columnas del proveedor, vía SSR).
+  whatsapp: string | null;
+  website: string | null;
+  mapsUrl: string | null;
+  minOrderAmount: number | null;
+  shippingNote: string | null;
+  rating: number;
+  ratingCount: number;
+}
+
+// Reseña tal como la entrega GET /api/suppliers/[id] (toSupplierReviewDTO).
+interface ReviewItem {
+  id: string;
+  rating: number;
+  comment: string | null;
+  clinicName?: string;
+  createdAt: string;
+}
+
+// Datos por-clínica + reputación que la ficha carga desde la ruta GET.
+interface DetailInfo {
+  isFavorite: boolean;
+  rating: number;
+  ratingCount: number;
+  reviews: ReviewItem[];
+  canReview: boolean;
+  reviewableOrderId: string | null;
+}
+
+/** Fila de 5 estrellas (relleno hasta el redondeo del valor). */
+function StarRow({ value, size = 15 }: { value: number; size?: number }) {
+  const rounded = Math.round(value);
+  return (
+    <span
+      style={{ display: "inline-flex", gap: 2, lineHeight: 0 }}
+      aria-label={`${value.toFixed(1)} de 5 estrellas`}
+    >
+      {[1, 2, 3, 4, 5].map((i) => (
+        <Star
+          key={i}
+          size={size}
+          style={{ color: "#f5b301" }}
+          fill={i <= rounded ? "#f5b301" : "none"}
+          strokeWidth={1.75}
+        />
+      ))}
+    </span>
+  );
 }
 
 interface ProductImage {
@@ -303,6 +358,93 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [logoError, setLogoError] = useState(false);
 
+  // Datos por-clínica (favorito, reseñas, canReview) + reputación fresca:
+  // los trae la ruta GET (clinicId SIEMPRE de sesión, server-side).
+  const [info, setInfo] = useState<DetailInfo | null>(null);
+  const [favBusy, setFavBusy] = useState(false);
+  const [revRating, setRevRating] = useState(5);
+  const [revHover, setRevHover] = useState(0);
+  const [revComment, setRevComment] = useState("");
+  const [revSubmitting, setRevSubmitting] = useState(false);
+
+  async function loadInfo() {
+    try {
+      const res = await fetch(`/api/suppliers/${supplier.id}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const j = await res.json();
+      setInfo({
+        isFavorite: !!j.supplier?.isFavorite,
+        rating: typeof j.supplier?.rating === "number" ? j.supplier.rating : supplier.rating,
+        ratingCount:
+          typeof j.supplier?.ratingCount === "number" ? j.supplier.ratingCount : supplier.ratingCount,
+        reviews: Array.isArray(j.reviews) ? j.reviews : [],
+        canReview: !!j.canReview,
+        reviewableOrderId: j.reviewableOrderId ?? null,
+      });
+    } catch {
+      /* la ficha ya muestra los datos SSR; el bloque dinámico simplemente no carga */
+    }
+  }
+
+  useEffect(() => {
+    loadInfo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supplier.id]);
+
+  // Reputación: SSR como base, refrescada por la ruta GET (y tras dejar reseña).
+  const rating = info ? info.rating : supplier.rating;
+  const ratingCount = info ? info.ratingCount : supplier.ratingCount;
+  const isFavorite = info?.isFavorite ?? false;
+
+  async function toggleFavorite() {
+    if (favBusy || !info) return;
+    setFavBusy(true);
+    const prev = info.isFavorite;
+    setInfo({ ...info, isFavorite: !prev }); // optimista
+    try {
+      const res = await fetch(`/api/suppliers/${supplier.id}/favorite`, { method: "POST" });
+      if (!res.ok) throw new Error();
+      const j = await res.json().catch(() => ({}));
+      const next = typeof j.isFavorite === "boolean" ? j.isFavorite : !prev;
+      setInfo((cur) => (cur ? { ...cur, isFavorite: next } : cur));
+      toast.success(next ? "Agregado a favoritos" : "Quitado de favoritos");
+    } catch {
+      setInfo((cur) => (cur ? { ...cur, isFavorite: prev } : cur)); // revertir
+      toast.error("No se pudo actualizar el favorito");
+    } finally {
+      setFavBusy(false);
+    }
+  }
+
+  async function submitReview() {
+    if (revSubmitting || !info?.reviewableOrderId) return;
+    setRevSubmitting(true);
+    try {
+      const res = await fetch(`/api/suppliers/${supplier.id}/reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rating: revRating,
+          comment: revComment.trim() || null,
+          orderId: info.reviewableOrderId,
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "No se pudo enviar la reseña");
+      }
+      toast.success("¡Gracias por tu reseña!");
+      setRevComment("");
+      setRevRating(5);
+      await loadInfo(); // refresca reseñas + canReview + reputación
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error al enviar la reseña";
+      toast.error(msg);
+    } finally {
+      setRevSubmitting(false);
+    }
+  }
+
   const locationLabel = [supplier.city, supplier.state].filter(Boolean).join(", ");
   const showLogo = !!supplier.logoUrl && !logoError;
 
@@ -459,6 +601,13 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
                 <Boxes size={13} />
                 {products.length} producto{products.length === 1 ? "" : "s"}
               </span>
+              {ratingCount > 0 && (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <StarRow value={rating} size={14} />
+                  <span style={{ fontWeight: 600, color: "var(--text-2)" }}>{rating.toFixed(1)}</span>
+                  <span style={{ color: "var(--text-4)" }}>({ratingCount})</span>
+                </span>
+              )}
             </div>
 
             {supplier.categories.length > 0 && (
@@ -483,6 +632,18 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
             flexShrink: 0,
           }}
         >
+          <button
+            type="button"
+            onClick={toggleFavorite}
+            disabled={favBusy || !info}
+            aria-pressed={isFavorite}
+            aria-label={isFavorite ? "Quitar de favoritos" : "Agregar a favoritos"}
+            className="btn-new btn-new--secondary"
+            style={{ color: isFavorite ? "#e11d48" : undefined, opacity: favBusy || !info ? 0.6 : 1 }}
+          >
+            <Heart size={14} fill={isFavorite ? "#e11d48" : "none"} />
+            {isFavorite ? "En favoritos" : "Favorito"}
+          </button>
           <Link
             href={`/dashboard/proveedor-chat/${supplier.id}`}
             className="btn-new btn-new--secondary"
@@ -582,6 +743,66 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
               </span>
             )}
           </div>
+
+          {/* Ubicación + canales (espejo del bloque del laboratorio) */}
+          {(supplier.mapsUrl || supplier.whatsapp || supplier.website) && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 20px" }}>
+              {supplier.mapsUrl && (
+                <a
+                  href={supplier.mapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ ...contactItemStyle, color: "var(--brand)", textDecoration: "none" }}
+                >
+                  <Navigation size={14} />
+                  Ver en Google Maps
+                </a>
+              )}
+              {supplier.whatsapp && (
+                <a
+                  href={`https://wa.me/${supplier.whatsapp.replace(/\D/g, "")}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ ...contactItemStyle, color: "var(--brand)", textDecoration: "none" }}
+                >
+                  <MessageCircle size={14} />
+                  WhatsApp
+                </a>
+              )}
+              {supplier.website && (
+                <a
+                  href={supplier.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ ...contactItemStyle, color: "var(--brand)", textDecoration: "none" }}
+                >
+                  <Globe size={14} />
+                  Sitio web
+                </a>
+              )}
+            </div>
+          )}
+
+          {/* Pedido mínimo + nota de envío */}
+          {(supplier.minOrderAmount != null || supplier.shippingNote) && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {supplier.minOrderAmount != null && (
+                <span style={contactItemStyle}>
+                  <DollarSign size={14} style={{ color: "var(--text-3)" }} />
+                  Pedido mínimo:&nbsp;
+                  <strong style={{ color: "var(--text-1)", fontWeight: 600 }}>
+                    {fmtMXN(supplier.minOrderAmount)}
+                  </strong>
+                </span>
+              )}
+              {supplier.shippingNote && (
+                <span style={{ ...contactItemStyle, alignItems: "flex-start" }}>
+                  <Truck size={14} style={{ color: "var(--text-3)", marginTop: 2, flexShrink: 0 }} />
+                  {supplier.shippingNote}
+                </span>
+              )}
+            </div>
+          )}
 
           {supplier.paymentMethods.length > 0 && (
             <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
@@ -690,6 +911,201 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
               />
             ))}
           </div>
+        )}
+      </div>
+
+      {/* Reseñas */}
+      <div style={{ marginTop: 24 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+          <span
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 9,
+              flexShrink: 0,
+              display: "grid",
+              placeItems: "center",
+              background: "var(--brand-soft)",
+              border: "1px solid var(--border-brand)",
+              color: "var(--violet-400)",
+            }}
+          >
+            <Star size={15} />
+          </span>
+          <h2
+            style={{
+              color: "var(--text-1)",
+              fontWeight: 600,
+              fontSize: 18,
+              letterSpacing: "-0.02em",
+              margin: 0,
+            }}
+          >
+            Reseñas
+          </h2>
+          {ratingCount > 0 && (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                color: "var(--text-3)",
+                fontSize: 13,
+              }}
+            >
+              <StarRow value={rating} size={14} />
+              <span style={{ fontWeight: 600, color: "var(--text-2)" }}>{rating.toFixed(1)}</span>
+              <span>({ratingCount})</span>
+            </span>
+          )}
+        </div>
+
+        {/* Formulario: solo si la clínica tiene un pedido entregado sin reseñar */}
+        {info?.canReview && (
+          <div style={{ marginBottom: 14 }}>
+            <CardNew>
+              <span
+                aria-hidden
+                style={{
+                  position: "absolute",
+                  insetInline: 0,
+                  top: 0,
+                  height: 3,
+                  background: "linear-gradient(90deg, var(--violet-400), var(--brand))",
+                  pointerEvents: "none",
+                }}
+              />
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>Deja tu reseña</div>
+                <p style={{ color: "var(--text-3)", fontSize: 13, margin: 0, lineHeight: 1.5 }}>
+                  Tienes un pedido entregado con este proveedor. Cuéntale a otras clínicas cómo fue tu
+                  experiencia.
+                </p>
+                <div style={{ display: "inline-flex", gap: 4 }} role="radiogroup" aria-label="Calificación">
+                  {[1, 2, 3, 4, 5].map((i) => {
+                    const on = (revHover || revRating) >= i;
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setRevRating(i)}
+                        onMouseEnter={() => setRevHover(i)}
+                        onMouseLeave={() => setRevHover(0)}
+                        role="radio"
+                        aria-label={`${i} estrella${i === 1 ? "" : "s"}`}
+                        aria-checked={revRating === i}
+                        style={{
+                          background: "transparent",
+                          border: "none",
+                          cursor: "pointer",
+                          padding: 2,
+                          lineHeight: 0,
+                          color: "#f5b301",
+                        }}
+                      >
+                        <Star size={26} fill={on ? "#f5b301" : "none"} strokeWidth={1.75} />
+                      </button>
+                    );
+                  })}
+                </div>
+                <textarea
+                  value={revComment}
+                  onChange={(e) => setRevComment(e.target.value)}
+                  aria-label="Escribe tu reseña"
+                  placeholder="Cuéntanos sobre la calidad, el envío y la atención (opcional)"
+                  rows={3}
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    borderRadius: 10,
+                    border: "1px solid var(--border-soft)",
+                    background: "var(--bg-elev)",
+                    color: "var(--text-1)",
+                    fontSize: 13,
+                    outline: "none",
+                    resize: "vertical",
+                    fontFamily: "inherit",
+                  }}
+                />
+                <div>
+                  <ButtonNew
+                    variant="primary"
+                    size="sm"
+                    icon={revSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                    disabled={revSubmitting}
+                    onClick={submitReview}
+                  >
+                    {revSubmitting ? "Enviando…" : "Enviar reseña"}
+                  </ButtonNew>
+                </div>
+              </div>
+            </CardNew>
+          </div>
+        )}
+
+        {/* Lista de reseñas */}
+        {info && info.reviews.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {info.reviews.map((r) => (
+              <CardNew key={r.id}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 10,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                    <span
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 8,
+                        flexShrink: 0,
+                        display: "grid",
+                        placeItems: "center",
+                        background: "var(--brand-soft)",
+                        border: "1px solid var(--border-brand)",
+                        color: "var(--violet-400)",
+                        fontWeight: 700,
+                        fontSize: 13,
+                      }}
+                    >
+                      {(r.clinicName ?? "C").charAt(0).toUpperCase()}
+                    </span>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>
+                        {r.clinicName ?? "Clínica"}
+                      </div>
+                      <StarRow value={r.rating} size={13} />
+                    </div>
+                  </div>
+                  <span style={{ color: "var(--text-4)", fontSize: 12 }}>
+                    {new Date(r.createdAt).toLocaleDateString("es-MX", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </span>
+                </div>
+                {r.comment && (
+                  <p style={{ color: "var(--text-2)", fontSize: 13, lineHeight: 1.5, margin: "10px 0 0" }}>
+                    {r.comment}
+                  </p>
+                )}
+              </CardNew>
+            ))}
+          </div>
+        ) : (
+          <CardNew>
+            <div
+              style={{ padding: "32px 24px", textAlign: "center", color: "var(--text-3)", fontSize: 13 }}
+            >
+              {info ? "Este proveedor aún no tiene reseñas." : "Cargando reseñas…"}
+            </div>
+          </CardNew>
         )}
       </div>
     </div>
