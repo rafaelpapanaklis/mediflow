@@ -17,7 +17,6 @@ import { useSidebarCounts } from "@/hooks/use-sidebar-counts";
 import { useActiveConsult } from "@/hooks/use-active-consult";
 import type { Role } from "@prisma/client";
 import { hasPermission, type PermissionKey } from "@/lib/auth/permissions";
-import { TrialSidebarStatus } from "@/components/dashboard/trial-sidebar-status";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { PEDIATRICS_MODULE_KEY } from "@/lib/pediatrics/permissions";
 import { IMPLANTS_MODULE_KEY } from "@/lib/implants/permissions";
@@ -580,14 +579,6 @@ export function Sidebar(props: SidebarProps) {
         plan={props.plan}
         allClinics={props.allClinics ?? []}
       />
-
-      {props.trialEndsAt !== undefined && (
-        <TrialSidebarStatus
-          trialEndsAt={props.trialEndsAt}
-          isInTrial={props.isInTrial ?? false}
-          collapsed={collapsed}
-        />
-      )}
 
       {canCreateAppt && (
         collapsed ? (
