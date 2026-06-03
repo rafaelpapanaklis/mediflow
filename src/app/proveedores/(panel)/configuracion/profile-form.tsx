@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import {
@@ -11,6 +11,8 @@ import {
   BadgeCheck,
   Building2,
   MapPin,
+  Navigation,
+  Truck,
   Tag,
   CreditCard,
   CheckCircle2,
@@ -80,6 +82,41 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
   const [description, setDescription] = useState(initial.description);
   const [categories, setCategories] = useState<string[]>(initial.categories);
 
+  // ── Campos extra (no vienen en `initial`): se prefilllean por GET y solo se
+  // envían en el PATCH si el usuario los editó, para que un GET lento o fallido
+  // nunca pise el valor ya guardado. Mismo patrón que el perfil del laboratorio.
+  const [whatsapp, setWhatsapp] = useState("");
+  const [website, setWebsite] = useState("");
+  const [mapsUrl, setMapsUrl] = useState("");
+  const [minOrder, setMinOrder] = useState("");
+  const [shippingNote, setShippingNote] = useState("");
+  const touched = useRef<Record<"whatsapp" | "website" | "mapsUrl" | "minOrder" | "shippingNote", boolean>>({
+    whatsapp: false,
+    website: false,
+    mapsUrl: false,
+    minOrder: false,
+    shippingNote: false,
+  });
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/proveedores/profile")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!active || !d) return;
+        if (!touched.current.whatsapp && typeof d.whatsapp === "string") setWhatsapp(d.whatsapp);
+        if (!touched.current.website && typeof d.website === "string") setWebsite(d.website);
+        if (!touched.current.mapsUrl && typeof d.mapsUrl === "string") setMapsUrl(d.mapsUrl);
+        if (!touched.current.shippingNote && typeof d.shippingNote === "string") setShippingNote(d.shippingNote);
+        if (!touched.current.minOrder && typeof d.minOrderAmount === "number") setMinOrder(String(d.minOrderAmount));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Cobros B2B ──────────────────────────────────────────────────────
   const [payTransferEnabled, setPayTransferEnabled] = useState(initial.payTransferEnabled);
   const [payMercadoPagoEnabled, setPayMercadoPagoEnabled] = useState(initial.payMercadoPagoEnabled);
@@ -98,26 +135,47 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
       toast.error("El nombre del negocio es requerido.");
       return;
     }
+    const mapsTrimmed = mapsUrl.trim();
+    if (touched.current.mapsUrl && mapsTrimmed !== "" && !/^https?:\/\//i.test(mapsTrimmed)) {
+      toast.error("El enlace de Google Maps debe empezar con http:// o https://.");
+      return;
+    }
+    const minTrimmed = minOrder.trim();
+    if (touched.current.minOrder && minTrimmed !== "") {
+      const n = Math.floor(Number(minTrimmed));
+      if (!Number.isInteger(n) || n < 0) {
+        toast.error("El pedido mínimo debe ser un número entero mayor o igual a 0.");
+        return;
+      }
+    }
     setSaving(true);
     try {
+      const payload: Record<string, unknown> = {
+        businessName,
+        rfc,
+        phone,
+        address,
+        city,
+        state,
+        description,
+        categories,
+        payTransferEnabled,
+        payMercadoPagoEnabled,
+        payCashEnabled,
+        // Sólo enviamos el token si el proveedor escribió uno nuevo.
+        ...(mpToken.trim() ? { mpAccessToken: mpToken.trim() } : {}),
+      };
+      // Campos extra: solo si el usuario los editó (undefined = el backend no toca).
+      if (touched.current.whatsapp) payload.whatsapp = whatsapp;
+      if (touched.current.website) payload.website = website;
+      if (touched.current.mapsUrl) payload.mapsUrl = mapsUrl;
+      if (touched.current.shippingNote) payload.shippingNote = shippingNote;
+      if (touched.current.minOrder) payload.minOrderAmount = minTrimmed === "" ? null : Math.floor(Number(minTrimmed));
+
       const res = await fetch("/api/proveedores/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          businessName,
-          rfc,
-          phone,
-          address,
-          city,
-          state,
-          description,
-          categories,
-          payTransferEnabled,
-          payMercadoPagoEnabled,
-          payCashEnabled,
-          // Sólo enviamos el token si el proveedor escribió uno nuevo.
-          ...(mpToken.trim() ? { mpAccessToken: mpToken.trim() } : {}),
-        }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
@@ -290,6 +348,27 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
             />
           </div>
           <div className="field-new">
+            <label className="field-new__label">WhatsApp</label>
+            <input
+              className="input-new"
+              value={whatsapp}
+              onChange={(e) => { touched.current.whatsapp = true; setWhatsapp(e.target.value); }}
+              disabled={!canEdit || saving}
+              placeholder="Ej. 55 1234 5678"
+            />
+          </div>
+          <div className="field-new">
+            <label className="field-new__label">Sitio web</label>
+            <input
+              className="input-new"
+              type="url"
+              value={website}
+              onChange={(e) => { touched.current.website = true; setWebsite(e.target.value); }}
+              disabled={!canEdit || saving}
+              placeholder="https://"
+            />
+          </div>
+          <div className="field-new">
             <label className="field-new__label">Ciudad</label>
             <input
               className="input-new"
@@ -314,6 +393,61 @@ export function ProfileForm({ canEdit, initial }: { canEdit: boolean; initial: P
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               disabled={!canEdit || saving}
+            />
+          </div>
+          <div className="field-new" style={{ gridColumn: "1 / -1" }}>
+            <label className="field-new__label" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <Navigation size={12} style={{ color: "var(--info)" }} /> Link de Google Maps
+            </label>
+            <input
+              className="input-new"
+              type="url"
+              value={mapsUrl}
+              onChange={(e) => { touched.current.mapsUrl = true; setMapsUrl(e.target.value); }}
+              disabled={!canEdit || saving}
+              placeholder="https://maps.google.com/…"
+            />
+            <span style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
+              Pega el enlace de tu ubicación para que las clínicas te encuentren.
+            </span>
+          </div>
+        </div>
+      </CardNew>
+
+      {/* Pedido y envío */}
+      <CardNew>
+        <CardAccent />
+        <div className="form-section__title">
+          <Truck size={13} style={{ color: "var(--violet-400)" }} /> Pedido y envío{" "}
+          <span className="form-section__rule" />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div className="field-new" style={{ maxWidth: 240 }}>
+            <label className="field-new__label">Pedido mínimo (MXN)</label>
+            <input
+              className="input-new mono"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              step={1}
+              value={minOrder}
+              onChange={(e) => { touched.current.minOrder = true; setMinOrder(e.target.value); }}
+              disabled={!canEdit || saving}
+              placeholder="Opcional"
+            />
+            <span style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
+              Monto mínimo de compra que deben alcanzar las clínicas. Déjalo vacío si no aplica.
+            </span>
+          </div>
+          <div className="field-new">
+            <label className="field-new__label">Nota de envío / entrega</label>
+            <textarea
+              className="input-new"
+              style={{ minHeight: 80, height: "auto", resize: "vertical", paddingTop: 8 }}
+              value={shippingNote}
+              onChange={(e) => { touched.current.shippingNote = true; setShippingNote(e.target.value); }}
+              disabled={!canEdit || saving}
+              placeholder="Ej. Envío gratis en pedidos mayores a $1,000. Entregas de lunes a viernes…"
             />
           </div>
         </div>

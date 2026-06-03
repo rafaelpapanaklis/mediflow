@@ -61,10 +61,44 @@ export async function PATCH(req: NextRequest) {
   const city = str(b.city);
   const state = str(b.state);
   const description = str(b.description);
+  const whatsapp = str(b.whatsapp);
+  const website = str(b.website);
+  const mapsUrl = str(b.mapsUrl);
+  const shippingNote = str(b.shippingNote);
   const rfcRaw = str(b.rfc);
   const rfc = rfcRaw !== undefined ? rfcRaw.slice(0, 13) : undefined;
   const categories = strList(b.categories);
   const paymentMethods = strList(b.paymentMethods);
+
+  // mapsUrl: si viene con valor, exige una URL http(s) válida (evita guardar
+  // esquemas peligrosos como javascript:/data: que luego se renderizan como href).
+  if (mapsUrl !== undefined && mapsUrl !== "") {
+    let validUrl = false;
+    try {
+      const u = new URL(mapsUrl);
+      validUrl = u.protocol === "http:" || u.protocol === "https:";
+    } catch {
+      validUrl = false;
+    }
+    if (!validUrl) {
+      return NextResponse.json({ error: "El enlace de Google Maps no es válido." }, { status: 400 });
+    }
+  }
+
+  // minOrderAmount: monto mínimo de pedido. undefined = no cambiar; null/"" = limpiar;
+  // entero >= 0 en cualquier otro caso.
+  let minOrderAmount: number | null | undefined = undefined;
+  if (b.minOrderAmount !== undefined) {
+    if (b.minOrderAmount === null || b.minOrderAmount === "") {
+      minOrderAmount = null;
+    } else {
+      const n = Math.floor(Number(b.minOrderAmount));
+      if (!Number.isInteger(n) || n < 0) {
+        return NextResponse.json({ error: "El pedido mínimo no es válido." }, { status: 400 });
+      }
+      minOrderAmount = n;
+    }
+  }
 
   // Métodos de pago B2B (rails reales) + token de MercadoPago del proveedor.
   const payTransferEnabled = bool(b.payTransferEnabled);
@@ -86,6 +120,11 @@ export async function PATCH(req: NextRequest) {
     city,
     state,
     description,
+    whatsapp,
+    website,
+    mapsUrl,
+    shippingNote,
+    minOrderAmount,
     rfc,
     categories,
     paymentMethods,
@@ -107,6 +146,11 @@ export async function PATCH(req: NextRequest) {
       ...(city !== undefined ? { city: city || null } : {}),
       ...(state !== undefined ? { state: state || null } : {}),
       ...(description !== undefined ? { description: description || null } : {}),
+      ...(whatsapp !== undefined ? { whatsapp: whatsapp || null } : {}),
+      ...(website !== undefined ? { website: website || null } : {}),
+      ...(mapsUrl !== undefined ? { mapsUrl: mapsUrl || null } : {}),
+      ...(shippingNote !== undefined ? { shippingNote: shippingNote || null } : {}),
+      ...(minOrderAmount !== undefined ? { minOrderAmount } : {}),
       ...(rfc !== undefined ? { rfc: rfc || null } : {}),
       ...(categories !== undefined ? { categories } : {}),
       ...(paymentMethods !== undefined ? { paymentMethods } : {}),
