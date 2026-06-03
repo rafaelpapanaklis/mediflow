@@ -6,6 +6,7 @@ import { CardNew }   from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { EvolutionChart } from "@/components/clinical/shared";
+import { DateField } from "@/components/ui/date-field";
 
 const ACTIVITY_LEVELS = [
   { id:"sedentary",   label:"Sedentario",             factor:1.2   },
@@ -386,8 +387,7 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
                 </div>
                 <div className="field-new">
                   <label className="field-new__label">Fecha meta</label>
-                  <input
-                    type="date"
+                  <DateField
                     className="input-new"
                     value={goal.fechaMeta}
                     onChange={e => updateSmartGoal(i, "fechaMeta", e.target.value)}

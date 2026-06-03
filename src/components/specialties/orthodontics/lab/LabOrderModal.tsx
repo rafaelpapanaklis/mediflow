@@ -19,6 +19,7 @@ import {
 } from "@/app/actions/clinical-shared/lab-orders";
 import { isFailure } from "@/lib/clinical-shared/result";
 import type { LabPartnerDTO } from "@/lib/clinical-shared/lab-orders/types";
+import { DateField } from "@/components/ui/date-field";
 
 export interface LabOrderModalProps {
   patientId: string;
@@ -214,8 +215,7 @@ export function LabOrderModal(props: LabOrderModalProps) {
             </label>
             <label style={{ ...fieldLabel, flex: 1 }}>
               <span style={fieldHint}>Fecha entrega</span>
-              <input
-                type="date"
+              <DateField
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
                 style={inputStyle}

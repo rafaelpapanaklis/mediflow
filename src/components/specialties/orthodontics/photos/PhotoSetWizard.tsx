@@ -20,6 +20,7 @@ import {
 } from "@/lib/orthodontics/photo-set-helpers";
 import { createPhotoSet, uploadPhotoToSet } from "@/app/actions/orthodontics";
 import { isFailure } from "@/app/actions/orthodontics/result";
+import { DateField } from "@/components/ui/date-field";
 import type { OrthoPhotoSetType } from "@prisma/client";
 
 export interface PhotoSetWizardProps {
@@ -219,8 +220,7 @@ export function PhotoSetWizard(props: PhotoSetWizardProps) {
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={{ fontSize: 11, color: "var(--text-2)" }}>Fecha</span>
-            <input
-              type="date"
+            <DateField
               value={capturedAt}
               onChange={(e) => setCapturedAt(e.target.value)}
               style={inputStyle}

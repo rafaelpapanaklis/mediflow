@@ -5,6 +5,7 @@ import { CardNew }   from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { BodyMap, BeforeAfterGallery } from "@/components/clinical/shared";
+import { DateField } from "@/components/ui/date-field";
 
 const BODY_ZONES = [
   "Cuero cabelludo","Cara","Cuello","Tórax anterior","Tórax posterior/Espalda",
@@ -565,7 +566,7 @@ export function DermatologyForm({ patientId, onSaved }: Props) {
       <CardNew title="Próxima cita / Control">
         <div className="field-new" style={{ maxWidth: 240 }}>
           <label className="field-new__label">Fecha</label>
-          <input type="date" className="input-new" value={returnDate} onChange={e => setReturnDate(e.target.value)} />
+          <DateField className="input-new" value={returnDate} onChange={e => setReturnDate(e.target.value)} />
         </div>
       </CardNew>
 

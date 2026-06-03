@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { DateField } from "@/components/ui/date-field";
 import toast from "react-hot-toast";
 
 const FITZPATRICK = ["I", "II", "III", "IV", "V", "VI"];
@@ -492,8 +493,7 @@ export function LaserForm({ patientId, onSaved }: Props) {
           </div>
           <div className="field-new">
             <label className="field-new__label">Fecha del test</label>
-            <input
-              type="date"
+            <DateField
               className="input-new"
               value={form.testSpotFecha}
               onChange={(e) => set("testSpotFecha", e.target.value)}

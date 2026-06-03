@@ -13,6 +13,7 @@ import {
 } from "@/app/actions/pediatrics";
 import { calculateAge } from "@/lib/pediatrics/age";
 import { DEFAULT_PEDIATRICS_CUTOFF_YEARS } from "@/lib/pediatrics/permissions";
+import { DateField } from "@/components/ui/date-field";
 
 export interface NewPediatricPatientDialogProps {
   open: boolean;
@@ -367,8 +368,7 @@ function PatientStep(props: {
       <div className="pedi-form__grid">
         <label className="pedi-form__field">
           <span>Fecha de nacimiento *</span>
-          <input
-            type="date"
+          <DateField
             value={v.dob}
             onChange={(e) => set("dob", e.target.value)}
             required

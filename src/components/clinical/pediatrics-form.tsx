@@ -6,6 +6,7 @@ import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { GrowthCurves } from "@/components/clinical/pediatrics/growth-curves";
 import { PrescriptionModal } from "@/components/clinical/shared/prescription-modal";
+import { DateField } from "@/components/ui/date-field";
 
 interface Props { patientId: string; patient?: any; onSaved: (record: any) => void }
 
@@ -225,7 +226,7 @@ export function PediatricsForm({ patientId, patient, onSaved }: Props) {
                   <input type="checkbox" checked={v.applied} onChange={() => toggleVaccine(v.id)} />
                 </td>
                 <td>
-                  <input type="date" className="input-new" value={v.date} onChange={e => setVaccineDate(v.id, e.target.value)} disabled={!v.applied} />
+                  <DateField className="input-new" value={v.date} onChange={e => setVaccineDate(v.id, e.target.value)} disabled={!v.applied} />
                 </td>
               </tr>
             ))}

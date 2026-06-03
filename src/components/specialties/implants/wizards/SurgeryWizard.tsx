@@ -9,6 +9,7 @@ import { createSurgicalRecord } from "@/app/actions/implants/createSurgicalRecor
 import { isFailure } from "@/app/actions/implants/result";
 import { ASA_CLASSIFICATION, LEKHOLM_ZARB } from "@/lib/validation/implants";
 import { LEKHOLM_ZARB_INFO } from "@/lib/implants/lekholm-zarb";
+import { DateField } from "@/components/ui/date-field";
 
 export interface SurgeryWizardProps {
   open: boolean;
@@ -174,7 +175,7 @@ export function SurgeryWizard(props: SurgeryWizardProps) {
               <Field label="Diámetro pilar (mm)"><input type="number" step="0.1" value={s.healingDiam} onChange={(e) => setS({ ...s, healingDiam: e.target.value })} className={cls} /></Field>
               <Field label="Altura pilar (mm)"><input type="number" step="0.1" value={s.healingHeight} onChange={(e) => setS({ ...s, healingHeight: e.target.value })} className={cls} /></Field>
               <Field label="Material de sutura"><input value={s.suture} onChange={(e) => setS({ ...s, suture: e.target.value })} className={cls} /></Field>
-              <Field label="Retiro suturas programado"><input type="date" value={s.sutureRemoval} onChange={(e) => setS({ ...s, sutureRemoval: e.target.value })} className={cls} /></Field>
+              <Field label="Retiro suturas programado"><DateField value={s.sutureRemoval} onChange={(e) => setS({ ...s, sutureRemoval: e.target.value })} className={cls} /></Field>
             </div>
           )}
 

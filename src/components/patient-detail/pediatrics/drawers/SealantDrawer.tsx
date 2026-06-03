@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { CaptureDrawer } from "./CaptureDrawer";
 import { placeSealant, isFailure } from "@/app/actions/pediatrics";
+import { DateField } from "@/components/ui/date-field";
 
 export interface SealantDrawerProps {
   open: boolean;
@@ -88,7 +89,7 @@ export function SealantDrawer(props: SealantDrawerProps) {
 
       <label className="pedi-form__field">
         <span>Fecha de colocación</span>
-        <input type="date" value={placedAt} onChange={(e) => setPlacedAt(e.target.value)} />
+        <DateField value={placedAt} onChange={(e) => setPlacedAt(e.target.value)} />
       </label>
 
       <label className="pedi-form__field">

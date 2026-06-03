@@ -29,6 +29,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DateField } from "@/components/ui/date-field";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
@@ -2942,7 +2943,7 @@ export function PatientDetailClient({
               <div className="space-y-1.5"><Label>Teléfono</Label><Input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5"><Label>Fecha de nacimiento</Label><Input type="date" value={editForm.dob} onChange={e => setEditForm(f => ({ ...f, dob: e.target.value }))} /></div>
+              <div className="space-y-1.5"><Label>Fecha de nacimiento</Label><DateField className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 disabled:opacity-50 transition-colors" value={editForm.dob} onChange={e => setEditForm(f => ({ ...f, dob: e.target.value }))} /></div>
               <div className="space-y-1.5"><Label>Género</Label>
                 <select className="flex h-10 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm" value={editForm.gender} onChange={e => setEditForm(f => ({ ...f, gender: e.target.value }))}>
                   <option value="M">Masculino</option><option value="F">Femenino</option><option value="OTHER">Otro</option>

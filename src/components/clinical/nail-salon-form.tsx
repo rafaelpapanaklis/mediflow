@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { DateField } from "@/components/ui/date-field";
 import toast from "react-hot-toast";
 
 const SERVICIOS = [
@@ -428,8 +429,7 @@ export function NailSalonForm({ patientId, onSaved }: Props) {
             </div>
             <div className="field-new">
               {idx === 0 && <label className="field-new__label">Fecha</label>}
-              <input
-                type="date"
+              <DateField
                 className="input-new"
                 value={a.fecha}
                 onChange={e => updateAlergia(idx, "fecha", e.target.value)}

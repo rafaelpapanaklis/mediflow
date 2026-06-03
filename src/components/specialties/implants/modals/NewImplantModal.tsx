@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { X } from "lucide-react";
 import { createImplant } from "@/app/actions/implants/createImplant";
 import { isFailure } from "@/app/actions/implants/result";
+import { DateField } from "@/components/ui/date-field";
 import { IMPLANT_BRAND, IMPLANT_CONNECTION, IMPLANT_PROTOCOL, IMPLANT_SURFACE } from "@/lib/validation/implants";
 
 export interface NewImplantModalProps {
@@ -108,8 +109,8 @@ export function NewImplantModal(props: NewImplantModalProps) {
             </select>
           </Field>
           <Field label="Lote (COFEPRIS)" required><input value={lotNumber} onChange={(e) => setLotNumber(e.target.value)} className={inputCls + " font-mono"} /></Field>
-          <Field label="Fecha manufactura"><input type="date" value={manufactureDate} onChange={(e) => setManufactureDate(e.target.value)} className={inputCls} /></Field>
-          <Field label="Caducidad"><input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} className={inputCls} /></Field>
+          <Field label="Fecha manufactura"><DateField value={manufactureDate} onChange={(e) => setManufactureDate(e.target.value)} className={inputCls} /></Field>
+          <Field label="Caducidad"><DateField value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} className={inputCls} /></Field>
           <Field label="Fecha colocación" required><input type="datetime-local" value={placedAt} onChange={(e) => setPlacedAt(e.target.value)} className={inputCls} /></Field>
           <Field label="Protocolo">
             <select value={protocol} onChange={(e) => setProtocol(e.target.value as typeof protocol)} className={inputCls}>

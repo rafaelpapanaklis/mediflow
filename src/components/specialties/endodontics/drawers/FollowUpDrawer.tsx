@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { Drawer } from "@/components/ui/design-system/Drawer";
+import { DateField } from "@/components/ui/date-field";
 import { completeFollowUp, isFailure } from "@/app/actions/endodontics";
 import { FOLLOW_UP_CONCLUSION } from "@/lib/validation/endodontics";
 
@@ -81,8 +82,7 @@ export function FollowUpDrawer(props: FollowUpDrawerProps) {
       <div className="pedi-form">
         <label className="pedi-form__field">
           <span>Fecha del control</span>
-          <input
-            type="date"
+          <DateField
             value={performedAt}
             onChange={(e) => setPerformedAt(e.target.value)}
           />

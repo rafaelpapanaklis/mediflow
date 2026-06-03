@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, CalendarPlus, Search } from "lucide-react";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { useAgenda } from "./agenda-provider";
 import { AgendaFilterPills } from "./agenda-filter-pills";
+import { DateField } from "@/components/ui/date-field";
 import { todayInTz, getTzParts, tzLocalToUtc } from "@/lib/agenda/time-utils";
 import type { AgendaViewMode } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
@@ -103,8 +104,7 @@ export function AgendaTopbar() {
           Hoy
         </button>
       )}
-      <input
-        type="date"
+      <DateField
         className={styles.datePicker}
         value={state.dayISO}
         onChange={(e) => e.target.value && setDay(e.target.value)}

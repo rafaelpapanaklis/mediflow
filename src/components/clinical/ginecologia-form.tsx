@@ -3,6 +3,7 @@ import { useState } from "react";
 import toast from "react-hot-toast";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { DateField } from "@/components/ui/date-field";
 import { PrenatalTracker } from "@/components/clinical/ginecologia/prenatal-tracker";
 
 interface Props { patientId: string; patient?: any; onSaved: (record: any) => void }
@@ -178,7 +179,7 @@ export function GinecologiaForm({ patientId, patient, onSaved }: Props) {
               </div>
               <div className="field-new">
                 <label className="field-new__label">FUR</label>
-                <input type="date" className="input-new" value={form.history.fur} onChange={e => setH("fur", e.target.value)} />
+                <DateField className="input-new" value={form.history.fur} onChange={e => setH("fur", e.target.value)} />
               </div>
               <div className="field-new">
                 <label className="field-new__label">Método anticonceptivo</label>
@@ -248,7 +249,7 @@ export function GinecologiaForm({ patientId, patient, onSaved }: Props) {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "12px 14px", marginBottom: 16 }}>
               <div className="field-new">
                 <label className="field-new__label">Fecha última menstruación (FUM)</label>
-                <input type="date" className="input-new" value={form.fum} onChange={e => set("fum", e.target.value)} />
+                <DateField className="input-new" value={form.fum} onChange={e => set("fum", e.target.value)} />
               </div>
               <div className="field-new">
                 <label className="field-new__label">Motivo / notas</label>
@@ -316,7 +317,7 @@ export function GinecologiaForm({ patientId, patient, onSaved }: Props) {
                   <div key={i} style={{ display: "grid", gridTemplateColumns: "170px 1fr auto", gap: 8, alignItems: "flex-end" }}>
                     <div className="field-new">
                       <label className="field-new__label">Fecha</label>
-                      <input type="date" className="input-new" value={u.date} onChange={e => updateUS(i, "date", e.target.value)} />
+                      <DateField className="input-new" value={u.date} onChange={e => updateUS(i, "date", e.target.value)} />
                     </div>
                     <div className="field-new">
                       <label className="field-new__label">Hallazgos</label>

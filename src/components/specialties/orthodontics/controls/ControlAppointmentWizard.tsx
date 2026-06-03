@@ -4,6 +4,7 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { WizardShell } from "../shared/WizardShell";
+import { DateField } from "@/components/ui/date-field";
 import { createControlAppointment } from "@/app/actions/orthodontics";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import type { AdjustmentType, ControlAttendance } from "@prisma/client";
@@ -97,7 +98,7 @@ export function ControlAppointmentWizard(props: ControlAppointmentWizardProps) {
       {step === 1 ? (
         <Section title="Asistencia + hallazgos">
           <Row label="Fecha programada">
-            <input type="date" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} style={inputStyle} />
+            <DateField value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} style={inputStyle} />
           </Row>
           <Row label="Asistencia">
             <select
@@ -160,7 +161,7 @@ export function ControlAppointmentWizard(props: ControlAppointmentWizardProps) {
       {step === 3 ? (
         <Section title="Próxima cita">
           <Row label="Fecha próxima cita">
-            <input type="date" value={nextDate} onChange={(e) => setNextDate(e.target.value)} style={inputStyle} />
+            <DateField value={nextDate} onChange={(e) => setNextDate(e.target.value)} style={inputStyle} />
           </Row>
           <Row label="Notas">
             <textarea value={nextNotes} onChange={(e) => setNextNotes(e.target.value)} rows={2} style={textareaStyle} />

@@ -12,6 +12,7 @@ import { createFollowUp } from "@/app/actions/implants/createFollowUp";
 import { createPeriImplantAssessment } from "@/app/actions/implants/createPeriImplantAssessment";
 import { isFailure } from "@/app/actions/implants/result";
 import { FOLLOWUP_MILESTONE } from "@/lib/validation/implants";
+import { DateField } from "@/components/ui/date-field";
 import {
   evaluateAlbrektsson,
   expectedMaxBoneLossMm,
@@ -173,7 +174,7 @@ export function MaintenanceDrawer(props: MaintenanceDrawerProps) {
               </select>
             </Field>
             <Field label="Fecha realizado">
-              <input type="date" value={performedAt} onChange={(e) => setPerformedAt(e.target.value)} className={cls} />
+              <DateField value={performedAt} onChange={(e) => setPerformedAt(e.target.value)} className={cls} />
             </Field>
           </div>
 
@@ -244,7 +245,7 @@ export function MaintenanceDrawer(props: MaintenanceDrawerProps) {
           </Field>
 
           <Field label="Próximo control">
-            <input type="date" value={nextControl} onChange={(e) => setNextControl(e.target.value)} className={cls} />
+            <DateField value={nextControl} onChange={(e) => setNextControl(e.target.value)} className={cls} />
           </Field>
 
           <Field label="Notas">

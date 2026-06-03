@@ -3,6 +3,7 @@ import { useState, useMemo } from "react";
 import toast from "react-hot-toast";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { DateField } from "@/components/ui/date-field";
 
 const SERVICIOS = [
   "Extensiones clásicas",
@@ -302,8 +303,7 @@ export function BrowLashForm({ patientId, onSaved }: Props) {
         <div className="grid grid-cols-2 gap-3">
           <div className="field-new">
             <label className="field-new__label">Fecha de patch test</label>
-            <input
-              type="date"
+            <DateField
               className="input-new"
               value={form.patchTestDate}
               onChange={(e) => set("patchTestDate", e.target.value)}
@@ -448,8 +448,7 @@ export function BrowLashForm({ patientId, onSaved }: Props) {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <div className="field-new">
                   <label className="field-new__label">Fecha</label>
-                  <input
-                    type="date"
+                  <DateField
                     className="input-new"
                     value={entry.fecha}
                     onChange={(e) => updateSensibilidad(idx, "fecha", e.target.value)}

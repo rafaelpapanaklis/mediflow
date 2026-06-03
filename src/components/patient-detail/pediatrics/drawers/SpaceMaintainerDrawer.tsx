@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { CaptureDrawer } from "./CaptureDrawer";
 import { placeMaintainer, isFailure } from "@/app/actions/pediatrics";
+import { DateField } from "@/components/ui/date-field";
 
 const TYPES = [
   { k: "banda_ansa",  label: "Banda-Ansa" },
@@ -88,12 +89,12 @@ export function SpaceMaintainerDrawer(props: SpaceMaintainerDrawerProps) {
 
       <label className="pedi-form__field">
         <span>Colocación</span>
-        <input type="date" value={placedAt} onChange={(e) => setPlacedAt(e.target.value)} />
+        <DateField value={placedAt} onChange={(e) => setPlacedAt(e.target.value)} />
       </label>
 
       <label className="pedi-form__field">
         <span>Retiro estimado (opcional)</span>
-        <input type="date" value={estimatedRemovalAt} onChange={(e) => setEstimatedRemovalAt(e.target.value)} />
+        <DateField value={estimatedRemovalAt} onChange={(e) => setEstimatedRemovalAt(e.target.value)} />
       </label>
 
       <label className="pedi-form__field">

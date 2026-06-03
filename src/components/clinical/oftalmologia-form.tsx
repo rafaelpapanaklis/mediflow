@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import toast from "react-hot-toast";
+import { DateField } from "@/components/ui/date-field";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { VisualAcuityTable } from "@/components/clinical/oftalmologia/visual-acuity-table";
@@ -142,7 +143,7 @@ export function OftalmologiaForm({ patientId, patient, onSaved }: Props) {
           </div>
           <div className="field-new">
             <label className="field-new__label">Próxima cita</label>
-            <input type="date" className="input-new" value={form.nextVisit} onChange={e => set("nextVisit", e.target.value)} />
+            <DateField className="input-new" value={form.nextVisit} onChange={e => set("nextVisit", e.target.value)} />
           </div>
         </div>
       </CardNew>

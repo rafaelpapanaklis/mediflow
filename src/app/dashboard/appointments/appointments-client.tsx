@@ -16,6 +16,7 @@ import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { getApptColors } from "@/lib/appointment-colors";
 import toast from "react-hot-toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { DateField } from "@/components/ui/date-field";
 
 interface Patient { id: string; firstName: string; lastName: string; patientNumber: string; phone?: string | null }
 interface Doctor  { id: string; firstName: string; lastName: string; role: string }
@@ -208,7 +209,7 @@ function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCance
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
             <div className="field-new" style={{ gridColumn: "1 / -1" }}>
               <label className="field-new__label">Fecha <span className="req">*</span></label>
-              <input type="date" className="input-new" value={form.date} onChange={e => setF("date", e.target.value)} />
+              <DateField className="input-new" value={form.date} onChange={e => setF("date", e.target.value)} />
             </div>
             <div className="field-new">
               <label className="field-new__label">Hora inicio</label>

@@ -7,6 +7,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { CalculatorModal } from "@/components/clinical/calculators/calculator-modal";
 import { EvolutionChart } from "@/components/clinical/shared";
+import { DateField } from "@/components/ui/date-field";
 
 const DIAGNOSES_CIE10 = ["J00 - Resfriado común","J06 - IRA superior","J18 - Neumonía","K29 - Gastritis","K57 - Diverticulosis","K92 - Hemorragia GI","E11 - Diabetes tipo 2","E14 - Diabetes NE","I10 - Hipertensión esencial","I50 - Insuficiencia cardíaca","J45 - Asma","F32 - Depresión","F41 - Ansiedad","M54 - Dorsalgia","N39 - ITU","Otro"];
 const SPECIALTIES = ["Cardiología","Neurología","Dermatología","Gastroenterología","Ortopedia","Ginecología","Urología","Psiquiatría","Oftalmología","ORL","Endocrinología","Reumatología","Oncología"];
@@ -552,8 +553,7 @@ export function GeneralMedicineForm({ patientId, onSaved }: Props) {
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="field-new">
               <label className="field-new__label">Próxima cita / Control</label>
-              <input
-                type="date"
+              <DateField
                 className="input-new"
                 value={form.returnDate}
                 onChange={e => set("returnDate", e.target.value)}

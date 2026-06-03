@@ -41,6 +41,7 @@ import {
 import toast from "react-hot-toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { NewPatientModal } from "@/components/dashboard/new-patient-modal";
+import { DateField } from "@/components/ui/date-field";
 import styles from "./patients.module.css";
 
 /* ─── Types ─── */
@@ -1459,15 +1460,13 @@ function FilterDrawer({
           <div className={styles.drawerSection}>
             <span className={styles.drawerLabel}>Última visita — desde / hasta</span>
             <div className={styles.rangeRow}>
-              <input
-                type="date"
+              <DateField
                 className={styles.drawerInput}
                 value={drafts.visitFrom}
                 onChange={(e) => setDrafts({ ...drafts, visitFrom: e.target.value })}
               />
               <span style={{ color: "var(--text-3)" }}>–</span>
-              <input
-                type="date"
+              <DateField
                 className={styles.drawerInput}
                 value={drafts.visitTo}
                 onChange={(e) => setDrafts({ ...drafts, visitTo: e.target.value })}

@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { Send, X } from "lucide-react";
 import { Btn } from "../atoms/Btn";
+import { DateField } from "@/components/ui/date-field";
 
 const CATALOG: ReadonlyArray<{ group: string; items: string[] }> = [
   { group: "Aligners", items: ["Alineadores serie 1-30", "Refinement 1-5"] },
@@ -161,8 +162,7 @@ export function DrawerLabOrder(props: DrawerLabOrderProps) {
                   <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1 dark:text-slate-400">
                     Fecha entrega
                   </div>
-                  <input
-                    type="date"
+                  <DateField
                     value={expectedDate}
                     onChange={(e) => setExpectedDate(e.target.value)}
                     className="w-full text-sm border border-slate-200 rounded px-3 py-2 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"

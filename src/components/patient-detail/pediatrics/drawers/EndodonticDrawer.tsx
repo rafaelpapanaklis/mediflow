@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { CaptureDrawer } from "./CaptureDrawer";
 import { recordEndoTreatment, isFailure } from "@/app/actions/pediatrics";
+import { DateField } from "@/components/ui/date-field";
 
 const TREATMENT_TYPES = [
   { k: "pulpotomia",                label: "Pulpotomía" },
@@ -93,7 +94,7 @@ export function EndodonticDrawer(props: EndodonticDrawerProps) {
         </label>
         <label className="pedi-form__field">
           <span>Fecha</span>
-          <input type="date" value={performedAt} onChange={(e) => setPerformedAt(e.target.value)} />
+          <DateField value={performedAt} onChange={(e) => setPerformedAt(e.target.value)} />
         </label>
       </div>
 

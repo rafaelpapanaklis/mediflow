@@ -9,6 +9,7 @@ import type { OrthoPaymentMethod } from "@prisma/client";
 import { recordInstallmentPayment } from "@/app/actions/orthodontics";
 import { isFailure } from "@/app/actions/orthodontics/result";
 import { BackdateJustificationModal } from "./BackdateJustificationModal";
+import { DateField } from "@/components/ui/date-field";
 
 const METHODS: OrthoPaymentMethod[] = [
   "CASH",
@@ -143,8 +144,7 @@ export function RecordPaymentDrawer(props: RecordPaymentDrawerProps) {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <Row label="Fecha de pago">
-            <input
-              type="date"
+            <DateField
               value={paidAt}
               onChange={(e) => setPaidAt(e.target.value)}
               style={inputStyle}

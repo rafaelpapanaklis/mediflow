@@ -6,6 +6,7 @@ import { CreditCard, Banknote, ArrowLeftRight, Wallet, FileCheck2, MoreHorizonta
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateField } from "@/components/ui/date-field";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/utils";
 
@@ -168,7 +169,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Fecha</Label>
-              <Input type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
+              <DateField className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 disabled:opacity-50 transition-colors" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label>Referencia</Label>

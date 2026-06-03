@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { CaptureDrawer } from "./CaptureDrawer";
 import { addGuardian, isFailure } from "@/app/actions/pediatrics";
+import { DateField } from "@/components/ui/date-field";
 
 const PARENTESCO_OPTIONS = [
   { k: "madre",        label: "Madre" },
@@ -124,7 +125,7 @@ export function GuardianDrawer(props: GuardianDrawerProps) {
 
       <label className="pedi-form__field">
         <span>Fecha de nacimiento</span>
-        <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
+        <DateField value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
       </label>
 
       <label className="pedi-form__field">

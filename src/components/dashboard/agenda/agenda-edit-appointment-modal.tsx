@@ -7,6 +7,7 @@ import { useAgenda } from "./agenda-provider";
 import { rescheduleAppointment, type ApiError } from "@/lib/agenda/mutations";
 import { describeOverlapConflict, describeResourceUnavailable } from "@/lib/agenda/conflict-copy";
 import { getTzParts } from "@/lib/agenda/time-utils";
+import { DateField } from "@/components/ui/date-field";
 import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 
 interface Props {
@@ -218,8 +219,7 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
 
         <form onSubmit={submit} style={{ padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
           <Field label="Fecha">
-            <input
-              type="date"
+            <DateField
               required
               value={form.date}
               onChange={(e) => setForm({ ...form, date: e.target.value })}

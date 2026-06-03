@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { CaptureDrawer } from "./CaptureDrawer";
 import { addHabit, isFailure } from "@/app/actions/pediatrics";
+import { DateField } from "@/components/ui/date-field";
 
 const HABIT_TYPES = [
   { key: "succion_digital",   label: "Succión digital" },
@@ -97,8 +98,7 @@ export function HabitDrawer(props: HabitDrawerProps) {
 
       <label className="pedi-form__field">
         <span>Desde</span>
-        <input
-          type="date"
+        <DateField
           value={startedAt}
           onChange={(e) => setStartedAt(e.target.value)}
           required

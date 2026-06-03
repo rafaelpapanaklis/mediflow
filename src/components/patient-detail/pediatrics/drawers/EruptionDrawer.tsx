@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { CaptureDrawer } from "./CaptureDrawer";
 import { recordEruption, isFailure } from "@/app/actions/pediatrics";
 import { getRangeForFdi } from "@/lib/pediatrics/eruption-data";
+import { DateField } from "@/components/ui/date-field";
 
 export interface EruptionDrawerProps {
   open: boolean;
@@ -83,7 +84,7 @@ export function EruptionDrawer(props: EruptionDrawerProps) {
 
       <label className="pedi-form__field">
         <span>Fecha observada</span>
-        <input type="date" value={observedAt} onChange={(e) => setObservedAt(e.target.value)} />
+        <DateField value={observedAt} onChange={(e) => setObservedAt(e.target.value)} />
       </label>
 
       <label className="pedi-form__field">

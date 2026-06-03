@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { DateField } from "@/components/ui/date-field";
 import toast from "react-hot-toast";
 
 interface Props {
@@ -169,7 +170,7 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
                 </div>
                 <div className="field-new">
                   <label className="field-new__label">Fecha de nacimiento <span className="req">*</span></label>
-                  <input className="input-new" type="date" value={form.dob} onChange={e => set("dob", e.target.value)} style={{ borderColor: errors.dob ? '#ef4444' : undefined }} />
+                  <DateField className="input-new" value={form.dob} onChange={e => set("dob", e.target.value)} style={{ borderColor: errors.dob ? '#ef4444' : undefined }} />
                 </div>
                 <div className="field-new">
                   <label className="field-new__label">Género <span className="req">*</span></label>

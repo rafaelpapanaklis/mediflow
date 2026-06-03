@@ -9,6 +9,7 @@ import { X, ChevronLeft, ChevronRight, CreditCard } from "lucide-react";
 import { createProstheticPhase } from "@/app/actions/implants/createProstheticPhase";
 import { isFailure } from "@/app/actions/implants/result";
 import { ABUTMENT_TYPE, PROSTHESIS_TYPE, PROSTHESIS_MATERIAL } from "@/lib/validation/implants";
+import { DateField } from "@/components/ui/date-field";
 
 export interface ProstheticWizardProps {
   open: boolean;
@@ -165,13 +166,13 @@ export function ProstheticWizard(props: ProstheticWizardProps) {
             <div className="grid grid-cols-2 gap-3">
               <Field label="Lote tornillo"><input value={s.screwLot} onChange={(e) => setS({ ...s, screwLot: e.target.value })} className={cls + " font-mono"} /></Field>
               <Field label="Torque tornillo (Ncm)"><input type="number" value={s.screwTorque} onChange={(e) => setS({ ...s, screwTorque: e.target.value })} className={cls} /></Field>
-              <Field label="Fecha entrega prótesis"><input type="date" value={s.prosthesisDelivered} onChange={(e) => setS({ ...s, prosthesisDelivered: e.target.value })} className={cls} /></Field>
+              <Field label="Fecha entrega prótesis"><DateField value={s.prosthesisDelivered} onChange={(e) => setS({ ...s, prosthesisDelivered: e.target.value })} className={cls} /></Field>
               <label className="flex items-center gap-2 text-xs col-span-2">
                 <input type="checkbox" checked={s.immediate} onChange={(e) => setS({ ...s, immediate: e.target.checked })} />
                 Carga inmediata
               </label>
-              <Field label="Provisional entregada"><input type="date" value={s.provisionalDelivered} onChange={(e) => setS({ ...s, provisionalDelivered: e.target.value })} className={cls} /></Field>
-              <Field label="Definitiva entregada"><input type="date" value={s.definitiveDelivered} onChange={(e) => setS({ ...s, definitiveDelivered: e.target.value })} className={cls} /></Field>
+              <Field label="Provisional entregada"><DateField value={s.provisionalDelivered} onChange={(e) => setS({ ...s, provisionalDelivered: e.target.value })} className={cls} /></Field>
+              <Field label="Definitiva entregada"><DateField value={s.definitiveDelivered} onChange={(e) => setS({ ...s, definitiveDelivered: e.target.value })} className={cls} /></Field>
             </div>
           )}
 

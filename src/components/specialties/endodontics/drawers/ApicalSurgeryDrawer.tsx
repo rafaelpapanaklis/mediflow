@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { Drawer } from "@/components/ui/design-system/Drawer";
+import { DateField } from "@/components/ui/date-field";
 import { createApicalSurgery, isFailure } from "@/app/actions/endodontics";
 import {
   RETRO_FILLING_MATERIAL,
@@ -136,7 +137,7 @@ export function ApicalSurgeryDrawer(props: ApicalSurgeryDrawerProps) {
           </label>
           <label className="pedi-form__field">
             <span>Control posoperatorio</span>
-            <input type="date" value={postOpAt} onChange={(e) => setPostOpAt(e.target.value)} />
+            <DateField value={postOpAt} onChange={(e) => setPostOpAt(e.target.value)} />
           </label>
         </div>
         <label className="pedi-form__field">

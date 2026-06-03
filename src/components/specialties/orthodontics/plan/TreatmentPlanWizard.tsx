@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { WizardShell } from "../shared/WizardShell";
 import { createTreatmentPlan } from "@/app/actions/orthodontics";
 import { isFailure } from "@/app/actions/orthodontics/result";
+import { DateField } from "@/components/ui/date-field";
 import type {
   AnchorageType,
   OrthoTechnique,
@@ -130,7 +131,7 @@ export function TreatmentPlanWizard(props: TreatmentPlanWizardProps) {
             <NumberInput value={duration} onChange={setDuration} min={3} max={60} step={1} />
           </Row>
           <Row label="Fecha de instalación (opcional)">
-            <input type="date" value={installedAt} onChange={(e) => setInstalledAt(e.target.value)} style={inputStyle} />
+            <DateField value={installedAt} onChange={(e) => setInstalledAt(e.target.value)} style={inputStyle} />
           </Row>
           <Row label="Costo total MXN">
             <NumberInput value={totalCost} onChange={setTotalCost} min={1} max={1000000} step={100} />
