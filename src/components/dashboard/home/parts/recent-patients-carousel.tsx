@@ -3,17 +3,19 @@
 import Link from "next/link";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { formatRelative } from "@/lib/home/greet";
+import { useT } from "@/i18n/i18n-provider";
 import type { HomeDoctorData } from "@/lib/home/types";
 
 type Patient = HomeDoctorData["recentPatients"][number];
 
 export function RecentPatientsCarousel({ patients }: { patients: Patient[] }) {
+  const t = useT();
   if (patients.length === 0) return null;
 
   return (
     <div
       role="list"
-      aria-label="Pacientes recientes"
+      aria-label={t("home.recentPatientsCarousel.ariaLabel")}
       className="scrollbar-thin"
       style={{
         display: "flex",

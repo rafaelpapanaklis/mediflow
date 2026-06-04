@@ -6,6 +6,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { EmptyWaitlist } from "@/components/dashboard/empty-states";
 import { formatRelative } from "@/lib/home/greet";
 import type { WaitlistEntry } from "@/lib/home/types";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Props {
   items: WaitlistEntry[];
@@ -13,13 +14,14 @@ interface Props {
 }
 
 export function WaitlistCard({ items, onAdd }: Props) {
+  const t = useT();
   return (
     <HomeSection
-      title="Lista de espera"
+      title={t("home.waitlist.title")}
       subtitle={
         items.length === 0
-          ? "Sin pacientes en espera"
-          : `${items.length} paciente${items.length === 1 ? "" : "s"} esperando un hueco`
+          ? t("home.waitlist.emptySubtitle")
+          : t("home.waitlist.subtitle", { count: items.length })
       }
       action={
         <ButtonNew
@@ -28,7 +30,7 @@ export function WaitlistCard({ items, onAdd }: Props) {
           icon={<Plus size={12} />}
           onClick={onAdd}
         >
-          Agregar
+          {t("common.add")}
         </ButtonNew>
       }
       noPad

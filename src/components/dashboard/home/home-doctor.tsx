@@ -12,6 +12,7 @@ import { HomeShortcutBar } from "./parts/home-shortcut-bar";
 import { HomeQuickActions } from "./parts/home-quick-actions";
 import { EmptyAppointmentsToday } from "@/components/dashboard/empty-states";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { useT } from "@/i18n/i18n-provider";
 import type { HomeDoctorData } from "@/lib/home/types";
 
 interface Props {
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export function HomeDoctor({ user, data }: Props) {
+  const t = useT();
   const router = useRouter();
   const totalToday = data.todayAppointments.length;
   const { draftNotes, unanalyzedXrays, unsignedConsents } = data.pendingTasks;
@@ -28,10 +30,11 @@ export function HomeDoctor({ user, data }: Props) {
 
   const trailing =
     totalToday > 0
-      ? `${totalToday} paciente${totalToday === 1 ? "" : "s"} hoy · ${
-          data.completedToday
-        } completado${data.completedToday === 1 ? "" : "s"}`
-      : "Sin citas hoy";
+      ? `${t("home.doctor.patientsToday", { count: totalToday })} · ${t(
+          "home.doctor.completedCount",
+          { count: data.completedToday }
+        )}`
+      : t("home.doctor.noAppointmentsToday");
 
   const restOfDay = data.nextAppointment
     ? data.todayAppointments.filter((a) => a.id !== data.nextAppointment!.id)
@@ -63,13 +66,13 @@ export function HomeDoctor({ user, data }: Props) {
         className="mf-home-doctor-grid"
       >
         <HomeSection
-          title="Resto del día"
+          title={t("home.doctor.restOfDayTitle")}
           subtitle={
             restOfDay.length === 0
               ? data.nextAppointment
-                ? "No hay más citas después de esta"
-                : "Sin citas"
-              : `${restOfDay.length} cita${restOfDay.length === 1 ? "" : "s"}`
+                ? t("home.doctor.noMoreAppointments")
+                : t("home.doctor.noAppointments")
+              : t("home.doctor.appointmentsCount", { count: restOfDay.length })
           }
           action={
             <ButtonNew
@@ -77,7 +80,7 @@ export function HomeDoctor({ user, data }: Props) {
               size="sm"
               onClick={() => router.push("/dashboard/appointments")}
             >
-              Ver agenda
+              {t("home.doctor.viewAgenda")}
               <ChevronRight size={12} />
             </ButtonNew>
           }
@@ -95,11 +98,11 @@ export function HomeDoctor({ user, data }: Props) {
         </HomeSection>
 
         <HomeSection
-          title="Tareas pendientes"
+          title={t("home.doctor.pendingTasksTitle")}
           subtitle={
             noTasks
-              ? "Todo al día"
-              : "Acciones que puedes cerrar en minutos"
+              ? t("home.recep.actionEmpty")
+              : t("home.doctor.tasksSubtitle")
           }
           noPad
         >
@@ -112,32 +115,32 @@ export function HomeDoctor({ user, data }: Props) {
                 fontSize: 13,
               }}
             >
-              Sin tareas pendientes 🎉
+              {t("home.doctor.noPendingTasks")}
             </div>
           ) : (
             <div>
               <TaskRow
                 icon={FileText}
-                label={`nota${draftNotes === 1 ? "" : "s"} SOAP en borrador`}
+                label={t("home.doctor.draftSoapNotes", { count: draftNotes })}
                 count={draftNotes}
                 href="/dashboard/patients"
-                ctaLabel="Completar"
+                ctaLabel={t("home.doctor.complete")}
                 tone="brand"
               />
               <TaskRow
                 icon={Camera}
-                label={`radiografía${unanalyzedXrays === 1 ? "" : "s"} sin analizar`}
+                label={t("home.doctor.unanalyzedXrays", { count: unanalyzedXrays })}
                 count={unanalyzedXrays}
                 href="/dashboard/xrays?filter=unanalyzed"
-                ctaLabel="Analizar con IA"
+                ctaLabel={t("home.doctor.analyzeWithAi")}
                 tone="brand"
               />
               <TaskRow
                 icon={FileSignature}
-                label={`consentimiento${unsignedConsents === 1 ? "" : "s"} sin firma`}
+                label={t("home.doctor.unsignedConsents", { count: unsignedConsents })}
                 count={unsignedConsents}
                 href="/dashboard/patients"
-                ctaLabel="Enviar firma digital"
+                ctaLabel={t("home.doctor.sendDigitalSignature")}
                 tone="warning"
               />
             </div>
@@ -147,8 +150,8 @@ export function HomeDoctor({ user, data }: Props) {
 
       {data.recentPatients.length > 0 && (
         <HomeSection
-          title="Pacientes recientes"
-          subtitle="Últimos expedientes que atendiste"
+          title={t("home.doctor.recentPatientsTitle")}
+          subtitle={t("home.doctor.recentPatientsSubtitle")}
         >
           <RecentPatientsCarousel patients={data.recentPatients} />
         </HomeSection>

@@ -4,8 +4,10 @@ import { CalendarPlus, UserPlus } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { useNewPatientDialog } from "@/components/dashboard/new-patient/new-patient-provider";
+import { useT } from "@/i18n/i18n-provider";
 
 export function HomeQuickActions() {
+  const t = useT();
   const { open: openAppt } = useNewAppointmentDialog();
   const { open: openPatient } = useNewPatientDialog();
 
@@ -24,14 +26,14 @@ export function HomeQuickActions() {
         icon={<CalendarPlus size={14} />}
         onClick={() => openAppt({ openAgendaAfter: true })}
       >
-        Nueva cita
+        {t("home.quickActions.newAppointment")}
       </ButtonNew>
       <ButtonNew
         variant="secondary"
         icon={<UserPlus size={14} />}
         onClick={() => openPatient()}
       >
-        Nuevo paciente
+        {t("home.quickActions.newPatient")}
       </ButtonNew>
     </div>
   );

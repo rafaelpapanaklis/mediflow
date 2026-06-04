@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
+import { useT } from "@/i18n/i18n-provider";
 import type { HomeAdminTeamRow } from "@/lib/home/types";
 
 type SortKey = "doctorName" | "appointments" | "completionPct" | "revenueMXN";
@@ -15,6 +16,7 @@ const mxn = new Intl.NumberFormat("es-MX", {
 });
 
 export function TeamPerformanceTable({ rows }: { rows: HomeAdminTeamRow[] }) {
+  const t = useT();
   const [sortKey, setSortKey] = useState<SortKey>("revenueMXN");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
@@ -49,7 +51,7 @@ export function TeamPerformanceTable({ rows }: { rows: HomeAdminTeamRow[] }) {
         <thead>
           <tr>
             <SortableTh
-              label="Doctor"
+              label={t("home.teamPerf.colDoctor")}
               sortKey="doctorName"
               active={sortKey}
               dir={sortDir}
@@ -57,7 +59,7 @@ export function TeamPerformanceTable({ rows }: { rows: HomeAdminTeamRow[] }) {
               align="left"
             />
             <SortableTh
-              label="Citas"
+              label={t("home.teamPerf.colAppointments")}
               sortKey="appointments"
               active={sortKey}
               dir={sortDir}
@@ -65,7 +67,7 @@ export function TeamPerformanceTable({ rows }: { rows: HomeAdminTeamRow[] }) {
               align="right"
             />
             <SortableTh
-              label="% Completadas"
+              label={t("home.teamPerf.colCompletedPct")}
               sortKey="completionPct"
               active={sortKey}
               dir={sortDir}
@@ -73,7 +75,7 @@ export function TeamPerformanceTable({ rows }: { rows: HomeAdminTeamRow[] }) {
               align="right"
             />
             <SortableTh
-              label="Ingresos"
+              label={t("home.teamPerf.colRevenue")}
               sortKey="revenueMXN"
               active={sortKey}
               dir={sortDir}

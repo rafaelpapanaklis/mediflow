@@ -1,16 +1,18 @@
 // src/components/dashboard/home/parts/admin-period-toggle.tsx
 "use client";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { useT } from "@/i18n/i18n-provider";
 import type { AdminPeriod } from "@/lib/home/types";
 
-const PERIODS: Array<{ value: AdminPeriod; label: string }> = [
-  { value: "day",     label: "Hoy" },
-  { value: "month",   label: "Mes" },
-  { value: "quarter", label: "Trimestre" },
-  { value: "year",    label: "Año" },
+const PERIODS: Array<{ value: AdminPeriod; labelKey: string }> = [
+  { value: "day",     labelKey: "home.adminPeriod.day" },
+  { value: "month",   labelKey: "home.adminPeriod.month" },
+  { value: "quarter", labelKey: "home.adminPeriod.quarter" },
+  { value: "year",    labelKey: "home.adminPeriod.year" },
 ];
 
 export function AdminPeriodToggle({ value }: { value: AdminPeriod }) {
+  const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -24,7 +26,7 @@ export function AdminPeriodToggle({ value }: { value: AdminPeriod }) {
   return (
     <div
       role="tablist"
-      aria-label="Período del resumen"
+      aria-label={t("home.adminPeriod.ariaLabel")}
       className="segment-new"
     >
       {PERIODS.map((p) => {
@@ -38,7 +40,7 @@ export function AdminPeriodToggle({ value }: { value: AdminPeriod }) {
             className={`segment-new__btn ${active ? "segment-new__btn--active" : ""}`}
             onClick={() => setPeriod(p.value)}
           >
-            {p.label}
+            {t(p.labelKey)}
           </button>
         );
       })}

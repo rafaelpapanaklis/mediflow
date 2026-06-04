@@ -74,6 +74,170 @@
         "other": "{count} pendientes"
       },
       "waitingRoom": "En sala de espera"
+    },
+    "admin": {
+      "opSummary": "Resumen operativo",
+      "kpiGroupAria": "Indicadores clave",
+      "teamPerformanceTitle": "Performance del equipo",
+      "teamPerformanceSubtitle": "Citas, completadas e ingresos generados",
+      "viewFullReport": "Ver reporte completo",
+      "noTeamActivity": "Sin actividad de equipo en este período.",
+      "kpiRevenue": "Ingresos del mes",
+      "kpiAppointments": "Citas",
+      "kpiOccupancy": "Ocupación",
+      "kpiNoShows": "No-shows"
+    },
+    "doctor": {
+      "patientsToday": {
+        "one": "{count} paciente hoy",
+        "other": "{count} pacientes hoy"
+      },
+      "completedCount": {
+        "one": "{count} completado",
+        "other": "{count} completados"
+      },
+      "noAppointmentsToday": "Sin citas hoy",
+      "restOfDayTitle": "Resto del día",
+      "noMoreAppointments": "No hay más citas después de esta",
+      "noAppointments": "Sin citas",
+      "appointmentsCount": {
+        "one": "{count} cita",
+        "other": "{count} citas"
+      },
+      "viewAgenda": "Ver agenda",
+      "pendingTasksTitle": "Tareas pendientes",
+      "tasksSubtitle": "Acciones que puedes cerrar en minutos",
+      "noPendingTasks": "Sin tareas pendientes 🎉",
+      "draftSoapNotes": {
+        "one": "nota SOAP en borrador",
+        "other": "notas SOAP en borrador"
+      },
+      "complete": "Completar",
+      "unanalyzedXrays": {
+        "one": "radiografía sin analizar",
+        "other": "radiografías sin analizar"
+      },
+      "analyzeWithAi": "Analizar con IA",
+      "unsignedConsents": {
+        "one": "consentimiento sin firma",
+        "other": "consentimientos sin firma"
+      },
+      "sendDigitalSignature": "Enviar firma digital",
+      "recentPatientsTitle": "Pacientes recientes",
+      "recentPatientsSubtitle": "Últimos expedientes que atendiste"
+    },
+    "adminPeriod": {
+      "day": "Hoy",
+      "month": "Mes",
+      "quarter": "Trimestre",
+      "year": "Año",
+      "ariaLabel": "Período del resumen"
+    },
+    "greeting": {
+      "hello": "Hola"
+    },
+    "heroNextPatient": {
+      "sectionLabel": "Siguiente paciente",
+      "eyebrow": "Tu siguiente paciente",
+      "alreadyActive": "Ya hay consulta activa con este paciente",
+      "consultStarted": "Consulta iniciada",
+      "defaultReason": "Consulta",
+      "allergyLabel": "Alergia",
+      "consultInProgress": "Consulta en curso",
+      "startConsult": "Iniciar consulta",
+      "viewRecord": "Ver expediente",
+      "aiAssist": "IA asistir",
+      "medicalAlerts": {
+        "one": "{count} alerta médica",
+        "other": "{count} alertas médicas"
+      }
+    },
+    "quickActions": {
+      "newAppointment": "Nueva cita",
+      "newPatient": "Nuevo paciente"
+    },
+    "shortcutBar": {
+      "newAppointment": "Nueva cita",
+      "newPatient": "Nuevo paciente",
+      "searchPatient": "Buscar paciente"
+    },
+    "recentPatientsCarousel": {
+      "ariaLabel": "Pacientes recientes"
+    },
+    "revenueTrend": {
+      "title": "Tendencia de ingresos",
+      "rangeAriaLabel": "Rango de la gráfica de ingresos",
+      "rangeDay": "Hoy",
+      "rangeWeek": "Semana",
+      "rangeMonth": "Mes",
+      "rangeYear": "Año",
+      "subtitleDay": "Hoy",
+      "subtitleWeek": "Esta semana",
+      "subtitleMonth": "Este mes",
+      "subtitleYear": "Este año",
+      "emptyState": "Aún no hay suficiente historial para graficar.",
+      "updating": "Actualizando…"
+    },
+    "teamPerf": {
+      "colDoctor": "Doctor",
+      "colAppointments": "Citas",
+      "colCompletedPct": "% Completadas",
+      "colRevenue": "Ingresos"
+    },
+    "apptRow": {
+      "statusScheduled": "Programada",
+      "statusConfirmed": "Confirmada",
+      "statusCheckedIn": "En sala",
+      "statusInChair": "En sillón",
+      "statusInProgress": "En consulta",
+      "statusCompleted": "Completada",
+      "statusCheckedOut": "Salió",
+      "statusNoShow": "No vino",
+      "statusCancelled": "Cancelada",
+      "defaultReason": "Consulta",
+      "minutesWaiting": {
+        "one": "{count} min esp.",
+        "other": "{count} min esp."
+      },
+      "call": "Llamar",
+      "sendWhatsApp": "Enviar WhatsApp",
+      "moreActions": "Más acciones",
+      "viewAppointment": "Ver cita",
+      "reschedule": "Reagendar",
+      "cancelAppointment": "Cancelar cita"
+    },
+    "upcoming": {
+      "statusScheduled": "Programada",
+      "statusConfirmed": "Confirmada",
+      "statusCheckedIn": "En sala",
+      "statusInChair": "En sillón",
+      "statusInProgress": "En consulta",
+      "statusCompleted": "Completada",
+      "statusCheckedOut": "Salió",
+      "statusNoShow": "No vino",
+      "statusCancelled": "Cancelada",
+      "title": "Próximas citas",
+      "subtitle": {
+        "one": "La más cercana",
+        "other": "Las {count} más cercanas"
+      },
+      "loadError": "No se pudieron cargar las citas.",
+      "empty": "No tienes citas próximas.",
+      "openAppointmentAria": "Abrir cita de {name} · {when}",
+      "teleconsult": "Teleconsulta",
+      "viewRecordAria": "Ver expediente de {name}",
+      "defaultReason": "Consulta",
+      "whenToday": "Hoy {time}",
+      "whenTomorrow": "Mañana {time}",
+      "intlLocale": "es-MX"
+    },
+    "waitlist": {
+      "title": "Lista de espera",
+      "emptySubtitle": "Sin pacientes en espera",
+      "subtitle": {
+        "one": "{count} paciente esperando un hueco",
+        "other": "{count} pacientes esperando un hueco"
+      }
     }
   },
   "sidebar": {

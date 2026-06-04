@@ -8,6 +8,7 @@ import {
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import type { AppointmentDTO, AppointmentStatus } from "@/lib/home/types";
 import { formatShortTime } from "@/lib/home/greet";
+import { useT } from "@/i18n/i18n-provider";
 
 const STATUS_DOT: Record<AppointmentStatus, string> = {
   SCHEDULED:    "var(--warning)",
@@ -21,16 +22,16 @@ const STATUS_DOT: Record<AppointmentStatus, string> = {
   CANCELLED:    "var(--text-4)",
 };
 
-const STATUS_LABEL: Record<AppointmentStatus, string> = {
-  SCHEDULED:    "Programada",
-  CONFIRMED:    "Confirmada",
-  CHECKED_IN:   "En sala",
-  IN_CHAIR:     "En sillón",
-  IN_PROGRESS:  "En consulta",
-  COMPLETED:    "Completada",
-  CHECKED_OUT:  "Salió",
-  NO_SHOW:      "No vino",
-  CANCELLED:    "Cancelada",
+const STATUS_LABEL_KEY: Record<AppointmentStatus, string> = {
+  SCHEDULED:    "home.apptRow.statusScheduled",
+  CONFIRMED:    "home.apptRow.statusConfirmed",
+  CHECKED_IN:   "home.apptRow.statusCheckedIn",
+  IN_CHAIR:     "home.apptRow.statusInChair",
+  IN_PROGRESS:  "home.apptRow.statusInProgress",
+  COMPLETED:    "home.apptRow.statusCompleted",
+  CHECKED_OUT:  "home.apptRow.statusCheckedOut",
+  NO_SHOW:      "home.apptRow.statusNoShow",
+  CANCELLED:    "home.apptRow.statusCancelled",
 };
 
 interface Props {
@@ -49,7 +50,9 @@ export function TodayAppointmentRow({
   onWhatsApp,
 }: Props) {
   const router = useRouter();
+  const t = useT();
   const canCheckIn = appt.status === "SCHEDULED" || appt.status === "CONFIRMED";
+  const statusLabel = t(STATUS_LABEL_KEY[appt.status]);
 
   return (
     <div
@@ -66,8 +69,8 @@ export function TodayAppointmentRow({
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
         <span
-          aria-label={STATUS_LABEL[appt.status]}
-          title={STATUS_LABEL[appt.status]}
+          aria-label={statusLabel}
+          title={statusLabel}
           style={{
             width: 8,
             height: 8,
@@ -134,7 +137,7 @@ export function TodayAppointmentRow({
             <Footprints size={10} aria-hidden style={{ color: "var(--warning)" }} />
           )}
           <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-            {appt.reason ?? "Consulta"}
+            {appt.reason ?? t("home.apptRow.defaultReason")}
             {appt.doctor && ` · ${appt.doctor.shortName}`}
           </span>
         </div>
@@ -154,7 +157,7 @@ export function TodayAppointmentRow({
             flexShrink: 0,
           }}
         >
-          {appt.minutesWaiting} min esp.
+          {t("home.apptRow.minutesWaiting", { count: appt.minutesWaiting })}
         </span>
       )}
 
@@ -172,19 +175,19 @@ export function TodayAppointmentRow({
           )}
           <IconButton
             icon={Phone}
-            label="Llamar"
+            label={t("home.apptRow.call")}
             onClick={() => onCall?.(appt.id)}
           />
           <IconButton
             icon={MessageCircle}
-            label="Enviar WhatsApp"
+            label={t("home.apptRow.sendWhatsApp")}
             onClick={() => onWhatsApp?.(appt.id)}
           />
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
               <button
                 type="button"
-                aria-label="Más acciones"
+                aria-label={t("home.apptRow.moreActions")}
                 style={iconBtnStyle}
               >
                 <MoreHorizontal size={14} />
@@ -202,7 +205,7 @@ export function TodayAppointmentRow({
                     router.push(`/dashboard/appointments/${appt.id}`)
                   }
                 >
-                  Ver cita
+                  {t("home.apptRow.viewAppointment")}
                 </DropdownMenu.Item>
                 <DropdownMenu.Item
                   style={dropdownItemStyle}
@@ -210,7 +213,7 @@ export function TodayAppointmentRow({
                     router.push(`/dashboard/appointments/${appt.id}?edit=1`)
                   }
                 >
-                  Reagendar
+                  {t("home.apptRow.reschedule")}
                 </DropdownMenu.Item>
                 <DropdownMenu.Item
                   style={{ ...dropdownItemStyle, color: "var(--danger)" }}
@@ -218,7 +221,7 @@ export function TodayAppointmentRow({
                     router.push(`/dashboard/appointments/${appt.id}?cancel=1`)
                   }
                 >
-                  Cancelar cita
+                  {t("home.apptRow.cancelAppointment")}
                 </DropdownMenu.Item>
               </DropdownMenu.Content>
             </DropdownMenu.Portal>

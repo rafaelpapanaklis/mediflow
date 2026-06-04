@@ -6,6 +6,8 @@ import { Video, Calendar } from "lucide-react";
 import { HomeSection } from "../home-section";
 import { formatShortTime } from "@/lib/home/greet";
 import type { AppointmentStatus } from "@/lib/home/types";
+import { useT } from "@/i18n/i18n-provider";
+import type { TFunction } from "@/i18n/t";
 
 interface UpcomingItem {
   id: string;
@@ -31,20 +33,21 @@ const STATUS_DOT: Record<AppointmentStatus, string> = {
   CANCELLED:   "var(--text-4)",
 };
 
-const STATUS_LABEL: Record<AppointmentStatus, string> = {
-  SCHEDULED:   "Programada",
-  CONFIRMED:   "Confirmada",
-  CHECKED_IN:  "En sala",
-  IN_CHAIR:    "En sillón",
-  IN_PROGRESS: "En consulta",
-  COMPLETED:   "Completada",
-  CHECKED_OUT: "Salió",
-  NO_SHOW:     "No vino",
-  CANCELLED:   "Cancelada",
+const STATUS_LABEL_KEY: Record<AppointmentStatus, string> = {
+  SCHEDULED:   "home.upcoming.statusScheduled",
+  CONFIRMED:   "home.upcoming.statusConfirmed",
+  CHECKED_IN:  "home.upcoming.statusCheckedIn",
+  IN_CHAIR:    "home.upcoming.statusInChair",
+  IN_PROGRESS: "home.upcoming.statusInProgress",
+  COMPLETED:   "home.upcoming.statusCompleted",
+  CHECKED_OUT: "home.upcoming.statusCheckedOut",
+  NO_SHOW:     "home.upcoming.statusNoShow",
+  CANCELLED:   "home.upcoming.statusCancelled",
 };
 
 export function UpcomingAppointmentsCard({ limit = 5 }: { limit?: number }) {
   const router = useRouter();
+  const t = useT();
   const [items, setItems] = useState<UpcomingItem[] | null>(null);
   const [error, setError] = useState(false);
 
@@ -71,13 +74,17 @@ export function UpcomingAppointmentsCard({ limit = 5 }: { limit?: number }) {
   }, [limit]);
 
   return (
-    <HomeSection title="Próximas citas" subtitle={`Las ${limit} más cercanas`} noPad>
+    <HomeSection
+      title={t("home.upcoming.title")}
+      subtitle={t("home.upcoming.subtitle", { count: limit })}
+      noPad
+    >
       {items === null ? (
         <Skeleton />
       ) : error ? (
-        <EmptyMsg text="No se pudieron cargar las citas." />
+        <EmptyMsg text={t("home.upcoming.loadError")} />
       ) : items.length === 0 ? (
-        <EmptyMsg text="No tienes citas próximas." />
+        <EmptyMsg text={t("home.upcoming.empty")} />
       ) : (
         <div role="list">
           {items.map((it, i) => (
@@ -85,6 +92,7 @@ export function UpcomingAppointmentsCard({ limit = 5 }: { limit?: number }) {
               key={it.id}
               item={it}
               last={i === items.length - 1}
+              t={t}
               onOpen={() => router.push(`/dashboard/appointments/${it.id}`)}
               onPatient={() => router.push(`/dashboard/patients/${it.patientId}`)}
             />
@@ -98,22 +106,27 @@ export function UpcomingAppointmentsCard({ limit = 5 }: { limit?: number }) {
 function Row({
   item,
   last,
+  t,
   onOpen,
   onPatient,
 }: {
   item: UpcomingItem;
   last: boolean;
+  t: TFunction;
   onOpen: () => void;
   onPatient: () => void;
 }) {
   const color = STATUS_DOT[item.status];
-  const when = formatWhen(item.startsAt);
+  const when = formatWhen(item.startsAt, t);
 
   return (
     <div
       role="button"
       tabIndex={0}
-      aria-label={`Abrir cita de ${item.patientName} · ${when}`}
+      aria-label={t("home.upcoming.openAppointmentAria", {
+        name: item.patientName,
+        when,
+      })}
       onClick={onOpen}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -175,12 +188,12 @@ function Row({
             {item.isTeleconsult && (
               <Video
                 size={11}
-                aria-label="Teleconsulta"
+                aria-label={t("home.upcoming.teleconsult")}
                 style={{ color: "var(--info)", flexShrink: 0 }}
               />
             )}
           </span>
-          <span style={chipStyle(color)}>{STATUS_LABEL[item.status]}</span>
+          <span style={chipStyle(color)}>{t(STATUS_LABEL_KEY[item.status])}</span>
         </div>
 
         <button
@@ -197,7 +210,7 @@ function Row({
               e.stopPropagation();
             }
           }}
-          aria-label={`Ver expediente de ${item.patientName}`}
+          aria-label={t("home.upcoming.viewRecordAria", { name: item.patientName })}
           style={{
             background: "transparent",
             border: "none",
@@ -232,7 +245,7 @@ function Row({
             textOverflow: "ellipsis",
           }}
         >
-          {[item.reason ?? "Consulta", item.doctorShortName]
+          {[item.reason ?? t("home.upcoming.defaultReason"), item.doctorShortName]
             .filter(Boolean)
             .join(" · ")}
         </div>
@@ -260,21 +273,22 @@ function chipStyle(color: string): CSSProperties {
  * Hora relativa legible en la zona del navegador:
  * "Hoy 14:30" · "Mañana 09:00" · "Lun 12 jun · 10:00".
  */
-function formatWhen(iso: string): string {
+function formatWhen(iso: string, t: TFunction): string {
   const d = new Date(iso);
   const now = new Date();
   const startOfDay = (x: Date) =>
     new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const dayDiff = Math.round((startOfDay(d) - startOfDay(now)) / 86_400_000);
   const time = formatShortTime(iso);
+  const intlLocale = t("home.upcoming.intlLocale");
 
-  if (dayDiff <= 0) return `Hoy ${time}`;
-  if (dayDiff === 1) return `Mañana ${time}`;
+  if (dayDiff <= 0) return t("home.upcoming.whenToday", { time });
+  if (dayDiff === 1) return t("home.upcoming.whenTomorrow", { time });
 
   const wd = cap(
-    new Intl.DateTimeFormat("es-MX", { weekday: "short" }).format(d).replace(".", ""),
+    new Intl.DateTimeFormat(intlLocale, { weekday: "short" }).format(d).replace(".", ""),
   );
-  const dm = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short" })
+  const dm = new Intl.DateTimeFormat(intlLocale, { day: "numeric", month: "short" })
     .format(d)
     .replace(".", "");
   return `${wd} ${dm} · ${time}`;

@@ -74,6 +74,170 @@
         "other": "{count} pending"
       },
       "waitingRoom": "In waiting room"
+    },
+    "admin": {
+      "opSummary": "Operational summary",
+      "kpiGroupAria": "Key indicators",
+      "teamPerformanceTitle": "Team performance",
+      "teamPerformanceSubtitle": "Appointments, completed visits and revenue generated",
+      "viewFullReport": "View full report",
+      "noTeamActivity": "No team activity in this period.",
+      "kpiRevenue": "Monthly revenue",
+      "kpiAppointments": "Appointments",
+      "kpiOccupancy": "Occupancy",
+      "kpiNoShows": "No-shows"
+    },
+    "doctor": {
+      "patientsToday": {
+        "one": "{count} patient today",
+        "other": "{count} patients today"
+      },
+      "completedCount": {
+        "one": "{count} completed",
+        "other": "{count} completed"
+      },
+      "noAppointmentsToday": "No appointments today",
+      "restOfDayTitle": "Rest of the day",
+      "noMoreAppointments": "No more appointments after this one",
+      "noAppointments": "No appointments",
+      "appointmentsCount": {
+        "one": "{count} appointment",
+        "other": "{count} appointments"
+      },
+      "viewAgenda": "View schedule",
+      "pendingTasksTitle": "Pending tasks",
+      "tasksSubtitle": "Actions you can close in minutes",
+      "noPendingTasks": "No pending tasks 🎉",
+      "draftSoapNotes": {
+        "one": "draft SOAP note",
+        "other": "draft SOAP notes"
+      },
+      "complete": "Complete",
+      "unanalyzedXrays": {
+        "one": "unanalyzed X-ray",
+        "other": "unanalyzed X-rays"
+      },
+      "analyzeWithAi": "Analyze with AI",
+      "unsignedConsents": {
+        "one": "unsigned consent",
+        "other": "unsigned consents"
+      },
+      "sendDigitalSignature": "Send digital signature",
+      "recentPatientsTitle": "Recent patients",
+      "recentPatientsSubtitle": "Latest records you attended"
+    },
+    "adminPeriod": {
+      "day": "Today",
+      "month": "Month",
+      "quarter": "Quarter",
+      "year": "Year",
+      "ariaLabel": "Summary period"
+    },
+    "greeting": {
+      "hello": "Hello"
+    },
+    "heroNextPatient": {
+      "sectionLabel": "Next patient",
+      "eyebrow": "Your next patient",
+      "alreadyActive": "There is already an active consultation with this patient",
+      "consultStarted": "Consultation started",
+      "defaultReason": "Consultation",
+      "allergyLabel": "Allergy",
+      "consultInProgress": "Consultation in progress",
+      "startConsult": "Start consultation",
+      "viewRecord": "View record",
+      "aiAssist": "AI assist",
+      "medicalAlerts": {
+        "one": "{count} medical alert",
+        "other": "{count} medical alerts"
+      }
+    },
+    "quickActions": {
+      "newAppointment": "New appointment",
+      "newPatient": "New patient"
+    },
+    "shortcutBar": {
+      "newAppointment": "New appointment",
+      "newPatient": "New patient",
+      "searchPatient": "Search patient"
+    },
+    "recentPatientsCarousel": {
+      "ariaLabel": "Recent patients"
+    },
+    "revenueTrend": {
+      "title": "Revenue trend",
+      "rangeAriaLabel": "Revenue chart range",
+      "rangeDay": "Today",
+      "rangeWeek": "Week",
+      "rangeMonth": "Month",
+      "rangeYear": "Year",
+      "subtitleDay": "Today",
+      "subtitleWeek": "This week",
+      "subtitleMonth": "This month",
+      "subtitleYear": "This year",
+      "emptyState": "Not enough history yet to chart.",
+      "updating": "Updating…"
+    },
+    "teamPerf": {
+      "colDoctor": "Doctor",
+      "colAppointments": "Appointments",
+      "colCompletedPct": "% Completed",
+      "colRevenue": "Revenue"
+    },
+    "apptRow": {
+      "statusScheduled": "Scheduled",
+      "statusConfirmed": "Confirmed",
+      "statusCheckedIn": "Checked in",
+      "statusInChair": "In chair",
+      "statusInProgress": "In consultation",
+      "statusCompleted": "Completed",
+      "statusCheckedOut": "Checked out",
+      "statusNoShow": "No-show",
+      "statusCancelled": "Cancelled",
+      "defaultReason": "Consultation",
+      "minutesWaiting": {
+        "one": "{count} min wait",
+        "other": "{count} min wait"
+      },
+      "call": "Call",
+      "sendWhatsApp": "Send WhatsApp",
+      "moreActions": "More actions",
+      "viewAppointment": "View appointment",
+      "reschedule": "Reschedule",
+      "cancelAppointment": "Cancel appointment"
+    },
+    "upcoming": {
+      "statusScheduled": "Scheduled",
+      "statusConfirmed": "Confirmed",
+      "statusCheckedIn": "Checked in",
+      "statusInChair": "In chair",
+      "statusInProgress": "In consultation",
+      "statusCompleted": "Completed",
+      "statusCheckedOut": "Checked out",
+      "statusNoShow": "No-show",
+      "statusCancelled": "Cancelled",
+      "title": "Upcoming appointments",
+      "subtitle": {
+        "one": "The nearest one",
+        "other": "The {count} nearest"
+      },
+      "loadError": "Could not load the appointments.",
+      "empty": "You have no upcoming appointments.",
+      "openAppointmentAria": "Open appointment for {name} · {when}",
+      "teleconsult": "Teleconsultation",
+      "viewRecordAria": "View record for {name}",
+      "defaultReason": "Consultation",
+      "whenToday": "Today {time}",
+      "whenTomorrow": "Tomorrow {time}",
+      "intlLocale": "en-US"
+    },
+    "waitlist": {
+      "title": "Waitlist",
+      "emptySubtitle": "No patients waiting",
+      "subtitle": {
+        "one": "{count} patient waiting for a slot",
+        "other": "{count} patients waiting for a slot"
+      }
     }
   },
   "sidebar": {

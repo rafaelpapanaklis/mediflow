@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { useT } from "@/i18n/i18n-provider";
 import { HomeSection } from "../home-section";
 
 type RevenueRange = "hoy" | "semana" | "mes" | "anio";
@@ -10,11 +11,15 @@ interface SeriesPoint {
   value: number;
 }
 
-const RANGES: Array<{ value: RevenueRange; label: string; subtitle: string }> = [
-  { value: "hoy",    label: "Hoy",    subtitle: "Hoy" },
-  { value: "semana", label: "Semana", subtitle: "Esta semana" },
-  { value: "mes",    label: "Mes",    subtitle: "Este mes" },
-  { value: "anio",   label: "Año",    subtitle: "Este año" },
+const RANGES: Array<{
+  value: RevenueRange;
+  labelKey: string;
+  subtitleKey: string;
+}> = [
+  { value: "hoy",    labelKey: "home.revenueTrend.rangeDay",   subtitleKey: "home.revenueTrend.subtitleDay" },
+  { value: "semana", labelKey: "home.revenueTrend.rangeWeek",  subtitleKey: "home.revenueTrend.subtitleWeek" },
+  { value: "mes",    labelKey: "home.revenueTrend.rangeMonth", subtitleKey: "home.revenueTrend.subtitleMonth" },
+  { value: "anio",   labelKey: "home.revenueTrend.rangeYear",  subtitleKey: "home.revenueTrend.subtitleYear" },
 ];
 
 // recharts pesa ~95kb min+gz — dynamic import lo saca del bundle inicial del
@@ -28,6 +33,7 @@ const RevenueAreaChart = dynamic(
 );
 
 export function RevenueTrendCard({ initialData }: { initialData: SeriesPoint[] }) {
+  const t = useT();
   const [range, setRange] = useState<RevenueRange>("mes");
   // initialData (serie SSR de 6 meses) sirve de fallback para el primer paint;
   // en cuanto monta pedimos la serie real del rango por defecto ("mes").
@@ -70,12 +76,12 @@ export function RevenueTrendCard({ initialData }: { initialData: SeriesPoint[] }
 
   return (
     <HomeSection
-      title="Tendencia de ingresos"
-      subtitle={active.subtitle}
+      title={t("home.revenueTrend.title")}
+      subtitle={t(active.subtitleKey)}
       action={
         <div
           role="tablist"
-          aria-label="Rango de la gráfica de ingresos"
+          aria-label={t("home.revenueTrend.rangeAriaLabel")}
           className="segment-new"
         >
           {RANGES.map((r) => {
@@ -89,7 +95,7 @@ export function RevenueTrendCard({ initialData }: { initialData: SeriesPoint[] }
                 className={`segment-new__btn ${isActive ? "segment-new__btn--active" : ""}`}
                 onClick={() => loadRange(r.value)}
               >
-                {r.label}
+                {t(r.labelKey)}
               </button>
             );
           })}
@@ -107,7 +113,7 @@ export function RevenueTrendCard({ initialData }: { initialData: SeriesPoint[] }
               fontSize: 13,
             }}
           >
-            Aún no hay suficiente historial para graficar.
+            {t("home.revenueTrend.emptyState")}
           </div>
         ) : (
           <div
@@ -142,7 +148,7 @@ export function RevenueTrendCard({ initialData }: { initialData: SeriesPoint[] }
                 padding: "3px 10px",
               }}
             >
-              Actualizando…
+              {t("home.revenueTrend.updating")}
             </span>
           </div>
         )}

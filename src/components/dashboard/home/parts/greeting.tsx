@@ -1,6 +1,7 @@
 // src/components/dashboard/home/parts/greeting.tsx
 "use client";
 import { useEffect, useState } from "react";
+import { useT } from "@/i18n/i18n-provider";
 import { timeGreeting, formatLongDate, firstName } from "@/lib/home/greet";
 
 export function Greeting({
@@ -10,7 +11,8 @@ export function Greeting({
   userFullName: string;
   trailing?: string;
 }) {
-  const [greeting, setGreeting] = useState("Hola");
+  const t = useT();
+  const [greeting, setGreeting] = useState(t("home.greeting.hello"));
   const [date, setDate] = useState(formatLongDate());
   const [mounted, setMounted] = useState(false);
 

@@ -13,6 +13,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { HomeQuickActions } from "./parts/home-quick-actions";
 import { RevenueTrendCard } from "./parts/revenue-trend-card";
 import { UpcomingAppointmentsCard } from "./parts/upcoming-appointments-card";
+import { useT } from "@/i18n/i18n-provider";
 import type { HomeAdminData, AdminPeriod } from "@/lib/home/types";
 
 interface Props {
@@ -32,6 +33,7 @@ function iconForKpi(label: string) {
 }
 
 export function HomeAdmin({ clinic, data, period }: Props) {
+  const t = useT();
   const router = useRouter();
 
   return (
@@ -46,14 +48,14 @@ export function HomeAdmin({ clinic, data, period }: Props) {
       }}>
         <Greeting
           userFullName={clinic.name}
-          trailing="Resumen operativo"
+          trailing={t("home.admin.opSummary")}
         />
         <HomeQuickActions />
       </div>
 
       <div
         role="group"
-        aria-label="Indicadores clave"
+        aria-label={t("home.admin.kpiGroupAria")}
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
@@ -106,15 +108,15 @@ export function HomeAdmin({ clinic, data, period }: Props) {
       </div>
 
       <HomeSection
-        title="Performance del equipo"
-        subtitle="Citas, completadas e ingresos generados"
+        title={t("home.admin.teamPerformanceTitle")}
+        subtitle={t("home.admin.teamPerformanceSubtitle")}
         action={
           <ButtonNew
             variant="ghost"
             size="sm"
             onClick={() => router.push("/dashboard/reports")}
           >
-            Ver reporte completo
+            {t("home.admin.viewFullReport")}
             <ChevronRight size={12} />
           </ButtonNew>
         }
@@ -129,7 +131,7 @@ export function HomeAdmin({ clinic, data, period }: Props) {
               fontSize: 13,
             }}
           >
-            Sin actividad de equipo en este período.
+            {t("home.admin.noTeamActivity")}
           </div>
         ) : (
           <TeamPerformanceTable rows={data.team} />
@@ -140,11 +142,12 @@ export function HomeAdmin({ clinic, data, period }: Props) {
 }
 
 function KpiPlaceholderGrid() {
+  const t = useT();
   const placeholders = [
-    { label: "Ingresos del mes", icon: DollarSign },
-    { label: "Citas", icon: Calendar },
-    { label: "Ocupación", icon: TrendingUp },
-    { label: "No-shows", icon: UserX },
+    { label: t("home.admin.kpiRevenue"), icon: DollarSign },
+    { label: t("home.admin.kpiAppointments"), icon: Calendar },
+    { label: t("home.admin.kpiOccupancy"), icon: TrendingUp },
+    { label: t("home.admin.kpiNoShows"), icon: UserX },
   ];
   return (
     <>

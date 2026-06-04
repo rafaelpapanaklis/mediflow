@@ -6,23 +6,25 @@ import { Play, FileText, Sparkles, AlertTriangle, Pill } from "lucide-react";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { AlergiesPopover } from "@/components/dashboard/alergies-popover";
 import { useActiveConsult } from "@/hooks/use-active-consult";
+import { useT } from "@/i18n/i18n-provider";
 import { formatShortTime, formatTimeUntil } from "@/lib/home/greet";
 import type { HomeDoctorData } from "@/lib/home/types";
 
 type NextAppt = NonNullable<HomeDoctorData["nextAppointment"]>;
 
 export function HeroNextPatient({ appt }: { appt: NextAppt }) {
+  const t = useT();
   const router = useRouter();
   const { startConsult, consult } = useActiveConsult();
   const isAlreadyActive = consult?.patientId === appt.patient.id;
 
   const handleStart = async () => {
     if (isAlreadyActive) {
-      toast("Ya hay consulta activa con este paciente", { icon: "ℹ️" });
+      toast(t("home.heroNextPatient.alreadyActive"), { icon: "ℹ️" });
       return;
     }
     await startConsult(appt.patient.id);
-    toast.success("Consulta iniciada");
+    toast.success(t("home.heroNextPatient.consultStarted"));
   };
 
   const genderAge = [
@@ -41,7 +43,7 @@ export function HeroNextPatient({ appt }: { appt: NextAppt }) {
 
   return (
     <section
-      aria-label="Siguiente paciente"
+      aria-label={t("home.heroNextPatient.sectionLabel")}
       style={{
         position: "relative",
         background:
@@ -65,7 +67,7 @@ export function HeroNextPatient({ appt }: { appt: NextAppt }) {
           marginBottom: 10,
         }}
       >
-        Tu siguiente paciente · {formatTimeUntil(appt.startsAt)}
+        {t("home.heroNextPatient.eyebrow")} · {formatTimeUntil(appt.startsAt)}
       </div>
 
       <div
@@ -113,7 +115,7 @@ export function HeroNextPatient({ appt }: { appt: NextAppt }) {
               {formatShortTime(appt.startsAt)}
             </strong>{" "}
             ·{" "}
-            {appt.reason ?? "Consulta"}
+            {appt.reason ?? t("home.heroNextPatient.defaultReason")}
           </div>
 
           {(firstAllergy || firstMed) && (
@@ -125,12 +127,12 @@ export function HeroNextPatient({ appt }: { appt: NextAppt }) {
                     <button
                       type="button"
                       style={alertChipStyle("danger")}
-                      aria-label={`${totalAlerts} alerta${
-                        totalAlerts === 1 ? "" : "s"
-                      } médica${totalAlerts === 1 ? "" : "s"}`}
+                      aria-label={t("home.heroNextPatient.medicalAlerts", {
+                        count: totalAlerts,
+                      })}
                     >
                       <AlertTriangle size={11} aria-hidden />
-                      Alergia: {firstAllergy}
+                      {t("home.heroNextPatient.allergyLabel")}: {firstAllergy}
                       {totalAlerts > 1 ? ` +${totalAlerts - 1}` : ""}
                     </button>
                   }
@@ -186,7 +188,9 @@ export function HeroNextPatient({ appt }: { appt: NextAppt }) {
           onMouseLeave={(e) => (e.currentTarget.style.background = "var(--brand)")}
         >
           <Play size={14} />
-          {isAlreadyActive ? "Consulta en curso" : "Iniciar consulta"}
+          {isAlreadyActive
+            ? t("home.heroNextPatient.consultInProgress")
+            : t("home.heroNextPatient.startConsult")}
         </button>
         <button
           type="button"
@@ -204,7 +208,7 @@ export function HeroNextPatient({ appt }: { appt: NextAppt }) {
           }}
         >
           <FileText size={14} />
-          Ver expediente
+          {t("home.heroNextPatient.viewRecord")}
         </button>
         <button
           type="button"
@@ -222,7 +226,7 @@ export function HeroNextPatient({ appt }: { appt: NextAppt }) {
           }}
         >
           <Sparkles size={14} />
-          IA asistir
+          {t("home.heroNextPatient.aiAssist")}
         </button>
       </div>
     </section>
