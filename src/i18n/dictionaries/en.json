@@ -7171,5 +7171,13 @@
       "totalAnnual": "Annual total",
       "totalMonthly": "Monthly total"
     }
+  },
+  "moduleLoading": {
+    "pediatrics": "Loading pediatrics module…",
+    "periodontics": "Loading periodontics module…",
+    "endodontics": "Loading endodontics module…",
+    "implants": "Loading implants module…",
+    "orthodontics": "Loading orthodontics module…",
+    "orthodonticsLegacy": "Loading orthodontics module…"
   }
 }

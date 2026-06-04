@@ -97,11 +97,19 @@ const SLOT_TO_VIEW: Record<
   oclusal_inf: "INTRA_OCCLUSAL_LOWER",
 };
 
+// Fallback de carga de los módulos lazy (pestañas de especialidad). Componente
+// cliente para poder traducir el texto con useT — el `loading` de dynamicImport
+// se renderiza dentro del árbol que ya tiene el I18nProvider.
+function ModuleLoading({ labelKey }: { labelKey: string }) {
+  const t = useT();
+  return <div className="text-xs text-muted-foreground p-4">{t(labelKey)}</div>;
+}
+
 // Pediatrics — lazy load del módulo. Solo carga el bundle cuando el doctor
 // abre la pestaña, evitando inflar el bundle del paciente cuando no aplica.
 const PediatricsTab = dynamicImport(
   () => import("@/components/patient-detail/pediatrics/PediatricsTab").then((m) => ({ default: m.PediatricsTab })),
-  { ssr: false, loading: () => <div className="text-xs text-muted-foreground p-4">Cargando módulo de pediatría…</div> },
+  { ssr: false, loading: () => <ModuleLoading labelKey="moduleLoading.pediatrics" /> },
 );
 
 // Periodontics — lazy load del módulo. El bundle del periodontograma 6×32
@@ -114,7 +122,7 @@ const PeriodonticsPatientTab = dynamicImport(
   {
     ssr: false,
     loading: () => (
-      <div className="text-xs text-muted-foreground p-4">Cargando módulo de periodoncia…</div>
+      <ModuleLoading labelKey="moduleLoading.periodontics" />
     ),
   },
 );
@@ -129,7 +137,7 @@ const EndodonticsTab = dynamicImport(
   {
     ssr: false,
     loading: () => (
-      <div className="text-xs text-muted-foreground p-4">Cargando módulo de endodoncia…</div>
+      <ModuleLoading labelKey="moduleLoading.endodontics" />
     ),
   },
 );
@@ -144,7 +152,7 @@ const ImplantsTab = dynamicImport(
   {
     ssr: false,
     loading: () => (
-      <div className="text-xs text-muted-foreground p-4">Cargando módulo de implantes…</div>
+      <ModuleLoading labelKey="moduleLoading.implants" />
     ),
   },
 );
@@ -160,7 +168,7 @@ const OrthodonticsRedesignClient = dynamicImport(
   {
     ssr: false,
     loading: () => (
-      <div className="text-xs text-muted-foreground p-4">Cargando módulo de Ortodoncia…</div>
+      <ModuleLoading labelKey="moduleLoading.orthodontics" />
     ),
   },
 );
@@ -173,7 +181,7 @@ const OrthodonticsClient = dynamicImport(
   {
     ssr: false,
     loading: () => (
-      <div className="text-xs text-muted-foreground p-4">Cargando módulo de ortodoncia…</div>
+      <ModuleLoading labelKey="moduleLoading.orthodonticsLegacy" />
     ),
   },
 );
