@@ -14,23 +14,24 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { useT } from "@/i18n/i18n-provider";
 
 interface TabDef {
   id: string;
-  label: string;
+  labelKey: string;
   href: string;
   icon: LucideIcon;
 }
 
 const TABS: TabDef[] = [
-  { id: "overview",     label: "Resumen",       href: "/dashboard/analytics",            icon: BarChart3 },
-  { id: "occupancy",    label: "Ocupación",     href: "/dashboard/analytics/occupancy",  icon: Grid3x3 },
-  { id: "doctors",      label: "Doctores",      href: "/dashboard/analytics/doctors",    icon: Stethoscope },
-  { id: "procedures",   label: "Procedimientos",href: "/dashboard/analytics/procedures", icon: ListChecks },
-  { id: "no-shows",     label: "No-shows",      href: "/dashboard/analytics/no-shows",   icon: AlertCircle },
-  { id: "waiting",      label: "Sala de espera",href: "/dashboard/analytics/waiting-room",icon: Clock },
-  { id: "costs",        label: "Costos & Margen",href:"/dashboard/analytics/costs",      icon: DollarSign },
-  { id: "journey",      label: "Patient Journey",href:"/dashboard/analytics/journey",    icon: Route },
+  { id: "overview",     labelKey: "analytics.layout.tabOverview",     href: "/dashboard/analytics",            icon: BarChart3 },
+  { id: "occupancy",    labelKey: "analytics.layout.tabOccupancy",    href: "/dashboard/analytics/occupancy",  icon: Grid3x3 },
+  { id: "doctors",      labelKey: "analytics.layout.tabDoctors",      href: "/dashboard/analytics/doctors",    icon: Stethoscope },
+  { id: "procedures",   labelKey: "analytics.layout.tabProcedures",   href: "/dashboard/analytics/procedures", icon: ListChecks },
+  { id: "no-shows",     labelKey: "analytics.layout.tabNoShows",      href: "/dashboard/analytics/no-shows",   icon: AlertCircle },
+  { id: "waiting",      labelKey: "analytics.layout.tabWaiting",      href: "/dashboard/analytics/waiting-room",icon: Clock },
+  { id: "costs",        labelKey: "analytics.layout.tabCosts",        href:"/dashboard/analytics/costs",       icon: DollarSign },
+  { id: "journey",      labelKey: "analytics.layout.tabJourney",      href:"/dashboard/analytics/journey",     icon: Route },
 ];
 
 interface Props {
@@ -41,6 +42,7 @@ interface Props {
 }
 
 export function AnalyticsLayout({ children, title, subtitle, rightActions }: Props) {
+  const t = useT();
   const pathname = usePathname();
   return (
     <div
@@ -65,7 +67,7 @@ export function AnalyticsLayout({ children, title, subtitle, rightActions }: Pro
           position: "sticky",
           top: 80,
         }}
-        aria-label="Secciones de Analytics"
+        aria-label={t("analytics.layout.sectionsAria")}
       >
         <div
           style={{
@@ -77,7 +79,7 @@ export function AnalyticsLayout({ children, title, subtitle, rightActions }: Pro
             padding: "8px 10px 6px",
           }}
         >
-          Analytics
+          {t("analytics.layout.heading")}
         </div>
         <nav style={{ display: "flex", flexDirection: "column", gap: 1 }}>
           {TABS.map((tab) => {
@@ -104,7 +106,7 @@ export function AnalyticsLayout({ children, title, subtitle, rightActions }: Pro
                 }}
               >
                 <tab.icon size={14} aria-hidden style={{ flexShrink: 0 }} />
-                <span>{tab.label}</span>
+                <span>{t(tab.labelKey)}</span>
               </Link>
             );
           })}

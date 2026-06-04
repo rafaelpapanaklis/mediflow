@@ -5,6 +5,7 @@ import { Calendar, CheckCircle2, AlertCircle, Clock, Database } from "lucide-rea
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
 import { AnalyticsCard } from "@/components/dashboard/analytics/analytics-card";
 import { EfficiencyGauge } from "@/components/dashboard/analytics/efficiency-gauge";
+import { useT } from "@/i18n/i18n-provider";
 
 interface OverviewData {
   monthAppts: number;
@@ -28,6 +29,7 @@ interface Props {
 }
 
 export function OverviewClient({ data }: Props) {
+  const t = useT();
   // Efficiency score se calcula client-side via API porque depende del
   // día actual (real-time) y de joins con users + agenda config. El
   // server-component KPI ya tiene el resto; solo este número parpadea
@@ -49,8 +51,8 @@ export function OverviewClient({ data }: Props) {
 
   return (
     <AnalyticsLayout
-      title="Resumen"
-      subtitle="Métricas clave de tu clínica este mes"
+      title={t("analytics.overview.title")}
+      subtitle={t("analytics.overview.subtitle")}
     >
       {data.insufficientData && (
         <DataCollectingBanner progress={data.dataProgress} count={data.totalAppts} />
@@ -79,37 +81,37 @@ export function OverviewClient({ data }: Props) {
               fontSize: 12,
             }}
           >
-            Calculando…
+            {t("analytics.overview.calculating")}
           </div>
         ) : (
           <EfficiencyGauge score={score?.today ?? 0} monthAverage={score?.monthAverage ?? 0} />
         )}
 
         <AnalyticsCard
-          label="Citas del mes"
+          label={t("analytics.overview.apptsThisMonth")}
           value={data.monthAppts.toLocaleString("es-MX")}
           delta={data.apptsDeltaPct !== 0 ? { pct: data.apptsDeltaPct } : null}
-          hint="vs mes anterior"
+          hint={t("analytics.overview.vsPrevMonth")}
           icon={<Calendar size={14} aria-hidden />}
           tone="brand"
         />
         <AnalyticsCard
-          label="Completadas"
+          label={t("analytics.overview.completed")}
           value={data.completedMonth.toLocaleString("es-MX")}
           delta={data.completedDeltaPct !== 0 ? { pct: data.completedDeltaPct } : null}
-          hint="vs mes anterior"
+          hint={t("analytics.overview.vsPrevMonth")}
           icon={<CheckCircle2 size={14} aria-hidden />}
           tone="success"
         />
         <AnalyticsCard
-          label="No-shows"
+          label={t("analytics.overview.noShows")}
           value={`${data.noShowRate.toFixed(1)}%`}
           delta={
             data.noShowDeltaPct !== 0
-              ? { pct: data.noShowDeltaPct, absolute: `${data.noShowMonth} citas` }
+              ? { pct: data.noShowDeltaPct, absolute: t("analytics.overview.apptsCount", { count: data.noShowMonth }) }
               : null
           }
-          hint="del total del mes"
+          hint={t("analytics.overview.ofMonthTotal")}
           icon={<AlertCircle size={14} aria-hidden />}
           tone={data.noShowRate > 10 ? "danger" : data.noShowRate > 5 ? "warning" : "neutral"}
         />
@@ -118,20 +120,20 @@ export function OverviewClient({ data }: Props) {
       {/* Second row: tiempos */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14, marginBottom: 14 }}>
         <AnalyticsCard
-          label="Tiempo promedio de espera"
+          label={t("analytics.overview.avgWaitTime")}
           value={
             data.avgWaitMin != null
-              ? `${Math.round(data.avgWaitMin)} min`
+              ? t("analytics.overview.minutesValue", { count: Math.round(data.avgWaitMin) })
               : "—"
           }
-          hint={data.avgWaitMin == null ? "Sin datos suficientes (CHECKED_IN → IN_CHAIR)" : "promedio del mes"}
+          hint={data.avgWaitMin == null ? t("analytics.overview.notEnoughDataWait") : t("analytics.overview.monthAverage")}
           icon={<Clock size={14} aria-hidden />}
           tone={data.avgWaitMin != null && data.avgWaitMin > 20 ? "warning" : "neutral"}
         />
         <AnalyticsCard
-          label="Citas hoy"
+          label={t("analytics.overview.apptsToday")}
           value={data.todayCount.toLocaleString("es-MX")}
-          hint="agendadas (no canceladas)"
+          hint={t("analytics.overview.scheduledNotCancelled")}
           icon={<Calendar size={14} aria-hidden />}
           tone="brand"
         />
@@ -141,6 +143,7 @@ export function OverviewClient({ data }: Props) {
 }
 
 function DataCollectingBanner({ progress, count }: { progress: number; count: number }) {
+  const t = useT();
   return (
     <div
       style={{
@@ -171,11 +174,10 @@ function DataCollectingBanner({ progress, count }: { progress: number; count: nu
       </div>
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: "#92400e", marginBottom: 4 }}>
-          Recolectando datos para insights
+          {t("analytics.overview.collectingData")}
         </div>
         <div style={{ fontSize: 12, color: "var(--text-2)", marginBottom: 8 }}>
-          Llevas {count} citas registradas. Necesitamos al menos 30 para que las métricas
-          comparativas sean confiables.
+          {t("analytics.overview.collectingDataDesc", { count })}
         </div>
         <div
           style={{
@@ -195,7 +197,7 @@ function DataCollectingBanner({ progress, count }: { progress: number; count: nu
           />
         </div>
         <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4 }}>
-          {progress}% del mínimo necesario
+          {t("analytics.overview.percentOfMinimum", { progress })}
         </div>
       </div>
     </div>

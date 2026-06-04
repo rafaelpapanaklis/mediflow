@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/i18n/i18n-provider";
 
 /**
  * AnalyticsHeatmap — grid Día (filas) × Hora (columnas) sin librería
@@ -28,6 +29,7 @@ interface Props {
 const DAYS_DEFAULT = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
 export function AnalyticsHeatmap({ data, hours, daysES = DAYS_DEFAULT, onCellClick }: Props) {
+  const t = useT();
   const [hover, setHover] = useState<{ day: number; hour: number; cell: HeatmapCell; x: number; y: number } | null>(null);
 
   return (
@@ -116,7 +118,7 @@ export function AnalyticsHeatmap({ data, hours, daysES = DAYS_DEFAULT, onCellCli
                   padding: 0,
                   transition: "transform 0.08s",
                 }}
-                aria-label={`${daysES[dayIdx]} ${hours[hourIdx]}h: ${cell.value}% ocupación`}
+                aria-label={t("analytics.heatmap.cellAria", { day: daysES[dayIdx]!, hour: hours[hourIdx]!, value: cell.value })}
               />
             );
           })}
@@ -136,7 +138,7 @@ export function AnalyticsHeatmap({ data, hours, daysES = DAYS_DEFAULT, onCellCli
           color: "var(--text-3)",
         }}
       >
-        <span>Ocupación:</span>
+        <span>{t("analytics.heatmap.occupancyLegend")}</span>
         {[
           { label: "<30%", tone: cellTone(15) },
           { label: "30-70%", tone: cellTone(50) },
@@ -185,8 +187,8 @@ export function AnalyticsHeatmap({ data, hours, daysES = DAYS_DEFAULT, onCellCli
             {daysES[hover.day]} · {hover.hour.toString().padStart(2, "0")}:00
           </strong>
           <div style={{ marginTop: 2, color: "var(--text-3)" }}>
-            {hover.cell.value}% ocupación
-            {hover.cell.count != null && ` · ${hover.cell.count} citas`}
+            {t("analytics.heatmap.tooltipOccupancy", { value: hover.cell.value })}
+            {hover.cell.count != null && ` · ${t("analytics.heatmap.tooltipAppointments", { count: hover.cell.count })}`}
           </div>
           {hover.cell.label && <div style={{ color: "var(--text-3)" }}>{hover.cell.label}</div>}
         </div>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Star, FileDown } from "lucide-react";
 import toast from "react-hot-toast";
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
+import { useT } from "@/i18n/i18n-provider";
 
 interface DoctorRow {
   id: string;
@@ -28,22 +29,23 @@ interface ApiResponse {
 }
 
 const PRESETS = [
-  { id: "month",   label: "Este mes",      compute: () => {
+  { id: "month",   labelKey: "analytics.doctors.presetMonth",   compute: () => {
     const now = new Date();
     const from = new Date(now.getFullYear(), now.getMonth(), 1);
     return { from, to: now };
   }},
-  { id: "last30",  label: "30 días",       compute: () => {
+  { id: "last30",  labelKey: "analytics.doctors.preset30d",     compute: () => {
     const to = new Date();
     return { from: new Date(to.getTime() - 30 * 86400000), to };
   }},
-  { id: "quarter", label: "90 días",       compute: () => {
+  { id: "quarter", labelKey: "analytics.doctors.preset90d",     compute: () => {
     const to = new Date();
     return { from: new Date(to.getTime() - 90 * 86400000), to };
   }},
 ];
 
 export function DoctorsClient() {
+  const t = useT();
   const [preset, setPreset] = useState("month");
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -89,9 +91,9 @@ export function DoctorsClient() {
       a.download = `nomina-${range.from.toISOString().slice(0, 10)}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success("PDF de nómina generado");
+      toast.success(t("analytics.doctors.payrollPdfGenerated"));
     } catch {
-      toast.error("Error al generar PDF");
+      toast.error(t("analytics.doctors.payrollPdfError"));
     } finally {
       setGeneratingPayroll(false);
     }
@@ -99,8 +101,8 @@ export function DoctorsClient() {
 
   return (
     <AnalyticsLayout
-      title="Doctores"
-      subtitle="Performance, ingresos generados y satisfacción de pacientes"
+      title={t("analytics.doctors.title")}
+      subtitle={t("analytics.doctors.subtitle")}
       rightActions={
         <div style={{ display: "flex", gap: 6 }}>
           {PRESETS.map((p) => (
@@ -120,7 +122,7 @@ export function DoctorsClient() {
                 fontFamily: "inherit",
               }}
             >
-              {p.label}
+              {t(p.labelKey)}
             </button>
           ))}
           <button
@@ -143,18 +145,18 @@ export function DoctorsClient() {
             }}
           >
             <FileDown size={13} aria-hidden />
-            {generatingPayroll ? "Generando…" : "Exportar nómina"}
+            {generatingPayroll ? t("analytics.doctors.generating") : t("analytics.doctors.exportPayroll")}
           </button>
         </div>
       }
     >
       {loading ? (
-        <Box>Cargando…</Box>
+        <Box>{t("common.loading")}</Box>
       ) : !data || data.doctors.length === 0 ? (
         <Box>
-          <strong style={{ color: "var(--text-2)" }}>Sin datos en el rango</strong>
+          <strong style={{ color: "var(--text-2)" }}>{t("analytics.doctors.noDataTitle")}</strong>
           <div style={{ marginTop: 6, color: "var(--text-3)", fontSize: 13 }}>
-            No hay doctores activos con citas en este período.
+            {t("analytics.doctors.noDataDesc")}
           </div>
         </Box>
       ) : (
@@ -169,14 +171,14 @@ export function DoctorsClient() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ background: "var(--bg-elev-2)" }}>
-                <Th>Doctor</Th>
-                <Th align="right">Citas</Th>
-                <Th align="right">Completadas</Th>
-                <Th align="right">/día</Th>
-                <Th align="right">No-shows</Th>
-                <Th align="right">Tiempo prom.</Th>
-                <Th align="right">Satisfacción</Th>
-                <Th align="right">Ingresos</Th>
+                <Th>{t("analytics.doctors.colDoctor")}</Th>
+                <Th align="right">{t("analytics.doctors.colAppts")}</Th>
+                <Th align="right">{t("analytics.doctors.colCompleted")}</Th>
+                <Th align="right">{t("analytics.doctors.colPerDay")}</Th>
+                <Th align="right">{t("analytics.doctors.colNoShows")}</Th>
+                <Th align="right">{t("analytics.doctors.colAvgTime")}</Th>
+                <Th align="right">{t("analytics.doctors.colSatisfaction")}</Th>
+                <Th align="right">{t("analytics.doctors.colRevenue")}</Th>
               </tr>
             </thead>
             <tbody>
@@ -205,7 +207,7 @@ export function DoctorsClient() {
                     {d.apptsNoShow} <span style={{ fontSize: 10 }}>({d.noShowRate}%)</span>
                   </Td>
                   <Td align="right" mono color="var(--text-2)">
-                    {d.avgConsultMin != null ? `${d.avgConsultMin} min` : "—"}
+                    {d.avgConsultMin != null ? t("analytics.doctors.minutes", { count: d.avgConsultMin }) : "—"}
                   </Td>
                   <Td align="right">
                     {d.avgSatisfaction != null ? (
@@ -226,9 +228,7 @@ export function DoctorsClient() {
         </div>
       )}
       <div style={{ marginTop: 12, fontSize: 11, color: "var(--text-3)", lineHeight: 1.5 }}>
-        Nota: Ingresos = facturas pagadas asociadas a citas del doctor. Satisfacción = promedio de
-        PatientSatisfaction (NPS 1-5). Tiempo promedio = AppointmentTimeline.totalConsultMin.
-        Nómina exporta CSV con los datos visibles. PDF profesional de nómina llegará en el próximo push.
+        {t("analytics.doctors.footerNote")}
       </div>
     </AnalyticsLayout>
   );

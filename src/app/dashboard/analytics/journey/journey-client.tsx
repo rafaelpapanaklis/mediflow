@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, AlertTriangle, Clock } from "lucide-react";
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
+import { useT } from "@/i18n/i18n-provider";
 
 interface FunnelStep { id: string; label: string; count: number }
 interface Stage {
@@ -22,8 +23,8 @@ interface ApiResponse {
 }
 
 const PRESETS = [
-  { id: "30d", label: "30 días", days: 30 },
-  { id: "90d", label: "90 días", days: 90 },
+  { id: "30d", labelKey: "analytics.journeyClient.preset30d", days: 30 },
+  { id: "90d", labelKey: "analytics.journeyClient.preset90d", days: 90 },
 ];
 
 /**
@@ -35,6 +36,7 @@ const PRESETS = [
  * de botella se highlightea en ámbar/rojo.
  */
 export function JourneyClient() {
+  const t = useT();
   const [preset, setPreset] = useState("30d");
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,8 +56,8 @@ export function JourneyClient() {
 
   return (
     <AnalyticsLayout
-      title="Patient Journey"
-      subtitle="Flujo de citas etapa por etapa, drop-offs y cuello de botella"
+      title={t("analytics.journeyClient.title")}
+      subtitle={t("analytics.journeyClient.subtitle")}
       rightActions={
         <div style={{ display: "flex", gap: 6 }}>
           {PRESETS.map((p) => (
@@ -75,16 +77,16 @@ export function JourneyClient() {
                 fontFamily: "inherit",
               }}
             >
-              {p.label}
+              {t(p.labelKey)}
             </button>
           ))}
         </div>
       }
     >
       {loading ? (
-        <Box>Cargando flujo…</Box>
+        <Box>{t("analytics.journeyClient.loadingFlow")}</Box>
       ) : !data || data.totalAppts === 0 ? (
-        <Box>Sin citas en el rango seleccionado.</Box>
+        <Box>{t("analytics.journeyClient.noAppointments")}</Box>
       ) : (
         <>
           {data.bottleneck && data.bottleneck.sample > 0 && (
@@ -108,10 +110,10 @@ export function JourneyClient() {
                 <AlertTriangle size={16} aria-hidden />
               </div>
               <div>
-                <strong style={{ color: "var(--text-1)" }}>Cuello de botella: {data.bottleneck.label}</strong>
-                {" — "}{data.bottleneck.avgMin} min promedio
+                <strong style={{ color: "var(--text-1)" }}>{t("analytics.journeyClient.bottleneckLabel", { label: data.bottleneck.label })}</strong>
+                {" — "}{t("analytics.journeyClient.avgMinSuffix", { avgMin: data.bottleneck.avgMin })}
                 <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
-                  Medido entre &quot;{data.bottleneck.from}&quot; → &quot;{data.bottleneck.to}&quot; en {data.bottleneck.sample} citas.
+                  {t("analytics.journeyClient.bottleneckMeasured", { from: data.bottleneck.from, to: data.bottleneck.to, sample: data.bottleneck.sample })}
                 </div>
               </div>
             </div>
@@ -128,7 +130,7 @@ export function JourneyClient() {
             }}
           >
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 16 }}>
-              Funnel de citas
+              {t("analytics.journeyClient.appointmentsFunnel")}
             </div>
             <FunnelView funnel={data.funnel} dropOffs={data.dropOffs} totalAppts={data.totalAppts} />
           </div>
@@ -143,7 +145,7 @@ export function JourneyClient() {
             }}
           >
             <div style={{ padding: "12px 16px", fontSize: 12, fontWeight: 700, color: "var(--text-2)", background: "var(--bg-elev-2)", borderBottom: "1px solid var(--border-soft)" }}>
-              Tiempo promedio por etapa
+              {t("analytics.journeyClient.avgTimePerStage")}
             </div>
             {data.stages.map((s) => (
               <div
@@ -187,10 +189,7 @@ export function JourneyClient() {
           </div>
 
           <div style={{ marginTop: 12, fontSize: 11, color: "var(--text-3)", lineHeight: 1.5 }}>
-            Los tiempos se calculan de AppointmentTimeline (timestamps capturados en cada
-            transición de status). Etapas con sample=0 indican que esa transición no se
-            está registrando en las citas del rango — confirma que el flujo CHECKED_IN →
-            IN_CHAIR → IN_PROGRESS → COMPLETED → CHECKED_OUT se use en el día a día.
+            {t("analytics.journeyClient.timingNote")}
           </div>
         </>
       )}
@@ -207,6 +206,7 @@ function FunnelView({
   dropOffs: { cancelled: number; noShow: number };
   totalAppts: number;
 }) {
+  const t = useT();
   // Cada step se renderiza con altura proporcional al count vs el primer
   // step. Drop-offs (cancelled, noShow) se renderean como pequeñas
   // ramas laterales saliendo entre los steps relevantes.
@@ -219,13 +219,13 @@ function FunnelView({
         const isFirst = idx === 0;
         const isLast = idx === funnel.length - 1;
         const drop =
-          isFirst && dropOffs.cancelled > 0 ? { label: "Canceladas", count: dropOffs.cancelled, color: "#94a3b8" } :
+          isFirst && dropOffs.cancelled > 0 ? { label: t("analytics.journeyClient.cancelled"), count: dropOffs.cancelled, color: "#94a3b8" } :
           step.id === "scheduled" || step.id === "arrived" ? null :
           null;
 
         // Drop-off por NO_SHOW se renderea entre "scheduled" y "arrived".
         const noShowDrop = idx === 0 && dropOffs.noShow > 0
-          ? { label: "No-show", count: dropOffs.noShow, color: "#dc2626" }
+          ? { label: t("analytics.journeyClient.noShow"), count: dropOffs.noShow, color: "#dc2626" }
           : null;
 
         return (
@@ -264,7 +264,7 @@ function FunnelView({
                   {step.count.toLocaleString("es-MX")}
                 </div>
                 <div style={{ fontSize: 10, color: "var(--text-3)" }}>
-                  {pct}% del total
+                  {t("analytics.journeyClient.pctOfTotal", { pct })}
                 </div>
               </div>
             </div>

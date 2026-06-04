@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { OverviewClient } from "./overview-client";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
+import { getServerT } from "@/i18n/server";
 
 export const metadata: Metadata = { title: "Analytics — MediFlow" };
 
@@ -14,12 +15,13 @@ export default async function AnalyticsOverviewPage() {
   const user = await getCurrentUser();
   requirePermissionOrRedirect(user, "analytics.view");
   const clinicId = user.clinicId;
+  const { t } = await getServerT();
 
   // Solo admin/owner ven analytics.
   if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
     return (
       <div style={{ padding: 32, textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
-        Solo los administradores tienen acceso a Analytics.
+        {t("analytics.overviewPage.adminOnly")}
       </div>
     );
   }

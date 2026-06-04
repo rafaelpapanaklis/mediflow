@@ -24,6 +24,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { MessageCircle, X } from "lucide-react";
 import { ChatPanel } from "./chat-panel";
+import { useT } from "@/i18n/i18n-provider";
 
 type Tab = "supplier" | "lab";
 
@@ -98,6 +99,7 @@ function TabButton({
 }
 
 export function ChatLauncher() {
+  const t = useT();
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<Tab>("supplier");
@@ -121,10 +123,10 @@ export function ChatLauncher() {
     }
   }, []);
 
-  const selectTab = (t: Tab) => {
-    setTab(t);
+  const selectTab = (next: Tab) => {
+    setTab(next);
     try {
-      window.localStorage.setItem(TAB_STORAGE_KEY, t);
+      window.localStorage.setItem(TAB_STORAGE_KEY, next);
     } catch {
       /* ignore */
     }
@@ -195,7 +197,7 @@ export function ChatLauncher() {
       {open && (
         <div
           role="dialog"
-          aria-label="Mensajes"
+          aria-label={t("inbox.chat.messages")}
           style={{
             position: "fixed",
             right: 24,
@@ -226,12 +228,12 @@ export function ChatLauncher() {
             }}
           >
             <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-1)", letterSpacing: "-0.01em" }}>
-              Mensajes
+              {t("inbox.chat.messages")}
             </span>
             <button
               type="button"
               onClick={() => setOpen(false)}
-              aria-label="Cerrar mensajes"
+              aria-label={t("inbox.chat.closeMessages")}
               style={{
                 display: "grid",
                 placeItems: "center",
@@ -249,9 +251,9 @@ export function ChatLauncher() {
           </header>
 
           {/* Pestañas */}
-          <div role="tablist" aria-label="Tipo de chat" style={{ display: "flex", borderBottom: "1px solid var(--border-soft)" }}>
-            <TabButton active={tab === "supplier"} label="Proveedores" count={supplierCount} onClick={() => selectTab("supplier")} />
-            <TabButton active={tab === "lab"} label="Laboratorios" count={labCount} onClick={() => selectTab("lab")} />
+          <div role="tablist" aria-label={t("inbox.chat.chatType")} style={{ display: "flex", borderBottom: "1px solid var(--border-soft)" }}>
+            <TabButton active={tab === "supplier"} label={t("inbox.chat.suppliersTab")} count={supplierCount} onClick={() => selectTab("supplier")} />
+            <TabButton active={tab === "lab"} label={t("inbox.chat.labsTab")} count={labCount} onClick={() => selectTab("lab")} />
           </div>
 
           {/* Cuerpo — ambos paneles montados; se alterna la visibilidad para
@@ -279,7 +281,7 @@ export function ChatLauncher() {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        aria-label={open ? "Cerrar mensajes" : "Abrir mensajes"}
+        aria-label={open ? t("inbox.chat.closeMessages") : t("inbox.chat.openMessages")}
         aria-expanded={open}
         style={{
           position: "fixed",

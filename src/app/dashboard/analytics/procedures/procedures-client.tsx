@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { TrendingUp, TrendingDown, Minus, Sparkles } from "lucide-react";
 import toast from "react-hot-toast";
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
+import { useT } from "@/i18n/i18n-provider";
 
 interface ProcedureRow {
   type: string;
@@ -22,6 +23,7 @@ interface ApiResponse {
 }
 
 export function ProceduresClient() {
+  const t = useT();
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [aiInsight, setAiInsight] = useState<string | null>(null);
@@ -58,7 +60,7 @@ export function ProceduresClient() {
       const j = await res.json();
       setAiInsight(j.insight ?? "");
     } catch {
-      toast.error("No se pudo generar el insight IA");
+      toast.error(t("analytics.procedures.aiInsightError"));
     } finally {
       setAiLoading(false);
     }
@@ -66,8 +68,8 @@ export function ProceduresClient() {
 
   return (
     <AnalyticsLayout
-      title="Procedimientos"
-      subtitle="Tiempos promedio, benchmark y comparativa entre doctores"
+      title={t("analytics.procedures.title")}
+      subtitle={t("analytics.procedures.subtitle")}
       rightActions={
         data && !data.insufficientData ? (
           <button
@@ -91,20 +93,18 @@ export function ProceduresClient() {
             }}
           >
             <Sparkles size={13} aria-hidden />
-            {aiLoading ? "Analizando…" : "Analizar con IA"}
+            {aiLoading ? t("analytics.procedures.analyzing") : t("analytics.procedures.analyzeWithAi")}
           </button>
         ) : null
       }
     >
       {loading ? (
-        <Box>Cargando…</Box>
+        <Box>{t("common.loading")}</Box>
       ) : !data || data.insufficientData ? (
         <Box>
-          <strong style={{ color: "var(--text-2)" }}>Recolectando datos</strong>
+          <strong style={{ color: "var(--text-2)" }}>{t("analytics.procedures.collectingData")}</strong>
           <div style={{ marginTop: 6, color: "var(--text-3)", fontSize: 13 }}>
-            Llevas {data?.sampleSize ?? 0} citas con tiempo de consulta registrado. Necesitamos
-            al menos 5 citas con check-in y completed (que disparen el AppointmentTimeline)
-            para mostrar tiempos promedio.
+            {t("analytics.procedures.collectingDataDetail", { count: data?.sampleSize ?? 0 })}
           </div>
         </Box>
       ) : (
@@ -142,13 +142,13 @@ export function ProceduresClient() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ background: "var(--bg-elev-2)" }}>
-                  <Th>Procedimiento</Th>
-                  <Th align="right">Realizadas</Th>
-                  <Th align="right">Tiempo prom.</Th>
-                  <Th align="right">Benchmark</Th>
-                  <Th align="right">Variance</Th>
-                  <Th>Más rápido</Th>
-                  <Th>Más lento</Th>
+                  <Th>{t("analytics.procedures.colProcedure")}</Th>
+                  <Th align="right">{t("analytics.procedures.colPerformed")}</Th>
+                  <Th align="right">{t("analytics.procedures.colAvgTime")}</Th>
+                  <Th align="right">{t("analytics.procedures.colBenchmark")}</Th>
+                  <Th align="right">{t("analytics.procedures.colVariance")}</Th>
+                  <Th>{t("analytics.procedures.colFastest")}</Th>
+                  <Th>{t("analytics.procedures.colSlowest")}</Th>
                 </tr>
               </thead>
               <tbody>
@@ -183,7 +183,7 @@ export function ProceduresClient() {
             </table>
           </div>
           <div style={{ marginTop: 10, fontSize: 11, color: "var(--text-3)" }}>
-            Calculado sobre {data.sampleSize} citas con timeline completo (CHECKED_IN → IN_PROGRESS → COMPLETED).
+            {t("analytics.procedures.footerNote", { count: data.sampleSize })}
           </div>
         </>
       )}

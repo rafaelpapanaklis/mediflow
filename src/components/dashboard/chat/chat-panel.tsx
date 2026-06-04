@@ -19,6 +19,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, MessageCircle, Send } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 type Domain = "lab" | "supplier";
 
@@ -44,13 +45,17 @@ const THREADS_POLL_MS = 5000;
 const MESSAGES_POLL_MS = 4000;
 
 // ── Config por dominio (endpoints + cómo leer la contraparte) ────────────
+// Las etiquetas visibles se guardan como CLAVES de traducción y se resuelven
+// con t(...) en tiempo de render (nunca en scope de módulo).
 interface DomainConfig {
   listUrl: string;
   msgUrl: (threadId: string, after?: string | null) => string;
-  nameOf: (t: ChatThread) => string;
-  logoOf: (t: ChatThread) => string | null;
-  counterpartLabel: string;
-  emptyHint: string;
+  /** Nombre dinámico de la contraparte; devuelve null si no hay (usa fallbackNameKey). */
+  rawNameOf: (item: ChatThread) => string | null;
+  logoOf: (item: ChatThread) => string | null;
+  fallbackNameKey: string;
+  counterpartLabelKey: string;
+  emptyHintKey: string;
 }
 
 const CONFIG: Record<Domain, DomainConfig> = {
@@ -58,19 +63,21 @@ const CONFIG: Record<Domain, DomainConfig> = {
     listUrl: "/api/lab-chat",
     msgUrl: (id, after) =>
       `/api/lab-chat/${id}/messages${after ? `?after=${encodeURIComponent(after)}` : ""}`,
-    nameOf: (t) => t.lab?.name ?? "Laboratorio",
-    logoOf: (t) => t.lab?.logoUrl ?? null,
-    counterpartLabel: "Laboratorio",
-    emptyHint: "Abre el chat desde la ficha de un laboratorio.",
+    rawNameOf: (item) => item.lab?.name ?? null,
+    logoOf: (item) => item.lab?.logoUrl ?? null,
+    fallbackNameKey: "inbox.chat.labFallbackName",
+    counterpartLabelKey: "inbox.chat.labCounterpart",
+    emptyHintKey: "inbox.chat.labEmptyHint",
   },
   supplier: {
     listUrl: "/api/supplier-chat",
     msgUrl: (id, after) =>
       `/api/supplier-chat/${id}/messages${after ? `?after=${encodeURIComponent(after)}` : ""}`,
-    nameOf: (t) => t.supplier?.businessName ?? "Proveedor",
-    logoOf: (t) => t.supplier?.logoUrl ?? null,
-    counterpartLabel: "Proveedor",
-    emptyHint: "Abre el chat desde la ficha de un proveedor.",
+    rawNameOf: (item) => item.supplier?.businessName ?? null,
+    logoOf: (item) => item.supplier?.logoUrl ?? null,
+    fallbackNameKey: "inbox.chat.supplierFallbackName",
+    counterpartLabelKey: "inbox.chat.supplierCounterpart",
+    emptyHintKey: "inbox.chat.supplierEmptyHint",
   },
 };
 
@@ -140,7 +147,14 @@ export interface ChatPanelProps {
 }
 
 export function ChatPanel({ domain, active, onUnreadCount }: ChatPanelProps) {
+  const t = useT();
   const cfg = CONFIG[domain];
+
+  // Nombre visible de la contraparte: dato dinámico o fallback traducido.
+  const nameOf = useCallback(
+    (thread: ChatThread) => cfg.rawNameOf(thread) ?? t(cfg.fallbackNameKey),
+    [cfg, t],
+  );
 
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -179,7 +193,7 @@ export function ChatPanel({ domain, active, onUnreadCount }: ChatPanelProps) {
   // Reporta no-leídos hacia arriba (excluye el hilo abierto, igual que la UI).
   useEffect(() => {
     const sum = threads.reduce(
-      (acc, t) => acc + (t.id === selectedId ? 0 : t.clinicUnread || 0),
+      (acc, th) => acc + (th.id === selectedId ? 0 : th.clinicUnread || 0),
       0,
     );
     onUnreadRef.current?.(sum);
@@ -252,7 +266,7 @@ export function ChatPanel({ domain, active, onUnreadCount }: ChatPanelProps) {
       lastMessageIdRef.current = null;
       setError(null);
       // Optimista: limpiar el badge del hilo abierto (baja el no-leído al abrir).
-      setThreads((prev) => prev.map((t) => (t.id === threadId ? { ...t, clinicUnread: 0 } : t)));
+      setThreads((prev) => prev.map((th) => (th.id === threadId ? { ...th, clinicUnread: 0 } : th)));
       fetchMessagesFull(threadId);
     },
     [fetchMessagesFull],
@@ -354,7 +368,7 @@ export function ChatPanel({ domain, active, onUnreadCount }: ChatPanelProps) {
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        setError(d?.error ?? "No se pudo enviar el mensaje.");
+        setError(d?.error ?? t("inbox.chat.sendFailed"));
         return;
       }
       const msg: ChatMessage = await res.json();
@@ -362,7 +376,7 @@ export function ChatPanel({ domain, active, onUnreadCount }: ChatPanelProps) {
       setDraft("");
       // Mover el hilo al tope con el nuevo preview.
       setThreads((prev) => {
-        const target = prev.find((t) => t.id === id);
+        const target = prev.find((th) => th.id === id);
         if (!target) return prev;
         const updated: ChatThread = {
           ...target,
@@ -370,16 +384,16 @@ export function ChatPanel({ domain, active, onUnreadCount }: ChatPanelProps) {
           messages: [msg],
           clinicUnread: 0,
         };
-        return [updated, ...prev.filter((t) => t.id !== id)];
+        return [updated, ...prev.filter((th) => th.id !== id)];
       });
     } catch {
-      setError("No se pudo enviar el mensaje.");
+      setError(t("inbox.chat.sendFailed"));
     } finally {
       setSending(false);
     }
-  }, [draft, sending, cfg]);
+  }, [draft, sending, cfg, t]);
 
-  const selected = threads.find((t) => t.id === selectedId) ?? null;
+  const selected = threads.find((th) => th.id === selectedId) ?? null;
 
   // ════════════════════════════════════════════════════════════════════
   // Render — UNA columna: bandeja O conversación.
@@ -390,7 +404,7 @@ export function ChatPanel({ domain, active, onUnreadCount }: ChatPanelProps) {
         // ── Bandeja ──────────────────────────────────────────────────
         <div className="scrollbar-thin" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
           {loadingThreads && threads.length === 0 ? (
-            <p style={{ padding: 16, fontSize: 13, color: "var(--text-3)" }}>Cargando…</p>
+            <p style={{ padding: 16, fontSize: 13, color: "var(--text-3)" }}>{t("common.loading")}</p>
           ) : threads.length === 0 ? (
             <div
               style={{
@@ -405,20 +419,20 @@ export function ChatPanel({ domain, active, onUnreadCount }: ChatPanelProps) {
               }}
             >
               <MessageCircle size={28} style={{ opacity: 0.4 }} />
-              <span>Aún no tienes conversaciones.</span>
-              <span style={{ fontSize: 12 }}>{cfg.emptyHint}</span>
+              <span>{t("inbox.chat.noConversations")}</span>
+              <span style={{ fontSize: 12 }}>{t(cfg.emptyHintKey)}</span>
             </div>
           ) : (
             <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-              {threads.map((t) => {
-                const unread = t.clinicUnread || 0;
-                const last = t.messages?.[0];
-                const name = cfg.nameOf(t);
+              {threads.map((th) => {
+                const unread = th.clinicUnread || 0;
+                const last = th.messages?.[0];
+                const name = nameOf(th);
                 return (
-                  <li key={t.id}>
+                  <li key={th.id}>
                     <button
                       type="button"
-                      onClick={() => selectThread(t.id)}
+                      onClick={() => selectThread(th.id)}
                       style={{
                         display: "flex",
                         alignItems: "center",
@@ -440,7 +454,7 @@ export function ChatPanel({ domain, active, onUnreadCount }: ChatPanelProps) {
                         e.currentTarget.style.background = "transparent";
                       }}
                     >
-                      <Avatar name={name} logoUrl={cfg.logoOf(t)} />
+                      <Avatar name={name} logoUrl={cfg.logoOf(th)} />
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                           <span
@@ -456,7 +470,7 @@ export function ChatPanel({ domain, active, onUnreadCount }: ChatPanelProps) {
                             {name}
                           </span>
                           <span style={{ flexShrink: 0, fontSize: 11, color: "var(--text-3)" }}>
-                            {fmtThreadTime(t.lastMessageAt)}
+                            {fmtThreadTime(th.lastMessageAt)}
                           </span>
                         </div>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 2 }}>
@@ -469,7 +483,9 @@ export function ChatPanel({ domain, active, onUnreadCount }: ChatPanelProps) {
                               whiteSpace: "nowrap",
                             }}
                           >
-                            {last ? `${last.sender === "CLINIC" ? "Tú: " : ""}${last.body}` : "Sin mensajes aún"}
+                            {last
+                              ? `${last.sender === "CLINIC" ? t("inbox.chat.youPrefix") : ""}${last.body}`
+                              : t("inbox.chat.noMessagesYet")}
                           </span>
                           {unread > 0 && (
                             <span
@@ -516,7 +532,7 @@ export function ChatPanel({ domain, active, onUnreadCount }: ChatPanelProps) {
             <button
               type="button"
               onClick={backToList}
-              aria-label="Volver a la bandeja"
+              aria-label={t("inbox.chat.backToInbox")}
               style={{
                 display: "grid",
                 placeItems: "center",
@@ -538,7 +554,7 @@ export function ChatPanel({ domain, active, onUnreadCount }: ChatPanelProps) {
             >
               <ArrowLeft size={17} />
             </button>
-            <Avatar name={cfg.nameOf(selected)} logoUrl={cfg.logoOf(selected)} size={34} />
+            <Avatar name={nameOf(selected)} logoUrl={cfg.logoOf(selected)} size={34} />
             <div style={{ minWidth: 0 }}>
               <p
                 style={{
@@ -551,9 +567,9 @@ export function ChatPanel({ domain, active, onUnreadCount }: ChatPanelProps) {
                   whiteSpace: "nowrap",
                 }}
               >
-                {cfg.nameOf(selected)}
+                {nameOf(selected)}
               </p>
-              <p style={{ margin: 0, fontSize: 11, color: "var(--text-3)" }}>{cfg.counterpartLabel}</p>
+              <p style={{ margin: 0, fontSize: 11, color: "var(--text-3)" }}>{t(cfg.counterpartLabelKey)}</p>
             </div>
           </header>
 
@@ -571,7 +587,7 @@ export function ChatPanel({ domain, active, onUnreadCount }: ChatPanelProps) {
             }}
           >
             {loadingMessages && messages.length === 0 ? (
-              <p style={{ margin: "auto", fontSize: 13, color: "var(--text-3)" }}>Cargando mensajes…</p>
+              <p style={{ margin: "auto", fontSize: 13, color: "var(--text-3)" }}>{t("inbox.chat.loadingMessages")}</p>
             ) : messages.length === 0 ? (
               <div
                 style={{
@@ -587,7 +603,7 @@ export function ChatPanel({ domain, active, onUnreadCount }: ChatPanelProps) {
                 }}
               >
                 <MessageCircle size={26} style={{ opacity: 0.4 }} />
-                No hay mensajes. Escribe el primero.
+                {t("inbox.chat.noMessagesWriteFirst")}
               </div>
             ) : (
               messages.map((m) => {
@@ -649,7 +665,7 @@ export function ChatPanel({ domain, active, onUnreadCount }: ChatPanelProps) {
                   }
                 }}
                 rows={1}
-                placeholder="Escribe un mensaje…"
+                placeholder={t("inbox.chat.composePlaceholder")}
                 style={{
                   flex: 1,
                   resize: "none",
@@ -668,7 +684,7 @@ export function ChatPanel({ domain, active, onUnreadCount }: ChatPanelProps) {
               <button
                 type="submit"
                 disabled={!draft.trim() || sending}
-                aria-label="Enviar mensaje"
+                aria-label={t("inbox.chat.sendMessage")}
                 style={{
                   display: "grid",
                   placeItems: "center",

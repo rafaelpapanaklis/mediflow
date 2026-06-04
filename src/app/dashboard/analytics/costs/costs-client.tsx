@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Pencil, Sparkles, X, Save, DollarSign, TrendingUp, TrendingDown } from "lucide-react";
 import toast from "react-hot-toast";
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
+import { useT } from "@/i18n/i18n-provider";
 
 interface ResourceRow {
   resourceId: string;
@@ -34,6 +35,7 @@ function currentMonth(): string {
 }
 
 export function CostsClient() {
+  const t = useT();
   const [month, setMonth] = useState(currentMonth());
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,7 +56,7 @@ export function CostsClient() {
       const j = await res.json();
       setData(j as ApiResponse);
     } catch {
-      toast.error("Error al cargar datos");
+      toast.error(t("analytics.costs.loadError"));
     } finally {
       setLoading(false);
     }
@@ -82,7 +84,7 @@ export function CostsClient() {
       const j = await res.json();
       setAiInsight(j.insight ?? "");
     } catch {
-      toast.error("No se pudo generar insight IA");
+      toast.error(t("analytics.costs.aiInsightError"));
     } finally {
       setAiLoading(false);
     }
@@ -90,8 +92,8 @@ export function CostsClient() {
 
   return (
     <AnalyticsLayout
-      title="Costos & Margen"
-      subtitle="Renta + operativos vs ingresos generados, por sillón"
+      title={t("analytics.costs.title")}
+      subtitle={t("analytics.costs.subtitle")}
       rightActions={
         <div style={{ display: "flex", gap: 8 }}>
           <input
@@ -130,16 +132,16 @@ export function CostsClient() {
               }}
             >
               <Sparkles size={13} aria-hidden />
-              {aiLoading ? "Analizando…" : "Analizar con IA"}
+              {aiLoading ? t("analytics.costs.analyzing") : t("analytics.costs.analyzeWithAi")}
             </button>
           )}
         </div>
       }
     >
       {loading ? (
-        <Box>Cargando…</Box>
+        <Box>{t("common.loading")}</Box>
       ) : !data || data.resources.length === 0 ? (
-        <Box>Sin sillones activos en la clínica.</Box>
+        <Box>{t("analytics.costs.noChairs")}</Box>
       ) : (
         <>
           {aiInsight && (
@@ -166,10 +168,10 @@ export function CostsClient() {
 
           {/* Totales */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 14 }}>
-            <TotalCard label="Ingresos" value={fmtMXN(data.totals.revenue)} tone="brand" icon={<DollarSign size={14} aria-hidden />} />
-            <TotalCard label="Costos" value={fmtMXN(data.totals.cost)} tone="warning" icon={<TrendingDown size={14} aria-hidden />} />
+            <TotalCard label={t("analytics.costs.revenue")} value={fmtMXN(data.totals.revenue)} tone="brand" icon={<DollarSign size={14} aria-hidden />} />
+            <TotalCard label={t("analytics.costs.costs")} value={fmtMXN(data.totals.cost)} tone="warning" icon={<TrendingDown size={14} aria-hidden />} />
             <TotalCard
-              label="Margen"
+              label={t("analytics.costs.margin")}
               value={fmtMXN(data.totals.margin)}
               tone={data.totals.margin >= 0 ? "success" : "danger"}
               icon={<TrendingUp size={14} aria-hidden />}
@@ -186,13 +188,13 @@ export function CostsClient() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ background: "var(--bg-elev-2)" }}>
-                  <Th>Sillón</Th>
-                  <Th align="right">Renta</Th>
-                  <Th align="right">Operativos</Th>
-                  <Th align="right">Costo total</Th>
-                  <Th align="right">Ingresos</Th>
-                  <Th align="right">Margen</Th>
-                  <Th align="right">Margen %</Th>
+                  <Th>{t("analytics.costs.colChair")}</Th>
+                  <Th align="right">{t("analytics.costs.colRent")}</Th>
+                  <Th align="right">{t("analytics.costs.colOps")}</Th>
+                  <Th align="right">{t("analytics.costs.colTotalCost")}</Th>
+                  <Th align="right">{t("analytics.costs.revenue")}</Th>
+                  <Th align="right">{t("analytics.costs.margin")}</Th>
+                  <Th align="right">{t("analytics.costs.colMarginPct")}</Th>
                   <Th />
                 </tr>
               </thead>
@@ -209,7 +211,7 @@ export function CostsClient() {
                       <strong style={{ color: "var(--text-1)" }}>{r.name}</strong>
                       {!r.configured && (
                         <span style={{ marginLeft: 8, fontSize: 10, color: "var(--text-4)", fontStyle: "italic" }}>
-                          sin costos
+                          {t("analytics.costs.noCosts")}
                         </span>
                       )}
                     </Td>
@@ -243,8 +245,8 @@ export function CostsClient() {
                       <button
                         type="button"
                         onClick={() => setEditing(r)}
-                        title="Editar costos"
-                        aria-label={`Editar costos de ${r.name}`}
+                        title={t("analytics.costs.editCosts")}
+                        aria-label={t("analytics.costs.editCostsOf", { name: r.name })}
                         style={{
                           width: 28, height: 28, display: "grid", placeItems: "center",
                           background: "transparent", border: "1px solid var(--border-soft)",
@@ -260,9 +262,7 @@ export function CostsClient() {
             </table>
           </div>
           <div style={{ marginTop: 10, fontSize: 11, color: "var(--text-3)", lineHeight: 1.5 }}>
-            Ingresos = SUM(invoice.paid) donde invoice.appointment.resourceId coincide y appointment.startsAt
-            cae en el mes. Margen rojo = pérdida ese mes; considera subir precios, reasignar pacientes
-            o renegociar renta.
+            {t("analytics.costs.footerNote")}
           </div>
         </>
       )}
@@ -290,6 +290,7 @@ function EditCostModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const t = useT();
   const [rent, setRent] = useState(String(resource.monthlyRent || ""));
   const [ops, setOps] = useState(String(resource.monthlyOps || ""));
   const [notes, setNotes] = useState(resource.notes ?? "");
@@ -315,10 +316,10 @@ function EditCostModal({
         }),
       });
       if (!res.ok) throw new Error();
-      toast.success("Costos guardados");
+      toast.success(t("analytics.costs.costsSaved"));
       onSaved();
     } catch {
-      toast.error("Error al guardar");
+      toast.error(t("analytics.costs.saveError"));
     } finally {
       setSaving(false);
     }
@@ -354,9 +355,9 @@ function EditCostModal({
       >
         <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-soft)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h3 id="cost-modal-title" style={{ fontSize: 15, fontWeight: 700, color: "var(--text-1)", margin: 0 }}>
-            Costos de {resource.name}
+            {t("analytics.costs.modalTitle", { name: resource.name })}
           </h3>
-          <button type="button" onClick={onClose} aria-label="Cerrar" style={{
+          <button type="button" onClick={onClose} aria-label={t("common.close")} style={{
             width: 28, height: 28, display: "grid", placeItems: "center",
             background: "transparent", border: "1px solid var(--border-soft)",
             borderRadius: 7, color: "var(--text-3)", cursor: "pointer",
@@ -365,19 +366,19 @@ function EditCostModal({
           </button>
         </div>
         <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
-          <Field label="Renta mensual (MXN)">
+          <Field label={t("analytics.costs.fieldRent")}>
             <input type="number" min={0} step={0.01} value={rent} onChange={(e) => setRent(e.target.value)} className="input-new mono" placeholder="0.00" />
           </Field>
-          <Field label="Operativos mensuales (MXN)" hint="luz, mantenimiento, insumos básicos del sillón">
+          <Field label={t("analytics.costs.fieldOps")} hint={t("analytics.costs.fieldOpsHint")}>
             <input type="number" min={0} step={0.01} value={ops} onChange={(e) => setOps(e.target.value)} className="input-new mono" placeholder="0.00" />
           </Field>
-          <Field label="Notas (opcional)">
+          <Field label={t("analytics.costs.fieldNotes")}>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value.slice(0, 500))}
               className="input-new"
               style={{ minHeight: 64, resize: "vertical" }}
-              placeholder="Ej. Renta compartida con otra clínica, contrato vence en oct…"
+              placeholder={t("analytics.costs.fieldNotesPlaceholder")}
             />
           </Field>
         </div>
@@ -388,7 +389,7 @@ function EditCostModal({
             border: "1px solid var(--border-strong)", borderRadius: 8,
             cursor: "pointer", fontFamily: "inherit",
           }}>
-            Cancelar
+            {t("common.cancel")}
           </button>
           <button type="button" onClick={save} disabled={saving} style={{
             padding: "8px 16px", fontSize: 13, fontWeight: 700,
@@ -398,7 +399,7 @@ function EditCostModal({
             display: "inline-flex", alignItems: "center", gap: 6,
           }}>
             <Save size={13} aria-hidden />
-            {saving ? "Guardando…" : "Guardar"}
+            {saving ? t("analytics.costs.saving") : t("common.save")}
           </button>
         </div>
       </div>

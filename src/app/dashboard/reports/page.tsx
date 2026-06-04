@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ReportsClient } from "./reports-client";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
+import { getServerT } from "@/i18n/server";
 
 export const metadata: Metadata = { title: "Reportes — MediFlow" };
 
@@ -13,6 +14,7 @@ async function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
 }
 
 export default async function ReportsPage() {
+  const { t }     = await getServerT();
   const user      = await getCurrentUser();
   requirePermissionOrRedirect(user, "reports.view");
   const clinicId  = user.clinicId;
@@ -122,7 +124,7 @@ export default async function ReportsPage() {
     const meta = resourceMeta.find((m: any) => m.id === r.resourceId);
     return {
       resourceId: r.resourceId,
-      name: meta?.name ?? "Sin nombre",
+      name: meta?.name ?? t("analytics.reportsPage.unnamedResource"),
       kind: meta?.kind ?? "OTHER",
       count: r._count.id,
     };

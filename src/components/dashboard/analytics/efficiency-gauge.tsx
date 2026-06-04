@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/i18n/i18n-provider";
+
 /**
  * EfficiencyGauge — dial 0-100 con arco coloreado y mensaje motivacional.
  * Score = ((horas activas / horas operativas) * 0.6) + ((slots usados /
@@ -19,7 +21,9 @@ interface Props {
   label?: string;
 }
 
-export function EfficiencyGauge({ score, monthAverage, label = "Eficiencia operativa" }: Props) {
+export function EfficiencyGauge({ score, monthAverage, label }: Props) {
+  const t = useT();
+  const resolvedLabel = label ?? t("analytics.efficiencyGauge.label");
   const safe = Math.max(0, Math.min(100, score));
   const tone = scoreTone(safe);
   const delta = monthAverage != null ? Math.round(safe - monthAverage) : null;
@@ -59,7 +63,7 @@ export function EfficiencyGauge({ score, monthAverage, label = "Eficiencia opera
           alignSelf: "flex-start",
         }}
       >
-        {label}
+        {resolvedLabel}
       </div>
       <div style={{ position: "relative", width: 240, height: 140 }}>
         <svg viewBox="0 0 240 140" style={{ width: "100%", height: "100%" }} aria-hidden>
@@ -106,7 +110,7 @@ export function EfficiencyGauge({ score, monthAverage, label = "Eficiencia opera
               marginTop: 2,
             }}
           >
-            de 100
+            {t("analytics.efficiencyGauge.outOf", { max: 100 })}
           </div>
         </div>
       </div>
@@ -122,7 +126,7 @@ export function EfficiencyGauge({ score, monthAverage, label = "Eficiencia opera
         }}
       >
         <span style={{ color: tone.color, fontSize: 16 }} aria-hidden>{tone.emoji}</span>
-        <span>{motivationalMessage(safe, delta)}</span>
+        <span>{motivationalMessage(t, safe, delta)}</span>
       </div>
     </div>
   );
@@ -135,17 +139,21 @@ function scoreTone(score: number) {
   return { color: "#dc2626", emoji: "🔴" };
 }
 
-function motivationalMessage(score: number, delta: number | null): string {
+function motivationalMessage(
+  t: (key: string, vars?: Record<string, unknown>) => string,
+  score: number,
+  delta: number | null,
+): string {
   if (delta != null && delta >= 5) {
-    return `+${delta} pts arriba del promedio mensual`;
+    return t("analytics.efficiencyGauge.aboveAverage", { delta });
   }
   if (delta != null && delta <= -5) {
-    return `${delta} pts abajo del promedio mensual`;
+    return t("analytics.efficiencyGauge.belowAverage", { delta });
   }
-  if (score >= 85) return "Excelente uso de tu agenda";
-  if (score >= 70) return "Buen ritmo, hay espacio para optimizar";
-  if (score >= 50) return "Hay oportunidades de mejora";
-  return "Capacidad sub-utilizada — revisa la ocupación";
+  if (score >= 85) return t("analytics.efficiencyGauge.msgExcellent");
+  if (score >= 70) return t("analytics.efficiencyGauge.msgGood");
+  if (score >= 50) return t("analytics.efficiencyGauge.msgImprove");
+  return t("analytics.efficiencyGauge.msgUnderused");
 }
 
 function describeArc(cx: number, cy: number, r: number, startDeg: number, endDeg: number): string {

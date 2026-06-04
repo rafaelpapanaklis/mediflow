@@ -5,6 +5,7 @@ import { Clock, AlertTriangle } from "lucide-react";
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
 import { AnalyticsCard } from "@/components/dashboard/analytics/analytics-card";
 import { AnalyticsHeatmap } from "@/components/dashboard/analytics/analytics-heatmap";
+import { useT } from "@/i18n/i18n-provider";
 
 interface HourStat { hour: number; avgMin: number; count: number; longWaits: number }
 interface LongWait {
@@ -26,6 +27,7 @@ interface ApiResponse {
 }
 
 export function WaitingRoomClient() {
+  const t = useT();
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -49,18 +51,16 @@ export function WaitingRoomClient() {
 
   return (
     <AnalyticsLayout
-      title="Sala de espera"
-      subtitle="Tiempos de espera por hora del día + alertas en tiempo real"
+      title={t("analytics.waitingRoom.title")}
+      subtitle={t("analytics.waitingRoom.subtitle")}
     >
       {loading ? (
-        <Box>Cargando…</Box>
+        <Box>{t("common.loading")}</Box>
       ) : !data || data.sampleSize === 0 ? (
         <Box>
-          <strong style={{ color: "var(--text-2)" }}>Sin datos de espera todavía</strong>
+          <strong style={{ color: "var(--text-2)" }}>{t("analytics.waitingRoom.emptyTitle")}</strong>
           <div style={{ marginTop: 6, color: "var(--text-3)", fontSize: 13 }}>
-            Para que aparezcan tiempos de espera, marca check-in del paciente al llegar
-            (status = CHECKED_IN) y luego &quot;En sillón&quot; (IN_CHAIR) cuando lo pasen.
-            El tiempo entre ambos es la espera.
+            {t("analytics.waitingRoom.emptyHint")}
           </div>
         </Box>
       ) : (
@@ -78,7 +78,7 @@ export function WaitingRoomClient() {
             >
               <div style={{ padding: "10px 14px", fontSize: 12, fontWeight: 700, color: "#dc2626", display: "inline-flex", alignItems: "center", gap: 6 }}>
                 <AlertTriangle size={14} aria-hidden />
-                {data.longWaits.length} paciente{data.longWaits.length === 1 ? "" : "s"} esperando &gt;{data.threshold} min
+                {t("analytics.waitingRoom.alertBanner", { count: data.longWaits.length, threshold: data.threshold })}
               </div>
               {data.longWaits.map((w) => (
                 <div key={w.appointmentId} style={{
@@ -100,7 +100,7 @@ export function WaitingRoomClient() {
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{w.patient}</div>
                     <div style={{ fontSize: 11, color: "var(--text-3)" }}>
-                      {w.type} · Dr/a. {w.doctor}
+                      {w.type} · {t("analytics.waitingRoom.doctorPrefix")} {w.doctor}
                     </div>
                   </div>
                 </div>
@@ -111,22 +111,22 @@ export function WaitingRoomClient() {
           {/* KPIs */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 14 }}>
             <AnalyticsCard
-              label="Tiempo promedio"
+              label={t("analytics.waitingRoom.kpiAvgLabel")}
               value={`${data.overallAvg} min`}
-              hint={`${data.sampleSize} citas con datos`}
+              hint={t("analytics.waitingRoom.kpiAvgHint", { count: data.sampleSize })}
               icon={<Clock size={14} aria-hidden />}
               tone={data.overallAvg > data.threshold ? "warning" : "neutral"}
             />
             <AnalyticsCard
-              label="Mediana"
+              label={t("analytics.waitingRoom.kpiMedianLabel")}
               value={`${data.overallMedian} min`}
-              hint="50% espera más, 50% menos"
+              hint={t("analytics.waitingRoom.kpiMedianHint")}
               icon={<Clock size={14} aria-hidden />}
             />
             <AnalyticsCard
-              label="Alertas activas"
+              label={t("analytics.waitingRoom.kpiAlertsLabel")}
               value={String(data.longWaits.length)}
-              hint={`Esperan más de ${data.threshold} min ahora`}
+              hint={t("analytics.waitingRoom.kpiAlertsHint", { threshold: data.threshold })}
               icon={<AlertTriangle size={14} aria-hidden />}
               tone={data.longWaits.length > 0 ? "danger" : "success"}
             />
@@ -135,7 +135,7 @@ export function WaitingRoomClient() {
           {/* Heatmap día × hora */}
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
-              Tiempo de espera promedio (min) por día y hora
+              {t("analytics.waitingRoom.heatmapTitle")}
             </div>
             <AnalyticsHeatmap
               data={data.heatmap.map((row) =>
@@ -150,8 +150,7 @@ export function WaitingRoomClient() {
               hours={data.hours}
             />
             <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 6 }}>
-              Color escalado proporcional al threshold ({data.threshold} min). Hover muestra
-              minutos exactos. Solo aparecen celdas con datos.
+              {t("analytics.waitingRoom.heatmapCaption", { threshold: data.threshold })}
             </div>
           </div>
 
@@ -163,15 +162,15 @@ export function WaitingRoomClient() {
             overflow: "hidden",
           }}>
             <div style={{ padding: "12px 16px", fontSize: 12, fontWeight: 700, color: "var(--text-2)", background: "var(--bg-elev-2)" }}>
-              Por hora del día
+              {t("analytics.waitingRoom.tableTitle")}
             </div>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr>
-                  <Th>Hora</Th>
-                  <Th align="right">Promedio</Th>
-                  <Th align="right">Citas</Th>
-                  <Th align="right">Esperas largas</Th>
+                  <Th>{t("analytics.waitingRoom.colHour")}</Th>
+                  <Th align="right">{t("analytics.waitingRoom.colAvg")}</Th>
+                  <Th align="right">{t("analytics.waitingRoom.colAppts")}</Th>
+                  <Th align="right">{t("analytics.waitingRoom.colLongWaits")}</Th>
                 </tr>
               </thead>
               <tbody>

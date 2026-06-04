@@ -5,13 +5,15 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TREATMENT_KINDS } from "@/lib/agenda/types";
 import { OccupancyClient } from "./occupancy-client";
+import { getServerT } from "@/i18n/server";
 
 export const metadata: Metadata = { title: "Ocupación — Analytics" };
 
 export default async function OccupancyPage() {
   const user = await getCurrentUser();
+  const { t } = await getServerT();
   if (!["SUPER_ADMIN", "ADMIN"].includes(user.role)) {
-    return <div style={{ padding: 32, color: "var(--text-3)" }}>Solo admin.</div>;
+    return <div style={{ padding: 32, color: "var(--text-3)" }}>{t("analytics.occupancyPage.adminOnly")}</div>;
   }
 
   const [resources, doctors] = await Promise.all([

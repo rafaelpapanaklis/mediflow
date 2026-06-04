@@ -7,6 +7,7 @@ import { DollarSign, Users, Calendar as CalendarIcon, Percent, TrendingUp, Trend
 import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { fmtMXN } from "@/lib/format";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Props {
   monthlyData: { label: string; revenue: number; patients: number; appointments: number }[];
@@ -29,9 +30,14 @@ interface Props {
   };
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  PENDING: "Pendiente", CONFIRMED: "Confirmada", COMPLETED: "Completada",
-  CANCELLED: "Cancelada", NO_SHOW: "No asistió", IN_PROGRESS: "En curso",
+// id -> translation key; resolved via t() at render time (never at module scope)
+const STATUS_LABEL_KEYS: Record<string, string> = {
+  PENDING: "analytics.reports.statusPending",
+  CONFIRMED: "analytics.reports.statusConfirmed",
+  COMPLETED: "analytics.reports.statusCompleted",
+  CANCELLED: "analytics.reports.statusCancelled",
+  NO_SHOW: "analytics.reports.statusNoShow",
+  IN_PROGRESS: "analytics.reports.statusInProgress",
 };
 
 const DS_COLORS = ["#7c3aed", "#10b981", "#f59e0b", "#3b82f6", "#ef4444", "#06b6d4"];
@@ -45,6 +51,7 @@ const TOOLTIP_STYLE: React.CSSProperties = {
 const AXIS_TICK = { fontSize: 10, fill: "var(--text-4)" } as any;
 
 export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, clinicStats }: Props) {
+  const t = useT();
   const totalRevenue  = monthlyData.reduce((s, d) => s + d.revenue, 0);
   const totalPatients = monthlyData.reduce((s, d) => s + d.patients, 0);
   const totalAppts    = monthlyData.reduce((s, d) => s + d.appointments, 0);
@@ -53,81 +60,84 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
     ? Math.round(((byStatus.find(s => s.status === "COMPLETED")?._count.id ?? 0) / totalStatus) * 100)
     : 0;
   const avgTicket = totalAppts > 0 ? totalRevenue / totalAppts : 0;
-  const pieData = byStatus.map(s => ({ name: STATUS_LABELS[s.status] ?? s.status, value: s._count.id }));
+  const pieData = byStatus.map(s => ({
+    name: STATUS_LABEL_KEYS[s.status] ? t(STATUS_LABEL_KEYS[s.status]) : s.status,
+    value: s._count.id,
+  }));
 
   return (
     <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
       {/* Header */}
       <div style={{ marginBottom: 22 }}>
         <h1 style={{ fontSize: "clamp(16px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
-          Reportes y estadísticas
+          {t("analytics.reports.pageTitle")}
         </h1>
         <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
-          Últimos 6 meses · Métricas de ingresos, pacientes y citas
+          {t("analytics.reports.pageSubtitle")}
         </p>
       </div>
 
       {/* Resumen actual de la clínica */}
       <div style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)", marginBottom: 10 }}>
-          📊 Resumen actual
+          📊 {t("analytics.reports.currentSummary")}
         </h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginBottom: 10 }}>
           <KpiCard
-            label="Total pacientes"
+            label={t("analytics.reports.kpiTotalPatients")}
             value={patientStats.total.toLocaleString()}
             icon={Users}
-            delta={{ value: `+${patientStats.newThisMonth} este mes`, direction: "up", sub: "" }}
+            delta={{ value: t("analytics.reports.kpiTotalPatientsDelta", { count: patientStats.newThisMonth }), direction: "up", sub: "" }}
           />
           <KpiCard
-            label="Nuevos este mes"
+            label={t("analytics.reports.kpiNewThisMonth")}
             value={patientStats.newThisMonth.toLocaleString()}
             icon={TrendingUp}
             delta={{
               value: patientStats.newPctDelta !== 0
-                ? `${patientStats.newPctDelta > 0 ? "+" : ""}${patientStats.newPctDelta}% vs mes anterior`
-                : "sin cambio",
+                ? t("analytics.reports.kpiNewDelta", { pct: `${patientStats.newPctDelta > 0 ? "+" : ""}${patientStats.newPctDelta}` })
+                : t("analytics.reports.kpiNoChange"),
               direction: patientStats.newPctDelta < 0 ? "down" : "up",
               sub: "",
             }}
           />
           <KpiCard
-            label="Con deuda"
+            label={t("analytics.reports.kpiWithDebt")}
             value={fmtMXN(patientStats.withDebtAmount)}
             icon={AlertCircle}
-            delta={{ value: `${patientStats.withDebt} pacientes`, direction: "down", sub: "" }}
+            delta={{ value: t("analytics.reports.kpiWithDebtDelta", { count: patientStats.withDebt }), direction: "down", sub: "" }}
           />
           <KpiCard
-            label="Proximas citas"
+            label={t("analytics.reports.kpiUpcomingAppts")}
             value={`${patientStats.nextApptsToday} / ${patientStats.nextApptsWeek}`}
             icon={CalendarIcon}
-            delta={{ value: "Hoy / Esta semana", direction: "up", sub: "" }}
+            delta={{ value: t("analytics.reports.kpiUpcomingApptsDelta"), direction: "up", sub: "" }}
           />
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14 }}>
           <KpiCard
-            label="Doctores activos"
+            label={t("analytics.reports.kpiActiveDoctors")}
             value={clinicStats.activeDoctors.toLocaleString()}
             icon={Stethoscope}
           />
           <KpiCard
-            label="Recursos activos"
+            label={t("analytics.reports.kpiActiveResources")}
             value={clinicStats.totalResources.toLocaleString()}
             icon={Building2}
             delta={{
-              value: `${clinicStats.resourcesByKind.length} tipos`,
+              value: t("analytics.reports.kpiActiveResourcesDelta", { count: clinicStats.resourcesByKind.length }),
               direction: "up",
               sub: "",
             }}
           />
           <KpiCard
-            label="Top recurso (30d)"
+            label={t("analytics.reports.kpiTopResource")}
             value={clinicStats.topResources[0]?.name ?? "—"}
             icon={Activity}
             delta={{
               value: clinicStats.topResources[0]
-                ? `${clinicStats.topResources[0].count} citas`
-                : "Sin uso",
+                ? t("analytics.reports.kpiTopResourceDelta", { count: clinicStats.topResources[0].count })
+                : t("analytics.reports.kpiNoUsage"),
               direction: "up",
               sub: "",
             }}
@@ -137,25 +147,25 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
 
       {/* Separator visual */}
       <div style={{ marginBottom: 20, marginTop: 18, fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>
-        📈 Últimos 6 meses
+        📈 {t("analytics.reports.last6Months")}
       </div>
 
       {/* KPIs */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginBottom: 20 }}>
-        <KpiCard label="Ingresos totales" value={fmtMXN(totalRevenue)}  icon={DollarSign} />
-        <KpiCard label="Pacientes nuevos" value={String(totalPatients)} icon={Users} />
-        <KpiCard label="Total citas"      value={String(totalAppts)}    icon={CalendarIcon} />
+        <KpiCard label={t("analytics.reports.kpiTotalRevenue")} value={fmtMXN(totalRevenue)}  icon={DollarSign} />
+        <KpiCard label={t("analytics.reports.kpiNewPatients")} value={String(totalPatients)} icon={Users} />
+        <KpiCard label={t("analytics.reports.kpiTotalAppts")}  value={String(totalAppts)}    icon={CalendarIcon} />
         <KpiCard
-          label="Ticket promedio"
+          label={t("analytics.reports.kpiAvgTicket")}
           value={fmtMXN(avgTicket)}
           icon={Percent}
-          delta={{ value: `${completionRate}% atención`, direction: "up", sub: "" }}
+          delta={{ value: t("analytics.reports.kpiAvgTicketDelta", { pct: completionRate }), direction: "up", sub: "" }}
         />
       </div>
 
       {/* Charts row */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-        <CardNew title="Ingresos mensuales" sub="Últimos 6 meses">
+        <CardNew title={t("analytics.reports.chartRevenueTitle")} sub={t("analytics.reports.chartRevenueSub")}>
           <div style={{ height: 220 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyData} barSize={28} margin={{ top: 4, right: 4, bottom: 0, left: -16 }}>
@@ -166,7 +176,7 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
                 <Tooltip
                   contentStyle={TOOLTIP_STYLE}
                   cursor={{ fill: "rgba(124,58,237,0.08)" }}
-                  formatter={(v: number) => [fmtMXN(v), "Ingresos"]}
+                  formatter={(v: number) => [fmtMXN(v), t("analytics.reports.legendRevenue")]}
                 />
                 <Bar dataKey="revenue" radius={[6, 6, 0, 0]}>
                   {monthlyData.map((_, i) => (
@@ -178,7 +188,7 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
           </div>
         </CardNew>
 
-        <CardNew title="Pacientes y citas" sub="Tendencia mensual">
+        <CardNew title={t("analytics.reports.chartTrendTitle")} sub={t("analytics.reports.chartTrendSub")}>
           <div style={{ height: 220 }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={monthlyData} margin={{ top: 4, right: 4, bottom: 0, left: -16 }}>
@@ -187,8 +197,8 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
                 <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} stroke="var(--text-4)" />
                 <Tooltip contentStyle={TOOLTIP_STYLE} />
                 <Legend wrapperStyle={{ fontSize: 11, color: "var(--text-2)" }} />
-                <Line type="monotone" dataKey="patients"     name="Pacientes nuevos" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="appointments" name="Citas"            stroke="#7c3aed" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="patients"     name={t("analytics.reports.legendNewPatients")} stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="appointments" name={t("analytics.reports.legendAppts")}       stroke="#7c3aed" strokeWidth={2} dot={{ r: 3 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -197,21 +207,21 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
 
       {/* Bottom row */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-        <CardNew title="Tipos de consulta" sub="Más frecuentes" noPad>
+        <CardNew title={t("analytics.reports.consultTypesTitle")} sub={t("analytics.reports.consultTypesSub")} noPad>
           {topTypes.length === 0 ? (
             <div style={{ padding: 32, textAlign: "center", color: "var(--text-3)", fontSize: 12 }}>
-              Sin datos aún
+              {t("analytics.reports.noDataYet")}
             </div>
           ) : (
             <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 14 }}>
-              {topTypes.map((t, i) => {
+              {topTypes.map((item, i) => {
                 const max = topTypes[0]._count.id;
-                const pct = max > 0 ? Math.round((t._count.id / max) * 100) : 0;
+                const pct = max > 0 ? Math.round((item._count.id / max) * 100) : 0;
                 return (
-                  <div key={t.type}>
+                  <div key={item.type}>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
-                      <span style={{ color: "var(--text-1)", fontWeight: 500 }}>{t.type}</span>
-                      <span className="mono" style={{ color: "var(--text-2)", fontWeight: 600 }}>{t._count.id}</span>
+                      <span style={{ color: "var(--text-1)", fontWeight: 500 }}>{item.type}</span>
+                      <span className="mono" style={{ color: "var(--text-2)", fontWeight: 600 }}>{item._count.id}</span>
                     </div>
                     <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
                       <div style={{
@@ -227,10 +237,10 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
           )}
         </CardNew>
 
-        <CardNew title="Estado de citas" sub="Distribución">
+        <CardNew title={t("analytics.reports.apptStatusTitle")} sub={t("analytics.reports.apptStatusSub")}>
           {pieData.length === 0 ? (
             <div style={{ padding: 32, textAlign: "center", color: "var(--text-3)", fontSize: 12 }}>
-              Sin datos aún
+              {t("analytics.reports.noDataYet")}
             </div>
           ) : (
             <div style={{ height: 220 }}>
@@ -249,15 +259,15 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
       </div>
 
       {/* Summary table */}
-      <CardNew title="Resumen mensual" sub="Ingresos, pacientes, citas" noPad>
+      <CardNew title={t("analytics.reports.monthlySummaryTitle")} sub={t("analytics.reports.monthlySummarySub")} noPad>
         <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
         <table className="table-new">
           <thead>
             <tr>
-              <th>Mes</th>
-              <th style={{ textAlign: "right" }}>Ingresos</th>
-              <th style={{ textAlign: "right" }}>Pacientes nuevos</th>
-              <th style={{ textAlign: "right" }}>Citas</th>
+              <th>{t("analytics.reports.colMonth")}</th>
+              <th style={{ textAlign: "right" }}>{t("analytics.reports.colRevenue")}</th>
+              <th style={{ textAlign: "right" }}>{t("analytics.reports.colNewPatients")}</th>
+              <th style={{ textAlign: "right" }}>{t("analytics.reports.colAppts")}</th>
             </tr>
           </thead>
           <tbody>
@@ -278,10 +288,10 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
 
       {/* Uso de recursos / sillones — ultimos 30 dias */}
       <div style={{ marginTop: 14 }}>
-        <CardNew title="Uso de sillones / consultorios" sub="Top 5 — últimos 30 días" noPad>
+        <CardNew title={t("analytics.reports.resourceUsageTitle")} sub={t("analytics.reports.resourceUsageSub")} noPad>
           {clinicStats.topResources.length === 0 ? (
             <div style={{ padding: 32, textAlign: "center", color: "var(--text-3)", fontSize: 12 }}>
-              Sin uso registrado en los últimos 30 días
+              {t("analytics.reports.resourceUsageEmpty")}
             </div>
           ) : (
             <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 14 }}>
@@ -298,7 +308,7 @@ export function ReportsClient({ monthlyData, topTypes, byStatus, patientStats, c
                         </span>
                       </span>
                       <span className="mono" style={{ color: "var(--text-2)", fontWeight: 600 }}>
-                        {r.count} citas
+                        {t("analytics.reports.resourceApptCount", { count: r.count })}
                       </span>
                     </div>
                     <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>

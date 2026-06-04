@@ -9,6 +9,7 @@ import { CardNew }   from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Props {
   connected:     boolean;
@@ -23,6 +24,7 @@ export function WhatsAppClient({
   connected: initConnected, phoneNumberId: initPhone,
   reminderMsg: initMsg, reminder24h: init24h, reminder1h: init1h, clinicName,
 }: Props) {
+  const t = useT();
   const askConfirm = useConfirm();
   const [connected,  setConnected]  = useState(initConnected);
   const [step,       setStep]       = useState<"intro" | "config" | "done">(initConnected ? "done" : "intro");
@@ -36,7 +38,7 @@ export function WhatsAppClient({
   const [savingMsg,  setSavingMsg]  = useState(false);
 
   async function connect() {
-    if (!form.phoneNumberId || !form.accessToken) { toast.error("Completa ambos campos"); return; }
+    if (!form.phoneNumberId || !form.accessToken) { toast.error(t("inbox.whatsapp.fillBothFields")); return; }
     setLoading(true);
     try {
       const res = await fetch("/api/whatsapp/connect", {
@@ -48,24 +50,24 @@ export function WhatsAppClient({
       if (!res.ok) throw new Error(data.error);
       setConnected(true);
       setStep("done");
-      toast.success(`WhatsApp conectado${data.displayName ? ` — ${data.displayName}` : ""}`);
+      toast.success(`${t("inbox.whatsapp.connectedToast")}${data.displayName ? ` — ${data.displayName}` : ""}`);
     } catch (err: any) { toast.error(err.message); } finally { setLoading(false); }
   }
 
   async function disconnect() {
     if (!(await askConfirm({
-      title: "¿Desconectar WhatsApp?",
-      description: "Se desactivarán los recordatorios automáticos. Puedes reconectar en cualquier momento.",
+      title: t("inbox.whatsapp.disconnectConfirmTitle"),
+      description: t("inbox.whatsapp.disconnectConfirmDesc"),
       variant: "warning",
-      confirmText: "Desconectar",
+      confirmText: t("inbox.whatsapp.disconnect"),
     }))) return;
     setLoading(true);
     try {
       await fetch("/api/whatsapp/connect", { method: "DELETE" });
       setConnected(false);
       setStep("intro");
-      toast.success("WhatsApp desconectado");
-    } catch { toast.error("Error"); } finally { setLoading(false); }
+      toast.success(t("inbox.whatsapp.disconnectedToast"));
+    } catch { toast.error(t("common.genericError")); } finally { setLoading(false); }
   }
 
   async function saveSettings() {
@@ -76,8 +78,8 @@ export function WhatsAppClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ waReminderMsg: msg, waReminder24h: r24h, waReminder1h: r1h }),
       });
-      toast.success("Configuración guardada");
-    } catch { toast.error("Error"); } finally { setSavingMsg(false); }
+      toast.success(t("inbox.whatsapp.settingsSavedToast"));
+    } catch { toast.error(t("common.genericError")); } finally { setSavingMsg(false); }
   }
 
   return (
@@ -98,24 +100,24 @@ export function WhatsAppClient({
               WhatsApp Business
             </h1>
             <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
-              Recordatorios automáticos y mensajería con pacientes
+              {t("inbox.whatsapp.subtitle")}
             </p>
           </div>
         </div>
         <BadgeNew tone={connected ? "success" : "danger"} dot>
-          {connected ? "Conectado" : "Desconectado"}
+          {connected ? t("inbox.whatsapp.connected") : t("inbox.whatsapp.disconnected")}
         </BadgeNew>
       </div>
 
       {/* INTRO */}
       {step === "intro" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 720 }}>
-          <CardNew title="¿Cómo funciona?" sub="Conexión con Meta WhatsApp Business Cloud API">
+          <CardNew title={t("inbox.whatsapp.howItWorksTitle")} sub={t("inbox.whatsapp.howItWorksSub")}>
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {[
-                { n: "1", t: "Crea una cuenta en Meta for Developers", d: "Necesitas una cuenta de Facebook Business y configurar la API de WhatsApp Cloud." },
-                { n: "2", t: "Obtén tu Phone Number ID y Access Token", d: "En tu aplicación de Meta, ve a WhatsApp → Configuration y copia ambos valores." },
-                { n: "3", t: "Conéctalo aquí", d: "Pega los valores abajo y MediFlow enviará recordatorios automáticos." },
+                { n: "1", titleKey: "inbox.whatsapp.step1Title", descKey: "inbox.whatsapp.step1Desc" },
+                { n: "2", titleKey: "inbox.whatsapp.step2Title", descKey: "inbox.whatsapp.step2Desc" },
+                { n: "3", titleKey: "inbox.whatsapp.step3Title", descKey: "inbox.whatsapp.step3Desc" },
               ].map(s => (
                 <div key={s.n} style={{ display: "flex", gap: 12 }}>
                   <div style={{
@@ -127,8 +129,8 @@ export function WhatsAppClient({
                     {s.n}
                   </div>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{s.t}</div>
-                    <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>{s.d}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{t(s.titleKey)}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>{t(s.descKey)}</div>
                   </div>
                 </div>
               ))}
@@ -138,7 +140,7 @@ export function WhatsAppClient({
               target="_blank" rel="noopener noreferrer"
               style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 14, fontSize: 11, fontWeight: 600, color: "#c4b5fd", textDecoration: "none" }}
             >
-              Ver guía oficial de Meta <ExternalLink size={12} />
+              {t("inbox.whatsapp.viewMetaGuide")} <ExternalLink size={12} />
             </a>
           </CardNew>
 
@@ -150,11 +152,11 @@ export function WhatsAppClient({
             fontSize: 12,
             color: "#fcd34d",
           }}>
-            <strong>Requisitos:</strong> Número de teléfono dedicado para WhatsApp Business (no puede ser tu número personal si ya lo usas). Meta otorga 1,000 conversaciones gratis al mes.
+            <strong>{t("inbox.whatsapp.requirementsLabel")}</strong> {t("inbox.whatsapp.requirementsBody")}
           </div>
 
           <ButtonNew variant="primary" onClick={() => setStep("config")}>
-            Configurar WhatsApp →
+            {t("inbox.whatsapp.configureCta")}
           </ButtonNew>
         </div>
       )}
@@ -162,7 +164,7 @@ export function WhatsAppClient({
       {/* CONFIG */}
       {step === "config" && (
         <div style={{ maxWidth: 720 }}>
-          <CardNew title="Conectar WhatsApp Business API">
+          <CardNew title={t("inbox.whatsapp.connectCardTitle")}>
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div className="field-new">
                 <label className="field-new__label">Phone Number ID <span className="req">*</span></label>
@@ -177,7 +179,7 @@ export function WhatsAppClient({
                   }}
                 />
                 <p style={{ fontSize: 10, color: "var(--text-4)" }}>
-                  Meta → Tu app → WhatsApp → Configuration → Phone Number ID
+                  {t("inbox.whatsapp.phoneIdHint")}
                 </p>
               </div>
 
@@ -203,7 +205,7 @@ export function WhatsAppClient({
                   </button>
                 </div>
                 <p style={{ fontSize: 10, color: "var(--text-4)" }}>
-                  Meta → Tu app → WhatsApp → Configuration → Temporary Access Token
+                  {t("inbox.whatsapp.accessTokenHint")}
                 </p>
               </div>
 
@@ -213,13 +215,13 @@ export function WhatsAppClient({
                 borderRadius: 8, padding: 12,
                 fontSize: 11, color: "#93c5fd",
               }}>
-                <strong>Nota:</strong> El Access Token temporal expira en 24h. Para producción, genera un token permanente siguiendo la guía de Meta.
+                <strong>{t("inbox.whatsapp.noteLabel")}</strong> {t("inbox.whatsapp.tokenNote")}
               </div>
 
               <div style={{ display: "flex", gap: 8 }}>
-                <ButtonNew variant="ghost" onClick={() => setStep("intro")}>← Atrás</ButtonNew>
+                <ButtonNew variant="ghost" onClick={() => setStep("intro")}>{t("inbox.whatsapp.back")}</ButtonNew>
                 <ButtonNew variant="primary" onClick={connect} disabled={loading}>
-                  {loading ? "Verificando…" : "Conectar WhatsApp"}
+                  {loading ? t("inbox.whatsapp.verifying") : t("inbox.whatsapp.connectButton")}
                 </ButtonNew>
               </div>
             </div>
@@ -231,11 +233,11 @@ export function WhatsAppClient({
       {step === "done" && (
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 14, maxWidth: 1200 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <CardNew title="Cuándo enviar recordatorios" sub="Automático al crear una cita">
+            <CardNew title={t("inbox.whatsapp.whenToSendTitle")} sub={t("inbox.whatsapp.whenToSendSub")}>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {([
-                  { key: "24h", label: "24 horas antes de la cita", desc: "El recordatorio principal — muy recomendado", val: r24h, set: setR24h },
-                  { key: "1h",  label: "1 hora antes de la cita",   desc: "Recordatorio de último momento",             val: r1h,  set: setR1h  },
+                  { key: "24h", labelKey: "inbox.whatsapp.reminder24hLabel", descKey: "inbox.whatsapp.reminder24hDesc", val: r24h, set: setR24h },
+                  { key: "1h",  labelKey: "inbox.whatsapp.reminder1hLabel",  descKey: "inbox.whatsapp.reminder1hDesc",  val: r1h,  set: setR1h  },
                 ] as const).map(opt => (
                   <div
                     key={opt.key}
@@ -252,15 +254,15 @@ export function WhatsAppClient({
                   >
                     <button
                       type="button"
-                      aria-label={opt.label}
+                      aria-label={t(opt.labelKey)}
                       onClick={() => opt.set(!opt.val)}
                       className={`switch ${opt.val ? "switch--on" : ""}`}
                     >
                       <span className="switch__thumb" />
                     </button>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-1)" }}>{opt.label}</div>
-                      <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>{opt.desc}</div>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-1)" }}>{t(opt.labelKey)}</div>
+                      <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>{t(opt.descKey)}</div>
                     </div>
                   </div>
                 ))}
@@ -268,8 +270,8 @@ export function WhatsAppClient({
             </CardNew>
 
             <CardNew
-              title="Mensaje del recordatorio"
-              sub="Variables: {nombre}, {fecha}, {hora}, {doctor}"
+              title={t("inbox.whatsapp.reminderMessageTitle")}
+              sub={t("inbox.whatsapp.reminderMessageVars")}
             >
               <textarea
                 className="input-new"
@@ -286,7 +288,7 @@ export function WhatsAppClient({
                   cursor: "pointer", textDecoration: "underline",
                 }}
               >
-                Restablecer mensaje por defecto
+                {t("inbox.whatsapp.resetDefaultMessage")}
               </button>
 
               <div style={{
@@ -297,7 +299,7 @@ export function WhatsAppClient({
                 padding: 12,
               }}>
                 <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
-                  Vista previa
+                  {t("inbox.whatsapp.preview")}
                 </div>
                 <div style={{
                   background: "var(--success)",
@@ -312,7 +314,7 @@ export function WhatsAppClient({
                 }}>
                   {msg
                     .replace("{nombre}", "María")
-                    .replace("{fecha}", "lunes 28 de abril")
+                    .replace("{fecha}", t("inbox.whatsapp.previewSampleDate"))
                     .replace("{hora}", "10:00")
                     .replace("{doctor}", "García")}
                 </div>
@@ -320,21 +322,21 @@ export function WhatsAppClient({
 
               <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
                 <ButtonNew variant="primary" onClick={saveSettings} disabled={savingMsg}>
-                  {savingMsg ? "Guardando…" : "Guardar configuración"}
+                  {savingMsg ? t("inbox.whatsapp.saving") : t("inbox.whatsapp.saveSettings")}
                 </ButtonNew>
                 <ButtonNew variant="danger" onClick={disconnect} disabled={loading}>
-                  Desconectar
+                  {t("inbox.whatsapp.disconnect")}
                 </ButtonNew>
               </div>
             </CardNew>
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <CardNew title="Estado" sub="Conexión WhatsApp">
+            <CardNew title={t("common.status")} sub={t("inbox.whatsapp.statusSub")}>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <CheckCircle size={14} style={{ color: "var(--success)" }} />
-                  <span style={{ fontSize: 12, color: "var(--text-1)" }}>Webhook recibiendo eventos</span>
+                  <span style={{ fontSize: 12, color: "var(--text-1)" }}>{t("inbox.whatsapp.webhookReceiving")}</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <CheckCircle size={14} style={{ color: "var(--success)" }} />
@@ -345,10 +347,10 @@ export function WhatsAppClient({
               </div>
             </CardNew>
 
-            <CardNew title="¿Cómo se envían?" sub="Envíos automáticos y manuales">
+            <CardNew title={t("inbox.whatsapp.howSentTitle")} sub={t("inbox.whatsapp.howSentSub")}>
               <div style={{ fontSize: 12, color: "var(--text-2)", lineHeight: 1.55 }}>
-                Los recordatorios se envían automáticamente cuando agendas una cita. También puedes enviar uno manualmente desde la
-                <strong style={{ color: "var(--text-1)" }}> Agenda</strong> haciendo clic en el ícono de WhatsApp junto a cada cita.
+                {t("inbox.whatsapp.howSentBodyBefore")}
+                <strong style={{ color: "var(--text-1)" }}> {t("inbox.whatsapp.howSentAgenda")}</strong> {t("inbox.whatsapp.howSentBodyAfter")}
               </div>
             </CardNew>
           </div>

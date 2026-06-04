@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Lightbulb } from "lucide-react";
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
 import { AnalyticsHeatmap, type HeatmapCell } from "@/components/dashboard/analytics/analytics-heatmap";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Resource { id: string; name: string }
 interface Doctor { id: string; firstName: string; lastName: string }
@@ -25,12 +26,13 @@ interface OccupancyData {
 }
 
 const PRESETS = [
-  { id: "7d",  label: "7 días",  days: 7  },
-  { id: "30d", label: "30 días", days: 30 },
-  { id: "90d", label: "90 días", days: 90 },
+  { id: "7d",  labelKey: "analytics.occupancy.preset7d",  days: 7  },
+  { id: "30d", labelKey: "analytics.occupancy.preset30d", days: 30 },
+  { id: "90d", labelKey: "analytics.occupancy.preset90d", days: 90 },
 ];
 
 export function OccupancyClient({ resources, doctors }: Props) {
+  const t = useT();
   const [preset, setPreset] = useState("30d");
   const [resourceId, setResourceId] = useState<string>("");
   const [doctorId, setDoctorId] = useState<string>("");
@@ -58,8 +60,8 @@ export function OccupancyClient({ resources, doctors }: Props) {
 
   return (
     <AnalyticsLayout
-      title="Ocupación"
-      subtitle="Heatmap de uso por día de la semana y hora"
+      title={t("analytics.occupancy.title")}
+      subtitle={t("analytics.occupancy.subtitle")}
       rightActions={
         <div style={{ display: "flex", gap: 6 }}>
           {PRESETS.map((p) => (
@@ -79,7 +81,7 @@ export function OccupancyClient({ resources, doctors }: Props) {
                 fontFamily: "inherit",
               }}
             >
-              {p.label}
+              {t(p.labelKey)}
             </button>
           ))}
         </div>
@@ -95,17 +97,17 @@ export function OccupancyClient({ resources, doctors }: Props) {
         }}
       >
         <FilterSelect
-          label="Sillón"
+          label={t("analytics.occupancy.chairFilter")}
           value={resourceId}
           onChange={setResourceId}
-          options={[{ id: "", label: "Todos" }, ...resources.map((r) => ({ id: r.id, label: r.name }))]}
+          options={[{ id: "", label: t("common.all") }, ...resources.map((r) => ({ id: r.id, label: r.name }))]}
         />
         <FilterSelect
-          label="Doctor"
+          label={t("analytics.occupancy.doctorFilter")}
           value={doctorId}
           onChange={setDoctorId}
           options={[
-            { id: "", label: "Todos" },
+            { id: "", label: t("common.all") },
             ...doctors.map((d) => ({ id: d.id, label: `${d.firstName} ${d.lastName}` })),
           ]}
         />
@@ -123,7 +125,7 @@ export function OccupancyClient({ resources, doctors }: Props) {
             fontSize: 13,
           }}
         >
-          Calculando heatmap…
+          {t("analytics.occupancy.calculatingHeatmap")}
         </div>
       ) : !data ? (
         <div
@@ -137,15 +139,15 @@ export function OccupancyClient({ resources, doctors }: Props) {
             fontSize: 13,
           }}
         >
-          Sin datos suficientes en el rango seleccionado.
+          {t("analytics.occupancy.noData")}
         </div>
       ) : (
         <>
           <AnalyticsHeatmap data={data.heatmap} hours={data.hours} />
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 14 }}>
-            <Stat label="Citas en el rango" value={data.insights.totalAppts.toLocaleString("es-MX")} />
-            <Stat label="Sillones activos" value={String(data.totalChairs)} />
+            <Stat label={t("analytics.occupancy.apptsInRange")} value={data.insights.totalAppts.toLocaleString("es-MX")} />
+            <Stat label={t("analytics.occupancy.activeChairs")} value={String(data.totalChairs)} />
           </div>
 
           {data.insights.leastUsedResource && (
@@ -168,8 +170,7 @@ export function OccupancyClient({ resources, doctors }: Props) {
               </div>
               <div>
                 <strong style={{ color: "var(--text-1)" }}>{data.insights.leastUsedResource.name}</strong>{" "}
-                solo recibe el {data.insights.leastUsedResource.pct}% de las citas.
-                Considera reasignar pacientes o reducir el horario de ese sillón.
+                {t("analytics.occupancy.leastUsedHint", { pct: data.insights.leastUsedResource.pct })}
               </div>
             </div>
           )}

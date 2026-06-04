@@ -5,6 +5,7 @@ import { AlertCircle, Sparkles, RefreshCw } from "lucide-react";
 import toast from "react-hot-toast";
 import { AnalyticsLayout } from "@/components/dashboard/analytics/analytics-layout";
 import { AnalyticsCard } from "@/components/dashboard/analytics/analytics-card";
+import { useT } from "@/i18n/i18n-provider";
 
 interface DayStat { dayIdx: number; count: number; total: number; rate: number }
 interface HourStat { hour: number; count: number; total: number; rate: number }
@@ -28,9 +29,18 @@ interface ApiResponse {
   upcomingHighRisk: UpcomingRisk[];
 }
 
-const DAYS_ES = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
+const DAY_KEYS = [
+  "analytics.noShows.dayMon",
+  "analytics.noShows.dayTue",
+  "analytics.noShows.dayWed",
+  "analytics.noShows.dayThu",
+  "analytics.noShows.dayFri",
+  "analytics.noShows.daySat",
+  "analytics.noShows.daySun",
+];
 
 export function NoShowsClient() {
+  const t = useT();
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [aiInsight, setAiInsight] = useState<string | null>(null);
@@ -62,14 +72,14 @@ export function NoShowsClient() {
             worstHour: [...data.byHour].sort((a, b) => b.rate - a.rate)[0],
             topPatients: data.topPatients.slice(0, 3),
           },
-          question: "Identifica el patrón de no-shows más anómalo y sugiere 1-2 acciones (ej. recordatorios extra, deposit, cambio de slots).",
+          question: t("analytics.noShows.aiQuestion"),
         }),
       });
       if (!res.ok) throw new Error();
       const j = await res.json();
       setAiInsight(j.insight ?? "");
     } catch {
-      toast.error("No se pudo generar el insight IA");
+      toast.error(t("analytics.noShows.aiError"));
     } finally {
       setAiLoading(false);
     }
@@ -84,12 +94,12 @@ export function NoShowsClient() {
         body: JSON.stringify({ appointmentId }),
       });
       if (!res.ok) throw new Error();
-      toast.success("Predicción actualizada");
+      toast.success(t("analytics.noShows.predictionUpdated"));
       // Refetch list
       const list = await fetch("/api/analytics/no-shows");
       if (list.ok) setData(await list.json());
     } catch {
-      toast.error("Error al actualizar predicción");
+      toast.error(t("analytics.noShows.predictionError"));
     } finally {
       setRefreshingPredId(null);
     }
@@ -97,8 +107,8 @@ export function NoShowsClient() {
 
   return (
     <AnalyticsLayout
-      title="No-shows"
-      subtitle="Análisis histórico + predicción IA para citas futuras"
+      title={t("analytics.noShows.title")}
+      subtitle={t("analytics.noShows.subtitle")}
       rightActions={
         data && data.total > 0 ? (
           <button
@@ -122,15 +132,15 @@ export function NoShowsClient() {
             }}
           >
             <Sparkles size={13} aria-hidden />
-            {aiLoading ? "Analizando…" : "Analizar con IA"}
+            {aiLoading ? t("analytics.noShows.analyzing") : t("analytics.noShows.analyzeWithAi")}
           </button>
         ) : null
       }
     >
       {loading ? (
-        <Box>Cargando…</Box>
+        <Box>{t("common.loading")}</Box>
       ) : !data || data.total === 0 ? (
-        <Box>Sin citas en el rango.</Box>
+        <Box>{t("analytics.noShows.noAppointments")}</Box>
       ) : (
         <>
           {aiInsight && (
@@ -157,32 +167,32 @@ export function NoShowsClient() {
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 14 }}>
             <AnalyticsCard
-              label="Tasa de no-shows"
+              label={t("analytics.noShows.rateLabel")}
               value={`${data.rate}%`}
-              hint={`${data.noShowCount} de ${data.total}`}
+              hint={t("analytics.noShows.rateHint", { count: data.noShowCount, total: data.total })}
               icon={<AlertCircle size={14} aria-hidden />}
               tone={data.rate > 10 ? "danger" : data.rate > 5 ? "warning" : "success"}
             />
             <AnalyticsCard
-              label="Día más problemático"
+              label={t("analytics.noShows.worstDayLabel")}
               value={(() => {
                 const worst = [...data.byDayOfWeek].sort((a, b) => b.rate - a.rate)[0];
-                return worst && worst.total > 0 ? DAYS_ES[worst.dayIdx]! : "—";
+                return worst && worst.total > 0 ? t(DAY_KEYS[worst.dayIdx]!) : "—";
               })()}
               hint={(() => {
                 const worst = [...data.byDayOfWeek].sort((a, b) => b.rate - a.rate)[0];
-                return worst ? `${worst.rate}% (${worst.count} no-shows)` : "";
+                return worst ? t("analytics.noShows.worstHint", { rate: worst.rate, count: worst.count }) : "";
               })()}
             />
             <AnalyticsCard
-              label="Hora más problemática"
+              label={t("analytics.noShows.worstHourLabel")}
               value={(() => {
                 const worst = [...data.byHour].sort((a, b) => b.rate - a.rate)[0];
                 return worst && worst.total > 0 ? `${worst.hour}:00` : "—";
               })()}
               hint={(() => {
                 const worst = [...data.byHour].sort((a, b) => b.rate - a.rate)[0];
-                return worst ? `${worst.rate}% (${worst.count} no-shows)` : "";
+                return worst ? t("analytics.noShows.worstHint", { rate: worst.rate, count: worst.count }) : "";
               })()}
             />
           </div>
@@ -204,7 +214,7 @@ export function NoShowsClient() {
                 color: "var(--text-2)",
                 background: "var(--bg-elev-2)",
               }}>
-                Próximas citas con alto riesgo (≥60%)
+                {t("analytics.noShows.upcomingHighRisk")}
               </div>
               {data.upcomingHighRisk.map((u) => (
                 <div key={u.appointmentId} style={{
@@ -226,7 +236,7 @@ export function NoShowsClient() {
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{u.patient}</div>
                     <div style={{ fontSize: 11, color: "var(--text-3)" }}>
-                      {new Date(u.startsAt).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" })} · {u.type} · Dr/a. {u.doctor}
+                      {new Date(u.startsAt).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" })} · {u.type} · {t("analytics.noShows.doctorPrefix")} {u.doctor}
                     </div>
                     {u.factors.slice(0, 2).map((f, i) => (
                       <div key={i} style={{ fontSize: 11, color: "var(--text-2)", marginTop: 2 }}>
@@ -252,10 +262,10 @@ export function NoShowsClient() {
                       alignItems: "center",
                       gap: 4,
                     }}
-                    title="Recalcular con IA"
+                    title={t("analytics.noShows.recalculateWithAi")}
                   >
                     <RefreshCw size={11} aria-hidden style={{ animation: refreshingPredId === u.appointmentId ? "spin 0.8s linear infinite" : undefined }} />
-                    {refreshingPredId === u.appointmentId ? "…" : "Refresh"}
+                    {refreshingPredId === u.appointmentId ? "…" : t("analytics.noShows.refresh")}
                   </button>
                 </div>
               ))}
@@ -272,7 +282,7 @@ export function NoShowsClient() {
               overflow: "hidden",
             }}>
               <div style={{ padding: "12px 16px", fontSize: 12, fontWeight: 700, color: "var(--text-2)", background: "var(--bg-elev-2)", borderBottom: "1px solid var(--border-soft)" }}>
-                Pacientes con más no-shows en el rango
+                {t("analytics.noShows.topPatientsTitle")}
               </div>
               {data.topPatients.map((p) => (
                 <div key={p.id} style={{
@@ -285,7 +295,7 @@ export function NoShowsClient() {
                 }}>
                   <span style={{ color: "var(--text-1)" }}>{p.name}</span>
                   <span style={{ color: "#dc2626", fontWeight: 600, fontFamily: "var(--font-mono, monospace)" }}>
-                    {p.count} no-show{p.count === 1 ? "" : "s"}
+                    {t("analytics.noShows.noShowCount", { count: p.count })}
                   </span>
                 </div>
               ))}
