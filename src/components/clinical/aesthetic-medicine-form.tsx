@@ -5,39 +5,49 @@ import { CardNew }   from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { FaceInjectionMap, BeforeAfterGallery, RecurringCalendar } from "@/components/clinical/shared";
+import { useT } from "@/i18n/i18n-provider";
 
 const PROCEDURES = ["botox", "fillers", "PRP", "mesoterapia", "peeling", "hilos tensores", "láser"] as const;
 const FITZPATRICK = ["I", "II", "III", "IV", "V", "VI"] as const;
-const FACIAL_ZONES = ["frente", "entrecejo", "patas de gallo", "nasogeniano", "labios", "mentón", "pómulos", "mandíbula"] as const;
+const FACIAL_ZONES: { value: string; labelKey: string }[] = [
+  { value: "frente",          labelKey: "clinical.aestheticForm.faceZoneForehead" },
+  { value: "entrecejo",       labelKey: "clinical.aestheticForm.faceZoneGlabella" },
+  { value: "patas de gallo",  labelKey: "clinical.aestheticForm.faceZoneCrowsFeet" },
+  { value: "nasogeniano",     labelKey: "clinical.aestheticForm.faceZoneNasolabial" },
+  { value: "labios",          labelKey: "clinical.aestheticForm.faceZoneLips" },
+  { value: "mentón",          labelKey: "clinical.aestheticForm.faceZoneChin" },
+  { value: "pómulos",         labelKey: "clinical.aestheticForm.faceZoneCheekbones" },
+  { value: "mandíbula",       labelKey: "clinical.aestheticForm.faceZoneJaw" },
+];
 
-const CONTRAINDICATIONS = [
-  "Embarazo o lactancia",
-  "Anticoagulantes activos",
-  "Isotretinoína (últimos 6 meses)",
-  "Enfermedad autoinmune activa",
-  "Tendencia a queloides",
-  "Infección activa en zona",
-  "Alergia conocida a ácido hialurónico",
-  "Herpes activo (zona perioral)",
-] as const;
+const CONTRAINDICATIONS: { value: string; labelKey: string }[] = [
+  { value: "Embarazo o lactancia",                    labelKey: "clinical.aestheticForm.contraPregnancy" },
+  { value: "Anticoagulantes activos",                 labelKey: "clinical.aestheticForm.contraAnticoagulants" },
+  { value: "Isotretinoína (últimos 6 meses)",         labelKey: "clinical.aestheticForm.contraIsotretinoin" },
+  { value: "Enfermedad autoinmune activa",            labelKey: "clinical.aestheticForm.contraAutoimmune" },
+  { value: "Tendencia a queloides",                   labelKey: "clinical.aestheticForm.contraKeloids" },
+  { value: "Infección activa en zona",                labelKey: "clinical.aestheticForm.contraInfection" },
+  { value: "Alergia conocida a ácido hialurónico",    labelKey: "clinical.aestheticForm.contraHaAllergy" },
+  { value: "Herpes activo (zona perioral)",           labelKey: "clinical.aestheticForm.contraHerpes" },
+];
 
 const ZONE_MAP = [
-  { key: "frente",            label: "Frente" },
-  { key: "glabela",           label: "Glabela (entrecejo)" },
-  { key: "patasDeGallo",      label: "Patas de gallo" },
-  { key: "surcoNasogeniano",  label: "Surco nasogeniano" },
-  { key: "labios",            label: "Labios" },
-  { key: "menton",            label: "Mentón" },
-  { key: "pomulos",           label: "Pómulos" },
-  { key: "lineaMandibular",   label: "Línea mandibular" },
+  { key: "frente",            labelKey: "clinical.aestheticForm.zoneForehead" },
+  { key: "glabela",           labelKey: "clinical.aestheticForm.zoneGlabella" },
+  { key: "patasDeGallo",      labelKey: "clinical.aestheticForm.zoneCrowsFeet" },
+  { key: "surcoNasogeniano",  labelKey: "clinical.aestheticForm.zoneNasolabialFold" },
+  { key: "labios",            labelKey: "clinical.aestheticForm.zoneLips" },
+  { key: "menton",            labelKey: "clinical.aestheticForm.zoneChin" },
+  { key: "pomulos",           labelKey: "clinical.aestheticForm.zoneCheekbones" },
+  { key: "lineaMandibular",   labelKey: "clinical.aestheticForm.zoneJawline" },
 ] as const;
 
 const GAIS_OPTIONS = [
-  { label: "Muy mejorado", value: 3 },
-  { label: "Mejorado",     value: 2 },
-  { label: "Sin cambio",   value: 1 },
-  { label: "Peor",         value: 0 },
-  { label: "Mucho peor",   value: -1 },
+  { labelKey: "clinical.aestheticForm.gaisMuchImproved",  value: 3 },
+  { labelKey: "clinical.aestheticForm.gaisImproved",      value: 2 },
+  { labelKey: "clinical.aestheticForm.gaisNoChange",      value: 1 },
+  { labelKey: "clinical.aestheticForm.gaisWorse",         value: 0 },
+  { labelKey: "clinical.aestheticForm.gaisMuchWorse",     value: -1 },
 ] as const;
 
 interface ZoneEntry { product: string; units: string }
@@ -45,6 +55,7 @@ interface ZoneEntry { product: string; units: string }
 interface Props { patientId: string; onSaved: (record: any) => void }
 
 export function AestheticMedicineForm({ patientId, onSaved }: Props) {
+  const t = useT();
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     subjective: "",
@@ -116,18 +127,18 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
         id: p.id,
         url: p.url,
         date: p.takenAt ? new Date(p.takenAt).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" }) : "",
-        label: p.angle || p.category || "Foto",
+        label: p.angle || p.category || t("clinical.aestheticForm.photoFallback"),
       })),
-    [beforeAfter]
+    [beforeAfter, t]
   );
   const upcomingItems = useMemo(() =>
     upcoming.map(a => ({
       date: a.date,
-      title: a.type || "Sesión",
-      category: a.mode === "TELECONSULTATION" ? "Teleconsulta" : "Presencial",
+      title: a.type || t("clinical.aestheticForm.sessionFallback"),
+      category: a.mode === "TELECONSULTATION" ? t("clinical.aestheticForm.teleconsult") : t("clinical.aestheticForm.inPerson"),
       color: "#a78bfa",
     })),
-    [upcoming]
+    [upcoming, t]
   );
   const injectionPoints = useMemo(() => {
     const proc = (form.procedimiento || "").toLowerCase();
@@ -160,7 +171,7 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
   }
 
   async function handleSave() {
-    if (!form.subjective && !form.assessment) { toast.error("Agrega al menos el motivo de consulta o diagnóstico"); return; }
+    if (!form.subjective && !form.assessment) { toast.error(t("clinical.aestheticForm.errReasonOrDiagnosis")); return; }
     setSaving(true);
     try {
       const res = await fetch("/api/clinical", {
@@ -183,8 +194,8 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
       if (!res.ok) throw new Error((await res.json()).error);
       const record = await res.json();
       onSaved(record);
-      toast.success("Expediente de medicina estética guardado");
-    } catch (err: any) { toast.error(err.message ?? "Error al guardar"); } finally { setSaving(false); }
+      toast.success(t("clinical.aestheticForm.saved"));
+    } catch (err: any) { toast.error(err.message ?? t("clinical.aestheticForm.errSave")); } finally { setSaving(false); }
   }
 
   // Tag button compartido para zonas faciales / contraindicaciones
@@ -198,24 +209,24 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {/* Motivo + exploración */}
-      <CardNew title="Motivo de consulta y exploración">
+      <CardNew title={t("clinical.aestheticForm.reasonExamTitle")}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
           <div className="field-new">
-            <label className="field-new__label">Motivo de consulta / HEA</label>
+            <label className="field-new__label">{t("clinical.aestheticForm.reasonLabel")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
-              placeholder="¿Por qué viene el paciente hoy?"
+              placeholder={t("clinical.aestheticForm.reasonPlaceholder")}
               value={form.subjective}
               onChange={e => set("subjective", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Exploración física / Observaciones</label>
+            <label className="field-new__label">{t("clinical.aestheticForm.examLabel")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
-              placeholder="Estado actual de la piel, zonas a tratar…"
+              placeholder={t("clinical.aestheticForm.examPlaceholder")}
               value={form.objective}
               onChange={e => set("objective", e.target.value)}
             />
@@ -225,24 +236,24 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
 
       {/* Contraindicaciones */}
       <CardNew
-        title="Checklist de contraindicaciones"
-        sub="Evaluar antes de proceder"
+        title={t("clinical.aestheticForm.contraTitle")}
+        sub={t("clinical.aestheticForm.contraSub")}
         action={
           contraindicaciones.length > 0 ? (
-            <BadgeNew tone="danger" dot>{contraindicaciones.length} detectadas</BadgeNew>
+            <BadgeNew tone="danger" dot>{t("clinical.aestheticForm.contraDetected", { count: contraindicaciones.length })}</BadgeNew>
           ) : undefined
         }
       >
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 8 }}>
           {CONTRAINDICATIONS.map(c => (
             <button
-              key={c}
+              key={c.value}
               type="button"
               className="tag-new"
-              style={tagButton(contraindicaciones.includes(c))}
-              onClick={() => toggleContraindicacion(c)}
+              style={tagButton(contraindicaciones.includes(c.value))}
+              onClick={() => toggleContraindicacion(c.value)}
             >
-              {contraindicaciones.includes(c) && "✓ "}{c}
+              {contraindicaciones.includes(c.value) && "✓ "}{t(c.labelKey)}
             </button>
           ))}
         </div>
@@ -256,30 +267,30 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
             fontSize: 11,
             color: "#fcd34d",
           }}>
-            ⚠ Contraindicaciones detectadas — evaluar riesgo/beneficio antes del procedimiento
+            {t("clinical.aestheticForm.contraWarning")}
           </div>
         )}
       </CardNew>
 
       {/* Datos del procedimiento */}
-      <CardNew title="Datos del procedimiento">
+      <CardNew title={t("clinical.aestheticForm.procedureDataTitle")}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px 14px" }}>
           <div className="field-new">
-            <label className="field-new__label">Fototipo Fitzpatrick</label>
+            <label className="field-new__label">{t("clinical.aestheticForm.fitzpatrickLabel")}</label>
             <select className="input-new" value={form.fototipo} onChange={e => set("fototipo", e.target.value)}>
-              <option value="">Seleccionar…</option>
-              {FITZPATRICK.map(f => <option key={f} value={f}>Tipo {f}</option>)}
+              <option value="">{t("clinical.aestheticForm.selectOption")}</option>
+              {FITZPATRICK.map(f => <option key={f} value={f}>{t("clinical.aestheticForm.fitzpatrickType", { type: f })}</option>)}
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Procedimiento</label>
+            <label className="field-new__label">{t("clinical.aestheticForm.procedureLabel")}</label>
             <select className="input-new" value={form.procedimiento} onChange={e => set("procedimiento", e.target.value)}>
-              <option value="">Seleccionar…</option>
+              <option value="">{t("clinical.aestheticForm.selectOption")}</option>
               {PROCEDURES.map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Unidades/ml aplicados</label>
+            <label className="field-new__label">{t("clinical.aestheticForm.unitsAppliedLabel")}</label>
             <input
               type="number"
               className="input-new mono"
@@ -292,36 +303,36 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
       </CardNew>
 
       {/* Zonas faciales */}
-      <CardNew title="Zona facial de aplicación">
+      <CardNew title={t("clinical.aestheticForm.facialZoneTitle")}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {FACIAL_ZONES.map(z => (
             <button
-              key={z}
+              key={z.value}
               type="button"
               className="tag-new"
-              style={{ ...tagButton(form.zonas.includes(z)), textTransform: "capitalize" }}
-              onClick={() => toggleZona(z)}
+              style={{ ...tagButton(form.zonas.includes(z.value)), textTransform: "capitalize" }}
+              onClick={() => toggleZona(z.value)}
             >
-              {form.zonas.includes(z) && "✓ "}{z}
+              {form.zonas.includes(z.value) && "✓ "}{t(z.labelKey)}
             </button>
           ))}
         </div>
       </CardNew>
 
       {/* Producto + lote */}
-      <CardNew title="Producto utilizado">
+      <CardNew title={t("clinical.aestheticForm.productUsedTitle")}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
           <div className="field-new">
-            <label className="field-new__label">Producto usado</label>
+            <label className="field-new__label">{t("clinical.aestheticForm.productLabel")}</label>
             <input
               className="input-new"
-              placeholder="Ej. Botox Allergan"
+              placeholder={t("clinical.aestheticForm.productPlaceholder")}
               value={form.producto}
               onChange={e => set("producto", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Número de lote</label>
+            <label className="field-new__label">{t("clinical.aestheticForm.lotLabel")}</label>
             <input
               className="input-new mono"
               placeholder="LOT-2026-0412"
@@ -334,20 +345,20 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
 
       {/* Mapa facial con unidades/zona */}
       <CardNew
-        title="Registro de aplicación por zona"
+        title={t("clinical.aestheticForm.perZoneTitle")}
         action={
           <div style={{ fontSize: 12, color: "var(--text-2)" }}>
-            Total: <span className="mono" style={{ fontWeight: 600, color: "var(--brand)" }}>{totalUnits}</span> U/ml
+            {t("clinical.aestheticForm.totalLabel")} <span className="mono" style={{ fontWeight: 600, color: "var(--brand)" }}>{totalUnits}</span> U/ml
           </div>
         }
       >
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           {ZONE_MAP.map(z => (
             <div key={z.key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 12, color: "var(--text-2)", width: 160, flexShrink: 0 }}>{z.label}</span>
+              <span style={{ fontSize: 12, color: "var(--text-2)", width: 160, flexShrink: 0 }}>{t(z.labelKey)}</span>
               <input
                 className="input-new"
-                placeholder="Producto"
+                placeholder={t("clinical.aestheticForm.productColumn")}
                 value={zoneMap[z.key]?.product ?? ""}
                 onChange={e => setZoneField(z.key, "product", e.target.value)}
               />
@@ -365,34 +376,34 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
       </CardNew>
 
       {/* Notas + plan */}
-      <CardNew title="Notas y plan">
+      <CardNew title={t("clinical.aestheticForm.notesPlanTitle")}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
           <div className="field-new">
-            <label className="field-new__label">Notas post-procedimiento</label>
+            <label className="field-new__label">{t("clinical.aestheticForm.postNotesLabel")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
-              placeholder="Cuidados posteriores, reacciones observadas…"
+              placeholder={t("clinical.aestheticForm.postNotesPlaceholder")}
               value={form.notasPost}
               onChange={e => set("notasPost", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Diagnóstico / Evaluación</label>
+            <label className="field-new__label">{t("clinical.aestheticForm.diagnosisLabel")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
-              placeholder="Diagnóstico estético, hallazgos…"
+              placeholder={t("clinical.aestheticForm.diagnosisPlaceholder")}
               value={form.assessment}
               onChange={e => set("assessment", e.target.value)}
             />
           </div>
           <div className="field-new" style={{ gridColumn: "1 / -1" }}>
-            <label className="field-new__label">Plan siguiente sesión</label>
+            <label className="field-new__label">{t("clinical.aestheticForm.nextSessionPlanLabel")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 70, padding: "10px 12px", height: "auto", resize: "vertical" }}
-              placeholder="Plan de tratamiento para próxima visita…"
+              placeholder={t("clinical.aestheticForm.nextSessionPlanPlaceholder")}
               value={form.planSiguiente}
               onChange={e => set("planSiguiente", e.target.value)}
             />
@@ -402,30 +413,30 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
 
       {/* Seguimiento visual */}
       {(injectionPoints !== null || galleryImages.length > 0 || upcomingItems.length > 0) && (
-        <CardNew title="Seguimiento visual" sub="Mapa de aplicación, antes/después y próximas sesiones">
+        <CardNew title={t("clinical.aestheticForm.visualFollowTitle")} sub={t("clinical.aestheticForm.visualFollowSub")}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
             {injectionPoints !== null && injectionPoints.length > 0 && (
               <FaceInjectionMap
                 injections={injectionPoints}
-                product={form.producto || "Toxina"}
+                product={form.producto || t("clinical.aestheticForm.toxinFallback")}
               />
             )}
             {galleryImages.length > 0 && (
-              <BeforeAfterGallery images={galleryImages} sessionLabel="Antes/Después" />
+              <BeforeAfterGallery images={galleryImages} sessionLabel={t("clinical.aestheticForm.beforeAfterLabel")} />
             )}
-            <RecurringCalendar items={upcomingItems} title="Próximas sesiones" emptyMessage="Sin sesiones agendadas" />
+            <RecurringCalendar items={upcomingItems} title={t("clinical.aestheticForm.upcomingSessionsTitle")} emptyMessage={t("clinical.aestheticForm.noSessionsScheduled")} />
           </div>
         </CardNew>
       )}
 
       {/* GAIS */}
       <CardNew
-        title="Escala GAIS"
+        title={t("clinical.aestheticForm.gaisScaleTitle")}
         sub="Global Aesthetic Improvement Scale"
         action={
           gaisDelta !== null ? (
             <BadgeNew tone={gaisDelta > 0 ? "success" : gaisDelta === 0 ? "neutral" : "danger"} dot>
-              Δ {gaisDelta > 0 ? "+" : ""}{gaisDelta} {gaisDelta > 0 ? "Mejoría" : gaisDelta === 0 ? "Sin cambio" : "Empeoramiento"}
+              Δ {gaisDelta > 0 ? "+" : ""}{gaisDelta} {gaisDelta > 0 ? t("clinical.aestheticForm.gaisDeltaImproved") : gaisDelta === 0 ? t("clinical.aestheticForm.gaisDeltaNoChange") : t("clinical.aestheticForm.gaisDeltaWorsened")}
             </BadgeNew>
           ) : undefined
         }
@@ -433,7 +444,7 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 14px" }}>
           <div>
             <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 10 }}>
-              Pre-procedimiento
+              {t("clinical.aestheticForm.preProcedure")}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {GAIS_OPTIONS.map(opt => (
@@ -444,14 +455,14 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
                     checked={gaisPre === opt.value}
                     onChange={() => setGaisPre(opt.value)}
                   />
-                  {opt.label} <span className="mono" style={{ color: "var(--text-4)" }}>({opt.value})</span>
+                  {t(opt.labelKey)} <span className="mono" style={{ color: "var(--text-4)" }}>({opt.value})</span>
                 </label>
               ))}
             </div>
           </div>
           <div>
             <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 10 }}>
-              Post-procedimiento
+              {t("clinical.aestheticForm.postProcedure")}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {GAIS_OPTIONS.map(opt => (
@@ -462,7 +473,7 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
                     checked={gaisPost === opt.value}
                     onChange={() => setGaisPost(opt.value)}
                   />
-                  {opt.label} <span className="mono" style={{ color: "var(--text-4)" }}>({opt.value})</span>
+                  {t(opt.labelKey)} <span className="mono" style={{ color: "var(--text-4)" }}>({opt.value})</span>
                 </label>
               ))}
             </div>
@@ -472,7 +483,7 @@ export function AestheticMedicineForm({ patientId, onSaved }: Props) {
 
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <ButtonNew variant="primary" onClick={handleSave} disabled={saving}>
-          {saving ? "Guardando…" : "Guardar expediente estético"}
+          {saving ? t("common.saving") : t("clinical.aestheticForm.saveRecord")}
         </ButtonNew>
       </div>
     </div>

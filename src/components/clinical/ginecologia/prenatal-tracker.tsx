@@ -12,6 +12,7 @@ import {
   Legend,
 } from "recharts";
 import { Baby, Calendar, CheckCircle2, Circle } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 interface PrenatalProps {
   fum: string | Date;
@@ -24,21 +25,21 @@ interface PrenatalProps {
 interface Milestone {
   weekStart: number;
   weekEnd: number;
-  label: string;
+  labelKey: string;
   trimester: 1 | 2 | 3;
 }
 
 const MILESTONES: Milestone[] = [
-  { weekStart: 6, weekEnd: 10, label: "Primera consulta prenatal", trimester: 1 },
-  { weekStart: 8, weekEnd: 12, label: "US fetal temprano", trimester: 1 },
-  { weekStart: 10, weekEnd: 13, label: "Laboratorios iniciales (hemograma, grupo Rh, VIH, VDRL)", trimester: 1 },
-  { weekStart: 11, weekEnd: 13, label: "Translucencia nucal", trimester: 1 },
-  { weekStart: 18, weekEnd: 22, label: "US morfológico", trimester: 2 },
-  { weekStart: 24, weekEnd: 28, label: "Test tolerancia glucosa (CTOG)", trimester: 2 },
-  { weekStart: 28, weekEnd: 28, label: "Inmunoglobulina anti-D (si Rh-)", trimester: 3 },
-  { weekStart: 32, weekEnd: 34, label: "US crecimiento fetal", trimester: 3 },
-  { weekStart: 35, weekEnd: 37, label: "Cultivo estreptococo grupo B", trimester: 3 },
-  { weekStart: 36, weekEnd: 40, label: "Monitoreo semanal", trimester: 3 },
+  { weekStart: 6, weekEnd: 10, labelKey: "clinical.prenatalTracker.milestoneFirstVisit", trimester: 1 },
+  { weekStart: 8, weekEnd: 12, labelKey: "clinical.prenatalTracker.milestoneEarlyUs", trimester: 1 },
+  { weekStart: 10, weekEnd: 13, labelKey: "clinical.prenatalTracker.milestoneInitialLabs", trimester: 1 },
+  { weekStart: 11, weekEnd: 13, labelKey: "clinical.prenatalTracker.milestoneNuchalTranslucency", trimester: 1 },
+  { weekStart: 18, weekEnd: 22, labelKey: "clinical.prenatalTracker.milestoneMorphoUs", trimester: 2 },
+  { weekStart: 24, weekEnd: 28, labelKey: "clinical.prenatalTracker.milestoneGlucoseTest", trimester: 2 },
+  { weekStart: 28, weekEnd: 28, labelKey: "clinical.prenatalTracker.milestoneAntiD", trimester: 3 },
+  { weekStart: 32, weekEnd: 34, labelKey: "clinical.prenatalTracker.milestoneGrowthUs", trimester: 3 },
+  { weekStart: 35, weekEnd: 37, labelKey: "clinical.prenatalTracker.milestoneGbsCulture", trimester: 3 },
+  { weekStart: 36, weekEnd: 40, labelKey: "clinical.prenatalTracker.milestoneWeeklyMonitoring", trimester: 3 },
 ];
 
 function parseDate(d: string | Date): Date {
@@ -62,6 +63,7 @@ export function PrenatalTracker({
   fetalHeartRate,
   measurements = [],
 }: PrenatalProps) {
+  const t = useT();
   const fumDate = useMemo(() => parseDate(fum), [fum]);
   const fpp = useMemo(() => addDays(fumDate, 280), [fumDate]);
   const currentWeeks = useMemo(() => {
@@ -109,10 +111,10 @@ export function PrenatalTracker({
           <Baby size={20} color="var(--brand)" />
           <div>
             <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-1)" }}>
-              Tracker prenatal
+              {t("clinical.prenatalTracker.title")}
             </div>
             <div style={{ fontSize: 12, color: "var(--text-2)" }}>
-              Trimestre {trimester} · {currentWeeks} semanas
+              {t("clinical.prenatalTracker.trimesterWeeks", { trimester, weeks: currentWeeks })}
             </div>
           </div>
         </div>
@@ -120,14 +122,14 @@ export function PrenatalTracker({
           <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-2)" }}>
             <Calendar size={12} />
             <div>
-              <div style={{ fontSize: 10, textTransform: "uppercase" }}>FUM</div>
+              <div style={{ fontSize: 10, textTransform: "uppercase" }}>{t("clinical.prenatalTracker.lmpAbbr")}</div>
               <div style={{ color: "var(--text-1)", fontWeight: 600 }}>{formatDate(fumDate)}</div>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-2)" }}>
             <Calendar size={12} color="#fbbf24" />
             <div>
-              <div style={{ fontSize: 10, textTransform: "uppercase" }}>FPP</div>
+              <div style={{ fontSize: 10, textTransform: "uppercase" }}>{t("clinical.prenatalTracker.eddAbbr")}</div>
               <div style={{ color: "#fbbf24", fontWeight: 600 }}>{formatDate(fpp)}</div>
             </div>
           </div>
@@ -144,10 +146,10 @@ export function PrenatalTracker({
             marginBottom: 6,
           }}
         >
-          <span>0 sem</span>
-          <span>13 sem (T1)</span>
-          <span>27 sem (T2)</span>
-          <span>40 sem (T3)</span>
+          <span>{t("clinical.prenatalTracker.scale0")}</span>
+          <span>{t("clinical.prenatalTracker.scale13")}</span>
+          <span>{t("clinical.prenatalTracker.scale27")}</span>
+          <span>{t("clinical.prenatalTracker.scale40")}</span>
         </div>
         <div
           style={{
@@ -240,8 +242,8 @@ export function PrenatalTracker({
               background: "rgba(255,255,255,0.02)",
             }}
           >
-            <div style={{ fontSize: 10, color: "var(--text-2)", textTransform: "uppercase" }}>Peso actual</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-1)" }}>{currentWeight} kg</div>
+            <div style={{ fontSize: 10, color: "var(--text-2)", textTransform: "uppercase" }}>{t("clinical.prenatalTracker.currentWeight")}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-1)" }}>{t("clinical.prenatalTracker.kgValue", { value: currentWeight })}</div>
           </div>
         )}
         {fundalHeight !== undefined && (
@@ -253,8 +255,8 @@ export function PrenatalTracker({
               background: "rgba(255,255,255,0.02)",
             }}
           >
-            <div style={{ fontSize: 10, color: "var(--text-2)", textTransform: "uppercase" }}>Altura uterina</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-1)" }}>{fundalHeight} cm</div>
+            <div style={{ fontSize: 10, color: "var(--text-2)", textTransform: "uppercase" }}>{t("clinical.prenatalTracker.fundalHeight")}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-1)" }}>{t("clinical.prenatalTracker.cmValue", { value: fundalHeight })}</div>
           </div>
         )}
         {fetalHeartRate !== undefined && (
@@ -266,8 +268,8 @@ export function PrenatalTracker({
               background: "rgba(255,255,255,0.02)",
             }}
           >
-            <div style={{ fontSize: 10, color: "var(--text-2)", textTransform: "uppercase" }}>FCF</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#34d399" }}>{fetalHeartRate} lpm</div>
+            <div style={{ fontSize: 10, color: "var(--text-2)", textTransform: "uppercase" }}>{t("clinical.prenatalTracker.fhrAbbr")}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#34d399" }}>{t("clinical.prenatalTracker.bpmValue", { value: fetalHeartRate })}</div>
           </div>
         )}
       </div>
@@ -282,7 +284,7 @@ export function PrenatalTracker({
             textTransform: "uppercase",
           }}
         >
-          Hitos del embarazo
+          {t("clinical.prenatalTracker.milestonesTitle")}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           {MILESTONES.map((m, i) => {
@@ -327,11 +329,11 @@ export function PrenatalTracker({
                     minWidth: 68,
                   }}
                 >
-                  Sem {m.weekStart}
+                  {t("clinical.prenatalTracker.weekAbbr")} {m.weekStart}
                   {m.weekEnd !== m.weekStart ? `-${m.weekEnd}` : ""}
                 </span>
                 <span style={{ color: status === "pending" ? "var(--text-2)" : "var(--text-1)" }}>
-                  {m.label}
+                  {t(m.labelKey)}
                 </span>
                 <span
                   style={{
@@ -342,7 +344,7 @@ export function PrenatalTracker({
                     fontWeight: 600,
                   }}
                 >
-                  {status === "done" ? "Completado" : status === "active" ? "En curso" : "Pendiente"}
+                  {status === "done" ? t("clinical.prenatalTracker.statusDone") : status === "active" ? t("clinical.prenatalTracker.statusActive") : t("clinical.prenatalTracker.statusPending")}
                 </span>
               </div>
             );
@@ -360,7 +362,7 @@ export function PrenatalTracker({
             textTransform: "uppercase",
           }}
         >
-          Altura uterina vs. edad gestacional
+          {t("clinical.prenatalTracker.chartTitle")}
         </div>
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
@@ -368,11 +370,11 @@ export function PrenatalTracker({
             <XAxis
               dataKey="weeks"
               tick={{ fontSize: 10, fill: "var(--text-2)" }}
-              label={{ value: "Semanas", position: "insideBottom", offset: -5, fontSize: 11, fill: "var(--text-2)" }}
+              label={{ value: t("clinical.prenatalTracker.axisWeeks"), position: "insideBottom", offset: -5, fontSize: 11, fill: "var(--text-2)" }}
             />
             <YAxis
               tick={{ fontSize: 10, fill: "var(--text-2)" }}
-              label={{ value: "Altura (cm)", angle: -90, position: "insideLeft", fontSize: 11, fill: "var(--text-2)" }}
+              label={{ value: t("clinical.prenatalTracker.axisHeight"), angle: -90, position: "insideLeft", fontSize: 11, fill: "var(--text-2)" }}
             />
             <Tooltip
               contentStyle={{
@@ -390,7 +392,7 @@ export function PrenatalTracker({
               strokeWidth={1.5}
               strokeDasharray="4 4"
               dot={false}
-              name="Teórico"
+              name={t("clinical.prenatalTracker.lineTheoretical")}
             />
             <Line
               type="monotone"
@@ -399,7 +401,7 @@ export function PrenatalTracker({
               strokeWidth={2.5}
               dot={{ r: 4, fill: "#7c3aed", stroke: "#fff", strokeWidth: 1 }}
               connectNulls
-              name="Paciente"
+              name={t("clinical.prenatalTracker.linePatient")}
             />
           </LineChart>
         </ResponsiveContainer>

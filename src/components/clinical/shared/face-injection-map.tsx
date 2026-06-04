@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/i18n/i18n-provider";
+
 interface Injection {
   x: number;
   y: number;
@@ -22,6 +24,7 @@ export function FaceInjectionMap({
   onAdd,
   editable,
 }: FaceInjectionMapProps) {
+  const t = useT();
   const total =
     totalUnits ?? injections.reduce((acc, inj) => acc + inj.units, 0);
 
@@ -53,7 +56,7 @@ export function FaceInjectionMap({
             color: "var(--text-1)",
           }}
         >
-          {product || "Aplicación"}
+          {product || t("clinical.faceInjectionMap.application")}
         </div>
         <div
           style={{
@@ -120,7 +123,7 @@ export function FaceInjectionMap({
           textAlign: "center",
         }}
       >
-        {injections.length} puntos · {total} U totales
+        {t("clinical.faceInjectionMap.summary", { points: injections.length, total })}
       </div>
     </div>
   );

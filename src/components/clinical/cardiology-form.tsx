@@ -7,12 +7,14 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { CalculatorModal } from "@/components/clinical/calculators/calculator-modal";
 import { EkgRenderer } from "@/components/clinical/cardiology/ekg-renderer";
 import { PrescriptionModal } from "@/components/clinical/shared/prescription-modal";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Props { patientId: string; onSaved: (record: any) => void }
 
 type RhythmType = "normal" | "sinus" | "afib" | "flutter" | "vtach" | "paced";
 
 export function CardiologyForm({ patientId, onSaved }: Props) {
+  const t = useT();
   const [saving, setSaving] = useState(false);
   const [calcOpen, setCalcOpen] = useState(false);
   // Receta standalone — no toca el expediente clínico para evitar
@@ -38,7 +40,7 @@ export function CardiologyForm({ patientId, onSaved }: Props) {
 
   async function handleSave() {
     if (!form.subjective && !form.plan) {
-      toast.error("Agrega el motivo de consulta o plan");
+      toast.error(t("clinical.cardiologyForm.reasonOrPlanRequired"));
       return;
     }
     setSaving(true);
@@ -83,9 +85,9 @@ export function CardiologyForm({ patientId, onSaved }: Props) {
       if (!res.ok) throw new Error((await res.json()).error);
       const saved = await res.json();
       onSaved(saved);
-      toast.success("Consulta cardiológica guardada");
+      toast.success(t("clinical.cardiologyForm.savedToast"));
     } catch (err: any) {
-      toast.error(err.message ?? "Error");
+      toast.error(err.message ?? t("common.genericError"));
     } finally {
       setSaving(false);
     }
@@ -99,60 +101,60 @@ export function CardiologyForm({ patientId, onSaved }: Props) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <CardNew title="Motivo de consulta">
+      <CardNew title={t("clinical.cardiologyForm.reasonTitle")}>
         <textarea
           className="input-new"
           style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
-          placeholder="Dolor precordial, disnea de esfuerzo, palpitaciones…"
+          placeholder={t("clinical.cardiologyForm.reasonPlaceholder")}
           value={form.subjective}
           onChange={e => set("subjective", e.target.value)}
         />
       </CardNew>
 
-      <CardNew title="Signos vitales">
+      <CardNew title={t("clinical.cardiologyForm.vitalsTitle")}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "12px 14px" }}>
           <div className="field-new">
-            <label className="field-new__label">TA sistólica (mmHg)</label>
+            <label className="field-new__label">{t("clinical.cardiologyForm.bpSysLabel")}</label>
             <input type="number" className="input-new mono" placeholder="120" value={form.vitals.bpSys} onChange={e => setV("bpSys", e.target.value)} />
           </div>
           <div className="field-new">
-            <label className="field-new__label">TA diastólica (mmHg)</label>
+            <label className="field-new__label">{t("clinical.cardiologyForm.bpDiaLabel")}</label>
             <input type="number" className="input-new mono" placeholder="80" value={form.vitals.bpDia} onChange={e => setV("bpDia", e.target.value)} />
           </div>
           <div className="field-new">
-            <label className="field-new__label">FC (lpm)</label>
+            <label className="field-new__label">{t("clinical.cardiologyForm.hrLabel")}</label>
             <input type="number" className="input-new mono" placeholder="72" value={form.vitals.hr} onChange={e => setV("hr", e.target.value)} />
           </div>
           <div className="field-new">
-            <label className="field-new__label">FR (rpm)</label>
+            <label className="field-new__label">{t("clinical.cardiologyForm.rrLabel")}</label>
             <input type="number" className="input-new mono" placeholder="16" value={form.vitals.rr} onChange={e => setV("rr", e.target.value)} />
           </div>
           <div className="field-new">
-            <label className="field-new__label">SpO₂ (%)</label>
+            <label className="field-new__label">{t("clinical.cardiologyForm.spo2Label")}</label>
             <input type="number" className="input-new mono" placeholder="98" value={form.vitals.spo2} onChange={e => setV("spo2", e.target.value)} />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Temp (°C)</label>
+            <label className="field-new__label">{t("clinical.cardiologyForm.tempLabel")}</label>
             <input type="number" step="0.1" className="input-new mono" placeholder="36.5" value={form.vitals.temp} onChange={e => setV("temp", e.target.value)} />
           </div>
         </div>
       </CardNew>
 
-      <CardNew title="Electrocardiograma">
+      <CardNew title={t("clinical.cardiologyForm.ekgTitle")}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "12px 14px", marginBottom: 16 }}>
           <div className="field-new">
-            <label className="field-new__label">Ritmo</label>
+            <label className="field-new__label">{t("clinical.cardiologyForm.rhythmLabel")}</label>
             <select className="input-new" value={form.ekg.rhythm} onChange={e => setE("rhythm", e.target.value)}>
-              <option value="normal">Normal</option>
-              <option value="sinus">Sinusal</option>
-              <option value="afib">Fibrilación auricular</option>
-              <option value="flutter">Flutter auricular</option>
-              <option value="vtach">Taquicardia ventricular</option>
-              <option value="paced">Con marcapasos</option>
+              <option value="normal">{t("clinical.cardiologyForm.rhythmNormal")}</option>
+              <option value="sinus">{t("clinical.cardiologyForm.rhythmSinus")}</option>
+              <option value="afib">{t("clinical.cardiologyForm.rhythmAfib")}</option>
+              <option value="flutter">{t("clinical.cardiologyForm.rhythmFlutter")}</option>
+              <option value="vtach">{t("clinical.cardiologyForm.rhythmVtach")}</option>
+              <option value="paced">{t("clinical.cardiologyForm.rhythmPaced")}</option>
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Frecuencia (bpm)</label>
+            <label className="field-new__label">{t("clinical.cardiologyForm.frequencyLabel")}</label>
             <input type="number" className="input-new mono" placeholder="72" value={form.ekg.rate} onChange={e => setE("rate", e.target.value)} />
           </div>
           <div className="field-new">
@@ -179,24 +181,24 @@ export function CardiologyForm({ patientId, onSaved }: Props) {
         />
       </CardNew>
 
-      <CardNew title="Auscultación">
+      <CardNew title={t("clinical.cardiologyForm.auscultationTitle")}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
           <div className="field-new">
-            <label className="field-new__label">Cardíaca</label>
+            <label className="field-new__label">{t("clinical.cardiologyForm.cardiacLabel")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 70, padding: "8px 12px", height: "auto", resize: "vertical" }}
-              placeholder="Ruidos rítmicos, sin soplos…"
+              placeholder={t("clinical.cardiologyForm.cardiacPlaceholder")}
               value={form.auscultation.cardiac}
               onChange={e => setA("cardiac", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Pulmonar</label>
+            <label className="field-new__label">{t("clinical.cardiologyForm.pulmonaryLabel")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 70, padding: "8px 12px", height: "auto", resize: "vertical" }}
-              placeholder="Murmullo vesicular conservado, sin estertores…"
+              placeholder={t("clinical.cardiologyForm.pulmonaryPlaceholder")}
               value={form.auscultation.pulmonary}
               onChange={e => setA("pulmonary", e.target.value)}
             />
@@ -205,16 +207,16 @@ export function CardiologyForm({ patientId, onSaved }: Props) {
       </CardNew>
 
       <CardNew
-        title="Escalas"
+        title={t("clinical.cardiologyForm.scalesTitle")}
         action={
           <ButtonNew type="button" size="sm" variant="ghost" icon={<Calculator size={14} />} onClick={() => setCalcOpen(true)}>
-            Calculadoras clínicas
+            {t("clinical.cardiologyForm.clinicalCalculators")}
           </ButtonNew>
         }
       >
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
           <div className="field-new">
-            <label className="field-new__label">CHA₂DS₂-VASc (puntaje)</label>
+            <label className="field-new__label">{t("clinical.cardiologyForm.cha2ds2VascLabel")}</label>
             <input
               type="number" min="0" max="9"
               className="input-new mono"
@@ -224,46 +226,46 @@ export function CardiologyForm({ patientId, onSaved }: Props) {
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">NYHA (clase)</label>
+            <label className="field-new__label">{t("clinical.cardiologyForm.nyhaLabel")}</label>
             <select className="input-new" value={form.scales.nyha} onChange={e => setS("nyha", e.target.value)}>
-              <option value="">Seleccionar…</option>
-              <option value="I">Clase I</option>
-              <option value="II">Clase II</option>
-              <option value="III">Clase III</option>
-              <option value="IV">Clase IV</option>
+              <option value="">{t("clinical.cardiologyForm.selectPlaceholder")}</option>
+              <option value="I">{t("clinical.cardiologyForm.nyhaClassI")}</option>
+              <option value="II">{t("clinical.cardiologyForm.nyhaClassII")}</option>
+              <option value="III">{t("clinical.cardiologyForm.nyhaClassIII")}</option>
+              <option value="IV">{t("clinical.cardiologyForm.nyhaClassIV")}</option>
             </select>
           </div>
         </div>
       </CardNew>
 
       <CardNew
-        title="Plan y receta"
+        title={t("clinical.cardiologyForm.planTitle")}
         action={
           <ButtonNew type="button" size="sm" variant="ghost" icon={<FileText size={14} />} onClick={openPrescriptionModal}>
-            Crear receta
+            {t("clinical.cardiologyForm.createPrescription")}
           </ButtonNew>
         }
       >
         <div className="field-new">
-          <label className="field-new__label">Plan e indicaciones</label>
+          <label className="field-new__label">{t("clinical.cardiologyForm.planLabel")}</label>
           <textarea
             className="input-new"
             style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
-            placeholder="Inicio IECA, beta bloqueador, control en 4 semanas…"
+            placeholder={t("clinical.cardiologyForm.planPlaceholder")}
             value={form.plan}
             onChange={e => set("plan", e.target.value)}
           />
         </div>
         {rxResult && (
           <div style={{ marginTop: 16, padding: 12, background: "rgba(16, 185, 129, 0.06)", border: "1px solid rgba(16, 185, 129, 0.30)", borderRadius: 10, fontSize: 13 }}>
-            ✓ Receta creada. <a href={rxResult.verifyUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#059669", fontWeight: 600 }}>Ver receta</a>
+            ✓ {t("clinical.cardiologyForm.prescriptionCreated")} <a href={rxResult.verifyUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#059669", fontWeight: 600 }}>{t("clinical.cardiologyForm.viewPrescription")}</a>
           </div>
         )}
       </CardNew>
 
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <ButtonNew type="button" variant="primary" onClick={handleSave} disabled={saving}>
-          {saving ? "Guardando…" : "Guardar consulta"}
+          {saving ? t("common.saving") : t("clinical.cardiologyForm.saveConsultation")}
         </ButtonNew>
       </div>
 

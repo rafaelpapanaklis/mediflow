@@ -2,11 +2,13 @@
 import { useMemo, useState } from "react";
 import { Search, X, Calculator as CalcIcon } from "lucide-react";
 import { CLINICAL_CALCULATORS } from "@/lib/clinical-calculators";
+import { useT } from "@/i18n/i18n-provider";
 import * as Calculators from "./index";
 
 interface Props { isOpen: boolean; onClose: () => void; defaultSpecialty?: string }
 
 export function CalculatorModal({ isOpen, onClose, defaultSpecialty }: Props) {
+  const t = useT();
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -61,9 +63,9 @@ export function CalculatorModal({ isOpen, onClose, defaultSpecialty }: Props) {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <CalcIcon size={18} color="var(--brand, #7c3aed)" />
             <div>
-              <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-1)" }}>Calculadoras clínicas</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-1)" }}>{t("clinical.calculatorModal.title")}</div>
               <div style={{ fontSize: 12, color: "var(--text-2)" }}>
-                {selectedCalc ? selectedCalc.name : `${filtered.length} disponibles`}
+                {selectedCalc ? selectedCalc.name : t("clinical.calculatorModal.available", { count: filtered.length })}
               </div>
             </div>
           </div>
@@ -72,7 +74,7 @@ export function CalculatorModal({ isOpen, onClose, defaultSpecialty }: Props) {
             onClick={handleClose}
             className="btn-new btn-new--ghost btn-new--sm"
             style={{ padding: 6 }}
-            aria-label="Cerrar"
+            aria-label={t("common.close")}
           >
             <X size={18} />
           </button>
@@ -88,7 +90,7 @@ export function CalculatorModal({ isOpen, onClose, defaultSpecialty }: Props) {
                 <input
                   className="input-new"
                   style={{ paddingLeft: 36 }}
-                  placeholder="Buscar calculadora…"
+                  placeholder={t("clinical.calculatorModal.searchPlaceholder")}
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   autoFocus
@@ -97,7 +99,7 @@ export function CalculatorModal({ isOpen, onClose, defaultSpecialty }: Props) {
 
               {filtered.length === 0 ? (
                 <div style={{ padding: 24, textAlign: "center", fontSize: 13, color: "var(--text-3)" }}>
-                  Sin resultados para &quot;{search}&quot;.
+                  {t("clinical.calculatorModal.noResults", { query: search })}
                 </div>
               ) : (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>

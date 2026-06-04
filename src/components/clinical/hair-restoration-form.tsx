@@ -3,6 +3,7 @@ import { useState } from "react";
 import toast from "react-hot-toast";
 import { CardNew }   from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { useT } from "@/i18n/i18n-provider";
 
 const TECHNIQUES = ["FUE", "FUT", "PRP capilar", "micropigmentación", "LLLT"] as const;
 const NORWOOD = ["Norwood I", "Norwood II", "Norwood III", "Norwood III Vertex", "Norwood IV", "Norwood V", "Norwood VI", "Norwood VII"] as const;
@@ -16,6 +17,7 @@ const SURVIVAL_ZONES = ["Frontal", "Temporal", "Vertex", "Línea de implantació
 interface Props { patientId: string; onSaved: (record: any) => void }
 
 export function HairRestorationForm({ patientId, onSaved }: Props) {
+  const t = useT();
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     subjective: "",
@@ -43,7 +45,7 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
   }
 
   async function handleSave() {
-    if (!form.subjective && !form.assessment) { toast.error("Agrega al menos el motivo de consulta o diagnóstico"); return; }
+    if (!form.subjective && !form.assessment) { toast.error(t("clinical.hairRestorationForm.errReasonOrDx")); return; }
     setSaving(true);
     try {
       const res = await fetch("/api/clinical", {
@@ -68,8 +70,8 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
       });
       if (!res.ok) throw new Error((await res.json()).error);
       onSaved(await res.json());
-      toast.success("Expediente capilar guardado");
-    } catch (err: any) { toast.error(err.message ?? "Error al guardar"); } finally { setSaving(false); }
+      toast.success(t("clinical.hairRestorationForm.savedSuccess"));
+    } catch (err: any) { toast.error(err.message ?? t("clinical.hairRestorationForm.saveError")); } finally { setSaving(false); }
   }
 
   // Tag button estilo toggle
@@ -84,24 +86,24 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {/* Motivo + exploración */}
-      <CardNew title="Motivo de consulta y exploración">
+      <CardNew title={t("clinical.hairRestorationForm.reasonExamTitle")}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
           <div className="field-new">
-            <label className="field-new__label">Motivo de consulta / HEA</label>
+            <label className="field-new__label">{t("clinical.hairRestorationForm.reasonHpi")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
-              placeholder="¿Por qué viene el paciente hoy?"
+              placeholder={t("clinical.hairRestorationForm.reasonPlaceholder")}
               value={form.subjective}
               onChange={e => set("subjective", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Exploración física / Observaciones</label>
+            <label className="field-new__label">{t("clinical.hairRestorationForm.physicalExam")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
-              placeholder="Estado del cuero cabelludo, densidad visual…"
+              placeholder={t("clinical.hairRestorationForm.physicalExamPlaceholder")}
               value={form.objective}
               onChange={e => set("objective", e.target.value)}
             />
@@ -110,32 +112,32 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
       </CardNew>
 
       {/* Clasificación & técnica */}
-      <CardNew title="Clasificación y técnica">
+      <CardNew title={t("clinical.hairRestorationForm.classTechTitle")}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
           <div className="field-new">
-            <label className="field-new__label">Clasificación</label>
+            <label className="field-new__label">{t("clinical.hairRestorationForm.classification")}</label>
             <select className="input-new" value={form.clasificacion} onChange={e => set("clasificacion", e.target.value)}>
-              <option value="">Seleccionar…</option>
-              <optgroup label="Hombres (Norwood)">
+              <option value="">{t("clinical.hairRestorationForm.select")}</option>
+              <optgroup label={t("clinical.hairRestorationForm.menNorwood")}>
                 {NORWOOD.map(n => <option key={n} value={n}>{n}</option>)}
               </optgroup>
-              <optgroup label="Mujeres (Ludwig)">
+              <optgroup label={t("clinical.hairRestorationForm.womenLudwig")}>
                 {LUDWIG.map(l => <option key={l} value={l}>{l}</option>)}
               </optgroup>
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Técnica</label>
+            <label className="field-new__label">{t("clinical.hairRestorationForm.technique")}</label>
             <select className="input-new" value={form.tecnica} onChange={e => set("tecnica", e.target.value)}>
-              <option value="">Seleccionar…</option>
-              {TECHNIQUES.map(t => <option key={t} value={t}>{t}</option>)}
+              <option value="">{t("clinical.hairRestorationForm.select")}</option>
+              {TECHNIQUES.map(tech => <option key={tech} value={tech}>{tech}</option>)}
             </select>
           </div>
         </div>
       </CardNew>
 
       {/* Densidad baseline por zona */}
-      <CardNew title="Densidad folicular por zona" sub="Folículos/cm²">
+      <CardNew title={t("clinical.hairRestorationForm.densityTitle")} sub={t("clinical.hairRestorationForm.folliclesPerCm2")}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
           {DENSITY_ZONES.map(zone => {
             const antes = Number(form.densidadZonas[zone]?.antes) || 0;
@@ -156,7 +158,7 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
               >
                 <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-2)" }}>{zone}</span>
                 <div className="field-new">
-                  <label className="field-new__label">Antes</label>
+                  <label className="field-new__label">{t("clinical.hairRestorationForm.before")}</label>
                   <input
                     type="number" min={0}
                     className="input-new mono"
@@ -167,7 +169,7 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
                   />
                 </div>
                 <div className="field-new">
-                  <label className="field-new__label">Después</label>
+                  <label className="field-new__label">{t("clinical.hairRestorationForm.after")}</label>
                   <input
                     type="number" min={0}
                     className="input-new mono"
@@ -193,10 +195,10 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
       </CardNew>
 
       {/* Datos del procedimiento */}
-      <CardNew title="Datos del procedimiento">
+      <CardNew title={t("clinical.hairRestorationForm.procedureDataTitle")}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px 14px" }}>
           <div className="field-new">
-            <label className="field-new__label">Densidad zona donante (folículos/cm²)</label>
+            <label className="field-new__label">{t("clinical.hairRestorationForm.donorDensity")}</label>
             <input
               type="number"
               className="input-new mono"
@@ -206,7 +208,7 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Grafts cosechados</label>
+            <label className="field-new__label">{t("clinical.hairRestorationForm.graftsHarvested")}</label>
             <input
               type="number"
               className="input-new mono"
@@ -216,7 +218,7 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Grafts implantados</label>
+            <label className="field-new__label">{t("clinical.hairRestorationForm.graftsImplanted")}</label>
             <input
               type="number"
               className="input-new mono"
@@ -229,7 +231,7 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
       </CardNew>
 
       {/* Zonas tratadas */}
-      <CardNew title="Zonas tratadas">
+      <CardNew title={t("clinical.hairRestorationForm.treatedZonesTitle")}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {TREATED_ZONES.map(z => (
             <button
@@ -246,32 +248,32 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
       </CardNew>
 
       {/* Diseño línea capilar */}
-      <CardNew title="Diseño de línea capilar">
+      <CardNew title={t("clinical.hairRestorationForm.hairlineDesignTitle")}>
         <textarea
           className="input-new"
           style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
-          placeholder="Descripción del diseño de la línea capilar…"
+          placeholder={t("clinical.hairRestorationForm.hairlineDesignPlaceholder")}
           value={form.disenoLinea}
           onChange={e => set("disenoLinea", e.target.value)}
         />
       </CardNew>
 
       {/* Seguimiento */}
-      <CardNew title="Seguimiento">
+      <CardNew title={t("clinical.hairRestorationForm.followupTitle")}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
           <div className="field-new">
-            <label className="field-new__label">Seguimiento (meses)</label>
+            <label className="field-new__label">{t("clinical.hairRestorationForm.followupMonths")}</label>
             <select
               className="input-new"
               value={form.seguimientoMeses}
               onChange={e => set("seguimientoMeses", e.target.value)}
             >
-              <option value="">Seleccionar…</option>
-              {FOLLOWUP_MONTHS.map(m => <option key={m} value={m}>{m} meses</option>)}
+              <option value="">{t("clinical.hairRestorationForm.select")}</option>
+              {FOLLOWUP_MONTHS.map(m => <option key={m} value={m}>{t("clinical.hairRestorationForm.monthsValue", { count: Number(m) })}</option>)}
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">% supervivencia grafts</label>
+            <label className="field-new__label">{t("clinical.hairRestorationForm.graftSurvivalPct")}</label>
             <input
               type="number"
               className="input-new mono"
@@ -284,7 +286,7 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
       </CardNew>
 
       {/* Timeline de evolución */}
-      <CardNew title="Timeline de evolución post-procedimiento" sub="Las fotos comparativas se registran en Antes/Después">
+      <CardNew title={t("clinical.hairRestorationForm.timelineTitle")} sub={t("clinical.hairRestorationForm.timelineSub")}>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {TIMELINE_MILESTONES.map(milestone => {
             const entry = form.timelineMilestones[milestone];
@@ -309,7 +311,7 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
                   <textarea
                     className="input-new"
                     style={{ minHeight: 60, padding: "8px 12px", height: "auto", resize: "vertical", marginLeft: 24, marginTop: 6, width: "calc(100% - 24px)" }}
-                    placeholder={`Observaciones a los ${milestone}…`}
+                    placeholder={t("clinical.hairRestorationForm.observationsAt", { milestone })}
                     value={entry?.observaciones ?? ""}
                     onChange={e => setForm(f => ({
                       ...f,
@@ -327,34 +329,34 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
       </CardNew>
 
       {/* Diagnóstico & plan */}
-      <CardNew title="Diagnóstico y plan">
+      <CardNew title={t("clinical.hairRestorationForm.dxPlanTitle")}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
           <div className="field-new">
-            <label className="field-new__label">Diagnóstico / Evaluación</label>
+            <label className="field-new__label">{t("clinical.hairRestorationForm.dxAssessment")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
-              placeholder="Diagnóstico, hallazgos clínicos…"
+              placeholder={t("clinical.hairRestorationForm.dxPlaceholder")}
               value={form.assessment}
               onChange={e => set("assessment", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Plan de tratamiento</label>
+            <label className="field-new__label">{t("clinical.hairRestorationForm.treatmentPlan")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
-              placeholder="Plan de tratamiento futuro…"
+              placeholder={t("clinical.hairRestorationForm.treatmentPlanPlaceholder")}
               value={form.plan}
               onChange={e => set("plan", e.target.value)}
             />
           </div>
           <div className="field-new" style={{ gridColumn: "1 / -1" }}>
-            <label className="field-new__label">Notas quirúrgicas</label>
+            <label className="field-new__label">{t("clinical.hairRestorationForm.surgicalNotes")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
-              placeholder="Detalles del procedimiento quirúrgico, complicaciones…"
+              placeholder={t("clinical.hairRestorationForm.surgicalNotesPlaceholder")}
               value={form.notasQuirurgicas}
               onChange={e => set("notasQuirurgicas", e.target.value)}
             />
@@ -363,7 +365,7 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
       </CardNew>
 
       {/* Supervivencia de injertos */}
-      <CardNew title="Supervivencia de injertos" sub="Por zona anatómica">
+      <CardNew title={t("clinical.hairRestorationForm.graftSurvivalTitle")} sub={t("clinical.hairRestorationForm.byAnatomicalZone")}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
           {SURVIVAL_ZONES.map(zone => (
             <div
@@ -380,7 +382,7 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
             >
               <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-2)" }}>{zone}</span>
               <div className="field-new">
-                <label className="field-new__label">Implantados</label>
+                <label className="field-new__label">{t("clinical.hairRestorationForm.implanted")}</label>
                 <input
                   type="number" min={0}
                   className="input-new mono"
@@ -391,7 +393,7 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
                 />
               </div>
               <div className="field-new">
-                <label className="field-new__label">Supervivencia %</label>
+                <label className="field-new__label">{t("clinical.hairRestorationForm.survivalPct")}</label>
                 <input
                   type="number" min={0} max={100}
                   className="input-new mono"
@@ -421,8 +423,8 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
               fontSize: 12,
               color: "var(--text-2)",
             }}>
-              <span>Total injertos: <strong className="mono" style={{ color: "var(--text-1)" }}>{totalInjertos}</strong></span>
-              <span>Supervivencia promedio ponderada: <strong className="mono" style={{ color: "var(--text-1)" }}>{avgSurvival}%</strong></span>
+              <span>{t("clinical.hairRestorationForm.totalGrafts")}: <strong className="mono" style={{ color: "var(--text-1)" }}>{totalInjertos}</strong></span>
+              <span>{t("clinical.hairRestorationForm.weightedAvgSurvival")}: <strong className="mono" style={{ color: "var(--text-1)" }}>{avgSurvival}%</strong></span>
             </div>
           ) : null;
         })()}
@@ -430,7 +432,7 @@ export function HairRestorationForm({ patientId, onSaved }: Props) {
 
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <ButtonNew variant="primary" onClick={handleSave} disabled={saving}>
-          {saving ? "Guardando…" : "Guardar expediente capilar"}
+          {saving ? t("common.saving") : t("clinical.hairRestorationForm.saveRecord")}
         </ButtonNew>
       </div>
     </div>

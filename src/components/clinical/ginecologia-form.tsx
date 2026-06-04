@@ -5,6 +5,7 @@ import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { DateField } from "@/components/ui/date-field";
 import { PrenatalTracker } from "@/components/clinical/ginecologia/prenatal-tracker";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Props { patientId: string; patient?: any; onSaved: (record: any) => void }
 
@@ -12,22 +13,23 @@ type Mode = "normal" | "prenatal";
 
 interface Ultrasound { date: string; findings: string }
 
-const TRIMESTER_LABS: { id: string; label: string; trimester: 1 | 2 | 3 }[] = [
-  { id: "bhcg", label: "β-hCG cuantitativa", trimester: 1 },
-  { id: "grupoRh", label: "Grupo sanguíneo y Rh", trimester: 1 },
-  { id: "bhT1", label: "Biometría hemática", trimester: 1 },
-  { id: "egoT1", label: "EGO + urocultivo", trimester: 1 },
-  { id: "vih", label: "VIH / VDRL / HBsAg", trimester: 1 },
-  { id: "glucosa", label: "Glucemia en ayuno", trimester: 1 },
-  { id: "ctog", label: "CTOG 75g (24-28 sem)", trimester: 2 },
-  { id: "bhT2", label: "Biometría hemática T2", trimester: 2 },
-  { id: "egoT2", label: "EGO T2", trimester: 2 },
-  { id: "bhT3", label: "Biometría hemática T3", trimester: 3 },
-  { id: "sgb", label: "Cultivo estreptococo grupo B", trimester: 3 },
-  { id: "egoT3", label: "EGO T3", trimester: 3 },
+const TRIMESTER_LABS: { id: string; labelKey: string; trimester: 1 | 2 | 3 }[] = [
+  { id: "bhcg", labelKey: "clinical.ginecologiaForm.labBhcg", trimester: 1 },
+  { id: "grupoRh", labelKey: "clinical.ginecologiaForm.labBloodGroupRh", trimester: 1 },
+  { id: "bhT1", labelKey: "clinical.ginecologiaForm.labCbc", trimester: 1 },
+  { id: "egoT1", labelKey: "clinical.ginecologiaForm.labUrinalysisCulture", trimester: 1 },
+  { id: "vih", labelKey: "clinical.ginecologiaForm.labHivVdrlHbsag", trimester: 1 },
+  { id: "glucosa", labelKey: "clinical.ginecologiaForm.labFastingGlucose", trimester: 1 },
+  { id: "ctog", labelKey: "clinical.ginecologiaForm.labOgtt", trimester: 2 },
+  { id: "bhT2", labelKey: "clinical.ginecologiaForm.labCbcT2", trimester: 2 },
+  { id: "egoT2", labelKey: "clinical.ginecologiaForm.labUrinalysisT2", trimester: 2 },
+  { id: "bhT3", labelKey: "clinical.ginecologiaForm.labCbcT3", trimester: 3 },
+  { id: "sgb", labelKey: "clinical.ginecologiaForm.labGbsCulture", trimester: 3 },
+  { id: "egoT3", labelKey: "clinical.ginecologiaForm.labUrinalysisT3", trimester: 3 },
 ];
 
 export function GinecologiaForm({ patientId, patient, onSaved }: Props) {
+  const t = useT();
   const [saving, setSaving] = useState(false);
   const [mode, setMode] = useState<Mode>("normal");
 
@@ -66,11 +68,11 @@ export function GinecologiaForm({ patientId, patient, onSaved }: Props) {
 
   async function handleSave() {
     if (!form.subjective && !form.plan && mode === "normal") {
-      toast.error("Agrega motivo de consulta o plan");
+      toast.error(t("clinical.ginecologiaForm.errReasonOrPlan"));
       return;
     }
     if (mode === "prenatal" && !form.fum) {
-      toast.error("Captura la FUM");
+      toast.error(t("clinical.ginecologiaForm.errCaptureLmp"));
       return;
     }
     setSaving(true);
@@ -103,9 +105,9 @@ export function GinecologiaForm({ patientId, patient, onSaved }: Props) {
       if (!res.ok) throw new Error((await res.json()).error);
       const saved = await res.json();
       onSaved(saved);
-      toast.success(mode === "prenatal" ? "Control prenatal guardado" : "Consulta ginecológica guardada");
+      toast.success(mode === "prenatal" ? t("clinical.ginecologiaForm.savedPrenatal") : t("clinical.ginecologiaForm.savedConsult"));
     } catch (err: any) {
-      toast.error(err.message ?? "Error");
+      toast.error(err.message ?? t("common.genericError"));
     } finally {
       setSaving(false);
     }
@@ -128,104 +130,104 @@ export function GinecologiaForm({ patientId, patient, onSaved }: Props) {
           className={`segment-new__btn ${mode === "normal" ? "segment-new__btn--active" : ""}`}
           onClick={() => setMode("normal")}
         >
-          Consulta normal
+          {t("clinical.ginecologiaForm.modeNormal")}
         </button>
         <button
           type="button"
           className={`segment-new__btn ${mode === "prenatal" ? "segment-new__btn--active" : ""}`}
           onClick={() => setMode("prenatal")}
         >
-          Prenatal
+          {t("clinical.ginecologiaForm.modePrenatal")}
         </button>
       </div>
 
       {mode === "normal" ? (
         <>
-          <CardNew title="Motivo de consulta">
+          <CardNew title={t("clinical.ginecologiaForm.reasonTitle")}>
             <textarea
               className="input-new"
               style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
-              placeholder="Revisión anual, sangrado anormal, dolor pélvico…"
+              placeholder={t("clinical.ginecologiaForm.reasonPlaceholder")}
               value={form.subjective}
               onChange={e => set("subjective", e.target.value)}
             />
           </CardNew>
 
-          <CardNew title="Historia ginecológica">
+          <CardNew title={t("clinical.ginecologiaForm.historyTitle")}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px 14px" }}>
               <div className="field-new">
-                <label className="field-new__label">Menarca (edad)</label>
+                <label className="field-new__label">{t("clinical.ginecologiaForm.menarcheAge")}</label>
                 <input type="number" className="input-new mono" placeholder="12" value={form.history.menarca} onChange={e => setH("menarca", e.target.value)} />
               </div>
               <div className="field-new">
-                <label className="field-new__label">IVSA (edad)</label>
+                <label className="field-new__label">{t("clinical.ginecologiaForm.ivsaAge")}</label>
                 <input type="number" className="input-new mono" placeholder="18" value={form.history.ivsa} onChange={e => setH("ivsa", e.target.value)} />
               </div>
               <div className="field-new">
-                <label className="field-new__label">Gesta</label>
+                <label className="field-new__label">{t("clinical.ginecologiaForm.gravida")}</label>
                 <input type="number" className="input-new mono" placeholder="0" value={form.history.gesta} onChange={e => setH("gesta", e.target.value)} />
               </div>
               <div className="field-new">
-                <label className="field-new__label">Para</label>
+                <label className="field-new__label">{t("clinical.ginecologiaForm.para")}</label>
                 <input type="number" className="input-new mono" placeholder="0" value={form.history.para} onChange={e => setH("para", e.target.value)} />
               </div>
               <div className="field-new">
-                <label className="field-new__label">Abortos</label>
+                <label className="field-new__label">{t("clinical.ginecologiaForm.abortions")}</label>
                 <input type="number" className="input-new mono" placeholder="0" value={form.history.aborto} onChange={e => setH("aborto", e.target.value)} />
               </div>
               <div className="field-new">
-                <label className="field-new__label">Cesáreas</label>
+                <label className="field-new__label">{t("clinical.ginecologiaForm.cesareans")}</label>
                 <input type="number" className="input-new mono" placeholder="0" value={form.history.cesarea} onChange={e => setH("cesarea", e.target.value)} />
               </div>
               <div className="field-new">
-                <label className="field-new__label">FUR</label>
+                <label className="field-new__label">{t("clinical.ginecologiaForm.lmpPrevAbbr")}</label>
                 <DateField className="input-new" value={form.history.fur} onChange={e => setH("fur", e.target.value)} />
               </div>
               <div className="field-new">
-                <label className="field-new__label">Método anticonceptivo</label>
+                <label className="field-new__label">{t("clinical.ginecologiaForm.contraceptiveMethod")}</label>
                 <select className="input-new" value={form.history.method} onChange={e => setH("method", e.target.value)}>
-                  <option value="">Ninguno</option>
-                  <option value="ACO">Anticonceptivo oral</option>
-                  <option value="DIU">DIU</option>
-                  <option value="Implante">Implante subdérmico</option>
-                  <option value="Inyectable">Inyectable</option>
-                  <option value="Parche">Parche</option>
-                  <option value="Barrera">Barrera</option>
-                  <option value="OTB">OTB</option>
-                  <option value="Vasectomía pareja">Vasectomía pareja</option>
+                  <option value="">{t("clinical.ginecologiaForm.methodNone")}</option>
+                  <option value="ACO">{t("clinical.ginecologiaForm.methodOral")}</option>
+                  <option value="DIU">{t("clinical.ginecologiaForm.methodIud")}</option>
+                  <option value="Implante">{t("clinical.ginecologiaForm.methodImplant")}</option>
+                  <option value="Inyectable">{t("clinical.ginecologiaForm.methodInjectable")}</option>
+                  <option value="Parche">{t("clinical.ginecologiaForm.methodPatch")}</option>
+                  <option value="Barrera">{t("clinical.ginecologiaForm.methodBarrier")}</option>
+                  <option value="OTB">{t("clinical.ginecologiaForm.methodTubalLigation")}</option>
+                  <option value="Vasectomía pareja">{t("clinical.ginecologiaForm.methodPartnerVasectomy")}</option>
                 </select>
               </div>
             </div>
           </CardNew>
 
-          <CardNew title="Exploración">
+          <CardNew title={t("clinical.ginecologiaForm.examTitle")}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px 14px" }}>
               <div className="field-new">
-                <label className="field-new__label">Mamas</label>
+                <label className="field-new__label">{t("clinical.ginecologiaForm.breasts")}</label>
                 <textarea
                   className="input-new"
                   style={{ minHeight: 70, padding: "8px 12px", height: "auto", resize: "vertical" }}
-                  placeholder="Simétricas, sin nódulos palpables…"
+                  placeholder={t("clinical.ginecologiaForm.breastsPlaceholder")}
                   value={form.exam.breasts}
                   onChange={e => setE("breasts", e.target.value)}
                 />
               </div>
               <div className="field-new">
-                <label className="field-new__label">Exploración pélvica</label>
+                <label className="field-new__label">{t("clinical.ginecologiaForm.pelvicExam")}</label>
                 <textarea
                   className="input-new"
                   style={{ minHeight: 70, padding: "8px 12px", height: "auto", resize: "vertical" }}
-                  placeholder="Genitales externos, vagina, cérvix…"
+                  placeholder={t("clinical.ginecologiaForm.pelvicExamPlaceholder")}
                   value={form.exam.pelvic}
                   onChange={e => setE("pelvic", e.target.value)}
                 />
               </div>
               <div className="field-new">
-                <label className="field-new__label">Citología</label>
+                <label className="field-new__label">{t("clinical.ginecologiaForm.cytology")}</label>
                 <textarea
                   className="input-new"
                   style={{ minHeight: 70, padding: "8px 12px", height: "auto", resize: "vertical" }}
-                  placeholder="Resultado Papanicolaou…"
+                  placeholder={t("clinical.ginecologiaForm.cytologyPlaceholder")}
                   value={form.exam.cytology}
                   onChange={e => setE("cytology", e.target.value)}
                 />
@@ -233,11 +235,11 @@ export function GinecologiaForm({ patientId, patient, onSaved }: Props) {
             </div>
           </CardNew>
 
-          <CardNew title="Plan">
+          <CardNew title={t("clinical.ginecologiaForm.planTitle")}>
             <textarea
               className="input-new"
               style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
-              placeholder="Indicaciones, estudios, próxima cita…"
+              placeholder={t("clinical.ginecologiaForm.planPlaceholder")}
               value={form.plan}
               onChange={e => set("plan", e.target.value)}
             />
@@ -245,17 +247,17 @@ export function GinecologiaForm({ patientId, patient, onSaved }: Props) {
         </>
       ) : (
         <>
-          <CardNew title="FUM y seguimiento">
+          <CardNew title={t("clinical.ginecologiaForm.lmpFollowupTitle")}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "12px 14px", marginBottom: 16 }}>
               <div className="field-new">
-                <label className="field-new__label">Fecha última menstruación (FUM)</label>
+                <label className="field-new__label">{t("clinical.ginecologiaForm.lmpDate")}</label>
                 <DateField className="input-new" value={form.fum} onChange={e => set("fum", e.target.value)} />
               </div>
               <div className="field-new">
-                <label className="field-new__label">Motivo / notas</label>
+                <label className="field-new__label">{t("clinical.ginecologiaForm.reasonNotes")}</label>
                 <input
                   className="input-new"
-                  placeholder="Control prenatal rutinario…"
+                  placeholder={t("clinical.ginecologiaForm.reasonNotesPlaceholder")}
                   value={form.subjective}
                   onChange={e => set("subjective", e.target.value)}
                 />
@@ -272,63 +274,63 @@ export function GinecologiaForm({ patientId, patient, onSaved }: Props) {
             )}
           </CardNew>
 
-          <CardNew title="Controles de la visita">
+          <CardNew title={t("clinical.ginecologiaForm.visitChecksTitle")}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "12px 14px" }}>
               <div className="field-new">
-                <label className="field-new__label">Peso (kg)</label>
+                <label className="field-new__label">{t("clinical.ginecologiaForm.weightKg")}</label>
                 <input type="number" step="0.1" className="input-new mono" placeholder="65" value={form.prenatal.weight} onChange={e => setP("weight", e.target.value)} />
               </div>
               <div className="field-new">
-                <label className="field-new__label">TA (mmHg)</label>
+                <label className="field-new__label">{t("clinical.ginecologiaForm.bpMmhg")}</label>
                 <input className="input-new mono" placeholder="110/70" value={form.prenatal.bp} onChange={e => setP("bp", e.target.value)} />
               </div>
               <div className="field-new">
-                <label className="field-new__label">Altura uterina (cm)</label>
+                <label className="field-new__label">{t("clinical.ginecologiaForm.fundalHeightCm")}</label>
                 <input type="number" step="0.1" className="input-new mono" placeholder="24" value={form.prenatal.fundalHeight} onChange={e => setP("fundalHeight", e.target.value)} />
               </div>
               <div className="field-new">
-                <label className="field-new__label">FCF (lpm)</label>
+                <label className="field-new__label">{t("clinical.ginecologiaForm.fhrBpm")}</label>
                 <input type="number" className="input-new mono" placeholder="140" value={form.prenatal.fhr} onChange={e => setP("fhr", e.target.value)} />
               </div>
               <div className="field-new">
-                <label className="field-new__label">Movimientos fetales</label>
+                <label className="field-new__label">{t("clinical.ginecologiaForm.fetalMovements")}</label>
                 <select className="input-new" value={form.prenatal.movements} onChange={e => setP("movements", e.target.value)}>
-                  <option value="">Seleccionar…</option>
-                  <option value="Presentes">Presentes</option>
-                  <option value="Disminuidos">Disminuidos</option>
-                  <option value="Ausentes">Ausentes</option>
-                  <option value="N/A">No aplica</option>
+                  <option value="">{t("clinical.ginecologiaForm.selectPlaceholder")}</option>
+                  <option value="Presentes">{t("clinical.ginecologiaForm.movementsPresent")}</option>
+                  <option value="Disminuidos">{t("clinical.ginecologiaForm.movementsDecreased")}</option>
+                  <option value="Ausentes">{t("clinical.ginecologiaForm.movementsAbsent")}</option>
+                  <option value="N/A">{t("clinical.ginecologiaForm.movementsNa")}</option>
                 </select>
               </div>
             </div>
           </CardNew>
 
           <CardNew
-            title="Ultrasonidos"
-            action={<ButtonNew size="sm" variant="ghost" onClick={addUS}>+ Agregar US</ButtonNew>}
+            title={t("clinical.ginecologiaForm.ultrasoundsTitle")}
+            action={<ButtonNew size="sm" variant="ghost" onClick={addUS}>{t("clinical.ginecologiaForm.addUs")}</ButtonNew>}
           >
             {ultrasounds.length === 0 ? (
               <div style={{ fontSize: 12, color: "var(--text-3)", fontStyle: "italic" }}>
-                Sin ultrasonidos. Haz clic en &quot;+ Agregar US&quot; para añadir.
+                {t("clinical.ginecologiaForm.ultrasoundsEmpty")}
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {ultrasounds.map((u, i) => (
                   <div key={i} style={{ display: "grid", gridTemplateColumns: "170px 1fr auto", gap: 8, alignItems: "flex-end" }}>
                     <div className="field-new">
-                      <label className="field-new__label">Fecha</label>
+                      <label className="field-new__label">{t("common.date")}</label>
                       <DateField className="input-new" value={u.date} onChange={e => updateUS(i, "date", e.target.value)} />
                     </div>
                     <div className="field-new">
-                      <label className="field-new__label">Hallazgos</label>
-                      <input className="input-new" placeholder="Producto único vivo, 22 SDG, PFE 500g…" value={u.findings} onChange={e => updateUS(i, "findings", e.target.value)} />
+                      <label className="field-new__label">{t("clinical.ginecologiaForm.findings")}</label>
+                      <input className="input-new" placeholder={t("clinical.ginecologiaForm.findingsPlaceholder")} value={u.findings} onChange={e => updateUS(i, "findings", e.target.value)} />
                     </div>
                     <button
                       type="button"
                       onClick={() => removeUS(i)}
                       className="btn-new btn-new--ghost btn-new--sm"
                       style={{ padding: 0, width: 28, color: "var(--danger)", alignSelf: "flex-end" }}
-                      aria-label="Eliminar"
+                      aria-label={t("common.delete")}
                     >×</button>
                   </div>
                 ))}
@@ -336,17 +338,17 @@ export function GinecologiaForm({ patientId, patient, onSaved }: Props) {
             )}
           </CardNew>
 
-          <CardNew title="Laboratorios por trimestre">
+          <CardNew title={t("clinical.ginecologiaForm.labsByTrimesterTitle")}>
             {[1, 2, 3].map(tri => (
               <div key={tri} style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, marginBottom: 8 }}>
-                  Trimestre {tri}
+                  {t("clinical.ginecologiaForm.trimesterLabel", { tri })}
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
                   {TRIMESTER_LABS.filter(l => l.trimester === tri).map(l => (
                     <label key={l.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer", background: labs[l.id] ? "rgba(52,211,153,0.08)" : "transparent" }}>
                       <input type="checkbox" checked={!!labs[l.id]} onChange={() => toggleLab(l.id)} />
-                      <span style={{ fontSize: 12, color: "var(--text-1)" }}>{l.label}</span>
+                      <span style={{ fontSize: 12, color: "var(--text-1)" }}>{t(l.labelKey)}</span>
                     </label>
                   ))}
                 </div>
@@ -354,11 +356,11 @@ export function GinecologiaForm({ patientId, patient, onSaved }: Props) {
             ))}
           </CardNew>
 
-          <CardNew title="Plan">
+          <CardNew title={t("clinical.ginecologiaForm.planTitle")}>
             <textarea
               className="input-new"
               style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
-              placeholder="Ácido fólico, hierro, control en 4 semanas…"
+              placeholder={t("clinical.ginecologiaForm.planPrenatalPlaceholder")}
               value={form.plan}
               onChange={e => set("plan", e.target.value)}
             />
@@ -368,7 +370,7 @@ export function GinecologiaForm({ patientId, patient, onSaved }: Props) {
 
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <ButtonNew variant="primary" onClick={handleSave} disabled={saving}>
-          {saving ? "Guardando…" : "Guardar consulta"}
+          {saving ? t("common.saving") : t("clinical.ginecologiaForm.saveConsult")}
         </ButtonNew>
       </div>
     </div>

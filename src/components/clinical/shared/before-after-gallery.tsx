@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 interface GalleryImage {
   id: string;
@@ -24,6 +25,7 @@ export function BeforeAfterGallery({
   improvement,
   tags,
 }: BeforeAfterGalleryProps) {
+  const t = useT();
   const [selected, setSelected] = useState<GalleryImage | null>(null);
   const main = images.slice(0, 2);
   const rest = images.slice(2);
@@ -46,7 +48,7 @@ export function BeforeAfterGallery({
               color: "var(--text-1)",
             }}
           >
-            {sessionLabel || "Comparativa"}
+            {sessionLabel || t("clinical.beforeAfter.comparison")}
           </div>
           {improvement !== undefined && (
             <span
@@ -61,16 +63,16 @@ export function BeforeAfterGallery({
                 fontFamily: "ui-monospace, monospace",
               }}
             >
-              +{improvement}% mejora
+              {t("clinical.beforeAfter.improvement", { improvement })}
             </span>
           )}
         </div>
 
         {tags && tags.length > 0 && (
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-            {tags.map((t, i) => (
+            {tags.map((tag, i) => (
               <span key={i} className="tag-new">
-                {t}
+                {tag}
               </span>
             ))}
           </div>
@@ -207,7 +209,7 @@ export function BeforeAfterGallery({
               cursor: "pointer",
               color: "var(--text-1)",
             }}
-            aria-label="Cerrar"
+            aria-label={t("common.close")}
           >
             <X size={16} />
           </button>

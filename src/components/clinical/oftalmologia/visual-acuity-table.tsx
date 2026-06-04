@@ -1,6 +1,7 @@
 "use client";
 
 import { Eye } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 interface VisualAcuityValues {
   odSC?: string;
@@ -31,6 +32,7 @@ const SNELLEN_OPTIONS = [
 ];
 
 export function VisualAcuityTable({ values, onChange, editable }: VisualAcuityProps) {
+  const t = useT();
   function update(key: keyof VisualAcuityValues, v: string) {
     if (!onChange) return;
     onChange({ ...values, [key]: v || undefined });
@@ -86,8 +88,8 @@ export function VisualAcuityTable({ values, onChange, editable }: VisualAcuityPr
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
         <Eye size={18} color="var(--brand)" />
         <div>
-          <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-1)" }}>Agudeza visual</div>
-          <div style={{ fontSize: 11, color: "var(--text-2)" }}>Notación Snellen</div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-1)" }}>{t("clinical.visualAcuityTable.title")}</div>
+          <div style={{ fontSize: 11, color: "var(--text-2)" }}>{t("clinical.visualAcuityTable.snellenNotation")}</div>
         </div>
       </div>
 
@@ -96,8 +98,8 @@ export function VisualAcuityTable({ values, onChange, editable }: VisualAcuityPr
           <thead>
             <tr>
               <th style={headerStyle}></th>
-              <th style={headerStyle}>SC (sin corrección)</th>
-              <th style={headerStyle}>CC (con corrección)</th>
+              <th style={headerStyle}>{t("clinical.visualAcuityTable.scHeader")}</th>
+              <th style={headerStyle}>{t("clinical.visualAcuityTable.ccHeader")}</th>
             </tr>
           </thead>
           <tbody>
@@ -125,10 +127,10 @@ export function VisualAcuityTable({ values, onChange, editable }: VisualAcuityPr
           flexWrap: "wrap",
         }}
       >
-        <span><strong style={{ color: "var(--text-1)" }}>CD</strong> = Cuenta Dedos</span>
-        <span><strong style={{ color: "var(--text-1)" }}>MM</strong> = Movimiento de Manos</span>
-        <span><strong style={{ color: "var(--text-1)" }}>PL</strong> = Percepción de Luz</span>
-        <span><strong style={{ color: "var(--text-1)" }}>NPL</strong> = No Percepción de Luz</span>
+        <span><strong style={{ color: "var(--text-1)" }}>CD</strong> = {t("clinical.visualAcuityTable.cdLabel")}</span>
+        <span><strong style={{ color: "var(--text-1)" }}>MM</strong> = {t("clinical.visualAcuityTable.mmLabel")}</span>
+        <span><strong style={{ color: "var(--text-1)" }}>PL</strong> = {t("clinical.visualAcuityTable.plLabel")}</span>
+        <span><strong style={{ color: "var(--text-1)" }}>NPL</strong> = {t("clinical.visualAcuityTable.nplLabel")}</span>
       </div>
     </div>
   );

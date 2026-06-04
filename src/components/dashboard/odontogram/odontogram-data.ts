@@ -27,15 +27,19 @@ export const FULL_TOOTH_STATES: ToothState[] = [
   "EXTRACCION",
 ];
 
-export const STATE_LABEL: Record<ToothState, string> = {
-  SANO:        "Sano",
-  CARIES:      "Caries",
-  RESINA:      "Restauración",
-  CORONA:      "Corona",
-  ENDODONCIA:  "Endodoncia",
-  IMPLANTE:    "Implante",
-  AUSENTE:     "Ausente",
-  EXTRACCION:  "Extracción",
+/**
+ * Mapa de estado → translation-key. El valor visible se resuelve vía
+ * t(STATE_LABEL_KEY[state]) en el render del componente (nunca en módulo).
+ */
+export const STATE_LABEL_KEY: Record<ToothState, string> = {
+  SANO:        "clinical.odontogram.stateSano",
+  CARIES:      "clinical.odontogram.stateCaries",
+  RESINA:      "clinical.odontogram.stateResina",
+  CORONA:      "clinical.odontogram.stateCorona",
+  ENDODONCIA:  "clinical.odontogram.stateEndodoncia",
+  IMPLANTE:    "clinical.odontogram.stateImplante",
+  AUSENTE:     "clinical.odontogram.stateAusente",
+  EXTRACCION:  "clinical.odontogram.stateExtraccion",
 };
 
 /** Paleta del mockup (mockups/audit-and-redesign/odontograma-3d.html). */
@@ -171,10 +175,14 @@ export function toothTypeName(fdi: number): string {
   return `Molar ${arch} ${side}`;
 }
 
-export const SURFACE_LABEL: Record<SurfaceKey, string> = {
-  V: "Vestibular",
-  L: "Lingual",
-  M: "Mesial",
-  D: "Distal",
-  O: "Oclusal",
+/**
+ * Mapa de superficie → translation-key. Se resuelve vía
+ * t(SURFACE_LABEL_KEY[surface]) en el render del componente.
+ */
+export const SURFACE_LABEL_KEY: Record<SurfaceKey, string> = {
+  V: "clinical.odontogram.surfaceVestibular",
+  L: "clinical.odontogram.surfaceLingual",
+  M: "clinical.odontogram.surfaceMesial",
+  D: "clinical.odontogram.surfaceDistal",
+  O: "clinical.odontogram.surfaceOclusal",
 };

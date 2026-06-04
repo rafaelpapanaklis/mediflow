@@ -4,6 +4,7 @@ import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { DateField } from "@/components/ui/date-field";
 import toast from "react-hot-toast";
+import { useT } from "@/i18n/i18n-provider";
 
 const FITZPATRICK = ["I", "II", "III", "IV", "V", "VI"];
 const COLORES_VELLO = [
@@ -65,6 +66,7 @@ interface Props {
 }
 
 export function LaserForm({ patientId, onSaved }: Props) {
+  const t = useT();
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     fitzpatrick: "",
@@ -97,6 +99,63 @@ export function LaserForm({ patientId, onSaved }: Props) {
 
   const set = (k: string, v: any) => setForm((f) => ({ ...f, [k]: v }));
 
+  const colorVelloLabels: Record<string, string> = {
+    "Negro": t("clinical.laserForm.hairBlack"),
+    "Castaño oscuro": t("clinical.laserForm.hairDarkBrown"),
+    "Castaño claro": t("clinical.laserForm.hairLightBrown"),
+    "Rubio": t("clinical.laserForm.hairBlonde"),
+    "Pelirrojo": t("clinical.laserForm.hairRed"),
+    "Canoso": t("clinical.laserForm.hairGray"),
+  };
+  const grosorLabels: Record<string, string> = {
+    "Fino": t("clinical.laserForm.thicknessFine"),
+    "Medio": t("clinical.laserForm.thicknessMedium"),
+    "Grueso": t("clinical.laserForm.thicknessThick"),
+  };
+  const zonaLabels: Record<string, string> = {
+    "Labio superior": t("clinical.laserForm.zoneUpperLip"),
+    "Axilas": t("clinical.laserForm.zoneArmpits"),
+    "Brazos": t("clinical.laserForm.zoneArms"),
+    "Pecho": t("clinical.laserForm.zoneChest"),
+    "Espalda": t("clinical.laserForm.zoneBack"),
+    "Abdomen": t("clinical.laserForm.zoneAbdomen"),
+    "Bikini clasico": t("clinical.laserForm.zoneBikiniClassic"),
+    "Bikini brasileño": t("clinical.laserForm.zoneBikiniBrazilian"),
+    "Bikini full": t("clinical.laserForm.zoneBikiniFull"),
+    "Piernas superiores": t("clinical.laserForm.zoneUpperLegs"),
+    "Piernas inferiores": t("clinical.laserForm.zoneLowerLegs"),
+    "Gluteos": t("clinical.laserForm.zoneGlutes"),
+    "Rostro completo": t("clinical.laserForm.zoneFullFace"),
+  };
+  const enfriamientoLabels: Record<string, string> = {
+    "Cryo": t("clinical.laserForm.coolingCryo"),
+    "Contacto": t("clinical.laserForm.coolingContact"),
+    "Aire": t("clinical.laserForm.coolingAir"),
+  };
+  const reaccionLabels: Record<string, string> = {
+    "Eritema leve": t("clinical.laserForm.reactionMildErythema"),
+    "Eritema moderado": t("clinical.laserForm.reactionModerateErythema"),
+    "Edema": t("clinical.laserForm.reactionEdema"),
+    "Ampollas": t("clinical.laserForm.reactionBlisters"),
+    "Hiperpigmentacion": t("clinical.laserForm.reactionHyperpigmentation"),
+    "Hiperpigmentación": t("clinical.laserForm.reactionHyperpigmentation"),
+    "Ninguna": t("clinical.laserForm.reactionNone"),
+    "Sin reacción": t("clinical.laserForm.reactionNoReaction"),
+  };
+  const intervaloLabels: Record<string, string> = {
+    "4 semanas": t("clinical.laserForm.interval4Weeks"),
+    "6 semanas": t("clinical.laserForm.interval6Weeks"),
+    "8 semanas": t("clinical.laserForm.interval8Weeks"),
+  };
+  const checklistLabels: Record<string, string> = {
+    "Sin exposición solar directa (2 semanas)": t("clinical.laserForm.checkNoSun"),
+    "Sin depilación con cera/pinza (4 semanas)": t("clinical.laserForm.checkNoWaxing"),
+    "Sin uso de retinoides tópicos (1 semana)": t("clinical.laserForm.checkNoRetinoids"),
+    "Sin autobronceante (2 semanas)": t("clinical.laserForm.checkNoSelfTanner"),
+    "Sin antibióticos fotosensibilizantes": t("clinical.laserForm.checkNoPhotoAntibiotics"),
+    "Zona rasurada previo a sesión": t("clinical.laserForm.checkShavedZone"),
+  };
+
   const toggleChecklist = (val: string) => {
     setForm((f) => ({
       ...f,
@@ -125,7 +184,7 @@ export function LaserForm({ patientId, onSaved }: Props) {
 
   async function handleSave() {
     if (!form.zona || !form.maquina) {
-      toast.error("Selecciona zona tratada y maquina");
+      toast.error(t("clinical.laserForm.selectZoneAndMachine"));
       return;
     }
     setSaving(true);
@@ -172,7 +231,7 @@ export function LaserForm({ patientId, onSaved }: Props) {
       });
       if (!res.ok) throw new Error((await res.json()).error);
       onSaved(await res.json());
-      toast.success("Registro de depilacion laser guardado");
+      toast.success(t("clinical.laserForm.saved"));
     } catch (err: any) {
       toast.error(err.message ?? "Error");
     } finally {
@@ -182,14 +241,14 @@ export function LaserForm({ patientId, onSaved }: Props) {
 
   return (
     <form onSubmit={e => { e.preventDefault(); handleSave(); }} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <CardNew title="Checklist pre-sesión (confirmar con el cliente)">
+      <CardNew title={t("clinical.laserForm.checklistTitle")}>
         <div className="flex items-center justify-between mb-3">
           <span className={`text-xs font-bold px-2 py-1 rounded-full ${
             allChecklistChecked
               ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-800 dark:text-emerald-200"
               : "bg-amber-100 text-amber-700 dark:bg-amber-800 dark:text-amber-200"
           }`}>
-            {allChecklistChecked ? "Apto \u2705" : "\u26A0\uFE0F Revisar contraindicaciones"}
+            {allChecklistChecked ? t("clinical.laserForm.eligible") : t("clinical.laserForm.reviewContraindications")}
           </span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -208,67 +267,67 @@ export function LaserForm({ patientId, onSaved }: Props) {
                 checked={form.checklistPreSesion.includes(item)}
                 onChange={() => toggleChecklist(item)}
               />
-              {item}
+              {checklistLabels[item] ?? item}
             </label>
           ))}
         </div>
       </CardNew>
 
-      <CardNew title="Evaluacion del paciente">
+      <CardNew title={t("clinical.laserForm.patientEvaluation")}>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="field-new">
-            <label className="field-new__label">Fototipo Fitzpatrick</label>
+            <label className="field-new__label">{t("clinical.laserForm.fitzpatrickType")}</label>
             <select
               className="input-new"
               value={form.fitzpatrick}
               onChange={(e) => set("fitzpatrick", e.target.value)}
             >
-              <option value="">Seleccionar…</option>
+              <option value="">{t("clinical.laserForm.selectOption")}</option>
               {FITZPATRICK.map((f) => (
                 <option key={f} value={f}>
-                  Tipo {f}
+                  {t("clinical.laserForm.fitzpatrickTypeLabel", { type: f })}
                 </option>
               ))}
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Color de vello</label>
+            <label className="field-new__label">{t("clinical.laserForm.hairColor")}</label>
             <select
               className="input-new"
               value={form.colorVello}
               onChange={(e) => set("colorVello", e.target.value)}
             >
-              <option value="">Seleccionar…</option>
+              <option value="">{t("clinical.laserForm.selectOption")}</option>
               {COLORES_VELLO.map((c) => (
                 <option key={c} value={c}>
-                  {c}
+                  {colorVelloLabels[c] ?? c}
                 </option>
               ))}
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Grosor</label>
+            <label className="field-new__label">{t("clinical.laserForm.thickness")}</label>
             <select
               className="input-new"
               value={form.grosor}
               onChange={(e) => set("grosor", e.target.value)}
             >
-              <option value="">Seleccionar…</option>
+              <option value="">{t("clinical.laserForm.selectOption")}</option>
               {GROSORES.map((g) => (
                 <option key={g} value={g}>
-                  {g}
+                  {grosorLabels[g] ?? g}
                 </option>
               ))}
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Maquina</label>
+            <label className="field-new__label">{t("clinical.laserForm.machine")}</label>
             <select
               className="input-new"
               value={form.maquina}
               onChange={(e) => set("maquina", e.target.value)}
             >
-              <option value="">Seleccionar…</option>
+              <option value="">{t("clinical.laserForm.selectOption")}</option>
               {MAQUINAS.map((m) => (
                 <option key={m} value={m}>
                   {m}
@@ -279,70 +338,70 @@ export function LaserForm({ patientId, onSaved }: Props) {
         </div>
       </CardNew>
 
-      <CardNew title="Zona tratada">
+      <CardNew title={t("clinical.laserForm.treatedZoneTitle")}>
         <div className="field-new">
-          <label className="field-new__label">Zona</label>
+          <label className="field-new__label">{t("clinical.laserForm.zone")}</label>
           <select
             className="input-new"
             value={form.zona}
             onChange={(e) => set("zona", e.target.value)}
           >
-            <option value="">Seleccionar…</option>
+            <option value="">{t("clinical.laserForm.selectOption")}</option>
             {ZONAS.map((z) => (
               <option key={z} value={z}>
-                {z}
+                {zonaLabels[z] ?? z}
               </option>
             ))}
           </select>
         </div>
       </CardNew>
 
-      <CardNew title="Parametros del equipo">
+      <CardNew title={t("clinical.laserForm.equipmentParamsTitle")}>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="field-new">
-            <label className="field-new__label">Fluencia (J/cm²)</label>
+            <label className="field-new__label">{t("clinical.laserForm.fluence")}</label>
             <input
               type="number"
               step="0.1"
               className="input-new"
-              placeholder="Ej: 18.5"
+              placeholder={t("clinical.laserForm.fluencePlaceholder")}
               value={form.fluencia}
               onChange={(e) => set("fluencia", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Ancho de pulso (ms)</label>
+            <label className="field-new__label">{t("clinical.laserForm.pulseWidth")}</label>
             <input
               type="number"
               step="0.1"
               className="input-new"
-              placeholder="Ej: 30"
+              placeholder={t("clinical.laserForm.pulseWidthPlaceholder")}
               value={form.anchoPulso}
               onChange={(e) => set("anchoPulso", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Spot size (mm)</label>
+            <label className="field-new__label">{t("clinical.laserForm.spotSize")}</label>
             <input
               type="number"
               step="0.1"
               className="input-new"
-              placeholder="Ej: 12"
+              placeholder={t("clinical.laserForm.spotSizePlaceholder")}
               value={form.spotSize}
               onChange={(e) => set("spotSize", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Metodo de enfriamiento</label>
+            <label className="field-new__label">{t("clinical.laserForm.coolingMethod")}</label>
             <select
               className="input-new"
               value={form.enfriamiento}
               onChange={(e) => set("enfriamiento", e.target.value)}
             >
-              <option value="">Seleccionar…</option>
+              <option value="">{t("clinical.laserForm.selectOption")}</option>
               {ENFRIAMIENTO.map((e) => (
                 <option key={e} value={e}>
-                  {e}
+                  {enfriamientoLabels[e] ?? e}
                 </option>
               ))}
             </select>
@@ -350,32 +409,32 @@ export function LaserForm({ patientId, onSaved }: Props) {
         </div>
       </CardNew>
 
-      <CardNew title="Progreso de sesiones">
+      <CardNew title={t("clinical.laserForm.sessionProgressTitle")}>
         <div className="grid grid-cols-3 gap-3">
           <div className="field-new">
-            <label className="field-new__label">Numero de sesion</label>
+            <label className="field-new__label">{t("clinical.laserForm.sessionNumber")}</label>
             <input
               type="number"
               min="1"
               className="input-new"
-              placeholder="Ej: 3"
+              placeholder={t("clinical.laserForm.sessionNumberPlaceholder")}
               value={form.sesionActual}
               onChange={(e) => set("sesionActual", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Total de sesiones planeadas</label>
+            <label className="field-new__label">{t("clinical.laserForm.totalSessionsPlanned")}</label>
             <input
               type="number"
               min="1"
               className="input-new"
-              placeholder="Ej: 8"
+              placeholder={t("clinical.laserForm.totalSessionsPlaceholder")}
               value={form.sesionesTotal}
               onChange={(e) => set("sesionesTotal", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Intervalo proxima sesion</label>
+            <label className="field-new__label">{t("clinical.laserForm.nextSessionInterval")}</label>
             <select
               className="input-new"
               value={form.intervalo}
@@ -383,7 +442,7 @@ export function LaserForm({ patientId, onSaved }: Props) {
             >
               {INTERVALOS.map((i) => (
                 <option key={i} value={i}>
-                  {i}
+                  {intervaloLabels[i] ?? i}
                 </option>
               ))}
             </select>
@@ -391,17 +450,17 @@ export function LaserForm({ patientId, onSaved }: Props) {
         </div>
         {form.sesionActual && form.sesionesTotal && (
           <p className="text-xs text-muted-foreground mt-2">
-            Sesion {form.sesionActual} de {form.sesionesTotal}
+            {t("clinical.laserForm.sessionXofY", { current: form.sesionActual, total: form.sesionesTotal })}
           </p>
         )}
       </CardNew>
 
       {form.zona && (
-        <CardNew title="Estimación de reducción acumulada">
+        <CardNew title={t("clinical.laserForm.cumulativeReductionTitle")}>
           <div className="space-y-3">
             <div className="space-y-2">
               <div className="flex items-center gap-3">
-                <span className="text-sm min-w-[160px] font-medium">{form.zona}</span>
+                <span className="text-sm min-w-[160px] font-medium">{zonaLabels[form.zona] ?? form.zona}</span>
                 <input
                   type="number"
                   min="0"
@@ -420,7 +479,7 @@ export function LaserForm({ patientId, onSaved }: Props) {
                     }))
                   }
                 />
-                <span className="text-xs text-muted-foreground">% reducción estimada</span>
+                <span className="text-xs text-muted-foreground">{t("clinical.laserForm.estimatedReductionPct")}</span>
               </div>
               <div className="w-full bg-muted rounded-full h-3">
                 <div
@@ -437,14 +496,14 @@ export function LaserForm({ patientId, onSaved }: Props) {
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                {form.reduccionPorZona[form.zona] ?? 0}% de reducción estimada
+                {t("clinical.laserForm.estimatedReductionResult", { pct: form.reduccionPorZona[form.zona] ?? 0 })}
               </p>
             </div>
           </div>
         </CardNew>
       )}
 
-      <CardNew title="Reacciones observadas">
+      <CardNew title={t("clinical.laserForm.observedReactionsTitle")}>
         <div className="flex flex-wrap gap-2">
           {REACCIONES.map((r) => (
             <label
@@ -463,36 +522,36 @@ export function LaserForm({ patientId, onSaved }: Props) {
                 checked={form.reacciones.includes(r)}
                 onChange={() => toggleReaccion(r)}
               />
-              {r}
+              {reaccionLabels[r] ?? r}
             </label>
           ))}
         </div>
       </CardNew>
 
-      <CardNew title="Test spot (requerido antes de primera sesión)">
+      <CardNew title={t("clinical.laserForm.testSpotTitle")}>
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
           <div className="field-new">
-            <label className="field-new__label">Zona probada</label>
+            <label className="field-new__label">{t("clinical.laserForm.testedZone")}</label>
             <input
               type="text"
               className="input-new"
-              placeholder="Ej: Antebrazo interno"
+              placeholder={t("clinical.laserForm.testedZonePlaceholder")}
               value={form.testSpotZona}
               onChange={(e) => set("testSpotZona", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Parámetros del test (fluencia, pulso)</label>
+            <label className="field-new__label">{t("clinical.laserForm.testParams")}</label>
             <input
               type="text"
               className="input-new"
-              placeholder="Ej: 15 J/cm², 30ms"
+              placeholder={t("clinical.laserForm.testParamsPlaceholder")}
               value={form.testSpotParametros}
               onChange={(e) => set("testSpotParametros", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Fecha del test</label>
+            <label className="field-new__label">{t("clinical.laserForm.testDate")}</label>
             <DateField
               className="input-new"
               value={form.testSpotFecha}
@@ -500,54 +559,54 @@ export function LaserForm({ patientId, onSaved }: Props) {
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Reacción a 24h</label>
+            <label className="field-new__label">{t("clinical.laserForm.reaction24h")}</label>
             <select
               className="input-new"
               value={form.testSpotReaccion24}
               onChange={(e) => set("testSpotReaccion24", e.target.value)}
             >
-              <option value="">Seleccionar…</option>
+              <option value="">{t("clinical.laserForm.selectOption")}</option>
               {REACCIONES_TEST.map((r) => (
-                <option key={r} value={r}>{r}</option>
+                <option key={r} value={r}>{reaccionLabels[r] ?? r}</option>
               ))}
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Reacción a 48h</label>
+            <label className="field-new__label">{t("clinical.laserForm.reaction48h")}</label>
             <select
               className="input-new"
               value={form.testSpotReaccion48}
               onChange={(e) => set("testSpotReaccion48", e.target.value)}
             >
-              <option value="">Seleccionar…</option>
+              <option value="">{t("clinical.laserForm.selectOption")}</option>
               {REACCIONES_TEST.map((r) => (
-                <option key={r} value={r}>{r}</option>
+                <option key={r} value={r}>{reaccionLabels[r] ?? r}</option>
               ))}
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Resultado</label>
+            <label className="field-new__label">{t("clinical.laserForm.result")}</label>
             <select
               className="input-new"
               value={form.testSpotResultado}
               onChange={(e) => set("testSpotResultado", e.target.value)}
             >
-              <option value="">Seleccionar…</option>
-              <option value="Apto para tratamiento">Apto para tratamiento</option>
-              <option value="Reducir parámetros">Reducir parámetros</option>
-              <option value="No apto">No apto</option>
+              <option value="">{t("clinical.laserForm.selectOption")}</option>
+              <option value="Apto para tratamiento">{t("clinical.laserForm.resultEligible")}</option>
+              <option value="Reducir parámetros">{t("clinical.laserForm.resultReduceParams")}</option>
+              <option value="No apto">{t("clinical.laserForm.resultNotEligible")}</option>
             </select>
           </div>
         </div>
       </CardNew>
 
-      <CardNew title="SOAP">
+      <CardNew title={t("clinical.laserForm.soapTitle")}>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {([
-            { key: "subjective", label: "Subjetivo", ph: "Sensibilidad, historial…" },
-            { key: "objective", label: "Objetivo", ph: "Observaciones de la piel…" },
-            { key: "assessment", label: "Evaluacion", ph: "Respuesta al tratamiento…" },
-            { key: "plan", label: "Plan", ph: "Ajustes, proxima sesion…" },
+            { key: "subjective", label: t("clinical.laserForm.soapSubjective"), ph: t("clinical.laserForm.soapSubjectivePlaceholder") },
+            { key: "objective", label: t("clinical.laserForm.soapObjective"), ph: t("clinical.laserForm.soapObjectivePlaceholder") },
+            { key: "assessment", label: t("clinical.laserForm.soapAssessment"), ph: t("clinical.laserForm.soapAssessmentPlaceholder") },
+            { key: "plan", label: t("clinical.laserForm.soapPlan"), ph: t("clinical.laserForm.soapPlanPlaceholder") },
           ] as const).map((f) => (
             <div key={f.key} className="field-new">
               <label className="field-new__label">{f.label}</label>
@@ -563,13 +622,13 @@ export function LaserForm({ patientId, onSaved }: Props) {
         </div>
       </CardNew>
 
-      <CardNew title="Notas adicionales">
+      <CardNew title={t("clinical.laserForm.additionalNotesTitle")}>
         <div className="field-new">
-          <label className="field-new__label">Notas adicionales</label>
+          <label className="field-new__label">{t("clinical.laserForm.additionalNotesLabel")}</label>
           <textarea
             className="input-new"
             style={{ minHeight: 80, resize: "vertical" }}
-            placeholder="Observaciones del procedimiento…"
+            placeholder={t("clinical.laserForm.additionalNotesPlaceholder")}
             value={form.notas}
             onChange={(e) => set("notas", e.target.value)}
           />
@@ -578,7 +637,7 @@ export function LaserForm({ patientId, onSaved }: Props) {
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
         <ButtonNew variant="primary" type="submit" disabled={saving}>
-          {saving ? "Guardando…" : "Guardar consulta"}
+          {saving ? t("common.saving") : t("clinical.laserForm.saveConsult")}
         </ButtonNew>
       </div>
     </form>

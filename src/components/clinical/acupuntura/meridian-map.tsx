@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Check } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 interface AcupuncturePoint {
   id: string;
@@ -72,6 +73,7 @@ export function MeridianMap({
   editable,
   points = DEFAULT_POINTS,
 }: MeridianMapProps) {
+  const t = useT();
   const [hoverId, setHoverId] = useState<string | null>(null);
   const usedSet = new Set(usedPointIds);
 
@@ -92,10 +94,10 @@ export function MeridianMap({
       >
         <div>
           <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-1)" }}>
-            Mapa de meridianos
+            {t("clinical.meridianMap.title")}
           </div>
           <div style={{ fontSize: 12, color: "var(--text-2)" }}>
-            {usedPointIds.length} / {points.length} puntos activados
+            {t("clinical.meridianMap.pointsActivated", { used: usedPointIds.length, total: points.length })}
           </div>
         </div>
       </div>

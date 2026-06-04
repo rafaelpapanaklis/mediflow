@@ -5,12 +5,14 @@ import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { MeridianMap } from "@/components/clinical/acupuntura/meridian-map";
 import { EvolutionChart } from "@/components/clinical/shared";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Props { patientId: string; onSaved: (record: any) => void }
 
 interface PointNote { id: string; notes: string }
 
 export function AcupunturaForm({ patientId, onSaved }: Props) {
+  const t = useT();
   const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({
@@ -64,7 +66,7 @@ export function AcupunturaForm({ patientId, onSaved }: Props) {
 
   async function handleSave() {
     if (!form.subjective && usedPoints.length === 0) {
-      toast.error("Agrega motivo o al menos un punto");
+      toast.error(t("clinical.acupunturaForm.errReasonOrPoint"));
       return;
     }
     setSaving(true);
@@ -93,9 +95,9 @@ export function AcupunturaForm({ patientId, onSaved }: Props) {
       if (!res.ok) throw new Error((await res.json()).error);
       const saved = await res.json();
       onSaved(saved);
-      toast.success("Consulta de acupuntura guardada");
+      toast.success(t("clinical.acupunturaForm.saved"));
     } catch (err: any) {
-      toast.error(err.message ?? "Error");
+      toast.error(err.message ?? t("common.genericError"));
     } finally {
       setSaving(false);
     }
@@ -103,61 +105,61 @@ export function AcupunturaForm({ patientId, onSaved }: Props) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <CardNew title="Motivo de consulta">
+      <CardNew title={t("clinical.acupunturaForm.reasonTitle")}>
         <textarea
           className="input-new"
           style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
-          placeholder="Dolor lumbar crónico, insomnio, ansiedad…"
+          placeholder={t("clinical.acupunturaForm.reasonPlaceholder")}
           value={form.subjective}
           onChange={e => set("subjective", e.target.value)}
         />
       </CardNew>
 
-      <CardNew title="Diagnóstico MTC">
+      <CardNew title={t("clinical.acupunturaForm.tcmDiagnosisTitle")}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px 14px" }}>
           <div className="field-new">
-            <label className="field-new__label">Síndrome</label>
+            <label className="field-new__label">{t("clinical.acupunturaForm.syndromeLabel")}</label>
             <select className="input-new" value={form.syndrome} onChange={e => set("syndrome", e.target.value)}>
-              <option value="">Seleccionar…</option>
-              <option value="Vacío">Vacío</option>
-              <option value="Plenitud">Plenitud</option>
-              <option value="Vacío + Plenitud">Vacío + Plenitud</option>
+              <option value="">{t("clinical.acupunturaForm.selectOption")}</option>
+              <option value="Vacío">{t("clinical.acupunturaForm.syndromeDeficiency")}</option>
+              <option value="Plenitud">{t("clinical.acupunturaForm.syndromeExcess")}</option>
+              <option value="Vacío + Plenitud">{t("clinical.acupunturaForm.syndromeBoth")}</option>
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Elemento</label>
+            <label className="field-new__label">{t("clinical.acupunturaForm.elementLabel")}</label>
             <select className="input-new" value={form.element} onChange={e => set("element", e.target.value)}>
-              <option value="">Seleccionar…</option>
-              <option value="Madera">Madera</option>
-              <option value="Fuego">Fuego</option>
-              <option value="Tierra">Tierra</option>
-              <option value="Metal">Metal</option>
-              <option value="Agua">Agua</option>
+              <option value="">{t("clinical.acupunturaForm.selectOption")}</option>
+              <option value="Madera">{t("clinical.acupunturaForm.elementWood")}</option>
+              <option value="Fuego">{t("clinical.acupunturaForm.elementFire")}</option>
+              <option value="Tierra">{t("clinical.acupunturaForm.elementEarth")}</option>
+              <option value="Metal">{t("clinical.acupunturaForm.elementMetal")}</option>
+              <option value="Agua">{t("clinical.acupunturaForm.elementWater")}</option>
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Víscera afectada</label>
+            <label className="field-new__label">{t("clinical.acupunturaForm.organLabel")}</label>
             <select className="input-new" value={form.organ} onChange={e => set("organ", e.target.value)}>
-              <option value="">Seleccionar…</option>
-              <option value="Hígado/VB">Hígado / Vesícula biliar</option>
-              <option value="Corazón/ID">Corazón / Intestino delgado</option>
-              <option value="Bazo/Estómago">Bazo / Estómago</option>
-              <option value="Pulmón/IG">Pulmón / Intestino grueso</option>
-              <option value="Riñón/Vejiga">Riñón / Vejiga</option>
-              <option value="Pericardio/TR">Pericardio / Triple recalentador</option>
+              <option value="">{t("clinical.acupunturaForm.selectOption")}</option>
+              <option value="Hígado/VB">{t("clinical.acupunturaForm.organLiverGb")}</option>
+              <option value="Corazón/ID">{t("clinical.acupunturaForm.organHeartSi")}</option>
+              <option value="Bazo/Estómago">{t("clinical.acupunturaForm.organSpleenStomach")}</option>
+              <option value="Pulmón/IG">{t("clinical.acupunturaForm.organLungLi")}</option>
+              <option value="Riñón/Vejiga">{t("clinical.acupunturaForm.organKidneyBladder")}</option>
+              <option value="Pericardio/TR">{t("clinical.acupunturaForm.organPericardiumTe")}</option>
             </select>
           </div>
         </div>
       </CardNew>
 
-      <CardNew title="Mapa de meridianos" sub="Haz clic en los puntos para seleccionarlos">
+      <CardNew title={t("clinical.acupunturaForm.meridianMapTitle")} sub={t("clinical.acupunturaForm.meridianMapSub")}>
         <MeridianMap editable usedPointIds={usedPoints} onPointToggle={togglePoint} />
       </CardNew>
 
-      <CardNew title="Puntos usados hoy">
+      <CardNew title={t("clinical.acupunturaForm.pointsUsedTitle")}>
         {pointNotes.length === 0 ? (
           <div style={{ fontSize: 12, color: "var(--text-3)", fontStyle: "italic" }}>
-            Selecciona puntos en el mapa para agregar notas de técnica y tiempo.
+            {t("clinical.acupunturaForm.pointsUsedEmpty")}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -169,7 +171,7 @@ export function AcupunturaForm({ patientId, onSaved }: Props) {
                 <textarea
                   className="input-new"
                   style={{ minHeight: 52, padding: "8px 12px", height: "auto", resize: "vertical" }}
-                  placeholder="Técnica (tonificación/dispersión), tiempo (20 min), moxa…"
+                  placeholder={t("clinical.acupunturaForm.pointNotePlaceholder")}
                   value={p.notes}
                   onChange={e => updatePointNote(p.id, e.target.value)}
                 />
@@ -179,39 +181,39 @@ export function AcupunturaForm({ patientId, onSaved }: Props) {
         )}
       </CardNew>
 
-      <CardNew title="Evolución de síntomas" sub="Severidad 0-10 en consultas anteriores">
+      <CardNew title={t("clinical.acupunturaForm.evolutionTitle")} sub={t("clinical.acupunturaForm.evolutionSub")}>
         {severityData.length < 2 ? (
           <div style={{ fontSize: 12, color: "var(--text-3)", fontStyle: "italic", padding: 12 }}>
-            Agrega 2+ consultas con severidad registrada para ver evolución
+            {t("clinical.acupunturaForm.evolutionEmpty")}
           </div>
         ) : (
-          <EvolutionChart data={severityData} metric="Severidad síntomas" color="#fbbf24" />
+          <EvolutionChart data={severityData} metric={t("clinical.acupunturaForm.evolutionMetric")} color="#fbbf24" />
         )}
       </CardNew>
 
-      <CardNew title="Plan de sesiones">
+      <CardNew title={t("clinical.acupunturaForm.sessionPlanTitle")}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px", marginBottom: 14 }}>
           <div className="field-new">
-            <label className="field-new__label">Número de sesiones</label>
+            <label className="field-new__label">{t("clinical.acupunturaForm.sessionCountLabel")}</label>
             <input type="number" min="1" className="input-new mono" placeholder="10" value={form.sessions.total} onChange={e => setSess("total", e.target.value)} />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Frecuencia</label>
+            <label className="field-new__label">{t("clinical.acupunturaForm.frequencyLabel")}</label>
             <select className="input-new" value={form.sessions.frequency} onChange={e => setSess("frequency", e.target.value)}>
-              <option value="">Seleccionar…</option>
-              <option value="Semanal">Semanal</option>
-              <option value="2x/semana">2x / semana</option>
-              <option value="Quincenal">Quincenal</option>
-              <option value="Mensual">Mensual</option>
+              <option value="">{t("clinical.acupunturaForm.selectOption")}</option>
+              <option value="Semanal">{t("clinical.acupunturaForm.freqWeekly")}</option>
+              <option value="2x/semana">{t("clinical.acupunturaForm.freqTwiceWeek")}</option>
+              <option value="Quincenal">{t("clinical.acupunturaForm.freqBiweekly")}</option>
+              <option value="Mensual">{t("clinical.acupunturaForm.freqMonthly")}</option>
             </select>
           </div>
         </div>
         <div className="field-new">
-          <label className="field-new__label">Notas</label>
+          <label className="field-new__label">{t("common.notes")}</label>
           <textarea
             className="input-new"
             style={{ minHeight: 70, padding: "8px 12px", height: "auto", resize: "vertical" }}
-            placeholder="Evaluar respuesta tras 5ª sesión…"
+            placeholder={t("clinical.acupunturaForm.sessionNotesPlaceholder")}
             value={form.sessions.notes}
             onChange={e => setSess("notes", e.target.value)}
           />
@@ -220,7 +222,7 @@ export function AcupunturaForm({ patientId, onSaved }: Props) {
 
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <ButtonNew variant="primary" onClick={handleSave} disabled={saving}>
-          {saving ? "Guardando…" : "Guardar consulta"}
+          {saving ? t("common.saving") : t("clinical.acupunturaForm.saveConsult")}
         </ButtonNew>
       </div>
     </div>

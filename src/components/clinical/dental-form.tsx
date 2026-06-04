@@ -7,19 +7,21 @@ import { formatCurrency } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { TreatmentTimeline } from "@/components/clinical/shared";
 import { PrescriptionModal } from "@/components/clinical/shared/prescription-modal";
+import { useT } from "@/i18n/i18n-provider";
 
 interface CatalogProcedure { id: string; name: string; basePrice: number; category: string }
 interface SelectedProcedure { id: string; name: string; price: number; quantity: number }
 
-const TOOTH_CONDITIONS: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  healthy:      { label: "Sano",          color: "#94a3b8", bg: "#fff",    border: "#94a3b8" },
-  caries:       { label: "Caries",        color: "#7f1d1d", bg: "#fca5a5", border: "#ef4444" },
-  restoration:  { label: "Restauración",  color: "#1e3a8a", bg: "#bfdbfe", border: "#3b82f6" },
-  crown:        { label: "Corona",        color: "#78350f", bg: "#fde68a", border: "#f59e0b" },
-  endo:         { label: "Endodoncia",    color: "#4c1d95", bg: "#c4b5fd", border: "#7c3aed" },
-  absent:       { label: "Ausente",       color: "#94a3b8", bg: "#f1f5f9", border: "#cbd5e1" },
-  extraction:   { label: "Extracción",    color: "#7c2d12", bg: "#fed7aa", border: "#f97316" },
-  implant:      { label: "Implante",      color: "#064e3b", bg: "#a7f3d0", border: "#10b981" },
+// labelKey resolves via t() at render time (never call t() at module scope).
+const TOOTH_CONDITIONS: Record<string, { labelKey: string; color: string; bg: string; border: string }> = {
+  healthy:      { labelKey: "clinical.dentalForm.condHealthy",     color: "#94a3b8", bg: "#fff",    border: "#94a3b8" },
+  caries:       { labelKey: "clinical.dentalForm.condCaries",      color: "#7f1d1d", bg: "#fca5a5", border: "#ef4444" },
+  restoration:  { labelKey: "clinical.dentalForm.condRestoration", color: "#1e3a8a", bg: "#bfdbfe", border: "#3b82f6" },
+  crown:        { labelKey: "clinical.dentalForm.condCrown",       color: "#78350f", bg: "#fde68a", border: "#f59e0b" },
+  endo:         { labelKey: "clinical.dentalForm.condEndo",        color: "#4c1d95", bg: "#c4b5fd", border: "#7c3aed" },
+  absent:       { labelKey: "clinical.dentalForm.condAbsent",      color: "#94a3b8", bg: "#f1f5f9", border: "#cbd5e1" },
+  extraction:   { labelKey: "clinical.dentalForm.condExtraction",  color: "#7c2d12", bg: "#fed7aa", border: "#f97316" },
+  implant:      { labelKey: "clinical.dentalForm.condImplant",     color: "#064e3b", bg: "#a7f3d0", border: "#10b981" },
 };
 
 const UPPER_TEETH = [18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28];
@@ -57,6 +59,7 @@ interface Props {
 }
 
 export function DentalForm({ patientId, onSaved, isChild = false, initialRecord }: Props) {
+  const t = useT();
   const isEditing = !!initialRecord;
   const initialSpec = (initialRecord?.specialtyData ?? {}) as any;
   const [saving,     setSaving]     = useState(false);
@@ -133,7 +136,7 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
       const isCurrent = cursor.getFullYear() === now.getFullYear() && cursor.getMonth() === now.getMonth();
       months.push({
         date: cursor.toLocaleDateString("es-MX", { month: "short", year: "2-digit" }),
-        title: `Mes ${i + 1}`,
+        title: t("clinical.dentalForm.month", { n: i + 1 }),
         status: isCompleted ? "completed" : isCurrent ? "current" : "pending",
       });
       cursor.setMonth(cursor.getMonth() + 1);
@@ -210,7 +213,7 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
 
   async function handleSave() {
     if (!form.subjective && !form.assessment) {
-      toast.error("Agrega al menos el motivo de consulta o diagnóstico");
+      toast.error(t("clinical.dentalForm.reasonOrDiagnosisRequired"));
       return;
     }
     setSaving(true);
@@ -243,10 +246,10 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
             specialtyData,
           }),
         });
-        if (!res.ok) throw new Error((await res.json()).error ?? "Error al actualizar");
+        if (!res.ok) throw new Error((await res.json()).error ?? t("clinical.dentalForm.updateError"));
         const body = await res.json();
         record = body.note ?? body;
-        toast.success("Consulta actualizada");
+        toast.success(t("clinical.dentalForm.updatedToast"));
       } else {
         // POST — crea record nuevo. autoInvoice si hay procedimientos con precio.
         const res = await fetch("/api/clinical", {
@@ -262,17 +265,17 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
             specialtyData,
           }),
         });
-        if (!res.ok) throw new Error((await res.json()).error ?? "Error al guardar");
+        if (!res.ok) throw new Error((await res.json()).error ?? t("clinical.dentalForm.saveError"));
         record = await res.json();
         if (selectedProcs.length > 0) {
-          toast.success(`✅ Expediente guardado y factura borrador creada por ${formatCurrency(proceduresTotal)}`);
+          toast.success(`✅ ${t("clinical.dentalForm.savedWithInvoiceToast", { total: formatCurrency(proceduresTotal) })}`);
         } else {
-          toast.success("Expediente dental guardado");
+          toast.success(t("clinical.dentalForm.savedToast"));
         }
       }
       onSaved(record);
     } catch (err: any) {
-      toast.error(err.message ?? (isEditing ? "Error al actualizar" : "Error al guardar"));
+      toast.error(err.message ?? (isEditing ? t("clinical.dentalForm.updateError") : t("clinical.dentalForm.saveError")));
     } finally {
       setSaving(false);
     }
@@ -296,9 +299,9 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
     return cond ? (TOOTH_CONDITIONS[cond]?.border ?? "#94a3b8") : "#94a3b8";
   }
   function isWholeTooth(num: number): string | null {
-    const t = odontogram[num];
-    if (!t) return null;
-    const vals = Object.values(t);
+    const surfaces = odontogram[num];
+    if (!surfaces) return null;
+    const vals = Object.values(surfaces);
     if (vals.length === 5 && WHOLE_TOOTH_CONDITIONS.includes(vals[0]!) && vals.every(v => v === vals[0])) return vals[0]!;
     return null;
   }
@@ -335,7 +338,7 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
             className="flex items-center justify-center rounded-lg border-2 cursor-pointer transition-all hover:scale-105"
             style={{ width: SZ, height: SZ, background: wholeStyle.bg, borderColor: isSelected ? "#2563eb" : wholeStyle.border, color: wholeStyle.color, boxShadow: isSelected ? "0 0 0 3px rgba(37,99,235,0.4)" : "none" }}
             onClick={() => clickSurface(num, "O")}
-            title={`#${num} — ${wholeStyle.label}`}
+            title={`#${num} — ${t(wholeStyle.labelKey)}`}
           >
             <span className="text-sm font-bold">
               {wholeCond === "absent" ? "✕" : wholeCond === "implant" ? "I" : wholeCond === "endo" ? "E" : wholeCond === "crown" ? "C" : "EX"}
@@ -416,7 +419,7 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
   return (
     <form onSubmit={e => { e.preventDefault(); handleSave(); }} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {orthoMilestones && orthoMilestones.months.length > 0 && (
-        <CardNew title={`Línea de tiempo — ${orthoMilestones.plan.name}`} sub="Plan de ortodoncia mes a mes">
+        <CardNew title={`${t("clinical.dentalForm.timelineTitle")} — ${orthoMilestones.plan.name}`} sub={t("clinical.dentalForm.orthoPlanMonthly")}>
           <TreatmentTimeline milestones={orthoMilestones.months} />
         </CardNew>
       )}
@@ -424,21 +427,21 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
       {/* ANAMNESIS */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         <div className="field-new">
-          <label className="field-new__label">Motivo de consulta / HEA</label>
+          <label className="field-new__label">{t("clinical.dentalForm.reasonLabel")}</label>
           <textarea
             className="input-new"
             style={{ height: 80, paddingTop: 8, resize: "vertical" }}
-            placeholder="¿Por qué viene el paciente hoy?"
+            placeholder={t("clinical.dentalForm.reasonPlaceholder")}
             value={form.subjective}
             onChange={e => set("subjective", e.target.value)}
           />
         </div>
         <div className="field-new">
-          <label className="field-new__label">Antecedentes médicos relevantes</label>
+          <label className="field-new__label">{t("clinical.dentalForm.medicalHistoryLabel")}</label>
           <textarea
             className="input-new"
             style={{ height: 80, paddingTop: 8, resize: "vertical" }}
-            placeholder="Diabetes, hipertensión, medicamentos actuales…"
+            placeholder={t("clinical.dentalForm.medicalHistoryPlaceholder")}
             value={form.objective}
             onChange={e => set("objective", e.target.value)}
           />
@@ -457,12 +460,12 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
             fontSize: 13, fontWeight: 600, color: "var(--text-1)",
             margin: 0, display: "flex", alignItems: "center", gap: 6,
           }}>
-            🦷 Odontograma
+            🦷 {t("clinical.dentalForm.odontogramTitle")}
           </h3>
           <span style={{ fontSize: 11, color: "var(--text-3)" }}>
             {selectedTooth
-              ? `Diente #${selectedTooth} seleccionado`
-              : "Haz clic en una cara (O·M·D·V·L)"}
+              ? t("clinical.dentalForm.toothSelected", { n: selectedTooth })
+              : t("clinical.dentalForm.clickSurfaceHint")}
           </span>
         </div>
 
@@ -490,7 +493,7 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
                 boxShadow: activeTool === key ? `0 0 0 1px ${val.color}40` : "none",
               }}
             >
-              {val.label}
+              {t(val.labelKey)}
             </button>
           ))}
           <button
@@ -499,7 +502,7 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
             className="btn-new btn-new--ghost btn-new--sm"
             style={{ marginLeft: "auto" }}
           >
-            Limpiar todo
+            {t("clinical.dentalForm.clearAll")}
           </button>
         </div>
 
@@ -515,7 +518,7 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
             color: "var(--text-3)", marginBottom: 10,
             textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600,
           }}>
-            Maxilar superior
+            {t("clinical.dentalForm.upperJaw")}
           </div>
           <div style={{ display: "flex", justifyContent: "center", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
             {upperTeeth.map(renderTooth)}
@@ -532,7 +535,7 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
             color: "var(--text-3)", marginTop: 10,
             textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600,
           }}>
-            Maxilar inferior
+            {t("clinical.dentalForm.lowerJaw")}
           </div>
         </div>
 
@@ -544,14 +547,18 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--text-1)" }}>
-                Diente #{selectedTooth}:
+                {t("clinical.dentalForm.toothLabel", { n: selectedTooth })}:
               </span>
               {SURFACES.map(s => {
                 const cond = odontogram[selectedTooth!]?.[s];
                 if (!cond) return null;
                 const style = TOOTH_CONDITIONS[cond];
                 const surfaceLabels: Record<Surface, string> = {
-                  O: "Oclusal", M: "Mesial", D: "Distal", V: "Vestibular", L: "Lingual",
+                  O: t("clinical.dentalForm.surfaceOcclusal"),
+                  M: t("clinical.dentalForm.surfaceMesial"),
+                  D: t("clinical.dentalForm.surfaceDistal"),
+                  V: t("clinical.dentalForm.surfaceVestibular"),
+                  L: t("clinical.dentalForm.surfaceLingual"),
                 };
                 return (
                   <span
@@ -563,7 +570,7 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
                       color: style.color,
                     }}
                   >
-                    {surfaceLabels[s]}: {style.label}
+                    {surfaceLabels[s]}: {t(style.labelKey)}
                   </span>
                 );
               })}
@@ -578,7 +585,7 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
           borderTop: "1px solid var(--border-soft)",
         }}>
           {Object.entries(TOOTH_CONDITIONS).map(([, val]) => (
-            <div key={val.label} style={{
+            <div key={val.labelKey} style={{
               display: "flex", alignItems: "center", gap: 4,
               fontSize: 10, color: "var(--text-3)",
             }}>
@@ -586,7 +593,7 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
                 width: 10, height: 10, borderRadius: 3,
                 background: val.bg, border: `1px solid ${val.border}`,
               }} />
-              {val.label}
+              {t(val.labelKey)}
             </div>
           ))}
         </div>
@@ -594,23 +601,23 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
           display: "flex", flexWrap: "wrap", gap: 10,
           marginTop: 8, fontSize: 10, color: "var(--text-4)",
         }}>
-          <span className="mono" style={{ fontWeight: 600 }}>Caras:</span>
-          <span>O = Oclusal</span>
-          <span>M = Mesial</span>
-          <span>D = Distal</span>
-          <span>V = Vestibular</span>
-          <span>L = Lingual/Palatino</span>
+          <span className="mono" style={{ fontWeight: 600 }}>{t("clinical.dentalForm.surfacesLabel")}</span>
+          <span>O = {t("clinical.dentalForm.surfaceOcclusal")}</span>
+          <span>M = {t("clinical.dentalForm.surfaceMesial")}</span>
+          <span>D = {t("clinical.dentalForm.surfaceDistal")}</span>
+          <span>V = {t("clinical.dentalForm.surfaceVestibular")}</span>
+          <span>L = {t("clinical.dentalForm.surfaceLingualPalatal")}</span>
         </div>
       </div>
 
       {/* PERIODONTAL */}
-      <CardNew title="Evaluación periodontal">
+      <CardNew title={t("clinical.dentalForm.periodontalTitle")}>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
-            { key: "plaque",     label: "Índice de placa",  placeholder: "Ej. 35%" },
-            { key: "calculus",   label: "Cálculo dental",   placeholder: "Leve / Moderado / Severo" },
-            { key: "gingival",   label: "Estado gingival",  placeholder: "Sana / Inflamada" },
-            { key: "pocketDepth",label: "Bolsas periodontales", placeholder: "Ej. 2-3mm" },
+            { key: "plaque",     label: t("clinical.dentalForm.plaqueIndexLabel"),     placeholder: t("clinical.dentalForm.plaqueIndexPlaceholder") },
+            { key: "calculus",   label: t("clinical.dentalForm.calculusLabel"),        placeholder: t("clinical.dentalForm.calculusPlaceholder") },
+            { key: "gingival",   label: t("clinical.dentalForm.gingivalLabel"),        placeholder: t("clinical.dentalForm.gingivalPlaceholder") },
+            { key: "pocketDepth",label: t("clinical.dentalForm.pocketDepthLabel"),     placeholder: t("clinical.dentalForm.pocketDepthPlaceholder") },
           ].map(f => (
             <div key={f.key} className="field-new">
               <label className="field-new__label">{f.label}</label>
@@ -625,54 +632,60 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
           <input type="checkbox" id="bleeding" checked={form.periodontal.bleeding}
             onChange={e => set("periodontal", { ...form.periodontal, bleeding: e.target.checked })}
             className="w-4 h-4 accent-brand-600" />
-          <label htmlFor="bleeding" className="text-sm font-medium">Sangrado al sondeo presente</label>
+          <label htmlFor="bleeding" className="text-sm font-medium">{t("clinical.dentalForm.bleedingOnProbing")}</label>
         </div>
       </CardNew>
 
       {/* EVALUACIÓN OCLUSAL */}
-      <CardNew title="Evaluación Oclusal">
+      <CardNew title={t("clinical.dentalForm.occlusalTitle")}>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="field-new">
-            <label className="field-new__label">Clase molar</label>
+            <label className="field-new__label">{t("clinical.dentalForm.molarClassLabel")}</label>
             <select
               className="input-new"
               value={form.occlusal.molarClass}
               onChange={e => set("occlusal", { ...form.occlusal, molarClass: e.target.value })}
             >
-              <option value="">Seleccionar…</option>
-              <option value="Clase I">Clase I</option>
-              <option value="Clase II div 1">Clase II div 1</option>
-              <option value="Clase II div 2">Clase II div 2</option>
-              <option value="Clase III">Clase III</option>
+              <option value="">{t("clinical.dentalForm.selectPlaceholder")}</option>
+              <option value="Clase I">{t("clinical.dentalForm.molarClassI")}</option>
+              <option value="Clase II div 1">{t("clinical.dentalForm.molarClassII1")}</option>
+              <option value="Clase II div 2">{t("clinical.dentalForm.molarClassII2")}</option>
+              <option value="Clase III">{t("clinical.dentalForm.molarClassIII")}</option>
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Sobremordida (mm)</label>
+            <label className="field-new__label">{t("clinical.dentalForm.overbiteLabel")}</label>
             <input type="number" className="input-new"
-              placeholder="Ej. 3" value={form.occlusal.overbite}
+              placeholder={t("clinical.dentalForm.overbitePlaceholder")} value={form.occlusal.overbite}
               onChange={e => set("occlusal", { ...form.occlusal, overbite: e.target.value })} />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Overjet (mm)</label>
+            <label className="field-new__label">{t("clinical.dentalForm.overjetLabel")}</label>
             <input type="number" className="input-new"
-              placeholder="Ej. 2" value={form.occlusal.overjet}
+              placeholder={t("clinical.dentalForm.overjetPlaceholder")} value={form.occlusal.overjet}
               onChange={e => set("occlusal", { ...form.occlusal, overjet: e.target.value })} />
           </div>
         </div>
         <div className="mt-3">
-          <label className="field-new__label">Mordida</label>
+          <label className="field-new__label">{t("clinical.dentalForm.biteLabel")}</label>
           <div className="flex flex-wrap gap-3 mt-1.5">
-            {["Abierta anterior", "Cruzada posterior", "Cruzada anterior", "Profunda", "Normal"].map(opt => (
-              <label key={opt} className="flex items-center gap-1.5 text-sm">
+            {[
+              { value: "Abierta anterior", labelKey: "clinical.dentalForm.biteOpenAnterior" },
+              { value: "Cruzada posterior", labelKey: "clinical.dentalForm.biteCrossPosterior" },
+              { value: "Cruzada anterior", labelKey: "clinical.dentalForm.biteCrossAnterior" },
+              { value: "Profunda", labelKey: "clinical.dentalForm.biteDeep" },
+              { value: "Normal", labelKey: "clinical.dentalForm.biteNormal" },
+            ].map(opt => (
+              <label key={opt.value} className="flex items-center gap-1.5 text-sm">
                 <input type="checkbox" className="w-4 h-4 accent-brand-600"
-                  checked={form.occlusal.bite.includes(opt)}
+                  checked={form.occlusal.bite.includes(opt.value)}
                   onChange={e => {
                     const bite = e.target.checked
-                      ? [...form.occlusal.bite, opt]
-                      : form.occlusal.bite.filter((b: string) => b !== opt);
+                      ? [...form.occlusal.bite, opt.value]
+                      : form.occlusal.bite.filter((b: string) => b !== opt.value);
                     set("occlusal", { ...form.occlusal, bite });
                   }} />
-                {opt}
+                {t(opt.labelKey)}
               </label>
             ))}
           </div>
@@ -680,80 +693,80 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
       </CardNew>
 
       {/* EVALUACIÓN ATM / BRUXISMO */}
-      <CardNew title="Evaluación ATM / Bruxismo">
+      <CardNew title={t("clinical.dentalForm.tmjTitle")}>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="field-new">
-            <label className="field-new__label">Apertura bucal (mm)</label>
+            <label className="field-new__label">{t("clinical.dentalForm.mouthOpeningLabel")}</label>
             <input type="number" className="input-new"
-              placeholder="Ej. 42" value={form.tmj.opening}
+              placeholder={t("clinical.dentalForm.mouthOpeningPlaceholder")} value={form.tmj.opening}
               onChange={e => set("tmj", { ...form.tmj, opening: e.target.value })} />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Chasquido</label>
+            <label className="field-new__label">{t("clinical.dentalForm.clickingLabel")}</label>
             <select
               className="input-new"
               value={form.tmj.clicking}
               onChange={e => set("tmj", { ...form.tmj, clicking: e.target.value })}
             >
-              <option value="">Seleccionar…</option>
-              <option value="Ninguno">Ninguno</option>
-              <option value="Clic derecho">Clic derecho</option>
-              <option value="Clic izquierdo">Clic izquierdo</option>
-              <option value="Bilateral">Bilateral</option>
+              <option value="">{t("clinical.dentalForm.selectPlaceholder")}</option>
+              <option value="Ninguno">{t("clinical.dentalForm.clickingNone")}</option>
+              <option value="Clic derecho">{t("clinical.dentalForm.clickingRight")}</option>
+              <option value="Clic izquierdo">{t("clinical.dentalForm.clickingLeft")}</option>
+              <option value="Bilateral">{t("clinical.dentalForm.clickingBilateral")}</option>
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Dolor ATM</label>
+            <label className="field-new__label">{t("clinical.dentalForm.tmjPainLabel")}</label>
             <select
               className="input-new"
               value={form.tmj.pain}
               onChange={e => set("tmj", { ...form.tmj, pain: e.target.value })}
             >
-              <option value="">Seleccionar…</option>
-              <option value="Sin dolor">Sin dolor</option>
-              <option value="Leve">Leve</option>
-              <option value="Moderado">Moderado</option>
-              <option value="Severo">Severo</option>
+              <option value="">{t("clinical.dentalForm.selectPlaceholder")}</option>
+              <option value="Sin dolor">{t("clinical.dentalForm.painNone")}</option>
+              <option value="Leve">{t("clinical.dentalForm.painMild")}</option>
+              <option value="Moderado">{t("clinical.dentalForm.painModerate")}</option>
+              <option value="Severo">{t("clinical.dentalForm.painSevere")}</option>
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Guarda oclusal</label>
+            <label className="field-new__label">{t("clinical.dentalForm.occlusalGuardLabel")}</label>
             <select
               className="input-new"
               value={form.tmj.guard}
               onChange={e => set("tmj", { ...form.tmj, guard: e.target.value })}
             >
-              <option value="">Seleccionar…</option>
-              <option value="No usa">No usa</option>
-              <option value="Usa — buen estado">Usa — buen estado</option>
-              <option value="Usa — desgastada">Usa — desgastada</option>
-              <option value="Recomendada">Recomendada</option>
+              <option value="">{t("clinical.dentalForm.selectPlaceholder")}</option>
+              <option value="No usa">{t("clinical.dentalForm.guardNotUsed")}</option>
+              <option value="Usa — buen estado">{t("clinical.dentalForm.guardGoodCondition")}</option>
+              <option value="Usa — desgastada">{t("clinical.dentalForm.guardWorn")}</option>
+              <option value="Recomendada">{t("clinical.dentalForm.guardRecommended")}</option>
             </select>
           </div>
         </div>
       </CardNew>
 
       {/* INSTRUCCIONES DE HIGIENE ORAL */}
-      <CardNew title="Instrucciones de higiene oral">
+      <CardNew title={t("clinical.dentalForm.hygieneTitle")}>
         <div className="flex flex-wrap gap-3">
           {[
-            "Técnica de cepillado enseñada (Bass modificada)",
-            "Uso de hilo dental instruido",
-            "Enjuague con fluoruro recomendado",
-            "Dieta baja en azúcares refinados discutida",
-            "Cepillo interdental recomendado",
-            "Profilaxis con pasta fluorada aplicada",
+            { value: "Técnica de cepillado enseñada (Bass modificada)", labelKey: "clinical.dentalForm.hygieneBrushing" },
+            { value: "Uso de hilo dental instruido", labelKey: "clinical.dentalForm.hygieneFloss" },
+            { value: "Enjuague con fluoruro recomendado", labelKey: "clinical.dentalForm.hygieneFluoride" },
+            { value: "Dieta baja en azúcares refinados discutida", labelKey: "clinical.dentalForm.hygieneDiet" },
+            { value: "Cepillo interdental recomendado", labelKey: "clinical.dentalForm.hygieneInterdental" },
+            { value: "Profilaxis con pasta fluorada aplicada", labelKey: "clinical.dentalForm.hygieneProphylaxis" },
           ].map(opt => (
-            <label key={opt} className="flex items-center gap-1.5 text-sm">
+            <label key={opt.value} className="flex items-center gap-1.5 text-sm">
               <input type="checkbox" className="w-4 h-4 accent-brand-600"
-                checked={form.hygieneInstructions.includes(opt)}
+                checked={form.hygieneInstructions.includes(opt.value)}
                 onChange={e => {
                   const updated = e.target.checked
-                    ? [...form.hygieneInstructions, opt]
-                    : form.hygieneInstructions.filter((h: string) => h !== opt);
+                    ? [...form.hygieneInstructions, opt.value]
+                    : form.hygieneInstructions.filter((h: string) => h !== opt.value);
                   set("hygieneInstructions", updated);
                 }} />
-              {opt}
+              {t(opt.labelKey)}
             </label>
           ))}
         </div>
@@ -761,10 +774,10 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
 
       {/* PROCEDIMIENTOS Y FACTURACIÓN */}
       <CardNew
-        title="💰 Procedimientos realizados"
+        title={`💰 ${t("clinical.dentalForm.proceduresTitle")}`}
         action={selectedProcs.length > 0 ? (
           <div className="text-sm font-bold text-brand-700 dark:text-brand-400">
-            Total: {formatCurrency(proceduresTotal)}
+            {t("common.total")}: {formatCurrency(proceduresTotal)}
           </div>
         ) : undefined}
       >
@@ -774,10 +787,10 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
             <table className="w-full text-xs">
               <thead className="bg-muted/30">
                 <tr>
-                  <th className="text-left px-3 py-2 font-bold">Procedimiento</th>
-                  <th className="text-center px-2 py-2 font-bold w-16">Cant.</th>
-                  <th className="text-right px-2 py-2 font-bold w-24">Precio</th>
-                  <th className="text-right px-3 py-2 font-bold w-24">Subtotal</th>
+                  <th className="text-left px-3 py-2 font-bold">{t("clinical.dentalForm.procedureCol")}</th>
+                  <th className="text-center px-2 py-2 font-bold w-16">{t("clinical.dentalForm.qtyCol")}</th>
+                  <th className="text-right px-2 py-2 font-bold w-24">{t("clinical.dentalForm.priceCol")}</th>
+                  <th className="text-right px-3 py-2 font-bold w-24">{t("clinical.dentalForm.subtotalCol")}</th>
                   <th className="w-8" />
                 </tr>
               </thead>
@@ -804,7 +817,7 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
               </tbody>
               <tfoot className="bg-brand-600/15">
                 <tr>
-                  <td colSpan={3} className="px-3 py-2 text-right font-bold">TOTAL</td>
+                  <td colSpan={3} className="px-3 py-2 text-right font-bold">{t("clinical.dentalForm.totalRow")}</td>
                   <td className="px-3 py-2 text-right font-mono font-extrabold text-brand-700 dark:text-brand-400">{formatCurrency(proceduresTotal)}</td>
                   <td />
                 </tr>
@@ -817,7 +830,7 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
         <div className="mb-2">
           <input
             type="text"
-            placeholder="🔍 Buscar procedimiento del catálogo..."
+            placeholder={t("clinical.dentalForm.searchProcedurePlaceholder")}
             className="input-new"
             value={procSearch}
             onChange={e => setProcSearch(e.target.value)}
@@ -829,8 +842,8 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
           {filteredCatalog.length === 0 ? (
             <div className="text-xs text-muted-foreground py-2">
               {catalog.length === 0
-                ? "No hay procedimientos en el catálogo. Ve a Configuración → Procedimientos para agregar."
-                : "Sin resultados"}
+                ? t("clinical.dentalForm.noProceduresCatalog")
+                : t("common.noResults")}
             </div>
           ) : filteredCatalog.map(p => {
             const isSelected = selectedProcs.some(sp => sp.id === p.id);
@@ -848,14 +861,14 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
 
         {selectedProcs.length > 0 && (
           <div className="mt-3 p-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg text-xs text-amber-700 dark:text-amber-300">
-            💡 Al guardar el expediente se creará automáticamente una factura borrador con estos procedimientos. Podrás editarla en la sección de Facturación antes de confirmar.
+            💡 {t("clinical.dentalForm.draftInvoiceTip")}
           </div>
         )}
       </CardNew>
 
       {/* PRESCRIPCIÓN — NOM-024 con CUMS + firma electrónica opcional */}
       <CardNew
-        title="💊 Receta médica"
+        title={`💊 ${t("clinical.dentalForm.prescriptionTitle")}`}
         action={(
           <ButtonNew
             type="button"
@@ -864,19 +877,18 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
             icon={<FileText size={14} />}
             onClick={openPrescriptionModal}
           >
-            Crear receta
+            {t("clinical.dentalForm.createPrescription")}
           </ButtonNew>
         )}
       >
         <p className="text-xs text-muted-foreground">
-          Las recetas se crean con FK al catálogo CUMS (Sector Salud) y vigencia
-          legal según grupo COFEPRIS. Firma electrónica con FIEL/SAT opcional.
+          {t("clinical.dentalForm.prescriptionHelp")}
         </p>
         {rxResult && (
           <div className="mt-3 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs">
-            ✓ Receta creada.{" "}
+            ✓ {t("clinical.dentalForm.prescriptionCreated")}{" "}
             <a href={rxResult.verifyUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-700 font-semibold hover:underline">
-              Ver receta verificable
+              {t("clinical.dentalForm.viewVerifiablePrescription")}
             </a>
           </div>
         )}
@@ -885,37 +897,37 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
       {/* DIAGNÓSTICO Y PLAN */}
       <div className="grid grid-cols-2 gap-4">
         <div className="field-new">
-          <label className="field-new__label">Observaciones clínicas / Diagnóstico</label>
+          <label className="field-new__label">{t("clinical.dentalForm.clinicalObservationsLabel")}</label>
           <textarea className="input-new"
             style={{ minHeight: 80, resize: "vertical" }}
-            placeholder="Diagnóstico, hallazgos clínicos…" value={form.assessment} onChange={e => set("assessment", e.target.value)} />
+            placeholder={t("clinical.dentalForm.clinicalObservationsPlaceholder")} value={form.assessment} onChange={e => set("assessment", e.target.value)} />
         </div>
         <div className="field-new">
-          <label className="field-new__label">Plan de tratamiento futuro</label>
+          <label className="field-new__label">{t("clinical.dentalForm.futurePlanLabel")}</label>
           <textarea className="input-new"
             style={{ minHeight: 80, resize: "vertical" }}
-            placeholder="Próximos procedimientos a realizar…" value={form.plan} onChange={e => set("plan", e.target.value)} />
+            placeholder={t("clinical.dentalForm.futurePlanPlaceholder")} value={form.plan} onChange={e => set("plan", e.target.value)} />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div className="field-new">
-          <label className="field-new__label">Radiografías tomadas</label>
+          <label className="field-new__label">{t("clinical.dentalForm.xraysLabel")}</label>
           <input className="input-new"
-            placeholder="Rx panorámica, periapical #26…" value={form.xrays} onChange={e => set("xrays", e.target.value)} />
+            placeholder={t("clinical.dentalForm.xraysPlaceholder")} value={form.xrays} onChange={e => set("xrays", e.target.value)} />
         </div>
         <div className="field-new">
-          <label className="field-new__label">Próxima cita recomendada</label>
+          <label className="field-new__label">{t("clinical.dentalForm.nextVisitLabel")}</label>
           <input className="input-new"
-            placeholder="En 3 meses, urgente, etc." value={form.nextVisit} onChange={e => set("nextVisit", e.target.value)} />
+            placeholder={t("clinical.dentalForm.nextVisitPlaceholder")} value={form.nextVisit} onChange={e => set("nextVisit", e.target.value)} />
         </div>
       </div>
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
         <ButtonNew variant="primary" type="submit" disabled={saving}>
           {saving
-            ? (isEditing ? "Guardando cambios…" : "Guardando…")
-            : (isEditing ? "Guardar cambios" : "Guardar consulta")}
+            ? (isEditing ? t("clinical.dentalForm.savingChanges") : t("common.saving"))
+            : (isEditing ? t("common.saveChanges") : t("clinical.dentalForm.saveConsultation"))}
         </ButtonNew>
       </div>
 

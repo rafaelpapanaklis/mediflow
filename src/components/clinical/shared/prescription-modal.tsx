@@ -4,14 +4,15 @@ import { useEffect, useState } from "react";
 import { X, ShieldCheck, Save, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { CumsSelector, type PrescriptionItemDraft } from "@/components/dashboard/clinical/cums-selector";
+import { useT } from "@/i18n/i18n-provider";
 
-const COFEPRIS_ETA: Record<string, string> = {
-  I:   "24 horas",
-  II:  "30 días",
-  III: "90 días",
-  IV:  "180 días",
-  V:   "180 días",
-  VI:  "180 días",
+const COFEPRIS_ETA_KEY: Record<string, string> = {
+  I:   "clinical.prescriptionModal.eta24h",
+  II:  "clinical.prescriptionModal.eta30d",
+  III: "clinical.prescriptionModal.eta90d",
+  IV:  "clinical.prescriptionModal.eta180d",
+  V:   "clinical.prescriptionModal.eta180d",
+  VI:  "clinical.prescriptionModal.eta180d",
 };
 
 interface CertInfo {
@@ -45,6 +46,7 @@ interface Props {
  *    POST /api/signature/sign con docType=PRESCRIPTION.
  */
 export function PrescriptionModal({ open, patientId, medicalRecordId, onClose, onCreated }: Props) {
+  const t = useT();
   const [items, setItems] = useState<PrescriptionItemDraft[]>([]);
   const [indications, setIndications] = useState("");
   const [cofeprisFolio, setCofeprisFolio] = useState("");
@@ -78,17 +80,17 @@ export function PrescriptionModal({ open, patientId, medicalRecordId, onClose, o
 
   async function submit() {
     if (items.length === 0) {
-      toast.error("Agrega al menos un medicamento");
+      toast.error(t("clinical.prescriptionModal.errorNoMeds"));
       return;
     }
     for (const it of items) {
       if (!it.dosage.trim()) {
-        toast.error("Cada medicamento requiere dosis (ej. 1 tableta cada 8h)");
+        toast.error(t("clinical.prescriptionModal.errorNoDosage"));
         return;
       }
     }
     if (signCheck && !keyPassword) {
-      toast.error("Para firmar, ingresá la contraseña de tu llave SAT");
+      toast.error(t("clinical.prescriptionModal.errorNoKeyPassword"));
       return;
     }
 
@@ -114,7 +116,7 @@ export function PrescriptionModal({ open, patientId, medicalRecordId, onClose, o
       });
       const rx = await rxRes.json();
       if (!rxRes.ok) {
-        toast.error(rx.error ?? rx.detail ?? "No se pudo crear la receta");
+        toast.error(rx.error ?? rx.detail ?? t("clinical.prescriptionModal.errorCreate"));
         setSubmitting(false);
         return;
       }
@@ -133,18 +135,18 @@ export function PrescriptionModal({ open, patientId, medicalRecordId, onClose, o
         });
         if (!signRes.ok) {
           const err = await signRes.json().catch(() => ({}));
-          toast.error(`Receta creada pero firma falló: ${err.error ?? "error"}`);
+          toast.error(t("clinical.prescriptionModal.errorSignFailed", { error: err.error ?? "error" }));
         } else {
-          toast.success("Receta creada y firmada electrónicamente");
+          toast.success(t("clinical.prescriptionModal.successCreatedSigned"));
         }
       } else {
-        toast.success("Receta creada");
+        toast.success(t("clinical.prescriptionModal.successCreated"));
       }
 
       onCreated?.({ id: rx.id, verifyUrl: rx.verifyUrl });
       onClose();
     } catch (err) {
-      toast.error(`Error: ${String(err)}`);
+      toast.error(t("clinical.prescriptionModal.errorGeneric", { error: String(err) }));
     } finally {
       setSubmitting(false);
     }
@@ -169,8 +171,8 @@ export function PrescriptionModal({ open, patientId, medicalRecordId, onClose, o
         fontFamily: "var(--font-sans, system-ui, sans-serif)",
       }}>
         <header style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-soft)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <h3 id="rx-modal-title" style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>Nueva receta médica</h3>
-          <button type="button" onClick={onClose} aria-label="Cerrar" style={{
+          <h3 id="rx-modal-title" style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>{t("clinical.prescriptionModal.title")}</h3>
+          <button type="button" onClick={onClose} aria-label={t("common.close")} style={{
             width: 28, height: 28, display: "grid", placeItems: "center",
             background: "transparent", border: "none", cursor: "pointer", color: "var(--text-3)",
           }}>
@@ -180,23 +182,23 @@ export function PrescriptionModal({ open, patientId, medicalRecordId, onClose, o
 
         <div style={{ padding: 20, overflowY: "auto", display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
-            <label style={labelStyle}>Medicamentos *</label>
+            <label style={labelStyle}>{t("clinical.prescriptionModal.medicationsLabel")}</label>
             <CumsSelector items={items} onChange={setItems} disabled={submitting} />
           </div>
 
           {cofeprisGroup && (
             <div style={{ padding: "8px 12px", background: "rgba(220, 38, 38, 0.08)", border: "1px solid rgba(220, 38, 38, 0.30)", borderRadius: 8, fontSize: 12, color: "#b91c1c" }}>
-              <strong>Sustancia controlada — Grupo COFEPRIS {cofeprisGroup}.</strong>{" "}
-              Vigencia legal: {COFEPRIS_ETA[cofeprisGroup] ?? "180 días"}.
+              <strong>{t("clinical.prescriptionModal.controlledSubstance", { group: cofeprisGroup })}</strong>{" "}
+              {t("clinical.prescriptionModal.legalValidity", { eta: t(COFEPRIS_ETA_KEY[cofeprisGroup] ?? "clinical.prescriptionModal.eta180d") })}
             </div>
           )}
 
           <div>
-            <label style={labelStyle}>Indicaciones generales (opcional)</label>
+            <label style={labelStyle}>{t("clinical.prescriptionModal.generalIndicationsLabel")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 64, padding: "10px 12px", resize: "vertical", width: "100%" }}
-              placeholder="Reposo, dieta, signos de alarma…"
+              placeholder={t("clinical.prescriptionModal.indicationsPlaceholder")}
               value={indications}
               onChange={(e) => setIndications(e.target.value)}
               disabled={submitting}
@@ -205,11 +207,11 @@ export function PrescriptionModal({ open, patientId, medicalRecordId, onClose, o
 
           {cofeprisGroup && (cofeprisGroup === "I" || cofeprisGroup === "II") && (
             <div>
-              <label style={labelStyle}>Folio COFEPRIS (Grupo {cofeprisGroup})</label>
+              <label style={labelStyle}>{t("clinical.prescriptionModal.cofeprisFolioLabel", { group: cofeprisGroup })}</label>
               <input
                 className="input-new"
                 style={{ width: "100%" }}
-                placeholder="Folio del receteario oficial"
+                placeholder={t("clinical.prescriptionModal.cofeprisFolioPlaceholder")}
                 value={cofeprisFolio}
                 onChange={(e) => setCofeprisFolio(e.target.value.trim())}
                 disabled={submitting}
@@ -223,14 +225,14 @@ export function PrescriptionModal({ open, patientId, medicalRecordId, onClose, o
               <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
                 <input type="checkbox" checked={signCheck} onChange={(e) => setSignCheck(e.target.checked)} disabled={submitting} />
                 <ShieldCheck size={14} aria-hidden style={{ color: "#059669" }} />
-                Firmar electrónicamente con FIEL/SAT
+                {t("clinical.prescriptionModal.signWithFiel")}
               </label>
               {signCheck && (
                 <input
                   type="password"
                   className="input-new"
                   style={{ width: "100%" }}
-                  placeholder="Contraseña de tu llave privada SAT"
+                  placeholder={t("clinical.prescriptionModal.keyPasswordPlaceholder")}
                   value={keyPassword}
                   onChange={(e) => setKeyPassword(e.target.value)}
                   disabled={submitting}
@@ -238,21 +240,20 @@ export function PrescriptionModal({ open, patientId, medicalRecordId, onClose, o
                 />
               )}
               <span style={{ fontSize: 11, color: "var(--text-3)" }}>
-                Cert válido hasta {new Date(cert.validUntil).toLocaleDateString("es-MX")}.
+                {t("clinical.prescriptionModal.certValidUntil", { date: new Date(cert.validUntil).toLocaleDateString("es-MX") })}
               </span>
             </div>
           ) : (
             <div style={{ fontSize: 11, color: "var(--text-3)", padding: "6px 4px" }}>
-              No tienes certificado FIEL/SAT activo. Configúralo en /dashboard/settings/signature
-              para firmar recetas electrónicamente.
+              {t("clinical.prescriptionModal.noCert")}
             </div>
           )}
         </div>
 
         <footer style={{ padding: "14px 20px", borderTop: "1px solid var(--border-soft)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button type="button" onClick={onClose} disabled={submitting} style={btnGhost}>Cancelar</button>
+          <button type="button" onClick={onClose} disabled={submitting} style={btnGhost}>{t("common.cancel")}</button>
           <button type="button" onClick={submit} disabled={submitting || items.length === 0} style={btnPrimary}>
-            {submitting ? <><Loader2 size={13} className="animate-spin" /> Guardando…</> : <><Save size={13} aria-hidden /> Crear receta</>}
+            {submitting ? <><Loader2 size={13} className="animate-spin" /> {t("common.saving")}</> : <><Save size={13} aria-hidden /> {t("clinical.prescriptionModal.createPrescription")}</>}
           </button>
         </footer>
       </div>

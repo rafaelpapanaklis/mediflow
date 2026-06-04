@@ -7,24 +7,25 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { EvolutionChart } from "@/components/clinical/shared";
 import { DateField } from "@/components/ui/date-field";
+import { useT } from "@/i18n/i18n-provider";
 
 const ACTIVITY_LEVELS = [
-  { id:"sedentary",   label:"Sedentario",             factor:1.2   },
-  { id:"light",       label:"Ligera (1-3 días/sem)",  factor:1.375 },
-  { id:"moderate",    label:"Moderada (3-5 días/sem)",factor:1.55  },
-  { id:"active",      label:"Activa (6-7 días/sem)",  factor:1.725 },
-  { id:"very_active", label:"Muy activa (doble)",     factor:1.9   },
+  { id:"sedentary",   labelKey:"clinical.nutritionForm.activitySedentary",  factor:1.2   },
+  { id:"light",       labelKey:"clinical.nutritionForm.activityLight",      factor:1.375 },
+  { id:"moderate",    labelKey:"clinical.nutritionForm.activityModerate",   factor:1.55  },
+  { id:"active",      labelKey:"clinical.nutritionForm.activityActive",     factor:1.725 },
+  { id:"very_active", labelKey:"clinical.nutritionForm.activityVeryActive", factor:1.9   },
 ];
 
 function calcBMI(weight: number, height: number) {
   if (!weight || !height) return null;
   return (weight / ((height / 100) ** 2)).toFixed(1);
 }
-function bmiCategory(bmi: number): { label: string; tone: "info" | "success" | "warning" | "danger" } {
-  if (bmi < 18.5) return { label: "Bajo peso", tone: "info" };
-  if (bmi < 25)   return { label: "Normal",    tone: "success" };
-  if (bmi < 30)   return { label: "Sobrepeso", tone: "warning" };
-  return           { label: "Obesidad",        tone: "danger" };
+function bmiCategory(bmi: number): { labelKey: string; tone: "info" | "success" | "warning" | "danger" } {
+  if (bmi < 18.5) return { labelKey: "clinical.nutritionForm.bmiUnderweight", tone: "info" };
+  if (bmi < 25)   return { labelKey: "clinical.nutritionForm.bmiNormal",      tone: "success" };
+  if (bmi < 30)   return { labelKey: "clinical.nutritionForm.bmiOverweight",  tone: "warning" };
+  return           { labelKey: "clinical.nutritionForm.bmiObesity",          tone: "danger" };
 }
 function calcBMR(weight: number, height: number, age: number, gender: string) {
   if (!weight || !height || !age) return 0;
@@ -35,6 +36,7 @@ function calcBMR(weight: number, height: number, age: number, gender: string) {
 interface Props { patientId: string; patient?: any; onSaved: (record: any) => void }
 
 export function NutritionForm({ patientId, patient, onSaved }: Props) {
+  const t = useT();
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     weight: "", height: "", bodyFat: "", muscleMass: "", waist: "", hip: "",
@@ -56,7 +58,7 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
     fetch(`/api/clinical?patientId=${patientId}`, { signal: ctrl.signal })
       .then(r => r.ok ? r.json() : [])
       .then(d => setHistory(Array.isArray(d) ? d : []))
-      .catch(err => { if (err.name !== "AbortError") toast.error("No se pudo cargar el histórico"); });
+      .catch(err => { if (err.name !== "AbortError") toast.error(t("clinical.nutritionForm.errorLoadHistory")); });
     return () => ctrl.abort();
   }, [patientId]);
 
@@ -90,7 +92,7 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
   const idealWeight = h > 0 ? Math.round(h - 100 - (h - 150) * 0.25) : 0;
 
   async function handleSave() {
-    if (!form.weight && !form.assessment) { toast.error("Agrega al menos el peso o el diagnóstico"); return; }
+    if (!form.weight && !form.assessment) { toast.error(t("clinical.nutritionForm.errorWeightOrDx")); return; }
     setSaving(true);
     try {
       const res = await fetch("/api/clinical", {
@@ -110,31 +112,31 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
       });
       if (!res.ok) throw new Error((await res.json()).error);
       onSaved(await res.json());
-      toast.success("Consulta nutricional guardada");
-    } catch (err: any) { toast.error(err.message ?? "Error"); } finally { setSaving(false); }
+      toast.success(t("clinical.nutritionForm.savedToast"));
+    } catch (err: any) { toast.error(err.message ?? t("common.genericError")); } finally { setSaving(false); }
   }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <CardNew title="Motivo de consulta">
+      <CardNew title={t("clinical.nutritionForm.reasonTitle")}>
         <textarea
           className="input-new"
           style={{ minHeight: 70, padding: "10px 12px", height: "auto", resize: "vertical" }}
-          placeholder="¿Por qué viene hoy?"
+          placeholder={t("clinical.nutritionForm.reasonPlaceholder")}
           value={form.subjective}
           onChange={e => set("subjective", e.target.value)}
         />
       </CardNew>
 
-      <CardNew title="Antropometría">
+      <CardNew title={t("clinical.nutritionForm.anthropometryTitle")}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "12px 14px", marginBottom: 16 }}>
           {[
-            { key: "weight",     label: "Peso (kg)",        ph: "70.5" },
-            { key: "height",     label: "Talla (cm)",       ph: "165"  },
-            { key: "bodyFat",    label: "% Grasa",          ph: "25"   },
-            { key: "muscleMass", label: "M. Muscular (kg)", ph: "30"   },
-            { key: "waist",      label: "Cintura (cm)",     ph: "85"   },
-            { key: "hip",        label: "Cadera (cm)",      ph: "98"   },
+            { key: "weight",     label: t("clinical.nutritionForm.anthWeight"),     ph: "70.5" },
+            { key: "height",     label: t("clinical.nutritionForm.anthHeight"),     ph: "165"  },
+            { key: "bodyFat",    label: t("clinical.nutritionForm.anthBodyFat"),    ph: "25"   },
+            { key: "muscleMass", label: t("clinical.nutritionForm.anthMuscleMass"), ph: "30"   },
+            { key: "waist",      label: t("clinical.nutritionForm.anthWaist"),      ph: "85"   },
+            { key: "hip",        label: t("clinical.nutritionForm.anthHip"),        ph: "98"   },
           ].map(f => (
             <div key={f.key} className="field-new">
               <label className="field-new__label">{f.label}</label>
@@ -162,17 +164,17 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
             {/* IMC */}
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>
-                <Activity size={10} /> IMC
+                <Activity size={10} /> {t("clinical.nutritionForm.metricBmi")}
               </div>
               <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: "var(--text-1)", lineHeight: 1 }}>
                 {bmi > 0 ? bmi : "—"}
               </div>
-              {bmiCat && <div style={{ marginTop: 6 }}><BadgeNew tone={bmiCat.tone} dot>{bmiCat.label}</BadgeNew></div>}
+              {bmiCat && <div style={{ marginTop: 6 }}><BadgeNew tone={bmiCat.tone} dot>{t(bmiCat.labelKey)}</BadgeNew></div>}
             </div>
             {/* TMB */}
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>
-                <Flame size={10} /> TMB
+                <Flame size={10} /> {t("clinical.nutritionForm.metricBmr")}
               </div>
               <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: "var(--text-1)", lineHeight: 1 }}>
                 {bmr > 0 ? `${bmr} kcal` : "—"}
@@ -182,24 +184,24 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
             {/* GET */}
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>
-                <Zap size={10} /> GET
+                <Zap size={10} /> {t("clinical.nutritionForm.metricTdee")}
               </div>
               <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: "var(--text-1)", lineHeight: 1 }}>
                 {tdee > 0 ? `${tdee} kcal` : "—"}
               </div>
-              <div style={{ fontSize: 10, color: "var(--text-3)", marginTop: 4 }}>Gasto total</div>
+              <div style={{ fontSize: 10, color: "var(--text-3)", marginTop: 4 }}>{t("clinical.nutritionForm.metricTdeeSub")}</div>
             </div>
             {/* ICC */}
             <div>
-              <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>ICC</div>
+              <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>{t("clinical.nutritionForm.metricWhr")}</div>
               <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: "var(--text-1)", lineHeight: 1 }}>
                 {waistHipRatio || "—"}
               </div>
-              <div style={{ fontSize: 10, color: "var(--text-3)", marginTop: 4 }}>Cintura/Cadera</div>
+              <div style={{ fontSize: 10, color: "var(--text-3)", marginTop: 4 }}>{t("clinical.nutritionForm.metricWhrSub")}</div>
             </div>
             {/* Peso ideal */}
             <div>
-              <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Peso ideal</div>
+              <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>{t("clinical.nutritionForm.metricIdealWeight")}</div>
               <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: "var(--text-1)", lineHeight: 1 }}>
                 {idealWeight > 0 ? `${idealWeight} kg` : "—"}
               </div>
@@ -209,87 +211,87 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
         )}
       </CardNew>
 
-      <CardNew title="Evolución de peso" sub="Histórico de consultas">
+      <CardNew title={t("clinical.nutritionForm.weightEvolutionTitle")} sub={t("clinical.nutritionForm.weightEvolutionSub")}>
         {weightData.length < 2 ? (
           <div style={{ fontSize: 12, color: "var(--text-3)", fontStyle: "italic", padding: "12px 0" }}>
-            Agrega 2+ consultas para ver evolución
+            {t("clinical.nutritionForm.add2Consults")}
           </div>
         ) : (
           <EvolutionChart
             data={weightData}
-            metric="Peso"
+            metric={t("clinical.nutritionForm.weightMetric")}
             color="#fbbf24"
             unit="kg"
           />
         )}
       </CardNew>
 
-      <CardNew title="Hábitos">
+      <CardNew title={t("clinical.nutritionForm.habitsTitle")}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px 14px" }}>
           <div className="field-new">
-            <label className="field-new__label">Nivel de actividad</label>
+            <label className="field-new__label">{t("clinical.nutritionForm.activityLevel")}</label>
             <select className="input-new" value={form.activityLevel} onChange={e => set("activityLevel", e.target.value)}>
-              {ACTIVITY_LEVELS.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
+              {ACTIVITY_LEVELS.map(a => <option key={a.id} value={a.id}>{t(a.labelKey)}</option>)}
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Dieta actual</label>
-            <input className="input-new" placeholder="Mixta, vegetariana…" value={form.diet} onChange={e => set("diet", e.target.value)} />
+            <label className="field-new__label">{t("clinical.nutritionForm.currentDiet")}</label>
+            <input className="input-new" placeholder={t("clinical.nutritionForm.currentDietPlaceholder")} value={form.diet} onChange={e => set("diet", e.target.value)} />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Agua (L/día)</label>
+            <label className="field-new__label">{t("clinical.nutritionForm.water")}</label>
             <input type="number" step="0.5" className="input-new mono" placeholder="1.5" value={form.waterIntake} onChange={e => set("waterIntake", e.target.value)} />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Horas de sueño</label>
+            <label className="field-new__label">{t("clinical.nutritionForm.sleepHours")}</label>
             <input type="number" className="input-new mono" placeholder="7" value={form.sleepHours} onChange={e => set("sleepHours", e.target.value)} />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Comidas al día</label>
+            <label className="field-new__label">{t("clinical.nutritionForm.mealsPerDay")}</label>
             <select className="input-new" value={form.mealsPerDay} onChange={e => set("mealsPerDay", e.target.value)}>
               {["1","2","3","4","5","6+"].map(n => <option key={n}>{n}</option>)}
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Alergias</label>
-            <input className="input-new" placeholder="Gluten, lactosa…" value={form.allergies} onChange={e => set("allergies", e.target.value)} />
+            <label className="field-new__label">{t("clinical.nutritionForm.allergies")}</label>
+            <input className="input-new" placeholder={t("clinical.nutritionForm.allergiesPlaceholder")} value={form.allergies} onChange={e => set("allergies", e.target.value)} />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Intolerancias</label>
-            <input className="input-new" placeholder="Lactosa, fructosa…" value={form.intolerances} onChange={e => set("intolerances", e.target.value)} />
+            <label className="field-new__label">{t("clinical.nutritionForm.intolerances")}</label>
+            <input className="input-new" placeholder={t("clinical.nutritionForm.intolerancesPlaceholder")} value={form.intolerances} onChange={e => set("intolerances", e.target.value)} />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Suplementos</label>
-            <input className="input-new" placeholder="Proteína, vitaminas…" value={form.supplements} onChange={e => set("supplements", e.target.value)} />
+            <label className="field-new__label">{t("clinical.nutritionForm.supplements")}</label>
+            <input className="input-new" placeholder={t("clinical.nutritionForm.supplementsPlaceholder")} value={form.supplements} onChange={e => set("supplements", e.target.value)} />
           </div>
         </div>
         <div className="field-new" style={{ marginTop: 14 }}>
-          <label className="field-new__label">Laboratorios recientes</label>
+          <label className="field-new__label">{t("clinical.nutritionForm.recentLabs")}</label>
           <textarea
             className="input-new"
             style={{ minHeight: 60, padding: "8px 12px", height: "auto", resize: "vertical" }}
-            placeholder="Glucosa: 95 mg/dL…"
+            placeholder={t("clinical.nutritionForm.recentLabsPlaceholder")}
             value={form.labResults}
             onChange={e => set("labResults", e.target.value)}
           />
         </div>
       </CardNew>
 
-      <CardNew title="Frecuencia alimentaria semanal" sub="Porciones promedio por día">
+      <CardNew title={t("clinical.nutritionForm.foodFreqTitle")} sub={t("clinical.nutritionForm.foodFreqSub")}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px 14px" }}>
           {[
-            { key:"frutas", label:"Frutas" },
-            { key:"verduras", label:"Verduras" },
-            { key:"carnesRojas", label:"Carnes rojas" },
-            { key:"pollosPavo", label:"Pollo/Pavo" },
-            { key:"pescadoMariscos", label:"Pescado/Mariscos" },
-            { key:"lacteos", label:"Lácteos" },
-            { key:"legumbres", label:"Legumbres" },
-            { key:"cerealesIntegrales", label:"Cereales integrales" },
-            { key:"ultraprocesados", label:"Ultraprocesados" },
-            { key:"bebidasAzucaradas", label:"Bebidas azucaradas" },
-            { key:"comidaRapida", label:"Comida rápida" },
-            { key:"snacksDulces", label:"Snacks/Dulces" },
+            { key:"frutas", label:t("clinical.nutritionForm.foodFruits") },
+            { key:"verduras", label:t("clinical.nutritionForm.foodVegetables") },
+            { key:"carnesRojas", label:t("clinical.nutritionForm.foodRedMeat") },
+            { key:"pollosPavo", label:t("clinical.nutritionForm.foodPoultry") },
+            { key:"pescadoMariscos", label:t("clinical.nutritionForm.foodFishSeafood") },
+            { key:"lacteos", label:t("clinical.nutritionForm.foodDairy") },
+            { key:"legumbres", label:t("clinical.nutritionForm.foodLegumes") },
+            { key:"cerealesIntegrales", label:t("clinical.nutritionForm.foodWholeGrains") },
+            { key:"ultraprocesados", label:t("clinical.nutritionForm.foodUltraprocessed") },
+            { key:"bebidasAzucaradas", label:t("clinical.nutritionForm.foodSugaryDrinks") },
+            { key:"comidaRapida", label:t("clinical.nutritionForm.foodFastFood") },
+            { key:"snacksDulces", label:t("clinical.nutritionForm.foodSnacksSweets") },
           ].map(f => (
             <div key={f.key} className="field-new">
               <label className="field-new__label">{f.label}</label>
@@ -299,28 +301,28 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
                 <option value="1-2">1-2</option>
                 <option value="3-4">3-4</option>
                 <option value="5-6">5-6</option>
-                <option value="Diario">Diario</option>
+                <option value="Diario">{t("clinical.nutritionForm.foodDaily")}</option>
               </select>
             </div>
           ))}
         </div>
       </CardNew>
 
-      <CardNew title="Plan alimenticio" sub={tdee > 0 ? `GET: ${tdee} kcal/día` : undefined}>
+      <CardNew title={t("clinical.nutritionForm.mealPlanTitle")} sub={tdee > 0 ? t("clinical.nutritionForm.mealPlanSub", { tdee }) : undefined}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px 14px" }}>
           {[
-            { key:"breakfast",       label:"Desayuno" },
-            { key:"morningSnack",    label:"Colación matutina" },
-            { key:"lunch",           label:"Comida" },
-            { key:"afternoonSnack",  label:"Colación vespertina" },
-            { key:"dinner",          label:"Cena" },
+            { key:"breakfast",       label:t("clinical.nutritionForm.mealBreakfast") },
+            { key:"morningSnack",    label:t("clinical.nutritionForm.mealMorningSnack") },
+            { key:"lunch",           label:t("clinical.nutritionForm.mealLunch") },
+            { key:"afternoonSnack",  label:t("clinical.nutritionForm.mealAfternoonSnack") },
+            { key:"dinner",          label:t("clinical.nutritionForm.mealDinner") },
           ].map(meal => (
             <div key={meal.key} className="field-new">
               <label className="field-new__label">{meal.label}</label>
               <textarea
                 className="input-new"
                 style={{ minHeight: 70, padding: "8px 12px", height: "auto", resize: "vertical" }}
-                placeholder="Avena con fruta…"
+                placeholder={t("clinical.nutritionForm.mealPlaceholder")}
                 value={(form.mealPlan as any)[meal.key]}
                 onChange={e => setMP(meal.key, e.target.value)}
               />
@@ -329,34 +331,34 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
         </div>
       </CardNew>
 
-      <CardNew title="Diagnóstico y plan">
+      <CardNew title={t("clinical.nutritionForm.dxPlanTitle")}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px 14px" }}>
           <div className="field-new">
-            <label className="field-new__label">Diagnóstico nutricional</label>
+            <label className="field-new__label">{t("clinical.nutritionForm.nutritionalDx")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
-              placeholder="Sobrepeso grado I…"
+              placeholder={t("clinical.nutritionForm.nutritionalDxPlaceholder")}
               value={form.assessment}
               onChange={e => set("assessment", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Objetivos</label>
+            <label className="field-new__label">{t("clinical.nutritionForm.goals")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
-              placeholder="Bajar 5kg en 2 meses…"
+              placeholder={t("clinical.nutritionForm.goalsPlaceholder")}
               value={form.goals}
               onChange={e => set("goals", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Plan e indicaciones</label>
+            <label className="field-new__label">{t("clinical.nutritionForm.planIndications")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
-              placeholder="Dieta hipocalórica…"
+              placeholder={t("clinical.nutritionForm.planPlaceholder")}
               value={form.plan}
               onChange={e => set("plan", e.target.value)}
             />
@@ -365,28 +367,28 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
       </CardNew>
 
       <CardNew
-        title="Objetivos SMART con seguimiento"
-        action={<ButtonNew size="sm" variant="ghost" onClick={addSmartGoal}>+ Agregar</ButtonNew>}
+        title={t("clinical.nutritionForm.smartGoalsTitle")}
+        action={<ButtonNew size="sm" variant="ghost" onClick={addSmartGoal}>{t("clinical.nutritionForm.addShort")}</ButtonNew>}
       >
         {smartGoals.length === 0 ? (
           <div style={{ fontSize: 12, color: "var(--text-3)", fontStyle: "italic" }}>
-            Sin objetivos SMART. Haz clic en &quot;+ Agregar&quot; para añadir.
+            {t("clinical.nutritionForm.smartGoalsEmpty")}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {smartGoals.map((goal, i) => (
               <div key={i} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr auto", gap: 8, alignItems: "flex-end" }}>
                 <div className="field-new">
-                  <label className="field-new__label">Objetivo</label>
+                  <label className="field-new__label">{t("clinical.nutritionForm.goal")}</label>
                   <input
                     className="input-new"
-                    placeholder="Bajar 2kg por mes"
+                    placeholder={t("clinical.nutritionForm.goalPlaceholder")}
                     value={goal.objetivo}
                     onChange={e => updateSmartGoal(i, "objetivo", e.target.value)}
                   />
                 </div>
                 <div className="field-new">
-                  <label className="field-new__label">Fecha meta</label>
+                  <label className="field-new__label">{t("clinical.nutritionForm.targetDate")}</label>
                   <DateField
                     className="input-new"
                     value={goal.fechaMeta}
@@ -394,7 +396,7 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
                   />
                 </div>
                 <div className="field-new">
-                  <label className="field-new__label">Progreso</label>
+                  <label className="field-new__label">{t("clinical.nutritionForm.progress")}</label>
                   <select
                     className="input-new"
                     value={goal.progreso}
@@ -404,13 +406,15 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
                   </select>
                 </div>
                 <div className="field-new">
-                  <label className="field-new__label">Estado</label>
+                  <label className="field-new__label">{t("common.status")}</label>
                   <select
                     className="input-new"
                     value={goal.estado}
                     onChange={e => updateSmartGoal(i, "estado", e.target.value)}
                   >
-                    {["En progreso","Logrado","No logrado"].map(s => <option key={s} value={s}>{s}</option>)}
+                    <option value="En progreso">{t("clinical.nutritionForm.statusInProgress")}</option>
+                    <option value="Logrado">{t("clinical.nutritionForm.statusAchieved")}</option>
+                    <option value="No logrado">{t("clinical.nutritionForm.statusNotAchieved")}</option>
                   </select>
                 </div>
                 <button
@@ -418,7 +422,7 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
                   onClick={() => removeSmartGoal(i)}
                   className="btn-new btn-new--ghost btn-new--sm"
                   style={{ padding: 0, width: 28, color: "var(--danger)", alignSelf: "flex-end" }}
-                  aria-label="Eliminar"
+                  aria-label={t("common.delete")}
                 >×</button>
               </div>
             ))}
@@ -428,7 +432,7 @@ export function NutritionForm({ patientId, patient, onSaved }: Props) {
 
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <ButtonNew variant="primary" onClick={handleSave} disabled={saving}>
-          {saving ? "Guardando…" : "Guardar consulta nutricional"}
+          {saving ? t("common.saving") : t("clinical.nutritionForm.saveButton")}
         </ButtonNew>
       </div>
     </div>

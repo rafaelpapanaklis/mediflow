@@ -2,6 +2,7 @@
 
 import { QRCodeSVG } from "qrcode.react";
 import { ShieldCheck, Printer } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Medication {
   name: string;
@@ -40,6 +41,7 @@ export function PrescriptionQR({
   cofeprisFolio,
   onPrint,
 }: PrescriptionQRProps) {
+  const t = useT();
   const issued = new Date(issuedAt);
   const expires = expiresAt ? new Date(expiresAt) : null;
 
@@ -48,19 +50,19 @@ export function PrescriptionQR({
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", fontWeight: 600, fontSize: 15, color: "var(--text-1)" }}>
-            Receta médica digital
+            {t("clinical.prescriptionQr.title")}
           </div>
           <div style={{ fontSize: 11, color: "var(--text-2)", fontFamily: "ui-monospace, monospace", marginTop: 4 }}>
             {clinic} · {doctor}
           </div>
-          <div style={{ fontSize: 11, color: "var(--text-2)", marginTop: 2 }}>Paciente: {patient}</div>
+          <div style={{ fontSize: 11, color: "var(--text-2)", marginTop: 2 }}>{t("clinical.prescriptionQr.patient", { patient })}</div>
           <div style={{ fontSize: 10, color: "var(--text-2)", fontFamily: "ui-monospace, monospace", marginTop: 6 }}>
-            Emitida {issued.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })}
-            {expires && ` · vence ${expires.toLocaleDateString("es-MX", { day: "numeric", month: "short" })}`}
+            {t("clinical.prescriptionQr.issued", { date: issued.toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" }) })}
+            {expires && ` ${t("clinical.prescriptionQr.expires", { date: expires.toLocaleDateString("es-MX", { day: "numeric", month: "short" }) })}`}
           </div>
           {(cofeprisGroup || cofeprisFolio) && (
             <div style={{ fontSize: 10, color: "var(--text-2)", fontFamily: "ui-monospace, monospace", marginTop: 4 }}>
-              COFEPRIS {cofeprisGroup && `· Grupo ${cofeprisGroup}`}{cofeprisFolio && ` · Folio ${cofeprisFolio}`}
+              COFEPRIS {cofeprisGroup && `· ${t("clinical.prescriptionQr.group", { group: cofeprisGroup })}`}{cofeprisFolio && ` · ${t("clinical.prescriptionQr.folio", { folio: cofeprisFolio })}`}
             </div>
           )}
         </div>
@@ -71,7 +73,7 @@ export function PrescriptionQR({
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "#34d399", fontFamily: "ui-monospace, monospace" }}>
             <ShieldCheck size={11} />
-            Verificable
+            {t("clinical.prescriptionQr.verifiable")}
           </div>
         </div>
       </div>
@@ -80,7 +82,7 @@ export function PrescriptionQR({
 
       <div>
         <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-2)", fontFamily: "ui-monospace, monospace", marginBottom: 8 }}>
-          Medicamentos
+          {t("clinical.prescriptionQr.medications")}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {medications.map((m, i) => (
@@ -99,7 +101,7 @@ export function PrescriptionQR({
       {indications && (
         <div>
           <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-2)", fontFamily: "ui-monospace, monospace", marginBottom: 6 }}>
-            Indicaciones
+            {t("clinical.prescriptionQr.indications")}
           </div>
           <div style={{ fontSize: 12, color: "var(--text-1)", whiteSpace: "pre-wrap" }}>{indications}</div>
         </div>
@@ -107,12 +109,12 @@ export function PrescriptionQR({
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
         <div style={{ fontSize: 10, color: "var(--text-2)", fontFamily: "ui-monospace, monospace" }}>
-          ID: {prescriptionId.slice(-12)}
+          {t("clinical.prescriptionQr.id", { id: prescriptionId.slice(-12) })}
         </div>
         {onPrint && (
           <button className="btn-new" onClick={onPrint} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}>
             <Printer size={13} />
-            Imprimir
+            {t("common.print")}
           </button>
         )}
       </div>

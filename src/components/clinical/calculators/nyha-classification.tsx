@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { X } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 export interface CalculatorResult { score: number | string; category?: string; risk?: string; recommendation?: string }
 
@@ -9,35 +10,36 @@ interface Props { onClose?: () => void }
 const CLASSES = [
   {
     id: "I",
-    title: "Clase I",
-    desc: "Sin limitación de la actividad física. La actividad ordinaria no causa disnea, fatiga ni palpitaciones.",
-    treatment: "Manejo con IECA/ARA II + beta-bloqueador. Modificaciones del estilo de vida.",
+    titleKey: "clinical.nyha.classITitle",
+    descKey: "clinical.nyha.classIDesc",
+    treatmentKey: "clinical.nyha.classITreatment",
     tone: "var(--success, #34d399)",
   },
   {
     id: "II",
-    title: "Clase II",
-    desc: "Limitación leve. Cómodo en reposo; la actividad física ordinaria causa síntomas.",
-    treatment: "IECA/ARA II + beta-bloqueador + diurético si congestión. Considerar ARNI.",
+    titleKey: "clinical.nyha.classIITitle",
+    descKey: "clinical.nyha.classIIDesc",
+    treatmentKey: "clinical.nyha.classIITreatment",
     tone: "var(--info, #38bdf8)",
   },
   {
     id: "III",
-    title: "Clase III",
-    desc: "Limitación marcada. Cómodo en reposo, pero actividad menor a la ordinaria causa síntomas.",
-    treatment: "ARNI + beta-bloqueador + antagonista de mineralocorticoides + iSGLT2. Considerar dispositivos.",
+    titleKey: "clinical.nyha.classIIITitle",
+    descKey: "clinical.nyha.classIIIDesc",
+    treatmentKey: "clinical.nyha.classIIITreatment",
     tone: "var(--warning, #fbbf24)",
   },
   {
     id: "IV",
-    title: "Clase IV",
-    desc: "Incapacidad para realizar cualquier actividad sin molestias. Síntomas en reposo.",
-    treatment: "Terapia máxima tolerada. Evaluar trasplante cardíaco, dispositivo de asistencia ventricular o cuidados paliativos.",
+    titleKey: "clinical.nyha.classIVTitle",
+    descKey: "clinical.nyha.classIVDesc",
+    treatmentKey: "clinical.nyha.classIVTreatment",
     tone: "var(--danger, #ef4444)",
   },
 ];
 
 export function NyhaClassificationCalculator({ onClose }: Props) {
+  const t = useT();
   const [selected, setSelected] = useState<string | null>(null);
   const sel = CLASSES.find(c => c.id === selected);
 
@@ -46,10 +48,10 @@ export function NyhaClassificationCalculator({ onClose }: Props) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
           <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-1)" }}>NYHA</div>
-          <div style={{ fontSize: 12, color: "var(--text-2)" }}>Clasificación funcional en insuficiencia cardíaca</div>
+          <div style={{ fontSize: 12, color: "var(--text-2)" }}>{t("clinical.nyha.subtitle")}</div>
         </div>
         {onClose && (
-          <button onClick={onClose} className="btn-new btn-new--ghost btn-new--sm" style={{ padding: 6 }} aria-label="Volver">
+          <button onClick={onClose} className="btn-new btn-new--ghost btn-new--sm" style={{ padding: 6 }} aria-label={t("common.back")}>
             <X size={16} />
           </button>
         )}
@@ -74,9 +76,9 @@ export function NyhaClassificationCalculator({ onClose }: Props) {
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: c.tone }}>{c.title}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: c.tone }}>{t(c.titleKey)}</span>
               </div>
-              <div style={{ fontSize: 12, color: "var(--text-2)", lineHeight: 1.4 }}>{c.desc}</div>
+              <div style={{ fontSize: 12, color: "var(--text-2)", lineHeight: 1.4 }}>{t(c.descKey)}</div>
             </button>
           );
         })}
@@ -84,10 +86,10 @@ export function NyhaClassificationCalculator({ onClose }: Props) {
 
       {sel && (
         <div style={{ padding: 14, borderRadius: 10, background: "var(--bg-elev-2, rgba(255,255,255,0.03))", border: "1px solid var(--border)" }}>
-          <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, marginBottom: 4 }}>CLASIFICACIÓN</div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: sel.tone, marginBottom: 8 }}>{sel.title}</div>
-          <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, marginBottom: 4 }}>TRATAMIENTO SUGERIDO</div>
-          <div style={{ fontSize: 13, color: "var(--text-1)", lineHeight: 1.5 }}>{sel.treatment}</div>
+          <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, marginBottom: 4 }}>{t("clinical.nyha.classificationLabel")}</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: sel.tone, marginBottom: 8 }}>{t(sel.titleKey)}</div>
+          <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, marginBottom: 4 }}>{t("clinical.nyha.suggestedTreatment")}</div>
+          <div style={{ fontSize: 13, color: "var(--text-1)", lineHeight: 1.5 }}>{t(sel.treatmentKey)}</div>
         </div>
       )}
     </div>

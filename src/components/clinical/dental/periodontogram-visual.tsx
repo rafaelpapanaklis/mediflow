@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Droplet } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 interface ToothPerio {
   toothNumber: number;
@@ -47,6 +48,7 @@ function ToothCell({
   setEditingSite,
   onToothChange,
 }: ToothCellProps) {
+  const t = useT();
   const data: ToothPerio =
     tooth ?? {
       toothNumber,
@@ -118,7 +120,7 @@ function ToothCell({
                 cursor: editable ? "pointer" : "default",
               }}
               onClick={() => handleSiteClick(i)}
-              title={`Sitio ${i + 1}: ${d}mm${data.bleeding[i] ? " (sangrado)" : ""}`}
+              title={`${t("clinical.periodontogram.site", { n: i + 1 })}: ${d}mm${data.bleeding[i] ? ` (${t("clinical.periodontogram.bleeding")})` : ""}`}
             >
               {d > 0 && (
                 <div
@@ -225,6 +227,7 @@ function renderQuadrant(
 }
 
 export function PeriodontogramVisual({ teeth, onToothChange, editable }: PeriodontogramProps) {
+  const t = useT();
   const [editingSite, setEditingSite] = useState<{ tooth: number; site: number } | null>(null);
 
   const stats = useMemo(() => {
@@ -232,11 +235,11 @@ export function PeriodontogramVisual({ teeth, onToothChange, editable }: Periodo
     let plaqueTeeth = 0;
     let bleedingSites = 0;
     let deepPocketTeeth = 0;
-    for (const t of teeth) {
+    for (const tooth of teeth) {
       totalSites += 3;
-      if (t.plaque) plaqueTeeth++;
-      t.bleeding.forEach((b) => b && bleedingSites++);
-      if (t.probingDepths.some((d) => d >= 5)) deepPocketTeeth++;
+      if (tooth.plaque) plaqueTeeth++;
+      tooth.bleeding.forEach((b) => b && bleedingSites++);
+      if (tooth.probingDepths.some((d) => d >= 5)) deepPocketTeeth++;
     }
     const plaquePct = teeth.length > 0 ? Math.round((plaqueTeeth / teeth.length) * 100) : 0;
     const bleedingPct = totalSites > 0 ? Math.round((bleedingSites / totalSites) * 100) : 0;
@@ -245,7 +248,7 @@ export function PeriodontogramVisual({ teeth, onToothChange, editable }: Periodo
 
   const teethMap = useMemo(() => {
     const m = new Map<number, ToothPerio>();
-    for (const t of teeth) m.set(t.toothNumber, t);
+    for (const tooth of teeth) m.set(tooth.toothNumber, tooth);
     return m;
   }, [teeth]);
 
@@ -261,18 +264,18 @@ export function PeriodontogramVisual({ teeth, onToothChange, editable }: Periodo
         }}
       >
         <div>
-          <div style={{ color: "var(--text-2)", fontSize: 10, textTransform: "uppercase" }}>Placa</div>
+          <div style={{ color: "var(--text-2)", fontSize: 10, textTransform: "uppercase" }}>{t("clinical.periodontogram.plaque")}</div>
           <div style={{ fontWeight: 700, color: "var(--text-1)", fontSize: 18 }}>
             {stats.plaquePct}%
           </div>
         </div>
         <div>
-          <div style={{ color: "var(--text-2)", fontSize: 10, textTransform: "uppercase" }}>Sangrado</div>
+          <div style={{ color: "var(--text-2)", fontSize: 10, textTransform: "uppercase" }}>{t("clinical.periodontogram.bleedingStat")}</div>
           <div style={{ fontWeight: 700, color: "#ef4444", fontSize: 18 }}>{stats.bleedingPct}%</div>
         </div>
         <div>
           <div style={{ color: "var(--text-2)", fontSize: 10, textTransform: "uppercase" }}>
-            Piezas con bolsa ≥5mm
+            {t("clinical.periodontogram.deepPocketTeeth")}
           </div>
           <div style={{ fontWeight: 700, color: "#fbbf24", fontSize: 18 }}>{stats.deepPocketTeeth}</div>
         </div>
@@ -287,7 +290,7 @@ export function PeriodontogramVisual({ teeth, onToothChange, editable }: Periodo
             <span style={{ width: 8, height: 8, background: "#ef4444", borderRadius: 2 }} /> ≥6mm
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "var(--text-2)" }}>
-            <Droplet size={10} color="#38bdf8" /> placa
+            <Droplet size={10} color="#38bdf8" /> {t("clinical.periodontogram.plaqueLegend")}
           </div>
         </div>
       </div>
@@ -302,7 +305,7 @@ export function PeriodontogramVisual({ teeth, onToothChange, editable }: Periodo
       >
         <div>
           <div style={{ fontSize: 10, color: "var(--text-2)", marginBottom: 6, textTransform: "uppercase" }}>
-            Arcada superior
+            {t("clinical.periodontogram.upperArch")}
           </div>
           <div
             style={{
@@ -319,7 +322,7 @@ export function PeriodontogramVisual({ teeth, onToothChange, editable }: Periodo
         </div>
         <div>
           <div style={{ fontSize: 10, color: "var(--text-2)", marginBottom: 6, textTransform: "uppercase" }}>
-            Arcada inferior
+            {t("clinical.periodontogram.lowerArch")}
           </div>
           <div style={{ display: "flex", gap: 16 }}>
             {renderQuadrant(Q4, teethMap, editable, editingSite, setEditingSite, onToothChange)}

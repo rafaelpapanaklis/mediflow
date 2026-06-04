@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { Activity } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 interface EkgProps {
   rhythm: "sinus" | "afib" | "flutter" | "vtach" | "paced" | "normal";
@@ -133,6 +134,7 @@ export function EkgRenderer({
   leads = "II",
   height = 180,
 }: EkgProps) {
+  const t = useT();
   const width = 760;
   const clampedRate = Math.max(40, Math.min(200, rate));
 
@@ -157,12 +159,12 @@ export function EkgRenderer({
   }, [rhythm, clampedRate, height]);
 
   const rhythmLabel: Record<EkgProps["rhythm"], string> = {
-    sinus: "Ritmo sinusal",
-    normal: "Normal",
-    afib: "Fibrilación auricular",
-    flutter: "Flutter auricular",
-    vtach: "Taquicardia ventricular",
-    paced: "Ritmo con marcapasos",
+    sinus: t("clinical.ekg.rhythmSinus"),
+    normal: t("clinical.ekg.rhythmNormal"),
+    afib: t("clinical.ekg.rhythmAfib"),
+    flutter: t("clinical.ekg.rhythmFlutter"),
+    vtach: t("clinical.ekg.rhythmVtach"),
+    paced: t("clinical.ekg.rhythmPaced"),
   };
 
   const gridLinesMinor: number[] = [];
@@ -200,7 +202,7 @@ export function EkgRenderer({
               {clampedRate} bpm
             </div>
             <div style={{ fontSize: 12, color: "var(--text-2)" }}>
-              {rhythmLabel[rhythm]} · Derivación {leads === "II" ? "II" : "12 derivaciones"}
+              {rhythmLabel[rhythm]} · {t("clinical.ekg.lead")} {leads === "II" ? "II" : t("clinical.ekg.twelveLeads")}
             </div>
           </div>
         </div>

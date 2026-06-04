@@ -1,43 +1,45 @@
 "use client";
 import { useState } from "react";
 import { X } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 export interface CalculatorResult { score: number | string; category?: string; risk?: string; recommendation?: string }
 
 interface Props { onClose?: () => void }
 
 const EYE = [
-  { v: 4, l: "Espontánea" },
-  { v: 3, l: "Al estímulo verbal" },
-  { v: 2, l: "Al dolor" },
-  { v: 1, l: "No abre" },
+  { v: 4, lKey: "clinical.glasgow.eye4" },
+  { v: 3, lKey: "clinical.glasgow.eye3" },
+  { v: 2, lKey: "clinical.glasgow.eye2" },
+  { v: 1, lKey: "clinical.glasgow.eye1" },
 ];
 const VERBAL = [
-  { v: 5, l: "Orientada" },
-  { v: 4, l: "Confusa" },
-  { v: 3, l: "Palabras inapropiadas" },
-  { v: 2, l: "Sonidos incomprensibles" },
-  { v: 1, l: "Sin respuesta" },
+  { v: 5, lKey: "clinical.glasgow.verbal5" },
+  { v: 4, lKey: "clinical.glasgow.verbal4" },
+  { v: 3, lKey: "clinical.glasgow.verbal3" },
+  { v: 2, lKey: "clinical.glasgow.verbal2" },
+  { v: 1, lKey: "clinical.glasgow.verbal1" },
 ];
 const MOTOR = [
-  { v: 6, l: "Obedece órdenes" },
-  { v: 5, l: "Localiza dolor" },
-  { v: 4, l: "Retira al dolor" },
-  { v: 3, l: "Flexión anormal (decorticación)" },
-  { v: 2, l: "Extensión anormal (descerebración)" },
-  { v: 1, l: "Sin respuesta" },
+  { v: 6, lKey: "clinical.glasgow.motor6" },
+  { v: 5, lKey: "clinical.glasgow.motor5" },
+  { v: 4, lKey: "clinical.glasgow.motor4" },
+  { v: 3, lKey: "clinical.glasgow.motor3" },
+  { v: 2, lKey: "clinical.glasgow.motor2" },
+  { v: 1, lKey: "clinical.glasgow.motor1" },
 ];
 
 export function GlasgowComaScaleCalculator({ onClose }: Props) {
+  const t = useT();
   const [eye, setEye] = useState(4);
   const [verbal, setVerbal] = useState(5);
   const [motor, setMotor] = useState(6);
 
   const score = eye + verbal + motor;
   const category =
-    score >= 13 ? "Leve"
-    : score >= 9 ? "Moderado"
-    : "Severo (considerar intubación)";
+    score >= 13 ? t("clinical.glasgow.catMild")
+    : score >= 9 ? t("clinical.glasgow.catModerate")
+    : t("clinical.glasgow.catSevere");
   const tone =
     score >= 13 ? "var(--success, #34d399)"
     : score >= 9 ? "var(--warning, #fbbf24)"
@@ -47,32 +49,32 @@ export function GlasgowComaScaleCalculator({ onClose }: Props) {
     <div className="card" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
-          <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-1)" }}>Escala de Glasgow (GCS)</div>
-          <div style={{ fontSize: 12, color: "var(--text-2)" }}>Nivel de conciencia</div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-1)" }}>{t("clinical.glasgow.title")}</div>
+          <div style={{ fontSize: 12, color: "var(--text-2)" }}>{t("clinical.glasgow.subtitle")}</div>
         </div>
         {onClose && (
-          <button onClick={onClose} className="btn-new btn-new--ghost btn-new--sm" style={{ padding: 6 }} aria-label="Volver">
+          <button onClick={onClose} className="btn-new btn-new--ghost btn-new--sm" style={{ padding: 6 }} aria-label={t("common.back")}>
             <X size={16} />
           </button>
         )}
       </div>
 
       <div className="field-new">
-        <label className="field-new__label">Apertura ocular (1-4)</label>
+        <label className="field-new__label">{t("clinical.glasgow.eyeOpening")}</label>
         <select className="input-new" value={eye} onChange={e => setEye(Number(e.target.value))}>
-          {EYE.map(o => <option key={o.v} value={o.v}>{o.v} — {o.l}</option>)}
+          {EYE.map(o => <option key={o.v} value={o.v}>{o.v} — {t(o.lKey)}</option>)}
         </select>
       </div>
       <div className="field-new">
-        <label className="field-new__label">Respuesta verbal (1-5)</label>
+        <label className="field-new__label">{t("clinical.glasgow.verbalResponse")}</label>
         <select className="input-new" value={verbal} onChange={e => setVerbal(Number(e.target.value))}>
-          {VERBAL.map(o => <option key={o.v} value={o.v}>{o.v} — {o.l}</option>)}
+          {VERBAL.map(o => <option key={o.v} value={o.v}>{o.v} — {t(o.lKey)}</option>)}
         </select>
       </div>
       <div className="field-new">
-        <label className="field-new__label">Respuesta motora (1-6)</label>
+        <label className="field-new__label">{t("clinical.glasgow.motorResponse")}</label>
         <select className="input-new" value={motor} onChange={e => setMotor(Number(e.target.value))}>
-          {MOTOR.map(o => <option key={o.v} value={o.v}>{o.v} — {o.l}</option>)}
+          {MOTOR.map(o => <option key={o.v} value={o.v}>{o.v} — {t(o.lKey)}</option>)}
         </select>
       </div>
 

@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import { Glasses, Printer } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 interface OpticalRx {
   od: { esf?: number; cil?: number; eje?: number; add?: number };
@@ -28,6 +29,7 @@ export function OpticalPrescription({
   patientName,
   onExportPDF,
 }: OpticalPrescriptionProps) {
+  const t = useT();
   const printRef = useRef<HTMLDivElement>(null);
 
   function updateEye(eye: Eye, field: Field, value: string) {
@@ -61,7 +63,7 @@ export function OpticalPrescription({
     w.document.write(`
       <html>
         <head>
-          <title>Receta óptica${patientName ? ` · ${patientName}` : ""}</title>
+          <title>${t("clinical.opticalRx.title")}${patientName ? ` · ${patientName}` : ""}</title>
           <style>
             body { font-family: system-ui, sans-serif; padding: 24px; color: #111; }
             table { border-collapse: collapse; width: 100%; margin-top: 16px; }
@@ -135,7 +137,7 @@ export function OpticalPrescription({
           <Glasses size={18} color="var(--brand)" />
           <div>
             <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-1)" }}>
-              Receta óptica
+              {t("clinical.opticalRx.title")}
             </div>
             {patientName && (
               <div style={{ fontSize: 11, color: "var(--text-2)" }}>{patientName}</div>
@@ -148,14 +150,14 @@ export function OpticalPrescription({
           className="btn-new btn-new--primary"
           style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
         >
-          <Printer size={14} /> Exportar PDF
+          <Printer size={14} /> {t("clinical.opticalRx.exportPdf")}
         </button>
       </div>
 
       <div ref={printRef}>
         {patientName && (
           <h1 style={{ color: "var(--text-1)", fontSize: 14, marginBottom: 8 }}>
-            Paciente: {patientName}
+            {t("clinical.opticalRx.patientLabel")}: {patientName}
           </h1>
         )}
 
@@ -221,7 +223,7 @@ export function OpticalPrescription({
 
         <div style={{ marginTop: 12 }}>
           <label style={{ fontSize: 11, color: "var(--text-2)", textTransform: "uppercase", fontWeight: 600 }}>
-            Notas
+            {t("common.notes")}
           </label>
           {editable ? (
             <textarea
@@ -230,7 +232,7 @@ export function OpticalPrescription({
               value={rx.notes ?? ""}
               onChange={(e) => updateNotes(e.target.value)}
               style={{ width: "100%", resize: "vertical", marginTop: 4 }}
-              placeholder="Instrucciones, tipo de lente, próximo control..."
+              placeholder={t("clinical.opticalRx.notesPlaceholder")}
             />
           ) : (
             <div style={{ color: "var(--text-1)", fontSize: 13, marginTop: 4 }}>

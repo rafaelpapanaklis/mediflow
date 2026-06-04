@@ -13,6 +13,7 @@ import {
   EmptyStateNew,
   type EmptyStateSize,
 } from "../empty-state";
+import { useT } from "@/i18n/i18n-provider";
 
 interface PresetBaseProps {
   size?: EmptyStateSize;
@@ -25,18 +26,19 @@ interface EmptyPatientsProps extends PresetBaseProps {
 }
 
 export function EmptyPatients({ size, className, onNew, onImport }: EmptyPatientsProps) {
+  const t = useT();
   return (
     <EmptyStateNew
       icon={Users} tone="brand"
-      title="Sin pacientes todavía"
-      description="Registra tu primer paciente o importa tu base desde Excel para empezar."
+      title={t("clinical.emptyStates.patientsTitle")}
+      description={t("clinical.emptyStates.patientsDesc")}
       primaryCta={{
-        label: "Nuevo paciente", icon: UserPlus,
+        label: t("clinical.emptyStates.patientsNewCta"), icon: UserPlus,
         onClick: onNew,
         href: onNew ? undefined : "/dashboard/patients?new=1",
       }}
       secondaryCta={{
-        label: "Importar Excel", icon: FileSpreadsheet,
+        label: t("clinical.emptyStates.patientsImportCta"), icon: FileSpreadsheet,
         onClick: onImport,
         href: onImport ? undefined : "/dashboard/patients?import=1",
       }}
@@ -50,18 +52,19 @@ interface EmptyAppointmentsTodayProps extends PresetBaseProps {
 }
 
 export function EmptyAppointmentsToday({ size, className, onNew }: EmptyAppointmentsTodayProps) {
+  const t = useT();
   return (
     <EmptyStateNew
       icon={Calendar} tone="neutral"
-      title="Sin citas hoy"
-      description="Disfruta el día libre o aprovecha para agendar la próxima semana."
+      title={t("clinical.emptyStates.apptsTodayTitle")}
+      description={t("clinical.emptyStates.apptsTodayDesc")}
       primaryCta={{
-        label: "Nueva cita", icon: CalendarPlus,
+        label: t("clinical.emptyStates.apptsNewCta"), icon: CalendarPlus,
         onClick: onNew,
         href: onNew ? undefined : "/dashboard/appointments?new=1",
       }}
       secondaryCta={{
-        label: "Ver agenda semanal", icon: CalendarDays,
+        label: t("clinical.emptyStates.apptsWeekCta"), icon: CalendarDays,
         href: "/dashboard/appointments?view=week",
       }}
       size={size} className={className}
@@ -70,12 +73,13 @@ export function EmptyAppointmentsToday({ size, className, onNew }: EmptyAppointm
 }
 
 export function EmptyInvoices({ size, className }: PresetBaseProps) {
+  const t = useT();
   return (
     <EmptyStateNew
       icon={CreditCard} tone="brand"
-      title="Sin facturas emitidas"
-      description="Cuando cobres una consulta o tratamiento, las facturas aparecerán aquí."
-      primaryCta={{ label: "Nueva factura", icon: FilePlus, href: "/dashboard/billing?new=1" }}
+      title={t("clinical.emptyStates.invoicesTitle")}
+      description={t("clinical.emptyStates.invoicesDesc")}
+      primaryCta={{ label: t("clinical.emptyStates.invoicesNewCta"), icon: FilePlus, href: "/dashboard/billing?new=1" }}
       size={size} className={className}
     />
   );
@@ -86,12 +90,13 @@ interface EmptyXraysProps extends PresetBaseProps {
 }
 
 export function EmptyXrays({ size, className, onUpload }: EmptyXraysProps) {
+  const t = useT();
   return (
     <EmptyStateNew
       icon={FileImage} tone="brand"
-      title="Sin radiografías subidas"
-      description="Sube panorámicas, periapicales o cualquier estudio por imagen. El análisis IA está disponible automáticamente."
-      primaryCta={{ label: "Subir radiografía", icon: Upload, onClick: onUpload }}
+      title={t("clinical.emptyStates.xraysTitle")}
+      description={t("clinical.emptyStates.xraysDesc")}
+      primaryCta={{ label: t("clinical.emptyStates.xraysUploadCta"), icon: Upload, onClick: onUpload }}
       size={size} className={className}
     />
   );
@@ -105,18 +110,19 @@ interface EmptyClinicalRecordsProps extends PresetBaseProps {
 export function EmptyClinicalRecords({
   size, className, onStartConsult, patientName,
 }: EmptyClinicalRecordsProps) {
+  const t = useT();
   return (
     <EmptyStateNew
       icon={Stethoscope} tone="brand"
-      title="Sin notas clínicas"
+      title={t("clinical.emptyStates.recordsTitle")}
       description={
         patientName
-          ? `Inicia la primera consulta de ${patientName} para generar notas SOAP, diagnósticos y planes de tratamiento.`
-          : "Las notas SOAP, diagnósticos y planes de tratamiento se guardarán aquí."
+          ? t("clinical.emptyStates.recordsDescNamed", { patientName })
+          : t("clinical.emptyStates.recordsDesc")
       }
       primaryCta={
         onStartConsult
-          ? { label: "Iniciar consulta", icon: Play, onClick: onStartConsult }
+          ? { label: t("clinical.emptyStates.recordsStartCta"), icon: Play, onClick: onStartConsult }
           : undefined
       }
       size={size} className={className}
@@ -125,23 +131,25 @@ export function EmptyClinicalRecords({
 }
 
 export function EmptyMessages({ size, className }: PresetBaseProps) {
+  const t = useT();
   return (
     <EmptyStateNew
       icon={MessageCircle} tone="neutral"
-      title="Sin mensajes"
-      description="Los mensajes entrantes de WhatsApp, email o SMS aparecerán aquí."
+      title={t("clinical.emptyStates.messagesTitle")}
+      description={t("clinical.emptyStates.messagesDesc")}
       size={size} className={className}
     />
   );
 }
 
 export function EmptyTreatments({ size, className }: PresetBaseProps) {
+  const t = useT();
   return (
     <EmptyStateNew
       icon={Activity} tone="brand"
-      title="Sin tratamientos en catálogo"
-      description="Agrega los tratamientos que ofreces para poder asignarlos a citas y facturas."
-      primaryCta={{ label: "Agregar tratamiento", icon: Plus, href: "/dashboard/treatments?new=1" }}
+      title={t("clinical.emptyStates.treatmentsTitle")}
+      description={t("clinical.emptyStates.treatmentsDesc")}
+      primaryCta={{ label: t("clinical.emptyStates.treatmentsAddCta"), icon: Plus, href: "/dashboard/treatments?new=1" }}
       size={size} className={className}
     />
   );
@@ -152,12 +160,13 @@ interface EmptyWaitlistProps extends PresetBaseProps {
 }
 
 export function EmptyWaitlist({ size, className, onAdd }: EmptyWaitlistProps) {
+  const t = useT();
   return (
     <EmptyStateNew
       icon={Clock} tone="neutral"
-      title="Lista de espera vacía"
-      description="Agrega pacientes que quieran adelantar su cita si hay cancelaciones."
-      primaryCta={{ label: "Agregar paciente a espera", icon: Plus, onClick: onAdd }}
+      title={t("clinical.emptyStates.waitlistTitle")}
+      description={t("clinical.emptyStates.waitlistDesc")}
+      primaryCta={{ label: t("clinical.emptyStates.waitlistAddCta"), icon: Plus, onClick: onAdd }}
       size={size} className={className}
     />
   );
@@ -169,33 +178,36 @@ interface EmptySearchResultsProps extends PresetBaseProps {
 }
 
 export function EmptySearchResults({ size, className, query, hint }: EmptySearchResultsProps) {
+  const t = useT();
   return (
     <EmptyStateNew
       icon={SearchX} tone="neutral"
-      title={`Sin resultados para "${query}"`}
-      description={hint ?? "Prueba con otro nombre, teléfono o folio. La búsqueda ignora acentos."}
+      title={t("clinical.emptyStates.searchTitle", { query })}
+      description={hint ?? t("clinical.emptyStates.searchDesc")}
       size={size ?? "sm"} className={className}
     />
   );
 }
 
 export function EmptyActivity({ size, className }: PresetBaseProps) {
+  const t = useT();
   return (
     <EmptyStateNew
       icon={Activity} tone="neutral"
-      title="Sin actividad reciente"
-      description="Los eventos de la clínica aparecerán aquí: cobros, nuevos pacientes, consultas completadas."
+      title={t("clinical.emptyStates.activityTitle")}
+      description={t("clinical.emptyStates.activityDesc")}
       size={size} className={className}
     />
   );
 }
 
 export function EmptyActionItemsAllClear({ size, className }: PresetBaseProps) {
+  const t = useT();
   return (
     <EmptyStateNew
       icon={CheckCircle2} tone="success"
-      title="Todo al día 🎉"
-      description="Sin citas sin confirmar, sin facturas pendientes, sin mensajes sin leer."
+      title={t("clinical.emptyStates.allClearTitle")}
+      description={t("clinical.emptyStates.allClearDesc")}
       size={size ?? "sm"} className={className}
     />
   );

@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import { CardNew }   from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
+import { useT } from "@/i18n/i18n-provider";
 
 // FDI notation - 6 measurement points per tooth (buccal: distobuccal, buccal, mesiobuccal; lingual: distolingual, lingual, mesiolingual)
 const UPPER_TEETH = [18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28];
@@ -31,6 +32,7 @@ function initTeeth(): Record<number, ToothData> {
 interface Props { patientId: string; clinicId: string; onSaved?: () => void }
 
 export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
+  const t = useT();
   const [teeth, setTeeth]         = useState<Record<number, ToothData>>(initTeeth);
   const [selected, setSelected]   = useState<number | null>(null);
   const [saving, setSaving]       = useState(false);
@@ -70,8 +72,8 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
   const bleedingPoints = allTeeth.reduce((s, n) => s + teeth[n].bleeding.filter(Boolean).length, 0);
   const bleedingIndex  = Math.round((bleedingPoints / totalPoints) * 100);
   const avgPocket      = allTeeth.reduce((s, n) => {
-    const t = teeth[n];
-    return s + t.buccal.reduce((a,b)=>a+b,0) + t.lingual.reduce((a,b)=>a+b,0);
+    const td = teeth[n];
+    return s + td.buccal.reduce((a,b)=>a+b,0) + td.lingual.reduce((a,b)=>a+b,0);
   }, 0) / (allTeeth.length * 6);
   const plaqIndex = bleedingIndex;
 
@@ -87,7 +89,7 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
         body: JSON.stringify({ patientId, clinicId, measurements: teeth, notes, bleedingIndex, plaquIndex: plaqIndex }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
-      toast.success("Periodontograma guardado");
+      toast.success(t("clinical.periodontal.savedToast"));
       onSaved?.();
     } catch (e: any) { toast.error(e.message); }
     finally { setSaving(false); }
@@ -102,9 +104,9 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
   }
 
   function renderToothBar(num: number) {
-    const t = teeth[num];
+    const td = teeth[num];
     const isSelected = selected === num;
-    const hasBleed   = t.bleeding.some(Boolean);
+    const hasBleed   = td.bleeding.some(Boolean);
     return (
       <button
         key={num}
@@ -126,7 +128,7 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
       >
         <div className="mono" style={{ fontSize: 9, color: "var(--text-3)", fontWeight: 600 }}>{num}</div>
         <div style={{ display: "flex", gap: 1 }}>
-          {t.buccal.map((v, i) => (
+          {td.buccal.map((v, i) => (
             <div
               key={i}
               style={{
@@ -147,8 +149,8 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
             boxShadow: hasBleed ? "0 0 6px var(--danger)" : "none",
           }}
         />
-        {t.furcation > 0 && (
-          <div className="mono" style={{ fontSize: 8, color: "var(--warning)", fontWeight: 700 }}>F{t.furcation}</div>
+        {td.furcation > 0 && (
+          <div className="mono" style={{ fontSize: 8, color: "var(--warning)", fontWeight: 700 }}>F{td.furcation}</div>
         )}
       </button>
     );
@@ -173,7 +175,7 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {/* Índices */}
-      <CardNew title="Índices periodontales">
+      <CardNew title={t("clinical.periodontal.indicesTitle")}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
           <div style={{
             padding: 14,
@@ -182,13 +184,13 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
             borderRadius: 10,
           }}>
             <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>
-              Índice de sangrado
+              {t("clinical.periodontal.bleedingIndex")}
             </div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
               <span className="mono" style={{ fontSize: 22, fontWeight: 600, color: "var(--text-1)" }}>{bleedingIndex}</span>
               <span style={{ fontSize: 11, color: "var(--text-3)" }}>%</span>
             </div>
-            <div style={{ marginTop: 6 }}><BadgeNew tone={bleedTone} dot>{bleedTone === "success" ? "Óptimo" : bleedTone === "warning" ? "Moderado" : "Alto"}</BadgeNew></div>
+            <div style={{ marginTop: 6 }}><BadgeNew tone={bleedTone} dot>{bleedTone === "success" ? t("clinical.periodontal.toneOptimal") : bleedTone === "warning" ? t("clinical.periodontal.toneModerate") : t("clinical.periodontal.toneHigh")}</BadgeNew></div>
           </div>
           <div style={{
             padding: 14,
@@ -197,13 +199,13 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
             borderRadius: 10,
           }}>
             <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>
-              Bolsa promedio
+              {t("clinical.periodontal.avgPocket")}
             </div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
               <span className="mono" style={{ fontSize: 22, fontWeight: 600, color: "var(--text-1)" }}>{avgPocket.toFixed(1)}</span>
               <span style={{ fontSize: 11, color: "var(--text-3)" }}>mm</span>
             </div>
-            <div style={{ marginTop: 6 }}><BadgeNew tone={pocketTone} dot>{pocketTone === "success" ? "Sano" : pocketTone === "warning" ? "Moderado" : "Severo"}</BadgeNew></div>
+            <div style={{ marginTop: 6 }}><BadgeNew tone={pocketTone} dot>{pocketTone === "success" ? t("clinical.periodontal.toneHealthy") : pocketTone === "warning" ? t("clinical.periodontal.toneModerate") : t("clinical.periodontal.toneSevere")}</BadgeNew></div>
           </div>
           <div style={{
             padding: 14,
@@ -212,7 +214,7 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
             borderRadius: 10,
           }}>
             <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>
-              Puntos con sangrado
+              {t("clinical.periodontal.bleedingPoints")}
             </div>
             <div className="mono" style={{ fontSize: 22, fontWeight: 600, color: "var(--text-1)" }}>
               {bleedingPoints}<span style={{ color: "var(--text-3)", fontSize: 14 }}>/{totalPoints}</span>
@@ -223,22 +225,22 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
         {/* Leyenda */}
         <div style={{ display: "flex", gap: 14, marginTop: 14, fontSize: 11, color: "var(--text-3)", flexWrap: "wrap" }}>
           <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <span style={{ width: 10, height: 10, borderRadius: 2, background: "#10b981" }} /> ≤3mm sano
+            <span style={{ width: 10, height: 10, borderRadius: 2, background: "#10b981" }} /> {t("clinical.periodontal.legendHealthy")}
           </span>
           <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <span style={{ width: 10, height: 10, borderRadius: 2, background: "#f59e0b" }} /> 4-5mm moderado
+            <span style={{ width: 10, height: 10, borderRadius: 2, background: "#f59e0b" }} /> {t("clinical.periodontal.legendModerate")}
           </span>
           <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <span style={{ width: 10, height: 10, borderRadius: 2, background: "#ef4444" }} /> ≥6mm severo
+            <span style={{ width: 10, height: 10, borderRadius: 2, background: "#ef4444" }} /> {t("clinical.periodontal.legendSevere")}
           </span>
           <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--danger)" }} /> Sangrado
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--danger)" }} /> {t("clinical.periodontal.legendBleeding")}
           </span>
         </div>
       </CardNew>
 
       {/* Sondaje periodontal */}
-      <CardNew title="Sondaje periodontal" sub="FDI — 32 dientes · 6 puntos cada uno">
+      <CardNew title={t("clinical.periodontal.probingTitle")} sub={t("clinical.periodontal.probingSub")}>
         <div style={{
           background: "var(--bg-elev-2)",
           border: "1px solid var(--border-soft)",
@@ -250,7 +252,7 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
             textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600,
             marginBottom: 10,
           }}>
-            Maxilar superior
+            {t("clinical.periodontal.upperJaw")}
           </div>
           <div style={{ display: "flex", gap: 2, flexWrap: "wrap", justifyContent: "center", marginBottom: 14 }}>
             {UPPER_TEETH.map(n => renderToothBar(n))}
@@ -266,7 +268,7 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
             textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600,
             textAlign: "left",
           }}>
-            Maxilar inferior
+            {t("clinical.periodontal.lowerJaw")}
           </div>
         </div>
 
@@ -280,14 +282,14 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
             borderRadius: "var(--radius)",
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>Diente</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{t("clinical.periodontal.tooth")}</span>
               <span className="mono" style={{ fontSize: 16, fontWeight: 700, color: "#c4b5fd" }}>#{selected}</span>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
               {/* Vestibular */}
               <div>
-                <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, marginBottom: 8 }}>Vestibular (D-C-M)</div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, marginBottom: 8 }}>{t("clinical.periodontal.buccal")}</div>
                 <div style={{ display: "flex", gap: 8 }}>
                   {sel.buccal.map((v, i) => (
                     <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
@@ -307,7 +309,7 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
                           cursor: "pointer",
                           boxShadow: sel.bleeding[i] ? "0 0 6px var(--danger)" : "none",
                         }}
-                        aria-label="Sangrado"
+                        aria-label={t("clinical.periodontal.legendBleeding")}
                       />
                     </div>
                   ))}
@@ -316,7 +318,7 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
 
               {/* Lingual */}
               <div>
-                <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, marginBottom: 8 }}>Lingual (D-C-M)</div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, marginBottom: 8 }}>{t("clinical.periodontal.lingual")}</div>
                 <div style={{ display: "flex", gap: 8 }}>
                   {sel.lingual.map((v, i) => (
                     <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
@@ -336,7 +338,7 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
                           cursor: "pointer",
                           boxShadow: sel.bleeding[i + 3] ? "0 0 6px var(--danger)" : "none",
                         }}
-                        aria-label="Sangrado"
+                        aria-label={t("clinical.periodontal.legendBleeding")}
                       />
                     </div>
                   ))}
@@ -346,20 +348,20 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px 14px" }}>
               <div className="field-new">
-                <label className="field-new__label">Furcación</label>
+                <label className="field-new__label">{t("clinical.periodontal.furcation")}</label>
                 <select
                   className="input-new"
                   value={sel.furcation}
                   onChange={e => updateTooth(selected, "furcation", parseInt(e.target.value) as 0|1|2|3)}
                 >
-                  <option value="0">Sin compromiso</option>
-                  <option value="1">Clase I</option>
-                  <option value="2">Clase II</option>
-                  <option value="3">Clase III</option>
+                  <option value="0">{t("clinical.periodontal.furcationNone")}</option>
+                  <option value="1">{t("clinical.periodontal.furcationClassI")}</option>
+                  <option value="2">{t("clinical.periodontal.furcationClassII")}</option>
+                  <option value="3">{t("clinical.periodontal.furcationClassIII")}</option>
                 </select>
               </div>
               <div className="field-new">
-                <label className="field-new__label">Recesión (mm)</label>
+                <label className="field-new__label">{t("clinical.periodontal.recession")}</label>
                 <input
                   type="number" min="0" max="10"
                   className="input-new mono"
@@ -368,16 +370,16 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
                 />
               </div>
               <div className="field-new">
-                <label className="field-new__label">Movilidad</label>
+                <label className="field-new__label">{t("clinical.periodontal.mobility")}</label>
                 <select
                   className="input-new"
                   value={sel.mobility}
                   onChange={e => updateTooth(selected, "mobility", parseInt(e.target.value) as 0|1|2|3)}
                 >
-                  <option value="0">Sin movilidad</option>
-                  <option value="1">Grado I</option>
-                  <option value="2">Grado II</option>
-                  <option value="3">Grado III</option>
+                  <option value="0">{t("clinical.periodontal.mobilityNone")}</option>
+                  <option value="1">{t("clinical.periodontal.mobilityGradeI")}</option>
+                  <option value="2">{t("clinical.periodontal.mobilityGradeII")}</option>
+                  <option value="3">{t("clinical.periodontal.mobilityGradeIII")}</option>
                 </select>
               </div>
             </div>
@@ -386,13 +388,13 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
       </CardNew>
 
       {/* Notas + historial */}
-      <CardNew title="Notas clínicas y plan periodontal">
+      <CardNew title={t("clinical.periodontal.notesTitle")}>
         <div className="field-new">
-          <label className="field-new__label">Observaciones, diagnóstico y plan</label>
+          <label className="field-new__label">{t("clinical.periodontal.notesLabel")}</label>
           <textarea
             className="input-new"
             style={{ minHeight: 80, padding: "10px 12px", height: "auto", resize: "vertical" }}
-            placeholder="Observaciones, diagnóstico, plan de tratamiento periodontal…"
+            placeholder={t("clinical.periodontal.notesPlaceholder")}
             value={notes}
             onChange={e => setNotes(e.target.value)}
           />
@@ -400,10 +402,10 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
 
         <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
           <ButtonNew variant="secondary" onClick={loadHistory} disabled={loadingHist}>
-            {loadingHist ? "Cargando…" : "Ver historial"}
+            {loadingHist ? t("common.loading") : t("clinical.periodontal.viewHistory")}
           </ButtonNew>
           <ButtonNew variant="primary" onClick={save} disabled={saving}>
-            {saving ? "Guardando…" : "Guardar periodontograma"}
+            {saving ? t("common.saving") : t("clinical.periodontal.saveButton")}
           </ButtonNew>
         </div>
 
@@ -416,7 +418,7 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
             borderRadius: 10,
           }}>
             <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 10 }}>
-              Historial de periodontogramas
+              {t("clinical.periodontal.historyTitle")}
             </div>
             <div>
               {history.map((h: any) => (
@@ -434,8 +436,8 @@ export function PeriodontalForm({ patientId, clinicId, onSaved }: Props) {
                     {new Date(h.recordedAt).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })}
                   </div>
                   <div style={{ display: "flex", gap: 12, fontSize: 11, color: "var(--text-3)" }}>
-                    <span>Sangrado: <strong className="mono" style={{ color: "var(--text-2)" }}>{h.bleedingIndex}%</strong></span>
-                    <span>Placa: <strong className="mono" style={{ color: "var(--text-2)" }}>{Math.round(h.plaquIndex)}%</strong></span>
+                    <span>{t("clinical.periodontal.histBleeding")} <strong className="mono" style={{ color: "var(--text-2)" }}>{h.bleedingIndex}%</strong></span>
+                    <span>{t("clinical.periodontal.histPlaque")} <strong className="mono" style={{ color: "var(--text-2)" }}>{Math.round(h.plaquIndex)}%</strong></span>
                   </div>
                 </div>
               ))}

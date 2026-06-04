@@ -13,6 +13,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import { TrendingUp, TrendingDown } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 interface EvolutionChartProps {
   data: { date: string; value: number; label?: string }[];
@@ -33,6 +34,7 @@ export function EvolutionChart({
   unit,
   height = 220,
 }: EvolutionChartProps) {
+  const t = useT();
   const gradientId = useMemo(
     () => `evo-grad-${Math.random().toString(36).slice(2, 9)}`,
     []
@@ -51,7 +53,7 @@ export function EvolutionChart({
         }}
       >
         <div style={{ fontSize: 12, color: "var(--text-2)" }}>
-          Agrega 2+ registros para ver evolución
+          {t("clinical.evolutionChart.needMoreData")}
         </div>
       </div>
     );

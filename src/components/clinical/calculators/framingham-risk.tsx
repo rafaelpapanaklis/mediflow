@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { X } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 export interface CalculatorResult { score: number | string; category?: string; risk?: string; recommendation?: string }
 
@@ -77,6 +78,7 @@ function riskFromPoints(pts: number, sex: "M" | "F"): string {
 }
 
 export function FraminghamRiskCalculator({ onClose }: Props) {
+  const t = useT();
   const [sex, setSex] = useState<"M" | "F">("M");
   const [age, setAge] = useState(50);
   const [chol, setChol] = useState(200);
@@ -101,19 +103,19 @@ export function FraminghamRiskCalculator({ onClose }: Props) {
     : numeric < 20 ? "var(--warning, #fbbf24)"
     : "var(--danger, #ef4444)";
   const category =
-    numeric < 10 ? "Riesgo bajo"
-    : numeric < 20 ? "Riesgo moderado"
-    : "Riesgo alto";
+    numeric < 10 ? t("clinical.framingham.riskLow")
+    : numeric < 20 ? t("clinical.framingham.riskModerate")
+    : t("clinical.framingham.riskHigh");
 
   return (
     <div className="card" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
           <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-1)" }}>Framingham</div>
-          <div style={{ fontSize: 12, color: "var(--text-2)" }}>Riesgo cardiovascular a 10 años</div>
+          <div style={{ fontSize: 12, color: "var(--text-2)" }}>{t("clinical.framingham.subtitle")}</div>
         </div>
         {onClose && (
-          <button onClick={onClose} className="btn-new btn-new--ghost btn-new--sm" style={{ padding: 6 }} aria-label="Volver">
+          <button onClick={onClose} className="btn-new btn-new--ghost btn-new--sm" style={{ padding: 6 }} aria-label={t("common.back")}>
             <X size={16} />
           </button>
         )}
@@ -121,33 +123,33 @@ export function FraminghamRiskCalculator({ onClose }: Props) {
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <div className="field-new">
-          <label className="field-new__label">Sexo</label>
+          <label className="field-new__label">{t("clinical.framingham.sex")}</label>
           <select className="input-new" value={sex} onChange={e => setSex(e.target.value as "M" | "F")}>
-            <option value="M">Masculino</option>
-            <option value="F">Femenino</option>
+            <option value="M">{t("clinical.framingham.male")}</option>
+            <option value="F">{t("clinical.framingham.female")}</option>
           </select>
         </div>
         <div className="field-new">
-          <label className="field-new__label">Edad (30-79)</label>
+          <label className="field-new__label">{t("clinical.framingham.age")}</label>
           <input type="number" min={30} max={79} className="input-new mono" value={age} onChange={e => setAge(Number(e.target.value))} />
         </div>
         <div className="field-new">
-          <label className="field-new__label">Colesterol total (mg/dL)</label>
+          <label className="field-new__label">{t("clinical.framingham.totalChol")}</label>
           <input type="number" className="input-new mono" value={chol} onChange={e => setChol(Number(e.target.value))} />
         </div>
         <div className="field-new">
-          <label className="field-new__label">HDL (mg/dL)</label>
+          <label className="field-new__label">{t("clinical.framingham.hdl")}</label>
           <input type="number" className="input-new mono" value={hdl} onChange={e => setHdl(Number(e.target.value))} />
         </div>
         <div className="field-new">
-          <label className="field-new__label">TA sistólica (mmHg)</label>
+          <label className="field-new__label">{t("clinical.framingham.systolicBp")}</label>
           <input type="number" className="input-new mono" value={sbp} onChange={e => setSbp(Number(e.target.value))} />
         </div>
         <div className="field-new">
-          <label className="field-new__label">Tratamiento para HTA</label>
+          <label className="field-new__label">{t("clinical.framingham.htaTreatment")}</label>
           <select className="input-new" value={treated ? "1" : "0"} onChange={e => setTreated(e.target.value === "1")}>
-            <option value="0">No</option>
-            <option value="1">Sí</option>
+            <option value="0">{t("common.no")}</option>
+            <option value="1">{t("common.yes")}</option>
           </select>
         </div>
       </div>
@@ -155,21 +157,21 @@ export function FraminghamRiskCalculator({ onClose }: Props) {
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-1)", cursor: "pointer" }}>
           <input type="checkbox" checked={smoker} onChange={e => setSmoker(e.target.checked)} />
-          Fumador activo
+          {t("clinical.framingham.smoker")}
         </label>
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-1)", cursor: "pointer" }}>
           <input type="checkbox" checked={diabetes} onChange={e => setDiabetes(e.target.checked)} />
-          Diabetes mellitus
+          {t("clinical.framingham.diabetes")}
         </label>
       </div>
 
       <div style={{ padding: 14, borderRadius: 10, background: "var(--bg-elev-2, rgba(255,255,255,0.03))", border: "1px solid var(--border)" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 6 }}>
-          <span style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600 }}>RIESGO CV 10 AÑOS</span>
+          <span style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600 }}>{t("clinical.framingham.cvRisk10y")}</span>
           <span className="mono" style={{ fontSize: 28, fontWeight: 700, color: tone }}>{risk}</span>
         </div>
         <div style={{ fontSize: 13, color: tone, fontWeight: 600, marginBottom: 6 }}>{category}</div>
-        <div style={{ fontSize: 11, color: "var(--text-3)", fontStyle: "italic" }}>Cálculo estimativo (modelo simplificado por puntos).</div>
+        <div style={{ fontSize: 11, color: "var(--text-3)", fontStyle: "italic" }}>{t("clinical.framingham.disclaimer")}</div>
       </div>
     </div>
   );

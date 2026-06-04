@@ -6,6 +6,7 @@ import { CardNew }   from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { EvolutionChart, RecurringCalendar } from "@/components/clinical/shared";
+import { useT } from "@/i18n/i18n-provider";
 
 const PHQ9_ITEMS = ["Poco interés en actividades","Sentirse deprimido/sin esperanza","Problemas para dormir","Sentirse cansado","Poco apetito o comer en exceso","Sentirse mal consigo mismo","Dificultad para concentrarse","Moverse/hablar lento, o agitación","Pensamientos de hacerse daño"];
 const GAD7_ITEMS = ["Sentirse nervioso o ansioso","No poder parar de preocuparse","Preocuparse demasiado por cosas","Dificultad para relajarse","Tan inquieto que es difícil estar quieto","Irritarse o enojarse fácilmente","Sentir miedo de que algo malo pase"];
@@ -20,6 +21,9 @@ const SESSION_TYPES = ["Individual","Pareja","Familia","Grupo","Evaluación inic
 interface Props { patientId: string; sessionNum: number; onSaved: (record: any) => void }
 
 export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
+  const t = useT();
+  const phq9SeverityLabel = (s: number) => s <= 4 ? t("clinical.psych.sevMinimal") : s <= 9 ? t("clinical.psych.sevMild") : s <= 14 ? t("clinical.psych.sevModerate") : s <= 19 ? t("clinical.psych.sevModeratelySevere") : t("clinical.psych.sevSevere");
+  const gad7SeverityLabel = (s: number) => s <= 4 ? t("clinical.psych.sevMinimal") : s <= 9 ? t("clinical.psych.sevMild") : s <= 14 ? t("clinical.psych.sevModerate") : t("clinical.psych.sevSevere");
   const [saving,     setSaving]   = useState(false);
   const [noteType,   setNoteType] = useState<typeof NOTE_TYPES[number]>("SOAP");
   const [phq9,       setPHQ9]     = useState<number[]>(new Array(9).fill(0));
@@ -89,8 +93,8 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
   const upcomingItems = useMemo(() =>
     upcoming.map(a => ({
       date: a.date,
-      title: a.type || "Sesión",
-      category: a.mode === "TELECONSULTATION" ? "Teleconsulta" : "Presencial",
+      title: a.type || t("clinical.psych.sessionLabel"),
+      category: a.mode === "TELECONSULTATION" ? t("clinical.psych.teleconsultation") : t("clinical.psych.inPerson"),
       color: "#38bdf8",
     })),
     [upcoming]
@@ -101,9 +105,9 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
   const auditCScore = auditC.reduce((a, b) => a + b, 0);
   const waisrRated = waisr.filter(v => v > 0);
   const waisrAvg = waisrRated.length > 0 ? waisrRated.reduce((a, b) => a + b, 0) / waisrRated.length : 0;
-  const waisrLabel = waisrAvg <= 2 ? "Débil — requiere atención" : waisrAvg <= 3.5 ? "Moderada — en desarrollo" : "Fuerte";
+  const waisrLabel = waisrAvg <= 2 ? t("clinical.psych.waisrWeak") : waisrAvg <= 3.5 ? t("clinical.psych.waisrModerate") : t("clinical.psych.waisrStrong");
   const waisrTone: "success" | "warning" | "danger" = waisrAvg <= 2 ? "danger" : waisrAvg <= 3.5 ? "warning" : "success";
-  const auditCLabel = auditCScore < 3 ? "Bajo riesgo" : auditCScore <= 7 ? "Riesgo moderado" : "Alto riesgo";
+  const auditCLabel = auditCScore < 3 ? t("clinical.psych.auditCLow") : auditCScore <= 7 ? t("clinical.psych.auditCModerate") : t("clinical.psych.auditCHigh");
   const auditCTone: "success" | "warning" | "danger" = auditCScore < 3 ? "success" : auditCScore <= 7 ? "warning" : "danger";
 
   const highRisk = applyScales && (phq9Score >= 20 || phq9[8] > 0 || form.mentalStatus.suicidalIdeation !== "no");
@@ -112,7 +116,7 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
 
   async function handleSave() {
     if (!form.subjective && !form.objective && !form.dap_data && !form.birp_behavior) {
-      toast.error("Completa al menos el contenido de la sesión");
+      toast.error(t("clinical.psych.errMissingContent"));
       return;
     }
     setSaving(true);
@@ -149,8 +153,8 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
       });
       if (!res.ok) throw new Error((await res.json()).error);
       onSaved(await res.json());
-      toast.success("Sesión guardada");
-    } catch (err: any) { toast.error(err.message ?? "Error"); } finally { setSaving(false); }
+      toast.success(t("clinical.psych.savedToast"));
+    } catch (err: any) { toast.error(err.message ?? t("common.genericError")); } finally { setSaving(false); }
   }
 
   // Helper para una pregunta de escala (PHQ-9 / GAD-7) con segment 0-3
@@ -188,22 +192,22 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {/* Sesión info */}
-      <CardNew title="Información de la sesión">
+      <CardNew title={t("clinical.psych.sessionInfoTitle")}>
         <div style={{ display: "grid", gridTemplateColumns: "auto 1fr 1fr", gap: "12px 14px" }}>
           <div className="field-new">
-            <label className="field-new__label">Sesión</label>
+            <label className="field-new__label">{t("clinical.psych.session")}</label>
             <div className="input-new mono" style={{ display: "flex", alignItems: "center", fontWeight: 600, minWidth: 60, justifyContent: "center" }}>
               #{sessionNum}
             </div>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Tipo de sesión</label>
+            <label className="field-new__label">{t("clinical.psych.sessionType")}</label>
             <select className="input-new" value={form.sessionType} onChange={e => set("sessionType", e.target.value)}>
-              {SESSION_TYPES.map(t => <option key={t}>{t}</option>)}
+              {SESSION_TYPES.map(st => <option key={st}>{st}</option>)}
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Enfoque terapéutico</label>
+            <label className="field-new__label">{t("clinical.psych.therapeuticApproach")}</label>
             <select className="input-new" value={form.approach} onChange={e => set("approach", e.target.value)}>
               {APPROACHES.map(a => <option key={a}>{a}</option>)}
             </select>
@@ -212,7 +216,7 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
       </CardNew>
 
       {/* Evolución emocional */}
-      <CardNew title="Evolución emocional" sub="Histórico de escalas y próximas sesiones">
+      <CardNew title={t("clinical.psych.emotionalEvolutionTitle")} sub={t("clinical.psych.emotionalEvolutionSub")}>
         <div className="segment-new" style={{ marginBottom: 14 }}>
           <button
             type="button"
@@ -233,12 +237,12 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
           {scaleTab === "phq9" ? (
             phq9Data.length < 2 ? (
               <div style={{ fontSize: 12, color: "var(--text-3)", fontStyle: "italic", padding: 12 }}>
-                Agrega 2+ consultas para ver evolución
+                {t("clinical.psych.addMoreConsults")}
               </div>
             ) : (
               <EvolutionChart
                 data={phq9Data}
-                metric="PHQ-9 · Depresión"
+                metric={t("clinical.psych.phq9Metric")}
                 color="#38bdf8"
                 normalRange={{ min: 0, max: 4 }}
               />
@@ -246,46 +250,46 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
           ) : (
             gad7Data.length < 2 ? (
               <div style={{ fontSize: 12, color: "var(--text-3)", fontStyle: "italic", padding: 12 }}>
-                Agrega 2+ consultas para ver evolución
+                {t("clinical.psych.addMoreConsults")}
               </div>
             ) : (
               <EvolutionChart
                 data={gad7Data}
-                metric="GAD-7 · Ansiedad"
+                metric={t("clinical.psych.gad7Metric")}
                 color="#38bdf8"
                 normalRange={{ min: 0, max: 4 }}
               />
             )
           )}
-          <RecurringCalendar items={upcomingItems} title="Próximas sesiones" emptyMessage="Sin sesiones agendadas" />
+          <RecurringCalendar items={upcomingItems} title={t("clinical.psych.upcomingSessions")} emptyMessage={t("clinical.psych.noSessionsScheduled")} />
         </div>
       </CardNew>
 
       {/* Formato de notas */}
-      <CardNew title="Formato de notas">
+      <CardNew title={t("clinical.psych.noteFormatTitle")}>
         <div className="segment-new">
-          {NOTE_TYPES.map(t => (
+          {NOTE_TYPES.map(nt => (
             <button
-              key={t}
+              key={nt}
               type="button"
-              className={`segment-new__btn ${noteType === t ? "segment-new__btn--active" : ""}`}
-              onClick={() => setNoteType(t)}
+              className={`segment-new__btn ${noteType === nt ? "segment-new__btn--active" : ""}`}
+              onClick={() => setNoteType(nt)}
             >
-              Nota {t}
+              {t("clinical.psych.noteLabel", { type: nt })}
             </button>
           ))}
         </div>
       </CardNew>
 
       {/* Notas de sesión */}
-      <CardNew title="Notas de sesión">
+      <CardNew title={t("clinical.psych.sessionNotesTitle")}>
         {noteType === "SOAP" && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "12px 14px" }}>
             {[
-              { key: "subjective", label: "S — Subjetivo (reporte del paciente)",     ph: "¿Cómo se siente? ¿Qué comenta hoy?" },
-              { key: "objective",  label: "O — Objetivo (observaciones del terapeuta)", ph: "Estado anímico, lenguaje no verbal…" },
-              { key: "assessment", label: "A — Evaluación / Diagnóstico",               ph: "Diagnóstico DSM-5, hipótesis clínica…" },
-              { key: "plan",       label: "P — Plan terapéutico",                       ph: "Intervenciones, tareas, objetivos…" },
+              { key: "subjective", label: t("clinical.psych.soapS"),     ph: t("clinical.psych.soapSPlaceholder") },
+              { key: "objective",  label: t("clinical.psych.soapO"), ph: t("clinical.psych.soapOPlaceholder") },
+              { key: "assessment", label: t("clinical.psych.soapA"),               ph: t("clinical.psych.soapAPlaceholder") },
+              { key: "plan",       label: t("clinical.psych.soapP"),                       ph: t("clinical.psych.soapPPlaceholder") },
             ].map(f => (
               <div key={f.key} className="field-new">
                 <label className="field-new__label">{f.label}</label>
@@ -304,10 +308,10 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
         {noteType === "BIRP" && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "12px 14px" }}>
             {[
-              { key: "birp_behavior",     label: "B — Comportamiento del paciente",  ph: "Conductas observadas, verbalizaciones…" },
-              { key: "birp_intervention", label: "I — Intervenciones del terapeuta", ph: "Técnicas aplicadas, preguntas clave…" },
-              { key: "birp_response",     label: "R — Respuesta del paciente",       ph: "Cómo reaccionó a las intervenciones…" },
-              { key: "birp_plan",         label: "P — Plan",                         ph: "Próximos pasos, tarea para casa…" },
+              { key: "birp_behavior",     label: t("clinical.psych.birpB"),  ph: t("clinical.psych.birpBPlaceholder") },
+              { key: "birp_intervention", label: t("clinical.psych.birpI"), ph: t("clinical.psych.birpIPlaceholder") },
+              { key: "birp_response",     label: t("clinical.psych.birpR"),       ph: t("clinical.psych.birpRPlaceholder") },
+              { key: "birp_plan",         label: t("clinical.psych.birpP"),                         ph: t("clinical.psych.birpPPlaceholder") },
             ].map(f => (
               <div key={f.key} className="field-new">
                 <label className="field-new__label">{f.label}</label>
@@ -326,9 +330,9 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
         {noteType === "DAP" && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px 14px" }}>
             {[
-              { key: "dap_data",       label: "D — Datos de la sesión", ph: "Lo que ocurrió en la sesión…" },
-              { key: "dap_assessment", label: "A — Evaluación clínica", ph: "Interpretación clínica…" },
-              { key: "dap_plan",       label: "P — Plan",               ph: "Intervenciones futuras…" },
+              { key: "dap_data",       label: t("clinical.psych.dapD"), ph: t("clinical.psych.dapDPlaceholder") },
+              { key: "dap_assessment", label: t("clinical.psych.dapA"), ph: t("clinical.psych.dapAPlaceholder") },
+              { key: "dap_plan",       label: t("clinical.psych.dapP"),               ph: t("clinical.psych.dapPPlaceholder") },
             ].map(f => (
               <div key={f.key} className="field-new">
                 <label className="field-new__label">{f.label}</label>
@@ -346,15 +350,15 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
       </CardNew>
 
       {/* Estado mental */}
-      <CardNew title="Estado mental">
+      <CardNew title={t("clinical.psych.mentalStatusTitle")}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px 14px" }}>
           {[
-            { key: "mood",              label: "Estado de ánimo",                  opts: ["", "Eutímico", "Deprimido", "Ansioso", "Irritable", "Expansivo", "Lábil"] },
-            { key: "sleepQuality",      label: "Calidad del sueño",                opts: ["", "Buena", "Regular", "Mala", "Insomnio", "Hipersomnia"] },
-            { key: "appetiteChanges",   label: "Apetito",                          opts: ["", "Normal", "Aumentado", "Disminuido", "Sin cambios"] },
-            { key: "socialFunctioning", label: "Funcionamiento social",            opts: ["", "Adecuado", "Levemente afectado", "Moderadamente afectado", "Severamente afectado"] },
-            { key: "workFunctioning",   label: "Funcionamiento laboral/académico", opts: ["", "Adecuado", "Levemente afectado", "Moderadamente afectado", "Severamente afectado", "Sin actividad"] },
-            { key: "suicidalIdeation",  label: "Ideación suicida / autolesión",    opts: ["no", "Pasiva", "Activa sin plan", "Activa con plan"] },
+            { key: "mood",              label: t("clinical.psych.mood"),                  opts: ["", "Eutímico", "Deprimido", "Ansioso", "Irritable", "Expansivo", "Lábil"] },
+            { key: "sleepQuality",      label: t("clinical.psych.sleepQuality"),                opts: ["", "Buena", "Regular", "Mala", "Insomnio", "Hipersomnia"] },
+            { key: "appetiteChanges",   label: t("clinical.psych.appetite"),                          opts: ["", "Normal", "Aumentado", "Disminuido", "Sin cambios"] },
+            { key: "socialFunctioning", label: t("clinical.psych.socialFunctioning"),            opts: ["", "Adecuado", "Levemente afectado", "Moderadamente afectado", "Severamente afectado"] },
+            { key: "workFunctioning",   label: t("clinical.psych.workFunctioning"), opts: ["", "Adecuado", "Levemente afectado", "Moderadamente afectado", "Severamente afectado", "Sin actividad"] },
+            { key: "suicidalIdeation",  label: t("clinical.psych.suicidalIdeation"),    opts: ["no", "Pasiva", "Activa sin plan", "Activa con plan"] },
           ].map(f => {
             const alert = f.key === "suicidalIdeation" && form.mentalStatus.suicidalIdeation !== "no";
             return (
@@ -387,12 +391,12 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
         }}>
           <AlertTriangle size={20} style={{ color: "var(--danger)", flexShrink: 0, marginTop: 2 }} />
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#fca5a5" }}>Riesgo alto detectado</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#fca5a5" }}>{t("clinical.psych.highRiskTitle")}</div>
             <div style={{ fontSize: 11, color: "var(--text-2)", marginTop: 4, lineHeight: 1.55 }}>
-              {phq9Score >= 20 && <>Score PHQ-9 severo ({phq9Score}/27). </>}
-              {phq9[8] > 0 && <>Ideación suicida en PHQ-9 (pregunta 9). </>}
-              {form.mentalStatus.suicidalIdeation !== "no" && form.mentalStatus.suicidalIdeation !== "" && <>Ideación reportada: {form.mentalStatus.suicidalIdeation}. </>}
-              Completa el plan de seguridad abajo y documenta la intervención en el plan terapéutico.
+              {phq9Score >= 20 && <>{t("clinical.psych.highRiskPhq9", { score: phq9Score })} </>}
+              {phq9[8] > 0 && <>{t("clinical.psych.highRiskPhq9Q9")} </>}
+              {form.mentalStatus.suicidalIdeation !== "no" && form.mentalStatus.suicidalIdeation !== "" && <>{t("clinical.psych.highRiskReported", { value: form.mentalStatus.suicidalIdeation })} </>}
+              {t("clinical.psych.highRiskAdvice")}
             </div>
           </div>
         </div>
@@ -400,15 +404,15 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
 
       {/* Plan de seguridad — solo si ideación suicida */}
       {form.mentalStatus.suicidalIdeation !== "no" && form.mentalStatus.suicidalIdeation !== "" && (
-        <CardNew title="Plan de seguridad" sub="Protocolo de crisis para ideación suicida">
+        <CardNew title={t("clinical.psych.safetyPlanTitle")} sub={t("clinical.psych.safetyPlanSub")}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "12px 14px" }}>
             {[
-              { key: "warningSignals",    label: "Señales de advertencia",                ph: "Pensamientos, sentimientos o situaciones que detonan la crisis" },
-              { key: "copingStrategies",  label: "Estrategias de afrontamiento internas", ph: "Cosas que puede hacer solo/a para distraerse" },
-              { key: "supportPeople",     label: "Personas de apoyo",                     ph: "Nombres y teléfonos a quién llamar" },
-              { key: "emergencyContacts", label: "Contactos profesionales de emergencia", ph: "Línea de crisis, terapeuta de guardia, hospital" },
-              { key: "meansRestriction",  label: "Restricción de medios letales",         ph: "Pasos para limitar acceso a medios" },
-              { key: "reasonToLive",      label: "Razón para vivir",                      ph: "Lo más importante para el paciente" },
+              { key: "warningSignals",    label: t("clinical.psych.warningSignals"),                ph: t("clinical.psych.warningSignalsPlaceholder") },
+              { key: "copingStrategies",  label: t("clinical.psych.copingStrategies"), ph: t("clinical.psych.copingStrategiesPlaceholder") },
+              { key: "supportPeople",     label: t("clinical.psych.supportPeople"),                     ph: t("clinical.psych.supportPeoplePlaceholder") },
+              { key: "emergencyContacts", label: t("clinical.psych.emergencyContacts"), ph: t("clinical.psych.emergencyContactsPlaceholder") },
+              { key: "meansRestriction",  label: t("clinical.psych.meansRestriction"),         ph: t("clinical.psych.meansRestrictionPlaceholder") },
+              { key: "reasonToLive",      label: t("clinical.psych.reasonToLive"),                      ph: t("clinical.psych.reasonToLivePlaceholder") },
             ].map(f => (
               <div key={f.key} className="field-new">
                 <label className="field-new__label">{f.label}</label>
@@ -427,7 +431,7 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
 
       {/* Alianza terapéutica WAI-SR */}
       <CardNew
-        title="Alianza terapéutica (WAI-SR)"
+        title={t("clinical.psych.waisrTitle")}
         action={
           waisrRated.length > 0 ? (
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -449,18 +453,18 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
           marginBottom: 8,
         }}>
           <span />
-          <span style={{ textAlign: "center" }}>Nunca 1</span>
-          <span style={{ textAlign: "center" }}>Rara vez 2</span>
-          <span style={{ textAlign: "center" }}>A veces 3</span>
-          <span style={{ textAlign: "center" }}>Frecuente 4</span>
-          <span style={{ textAlign: "center" }}>Siempre 5</span>
+          <span style={{ textAlign: "center" }}>{t("clinical.psych.waisrNever")}</span>
+          <span style={{ textAlign: "center" }}>{t("clinical.psych.waisrRarely")}</span>
+          <span style={{ textAlign: "center" }}>{t("clinical.psych.waisrSometimes")}</span>
+          <span style={{ textAlign: "center" }}>{t("clinical.psych.waisrOften")}</span>
+          <span style={{ textAlign: "center" }}>{t("clinical.psych.waisrAlways")}</span>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {[
-            "El paciente y yo trabajamos hacia metas mutuamente acordadas",
-            "Se ha establecido un vínculo de confianza y respeto mutuo",
-            "Hay acuerdo sobre las tareas y métodos del tratamiento",
-            "El paciente se siente comprendido en la relación terapéutica",
+            t("clinical.psych.waisrItem1"),
+            t("clinical.psych.waisrItem2"),
+            t("clinical.psych.waisrItem3"),
+            t("clinical.psych.waisrItem4"),
           ].map((item, i) => (
             <div key={i} style={{
               display: "grid",
@@ -491,17 +495,17 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
 
       {/* Escalas PHQ-9 y GAD-7 */}
       <CardNew
-        title="Escalas estandarizadas"
+        title={t("clinical.psych.standardScalesTitle")}
         action={
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-2)", cursor: "pointer" }}>
             <input type="checkbox" checked={applyScales} onChange={e => setApplyScales(e.target.checked)} />
-            Aplicar esta sesión
+            {t("clinical.psych.applyThisSession")}
           </label>
         }
       >
         {!applyScales ? (
           <div style={{ fontSize: 12, color: "var(--text-3)", fontStyle: "italic" }}>
-            Escalas desactivadas para esta sesión.
+            {t("clinical.psych.scalesDisabled")}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -509,11 +513,11 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                 <h4 style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, margin: 0 }}>
-                  PHQ-9 · Depresión
+                  {t("clinical.psych.phq9Metric")}
                 </h4>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span className="mono" style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>{phq9Score}/27</span>
-                  <BadgeNew tone={PHQ9_TONE(phq9Score)} dot>{PHQ9_SEVERITY(phq9Score)}</BadgeNew>
+                  <BadgeNew tone={PHQ9_TONE(phq9Score)} dot>{phq9SeverityLabel(phq9Score)}</BadgeNew>
                 </div>
               </div>
               <div style={{
@@ -528,16 +532,16 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
                 marginBottom: 4,
               }}>
                 <span />
-                <span style={{ textAlign: "center" }}>Nunca</span>
-                <span style={{ textAlign: "center" }}>Varios días</span>
-                <span style={{ textAlign: "center" }}>Mitad del tiempo</span>
-                <span style={{ textAlign: "center" }}>Casi todos</span>
+                <span style={{ textAlign: "center" }}>{t("clinical.psych.phq9ColNever")}</span>
+                <span style={{ textAlign: "center" }}>{t("clinical.psych.phq9ColSeveralDays")}</span>
+                <span style={{ textAlign: "center" }}>{t("clinical.psych.phq9ColHalfDays")}</span>
+                <span style={{ textAlign: "center" }}>{t("clinical.psych.phq9ColNearlyEvery")}</span>
               </div>
               {PHQ9_ITEMS.map((item, i) => (
                 <ScaleItem
                   key={i}
                   idx={i}
-                  label={item}
+                  label={t(`clinical.psych.phq9Item${i + 1}`)}
                   values={phq9}
                   onChange={v => { const n = [...phq9]; n[i] = v; setPHQ9(n); }}
                 />
@@ -548,18 +552,18 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                 <h4 style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, margin: 0 }}>
-                  GAD-7 · Ansiedad
+                  {t("clinical.psych.gad7Metric")}
                 </h4>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span className="mono" style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>{gad7Score}/21</span>
-                  <BadgeNew tone={GAD7_TONE(gad7Score)} dot>{GAD7_SEVERITY(gad7Score)}</BadgeNew>
+                  <BadgeNew tone={GAD7_TONE(gad7Score)} dot>{gad7SeverityLabel(gad7Score)}</BadgeNew>
                 </div>
               </div>
               {GAD7_ITEMS.map((item, i) => (
                 <ScaleItem
                   key={i}
                   idx={i}
-                  label={item}
+                  label={t(`clinical.psych.gad7Item${i + 1}`)}
                   values={gad7}
                   onChange={v => { const n = [...gad7]; n[i] = v; setGAD7(n); }}
                 />
@@ -571,7 +575,7 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
 
       {/* Screening sustancias */}
       <CardNew
-        title="Screening de sustancias"
+        title={t("clinical.psych.substanceScreeningTitle")}
         action={
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{auditCScore}/12</span>
@@ -580,13 +584,13 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
         }
       >
         <h4 style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginTop: 0, marginBottom: 10 }}>
-          AUDIT-C (alcohol)
+          {t("clinical.psych.auditCHeading")}
         </h4>
         <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10, marginBottom: 18 }}>
           {[
-            { label: "Frecuencia de consumo de alcohol",           opts: ["Nunca (0)", "Mensual o menos (1)", "2-4 veces/mes (2)", "2-3 veces/semana (3)", "4+ veces/semana (4)"] },
-            { label: "Cantidad habitual de tragos por ocasión",    opts: ["1-2 (0)", "3-4 (1)", "5-6 (2)", "7-9 (3)", "10+ (4)"] },
-            { label: "Frecuencia de consumo excesivo (6+ tragos)", opts: ["Nunca (0)", "Menos de mensual (1)", "Mensual (2)", "Semanal (3)", "Diario o casi (4)"] },
+            { label: t("clinical.psych.auditCQ1"),           opts: [t("clinical.psych.auditCQ1O0"), t("clinical.psych.auditCQ1O1"), t("clinical.psych.auditCQ1O2"), t("clinical.psych.auditCQ1O3"), t("clinical.psych.auditCQ1O4")] },
+            { label: t("clinical.psych.auditCQ2"),    opts: ["1-2 (0)", "3-4 (1)", "5-6 (2)", "7-9 (3)", "10+ (4)"] },
+            { label: t("clinical.psych.auditCQ3"), opts: [t("clinical.psych.auditCQ3O0"), t("clinical.psych.auditCQ3O1"), t("clinical.psych.auditCQ3O2"), t("clinical.psych.auditCQ3O3"), t("clinical.psych.auditCQ3O4")] },
           ].map((q, i) => (
             <div key={i} className="field-new">
               <label className="field-new__label">{q.label}</label>
@@ -602,19 +606,19 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
         </div>
 
         <h4 style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 10 }}>
-          DAST (otras sustancias)
+          {t("clinical.psych.dastHeading")}
         </h4>
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-1)", cursor: "pointer", marginBottom: 10 }}>
           <input type="checkbox" checked={dastPositive} onChange={e => setDastPositive(e.target.checked)} />
-          ¿El paciente reporta uso de sustancias no prescritas?
+          {t("clinical.psych.dastQuestion")}
         </label>
         {dastPositive && (
           <div className="field-new">
-            <label className="field-new__label">Detalle de sustancias y frecuencia</label>
+            <label className="field-new__label">{t("clinical.psych.dastDetailLabel")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 70, padding: "8px 12px", height: "auto", resize: "vertical" }}
-              placeholder="Ej: Cannabis 3 veces/semana, cocaína uso esporádico…"
+              placeholder={t("clinical.psych.dastDetailPlaceholder")}
               value={dastDetail}
               onChange={e => setDastDetail(e.target.value)}
             />
@@ -624,23 +628,23 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
 
       {/* Plan terapéutico */}
       <CardNew
-        title="Plan terapéutico"
-        action={<ButtonNew size="sm" variant="ghost" onClick={addGoal}>+ Agregar meta</ButtonNew>}
+        title={t("clinical.psych.treatmentPlanTitle")}
+        action={<ButtonNew size="sm" variant="ghost" onClick={addGoal}>{t("clinical.psych.addGoal")}</ButtonNew>}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
           {form.treatmentGoals.map((g, i) => (
             <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
               <div className="field-new" style={{ flex: 1 }}>
-                <label className="field-new__label">Meta {i + 1}</label>
+                <label className="field-new__label">{t("clinical.psych.goalLabel", { num: i + 1 })}</label>
                 <input
                   className="input-new"
-                  placeholder="Reducir ansiedad ante situaciones sociales…"
+                  placeholder={t("clinical.psych.goalPlaceholder")}
                   value={g.goal}
                   onChange={e => { const goals = [...form.treatmentGoals]; goals[i].goal = e.target.value; set("treatmentGoals", goals); }}
                 />
               </div>
               <div className="field-new" style={{ width: 140 }}>
-                <label className="field-new__label">Estado</label>
+                <label className="field-new__label">{t("common.status")}</label>
                 <select
                   className="input-new"
                   value={g.status}
@@ -654,19 +658,19 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
           <div className="field-new">
-            <label className="field-new__label">Tarea para casa / Actividades entre sesiones</label>
+            <label className="field-new__label">{t("clinical.psych.homeworkLabel")}</label>
             <input
               className="input-new"
-              placeholder="Registro de pensamientos automáticos, técnica de respiración…"
+              placeholder={t("clinical.psych.homeworkPlaceholder")}
               value={form.homework}
               onChange={e => set("homework", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Objetivo para próxima sesión</label>
+            <label className="field-new__label">{t("clinical.psych.nextGoalLabel")}</label>
             <input
               className="input-new"
-              placeholder="Trabajar técnica de exposición gradual…"
+              placeholder={t("clinical.psych.nextGoalPlaceholder")}
               value={form.nextGoal}
               onChange={e => set("nextGoal", e.target.value)}
             />
@@ -676,7 +680,7 @@ export function PsychologyForm({ patientId, sessionNum, onSaved }: Props) {
 
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <ButtonNew variant="primary" onClick={handleSave} disabled={saving}>
-          {saving ? "Guardando…" : "Guardar sesión de psicología"}
+          {saving ? t("common.saving") : t("clinical.psych.saveSession")}
         </ButtonNew>
       </div>
     </div>

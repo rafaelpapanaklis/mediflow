@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { X } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 export interface CalculatorResult { score: number | string; category?: string; risk?: string; recommendation?: string }
 
@@ -12,6 +13,7 @@ const RISK_BY_SCORE: Record<number, string> = {
 };
 
 export function Cha2ds2VascCalculator({ onClose }: Props) {
+  const t = useT();
   const [age, setAge] = useState<number>(65);
   const [sex, setSex] = useState<"M" | "F">("M");
   const [chf, setChf] = useState(false);
@@ -32,9 +34,9 @@ export function Cha2ds2VascCalculator({ onClose }: Props) {
 
   const risk = RISK_BY_SCORE[score] ?? "—";
   const recommendation =
-    score === 0 ? "Sin anticoagulación"
-    : score === 1 ? "Considerar anticoagulación"
-    : "Anticoagulación indicada";
+    score === 0 ? t("clinical.cha2ds2vasc.recNone")
+    : score === 1 ? t("clinical.cha2ds2vasc.recConsider")
+    : t("clinical.cha2ds2vasc.recIndicated");
   const tone = score === 0 ? "var(--success, #34d399)" : score === 1 ? "var(--warning, #fbbf24)" : "var(--danger, #ef4444)";
 
   return (
@@ -42,10 +44,10 @@ export function Cha2ds2VascCalculator({ onClose }: Props) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
           <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-1)" }}>CHA₂DS₂-VASc</div>
-          <div style={{ fontSize: 12, color: "var(--text-2)" }}>Riesgo de ictus en fibrilación auricular</div>
+          <div style={{ fontSize: 12, color: "var(--text-2)" }}>{t("clinical.cha2ds2vasc.subtitle")}</div>
         </div>
         {onClose && (
-          <button onClick={onClose} className="btn-new btn-new--ghost btn-new--sm" style={{ padding: 6 }} aria-label="Volver">
+          <button onClick={onClose} className="btn-new btn-new--ghost btn-new--sm" style={{ padding: 6 }} aria-label={t("common.back")}>
             <X size={16} />
           </button>
         )}
@@ -53,29 +55,29 @@ export function Cha2ds2VascCalculator({ onClose }: Props) {
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <div className="field-new">
-          <label className="field-new__label">Edad</label>
+          <label className="field-new__label">{t("clinical.cha2ds2vasc.age")}</label>
           <input type="number" min={0} max={120} className="input-new mono" value={age} onChange={e => setAge(Number(e.target.value))} />
         </div>
         <div className="field-new">
-          <label className="field-new__label">Sexo</label>
+          <label className="field-new__label">{t("clinical.cha2ds2vasc.sex")}</label>
           <select className="input-new" value={sex} onChange={e => setSex(e.target.value as "M" | "F")}>
-            <option value="M">Masculino</option>
-            <option value="F">Femenino</option>
+            <option value="M">{t("clinical.cha2ds2vasc.male")}</option>
+            <option value="F">{t("clinical.cha2ds2vasc.female")}</option>
           </select>
         </div>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {[
-          { k: "chf", v: chf, set: setChf, l: "Insuficiencia cardíaca congestiva (+1)" },
-          { k: "hta", v: hta, set: setHta, l: "Hipertensión arterial (+1)" },
-          { k: "stroke", v: stroke, set: setStroke, l: "ACV / AIT / tromboembolismo previo (+2)" },
-          { k: "dm", v: dm, set: setDm, l: "Diabetes mellitus (+1)" },
-          { k: "vascular", v: vascular, set: setVascular, l: "Enfermedad vascular (IAM, vasculopatía) (+1)" },
+          { k: "chf", v: chf, set: setChf, lKey: "clinical.cha2ds2vasc.chf" },
+          { k: "hta", v: hta, set: setHta, lKey: "clinical.cha2ds2vasc.hta" },
+          { k: "stroke", v: stroke, set: setStroke, lKey: "clinical.cha2ds2vasc.stroke" },
+          { k: "dm", v: dm, set: setDm, lKey: "clinical.cha2ds2vasc.dm" },
+          { k: "vascular", v: vascular, set: setVascular, lKey: "clinical.cha2ds2vasc.vascular" },
         ].map(c => (
           <label key={c.k} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-1)", cursor: "pointer" }}>
             <input type="checkbox" checked={c.v} onChange={e => c.set(e.target.checked)} />
-            {c.l}
+            {t(c.lKey)}
           </label>
         ))}
       </div>
@@ -86,7 +88,7 @@ export function Cha2ds2VascCalculator({ onClose }: Props) {
           <span className="mono" style={{ fontSize: 28, fontWeight: 700, color: tone }}>{score}</span>
           <span style={{ fontSize: 13, color: "var(--text-2)" }}>/ 9</span>
         </div>
-        <div style={{ fontSize: 13, color: "var(--text-1)", marginBottom: 4 }}>Riesgo anual de ictus: <span className="mono" style={{ fontWeight: 600 }}>{risk}</span></div>
+        <div style={{ fontSize: 13, color: "var(--text-1)", marginBottom: 4 }}>{t("clinical.cha2ds2vasc.annualRisk")}: <span className="mono" style={{ fontWeight: 600 }}>{risk}</span></div>
         <div style={{ fontSize: 13, color: tone, fontWeight: 600 }}>{recommendation}</div>
       </div>
     </div>

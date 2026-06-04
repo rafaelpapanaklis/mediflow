@@ -3,14 +3,42 @@ import { useState } from "react";
 import toast from "react-hot-toast";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { useT } from "@/i18n/i18n-provider";
 
 const TREATMENTS = ["facial", "body wrap", "radiofrecuencia", "cavitación", "LED", "microdermoabrasión", "otro"] as const;
+const TREATMENT_KEYS: Record<string, string> = {
+  "facial": "clinical.beautyCenterForm.txFacial",
+  "body wrap": "clinical.beautyCenterForm.txBodyWrap",
+  "radiofrecuencia": "clinical.beautyCenterForm.txRadiofrequency",
+  "cavitación": "clinical.beautyCenterForm.txCavitation",
+  "LED": "clinical.beautyCenterForm.txLed",
+  "microdermoabrasión": "clinical.beautyCenterForm.txMicrodermabrasion",
+  "otro": "clinical.beautyCenterForm.txOther",
+};
 const BODY_ZONES = ["rostro", "cuello", "brazos", "abdomen", "piernas", "glúteos", "espalda", "cuerpo completo"] as const;
+const BODY_ZONE_KEYS: Record<string, string> = {
+  "rostro": "clinical.beautyCenterForm.zoneFace",
+  "cuello": "clinical.beautyCenterForm.zoneNeck",
+  "brazos": "clinical.beautyCenterForm.zoneArms",
+  "abdomen": "clinical.beautyCenterForm.zoneAbdomen",
+  "piernas": "clinical.beautyCenterForm.zoneLegs",
+  "glúteos": "clinical.beautyCenterForm.zoneGlutes",
+  "espalda": "clinical.beautyCenterForm.zoneBack",
+  "cuerpo completo": "clinical.beautyCenterForm.zoneFullBody",
+};
 const CONTRAINDICATIONS = ["embarazo", "marcapasos", "medicamentos fotosensibles", "enfermedades autoinmunes", "heridas abiertas"] as const;
+const CONTRA_KEYS: Record<string, string> = {
+  "embarazo": "clinical.beautyCenterForm.contraPregnancy",
+  "marcapasos": "clinical.beautyCenterForm.contraPacemaker",
+  "medicamentos fotosensibles": "clinical.beautyCenterForm.contraPhotosensitive",
+  "enfermedades autoinmunes": "clinical.beautyCenterForm.contraAutoimmune",
+  "heridas abiertas": "clinical.beautyCenterForm.contraOpenWounds",
+};
 
 interface Props { patientId: string; onSaved: (record: any) => void; }
 
 export function BeautyCenterForm({ patientId, onSaved }: Props) {
+  const t = useT();
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     subjective: "",
@@ -55,7 +83,7 @@ export function BeautyCenterForm({ patientId, onSaved }: Props) {
   }
 
   async function handleSave() {
-    if (!form.subjective && !form.assessment) { toast.error("Agrega al menos el motivo de consulta o diagnóstico"); return; }
+    if (!form.subjective && !form.assessment) { toast.error(t("clinical.beautyCenterForm.errReason")); return; }
     setSaving(true);
     try {
       const res = await fetch("/api/clinical", {
@@ -99,133 +127,133 @@ export function BeautyCenterForm({ patientId, onSaved }: Props) {
       if (!res.ok) throw new Error((await res.json()).error);
       const record = await res.json();
       onSaved(record);
-      toast.success("Expediente de centro de belleza guardado");
-    } catch (err: any) { toast.error(err.message ?? "Error al guardar"); } finally { setSaving(false); }
+      toast.success(t("clinical.beautyCenterForm.savedToast"));
+    } catch (err: any) { toast.error(err.message ?? t("clinical.beautyCenterForm.errSave")); } finally { setSaving(false); }
   }
 
   return (
     <form onSubmit={e => { e.preventDefault(); handleSave(); }} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <CardNew title="Anamnesis">
+      <CardNew title={t("clinical.beautyCenterForm.anamnesis")}>
         <div className="grid grid-cols-2 gap-4">
           <div className="field-new">
-            <label className="field-new__label">Motivo de consulta / HEA</label>
+            <label className="field-new__label">{t("clinical.beautyCenterForm.reasonLabel")}</label>
             <textarea className="input-new" style={{ minHeight: 80, resize: "vertical" }}
-              placeholder="¿Por qué viene el paciente hoy?" value={form.subjective} onChange={e => set("subjective", e.target.value)} />
+              placeholder={t("clinical.beautyCenterForm.reasonPlaceholder")} value={form.subjective} onChange={e => set("subjective", e.target.value)} />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Exploración física / Observaciones</label>
+            <label className="field-new__label">{t("clinical.beautyCenterForm.physicalExamLabel")}</label>
             <textarea className="input-new" style={{ minHeight: 80, resize: "vertical" }}
-              placeholder="Estado actual de la piel, condiciones observadas…" value={form.objective} onChange={e => set("objective", e.target.value)} />
+              placeholder={t("clinical.beautyCenterForm.physicalExamPlaceholder")} value={form.objective} onChange={e => set("objective", e.target.value)} />
           </div>
         </div>
       </CardNew>
 
-      <CardNew title="Tipo de piel">
+      <CardNew title={t("clinical.beautyCenterForm.skinTypeTitle")}>
         <div className="field-new">
-          <label className="field-new__label">Tipo de piel / condición</label>
+          <label className="field-new__label">{t("clinical.beautyCenterForm.skinTypeLabel")}</label>
           <textarea className="input-new" style={{ minHeight: 80, resize: "vertical" }}
-            placeholder="Ej. Piel mixta, deshidratada, con manchas solares…" value={form.tipoPiel} onChange={e => set("tipoPiel", e.target.value)} />
+            placeholder={t("clinical.beautyCenterForm.skinTypePlaceholder")} value={form.tipoPiel} onChange={e => set("tipoPiel", e.target.value)} />
         </div>
       </CardNew>
 
-      <CardNew title="Tratamiento">
+      <CardNew title={t("clinical.beautyCenterForm.treatmentTitle")}>
         <div className="grid grid-cols-2 gap-3">
           <div className="field-new">
-            <label className="field-new__label">Tratamiento</label>
+            <label className="field-new__label">{t("clinical.beautyCenterForm.treatmentLabel")}</label>
             <select className="input-new"
               value={form.tratamiento} onChange={e => set("tratamiento", e.target.value)}>
-              <option value="">Seleccionar…</option>
-              {TREATMENTS.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+              <option value="">{t("clinical.beautyCenterForm.selectOption")}</option>
+              {TREATMENTS.map(ty => <option key={ty} value={ty}>{t(TREATMENT_KEYS[ty] ?? "")}</option>)}
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Zona tratada</label>
+            <label className="field-new__label">{t("clinical.beautyCenterForm.treatedZoneLabel")}</label>
             <select className="input-new"
               value={form.zonaTratada} onChange={e => set("zonaTratada", e.target.value)}>
-              <option value="">Seleccionar…</option>
-              {BODY_ZONES.map(z => <option key={z} value={z}>{z.charAt(0).toUpperCase() + z.slice(1)}</option>)}
+              <option value="">{t("clinical.beautyCenterForm.selectOption")}</option>
+              {BODY_ZONES.map(z => <option key={z} value={z}>{t(BODY_ZONE_KEYS[z] ?? "")}</option>)}
             </select>
           </div>
         </div>
       </CardNew>
 
-      <CardNew title="Productos">
+      <CardNew title={t("clinical.beautyCenterForm.productsTitle")}>
         <div className="field-new">
-          <label className="field-new__label">Productos utilizados</label>
+          <label className="field-new__label">{t("clinical.beautyCenterForm.productsLabel")}</label>
           <textarea className="input-new" style={{ minHeight: 80, resize: "vertical" }}
-            placeholder="Productos, marcas y cantidades aplicadas…" value={form.productos} onChange={e => set("productos", e.target.value)} />
+            placeholder={t("clinical.beautyCenterForm.productsPlaceholder")} value={form.productos} onChange={e => set("productos", e.target.value)} />
         </div>
       </CardNew>
 
-      <CardNew title="Checklist contraindicaciones">
+      <CardNew title={t("clinical.beautyCenterForm.contraTitle")}>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {CONTRAINDICATIONS.map(c => (
             <label key={c} className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={form.contraindicaciones.includes(c)} onChange={() => toggleContra(c)}
                 className="w-4 h-4 accent-brand-600" />
-              <span className="text-sm capitalize">{c}</span>
+              <span className="text-sm capitalize">{t(CONTRA_KEYS[c])}</span>
             </label>
           ))}
         </div>
       </CardNew>
 
-      <CardNew title="Diagnóstico y observaciones">
+      <CardNew title={t("clinical.beautyCenterForm.diagnosisTitle")}>
         <div className="grid grid-cols-2 gap-4">
           <div className="field-new">
-            <label className="field-new__label">Diagnóstico / Evaluación</label>
+            <label className="field-new__label">{t("clinical.beautyCenterForm.diagnosisLabel")}</label>
             <textarea className="input-new" style={{ minHeight: 80, resize: "vertical" }}
-              placeholder="Diagnóstico, hallazgos…" value={form.assessment} onChange={e => set("assessment", e.target.value)} />
+              placeholder={t("clinical.beautyCenterForm.diagnosisPlaceholder")} value={form.assessment} onChange={e => set("assessment", e.target.value)} />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Observaciones</label>
+            <label className="field-new__label">{t("clinical.beautyCenterForm.observationsLabel")}</label>
             <textarea className="input-new" style={{ minHeight: 80, resize: "vertical" }}
-              placeholder="Observaciones adicionales del tratamiento…" value={form.observaciones} onChange={e => set("observaciones", e.target.value)} />
+              placeholder={t("clinical.beautyCenterForm.observationsPlaceholder")} value={form.observaciones} onChange={e => set("observaciones", e.target.value)} />
           </div>
         </div>
       </CardNew>
 
-      <CardNew title="Tipo de piel Baumann">
+      <CardNew title={t("clinical.beautyCenterForm.baumannTitle")}>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="field-new">
-            <label className="field-new__label">Hidratación</label>
+            <label className="field-new__label">{t("clinical.beautyCenterForm.baumannHydration")}</label>
             <select className="input-new"
               value={form.baumannHidratacion} onChange={e => set("baumannHidratacion", e.target.value)}>
-              <option value="">Seleccionar…</option>
-              <option value="O">Oleosa (O)</option>
-              <option value="D">Seca (D)</option>
+              <option value="">{t("clinical.beautyCenterForm.selectOption")}</option>
+              <option value="O">{t("clinical.beautyCenterForm.baumannOily")}</option>
+              <option value="D">{t("clinical.beautyCenterForm.baumannDry")}</option>
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Sensibilidad</label>
+            <label className="field-new__label">{t("clinical.beautyCenterForm.baumannSensitivity")}</label>
             <select className="input-new"
               value={form.baumannSensibilidad} onChange={e => set("baumannSensibilidad", e.target.value)}>
-              <option value="">Seleccionar…</option>
-              <option value="S">Sensible (S)</option>
-              <option value="R">Resistente (R)</option>
+              <option value="">{t("clinical.beautyCenterForm.selectOption")}</option>
+              <option value="S">{t("clinical.beautyCenterForm.baumannSensitive")}</option>
+              <option value="R">{t("clinical.beautyCenterForm.baumannResistant")}</option>
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Pigmentación</label>
+            <label className="field-new__label">{t("clinical.beautyCenterForm.baumannPigmentation")}</label>
             <select className="input-new"
               value={form.baumannPigmentacion} onChange={e => set("baumannPigmentacion", e.target.value)}>
-              <option value="">Seleccionar…</option>
-              <option value="P">Pigmentada (P)</option>
-              <option value="N">No pigmentada (N)</option>
+              <option value="">{t("clinical.beautyCenterForm.selectOption")}</option>
+              <option value="P">{t("clinical.beautyCenterForm.baumannPigmented")}</option>
+              <option value="N">{t("clinical.beautyCenterForm.baumannNonPigmented")}</option>
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Arrugas</label>
+            <label className="field-new__label">{t("clinical.beautyCenterForm.baumannWrinkles")}</label>
             <select className="input-new"
               value={form.baumannArrugas} onChange={e => set("baumannArrugas", e.target.value)}>
-              <option value="">Seleccionar…</option>
-              <option value="W">Con arrugas (W)</option>
-              <option value="T">Tirante (T)</option>
+              <option value="">{t("clinical.beautyCenterForm.selectOption")}</option>
+              <option value="W">{t("clinical.beautyCenterForm.baumannWrinkled")}</option>
+              <option value="T">{t("clinical.beautyCenterForm.baumannTight")}</option>
             </select>
           </div>
         </div>
         {(form.baumannHidratacion || form.baumannSensibilidad || form.baumannPigmentacion || form.baumannArrugas) && (
           <div className="mt-3 flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Tipo Baumann:</span>
+            <span className="text-xs text-muted-foreground">{t("clinical.beautyCenterForm.baumannTypeLabel")}</span>
             <span className="inline-flex items-center rounded-full bg-brand-500/15 px-3 py-0.5 text-sm font-bold text-brand-700 dark:text-brand-300">
               {form.baumannHidratacion || "–"}{form.baumannSensibilidad || "–"}{form.baumannPigmentacion || "–"}{form.baumannArrugas || "–"}
             </span>
@@ -233,87 +261,87 @@ export function BeautyCenterForm({ patientId, onSaved }: Props) {
         )}
       </CardNew>
 
-      <CardNew title="Parámetros del equipo">
+      <CardNew title={t("clinical.beautyCenterForm.equipmentTitle")}>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <div className="field-new">
-            <label className="field-new__label">Equipo utilizado</label>
+            <label className="field-new__label">{t("clinical.beautyCenterForm.equipmentUsedLabel")}</label>
             <input className="input-new"
-              placeholder="Nombre del equipo" value={form.equipoUtilizado} onChange={e => set("equipoUtilizado", e.target.value)} />
+              placeholder={t("clinical.beautyCenterForm.equipmentUsedPlaceholder")} value={form.equipoUtilizado} onChange={e => set("equipoUtilizado", e.target.value)} />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Energía (J/cm²)</label>
+            <label className="field-new__label">{t("clinical.beautyCenterForm.energyLabel")}</label>
             <input type="number" min={0} step="0.1" className="input-new"
               placeholder="0" value={form.energia} onChange={e => set("energia", e.target.value)} />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Frecuencia (Hz)</label>
+            <label className="field-new__label">{t("clinical.beautyCenterForm.frequencyLabel")}</label>
             <input type="number" min={0} step="0.1" className="input-new"
               placeholder="0" value={form.frecuencia} onChange={e => set("frecuencia", e.target.value)} />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Profundidad (mm)</label>
+            <label className="field-new__label">{t("clinical.beautyCenterForm.depthLabel")}</label>
             <input type="number" min={0} step="0.1" className="input-new"
               placeholder="0" value={form.profundidad} onChange={e => set("profundidad", e.target.value)} />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Tiempo de exposición (seg)</label>
+            <label className="field-new__label">{t("clinical.beautyCenterForm.exposureTimeLabel")}</label>
             <input type="number" min={0} step="1" className="input-new"
               placeholder="0" value={form.tiempoExposicion} onChange={e => set("tiempoExposicion", e.target.value)} />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Modo/Programa</label>
+            <label className="field-new__label">{t("clinical.beautyCenterForm.modeProgramLabel")}</label>
             <input className="input-new"
-              placeholder="Modo o programa utilizado" value={form.modoPrograma} onChange={e => set("modoPrograma", e.target.value)} />
+              placeholder={t("clinical.beautyCenterForm.modeProgramPlaceholder")} value={form.modoPrograma} onChange={e => set("modoPrograma", e.target.value)} />
           </div>
         </div>
       </CardNew>
 
-      <CardNew title="Evaluación de reacciones post-tratamiento">
+      <CardNew title={t("clinical.beautyCenterForm.reactionsTitle")}>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
           {([
-            { key: "reaccionEritema", label: "Eritema" },
-            { key: "reaccionEdema", label: "Edema" },
-            { key: "reaccionSensibilidad", label: "Sensibilidad" },
-            { key: "reaccionDescamacion", label: "Descamación" },
+            { key: "reaccionEritema", labelKey: "clinical.beautyCenterForm.reactionErythema" },
+            { key: "reaccionEdema", labelKey: "clinical.beautyCenterForm.reactionEdema" },
+            { key: "reaccionSensibilidad", labelKey: "clinical.beautyCenterForm.reactionSensitivity" },
+            { key: "reaccionDescamacion", labelKey: "clinical.beautyCenterForm.reactionDesquamation" },
           ] as const).map(item => (
             <div key={item.key} className="field-new">
-              <label className="field-new__label">{item.label}</label>
+              <label className="field-new__label">{t(item.labelKey)}</label>
               <select className="input-new"
                 value={(form as any)[item.key]} onChange={e => set(item.key, Number(e.target.value))}>
-                <option value={0}>0 - Ninguna</option>
-                <option value={1}>1 - Leve</option>
-                <option value={2}>2 - Moderada</option>
-                <option value={3}>3 - Severa</option>
+                <option value={0}>{t("clinical.beautyCenterForm.reactionLevel0")}</option>
+                <option value={1}>{t("clinical.beautyCenterForm.reactionLevel1")}</option>
+                <option value={2}>{t("clinical.beautyCenterForm.reactionLevel2")}</option>
+                <option value={3}>{t("clinical.beautyCenterForm.reactionLevel3")}</option>
               </select>
             </div>
           ))}
         </div>
         <div className="field-new">
-          <label className="field-new__label">Tiempo de resolución estimado</label>
+          <label className="field-new__label">{t("clinical.beautyCenterForm.resolutionTimeLabel")}</label>
           <select className="input-new"
             value={form.tiempoResolucion} onChange={e => set("tiempoResolucion", e.target.value)}>
-            <option value="">Seleccionar…</option>
-            <option value="Inmediata">Inmediata</option>
+            <option value="">{t("clinical.beautyCenterForm.selectOption")}</option>
+            <option value="Inmediata">{t("clinical.beautyCenterForm.resolutionImmediate")}</option>
             <option value="24h">24h</option>
             <option value="48h">48h</option>
             <option value="72h">72h</option>
-            <option value="1 semana">1 semana</option>
-            <option value="> 1 semana">&gt; 1 semana</option>
+            <option value="1 semana">{t("clinical.beautyCenterForm.resolution1Week")}</option>
+            <option value="> 1 semana">{t("clinical.beautyCenterForm.resolutionMoreThan1Week")}</option>
           </select>
         </div>
       </CardNew>
 
-      <CardNew title="Plan siguiente sesión">
+      <CardNew title={t("clinical.beautyCenterForm.nextSessionTitle")}>
         <div className="field-new">
-          <label className="field-new__label">Plan siguiente sesión</label>
+          <label className="field-new__label">{t("clinical.beautyCenterForm.nextSessionLabel")}</label>
           <textarea className="input-new" style={{ minHeight: 80, resize: "vertical" }}
-            placeholder="Plan de tratamiento para próxima visita…" value={form.planSiguiente} onChange={e => set("planSiguiente", e.target.value)} />
+            placeholder={t("clinical.beautyCenterForm.nextSessionPlaceholder")} value={form.planSiguiente} onChange={e => set("planSiguiente", e.target.value)} />
         </div>
       </CardNew>
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
         <ButtonNew variant="primary" type="submit" disabled={saving}>
-          {saving ? "Guardando…" : "Guardar consulta"}
+          {saving ? t("common.saving") : t("clinical.beautyCenterForm.saveConsultation")}
         </ButtonNew>
       </div>
     </form>

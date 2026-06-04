@@ -3,28 +3,33 @@ import { useState } from "react";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import toast from "react-hot-toast";
+import { useT } from "@/i18n/i18n-provider";
 
-const MODALIDADES = [
-  "acupuntura",
-  "ventosas/cupping",
-  "moxibustión",
-  "electroacupuntura",
-  "quiropráctica",
-  "naturopatía",
-  "herbolaria",
-  "homeopatía",
+const MODALIDADES: { value: string; labelKey: string }[] = [
+  { value: "acupuntura",        labelKey: "clinical.altMedForm.modalityAcupuncture" },
+  { value: "ventosas/cupping",  labelKey: "clinical.altMedForm.modalityCupping" },
+  { value: "moxibustión",       labelKey: "clinical.altMedForm.modalityMoxibustion" },
+  { value: "electroacupuntura", labelKey: "clinical.altMedForm.modalityElectroacupuncture" },
+  { value: "quiropráctica",     labelKey: "clinical.altMedForm.modalityChiropractic" },
+  { value: "naturopatía",       labelKey: "clinical.altMedForm.modalityNaturopathy" },
+  { value: "herbolaria",        labelKey: "clinical.altMedForm.modalityHerbalism" },
+  { value: "homeopatía",        labelKey: "clinical.altMedForm.modalityHomeopathy" },
 ];
 
-const PROFUNDIDADES = ["superficial", "media", "profunda"];
+const PROFUNDIDADES: { value: string; labelKey: string }[] = [
+  { value: "superficial", labelKey: "clinical.altMedForm.depthSuperficial" },
+  { value: "media",       labelKey: "clinical.altMedForm.depthMedium" },
+  { value: "profunda",    labelKey: "clinical.altMedForm.depthDeep" },
+];
 
-const TIPOS_PULSO = [
-  "superficial",
-  "profundo",
-  "rápido",
-  "lento",
-  "resbaladizo",
-  "áspero",
-  "de cuerda",
+const TIPOS_PULSO: { value: string; labelKey: string }[] = [
+  { value: "superficial",  labelKey: "clinical.altMedForm.pulseSuperficial" },
+  { value: "profundo",     labelKey: "clinical.altMedForm.pulseDeep" },
+  { value: "rápido",       labelKey: "clinical.altMedForm.pulseRapid" },
+  { value: "lento",        labelKey: "clinical.altMedForm.pulseSlow" },
+  { value: "resbaladizo",  labelKey: "clinical.altMedForm.pulseSlippery" },
+  { value: "áspero",       labelKey: "clinical.altMedForm.pulseRough" },
+  { value: "de cuerda",    labelKey: "clinical.altMedForm.pulseWiry" },
 ];
 
 interface Props {
@@ -33,6 +38,7 @@ interface Props {
 }
 
 export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
+  const t = useT();
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     subjective: "",
@@ -78,12 +84,12 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
     "Hígado (LR)", "Du Mai (GV)", "Ren Mai (CV)", "Extra",
   ];
 
-  const INTERACCIONES_COMUNES = [
-    "Anticoagulantes + Ginkgo/Ginseng/Dong Quai",
-    "Antidepresivos ISRS + Hierba de San Juan",
-    "Antidiabéticos + Ginseng/Aloe vera",
-    "Antihipertensivos + Regaliz (Glycyrrhiza)",
-    "Inmunosupresores + Echinacea/Astrágalo",
+  const INTERACCIONES_COMUNES: { value: string; labelKey: string }[] = [
+    { value: "Anticoagulantes + Ginkgo/Ginseng/Dong Quai", labelKey: "clinical.altMedForm.interactionAnticoagulants" },
+    { value: "Antidepresivos ISRS + Hierba de San Juan",   labelKey: "clinical.altMedForm.interactionSsri" },
+    { value: "Antidiabéticos + Ginseng/Aloe vera",         labelKey: "clinical.altMedForm.interactionAntidiabetics" },
+    { value: "Antihipertensivos + Regaliz (Glycyrrhiza)",  labelKey: "clinical.altMedForm.interactionAntihypertensives" },
+    { value: "Inmunosupresores + Echinacea/Astrágalo",     labelKey: "clinical.altMedForm.interactionImmunosuppressants" },
   ];
 
   function addPuntoDetallado() {
@@ -114,7 +120,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
 
   async function handleSave() {
     if (!form.modalidad) {
-      toast.error("Selecciona la modalidad de tratamiento");
+      toast.error(t("clinical.altMedForm.errSelectModality"));
       return;
     }
     setSaving(true);
@@ -183,9 +189,9 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
       }
 
       onSaved(record);
-      toast.success("Registro de medicina alternativa guardado");
+      toast.success(t("clinical.altMedForm.saved"));
     } catch (err: any) {
-      toast.error(err.message ?? "Error al guardar");
+      toast.error(err.message ?? t("clinical.altMedForm.errSave"));
     } finally {
       setSaving(false);
     }
@@ -196,21 +202,21 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
       <CardNew title="SOAP">
         <div className="grid grid-cols-2 gap-4">
           <div className="field-new">
-            <label className="field-new__label">Motivo de consulta</label>
+            <label className="field-new__label">{t("clinical.altMedForm.reasonLabel")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, resize: "vertical" }}
-              placeholder="Síntomas, dolencia principal…"
+              placeholder={t("clinical.altMedForm.reasonPlaceholder")}
               value={form.subjective}
               onChange={(e) => set("subjective", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Exploración física</label>
+            <label className="field-new__label">{t("clinical.altMedForm.examLabel")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, resize: "vertical" }}
-              placeholder="Hallazgos de la exploración…"
+              placeholder={t("clinical.altMedForm.examPlaceholder")}
               value={form.objective}
               onChange={(e) => set("objective", e.target.value)}
             />
@@ -218,18 +224,18 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
         </div>
       </CardNew>
 
-      <CardNew title="Modalidad de tratamiento">
+      <CardNew title={t("clinical.altMedForm.modalityCardTitle")}>
         <div className="field-new">
-          <label className="field-new__label">Modalidad</label>
+          <label className="field-new__label">{t("clinical.altMedForm.modalityLabel")}</label>
           <select
             className="input-new"
             value={form.modalidad}
             onChange={(e) => set("modalidad", e.target.value)}
           >
-            <option value="">Seleccionar…</option>
+            <option value="">{t("clinical.altMedForm.selectOption")}</option>
             {MODALIDADES.map((m) => (
-              <option key={m} value={m}>
-                {m.charAt(0).toUpperCase() + m.slice(1)}
+              <option key={m.value} value={m.value}>
+                {t(m.labelKey)}
               </option>
             ))}
           </select>
@@ -237,10 +243,10 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
       </CardNew>
 
       {isAcupuntura && (
-        <CardNew title="Acupuntura">
+        <CardNew title={t("clinical.altMedForm.acupunctureTitle")}>
           <div className="space-y-4">
             <div className="field-new">
-              <label className="field-new__label">Puntos aplicados</label>
+              <label className="field-new__label">{t("clinical.altMedForm.pointsAppliedLabel")}</label>
               <textarea
                 className="input-new"
                 style={{ minHeight: 80, resize: "vertical" }}
@@ -251,22 +257,22 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="field-new">
-                <label className="field-new__label">Profundidad</label>
+                <label className="field-new__label">{t("clinical.altMedForm.depthLabel")}</label>
                 <select
                   className="input-new"
                   value={form.profundidad}
                   onChange={(e) => set("profundidad", e.target.value)}
                 >
-                  <option value="">Seleccionar…</option>
+                  <option value="">{t("clinical.altMedForm.selectOption")}</option>
                   {PROFUNDIDADES.map((p) => (
-                    <option key={p} value={p}>
-                      {p.charAt(0).toUpperCase() + p.slice(1)}
+                    <option key={p.value} value={p.value}>
+                      {t(p.labelKey)}
                     </option>
                   ))}
                 </select>
               </div>
               <div className="field-new">
-                <label className="field-new__label">Tiempo de retención (minutos)</label>
+                <label className="field-new__label">{t("clinical.altMedForm.retentionTimeLabel")}</label>
                 <input
                   type="number"
                   className="input-new"
@@ -281,13 +287,13 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
       )}
 
       {isHerbolaria && (
-        <CardNew title="Herbolaria">
+        <CardNew title={t("clinical.altMedForm.herbalismTitle")}>
           <div className="field-new">
-            <label className="field-new__label">Fórmula herbal</label>
+            <label className="field-new__label">{t("clinical.altMedForm.herbalFormulaLabel")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, resize: "vertical" }}
-              placeholder="Ingredientes con dosis: ej. Astragalus 15g, Ginseng 10g…"
+              placeholder={t("clinical.altMedForm.herbalFormulaPlaceholder")}
               value={form.formulaHerbal}
               onChange={(e) => set("formulaHerbal", e.target.value)}
             />
@@ -295,39 +301,39 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
         </CardNew>
       )}
 
-      <CardNew title="Diagnóstico TCM">
+      <CardNew title={t("clinical.altMedForm.tcmDiagnosisTitle")}>
         <div className="space-y-4">
           <div className="field-new">
-            <label className="field-new__label">Observación de lengua</label>
+            <label className="field-new__label">{t("clinical.altMedForm.tongueObservationLabel")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, resize: "vertical" }}
-              placeholder="Color, capa, forma, marcas dentales…"
+              placeholder={t("clinical.altMedForm.tongueObservationPlaceholder")}
               value={form.observacionLengua}
               onChange={(e) => set("observacionLengua", e.target.value)}
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="field-new">
-              <label className="field-new__label">Tipo de pulso</label>
+              <label className="field-new__label">{t("clinical.altMedForm.pulseTypeLabel")}</label>
               <select
                 className="input-new"
                 value={form.tipoPulso}
                 onChange={(e) => set("tipoPulso", e.target.value)}
               >
-                <option value="">Seleccionar…</option>
+                <option value="">{t("clinical.altMedForm.selectOption")}</option>
                 {TIPOS_PULSO.map((p) => (
-                  <option key={p} value={p}>
-                    {p.charAt(0).toUpperCase() + p.slice(1)}
+                  <option key={p.value} value={p.value}>
+                    {t(p.labelKey)}
                   </option>
                 ))}
               </select>
             </div>
             <div className="field-new">
-              <label className="field-new__label">Tipo constitucional</label>
+              <label className="field-new__label">{t("clinical.altMedForm.constitutionalTypeLabel")}</label>
               <input
                 className="input-new"
-                placeholder="Dosha o patrón TCM (ej. Vata, Qi deficiente)"
+                placeholder={t("clinical.altMedForm.constitutionalTypePlaceholder")}
                 value={form.tipoConstitucional}
                 onChange={(e) => set("tipoConstitucional", e.target.value)}
               />
@@ -336,91 +342,91 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
         </div>
       </CardNew>
 
-      <CardNew title="Evaluación constitucional">
+      <CardNew title={t("clinical.altMedForm.constitutionalEvalTitle")}>
         <div className="grid grid-cols-2 gap-4">
           <div className="field-new">
-            <label className="field-new__label">Constitución predominante</label>
+            <label className="field-new__label">{t("clinical.altMedForm.predominantConstitutionLabel")}</label>
             <select
               className="input-new"
               value={form.constitucionPredominante}
               onChange={(e) => set("constitucionPredominante", e.target.value)}
             >
-              <option value="">Seleccionar…</option>
-              <option value="madera">Madera (Hígado/Vesícula)</option>
-              <option value="fuego">Fuego (Corazón/Intestino D.)</option>
-              <option value="tierra">Tierra (Bazo/Estómago)</option>
-              <option value="metal">Metal (Pulmón/Intestino G.)</option>
-              <option value="agua">Agua (Riñón/Vejiga)</option>
+              <option value="">{t("clinical.altMedForm.selectOption")}</option>
+              <option value="madera">{t("clinical.altMedForm.constWood")}</option>
+              <option value="fuego">{t("clinical.altMedForm.constFire")}</option>
+              <option value="tierra">{t("clinical.altMedForm.constEarth")}</option>
+              <option value="metal">{t("clinical.altMedForm.constMetal")}</option>
+              <option value="agua">{t("clinical.altMedForm.constWater")}</option>
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Exceso/Deficiencia</label>
+            <label className="field-new__label">{t("clinical.altMedForm.excessDeficiencyLabel")}</label>
             <select
               className="input-new"
               value={form.excesoDeficiencia}
               onChange={(e) => set("excesoDeficiencia", e.target.value)}
             >
-              <option value="">Seleccionar…</option>
-              <option value="exceso">Exceso (Shi)</option>
-              <option value="deficiencia">Deficiencia (Xu)</option>
-              <option value="mixto">Mixto</option>
+              <option value="">{t("clinical.altMedForm.selectOption")}</option>
+              <option value="exceso">{t("clinical.altMedForm.excessShi")}</option>
+              <option value="deficiencia">{t("clinical.altMedForm.deficiencyXu")}</option>
+              <option value="mixto">{t("clinical.altMedForm.mixed")}</option>
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Frío/Calor</label>
+            <label className="field-new__label">{t("clinical.altMedForm.coldHeatLabel")}</label>
             <select
               className="input-new"
               value={form.frioCalor}
               onChange={(e) => set("frioCalor", e.target.value)}
             >
-              <option value="">Seleccionar…</option>
-              <option value="frio">Patrón de frío</option>
-              <option value="calor">Patrón de calor</option>
-              <option value="mixto">Mixto</option>
+              <option value="">{t("clinical.altMedForm.selectOption")}</option>
+              <option value="frio">{t("clinical.altMedForm.coldPattern")}</option>
+              <option value="calor">{t("clinical.altMedForm.heatPattern")}</option>
+              <option value="mixto">{t("clinical.altMedForm.mixed")}</option>
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Humedad</label>
+            <label className="field-new__label">{t("clinical.altMedForm.dampnessLabel")}</label>
             <select
               className="input-new"
               value={form.humedad}
               onChange={(e) => set("humedad", e.target.value)}
             >
-              <option value="">Seleccionar…</option>
-              <option value="sin_humedad">Sin humedad</option>
-              <option value="leve">Humedad leve</option>
-              <option value="severa">Humedad severa</option>
+              <option value="">{t("clinical.altMedForm.selectOption")}</option>
+              <option value="sin_humedad">{t("clinical.altMedForm.dampnessNone")}</option>
+              <option value="leve">{t("clinical.altMedForm.dampnessMild")}</option>
+              <option value="severa">{t("clinical.altMedForm.dampnessSevere")}</option>
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Estancamiento de Qi</label>
+            <label className="field-new__label">{t("clinical.altMedForm.qiStagnationLabel")}</label>
             <select
               className="input-new"
               value={form.estancamientoQi}
               onChange={(e) => set("estancamientoQi", e.target.value)}
             >
-              <option value="">Seleccionar…</option>
-              <option value="sin_estancamiento">Sin estancamiento</option>
-              <option value="leve">Leve</option>
-              <option value="moderado">Moderado</option>
-              <option value="severo">Severo</option>
+              <option value="">{t("clinical.altMedForm.selectOption")}</option>
+              <option value="sin_estancamiento">{t("clinical.altMedForm.stagnationNone")}</option>
+              <option value="leve">{t("clinical.altMedForm.stagnationMild")}</option>
+              <option value="moderado">{t("clinical.altMedForm.stagnationModerate")}</option>
+              <option value="severo">{t("clinical.altMedForm.stagnationSevere")}</option>
             </select>
           </div>
         </div>
       </CardNew>
 
       {isAcupuntura && (
-        <CardNew title="Registro de puntos de acupuntura" action={
+        <CardNew title={t("clinical.altMedForm.pointsRegistryTitle")} action={
           <div className="flex items-center gap-3">
             <span className="text-xs text-muted-foreground">
-              Total de agujas: <span className="font-bold text-foreground">{form.puntosDetallados.filter((p: any) => p.punto).length}</span>
+              {t("clinical.altMedForm.totalNeedles")} <span className="font-bold text-foreground">{form.puntosDetallados.filter((p: any) => p.punto).length}</span>
             </span>
             <button
               type="button"
               className="text-xs font-semibold text-brand-600 hover:underline"
               onClick={addPuntoDetallado}
             >
-              + Agregar punto
+              {t("clinical.altMedForm.addPoint")}
             </button>
           </div>
         }>
@@ -428,7 +434,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
             {form.puntosDetallados.map((p: any, i: number) => (
               <div key={i} className="grid grid-cols-[1fr_1fr_auto_auto_auto] gap-2 items-end">
                 <div className="field-new">
-                  <label className="field-new__label">Punto</label>
+                  <label className="field-new__label">{t("clinical.altMedForm.pointLabel")}</label>
                   <input
                     className="input-new"
                     placeholder="Ej. LI4 Hegu"
@@ -437,42 +443,42 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
                   />
                 </div>
                 <div className="field-new">
-                  <label className="field-new__label">Meridiano</label>
+                  <label className="field-new__label">{t("clinical.altMedForm.meridianLabel")}</label>
                   <select
                     className="input-new"
                     value={p.meridiano}
                     onChange={(e) => updatePuntoDetallado(i, "meridiano", e.target.value)}
                   >
-                    <option value="">Meridiano…</option>
+                    <option value="">{t("clinical.altMedForm.meridianPlaceholder")}</option>
                     {MERIDIANOS.map((m) => (
                       <option key={m} value={m}>{m}</option>
                     ))}
                   </select>
                 </div>
                 <div className="field-new">
-                  <label className="field-new__label">Lateralidad</label>
+                  <label className="field-new__label">{t("clinical.altMedForm.lateralityLabel")}</label>
                   <select
                     className="input-new"
                     value={p.lateralidad}
                     onChange={(e) => updatePuntoDetallado(i, "lateralidad", e.target.value)}
                   >
-                    <option value="">Lat…</option>
-                    <option value="izq">Izq</option>
-                    <option value="der">Der</option>
-                    <option value="bilateral">Bilateral</option>
+                    <option value="">{t("clinical.altMedForm.lateralityPlaceholder")}</option>
+                    <option value="izq">{t("clinical.altMedForm.lateralityLeft")}</option>
+                    <option value="der">{t("clinical.altMedForm.lateralityRight")}</option>
+                    <option value="bilateral">{t("clinical.altMedForm.lateralityBilateral")}</option>
                   </select>
                 </div>
                 <div className="field-new">
-                  <label className="field-new__label">Técnica</label>
+                  <label className="field-new__label">{t("clinical.altMedForm.techniqueLabel")}</label>
                   <select
                     className="input-new"
                     value={p.tecnica}
                     onChange={(e) => updatePuntoDetallado(i, "tecnica", e.target.value)}
                   >
-                    <option value="">Técnica…</option>
-                    <option value="tonificacion">Tonificación</option>
-                    <option value="sedacion">Sedación</option>
-                    <option value="neutra">Neutra</option>
+                    <option value="">{t("clinical.altMedForm.techniquePlaceholder")}</option>
+                    <option value="tonificacion">{t("clinical.altMedForm.techniqueTonification")}</option>
+                    <option value="sedacion">{t("clinical.altMedForm.techniqueSedation")}</option>
+                    <option value="neutra">{t("clinical.altMedForm.techniqueNeutral")}</option>
                   </select>
                 </div>
                 {form.puntosDetallados.length > 1 && (
@@ -490,24 +496,24 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
         </CardNew>
       )}
 
-      <CardNew title="Notas y plan">
+      <CardNew title={t("clinical.altMedForm.notesPlanTitle")}>
         <div className="grid grid-cols-2 gap-4">
           <div className="field-new">
-            <label className="field-new__label">Notas de sesión</label>
+            <label className="field-new__label">{t("clinical.altMedForm.sessionNotesLabel")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, resize: "vertical" }}
-              placeholder="Respuesta del paciente, reacciones, evolución…"
+              placeholder={t("clinical.altMedForm.sessionNotesPlaceholder")}
               value={form.notasSesion}
               onChange={(e) => set("notasSesion", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Plan de tratamiento</label>
+            <label className="field-new__label">{t("clinical.altMedForm.treatmentPlanLabel")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, resize: "vertical" }}
-              placeholder="Frecuencia de sesiones, recomendaciones dietéticas…"
+              placeholder={t("clinical.altMedForm.treatmentPlanPlaceholder")}
               value={form.planTratamiento}
               onChange={(e) => set("planTratamiento", e.target.value)}
             />
@@ -515,63 +521,63 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
         </div>
       </CardNew>
 
-      <CardNew title="Diagnóstico / Evaluación">
+      <CardNew title={t("clinical.altMedForm.diagnosisTitle")}>
         <div className="field-new">
-          <label className="field-new__label">Diagnóstico / Evaluación</label>
+          <label className="field-new__label">{t("clinical.altMedForm.diagnosisLabel")}</label>
           <textarea
             className="input-new"
             style={{ minHeight: 80, resize: "vertical" }}
-            placeholder="Diagnóstico energético, patrón identificado…"
+            placeholder={t("clinical.altMedForm.diagnosisPlaceholder")}
             value={form.assessment}
             onChange={(e) => set("assessment", e.target.value)}
           />
         </div>
       </CardNew>
 
-      <CardNew title="Alerta de interacciones">
+      <CardNew title={t("clinical.altMedForm.interactionsAlertTitle")}>
         <div className="space-y-4">
           <div className="field-new">
-            <label className="field-new__label">Medicamentos convencionales del paciente</label>
+            <label className="field-new__label">{t("clinical.altMedForm.conventionalMedsLabel")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, resize: "vertical" }}
-              placeholder="Listar medicamentos convencionales que toma el paciente…"
+              placeholder={t("clinical.altMedForm.conventionalMedsPlaceholder")}
               value={form.medicamentosConvencionales}
               onChange={(e) => set("medicamentosConvencionales", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Fórmula herbal prescrita</label>
+            <label className="field-new__label">{t("clinical.altMedForm.prescribedFormulaLabel")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, resize: "vertical" }}
-              placeholder="Fórmula herbal prescrita en esta sesión…"
+              placeholder={t("clinical.altMedForm.prescribedFormulaPlaceholder")}
               value={form.formulaHerbalPrescrita || form.formulaHerbal}
               onChange={(e) => set("formulaHerbalPrescrita", e.target.value)}
             />
           </div>
           <div className="space-y-2">
-            <label className="field-new__label">Interacciones conocidas</label>
+            <label className="field-new__label">{t("clinical.altMedForm.knownInteractionsLabel")}</label>
             <div className="space-y-2">
               {INTERACCIONES_COMUNES.map((interaccion) => (
-                <label key={interaccion} className="flex items-center gap-2 cursor-pointer">
+                <label key={interaccion.value} className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     className="h-4 w-4 rounded border-border text-brand-600 focus:ring-brand-600/20"
-                    checked={form.interaccionesConocidas.includes(interaccion)}
-                    onChange={() => toggleInteraccion(interaccion)}
+                    checked={form.interaccionesConocidas.includes(interaccion.value)}
+                    onChange={() => toggleInteraccion(interaccion.value)}
                   />
-                  <span className="text-sm">{interaccion}</span>
+                  <span className="text-sm">{t(interaccion.labelKey)}</span>
                 </label>
               ))}
             </div>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Notas de seguridad</label>
+            <label className="field-new__label">{t("clinical.altMedForm.safetyNotesLabel")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, resize: "vertical" }}
-              placeholder="Precauciones adicionales, contraindicaciones observadas…"
+              placeholder={t("clinical.altMedForm.safetyNotesPlaceholder")}
               value={form.notasSeguridad}
               onChange={(e) => set("notasSeguridad", e.target.value)}
             />
@@ -581,7 +587,7 @@ export function AlternativeMedicineForm({ patientId, onSaved }: Props) {
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
         <ButtonNew variant="primary" type="submit" disabled={saving}>
-          {saving ? "Guardando…" : "Guardar consulta"}
+          {saving ? t("common.saving") : t("clinical.altMedForm.saveConsult")}
         </ButtonNew>
       </div>
     </form>

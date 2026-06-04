@@ -9,20 +9,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { useT } from "@/i18n/i18n-provider";
 import { PaymentModal, type PaymentInvoice } from "./payment-modal";
 
-const INV_STATUS: Record<string, { label: string; cls: string }> = {
-  PENDING: { label: "Pendiente", cls: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800" },
-  PARTIAL: { label: "Parcial",   cls: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800" },
-  PAID:    { label: "Pagada",    cls: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800" },
-  OVERDUE: { label: "Vencida",   cls: "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800" },
-  CANCELLED: { label: "Cancelada", cls: "bg-muted text-muted-foreground border border-border" },
-  DRAFT:   { label: "Borrador",  cls: "bg-muted text-muted-foreground border border-border" },
+// labelKey -> translation key resolved via t() at render time.
+const INV_STATUS: Record<string, { labelKey: string; cls: string }> = {
+  PENDING: { labelKey: "clinical.invoiceDetail.statusPending", cls: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800" },
+  PARTIAL: { labelKey: "clinical.invoiceDetail.statusPartial",   cls: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800" },
+  PAID:    { labelKey: "clinical.invoiceDetail.statusPaid",    cls: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800" },
+  OVERDUE: { labelKey: "clinical.invoiceDetail.statusOverdue",   cls: "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800" },
+  CANCELLED: { labelKey: "clinical.invoiceDetail.statusCancelled", cls: "bg-muted text-muted-foreground border border-border" },
+  DRAFT:   { labelKey: "clinical.invoiceDetail.statusDraft",  cls: "bg-muted text-muted-foreground border border-border" },
 };
 
-const METHOD_LABELS: Record<string, string> = {
-  cash: "Efectivo", debit: "Tarjeta débito", credit: "Tarjeta crédito",
-  transfer: "Transferencia", check: "Cheque", refund: "Reembolso", other: "Otro",
+const METHOD_LABEL_KEYS: Record<string, string> = {
+  cash: "clinical.invoiceDetail.methodCash", debit: "clinical.invoiceDetail.methodDebit", credit: "clinical.invoiceDetail.methodCredit",
+  transfer: "clinical.invoiceDetail.methodTransfer", check: "clinical.invoiceDetail.methodCheck", refund: "clinical.invoiceDetail.methodRefund", other: "clinical.invoiceDetail.methodOther",
 };
 
 interface Invoice {
@@ -54,6 +56,7 @@ interface InvoiceDetailModalProps {
 type SubAction = null | "refund" | "edit-price" | "discount" | "cancel";
 
 export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMutated }: InvoiceDetailModalProps) {
+  const t = useT();
   const router = useRouter();
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [sub, setSub] = useState<SubAction>(null);
@@ -99,9 +102,9 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? "Error en la operación");
+        throw new Error(err.error ?? t("clinical.invoiceDetail.operationError"));
       }
-      toast.success(successMsg ?? "Operación exitosa");
+      toast.success(successMsg ?? t("clinical.invoiceDetail.operationSuccess"));
       setSub(null);
       await onMutated();
       onClose();
@@ -111,38 +114,38 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
       // parent tenga que cablear router.refresh() en onMutated.
       router.refresh();
     } catch (err: any) {
-      toast.error(err.message ?? "Error");
+      toast.error(err.message ?? t("common.genericError"));
     } finally {
       setBusy(false);
     }
   }
 
   async function handleMarkPaid() {
-    if (!confirm(`¿Marcar como pagada en efectivo? Se cobrará el saldo de ${formatCurrency(invoice!.balance)}.`)) return;
-    await callApi("/mark-paid", "POST", {}, "Factura cobrada en efectivo");
+    if (!confirm(t("clinical.invoiceDetail.markPaidConfirm", { balance: formatCurrency(invoice!.balance) }))) return;
+    await callApi("/mark-paid", "POST", {}, t("clinical.invoiceDetail.markPaidSuccess"));
   }
 
   async function handleCancel() {
-    await callApi("/cancel", "POST", { reason: cancelReason.trim() || undefined }, "Factura cancelada");
+    await callApi("/cancel", "POST", { reason: cancelReason.trim() || undefined }, t("clinical.invoiceDetail.cancelSuccess"));
   }
 
   async function handleRefund() {
     const amount = Number(refundAmount);
-    if (!amount || amount <= 0) { toast.error("Monto inválido"); return; }
-    if (amount > invoice!.paid) { toast.error("Excede lo pagado"); return; }
-    await callApi("/refund", "POST", { amount, reason: refundReason.trim() || undefined }, "Reembolso registrado");
+    if (!amount || amount <= 0) { toast.error(t("clinical.invoiceDetail.invalidAmount")); return; }
+    if (amount > invoice!.paid) { toast.error(t("clinical.invoiceDetail.exceedsPaid")); return; }
+    await callApi("/refund", "POST", { amount, reason: refundReason.trim() || undefined }, t("clinical.invoiceDetail.refundSuccess"));
   }
 
   async function handleEditPrice() {
     const total = Number(editTotal);
-    if (!isFinite(total) || total < 0) { toast.error("Total inválido"); return; }
-    await callApi("/edit-price", "POST", { total }, "Precio actualizado");
+    if (!isFinite(total) || total < 0) { toast.error(t("clinical.invoiceDetail.invalidTotal")); return; }
+    await callApi("/edit-price", "POST", { total }, t("clinical.invoiceDetail.priceUpdated"));
   }
 
   async function handleDiscount() {
     const discount = Number(discountAmt);
-    if (!isFinite(discount) || discount < 0) { toast.error("Descuento inválido"); return; }
-    await callApi("/edit-price", "POST", { discount }, "Descuento aplicado");
+    if (!isFinite(discount) || discount < 0) { toast.error(t("clinical.invoiceDetail.invalidDiscount")); return; }
+    await callApi("/edit-price", "POST", { discount }, t("clinical.invoiceDetail.discountApplied"));
   }
 
   // "Cobrar ahora" sobre un DRAFT: confirma el borrador (DRAFT → PENDING) y
@@ -156,13 +159,13 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
       const res = await fetch(`/api/invoices/${invoice.id}/confirm`, { method: "POST" });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? "No se pudo confirmar la factura");
+        throw new Error(err.error ?? t("clinical.invoiceDetail.confirmError"));
       }
       // router.refresh() removido: causaba race con el refresh post-payment
       // de handlePaymentSuccess. El refresh ocurre al cerrar el PaymentModal.
       setPaymentOpen(true);
     } catch (err: any) {
-      toast.error(err.message ?? "Error");
+      toast.error(err.message ?? t("common.genericError"));
     } finally {
       setBusy(false);
     }
@@ -170,8 +173,8 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
 
   async function handleDeleteDraft() {
     if (!invoice) return;
-    if (!confirm(`¿Eliminar el borrador ${invoice.invoiceNumber}? Esta acción no se puede deshacer.`)) return;
-    await callApi("", "DELETE", undefined, "Borrador eliminado");
+    if (!confirm(t("clinical.invoiceDetail.deleteDraftConfirm", { number: invoice.invoiceNumber }))) return;
+    await callApi("", "DELETE", undefined, t("clinical.invoiceDetail.draftDeleted"));
   }
 
   function handlePaymentSuccess() {
@@ -188,26 +191,26 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
           <DialogHeader>
             <DialogTitle className="text-foreground font-bold flex items-center gap-3 flex-wrap">
               <span className="font-mono">{invoice.invoiceNumber}</span>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.cls}`}>{s.label}</span>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.cls}`}>{t(s.labelKey)}</span>
             </DialogTitle>
           </DialogHeader>
 
           <div className="px-6 py-4 space-y-4">
             {/* Resumen — usa tokens de tema (bg-muted/40, border-border, text-muted-foreground) */}
             <div className="bg-muted/40 border border-border rounded-lg p-3 text-xs space-y-1.5 text-foreground">
-              <div className="flex justify-between"><span className="text-muted-foreground">Paciente</span><span className="font-medium">{patientName}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Fecha</span><span>{formatDate(invoice.createdAt)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.patient")}</span><span className="font-medium">{patientName}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">{t("common.date")}</span><span>{formatDate(invoice.createdAt)}</span></div>
               {(invoice.discount ?? 0) > 0 && (
                 <>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatCurrency(invoice.subtotal ?? invoice.total + (invoice.discount ?? 0))}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Descuento</span><span className="text-amber-600 dark:text-amber-400">−{formatCurrency(invoice.discount ?? 0)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.subtotal")}</span><span>{formatCurrency(invoice.subtotal ?? invoice.total + (invoice.discount ?? 0))}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.discount")}</span><span className="text-amber-600 dark:text-amber-400">−{formatCurrency(invoice.discount ?? 0)}</span></div>
                 </>
               )}
-              <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-bold">{formatCurrency(invoice.total)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Pagado</span><span className="text-emerald-600 dark:text-emerald-400 font-bold">{formatCurrency(invoice.paid)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Saldo</span><span className="text-rose-600 dark:text-rose-400 font-bold">{formatCurrency(invoice.balance)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">{t("common.total")}</span><span className="font-bold">{formatCurrency(invoice.total)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.paid")}</span><span className="text-emerald-600 dark:text-emerald-400 font-bold">{formatCurrency(invoice.paid)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.balance")}</span><span className="text-rose-600 dark:text-rose-400 font-bold">{formatCurrency(invoice.balance)}</span></div>
               {invoice.paymentMethod && (
-                <div className="flex justify-between"><span className="text-muted-foreground">Método</span><span className="capitalize">{METHOD_LABELS[invoice.paymentMethod] ?? invoice.paymentMethod}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.method")}</span><span className="capitalize">{METHOD_LABEL_KEYS[invoice.paymentMethod] ? t(METHOD_LABEL_KEYS[invoice.paymentMethod]) : invoice.paymentMethod}</span></div>
               )}
               {invoice.cfdiUuid && (
                 <div className="flex justify-between gap-2">
@@ -217,7 +220,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
               )}
               {isCancelled && invoice.notes && (
                 <div className="pt-2 border-t border-border mt-2">
-                  <span className="text-muted-foreground text-[10px] uppercase tracking-wide">Notas</span>
+                  <span className="text-muted-foreground text-[10px] uppercase tracking-wide">{t("common.notes")}</span>
                   <p className="text-[11px] mt-1 whitespace-pre-line">{invoice.notes}</p>
                 </div>
               )}
@@ -226,12 +229,12 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             {/* Conceptos */}
             {Array.isArray(invoice.items) && invoice.items.length > 0 && (
               <div>
-                <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide mb-1.5">Conceptos</h3>
+                <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide mb-1.5">{t("clinical.invoiceDetail.lineItems")}</h3>
                 <div className="bg-card border border-border rounded-lg divide-y divide-border">
                   {invoice.items.map((it: any, i: number) => (
                     <div key={i} className="px-3 py-2 flex items-center justify-between text-xs">
                       <div className="min-w-0">
-                        <div className="font-medium truncate text-foreground">{it.description ?? it.name ?? `Concepto ${i + 1}`}</div>
+                        <div className="font-medium truncate text-foreground">{it.description ?? it.name ?? t("clinical.invoiceDetail.lineItemFallback", { n: i + 1 })}</div>
                         {(it.quantity ?? 1) !== 1 && (
                           <div className="text-[10px] text-muted-foreground">{it.quantity} × {formatCurrency(it.unitPrice ?? 0)}</div>
                         )}
@@ -246,7 +249,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             {/* Pagos registrados — refunds aparecen con method="refund" en rojo */}
             {Array.isArray(invoice.payments) && invoice.payments.length > 0 && (
               <div>
-                <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide mb-1.5">Movimientos</h3>
+                <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide mb-1.5">{t("clinical.invoiceDetail.movements")}</h3>
                 <div className="bg-card border border-border rounded-lg divide-y divide-border">
                   {invoice.payments.map((p: any) => {
                     const isRefund = p.method === "refund";
@@ -254,7 +257,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
                       <div key={p.id} className="px-3 py-2 flex items-center justify-between text-xs">
                         <div className="min-w-0">
                           <div className={`font-medium ${isRefund ? "text-rose-600 dark:text-rose-400" : "text-foreground"}`}>
-                            {METHOD_LABELS[p.method] ?? p.method ?? "—"}
+                            {METHOD_LABEL_KEYS[p.method] ? t(METHOD_LABEL_KEYS[p.method]) : (p.method ?? "—")}
                           </div>
                           <div className="text-[10px] text-muted-foreground">
                             {formatDate(p.paidAt)}
@@ -279,17 +282,17 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             {isDraft && (
               <>
                 <Button onClick={handleConfirmAndPay} disabled={busy}>
-                  <CreditCard size={14} aria-hidden /> Cobrar ahora · {formatCurrency(invoice.total)}
+                  <CreditCard size={14} aria-hidden /> {t("clinical.invoiceDetail.chargeNow", { amount: formatCurrency(invoice.total) })}
                 </Button>
                 <Button variant="outline" onClick={() => openSub("edit-price")} disabled={busy}>
-                  <Pencil size={14} aria-hidden /> Editar precio
+                  <Pencil size={14} aria-hidden /> {t("clinical.invoiceDetail.editPrice")}
                 </Button>
                 <Button variant="outline" onClick={() => openSub("discount")} disabled={busy}>
-                  <Tag size={14} aria-hidden /> Aplicar descuento
+                  <Tag size={14} aria-hidden /> {t("clinical.invoiceDetail.applyDiscount")}
                 </Button>
                 <Button variant="outline" onClick={handleDeleteDraft} disabled={busy}
                   className="border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950/40">
-                  <Trash2 size={14} aria-hidden /> Eliminar borrador
+                  <Trash2 size={14} aria-hidden /> {t("clinical.invoiceDetail.deleteDraft")}
                 </Button>
               </>
             )}
@@ -298,25 +301,25 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             {isPending && (
               <>
                 <Button onClick={() => setPaymentOpen(true)} disabled={busy}>
-                  <CreditCard size={14} aria-hidden /> Cobrar pago · {formatCurrency(invoice.balance)}
+                  <CreditCard size={14} aria-hidden /> {t("clinical.invoiceDetail.collectPayment", { amount: formatCurrency(invoice.balance) })}
                 </Button>
                 <Button variant="outline" onClick={handleMarkPaid} disabled={busy} className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40">
-                  <CheckCircle2 size={14} aria-hidden /> Marcar pagada
+                  <CheckCircle2 size={14} aria-hidden /> {t("clinical.invoiceDetail.markPaid")}
                 </Button>
                 {canEditPrice && (
                   <>
                     <Button variant="outline" onClick={() => openSub("edit-price")} disabled={busy}>
-                      <Pencil size={14} aria-hidden /> Editar precio
+                      <Pencil size={14} aria-hidden /> {t("clinical.invoiceDetail.editPrice")}
                     </Button>
                     <Button variant="outline" onClick={() => openSub("discount")} disabled={busy}>
-                      <Tag size={14} aria-hidden /> Aplicar descuento
+                      <Tag size={14} aria-hidden /> {t("clinical.invoiceDetail.applyDiscount")}
                     </Button>
                   </>
                 )}
                 {invoice.paid === 0 && (
                   <Button variant="outline" onClick={() => openSub("cancel")} disabled={busy}
                     className="border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950/40">
-                    <XCircle size={14} aria-hidden /> Cancelar factura
+                    <XCircle size={14} aria-hidden /> {t("clinical.invoiceDetail.cancelInvoice")}
                   </Button>
                 )}
               </>
@@ -327,14 +330,14 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
               <>
                 <Button variant="outline" onClick={() => openSub("refund")} disabled={busy}
                   className="border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950/40">
-                  <Undo2 size={14} aria-hidden /> Reembolsar
+                  <Undo2 size={14} aria-hidden /> {t("clinical.invoiceDetail.refund")}
                 </Button>
                 {invoice.cfdiUuid && (
                   <Button variant="outline" onClick={() => {
                     navigator.clipboard.writeText(invoice.cfdiUuid!).catch(() => {});
-                    toast.success("UUID CFDI copiado");
+                    toast.success(t("clinical.invoiceDetail.cfdiUuidCopied"));
                   }}>
-                    <FileText size={14} aria-hidden /> Copiar UUID CFDI
+                    <FileText size={14} aria-hidden /> {t("clinical.invoiceDetail.copyCfdiUuid")}
                   </Button>
                 )}
               </>
@@ -342,10 +345,10 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
 
             {/* Imprimir disponible siempre */}
             <Button variant="outline" onClick={() => window.print()}>
-              <Printer size={14} aria-hidden /> Imprimir
+              <Printer size={14} aria-hidden /> {t("common.print")}
             </Button>
 
-            <Button variant="ghost" onClick={onClose}>Cerrar</Button>
+            <Button variant="ghost" onClick={onClose}>{t("common.close")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -354,27 +357,27 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
       <Dialog open={sub === "refund"} onOpenChange={(o) => { if (!o && !busy) setSub(null); }}>
         <DialogContent className="max-w-md bg-card text-foreground border border-border">
           <DialogHeader>
-            <DialogTitle className="text-foreground font-bold">Reembolsar factura {invoice.invoiceNumber}</DialogTitle>
+            <DialogTitle className="text-foreground font-bold">{t("clinical.invoiceDetail.refundInvoiceTitle", { number: invoice.invoiceNumber })}</DialogTitle>
           </DialogHeader>
           <div className="px-6 py-4 space-y-3">
-            <p className="text-xs text-muted-foreground">Pagado total: <span className="font-mono font-bold text-foreground">{formatCurrency(invoice.paid)}</span></p>
+            <p className="text-xs text-muted-foreground">{t("clinical.invoiceDetail.totalPaidLabel")} <span className="font-mono font-bold text-foreground">{formatCurrency(invoice.paid)}</span></p>
             <div className="space-y-1.5">
-              <Label>Monto a reembolsar *</Label>
+              <Label>{t("clinical.invoiceDetail.refundAmountLabel")}</Label>
               <Input type="number" step="0.01" min={0} value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} autoFocus />
             </div>
             <div className="space-y-1.5">
-              <Label>Razón</Label>
+              <Label>{t("clinical.invoiceDetail.reason")}</Label>
               <textarea
                 className="flex min-h-[60px] w-full rounded-lg border border-border bg-card text-foreground px-3 py-2 text-sm placeholder:text-muted-foreground resize-none"
-                placeholder="Tratamiento no realizado, error de cobro, etc."
+                placeholder={t("clinical.invoiceDetail.refundReasonPlaceholder")}
                 value={refundReason} onChange={(e) => setRefundReason(e.target.value)}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setSub(null)} disabled={busy}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.cancel")}</Button>
             <Button onClick={handleRefund} disabled={busy} className="bg-rose-600 hover:bg-rose-700 text-white">
-              {busy ? "Procesando…" : `Reembolsar ${formatCurrency(Number(refundAmount) || 0)}`}
+              {busy ? t("clinical.invoiceDetail.processing") : t("clinical.invoiceDetail.refundAmountBtn", { amount: formatCurrency(Number(refundAmount) || 0) })}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -384,19 +387,19 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
       <Dialog open={sub === "edit-price"} onOpenChange={(o) => { if (!o && !busy) setSub(null); }}>
         <DialogContent className="max-w-md bg-card text-foreground border border-border">
           <DialogHeader>
-            <DialogTitle className="text-foreground font-bold">Editar precio</DialogTitle>
+            <DialogTitle className="text-foreground font-bold">{t("clinical.invoiceDetail.editPrice")}</DialogTitle>
           </DialogHeader>
           <div className="px-6 py-4 space-y-3">
-            <p className="text-xs text-muted-foreground">Total actual: <span className="font-mono font-bold text-foreground">{formatCurrency(invoice.total)}</span></p>
+            <p className="text-xs text-muted-foreground">{t("clinical.invoiceDetail.currentTotalLabel")} <span className="font-mono font-bold text-foreground">{formatCurrency(invoice.total)}</span></p>
             <div className="space-y-1.5">
-              <Label>Nuevo total *</Label>
+              <Label>{t("clinical.invoiceDetail.newTotalLabel")}</Label>
               <Input type="number" step="0.01" min={0} value={editTotal} onChange={(e) => setEditTotal(e.target.value)} autoFocus />
             </div>
-            <p className="text-[11px] text-muted-foreground">Solo disponible mientras la factura no tenga pagos registrados.</p>
+            <p className="text-[11px] text-muted-foreground">{t("clinical.invoiceDetail.editPriceHelper")}</p>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setSub(null)} disabled={busy}>Cancelar</Button>
-            <Button onClick={handleEditPrice} disabled={busy}>{busy ? "Guardando…" : "Guardar precio"}</Button>
+            <Button variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.cancel")}</Button>
+            <Button onClick={handleEditPrice} disabled={busy}>{busy ? t("common.saving") : t("clinical.invoiceDetail.savePrice")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -405,19 +408,19 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
       <Dialog open={sub === "discount"} onOpenChange={(o) => { if (!o && !busy) setSub(null); }}>
         <DialogContent className="max-w-md bg-card text-foreground border border-border">
           <DialogHeader>
-            <DialogTitle className="text-foreground font-bold">Aplicar descuento</DialogTitle>
+            <DialogTitle className="text-foreground font-bold">{t("clinical.invoiceDetail.applyDiscount")}</DialogTitle>
           </DialogHeader>
           <div className="px-6 py-4 space-y-3">
-            <p className="text-xs text-muted-foreground">Subtotal actual: <span className="font-mono font-bold text-foreground">{formatCurrency(invoice.subtotal ?? invoice.total + (invoice.discount ?? 0))}</span></p>
+            <p className="text-xs text-muted-foreground">{t("clinical.invoiceDetail.currentSubtotalLabel")} <span className="font-mono font-bold text-foreground">{formatCurrency(invoice.subtotal ?? invoice.total + (invoice.discount ?? 0))}</span></p>
             <div className="space-y-1.5">
-              <Label>Descuento (MXN) *</Label>
+              <Label>{t("clinical.invoiceDetail.discountMxnLabel")}</Label>
               <Input type="number" step="0.01" min={0} value={discountAmt} onChange={(e) => setDiscountAmt(e.target.value)} autoFocus />
             </div>
-            <p className="text-[11px] text-muted-foreground">El total se recalcula como subtotal − descuento.</p>
+            <p className="text-[11px] text-muted-foreground">{t("clinical.invoiceDetail.discountHelper")}</p>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setSub(null)} disabled={busy}>Cancelar</Button>
-            <Button onClick={handleDiscount} disabled={busy}>{busy ? "Aplicando…" : "Aplicar descuento"}</Button>
+            <Button variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.cancel")}</Button>
+            <Button onClick={handleDiscount} disabled={busy}>{busy ? t("clinical.invoiceDetail.applying") : t("clinical.invoiceDetail.applyDiscount")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -426,23 +429,23 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
       <Dialog open={sub === "cancel"} onOpenChange={(o) => { if (!o && !busy) setSub(null); }}>
         <DialogContent className="max-w-md bg-card text-foreground border border-border">
           <DialogHeader>
-            <DialogTitle className="text-foreground font-bold">Cancelar factura {invoice.invoiceNumber}</DialogTitle>
+            <DialogTitle className="text-foreground font-bold">{t("clinical.invoiceDetail.cancelInvoiceTitle", { number: invoice.invoiceNumber })}</DialogTitle>
           </DialogHeader>
           <div className="px-6 py-4 space-y-3">
-            <p className="text-xs text-muted-foreground">No podrá registrar pagos después. La razón quedará en el audit log y en las notas de la factura.</p>
+            <p className="text-xs text-muted-foreground">{t("clinical.invoiceDetail.cancelWarning")}</p>
             <div className="space-y-1.5">
-              <Label>Razón (opcional)</Label>
+              <Label>{t("clinical.invoiceDetail.reasonOptional")}</Label>
               <textarea
                 className="flex min-h-[60px] w-full rounded-lg border border-border bg-card text-foreground px-3 py-2 text-sm placeholder:text-muted-foreground resize-none"
-                placeholder="Cita cancelada, paciente no se presentó, error en cobro…"
+                placeholder={t("clinical.invoiceDetail.cancelReasonPlaceholder")}
                 value={cancelReason} onChange={(e) => setCancelReason(e.target.value)}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setSub(null)} disabled={busy}>Volver</Button>
+            <Button variant="ghost" onClick={() => setSub(null)} disabled={busy}>{t("common.back")}</Button>
             <Button onClick={handleCancel} disabled={busy} className="bg-rose-600 hover:bg-rose-700 text-white">
-              {busy ? "Cancelando…" : "Confirmar cancelación"}
+              {busy ? t("clinical.invoiceDetail.cancelling") : t("clinical.invoiceDetail.confirmCancellation")}
             </Button>
           </DialogFooter>
         </DialogContent>

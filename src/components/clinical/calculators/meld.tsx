@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { X } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 export interface CalculatorResult { score: number | string; category?: string; risk?: string; recommendation?: string }
 
@@ -21,6 +22,7 @@ function calcMeldNa(meld: number, sodium: number): number {
 }
 
 export function MeldCalculator({ onClose }: Props) {
+  const t = useT();
   const [bili, setBili] = useState("1.0");
   const [inr, setInr] = useState("1.0");
   const [creat, setCreat] = useState("1.0");
@@ -33,20 +35,20 @@ export function MeldCalculator({ onClose }: Props) {
 
   const finalScore = meldNa ?? meld;
   const info =
-    finalScore < 10 ? { label: "Baja mortalidad a 3 meses", tone: "var(--success, #34d399)" }
-    : finalScore < 20 ? { label: "Mortalidad moderada", tone: "var(--warning, #fbbf24)" }
-    : finalScore < 30 ? { label: "Mortalidad alta", tone: "var(--danger, #ef4444)" }
-    : { label: "Mortalidad muy alta", tone: "var(--danger, #ef4444)" };
+    finalScore < 10 ? { label: t("clinical.meld.lowMortality"), tone: "var(--success, #34d399)" }
+    : finalScore < 20 ? { label: t("clinical.meld.moderateMortality"), tone: "var(--warning, #fbbf24)" }
+    : finalScore < 30 ? { label: t("clinical.meld.highMortality"), tone: "var(--danger, #ef4444)" }
+    : { label: t("clinical.meld.veryHighMortality"), tone: "var(--danger, #ef4444)" };
 
   return (
     <div className="card" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
           <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-1)" }}>MELD / MELD-Na</div>
-          <div style={{ fontSize: 12, color: "var(--text-2)" }}>Severidad de enfermedad hepática terminal</div>
+          <div style={{ fontSize: 12, color: "var(--text-2)" }}>{t("clinical.meld.subtitle")}</div>
         </div>
         {onClose && (
-          <button onClick={onClose} className="btn-new btn-new--ghost btn-new--sm" style={{ padding: 6 }} aria-label="Volver">
+          <button onClick={onClose} className="btn-new btn-new--ghost btn-new--sm" style={{ padding: 6 }} aria-label={t("common.back")}>
             <X size={16} />
           </button>
         )}
@@ -54,7 +56,7 @@ export function MeldCalculator({ onClose }: Props) {
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <div className="field-new">
-          <label className="field-new__label">Bilirrubina total (mg/dL)</label>
+          <label className="field-new__label">{t("clinical.meld.totalBilirubin")}</label>
           <input type="number" step="0.1" min="0" className="input-new mono" value={bili} onChange={e => setBili(e.target.value)} />
         </div>
         <div className="field-new">
@@ -62,12 +64,12 @@ export function MeldCalculator({ onClose }: Props) {
           <input type="number" step="0.1" min="0" className="input-new mono" value={inr} onChange={e => setInr(e.target.value)} />
         </div>
         <div className="field-new">
-          <label className="field-new__label">Creatinina (mg/dL)</label>
+          <label className="field-new__label">{t("clinical.meld.creatinine")}</label>
           <input type="number" step="0.1" min="0" className="input-new mono" value={creat} onChange={e => setCreat(e.target.value)} />
         </div>
         <div className="field-new">
-          <label className="field-new__label">Sodio (mEq/L) — opcional</label>
-          <input type="number" step="1" className="input-new mono" placeholder="p.ej. 135" value={sodium} onChange={e => setSodium(e.target.value)} />
+          <label className="field-new__label">{t("clinical.meld.sodiumOptional")}</label>
+          <input type="number" step="1" className="input-new mono" placeholder={t("clinical.meld.sodiumPlaceholder")} value={sodium} onChange={e => setSodium(e.target.value)} />
         </div>
       </div>
 

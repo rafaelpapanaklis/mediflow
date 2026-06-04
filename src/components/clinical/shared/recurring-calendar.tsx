@@ -1,6 +1,7 @@
 "use client";
 
 import { formatRelativeDate } from "@/lib/format";
+import { useT } from "@/i18n/i18n-provider";
 
 interface CalendarItem {
   date: string;
@@ -18,9 +19,12 @@ interface RecurringCalendarProps {
 
 export function RecurringCalendar({
   items,
-  title = "Próximas sesiones",
-  emptyMessage = "Sin sesiones próximas",
+  title,
+  emptyMessage,
 }: RecurringCalendarProps) {
+  const t = useT();
+  const resolvedTitle = title ?? t("clinical.recurringCalendar.title");
+  const resolvedEmptyMessage = emptyMessage ?? t("clinical.recurringCalendar.empty");
   return (
     <div className="card" style={{ padding: 16 }}>
       <div
@@ -31,7 +35,7 @@ export function RecurringCalendar({
           marginBottom: 12,
         }}
       >
-        {title}
+        {resolvedTitle}
       </div>
 
       {items.length === 0 ? (
@@ -43,7 +47,7 @@ export function RecurringCalendar({
             padding: "24px 0",
           }}
         >
-          {emptyMessage}
+          {resolvedEmptyMessage}
         </div>
       ) : (
         <div>

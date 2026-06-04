@@ -3,6 +3,7 @@ import { useState } from "react";
 import toast from "react-hot-toast";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { useT } from "@/i18n/i18n-provider";
 
 const SERVICIOS = [
   "corte",
@@ -28,12 +29,22 @@ const VOLUMENES_REVELADOR = ["10", "20", "30", "40"];
 
 const COLOR_SERVICES = ["color completo", "mechas/highlights", "balayage"];
 
+const SCALP_TYPES: { value: string; labelKey: string }[] = [
+  { value: "normal", labelKey: "clinical.hairSalonForm.scalpNormal" },
+  { value: "graso", labelKey: "clinical.hairSalonForm.scalpOily" },
+  { value: "seco", labelKey: "clinical.hairSalonForm.scalpDry" },
+  { value: "mixto", labelKey: "clinical.hairSalonForm.scalpCombination" },
+  { value: "con caspa", labelKey: "clinical.hairSalonForm.scalpDandruff" },
+  { value: "con dermatitis", labelKey: "clinical.hairSalonForm.scalpDermatitis" },
+];
+
 interface Props {
   patientId: string;
   onSaved: (record: any) => void;
 }
 
 export function HairSalonForm({ patientId, onSaved }: Props) {
+  const t = useT();
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     subjective: "",
@@ -85,7 +96,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
 
   async function handleSave() {
     if (!form.servicio) {
-      toast.error("Selecciona el servicio realizado");
+      toast.error(t("clinical.hairSalonForm.errSelectService"));
       return;
     }
     setSaving(true);
@@ -156,9 +167,9 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
       }
 
       onSaved(record);
-      toast.success("Registro de salón guardado");
+      toast.success(t("clinical.hairSalonForm.savedSuccess"));
     } catch (err: any) {
-      toast.error(err.message ?? "Error al guardar");
+      toast.error(err.message ?? t("clinical.hairSalonForm.saveError"));
     } finally {
       setSaving(false);
     }
@@ -166,24 +177,24 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
 
   return (
     <form onSubmit={e => { e.preventDefault(); handleSave(); }} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <CardNew title="Motivo y observaciones">
+      <CardNew title={t("clinical.hairSalonForm.reasonObsTitle")}>
         <div className="grid grid-cols-2 gap-4">
           <div className="field-new">
-            <label className="field-new__label">Motivo de visita</label>
+            <label className="field-new__label">{t("clinical.hairSalonForm.visitReason")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, resize: "vertical" }}
-              placeholder="¿Qué busca el cliente hoy?"
+              placeholder={t("clinical.hairSalonForm.visitReasonPlaceholder")}
               value={form.subjective}
               onChange={(e) => set("subjective", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Observaciones del cabello</label>
+            <label className="field-new__label">{t("clinical.hairSalonForm.hairObservations")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, resize: "vertical" }}
-              placeholder="Estado actual del cabello, daño, raíces…"
+              placeholder={t("clinical.hairSalonForm.hairObservationsPlaceholder")}
               value={form.objective}
               onChange={(e) => set("objective", e.target.value)}
             />
@@ -191,16 +202,16 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
         </div>
       </CardNew>
 
-      <CardNew title="Servicio">
+      <CardNew title={t("clinical.hairSalonForm.serviceTitle")}>
         <div className="grid grid-cols-2 gap-4">
           <div className="field-new">
-            <label className="field-new__label">Servicio</label>
+            <label className="field-new__label">{t("clinical.hairSalonForm.service")}</label>
             <select
               className="input-new"
               value={form.servicio}
               onChange={(e) => set("servicio", e.target.value)}
             >
-              <option value="">Seleccionar…</option>
+              <option value="">{t("clinical.hairSalonForm.select")}</option>
               {SERVICIOS.map((s) => (
                 <option key={s} value={s}>
                   {s.charAt(0).toUpperCase() + s.slice(1)}
@@ -209,16 +220,16 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Tipo de cabello</label>
+            <label className="field-new__label">{t("clinical.hairSalonForm.hairType")}</label>
             <select
               className="input-new"
               value={form.tipoCabello}
               onChange={(e) => set("tipoCabello", e.target.value)}
             >
-              <option value="">Seleccionar…</option>
-              {TIPOS_CABELLO.map((t) => (
-                <option key={t} value={t}>
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
+              <option value="">{t("clinical.hairSalonForm.select")}</option>
+              {TIPOS_CABELLO.map((ty) => (
+                <option key={ty} value={ty}>
+                  {ty.charAt(0).toUpperCase() + ty.slice(1)}
                 </option>
               ))}
             </select>
@@ -228,14 +239,14 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
 
       {showColorFormula && (
         <CardNew
-          title="Fórmula de color"
+          title={t("clinical.hairSalonForm.colorFormulaTitle")}
           action={
             <button
               type="button"
               className="text-xs font-semibold text-brand-600 hover:underline"
               onClick={addColor}
             >
-              + Agregar color
+              {t("clinical.hairSalonForm.addColor")}
             </button>
           }
         >
@@ -243,28 +254,28 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
             {form.colors.map((c, i) => (
               <div key={i} className="grid grid-cols-4 gap-2">
                 <div className="field-new">
-                  <label className="field-new__label">Marca</label>
+                  <label className="field-new__label">{t("clinical.hairSalonForm.brand")}</label>
                   <input
                     className="input-new"
-                    placeholder="Ej. Wella"
+                    placeholder={t("clinical.hairSalonForm.brandPlaceholder")}
                     value={c.marca}
                     onChange={(e) => updateColor(i, "marca", e.target.value)}
                   />
                 </div>
                 <div className="field-new">
-                  <label className="field-new__label">Tono</label>
+                  <label className="field-new__label">{t("clinical.hairSalonForm.shade")}</label>
                   <input
                     className="input-new"
-                    placeholder="Ej. 7/1"
+                    placeholder={t("clinical.hairSalonForm.shadePlaceholder")}
                     value={c.tono}
                     onChange={(e) => updateColor(i, "tono", e.target.value)}
                   />
                 </div>
                 <div className="field-new">
-                  <label className="field-new__label">Proporción</label>
+                  <label className="field-new__label">{t("clinical.hairSalonForm.ratio")}</label>
                   <input
                     className="input-new"
-                    placeholder="Ej. 1:1.5"
+                    placeholder={t("clinical.hairSalonForm.ratioPlaceholder")}
                     value={c.proporcion}
                     onChange={(e) =>
                       updateColor(i, "proporcion", e.target.value)
@@ -272,7 +283,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
                   />
                 </div>
                 <div className="field-new">
-                  <label className="field-new__label">Revelador volumen</label>
+                  <label className="field-new__label">{t("clinical.hairSalonForm.developerVolume")}</label>
                   <select
                     className="input-new"
                     value={c.reveladorVolumen}
@@ -282,7 +293,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
                   >
                     {VOLUMENES_REVELADOR.map((v) => (
                       <option key={v} value={v}>
-                        Vol. {v}
+                        {t("clinical.hairSalonForm.volValue", { value: v })}
                       </option>
                     ))}
                   </select>
@@ -291,11 +302,11 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
             ))}
           </div>
           <div className="mt-3 field-new">
-            <label className="field-new__label">Tiempo de procesamiento (minutos)</label>
+            <label className="field-new__label">{t("clinical.hairSalonForm.processingTime")}</label>
             <input
               type="number"
               className="input-new"
-              placeholder="Ej. 35"
+              placeholder={t("clinical.hairSalonForm.processingTimePlaceholder")}
               value={form.processingTime}
               onChange={(e) => set("processingTime", e.target.value)}
             />
@@ -303,24 +314,24 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
         </CardNew>
       )}
 
-      <CardNew title="Detalles adicionales">
+      <CardNew title={t("clinical.hairSalonForm.additionalDetailsTitle")}>
         <div className="space-y-4">
           <div className="field-new">
-            <label className="field-new__label">Productos aplicados</label>
+            <label className="field-new__label">{t("clinical.hairSalonForm.productsApplied")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, resize: "vertical" }}
-              placeholder="Shampoo, acondicionador, tratamiento, protector térmico…"
+              placeholder={t("clinical.hairSalonForm.productsAppliedPlaceholder")}
               value={form.productosAplicados}
               onChange={(e) => set("productosAplicados", e.target.value)}
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="field-new">
-              <label className="field-new__label">Estilista</label>
+              <label className="field-new__label">{t("clinical.hairSalonForm.stylist")}</label>
               <input
                 className="input-new"
-                placeholder="Nombre del estilista"
+                placeholder={t("clinical.hairSalonForm.stylistPlaceholder")}
                 value={form.estilista}
                 onChange={(e) => set("estilista", e.target.value)}
               />
@@ -329,63 +340,63 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
         </div>
       </CardNew>
 
-      <CardNew title="Diagnóstico capilar">
+      <CardNew title={t("clinical.hairSalonForm.hairDiagnosisTitle")}>
         <div className="grid grid-cols-2 gap-4">
           <div className="field-new">
-            <label className="field-new__label">Porosidad</label>
+            <label className="field-new__label">{t("clinical.hairSalonForm.porosity")}</label>
             <select
               className="input-new"
               value={form.porosidad}
               onChange={(e) => set("porosidad", e.target.value)}
             >
-              <option value="">Seleccionar…</option>
-              <option value="baja">Baja (cerrada)</option>
-              <option value="media">Media (normal)</option>
-              <option value="alta">Alta (abierta)</option>
+              <option value="">{t("clinical.hairSalonForm.select")}</option>
+              <option value="baja">{t("clinical.hairSalonForm.porosityLow")}</option>
+              <option value="media">{t("clinical.hairSalonForm.porosityMedium")}</option>
+              <option value="alta">{t("clinical.hairSalonForm.porosityHigh")}</option>
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Tipo de cuero cabelludo</label>
+            <label className="field-new__label">{t("clinical.hairSalonForm.scalpType")}</label>
             <select
               className="input-new"
               value={form.tipoCueroCabelludo}
               onChange={(e) => set("tipoCueroCabelludo", e.target.value)}
             >
-              <option value="">Seleccionar…</option>
-              {["Normal", "Graso", "Seco", "Mixto", "Con caspa", "Con dermatitis"].map((t) => (
-                <option key={t} value={t.toLowerCase()}>{t}</option>
+              <option value="">{t("clinical.hairSalonForm.select")}</option>
+              {SCALP_TYPES.map((scalp) => (
+                <option key={scalp.value} value={scalp.value}>{t(scalp.labelKey)}</option>
               ))}
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Elasticidad</label>
+            <label className="field-new__label">{t("clinical.hairSalonForm.elasticity")}</label>
             <select
               className="input-new"
               value={form.elasticidad}
               onChange={(e) => set("elasticidad", e.target.value)}
             >
-              <option value="">Seleccionar…</option>
-              <option value="buena">Buena</option>
-              <option value="media">Media</option>
-              <option value="baja">Baja (se quiebra)</option>
+              <option value="">{t("clinical.hairSalonForm.select")}</option>
+              <option value="buena">{t("clinical.hairSalonForm.elasticityGood")}</option>
+              <option value="media">{t("clinical.hairSalonForm.elasticityMedium")}</option>
+              <option value="baja">{t("clinical.hairSalonForm.elasticityLow")}</option>
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Grosor del cabello</label>
+            <label className="field-new__label">{t("clinical.hairSalonForm.hairThickness")}</label>
             <select
               className="input-new"
               value={form.grosorCabello}
               onChange={(e) => set("grosorCabello", e.target.value)}
             >
-              <option value="">Seleccionar…</option>
-              <option value="fino">Fino</option>
-              <option value="medio">Medio</option>
-              <option value="grueso">Grueso</option>
+              <option value="">{t("clinical.hairSalonForm.select")}</option>
+              <option value="fino">{t("clinical.hairSalonForm.thicknessFine")}</option>
+              <option value="medio">{t("clinical.hairSalonForm.thicknessMedium")}</option>
+              <option value="grueso">{t("clinical.hairSalonForm.thicknessThick")}</option>
             </select>
           </div>
         </div>
         <div className="mt-4 field-new">
-          <label className="field-new__label">Nivel de daño (1-5)</label>
+          <label className="field-new__label">{t("clinical.hairSalonForm.damageLevel")}</label>
           <div className="flex gap-2">
             {[1, 2, 3, 4, 5].map((n) => {
               const colors = [
@@ -414,144 +425,144 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
         </div>
       </CardNew>
 
-      <CardNew title="Preferencias del cliente">
+      <CardNew title={t("clinical.hairSalonForm.clientPrefsTitle")}>
         <div className="grid grid-cols-2 gap-4">
           <div className="field-new">
-            <label className="field-new__label">Estilo preferido</label>
+            <label className="field-new__label">{t("clinical.hairSalonForm.preferredStyle")}</label>
             <input
               className="input-new"
-              placeholder="Ej. Bob asimétrico, degradado…"
+              placeholder={t("clinical.hairSalonForm.preferredStylePlaceholder")}
               value={form.estiloPreferido}
               onChange={(e) => set("estiloPreferido", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Largo ideal</label>
+            <label className="field-new__label">{t("clinical.hairSalonForm.idealLength")}</label>
             <select
               className="input-new"
               value={form.largoIdeal}
               onChange={(e) => set("largoIdeal", e.target.value)}
             >
-              <option value="">Seleccionar…</option>
-              <option value="muy_corto">Muy corto (pixie)</option>
-              <option value="corto">Corto (por encima de hombros)</option>
-              <option value="medio">Medio (hombros)</option>
-              <option value="largo">Largo</option>
-              <option value="muy_largo">Muy largo</option>
+              <option value="">{t("clinical.hairSalonForm.select")}</option>
+              <option value="muy_corto">{t("clinical.hairSalonForm.lengthVeryShort")}</option>
+              <option value="corto">{t("clinical.hairSalonForm.lengthShort")}</option>
+              <option value="medio">{t("clinical.hairSalonForm.lengthMedium")}</option>
+              <option value="largo">{t("clinical.hairSalonForm.lengthLong")}</option>
+              <option value="muy_largo">{t("clinical.hairSalonForm.lengthVeryLong")}</option>
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Frecuencia de visita</label>
+            <label className="field-new__label">{t("clinical.hairSalonForm.visitFrequency")}</label>
             <select
               className="input-new"
               value={form.frecuenciaVisita}
               onChange={(e) => set("frecuenciaVisita", e.target.value)}
             >
-              <option value="">Seleccionar…</option>
-              <option value="3_semanas">Cada 3 semanas</option>
-              <option value="mensual">Mensual</option>
-              <option value="6_semanas">Cada 6 semanas</option>
-              <option value="2_meses">Cada 2 meses</option>
-              <option value="3_meses">Cada 3+ meses</option>
+              <option value="">{t("clinical.hairSalonForm.select")}</option>
+              <option value="3_semanas">{t("clinical.hairSalonForm.freqEvery3Weeks")}</option>
+              <option value="mensual">{t("clinical.hairSalonForm.freqMonthly")}</option>
+              <option value="6_semanas">{t("clinical.hairSalonForm.freqEvery6Weeks")}</option>
+              <option value="2_meses">{t("clinical.hairSalonForm.freqEvery2Months")}</option>
+              <option value="3_meses">{t("clinical.hairSalonForm.freqEvery3Months")}</option>
             </select>
           </div>
           <div className="field-new">
-            <label className="field-new__label">Productos favoritos</label>
+            <label className="field-new__label">{t("clinical.hairSalonForm.favoriteProducts")}</label>
             <input
               className="input-new"
-              placeholder="Marcas o productos que usa el cliente"
+              placeholder={t("clinical.hairSalonForm.favoriteProductsPlaceholder")}
               value={form.productosFavoritos}
               onChange={(e) => set("productosFavoritos", e.target.value)}
             />
           </div>
         </div>
         <div className="mt-4 field-new">
-          <label className="field-new__label">Alergias a tintes/productos</label>
+          <label className="field-new__label">{t("clinical.hairSalonForm.allergies")}</label>
           <textarea
             className="input-new"
             style={{ minHeight: 80, resize: "vertical" }}
-            placeholder="Reacciones conocidas a tintes, químicos, ingredientes…"
+            placeholder={t("clinical.hairSalonForm.allergiesPlaceholder")}
             value={form.alergias}
             onChange={(e) => set("alergias", e.target.value)}
           />
         </div>
       </CardNew>
 
-      <CardNew title="Recomendaciones para casa">
+      <CardNew title={t("clinical.hairSalonForm.homeCareTitle")}>
         <div className="grid grid-cols-2 gap-4">
           <div className="field-new">
-            <label className="field-new__label">Champú recomendado</label>
+            <label className="field-new__label">{t("clinical.hairSalonForm.recommendedShampoo")}</label>
             <input
               className="input-new"
-              placeholder="Marca y tipo de champú"
+              placeholder={t("clinical.hairSalonForm.recommendedShampooPlaceholder")}
               value={form.champuRecomendado}
               onChange={(e) => set("champuRecomendado", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Acondicionador</label>
+            <label className="field-new__label">{t("clinical.hairSalonForm.conditioner")}</label>
             <input
               className="input-new"
-              placeholder="Marca y tipo de acondicionador"
+              placeholder={t("clinical.hairSalonForm.conditionerPlaceholder")}
               value={form.acondicionador}
               onChange={(e) => set("acondicionador", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Tratamiento/mascarilla</label>
+            <label className="field-new__label">{t("clinical.hairSalonForm.treatmentMask")}</label>
             <input
               className="input-new"
-              placeholder="Tratamiento o mascarilla recomendada"
+              placeholder={t("clinical.hairSalonForm.treatmentMaskPlaceholder")}
               value={form.tratamientoMascarilla}
               onChange={(e) => set("tratamientoMascarilla", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Frecuencia de lavado</label>
+            <label className="field-new__label">{t("clinical.hairSalonForm.washFrequency")}</label>
             <select
               className="input-new"
               value={form.frecuenciaLavado}
               onChange={(e) => set("frecuenciaLavado", e.target.value)}
             >
-              <option value="">Seleccionar…</option>
-              <option value="diario">Diario</option>
-              <option value="cada_2_dias">Cada 2 días</option>
-              <option value="cada_3_dias">Cada 3 días</option>
-              <option value="2_por_semana">2 veces por semana</option>
-              <option value="1_por_semana">1 vez por semana</option>
+              <option value="">{t("clinical.hairSalonForm.select")}</option>
+              <option value="diario">{t("clinical.hairSalonForm.washDaily")}</option>
+              <option value="cada_2_dias">{t("clinical.hairSalonForm.washEvery2Days")}</option>
+              <option value="cada_3_dias">{t("clinical.hairSalonForm.washEvery3Days")}</option>
+              <option value="2_por_semana">{t("clinical.hairSalonForm.washTwiceWeek")}</option>
+              <option value="1_por_semana">{t("clinical.hairSalonForm.washOnceWeek")}</option>
             </select>
           </div>
         </div>
         <div className="mt-4 field-new">
-          <label className="field-new__label">Notas adicionales de cuidado</label>
+          <label className="field-new__label">{t("clinical.hairSalonForm.careNotes")}</label>
           <textarea
             className="input-new"
             style={{ minHeight: 80, resize: "vertical" }}
-            placeholder="Evitar plancha, usar protector térmico, no lavar en 48h…"
+            placeholder={t("clinical.hairSalonForm.careNotesPlaceholder")}
             value={form.notasCuidado}
             onChange={(e) => set("notasCuidado", e.target.value)}
           />
         </div>
       </CardNew>
 
-      <CardNew title="Diagnóstico y plan">
+      <CardNew title={t("clinical.hairSalonForm.dxPlanTitle")}>
         <div className="grid grid-cols-2 gap-4">
           <div className="field-new">
-            <label className="field-new__label">Resultado / Observaciones</label>
+            <label className="field-new__label">{t("clinical.hairSalonForm.resultObservations")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, resize: "vertical" }}
-              placeholder="Resultado del servicio, satisfacción del cliente…"
+              placeholder={t("clinical.hairSalonForm.resultPlaceholder")}
               value={form.assessment}
               onChange={(e) => set("assessment", e.target.value)}
             />
           </div>
           <div className="field-new">
-            <label className="field-new__label">Notas para próxima visita</label>
+            <label className="field-new__label">{t("clinical.hairSalonForm.nextVisitNotes")}</label>
             <textarea
               className="input-new"
               style={{ minHeight: 80, resize: "vertical" }}
-              placeholder="Retocar raíz en 4 semanas, cambiar tono…"
+              placeholder={t("clinical.hairSalonForm.nextVisitNotesPlaceholder")}
               value={form.notasProximaVisita}
               onChange={(e) => set("notasProximaVisita", e.target.value)}
             />
@@ -561,7 +572,7 @@ export function HairSalonForm({ patientId, onSaved }: Props) {
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
         <ButtonNew variant="primary" type="submit" disabled={saving}>
-          {saving ? "Guardando…" : "Guardar consulta"}
+          {saving ? t("common.saving") : t("clinical.hairSalonForm.saveConsult")}
         </ButtonNew>
       </div>
     </form>

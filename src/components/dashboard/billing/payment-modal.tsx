@@ -9,16 +9,18 @@ import { Input } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/utils";
+import { useT } from "@/i18n/i18n-provider";
 
 export type PaymentMethod = "cash" | "debit" | "credit" | "transfer" | "check" | "other";
 
-const METHODS: { value: PaymentMethod; label: string; icon: typeof CreditCard }[] = [
-  { value: "cash",     label: "Efectivo",          icon: Banknote },
-  { value: "debit",    label: "Tarjeta débito",    icon: CreditCard },
-  { value: "credit",   label: "Tarjeta crédito",   icon: CreditCard },
-  { value: "transfer", label: "Transferencia",     icon: ArrowLeftRight },
-  { value: "check",    label: "Cheque",            icon: FileCheck2 },
-  { value: "other",    label: "Otro",              icon: MoreHorizontal },
+// labelKey resolved via t() at render time.
+const METHODS: { value: PaymentMethod; labelKey: string; icon: typeof CreditCard }[] = [
+  { value: "cash",     labelKey: "clinical.paymentModal.methodCash",      icon: Banknote },
+  { value: "debit",    labelKey: "clinical.paymentModal.methodDebit",     icon: CreditCard },
+  { value: "credit",   labelKey: "clinical.paymentModal.methodCredit",    icon: CreditCard },
+  { value: "transfer", labelKey: "clinical.paymentModal.methodTransfer",  icon: ArrowLeftRight },
+  { value: "check",    labelKey: "clinical.paymentModal.methodCheck",     icon: FileCheck2 },
+  { value: "other",    labelKey: "clinical.paymentModal.methodOther",     icon: MoreHorizontal },
 ];
 
 export interface PaymentInvoice {
@@ -39,6 +41,7 @@ interface PaymentModalProps {
 }
 
 export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModalProps) {
+  const t = useT();
   const [amount, setAmount]       = useState("");
   const [method, setMethod]       = useState<PaymentMethod>("cash");
   const [paidAt, setPaidAt]       = useState(() => new Date().toISOString().slice(0, 10));
@@ -79,12 +82,12 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? "No se pudo registrar el pago");
+        throw new Error(body.error ?? t("clinical.paymentModal.registerError"));
       }
-      toast.success("Pago registrado correctamente");
+      toast.success(t("clinical.paymentModal.registerSuccess"));
       onSuccess();
     } catch (err: any) {
-      toast.error(err.message ?? "Error al registrar el pago");
+      toast.error(err.message ?? t("clinical.paymentModal.registerErrorGeneric"));
     } finally {
       setSaving(false);
     }
@@ -94,37 +97,37 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-md bg-card text-foreground border border-border">
         <DialogHeader>
-          <DialogTitle className="text-foreground font-bold">Registrar pago</DialogTitle>
+          <DialogTitle className="text-foreground font-bold">{t("clinical.paymentModal.title")}</DialogTitle>
         </DialogHeader>
 
         <div className="px-6 py-4 space-y-4">
           <div className="bg-muted/40 border border-border rounded-lg p-3 text-xs space-y-1">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Factura</span>
+              <span className="text-muted-foreground">{t("clinical.paymentModal.invoice")}</span>
               <span className="font-mono font-bold">{invoice.invoiceNumber}</span>
             </div>
             {invoice.patientName && (
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Paciente</span>
+                <span className="text-muted-foreground">{t("clinical.paymentModal.patient")}</span>
                 <span className="font-medium">{invoice.patientName}</span>
               </div>
             )}
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Total</span>
+              <span className="text-muted-foreground">{t("common.total")}</span>
               <span className="font-bold">{formatCurrency(invoice.total)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Pagado</span>
+              <span className="text-muted-foreground">{t("clinical.paymentModal.paid")}</span>
               <span className="text-emerald-600 font-bold">{formatCurrency(invoice.paid)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Saldo pendiente</span>
+              <span className="text-muted-foreground">{t("clinical.paymentModal.pendingBalance")}</span>
               <span className="text-rose-600 font-bold">{formatCurrency(invoice.balance)}</span>
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <Label>Monto a cobrar *</Label>
+            <Label>{t("clinical.paymentModal.amountToCharge")}</Label>
             <Input
               type="number"
               inputMode="decimal"
@@ -136,13 +139,13 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
             />
             {isOverpay && (
               <p className="text-[11px] text-rose-600">
-                El monto excede el saldo pendiente ({formatCurrency(invoice.balance)}).
+                {t("clinical.paymentModal.overpayWarning", { balance: formatCurrency(invoice.balance) })}
               </p>
             )}
           </div>
 
           <div className="space-y-1.5">
-            <Label>Método de pago *</Label>
+            <Label>{t("clinical.paymentModal.paymentMethod")}</Label>
             <div className="grid grid-cols-3 gap-1.5">
               {METHODS.map((m) => {
                 const Icon = m.icon;
@@ -159,7 +162,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
                     }`}
                   >
                     <Icon size={14} aria-hidden />
-                    {m.label}
+                    {t(m.labelKey)}
                   </button>
                 );
               })}
@@ -168,13 +171,13 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Fecha</Label>
+              <Label>{t("common.date")}</Label>
               <DateField className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 disabled:opacity-50 transition-colors" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label>Referencia</Label>
+              <Label>{t("clinical.paymentModal.reference")}</Label>
               <Input
-                placeholder={method === "transfer" ? "# transferencia" : method === "check" ? "# cheque" : "# autorización"}
+                placeholder={method === "transfer" ? t("clinical.paymentModal.refTransfer") : method === "check" ? t("clinical.paymentModal.refCheck") : t("clinical.paymentModal.refAuthorization")}
                 value={reference}
                 onChange={(e) => setReference(e.target.value)}
               />
@@ -182,10 +185,10 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
           </div>
 
           <div className="space-y-1.5">
-            <Label>Notas</Label>
+            <Label>{t("common.notes")}</Label>
             <textarea
               className="flex min-h-[60px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground resize-none"
-              placeholder="Opcional"
+              placeholder={t("common.optional")}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
@@ -193,9 +196,9 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button variant="outline" onClick={onClose} disabled={saving}>{t("common.cancel")}</Button>
           <Button onClick={submit} disabled={isInvalid || saving}>
-            {saving ? "Registrando…" : `Registrar pago${amountNum ? " · " + formatCurrency(amountNum) : ""}`}
+            {saving ? t("clinical.paymentModal.registering") : t("clinical.paymentModal.registerPaymentBtn", { amount: amountNum ? " · " + formatCurrency(amountNum) : "" })}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { Plus, X, Sparkles, Loader2 } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Remedy {
   name: string;
@@ -17,6 +18,7 @@ interface RepertorizationProps {
 }
 
 export function Repertorization({ constitutional, onRemedySelect }: RepertorizationProps) {
+  const t = useT();
   const [symptoms, setSymptoms] = useState<string[]>([]);
   const [newSymptom, setNewSymptom] = useState("");
   const [remedies, setRemedies] = useState<Remedy[]>([]);
@@ -36,7 +38,7 @@ export function Repertorization({ constitutional, onRemedySelect }: Repertorizat
 
   async function suggestRemedies() {
     if (symptoms.length < 2) {
-      toast.error("Agrega al menos 2 síntomas rúbricos");
+      toast.error(t("clinical.repertorization.minSymptoms"));
       return;
     }
     setLoading(true);
@@ -50,7 +52,7 @@ export function Repertorization({ constitutional, onRemedySelect }: Repertorizat
       if (!res.ok) throw new Error(data.error ?? "Error");
       setRemedies(data.remedies ?? []);
     } catch (err: any) {
-      toast.error(err.message ?? "No se pudieron obtener sugerencias");
+      toast.error(err.message ?? t("clinical.repertorization.suggestError"));
     } finally {
       setLoading(false);
     }
@@ -61,9 +63,9 @@ export function Repertorization({ constitutional, onRemedySelect }: Repertorizat
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <div style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", fontWeight: 600, fontSize: 15, color: "var(--text-1)" }}>
-            Repertorización
+            {t("clinical.repertorization.title")}
           </div>
-          <div style={{ fontSize: 11, color: "var(--text-2)", marginTop: 2 }}>Boericke / Kent · IA sugiere remedios</div>
+          <div style={{ fontSize: 11, color: "var(--text-2)", marginTop: 2 }}>{t("clinical.repertorization.subtitle")}</div>
         </div>
         <button
           className="btn-new"
@@ -72,13 +74,13 @@ export function Repertorization({ constitutional, onRemedySelect }: Repertorizat
           style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#7c3aed", color: "#fff", borderColor: "#7c3aed" }}
         >
           {loading ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-          Sugerir
+          {t("clinical.repertorization.suggest")}
         </button>
       </div>
 
       <div>
         <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-2)", fontFamily: "ui-monospace, monospace", marginBottom: 8 }}>
-          Síntomas rúbricos
+          {t("clinical.repertorization.rubricSymptoms")}
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
           {symptoms.map((s, i) => (
@@ -91,7 +93,7 @@ export function Repertorization({ constitutional, onRemedySelect }: Repertorizat
           ))}
           {symptoms.length === 0 && (
             <div style={{ fontSize: 11, color: "var(--text-2)", fontStyle: "italic" }}>
-              Agrega síntomas mentales, generales o locales
+              {t("clinical.repertorization.symptomsHint")}
             </div>
           )}
         </div>
@@ -99,13 +101,13 @@ export function Repertorization({ constitutional, onRemedySelect }: Repertorizat
           <input
             className="input-new"
             style={{ flex: 1 }}
-            placeholder='Ej: "ansiedad con palpitaciones", "dolor &lt; frío"'
+            placeholder={t("clinical.repertorization.symptomPlaceholder")}
             value={newSymptom}
             onChange={e => setNewSymptom(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addSymptom(); } }}
           />
           <button className="btn-new" onClick={addSymptom} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-            <Plus size={13} /> Agregar
+            <Plus size={13} /> {t("common.add")}
           </button>
         </div>
       </div>
@@ -113,7 +115,7 @@ export function Repertorization({ constitutional, onRemedySelect }: Repertorizat
       {remedies.length > 0 && (
         <div>
           <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-2)", fontFamily: "ui-monospace, monospace", marginBottom: 8 }}>
-            Remedios sugeridos
+            {t("clinical.repertorization.suggestedRemedies")}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {remedies.map((r, i) => {
@@ -142,7 +144,7 @@ export function Repertorization({ constitutional, onRemedySelect }: Repertorizat
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span style={{ fontFamily: "var(--font-sans, system-ui, sans-serif)", fontWeight: 600, fontSize: 13, color: isTop ? "#fbbf24" : "var(--text-1)" }}>{r.name}</span>
                       <span className="badge-new" style={{ fontSize: 10 }}>{r.potency}</span>
-                      {isTop && <span className="badge-new" style={{ fontSize: 10, background: "rgba(251,191,36,0.15)", color: "#fbbf24", borderColor: "rgba(251,191,36,0.4)" }}>Top</span>}
+                      {isTop && <span className="badge-new" style={{ fontSize: 10, background: "rgba(251,191,36,0.15)", color: "#fbbf24", borderColor: "rgba(251,191,36,0.4)" }}>{t("clinical.repertorization.topBadge")}</span>}
                     </div>
                     <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 11, color: "var(--text-2)" }}>{r.score}/100</div>
                   </div>

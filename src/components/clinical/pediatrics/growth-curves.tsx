@@ -14,6 +14,7 @@ import {
   ComposedChart,
 } from "recharts";
 import { TrendingUp } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 interface GrowthCurvesProps {
   metric: "weight-age" | "height-age" | "bmi-age";
@@ -112,10 +113,11 @@ export function GrowthCurves({
   value,
   history = [],
 }: GrowthCurvesProps) {
+  const t = useT();
   const metricLabels: Record<GrowthCurvesProps["metric"], { title: string; unit: string; yLabel: string }> = {
-    "weight-age": { title: "Peso / Edad", unit: "kg", yLabel: "Peso (kg)" },
-    "height-age": { title: "Talla / Edad", unit: "cm", yLabel: "Talla (cm)" },
-    "bmi-age": { title: "IMC / Edad", unit: "kg/m²", yLabel: "IMC (kg/m²)" },
+    "weight-age": { title: t("clinical.growthCurves.weightAgeTitle"), unit: "kg", yLabel: t("clinical.growthCurves.weightYLabel") },
+    "height-age": { title: t("clinical.growthCurves.heightAgeTitle"), unit: "cm", yLabel: t("clinical.growthCurves.heightYLabel") },
+    "bmi-age": { title: t("clinical.growthCurves.bmiAgeTitle"), unit: "kg/m²", yLabel: t("clinical.growthCurves.bmiYLabel") },
   };
 
   const { data, patientPercentile } = useMemo(() => {
@@ -171,10 +173,10 @@ export function GrowthCurves({
           <TrendingUp size={18} color="var(--brand)" />
           <div>
             <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-1)" }}>
-              {metricLabels[metric].title} · {gender === "M" ? "Masculino" : "Femenino"}
+              {metricLabels[metric].title} · {gender === "M" ? t("clinical.growthCurves.male") : t("clinical.growthCurves.female")}
             </div>
             <div style={{ fontSize: 12, color: "var(--text-2)" }}>
-              {ageMonths} meses · {value} {metricLabels[metric].unit}
+              {t("clinical.growthCurves.monthsValue", { months: ageMonths })} · {value} {metricLabels[metric].unit}
             </div>
           </div>
         </div>
@@ -189,7 +191,7 @@ export function GrowthCurves({
             fontWeight: 600,
           }}
         >
-          Percentil: {patientPercentile}
+          {t("clinical.growthCurves.percentileLabel")}: {patientPercentile}
         </div>
       </div>
 
@@ -199,7 +201,7 @@ export function GrowthCurves({
           <XAxis
             dataKey="age"
             tick={{ fontSize: 10, fill: "var(--text-2)" }}
-            label={{ value: "Edad (meses)", position: "insideBottom", offset: -5, fontSize: 11, fill: "var(--text-2)" }}
+            label={{ value: t("clinical.growthCurves.ageMonthsAxis"), position: "insideBottom", offset: -5, fontSize: 11, fill: "var(--text-2)" }}
           />
           <YAxis
             tick={{ fontSize: 10, fill: "var(--text-2)" }}

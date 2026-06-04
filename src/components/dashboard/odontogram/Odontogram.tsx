@@ -15,8 +15,8 @@ import {
   FULL_TOOTH_STATES,
   LOWER_FDI,
   STATE_COLOR,
-  STATE_LABEL,
-  SURFACE_LABEL,
+  STATE_LABEL_KEY,
+  SURFACE_LABEL_KEY,
   SURFACE_STATES,
   TOOLBAR_STATES,
   UPPER_FDI,
@@ -27,6 +27,7 @@ import {
   type ToothState,
 } from "./odontogram-data";
 import { Tooth } from "./tooth";
+import { useT } from "@/i18n/i18n-provider";
 import styles from "./odontogram.module.css";
 
 interface OdontogramProps {
@@ -105,6 +106,7 @@ async function readErrorMessage(res: Response, fallback: string): Promise<string
 }
 
 export function Odontogram({ patientId, readOnly: readOnlyProp = false }: OdontogramProps) {
+  const t = useT();
   const [entries, setEntries] = useState<ServerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeMode, setActiveMode] = useState<ToothState | null>(null);
@@ -125,13 +127,13 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
   const loadHistory = useCallback(async () => {
     try {
       const res = await fetch(`/api/patients/${patientId}/odontogram-history`, { cache: "no-store" });
-      if (!res.ok) throw new Error(await readErrorMessage(res, "No se pudo cargar historial"));
+      if (!res.ok) throw new Error(await readErrorMessage(res, t("clinical.odontogram.errHistoryLoad")));
       const { data } = await safeJson<{ snapshots: HistorySnapshot[] }>(res);
       setHistory(data?.snapshots ?? []);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error de historial");
+      toast.error(err instanceof Error ? err.message : t("clinical.odontogram.errHistoryGeneric"));
     }
-  }, [patientId]);
+  }, [patientId, t]);
 
   // Carga el historial la primera vez que se abre el popover.
   useEffect(() => {
@@ -157,19 +159,19 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
     (async () => {
       try {
         const res = await fetch(`/api/odontogram?patientId=${patientId}`, { cache: "no-store" });
-        if (!res.ok) throw new Error(await readErrorMessage(res, "No se pudo cargar"));
+        if (!res.ok) throw new Error(await readErrorMessage(res, t("clinical.odontogram.errLoad")));
         const { data } = await safeJson<{ entries: ServerEntry[] }>(res);
         if (cancelled) return;
         setEntries(data?.entries ?? []);
       } catch (err) {
         if (cancelled) return;
-        toast.error(err instanceof Error ? err.message : "No se pudo cargar el odontograma");
+        toast.error(err instanceof Error ? err.message : t("clinical.odontogram.errLoadOdontogram"));
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [patientId]);
+  }, [patientId, t]);
 
   // Map indexado para render (snapshot histórico tiene precedencia sobre live).
   const teethMap = useMemo(
@@ -229,13 +231,13 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
   // Plan tratamiento sugerido (heurística)
   const plan = useMemo(() => {
     const items: { label: string; tone: "warn" | "info" | "neutral" }[] = [];
-    if (stats.CARIES > 0) items.push({ label: `Tratar ${stats.CARIES} caries (resina o corona según extensión)`, tone: "warn" });
-    if (stats.ENDODONCIA > 0) items.push({ label: `${stats.ENDODONCIA} endodoncia${stats.ENDODONCIA === 1 ? "" : "s"} en seguimiento`, tone: "info" });
-    if (stats.AUSENTE > 0) items.push({ label: `Considerar ${stats.AUSENTE} implante${stats.AUSENTE === 1 ? "" : "s"} para diente ausente`, tone: "info" });
-    if (stats.CORONA > 0) items.push({ label: `Control periódico de ${stats.CORONA} corona${stats.CORONA === 1 ? "" : "s"}`, tone: "neutral" });
-    if (items.length === 0) items.push({ label: "Sin tratamientos pendientes — boca sana", tone: "neutral" });
+    if (stats.CARIES > 0) items.push({ label: t("clinical.odontogram.planCaries", { count: stats.CARIES }), tone: "warn" });
+    if (stats.ENDODONCIA > 0) items.push({ label: t("clinical.odontogram.planEndo", { count: stats.ENDODONCIA }), tone: "info" });
+    if (stats.AUSENTE > 0) items.push({ label: t("clinical.odontogram.planImplant", { count: stats.AUSENTE }), tone: "info" });
+    if (stats.CORONA > 0) items.push({ label: t("clinical.odontogram.planCrown", { count: stats.CORONA }), tone: "neutral" });
+    if (items.length === 0) items.push({ label: t("clinical.odontogram.planNone"), tone: "neutral" });
     return items;
-  }, [stats]);
+  }, [stats, t]);
 
   /* ─── Mutaciones ──────────────────────────────────────────── */
 
@@ -261,10 +263,10 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ patientId, toothNumber: fdi, surface }),
         });
-        if (!res.ok) throw new Error(await readErrorMessage(res, "No se pudo borrar"));
+        if (!res.ok) throw new Error(await readErrorMessage(res, t("clinical.odontogram.errDelete")));
       } catch (err) {
         setEntries((es) => [...es, prev]); // rollback
-        toast.error(err instanceof Error ? err.message : "Error al borrar");
+        toast.error(err instanceof Error ? err.message : t("clinical.odontogram.errDeleteGeneric"));
         return;
       }
       setLastAction({ fdi, surface, state });
@@ -293,9 +295,9 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ patientId, toothNumber: fdi, surface, state }),
       });
-      if (!res.ok) throw new Error(await readErrorMessage(res, "No se pudo guardar"));
+      if (!res.ok) throw new Error(await readErrorMessage(res, t("clinical.odontogram.errSave")));
       const { data } = await safeJson<{ entry: ServerEntry }>(res);
-      if (!data?.entry) throw new Error("Respuesta vacía del servidor");
+      if (!data?.entry) throw new Error(t("clinical.odontogram.errEmptyResponse"));
       // Reemplaza optimistic con respuesta real (sobre todo el id)
       setEntries((es) => {
         const without = es.filter((e) => e.id !== optimistic.id);
@@ -307,12 +309,12 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
         const without = es.filter((e) => e.id !== optimistic.id);
         return prev ? [...without, prev] : without;
       });
-      toast.error(err instanceof Error ? err.message : "Error al guardar");
+      toast.error(err instanceof Error ? err.message : t("clinical.odontogram.errSaveGeneric"));
       return;
     }
 
     setLastAction({ fdi, surface, state });
-  }, [entries, patientId, readOnly]);
+  }, [entries, patientId, readOnly, t]);
 
   const applyToTooth = useCallback((fdi: number, state: ToothState, surface?: SurfaceKey) => {
     if (readOnly) return;
@@ -344,7 +346,7 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
         return;
       }
       if (!activeMode) {
-        toast("Selecciona primero un estado de la barra superior", { icon: "ℹ️" });
+        toast(t("clinical.odontogram.selectStateFirst"), { icon: "ℹ️" });
         return;
       }
       // Si activeMode es full-tooth, aplica al diente entero ignorando surface
@@ -354,7 +356,7 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
       }
       applyToTooth(fdi, activeMode, surface);
     };
-  }, [activeMode, applyToTooth, readOnly]);
+  }, [activeMode, applyToTooth, readOnly, t]);
 
   const handleToothClick = useCallback((fdi: number) => {
     return (shiftKey: boolean) => {
@@ -411,20 +413,20 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
 
   const handleReset = useCallback(async () => {
     if (readOnly) return;
-    if (!confirm("¿Borrar TODAS las marcas del odontograma? Esta acción no se puede deshacer.")) return;
+    if (!confirm(t("clinical.odontogram.resetConfirm"))) return;
     setPending(true);
     try {
       const res = await fetch(`/api/odontogram/reset?patientId=${patientId}`, { method: "POST" });
-      if (!res.ok) throw new Error(await readErrorMessage(res, "No se pudo reiniciar"));
+      if (!res.ok) throw new Error(await readErrorMessage(res, t("clinical.odontogram.errReset")));
       setEntries([]);
       setLastAction(null);
-      toast.success("Odontograma reiniciado");
+      toast.success(t("clinical.odontogram.resetSuccess"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo reiniciar");
+      toast.error(err instanceof Error ? err.message : t("clinical.odontogram.errReset"));
     } finally {
       setPending(false);
     }
-  }, [patientId, readOnly]);
+  }, [patientId, readOnly, t]);
 
   const handleGeneratePdf = useCallback(() => {
     // Stub: window.print() con vista actual. PDF real con react-pdf/jsPDF en
@@ -440,17 +442,17 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
     <div className={styles.odontogram} data-active-mode={activeMode ?? "none"}>
       {/* Summary header — stats pills + plan collapsible + PDF (movido desde sidebar) */}
       <header className={styles.summaryRow}>
-        <ul className={styles.statsPills} aria-label="Estado clínico">
+        <ul className={styles.statsPills} aria-label={t("clinical.odontogram.clinicalStatusLabel")}>
           {summaryStates.map((st) => (
             <li
               key={st}
               className={styles.statPill}
               style={{ "--mf-stat-color": STATE_COLOR[st] } as React.CSSProperties}
               data-zero={stats[st] === 0 ? "true" : undefined}
-              title={`${STATE_LABEL[st]}: ${stats[st]}`}
+              title={`${t(STATE_LABEL_KEY[st])}: ${stats[st]}`}
             >
               <span className={styles.statPillDot} aria-hidden />
-              <span className={styles.statPillLabel}>{STATE_LABEL[st]}</span>
+              <span className={styles.statPillLabel}>{t(STATE_LABEL_KEY[st])}</span>
               <span className={styles.statPillCount}>{stats[st]}</span>
             </li>
           ))}
@@ -464,10 +466,10 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
                 className={`${styles.planToggle} ${isHistoryView ? styles.open : ""}`}
                 aria-haspopup="menu"
                 aria-expanded={historyOpen}
-                title="Ver historial del odontograma"
+                title={t("clinical.odontogram.viewHistoryTitle")}
               >
                 <History size={11} aria-hidden />
-                Historial
+                {t("clinical.odontogram.history")}
                 <ChevronDown size={11} aria-hidden />
               </button>
             </Popover.Trigger>
@@ -475,7 +477,7 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
               <Popover.Content align="end" sideOffset={6} className={styles.historyPopover}>
                 {history.length === 0 ? (
                   <div className={styles.historyEmpty}>
-                    Aún no hay snapshots. Se crearán al cerrar consultas.
+                    {t("clinical.odontogram.noSnapshots")}
                   </div>
                 ) : (
                   <>
@@ -487,8 +489,8 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
                         setHistoryOpen(false);
                       }}
                     >
-                      <span className={styles.historyItemLabel}>Estado actual</span>
-                      <span className={styles.historyItemDate}>vivo</span>
+                      <span className={styles.historyItemLabel}>{t("clinical.odontogram.currentState")}</span>
+                      <span className={styles.historyItemDate}>{t("clinical.odontogram.live")}</span>
                     </button>
                     <div className={styles.historyDivider} aria-hidden />
                     {history.map((s) => {
@@ -507,7 +509,7 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
                           }}
                         >
                           <span className={styles.historyItemLabel}>
-                            {s.appointmentType ?? "Consulta"}
+                            {s.appointmentType ?? t("clinical.odontogram.consultationFallback")}
                             {s.doctorName ? ` · ${s.doctorName}` : ""}
                           </span>
                           <span className={styles.historyItemDate}>{dateLabel}</span>
@@ -527,7 +529,7 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
             aria-expanded={planOpen}
             aria-controls="odontogram-plan"
           >
-            Plan sugerido
+            {t("clinical.odontogram.suggestedPlan")}
             <span className={styles.planToggleCount}>({plan.length})</span>
             <ChevronDown size={11} aria-hidden />
           </button>
@@ -535,9 +537,9 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
             type="button"
             className={styles.pdfBtn}
             onClick={handleGeneratePdf}
-            title="Generar plan de tratamiento PDF"
+            title={t("clinical.odontogram.generatePdfTitle")}
           >
-            <FileDown size={12} aria-hidden /> Generar PDF
+            <FileDown size={12} aria-hidden /> {t("clinical.odontogram.generatePdf")}
           </button>
         </div>
       </header>
@@ -547,21 +549,21 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
         <div className={styles.historyBanner}>
           <History size={12} aria-hidden />
           <span>
-            Viendo snapshot del{" "}
+            {t("clinical.odontogram.viewingSnapshotOf")}{" "}
             <strong>
               {new Intl.DateTimeFormat("es-MX", {
                 day: "numeric", month: "long", year: "numeric",
               }).format(new Date(viewingSnapshot.snapshotAt))}
             </strong>
             {viewingSnapshot.doctorName ? ` · ${viewingSnapshot.doctorName}` : ""} ·
-            <em> read-only</em>
+            <em> {t("clinical.odontogram.readOnly")}</em>
           </span>
           <button
             type="button"
             className={styles.historyBannerExit}
             onClick={() => setViewingSnapshotId(null)}
           >
-            <X size={11} aria-hidden /> Volver al actual
+            <X size={11} aria-hidden /> {t("clinical.odontogram.backToCurrent")}
           </button>
         </div>
       )}
@@ -579,7 +581,7 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
 
       {/* Toolbar */}
       <div className={styles.toolbar}>
-        <div className={styles.toolbarChips} role="toolbar" aria-label="Estados">
+        <div className={styles.toolbarChips} role="toolbar" aria-label={t("clinical.odontogram.statesLabel")}>
           {TOOLBAR_STATES.map((st, idx) => {
             const isActive = activeMode === st;
             return (
@@ -591,17 +593,17 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
                 onClick={() => applyToSelected(st)}
                 disabled={readOnly}
                 aria-pressed={isActive}
-                title={`${STATE_LABEL[st]} (atajo ${idx + 1})`}
+                title={t("clinical.odontogram.chipTitle", { state: t(STATE_LABEL_KEY[st]), n: idx + 1 })}
               >
                 <span className={styles.chipDot} aria-hidden />
-                <span>{STATE_LABEL[st]}</span>
+                <span>{t(STATE_LABEL_KEY[st])}</span>
                 <kbd className={styles.chipKbd}>{idx + 1}</kbd>
               </button>
             );
           })}
         </div>
         <div className={styles.toolbarRight}>
-          <div className={styles.segmented} role="tablist" aria-label="Notación">
+          <div className={styles.segmented} role="tablist" aria-label={t("clinical.odontogram.notationLabel")}>
             {(["FDI", "UNIVERSAL", "PALMER"] as Notation[]).map((n) => (
               <button
                 key={n}
@@ -615,7 +617,7 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
               </button>
             ))}
           </div>
-          <div className={styles.segmented} role="tablist" aria-label="Dentición">
+          <div className={styles.segmented} role="tablist" aria-label={t("clinical.odontogram.dentitionLabel")}>
             {(["PERMANENTE", "DECIDUA"] as const).map((d) => (
               <button
                 key={d}
@@ -625,9 +627,9 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
                 className={`${styles.segmentedBtn} ${dentition === d ? styles.active : ""}`}
                 onClick={() => setDentition(d)}
                 disabled={d === "DECIDUA"}
-                title={d === "DECIDUA" ? "Dentición decidua próximamente" : ""}
+                title={d === "DECIDUA" ? t("clinical.odontogram.deciduousSoon") : ""}
               >
-                {d[0]! + d.slice(1).toLowerCase()}
+                {d === "PERMANENTE" ? t("clinical.odontogram.dentitionPermanent") : t("clinical.odontogram.dentitionDeciduous")}
               </button>
             ))}
           </div>
@@ -637,7 +639,7 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
               className={styles.clearSelected}
               onClick={() => setSelected(new Set())}
             >
-              <X size={11} aria-hidden /> Quitar selección ({selected.size})
+              <X size={11} aria-hidden /> {t("clinical.odontogram.clearSelection", { count: selected.size })}
             </button>
           )}
           <button
@@ -645,9 +647,9 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
             className={styles.resetBtn}
             onClick={handleReset}
             disabled={readOnly || pending || entries.length === 0}
-            title="Borrar todas las marcas"
+            title={t("clinical.odontogram.resetAllTitle")}
           >
-            <RotateCcw size={12} aria-hidden /> Reiniciar
+            <RotateCcw size={12} aria-hidden /> {t("clinical.odontogram.reset")}
           </button>
         </div>
       </div>
@@ -656,10 +658,10 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
       <div className={styles.body}>
         <div className={styles.arches}>
           {loading ? (
-            <div className={styles.loading}>Cargando odontograma…</div>
+            <div className={styles.loading}>{t("clinical.odontogram.loading")}</div>
           ) : (
             <>
-              <div className={styles.archLabel}>Maxilar superior</div>
+              <div className={styles.archLabel}>{t("clinical.odontogram.upperArch")}</div>
               <div className={styles.arch}>
                 {UPPER_FDI.map((fdi) => {
                   const data = teethMap.get(fdi);
@@ -699,7 +701,7 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
                   );
                 })}
               </div>
-              <div className={styles.archLabel}>Maxilar inferior</div>
+              <div className={styles.archLabel}>{t("clinical.odontogram.lowerArch")}</div>
             </>
           )}
 
@@ -708,7 +710,7 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
            *  Click → expande para ver lista completa con preview vs. ver todos.
            *  Última acción se muestra al final como contexto secundario. */}
           <div className={styles.statusFooter}>
-            <span className={styles.statusLabel}>Resumen</span>
+            <span className={styles.statusLabel}>{t("clinical.odontogram.summary")}</span>
             {summaryStates.map((st) => {
               const fdis = groupsByState.get(st);
               if (!fdis || fdis.length === 0) return null;
@@ -727,7 +729,7 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
                 if (!includeSurface) return label;
                 const surfs = surfaceMap?.get(fdi);
                 if (surfs && surfs.length === 1) {
-                  return `${label} (${SURFACE_LABEL[surfs[0]].toLowerCase()})`;
+                  return `${label} (${t(SURFACE_LABEL_KEY[surfs[0]]).toLowerCase()})`;
                 }
                 return label;
               };
@@ -744,12 +746,12 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
                   onBlur={() => setHoverGroup(null)}
                   onClick={() => setExpandedGroup((p) => (p === st ? null : st))}
                   aria-expanded={isExpanded}
-                  title={`${STATE_LABEL[st]} — ${fdis.length} diente${fdis.length === 1 ? "" : "s"}`}
+                  title={`${t(STATE_LABEL_KEY[st])} — ${t("clinical.odontogram.teethCount", { count: fdis.length })}`}
                 >
                   <span className={styles.stateGroupDot} aria-hidden />
-                  <strong className={styles.stateGroupName}>{STATE_LABEL[st]}</strong>
+                  <strong className={styles.stateGroupName}>{t(STATE_LABEL_KEY[st])}</strong>
                   <span className={styles.stateGroupCount}>
-                    ({fdis.length} diente{fdis.length === 1 ? "" : "s"})
+                    ({t("clinical.odontogram.teethCount", { count: fdis.length })})
                   </span>
                   <span className={styles.stateGroupList}>
                     {visibleFdis.map((fdi) => renderFdi(fdi, includeSurface)).join(", ")}
@@ -759,24 +761,24 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
               );
             })}
             {groupsByState.size === 0 && (
-              <span className={styles.statusEmpty}>Sin marcas — boca sana</span>
+              <span className={styles.statusEmpty}>{t("clinical.odontogram.noMarks")}</span>
             )}
             {lastAction && (
               <span
                 className={styles.statusPill}
                 style={{ "--mf-status-color": STATE_COLOR[lastAction.state] } as React.CSSProperties}
-                title="Última acción registrada"
+                title={t("clinical.odontogram.lastActionTitle")}
               >
                 <span className={styles.statusPillIcon} aria-hidden>↳</span>
                 {notationLabel(lastAction.fdi, notation)}
-                {lastAction.surface ? ` · ${SURFACE_LABEL[lastAction.surface]}` : ""}
+                {lastAction.surface ? ` · ${t(SURFACE_LABEL_KEY[lastAction.surface])}` : ""}
                 {" · "}
-                <strong>{STATE_LABEL[lastAction.state]}</strong>
+                <strong>{t(STATE_LABEL_KEY[lastAction.state])}</strong>
               </span>
             )}
             <div className={styles.kbdHint}>
               <Keyboard size={11} aria-hidden />
-              <span>1-8 estado · Esc cancelar · Shift-click multi</span>
+              <span>{t("clinical.odontogram.kbdHint")}</span>
             </div>
           </div>
         </div>
