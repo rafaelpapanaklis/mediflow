@@ -2,13 +2,22 @@
 
 import { useMemo } from "react";
 import { useAgenda } from "./agenda-provider";
+import { useT } from "@/i18n/i18n-provider";
 import { todayInTz } from "@/lib/agenda/time-utils";
 import { calendarDayISO, formatTimeInTz } from "@/lib/agenda/date-ranges";
 import { doctorColorFor } from "@/lib/agenda/doctor-color";
 import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
 
-const WEEKDAYS_ES = ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"];
+const WEEKDAY_KEYS = [
+  "agenda.monthView.dowMon",
+  "agenda.monthView.dowTue",
+  "agenda.monthView.dowWed",
+  "agenda.monthView.dowThu",
+  "agenda.monthView.dowFri",
+  "agenda.monthView.dowSat",
+  "agenda.monthView.dowSun",
+];
 const MONTH_PREVIEW_LIMIT = 4;
 
 interface MonthCell {
@@ -42,6 +51,7 @@ function buildMonthGrid(refISO: string): MonthCell[] {
 
 export function AgendaMonthView() {
   const { state, setDay, setViewMode, selectAppointment } = useAgenda();
+  const t = useT();
 
   const cells = useMemo(() => buildMonthGrid(state.dayISO), [state.dayISO]);
   const today = todayInTz(state.timezone);
@@ -74,9 +84,9 @@ export function AgendaMonthView() {
   return (
     <div className={styles.monthView}>
       <div className={styles.monthHeader}>
-        {WEEKDAYS_ES.map((dow) => (
-          <div key={dow} className={styles.monthHeaderCell}>
-            {dow}
+        {WEEKDAY_KEYS.map((dowKey) => (
+          <div key={dowKey} className={styles.monthHeaderCell}>
+            {t(dowKey)}
           </div>
         ))}
       </div>
@@ -107,14 +117,14 @@ export function AgendaMonthView() {
                   jumpToDay(c.iso);
                 }
               }}
-              aria-label={`Abrir vista día ${c.iso}, ${count} cita${count === 1 ? "" : "s"}`}
-              title={`Ver el día ${c.iso} en vista detallada`}
+              aria-label={t("agenda.monthView.dayCellAria", { iso: c.iso, count })}
+              title={t("agenda.monthView.dayCellTitle", { iso: c.iso })}
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
                 <span className={styles.monthDayNum}>{c.day}</span>
                 {count > 0 && (
                   <span className={styles.monthDayBadge}>
-                    {count} cita{count === 1 ? "" : "s"}
+                    {t("agenda.monthView.apptCount", { count })}
                   </span>
                 )}
               </div>
@@ -164,10 +174,10 @@ export function AgendaMonthView() {
                     width: "100%",
                     fontWeight: 600,
                   }}
-                  title={`Ver ${count} cita${count === 1 ? "" : "s"} del ${c.iso}`}
-                  aria-label={`Ver las ${count} citas del día ${c.iso}`}
+                  title={t("agenda.monthView.viewApptsTitle", { count, iso: c.iso })}
+                  aria-label={t("agenda.monthView.viewApptsAria", { count, iso: c.iso })}
                 >
-                  +{more} más
+                  {t("agenda.monthView.moreCount", { more })}
                 </button>
               )}
             </div>

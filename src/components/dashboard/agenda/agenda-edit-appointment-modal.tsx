@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { X } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 import { useAgenda } from "./agenda-provider";
 import { rescheduleAppointment, type ApiError } from "@/lib/agenda/mutations";
 import { describeOverlapConflict, describeResourceUnavailable } from "@/lib/agenda/conflict-copy";
@@ -66,6 +67,7 @@ function localToIso(date: string, time: string, timezone: string): string | null
 }
 
 export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
+  const t = useT();
   const { state, dispatch } = useAgenda();
   const [form, setForm] = useState<FormState | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -111,13 +113,13 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
 
     const startsAtIso = localToIso(form.date, form.startTime, state.timezone);
     if (!startsAtIso) {
-      toast.error("Fecha u hora inválida");
+      toast.error(t("agenda.editApptModal.invalidDateTime"));
       return;
     }
     const endsMs = new Date(startsAtIso).getTime() + form.durationMin * 60_000;
     const endsAtIso = new Date(endsMs).toISOString();
     if (!form.doctorId) {
-      toast.error("Seleccioná un doctor");
+      toast.error(t("agenda.editApptModal.selectDoctor"));
       return;
     }
 
@@ -132,7 +134,7 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
         ...(form.reason !== (appt.reason ?? "") ? { reason: form.reason } : {}),
       });
       dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
-      toast.success("Cita actualizada");
+      toast.success(t("agenda.editApptModal.apptUpdated"));
       onClose();
     } catch (err) {
       const e = err as ApiError & { message?: string };
@@ -154,7 +156,7 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
           ),
         );
       } else {
-        const detail = e?.reason ?? e?.error ?? e?.message ?? "No se pudo actualizar";
+        const detail = e?.reason ?? e?.error ?? e?.message ?? t("agenda.editApptModal.updateFailed");
         const prefix = e?.status ? `[${e.status}] ` : "";
         toast.error(`${prefix}${detail}`);
       }
@@ -197,7 +199,7 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
         }}>
           <div>
             <h2 id="edit-appt-title" style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>
-              Editar cita
+              {t("agenda.editApptModal.title")}
             </h2>
             <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
               {appt.patient.name}
@@ -206,7 +208,7 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
           <button
             type="button"
             onClick={onClose}
-            aria-label="Cerrar"
+            aria-label={t("common.close")}
             style={{
               width: 28, height: 28, display: "grid", placeItems: "center",
               background: "transparent", border: 0, borderRadius: 6,
@@ -218,7 +220,7 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
         </header>
 
         <form onSubmit={submit} style={{ padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
-          <Field label="Fecha">
+          <Field label={t("common.date")}>
             <DateField
               required
               value={form.date}
@@ -227,7 +229,7 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
             />
           </Field>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <Field label="Hora inicio">
+            <Field label={t("agenda.editApptModal.startTime")}>
               <input
                 type="time"
                 required
@@ -236,7 +238,7 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
                 style={inputStyle}
               />
             </Field>
-            <Field label="Duración (min)">
+            <Field label={t("agenda.editApptModal.durationMin")}>
               <select
                 required
                 value={form.durationMin}
@@ -244,42 +246,42 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
                 style={inputStyle}
               >
                 {[15, 30, 45, 60, 75, 90, 105, 120, 150, 180].map((m) => (
-                  <option key={m} value={m}>{m} min</option>
+                  <option key={m} value={m}>{t("agenda.editApptModal.minutesOption", { count: m })}</option>
                 ))}
               </select>
             </Field>
           </div>
-          <Field label="Doctor">
+          <Field label={t("agenda.editApptModal.doctor")}>
             <select
               required
               value={form.doctorId}
               onChange={(e) => setForm({ ...form, doctorId: e.target.value })}
               style={inputStyle}
             >
-              <option value="">— Seleccionar —</option>
+              <option value="">{t("agenda.editApptModal.selectOption")}</option>
               {activeDoctors.map((d) => (
                 <option key={d.id} value={d.id}>{d.displayName}</option>
               ))}
             </select>
           </Field>
-          <Field label="Lugar de atención">
+          <Field label={t("agenda.editApptModal.careLocation")}>
             <select
               value={form.resourceId}
               onChange={(e) => setForm({ ...form, resourceId: e.target.value })}
               style={inputStyle}
             >
-              <option value="">Sin lugar asignado</option>
+              <option value="">{t("agenda.editApptModal.noLocationAssigned")}</option>
               {state.resources.map((r) => (
                 <option key={r.id} value={r.id}>{r.name}</option>
               ))}
             </select>
           </Field>
-          <Field label="Tratamiento / motivo">
+          <Field label={t("agenda.editApptModal.treatmentReason")}>
             <input
               type="text"
               value={form.reason}
               onChange={(e) => setForm({ ...form, reason: e.target.value })}
-              placeholder="Ej. Limpieza, Endodoncia, Consulta general…"
+              placeholder={t("agenda.editApptModal.reasonPlaceholder")}
               style={inputStyle}
             />
           </Field>
@@ -293,14 +295,14 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
               fontSize: 12,
               color: "var(--text-1)",
             }}>
-              <strong style={{ color: "var(--warning)" }}>Conflicto:</strong> {conflict}
+              <strong style={{ color: "var(--warning)" }}>{t("agenda.editApptModal.conflictLabel")}</strong> {conflict}
               <div style={{ marginTop: 8 }}>
-                <Field label="Razón para sobrescribir (solo ADMIN)">
+                <Field label={t("agenda.editApptModal.overrideReasonLabel")}>
                   <input
                     type="text"
                     value={form.overrideReason}
                     onChange={(e) => setForm({ ...form, overrideReason: e.target.value })}
-                    placeholder="Ej. Doble cita autorizada por X"
+                    placeholder={t("agenda.editApptModal.overrideReasonPlaceholder")}
                     style={inputStyle}
                   />
                 </Field>
@@ -318,14 +320,14 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
               style={btnGhostStyle}
               disabled={submitting}
             >
-              Cancelar
+              {t("common.cancel")}
             </button>
             <button
               type="submit"
               style={btnPrimaryStyle}
               disabled={submitting}
             >
-              {submitting ? "Guardando…" : conflict ? "Sobrescribir y guardar" : "Guardar cambios"}
+              {submitting ? t("common.saving") : conflict ? t("agenda.editApptModal.overrideAndSave") : t("common.saveChanges")}
             </button>
           </footer>
         </form>

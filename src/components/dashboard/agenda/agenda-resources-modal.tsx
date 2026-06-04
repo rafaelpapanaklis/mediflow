@@ -9,6 +9,7 @@ import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
 import { updateDoctor } from "@/lib/agenda/mutations";
 import { ResourcesManager } from "@/components/dashboard/resources/resources-manager";
 import type { DoctorColumnDTO } from "@/lib/agenda/types";
+import { useT } from "@/i18n/i18n-provider";
 import styles from "./agenda.module.css";
 
 const SWATCH_COLORS = [
@@ -26,6 +27,7 @@ const SWATCH_COLORS = [
  * (también usado en `/dashboard/resources`). Este modal solo es un atajo.
  */
 export function AgendaResourcesModal() {
+  const t = useT();
   const { state, closeModal } = useAgenda();
   const open = state.modalOpen === "team" || state.modalOpen === "resources";
   const isTeam = state.modalOpen === "team";
@@ -35,12 +37,12 @@ export function AgendaResourcesModal() {
       <DialogContent className={styles.modal}>
         <div className={styles.modalHeader}>
           <div className={styles.modalTitle}>
-            {isTeam ? "Equipo" : "Sillones / Salas / Equipo"}
+            {isTeam ? t("agenda.resourcesModal.teamTitle") : t("agenda.resourcesModal.resourcesTitle")}
           </div>
           <div className={styles.modalSubtitle}>
             {isTeam
-              ? "Doctores de la clínica que aparecen como columnas en la agenda."
-              : "Sillones, salas y equipos disponibles para asignar a citas."}
+              ? t("agenda.resourcesModal.teamSubtitle")
+              : t("agenda.resourcesModal.resourcesSubtitle")}
           </div>
         </div>
         <div className={styles.modalBody}>
@@ -75,15 +77,16 @@ function ResourcesPanelWrapper() {
 /* ─────────────── Doctors panel ─────────────── */
 
 function DoctorsPanel() {
+  const t = useT();
   const { state } = useAgenda();
 
   return (
     <>
       {state.doctors.length === 0 ? (
         <div className={styles.modalEmpty}>
-          No hay doctores en esta clínica.{" "}
+          {t("agenda.resourcesModal.noDoctors")}{" "}
           <a className={styles.modalLink} href="/dashboard/team">
-            Invítalos desde Equipo →
+            {t("agenda.resourcesModal.inviteFromTeam")}
           </a>
         </div>
       ) : (
@@ -92,7 +95,7 @@ function DoctorsPanel() {
             <DoctorRow key={d.id} doctor={d} />
           ))}
           <a className={styles.modalHelperLink} href="/dashboard/team">
-            Para invitar nuevos doctores ve a Equipo →
+            {t("agenda.resourcesModal.inviteNewDoctors")}
           </a>
         </>
       )}
@@ -101,6 +104,7 @@ function DoctorsPanel() {
 }
 
 function DoctorRow({ doctor }: { doctor: DoctorColumnDTO }) {
+  const t = useT();
   const { dispatch } = useAgenda();
   const router = useRouter();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -113,14 +117,14 @@ function DoctorRow({ doctor }: { doctor: DoctorColumnDTO }) {
     dispatch({ type: "UPSERT_DOCTOR", doctor: optimistic });
     try {
       await updateDoctor(doctor.id, { color: nextColor });
-      toast.success("Color actualizado");
+      toast.success(t("agenda.resourcesModal.colorUpdated"));
       router.refresh();
     } catch (err) {
       dispatch({ type: "UPSERT_DOCTOR", doctor: original });
       const reason =
         (err as { reason?: string; error?: string })?.reason ??
         (err as { error?: string })?.error ??
-        "No se pudo guardar";
+        t("agenda.resourcesModal.couldNotSave");
       toast.error(reason);
     }
   }
@@ -142,7 +146,7 @@ function DoctorRow({ doctor }: { doctor: DoctorColumnDTO }) {
       const reason =
         (err as { reason?: string; error?: string })?.reason ??
         (err as { error?: string })?.error ??
-        "No se pudo guardar";
+        t("agenda.resourcesModal.couldNotSave");
       toast.error(reason);
     } finally {
       setSavingActive(false);
@@ -174,7 +178,7 @@ function DoctorRow({ doctor }: { doctor: DoctorColumnDTO }) {
           onClick={() => setPickerOpen((v) => !v)}
           role="button"
           tabIndex={0}
-          aria-label="Cambiar color"
+          aria-label={t("agenda.resourcesModal.changeColor")}
         />
         {pickerOpen && (
           <div className={styles.modalSwatchPicker}>
@@ -206,9 +210,9 @@ function DoctorRow({ doctor }: { doctor: DoctorColumnDTO }) {
         onClick={() => void toggleActive()}
         role="switch"
         aria-checked={doctor.activeInAgenda}
-        aria-label={doctor.activeInAgenda ? "Quitar de la agenda" : "Mostrar en la agenda"}
+        aria-label={doctor.activeInAgenda ? t("agenda.resourcesModal.removeFromAgenda") : t("agenda.resourcesModal.showInAgenda")}
         disabled={savingActive}
-        title={doctor.activeInAgenda ? "Activo en agenda" : "Inactivo en agenda"}
+        title={doctor.activeInAgenda ? t("agenda.resourcesModal.activeInAgenda") : t("agenda.resourcesModal.inactiveInAgenda")}
       >
         <span className={styles.modalToggleKnob} />
       </button>

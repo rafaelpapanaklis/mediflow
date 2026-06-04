@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useRef } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { useAgenda } from "./agenda-provider";
+import { useT } from "@/i18n/i18n-provider";
 import { AgendaTimeAxis } from "./agenda-time-axis";
 import { AgendaAppointmentCard } from "./agenda-appointment-card";
 import { slotIndexToUtc, todayInTz } from "@/lib/agenda/time-utils";
@@ -14,12 +15,20 @@ import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 import type { DroppableData } from "@/lib/agenda/drag-utils";
 import styles from "./agenda.module.css";
 
-const WEEKDAYS_ES = ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"];
+const WEEKDAY_KEYS = [
+  "agenda.weekView.dowMon",
+  "agenda.weekView.dowTue",
+  "agenda.weekView.dowWed",
+  "agenda.weekView.dowThu",
+  "agenda.weekView.dowFri",
+  "agenda.weekView.dowSat",
+  "agenda.weekView.dowSun",
+];
 
 interface WeekDay {
   iso: string;
   day: number;
-  dow: string;
+  dowKey: string;
 }
 
 function pad(n: number): string {
@@ -37,7 +46,7 @@ function buildWeekDays(refISO: string): WeekDay[] {
     out.push({
       iso: `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`,
       day: dt.getUTCDate(),
-      dow: WEEKDAYS_ES[i]!,
+      dowKey: WEEKDAY_KEYS[i]!,
     });
   }
   return out;
@@ -45,6 +54,7 @@ function buildWeekDays(refISO: string): WeekDay[] {
 
 export function AgendaWeekView() {
   const { state, setDay, setViewMode } = useAgenda();
+  const t = useT();
 
   const days = useMemo(() => buildWeekDays(state.dayISO), [state.dayISO]);
   const today = todayInTz(state.timezone);
@@ -85,10 +95,10 @@ export function AgendaWeekView() {
                 type="button"
                 className={classes}
                 onClick={() => jumpToDay(d.iso)}
-                aria-label={`Abrir vista día ${d.iso}`}
-                title={`Ver el día ${d.iso} en vista detallada`}
+                aria-label={t("agenda.weekView.openDayAria", { date: d.iso })}
+                title={t("agenda.weekView.openDayTitle", { date: d.iso })}
               >
-                <div className={styles.weekHeaderDow}>{d.dow}</div>
+                <div className={styles.weekHeaderDow}>{t(d.dowKey)}</div>
                 <div className={styles.weekHeaderDay}>{d.day}</div>
               </button>
             );
@@ -118,6 +128,7 @@ interface WeekDayColumnProps {
 
 function WeekDayColumn({ day, isToday, slotsTotal }: WeekDayColumnProps) {
   const { state, setDay } = useAgenda();
+  const t = useT();
   const { open: openNewAppointment } = useNewAppointmentDialog();
   const colRef = useRef<HTMLDivElement | null>(null);
 
@@ -212,7 +223,7 @@ function WeekDayColumn({ day, isToday, slotsTotal }: WeekDayColumnProps) {
       }}
       onClick={handleClick}
       role="grid"
-      aria-label={`Día ${day.iso}`}
+      aria-label={t("agenda.weekView.dayColAria", { date: day.iso })}
     >
       {lanedAppts.map(({ appt, lane, laneCount }) => (
         <AgendaAppointmentCard

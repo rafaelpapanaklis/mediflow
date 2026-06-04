@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
+import { useT } from "@/i18n/i18n-provider";
 import { Video, Footprints, AlertTriangle, Check, ArrowRight } from "lucide-react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
@@ -64,6 +65,7 @@ export function AgendaAppointmentCard({
   resourceColor,
 }: Props) {
   const { state, selectAppointment, dispatch } = useAgenda();
+  const t = useT();
   const [pendingNext, setPendingNext] = useState(false);
 
   const config = { timezone, slotMinutes, dayStart, dayEnd: 24 };
@@ -171,7 +173,7 @@ export function AgendaAppointmentCard({
   const needsValidation =
     appointment.requiresValidation && appointment.status === "SCHEDULED";
   const nextStep = needsValidation
-    ? { status: "CONFIRMED" as AppointmentStatus, label: "Aprobar" }
+    ? { status: "CONFIRMED" as AppointmentStatus, label: t("agenda.apptCard.approve") }
     : nextLogicalStatus(appointment.status);
 
   async function advanceStatus() {
@@ -190,7 +192,7 @@ export function AgendaAppointmentCard({
         // (No tenemos REPLACE_APPOINTMENT con el shape completo aquí.)
       } catch (err) {
         dispatch({ type: "ROLLBACK_STATUS", original });
-        toast.error(err instanceof Error ? err.message : "No se pudo aprobar");
+        toast.error(err instanceof Error ? err.message : t("agenda.apptCard.approveFailed"));
       } finally {
         setPendingNext(false);
       }
@@ -206,7 +208,7 @@ export function AgendaAppointmentCard({
       const reason =
         (err as { reason?: string; error?: string })?.reason ??
         (err as { error?: string })?.error ??
-        "No se pudo cambiar";
+        t("agenda.apptCard.statusChangeFailed");
       toast.error(reason);
     } finally {
       setPendingNext(false);
@@ -229,7 +231,7 @@ export function AgendaAppointmentCard({
     ? doctorInitials(appointment.doctor.shortName ?? "")
     : null;
 
-  const treatment = appointment.reason ?? "Consulta";
+  const treatment = appointment.reason ?? t("agenda.apptCard.consultationFallback");
 
   // Cuando la columna es "resource" y conocemos el color del Resource,
   // exponemos un CSS var adicional para que el border-left herede ese tono.
@@ -269,7 +271,10 @@ export function AgendaAppointmentCard({
           selectAppointment(appointment.id);
         }
       }}
-      aria-label={`Cita: ${appointment.patient.name} a las ${formatTimeInTz(appointment.startsAt, timezone)}`}
+      aria-label={t("agenda.apptCard.appointmentAria", {
+        name: appointment.patient.name,
+        time: formatTimeInTz(appointment.startsAt, timezone),
+      })}
       aria-selected={isSelected}
       {...listeners}
       {...attributes}
@@ -290,8 +295,14 @@ export function AgendaAppointmentCard({
             void advanceStatus();
           }}
           disabled={pendingNext}
-          title={`${nextStep.label} (${appointment.patient.name})`}
-          aria-label={`${nextStep.label} cita de ${appointment.patient.name}`}
+          title={t("agenda.apptCard.nextStepTitle", {
+            label: nextStep.label,
+            name: appointment.patient.name,
+          })}
+          aria-label={t("agenda.apptCard.nextStepAria", {
+            label: nextStep.label,
+            name: appointment.patient.name,
+          })}
         >
           {pendingNext ? (
             <span aria-hidden>…</span>

@@ -21,6 +21,7 @@ import {
   LogOut,
   type LucideIcon,
 } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 import { useAgenda } from "./agenda-provider";
 import { formatSlotTime } from "@/lib/agenda/time-utils";
 import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
@@ -44,21 +45,22 @@ import styles from "./agenda.module.css";
 
 interface ActionDef {
   status: AppointmentStatus;
-  label: string;
+  /** Translation key resolved via t() at render time. */
+  labelKey: string;
   icon: LucideIcon;
   variant?: "primary" | "danger" | undefined;
 }
 
 const STATUS_ACTIONS: Record<AppointmentStatus, ActionDef> = {
-  SCHEDULED:    { status: "SCHEDULED",    label: "Reagendar",       icon: Calendar },
-  CONFIRMED:    { status: "CONFIRMED",    label: "Confirmar",       icon: CheckCircle2 },
-  CHECKED_IN:   { status: "CHECKED_IN",   label: "Check-in",        icon: LogIn },
-  IN_CHAIR:     { status: "IN_CHAIR",     label: "Pasar a sillón",  icon: Armchair },
-  IN_PROGRESS:  { status: "IN_PROGRESS",  label: "Iniciar consulta", icon: Play, variant: "primary" },
-  COMPLETED:    { status: "COMPLETED",    label: "Marcar completada", icon: CheckCircle2, variant: "primary" },
-  CHECKED_OUT:  { status: "CHECKED_OUT",  label: "Marcar checkout", icon: LogOut },
-  CANCELLED:    { status: "CANCELLED",    label: "Cancelar",        icon: X, variant: "danger" },
-  NO_SHOW:      { status: "NO_SHOW",      label: "Marcar no-show",  icon: AlertTriangle, variant: "danger" },
+  SCHEDULED:    { status: "SCHEDULED",    labelKey: "agenda.detailPanel.actionReschedule",     icon: Calendar },
+  CONFIRMED:    { status: "CONFIRMED",    labelKey: "agenda.detailPanel.actionConfirm",        icon: CheckCircle2 },
+  CHECKED_IN:   { status: "CHECKED_IN",   labelKey: "agenda.detailPanel.actionCheckIn",        icon: LogIn },
+  IN_CHAIR:     { status: "IN_CHAIR",     labelKey: "agenda.detailPanel.actionToChair",        icon: Armchair },
+  IN_PROGRESS:  { status: "IN_PROGRESS",  labelKey: "agenda.detailPanel.actionStartConsult",   icon: Play, variant: "primary" },
+  COMPLETED:    { status: "COMPLETED",    labelKey: "agenda.detailPanel.actionMarkCompleted",  icon: CheckCircle2, variant: "primary" },
+  CHECKED_OUT:  { status: "CHECKED_OUT",  labelKey: "agenda.detailPanel.actionMarkCheckout",   icon: LogOut },
+  CANCELLED:    { status: "CANCELLED",    labelKey: "agenda.detailPanel.actionCancel",         icon: X, variant: "danger" },
+  NO_SHOW:      { status: "NO_SHOW",      labelKey: "agenda.detailPanel.actionMarkNoShow",     icon: AlertTriangle, variant: "danger" },
 };
 
 const STATUS_COLOR: Record<AppointmentStatus, string> = {
@@ -81,6 +83,7 @@ function patientInitials(name: string): string {
 }
 
 export function AgendaDetailPanel() {
+  const t = useT();
   const { state, selectAppointment, dispatch } = useAgenda();
   const router = useRouter();
   const { open: openNewAppointment } = useNewAppointmentDialog();
@@ -99,9 +102,9 @@ export function AgendaDetailPanel() {
 
   if (!appt) {
     return (
-      <aside className={styles.detailPanel} aria-label="Detalle de cita">
+      <aside className={styles.detailPanel} aria-label={t("agenda.detailPanel.ariaLabel")}>
         <div className={styles.detailEmpty}>
-          <span>Selecciona una cita para ver su detalle</span>
+          <span>{t("agenda.detailPanel.emptyState")}</span>
         </div>
       </aside>
     );
@@ -128,14 +131,14 @@ export function AgendaDetailPanel() {
   const resourceLabel = resource
     ? resource.name
     : appt.isTeleconsult
-    ? "Teleconsulta"
+    ? t("agenda.detailPanel.teleconsult")
     : "—";
 
   const mode = appt.isTeleconsult
-    ? "Teleconsulta"
+    ? t("agenda.detailPanel.teleconsult")
     : appt.isWalkIn
-    ? "Walk-in"
-    : "Presencial";
+    ? t("agenda.detailPanel.walkIn")
+    : t("agenda.detailPanel.inPerson");
 
   /**
    * Cambia el status del appointment optimistically + revalidate via
@@ -149,7 +152,7 @@ export function AgendaDetailPanel() {
     if (appt.status === target) {
       // Antes esto era un early return silente que el usuario veía como
       // "el botón no hace nada". Ahora damos feedback claro.
-      toast(`La cita ya está en estado ${target}`);
+      toast(t("agenda.detailPanel.alreadyInStatus", { status: target }));
       return false;
     }
 
@@ -162,14 +165,14 @@ export function AgendaDetailPanel() {
       startTransition(() => {
         dispatch({ type: "REPLACE_APPOINTMENT", appointment: updated });
       });
-      toast.success("Estado actualizado");
+      toast.success(t("agenda.detailPanel.statusUpdated"));
       return true;
     } catch (err) {
       dispatch({ type: "ROLLBACK_STATUS", original });
       // ApiError viene como { status, error, reason } desde mutations.ts.
       // Native Error tiene .message. Fetch reject puede ser TypeError.
       const e = err as { status?: number; reason?: string; error?: string; message?: string };
-      const detail = e?.reason ?? e?.error ?? e?.message ?? "No se pudo cambiar el estado";
+      const detail = e?.reason ?? e?.error ?? e?.message ?? t("agenda.detailPanel.statusChangeError");
       const prefix = e?.status ? `[${e.status}] ` : "";
       toast.error(`${prefix}${detail}`);
       return false;
@@ -189,11 +192,11 @@ export function AgendaDetailPanel() {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? "No se pudo enviar WhatsApp");
+        throw new Error(body.error ?? t("agenda.detailPanel.whatsappError"));
       }
-      toast.success("Recordatorio enviado");
+      toast.success(t("agenda.detailPanel.reminderSent"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo enviar WhatsApp");
+      toast.error(err instanceof Error ? err.message : t("agenda.detailPanel.whatsappError"));
     } finally {
       setWaSending(false);
     }
@@ -245,7 +248,7 @@ export function AgendaDetailPanel() {
   return (
     <aside
       className={styles.detailPanel}
-      aria-label="Detalle de cita"
+      aria-label={t("agenda.detailPanel.ariaLabel")}
       style={{ "--mf-status-color": statusColor } as React.CSSProperties}
     >
       <div className={styles.detailHeader}>
@@ -253,7 +256,7 @@ export function AgendaDetailPanel() {
           type="button"
           className={styles.detailClose}
           onClick={() => selectAppointment(null)}
-          aria-label="Cerrar detalle"
+          aria-label={t("agenda.detailPanel.closeAriaLabel")}
         >
           <X size={14} />
         </button>
@@ -264,7 +267,7 @@ export function AgendaDetailPanel() {
           <div>
             <div className={styles.detailName}>{appt.patient.name}</div>
             <div className={styles.detailSub}>
-              {appt.requiresValidation ? "Pendiente de validación" : "Paciente"}
+              {appt.requiresValidation ? t("agenda.detailPanel.pendingValidation") : t("agenda.detailPanel.patient")}
             </div>
           </div>
         </div>
@@ -281,10 +284,10 @@ export function AgendaDetailPanel() {
       </div>
 
       <div className={styles.detailSection}>
-        <div className={styles.detailSectionTitle}>Información</div>
+        <div className={styles.detailSectionTitle}>{t("agenda.detailPanel.sectionInfo")}</div>
         {appt.doctor && (
           <div className={styles.detailRow}>
-            <span className={styles.detailRowLabel}>Doctor</span>
+            <span className={styles.detailRowLabel}>{t("agenda.detailPanel.labelDoctor")}</span>
             <span className={styles.detailRowValue}>
               <span
                 className={styles.detailDocAvatar}
@@ -298,21 +301,21 @@ export function AgendaDetailPanel() {
           </div>
         )}
         <div className={styles.detailRow}>
-          <span className={styles.detailRowLabel}>Tratamiento</span>
-          <span className={styles.detailRowValue}>{appt.reason ?? "Consulta"}</span>
+          <span className={styles.detailRowLabel}>{t("agenda.detailPanel.labelTreatment")}</span>
+          <span className={styles.detailRowValue}>{appt.reason ?? t("agenda.detailPanel.consultDefault")}</span>
         </div>
         <div className={styles.detailRow}>
-          <span className={styles.detailRowLabel}>{resource ? RESOURCE_KIND_LABELS[resource.kind] : "Recurso"}</span>
+          <span className={styles.detailRowLabel}>{resource ? RESOURCE_KIND_LABELS[resource.kind] : t("agenda.detailPanel.labelResource")}</span>
           <span className={styles.detailRowValue}>{resourceLabel}</span>
         </div>
         <div className={styles.detailRow}>
-          <span className={styles.detailRowLabel}>Modo</span>
+          <span className={styles.detailRowLabel}>{t("agenda.detailPanel.labelMode")}</span>
           <span className={styles.detailRowValue}>{mode}</span>
         </div>
       </div>
 
       <div className={styles.detailSection}>
-        <div className={styles.detailSectionTitle}>Estado</div>
+        <div className={styles.detailSectionTitle}>{t("agenda.detailPanel.sectionStatus")}</div>
       </div>
       <StatusPipeline
         appt={appt}
@@ -323,7 +326,7 @@ export function AgendaDetailPanel() {
       {appt.requiresValidation && appt.overrideReason && (
         <div className={styles.detailAlerts}>
           <div className={styles.detailAlertsTitle}>
-            <AlertTriangle size={12} aria-hidden /> Validación pendiente
+            <AlertTriangle size={12} aria-hidden /> {t("agenda.detailPanel.validationPending")}
           </div>
           <div className={styles.detailAlertsContent}>{appt.overrideReason}</div>
         </div>
@@ -333,6 +336,7 @@ export function AgendaDetailPanel() {
         {/* Acciones de transición de status (filtradas por matriz). */}
         {primaryActions.map((target) => {
           const def = STATUS_ACTIONS[target];
+          const label = t(def.labelKey);
           const Icon = def.icon;
           const isPrimary = def.variant === "primary";
           // Cuando se inicia consulta (IN_PROGRESS), navegamos al
@@ -354,10 +358,10 @@ export function AgendaDetailPanel() {
               className={`${styles.detailAction} ${isPrimary ? styles.primary : ""}`}
               onClick={onClickAction}
               disabled={pendingStatus !== null}
-              title={def.label}
+              title={label}
             >
               <Icon size={12} aria-hidden />
-              {pendingStatus === target ? "…" : def.label}
+              {pendingStatus === target ? "…" : label}
             </button>
           );
         })}
@@ -366,18 +370,18 @@ export function AgendaDetailPanel() {
           type="button"
           className={styles.detailAction}
           onClick={() => router.push(`/dashboard/patients/${appt.patient.id}`)}
-          title="Abrir expediente del paciente"
+          title={t("agenda.detailPanel.recordTitle")}
         >
-          <FileText size={12} aria-hidden /> Expediente
+          <FileText size={12} aria-hidden /> {t("agenda.detailPanel.record")}
         </button>
         {!isTerminal && (
           <button
             type="button"
             className={styles.detailAction}
             onClick={(e) => { e.stopPropagation(); setEditOpen(true); }}
-            title="Editar fecha, doctor, sillón, motivo"
+            title={t("agenda.detailPanel.editTitle")}
           >
-            <Pencil size={12} aria-hidden /> Editar
+            <Pencil size={12} aria-hidden /> {t("common.edit")}
           </button>
         )}
         <button
@@ -387,16 +391,16 @@ export function AgendaDetailPanel() {
           disabled={waSending}
         >
           <MessageCircle size={12} aria-hidden />
-          {waSending ? "Enviando…" : "WhatsApp"}
+          {waSending ? t("agenda.detailPanel.sending") : "WhatsApp"}
         </button>
         {(appt.status === "COMPLETED" || appt.status === "CHECKED_OUT") && (
           <button
             type="button"
             className={styles.detailAction}
             onClick={() => router.push(`/dashboard/patients/${appt.patient.id}?tab=facturacion&appointment=${appt.id}`)}
-            title="Cobrar / facturar la cita"
+            title={t("agenda.detailPanel.chargeTitle")}
           >
-            <DollarSign size={12} aria-hidden /> Cobrar
+            <DollarSign size={12} aria-hidden /> {t("agenda.detailPanel.charge")}
           </button>
         )}
         {isTerminal && (
@@ -404,14 +408,15 @@ export function AgendaDetailPanel() {
             type="button"
             className={`${styles.detailAction} ${styles.primary}`}
             onClick={(e) => { e.stopPropagation(); handleReschedule(); }}
-            title="Crear nueva cita pre-poblada con los datos actuales"
+            title={t("agenda.detailPanel.rescheduleTitle")}
           >
-            <Calendar size={12} aria-hidden /> Reagendar
+            <Calendar size={12} aria-hidden /> {t("agenda.detailPanel.actionReschedule")}
           </button>
         )}
         {/* Acciones destructivas al final. */}
         {dangerActions.map((target) => {
           const def = STATUS_ACTIONS[target];
+          const label = t(def.labelKey);
           const Icon = def.icon;
           return (
             <button
@@ -423,10 +428,10 @@ export function AgendaDetailPanel() {
                 void changeStatus(target);
               }}
               disabled={pendingStatus !== null}
-              title={def.label}
+              title={label}
             >
               <Icon size={12} aria-hidden />
-              {pendingStatus === target ? "…" : def.label}
+              {pendingStatus === target ? "…" : label}
             </button>
           );
         })}
@@ -450,6 +455,7 @@ interface StatusPipelineProps {
 }
 
 function StatusPipeline({ appt, pendingStatus, onChange }: StatusPipelineProps) {
+  const t = useT();
   const [moreOpen, setMoreOpen] = useState(false);
   const currentIdx = pipelinePosition(appt.status);
   const next = nextLogicalStatus(appt.status);
@@ -497,8 +503,8 @@ function StatusPipeline({ appt, pendingStatus, onChange }: StatusPipelineProps) 
             <button
               type="button"
               className={styles.pipelineMore}
-              aria-label="Más opciones de estado"
-              title="Más opciones"
+              aria-label={t("agenda.detailPanel.moreStatusOptionsAria")}
+              title={t("agenda.detailPanel.moreOptions")}
             >
               <MoreHorizontal size={14} />
             </button>
@@ -509,10 +515,10 @@ function StatusPipeline({ appt, pendingStatus, onChange }: StatusPipelineProps) 
               sideOffset={6}
               className={styles.statusPopover}
             >
-              <div className={styles.statusPopoverTitle}>Estados especiales</div>
+              <div className={styles.statusPopoverTitle}>{t("agenda.detailPanel.specialStatuses")}</div>
               <div className={styles.statusPopoverList}>
                 {offRails.length === 0 ? (
-                  <div className={styles.statusPopoverEmpty}>Sin acciones disponibles</div>
+                  <div className={styles.statusPopoverEmpty}>{t("agenda.detailPanel.noActionsAvailable")}</div>
                 ) : (
                   offRails.map((status) => (
                     <button
@@ -534,7 +540,7 @@ function StatusPipeline({ appt, pendingStatus, onChange }: StatusPipelineProps) 
                       />
                       <span>
                         {status === "SCHEDULED" && (appt.status === "CANCELLED" || appt.status === "NO_SHOW")
-                          ? "Re-abrir cita"
+                          ? t("agenda.detailPanel.reopenAppointment")
                           : STATUS_LABELS[status]}
                       </span>
                     </button>
@@ -547,7 +553,7 @@ function StatusPipeline({ appt, pendingStatus, onChange }: StatusPipelineProps) 
       </div>
       {isOffRails && (
         <div className={styles.pipelineNote}>
-          Estado actual: <strong>{STATUS_LABELS[appt.status]}</strong>
+          {t("agenda.detailPanel.currentStatus")} <strong>{STATUS_LABELS[appt.status]}</strong>
         </div>
       )}
     </div>

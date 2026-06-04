@@ -8,6 +8,7 @@ import { useAgenda } from "./agenda-provider";
 import { patchAppointmentStatus } from "@/lib/agenda/mutations";
 import { offRailsStatuses, STATUS_LABELS } from "@/lib/agenda/status-pipeline";
 import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
+import { useT } from "@/i18n/i18n-provider";
 import styles from "./agenda.module.css";
 
 const STATUS_COLOR: Record<AppointmentStatus, string> = {
@@ -27,6 +28,7 @@ interface Props {
 }
 
 export function AgendaStatusPopover({ appointment }: Props) {
+  const t = useT();
   const { dispatch } = useAgenda();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<AppointmentStatus | null>(null);
@@ -56,7 +58,7 @@ export function AgendaStatusPopover({ appointment }: Props) {
       const reason =
         (err as { reason?: string; error?: string })?.reason ??
         (err as { error?: string })?.error ??
-        "No se pudo cambiar";
+        t("agenda.statusPopover.couldNotChange");
       toast.error(reason);
     } finally {
       setPending(null);
@@ -80,8 +82,8 @@ export function AgendaStatusPopover({ appointment }: Props) {
             // Evitar que dnd-kit capture este pointerdown como inicio de drag
             e.stopPropagation();
           }}
-          aria-label="Más acciones de estado"
-          title="Más acciones"
+          aria-label={t("agenda.statusPopover.moreStatusActions")}
+          title={t("agenda.statusPopover.moreActions")}
         >
           <MoreHorizontal size={10} aria-hidden />
         </button>
@@ -93,14 +95,14 @@ export function AgendaStatusPopover({ appointment }: Props) {
           sideOffset={6}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className={styles.statusPopoverTitle}>Estados especiales</div>
+          <div className={styles.statusPopoverTitle}>{t("agenda.statusPopover.specialStatuses")}</div>
           <div className={styles.statusPopoverList}>
             {offRails.map((status) => {
               const isPending = pending === status;
               const label =
                 status === "SCHEDULED" &&
                 (appointment.status === "CANCELLED" || appointment.status === "NO_SHOW")
-                  ? "Re-abrir cita"
+                  ? t("agenda.statusPopover.reopenAppt")
                   : STATUS_LABELS[status];
               return (
                 <button

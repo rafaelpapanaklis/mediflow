@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useAgenda } from "./agenda-provider";
+import { useT } from "@/i18n/i18n-provider";
 import { calendarDayISO, formatTimeInTz } from "@/lib/agenda/date-ranges";
 import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
 import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
@@ -19,16 +20,16 @@ const STATUS_COLOR: Record<AppointmentStatus, string> = {
   NO_SHOW:      "var(--danger)",
 };
 
-const STATUS_LABEL: Record<AppointmentStatus, string> = {
-  SCHEDULED:    "Programada",
-  CONFIRMED:    "Confirmada",
-  CHECKED_IN:   "Llegó",
-  IN_CHAIR:     "En sillón",
-  IN_PROGRESS:  "En curso",
-  COMPLETED:    "Completada",
-  CHECKED_OUT:  "Salió",
-  CANCELLED:    "Cancelada",
-  NO_SHOW:      "No asistió",
+const STATUS_LABEL_KEY: Record<AppointmentStatus, string> = {
+  SCHEDULED:    "agenda.listView.statusScheduled",
+  CONFIRMED:    "agenda.listView.statusConfirmed",
+  CHECKED_IN:   "agenda.listView.statusCheckedIn",
+  IN_CHAIR:     "agenda.listView.statusInChair",
+  IN_PROGRESS:  "agenda.listView.statusInProgress",
+  COMPLETED:    "agenda.listView.statusCompleted",
+  CHECKED_OUT:  "agenda.listView.statusCheckedOut",
+  CANCELLED:    "agenda.listView.statusCancelled",
+  NO_SHOW:      "agenda.listView.statusNoShow",
 };
 
 function formatDayHeading(dayISO: string, timezone: string): string {
@@ -44,6 +45,7 @@ function formatDayHeading(dayISO: string, timezone: string): string {
 
 export function AgendaListView() {
   const { state } = useAgenda();
+  const t = useT();
 
   // Agrupamos por día (en clinic timezone) y ordenamos cronológicamente.
   // Excluimos CANCELLED por default (mismo criterio que vista Mes); el
@@ -70,7 +72,7 @@ export function AgendaListView() {
   if (groups.length === 0) {
     return (
       <div className={styles.listView}>
-        <div className={styles.listEmpty}>No hay citas en el rango seleccionado.</div>
+        <div className={styles.listEmpty}>{t("agenda.listView.empty")}</div>
       </div>
     );
   }
@@ -82,7 +84,7 @@ export function AgendaListView() {
           <div className={styles.listGroupHeader}>
             {formatDayHeading(g.dayISO, state.timezone)}
             <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.7 }}>
-              · {g.appts.length} cita{g.appts.length === 1 ? "" : "s"}
+              · {t("agenda.listView.apptCount", { count: g.appts.length })}
             </span>
           </div>
           {g.appts.map((a) => (
@@ -96,6 +98,7 @@ export function AgendaListView() {
 
 function ListRow({ appointment }: { appointment: AgendaAppointmentDTO }) {
   const { state, selectAppointment } = useAgenda();
+  const t = useT();
   const start = formatTimeInTz(appointment.startsAt, state.timezone);
   const end = appointment.endsAt
     ? formatTimeInTz(appointment.endsAt, state.timezone)
@@ -129,7 +132,7 @@ function ListRow({ appointment }: { appointment: AgendaAppointmentDTO }) {
     >
       <div>
         <div className={styles.listItemTime}>{start}</div>
-        {end && <div className={styles.listItemTimeRange}>hasta {end}</div>}
+        {end && <div className={styles.listItemTimeRange}>{t("agenda.listView.until", { end })}</div>}
       </div>
       <div className={styles.listItemMid}>
         <div className={styles.listItemName}>{appointment.patient.name}</div>
@@ -143,11 +146,11 @@ function ListRow({ appointment }: { appointment: AgendaAppointmentDTO }) {
               <span>·</span>
             </>
           )}
-          <span>{appointment.reason ?? "Consulta"}</span>
+          <span>{appointment.reason ?? t("agenda.listView.consultation")}</span>
         </div>
       </div>
       <span className={styles.listItemBadge}>
-        {STATUS_LABEL[appointment.status]}
+        {t(STATUS_LABEL_KEY[appointment.status])}
       </span>
     </div>
   );

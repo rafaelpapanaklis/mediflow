@@ -1,9 +1,11 @@
 "use client";
 
 import { Armchair, Plus } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 import { useAgenda } from "./agenda-provider";
 
 export function AgendaEmptyResources() {
+  const t = useT();
   const { openModal } = useAgenda();
 
   return (
@@ -43,7 +45,7 @@ export function AgendaEmptyResources() {
             marginBottom: 6,
           }}
         >
-          Configura tus sillones para empezar
+          {t("agenda.emptyResources.title")}
         </h2>
         <p
           style={{
@@ -53,8 +55,7 @@ export function AgendaEmptyResources() {
             maxWidth: 380,
           }}
         >
-          Crea sillones, salas o equipos para organizar tu agenda por recurso.
-          Cada uno aparecerá como una columna en la vista del día.
+          {t("agenda.emptyResources.description")}
         </p>
       </div>
       <button
@@ -76,7 +77,7 @@ export function AgendaEmptyResources() {
           boxShadow: "0 0 0 1px rgba(124,58,237,0.5), 0 4px 16px -4px rgba(124,58,237,0.4)",
         }}
       >
-        <Plus size={14} aria-hidden /> Crear primer sillón
+        <Plus size={14} aria-hidden /> {t("agenda.emptyResources.createFirstChair")}
       </button>
     </div>
   );

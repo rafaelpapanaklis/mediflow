@@ -752,5 +752,343 @@
       "endLabel": "Terminar consulta",
       "endAria": "Terminar consulta"
     }
+  },
+  "agenda": {
+    "pageClient": {
+      "waitlistMarkFailed": "Cita creada, pero no se pudo marcar la espera",
+      "overlapConflict": "Conflicto: ya hay una cita en ese horario",
+      "doctorFallback": "Doctor",
+      "rescheduleSuccess": "Cita reprogramada",
+      "rescheduleFailed": "No se pudo reprogramar la cita",
+      "dayAgendaTitle": "Agenda del día",
+      "professionalFallback": "Profesional"
+    },
+    "apptCard": {
+      "approve": "Aprobar",
+      "approveFailed": "No se pudo aprobar",
+      "statusChangeFailed": "No se pudo cambiar",
+      "consultationFallback": "Consulta",
+      "appointmentAria": "Cita: {name} a las {time}",
+      "nextStepTitle": "{label} ({name})",
+      "nextStepAria": "{label} cita de {name}"
+    },
+    "column": {
+      "columnAriaLabel": "Columna {title}"
+    },
+    "dayNav": {
+      "today": "Hoy",
+      "tomorrow": "Mañana",
+      "yesterday": "Ayer",
+      "prevDay": "Día anterior",
+      "nextDay": "Día siguiente"
+    },
+    "detailPanel": {
+      "ariaLabel": "Detalle de cita",
+      "emptyState": "Selecciona una cita para ver su detalle",
+      "closeAriaLabel": "Cerrar detalle",
+      "pendingValidation": "Pendiente de validación",
+      "patient": "Paciente",
+      "teleconsult": "Teleconsulta",
+      "walkIn": "Walk-in",
+      "inPerson": "Presencial",
+      "alreadyInStatus": "La cita ya está en estado {status}",
+      "statusUpdated": "Estado actualizado",
+      "statusChangeError": "No se pudo cambiar el estado",
+      "whatsappError": "No se pudo enviar WhatsApp",
+      "reminderSent": "Recordatorio enviado",
+      "sectionInfo": "Información",
+      "labelDoctor": "Doctor",
+      "labelTreatment": "Tratamiento",
+      "consultDefault": "Consulta",
+      "labelResource": "Recurso",
+      "labelMode": "Modo",
+      "sectionStatus": "Estado",
+      "validationPending": "Validación pendiente",
+      "record": "Expediente",
+      "recordTitle": "Abrir expediente del paciente",
+      "editTitle": "Editar fecha, doctor, sillón, motivo",
+      "sending": "Enviando…",
+      "charge": "Cobrar",
+      "chargeTitle": "Cobrar / facturar la cita",
+      "rescheduleTitle": "Crear nueva cita pre-poblada con los datos actuales",
+      "actionReschedule": "Reagendar",
+      "actionConfirm": "Confirmar",
+      "actionCheckIn": "Check-in",
+      "actionToChair": "Pasar a sillón",
+      "actionStartConsult": "Iniciar consulta",
+      "actionMarkCompleted": "Marcar completada",
+      "actionMarkCheckout": "Marcar checkout",
+      "actionCancel": "Cancelar",
+      "actionMarkNoShow": "Marcar no-show",
+      "moreStatusOptionsAria": "Más opciones de estado",
+      "moreOptions": "Más opciones",
+      "specialStatuses": "Estados especiales",
+      "noActionsAvailable": "Sin acciones disponibles",
+      "reopenAppointment": "Re-abrir cita",
+      "currentStatus": "Estado actual:"
+    },
+    "editApptModal": {
+      "title": "Editar cita",
+      "invalidDateTime": "Fecha u hora inválida",
+      "selectDoctor": "Seleccioná un doctor",
+      "apptUpdated": "Cita actualizada",
+      "updateFailed": "No se pudo actualizar",
+      "startTime": "Hora inicio",
+      "durationMin": "Duración (min)",
+      "minutesOption": {
+        "one": "{count} min",
+        "other": "{count} min"
+      },
+      "doctor": "Doctor",
+      "selectOption": "— Seleccionar —",
+      "careLocation": "Lugar de atención",
+      "noLocationAssigned": "Sin lugar asignado",
+      "treatmentReason": "Tratamiento / motivo",
+      "reasonPlaceholder": "Ej. Limpieza, Endodoncia, Consulta general…",
+      "conflictLabel": "Conflicto:",
+      "overrideReasonLabel": "Razón para sobrescribir (solo ADMIN)",
+      "overrideReasonPlaceholder": "Ej. Doble cita autorizada por X",
+      "overrideAndSave": "Sobrescribir y guardar"
+    },
+    "emptyDay": {
+      "title": "No hay profesionales activos",
+      "description": "Agrega un profesional desde Equipo o crea una cita para comenzar.",
+      "createFirstAppt": "Crear primera cita"
+    },
+    "emptyResources": {
+      "title": "Configura tus sillones para empezar",
+      "description": "Crea sillones, salas o equipos para organizar tu agenda por recurso. Cada uno aparecerá como una columna en la vista del día.",
+      "createFirstChair": "Crear primer sillón"
+    },
+    "filterPills": {
+      "statusScheduled": "Programada",
+      "statusConfirmed": "Confirmada",
+      "statusCheckedIn": "Llegó",
+      "statusInChair": "En sillón",
+      "statusInProgress": "En curso",
+      "statusCompleted": "Completada",
+      "statusCheckedOut": "Salió",
+      "statusNoShow": "No asistió",
+      "statusCancelled": "Cancelada",
+      "doctors": "Doctores",
+      "noActiveDoctors": "Sin doctores activos",
+      "chairs": "Sillones",
+      "noChairsRegistered": "Sin sillones registrados",
+      "status": "Estado",
+      "clearAllTitle": "Quitar todos los filtros"
+    },
+    "listView": {
+      "empty": "No hay citas en el rango seleccionado.",
+      "until": "hasta {end}",
+      "consultation": "Consulta",
+      "statusScheduled": "Programada",
+      "statusConfirmed": "Confirmada",
+      "statusCheckedIn": "Llegó",
+      "statusInChair": "En sillón",
+      "statusInProgress": "En curso",
+      "statusCompleted": "Completada",
+      "statusCheckedOut": "Salió",
+      "statusCancelled": "Cancelada",
+      "statusNoShow": "No asistió",
+      "apptCount": {
+        "one": "{count} cita",
+        "other": "{count} citas"
+      }
+    },
+    "monthView": {
+      "dowMon": "LUN",
+      "dowTue": "MAR",
+      "dowWed": "MIÉ",
+      "dowThu": "JUE",
+      "dowFri": "VIE",
+      "dowSat": "SÁB",
+      "dowSun": "DOM",
+      "apptCount": {
+        "one": "{count} cita",
+        "other": "{count} citas"
+      },
+      "dayCellAria": {
+        "one": "Abrir vista día {iso}, {count} cita",
+        "other": "Abrir vista día {iso}, {count} citas"
+      },
+      "dayCellTitle": "Ver el día {iso} en vista detallada",
+      "viewApptsTitle": {
+        "one": "Ver {count} cita del {iso}",
+        "other": "Ver {count} citas del {iso}"
+      },
+      "viewApptsAria": {
+        "one": "Ver la {count} cita del día {iso}",
+        "other": "Ver las {count} citas del día {iso}"
+      },
+      "moreCount": "+{more} más"
+    },
+    "rescheduleConfirm": {
+      "title": "Confirma la reprogramacion",
+      "doctor": "Doctor",
+      "originalAppt": "Cita original",
+      "rescheduled": "Reprogramada",
+      "newAppt": "Cita nueva",
+      "pending": "Pendiente",
+      "rescheduling": "Reprogramando...",
+      "reschedule": "Reprogramar"
+    },
+    "resourcesModal": {
+      "teamTitle": "Equipo",
+      "resourcesTitle": "Sillones / Salas / Equipo",
+      "teamSubtitle": "Doctores de la clínica que aparecen como columnas en la agenda.",
+      "resourcesSubtitle": "Sillones, salas y equipos disponibles para asignar a citas.",
+      "noDoctors": "No hay doctores en esta clínica.",
+      "inviteFromTeam": "Invítalos desde Equipo →",
+      "inviteNewDoctors": "Para invitar nuevos doctores ve a Equipo →",
+      "colorUpdated": "Color actualizado",
+      "couldNotSave": "No se pudo guardar",
+      "changeColor": "Cambiar color",
+      "removeFromAgenda": "Quitar de la agenda",
+      "showInAgenda": "Mostrar en la agenda",
+      "activeInAgenda": "Activo en agenda",
+      "inactiveInAgenda": "Inactivo en agenda"
+    },
+    "statusPopover": {
+      "couldNotChange": "No se pudo cambiar",
+      "moreStatusActions": "Más acciones de estado",
+      "moreActions": "Más acciones",
+      "specialStatuses": "Estados especiales",
+      "reopenAppt": "Re-abrir cita"
+    },
+    "subToolbar": {
+      "chairs": "Sillones",
+      "doctors": "Doctores",
+      "inWaitingRoom": " en sala",
+      "togglePendingTitle": "Mostrar / colapsar pendientes de validar",
+      "pendingValidationPlural": " pendientes validar",
+      "apptsThisWeek": " citas esta semana",
+      "apptsThisMonth": " citas en el mes",
+      "viewLabel": "Vista",
+      "groupBy": "Agrupar por",
+      "apptsToday": {
+        "one": " cita hoy",
+        "other": " citas hoy"
+      },
+      "pendingValidation": {
+        "one": " pendiente validar",
+        "other": " pendientes validar"
+      },
+      "appts": {
+        "one": " cita",
+        "other": " citas"
+      }
+    },
+    "topbar": {
+      "viewDay": "Día",
+      "viewWeek": "Semana",
+      "viewMonth": "Mes",
+      "viewList": "Lista",
+      "viewTabsLabel": "Vista de agenda",
+      "today": "Hoy",
+      "tomorrow": "Mañana",
+      "yesterday": "Ayer",
+      "prevDay": "Día anterior",
+      "nextDay": "Día siguiente",
+      "searchPlaceholder": "Buscar paciente…",
+      "newAppointment": "Nueva cita"
+    },
+    "validateBanner": {
+      "sectionLabel": "Citas pendientes de validar",
+      "pendingCount": {
+        "one": "cita pendiente de validar",
+        "other": "citas pendientes de validar"
+      },
+      "notifyWhatsApp": "Notificar por WhatsApp",
+      "confirming": "Confirmando…",
+      "approveAll": "✓ Aprobar todas ({count})",
+      "collapse": "Colapsar",
+      "consultationDefault": "Consulta",
+      "reject": "Rechazar",
+      "approve": "Aprobar",
+      "processError": "No se pudo procesar",
+      "batchError": "Error al procesar el batch",
+      "confirmedToast": {
+        "one": "{count} cita confirmada",
+        "other": "{count} citas confirmadas"
+      },
+      "confirmFailedToast": {
+        "one": "{count} cita no se pudo confirmar",
+        "other": "{count} citas no se pudieron confirmar"
+      }
+    },
+    "validateModal": {
+      "title": "Validar citas pendientes",
+      "subtitleEmpty": "No hay citas pendientes de validar.",
+      "subtitleCount": {
+        "one": "{count} cita requiere confirmación.",
+        "other": "{count} citas requieren confirmación."
+      },
+      "allProcessed": "Todas las citas han sido procesadas.",
+      "confirming": "Confirmando…",
+      "confirmAll": "Confirmar todas ({count})",
+      "consultationDefault": "Consulta",
+      "reject": "Rechazar",
+      "confirm": "Confirmar",
+      "processError": "No se pudo procesar",
+      "batchError": "Error al procesar el batch",
+      "confirmedToast": {
+        "one": "{count} cita confirmada",
+        "other": "{count} citas confirmadas"
+      },
+      "confirmFailedToast": {
+        "one": "{count} cita no se pudo confirmar",
+        "other": "{count} citas no se pudieron confirmar"
+      }
+    },
+    "waitlist": {
+      "title": "Lista de espera",
+      "close": "Cerrar lista de espera",
+      "empty": "No hay pacientes en espera.",
+      "loadError": "No se pudo cargar la lista de espera",
+      "defaultReason": "Consulta",
+      "priorityHigh": "Alta",
+      "priorityNormal": "Normal",
+      "priorityLow": "Baja",
+      "priorityTitle": "Prioridad: {priority}",
+      "relToday": "hoy",
+      "relYesterday": "ayer",
+      "relDaysAgo": {
+        "one": "hace {count} día",
+        "other": "hace {count} días"
+      },
+      "relWeeksAgo": {
+        "one": "hace {count} sem",
+        "other": "hace {count} sem"
+      },
+      "relMonthsAgo": {
+        "one": "hace {count} mes",
+        "other": "hace {count} mes"
+      },
+      "schedule": "Agendar",
+      "discard": "Descartar",
+      "scheduledToast": "{name} agendado",
+      "scheduledMarkError": "Cita creada, pero no se pudo marcar la entrada como agendada",
+      "discardConfirm": "¿Descartar a {name} de la lista?",
+      "discardedToast": "Descartado",
+      "discardError": "No se pudo descartar"
+    },
+    "weekView": {
+      "dowMon": "LUN",
+      "dowTue": "MAR",
+      "dowWed": "MIÉ",
+      "dowThu": "JUE",
+      "dowFri": "VIE",
+      "dowSat": "SÁB",
+      "dowSun": "DOM",
+      "openDayAria": "Abrir vista día {date}",
+      "openDayTitle": "Ver el día {date} en vista detallada",
+      "dayColAria": "Día {date}"
+    },
+    "noShowRisk": {
+      "high": "Alto riesgo",
+      "medium": "Riesgo",
+      "probabilityTitle": "Probabilidad de no-show: {pct}%",
+      "ariaLabel": "{label} de no-show: {pct}%"
+    }
   }
 }

@@ -1,20 +1,22 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useT } from "@/i18n/i18n-provider";
 import { useAgenda } from "./agenda-provider";
 import type { AgendaFilters, AppointmentStatus } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
 
-const STATUS_OPTIONS: Array<{ value: AppointmentStatus; label: string }> = [
-  { value: "SCHEDULED",   label: "Programada" },
-  { value: "CONFIRMED",   label: "Confirmada" },
-  { value: "CHECKED_IN",  label: "Llegó" },
-  { value: "IN_CHAIR",    label: "En sillón" },
-  { value: "IN_PROGRESS", label: "En curso" },
-  { value: "COMPLETED",   label: "Completada" },
-  { value: "CHECKED_OUT", label: "Salió" },
-  { value: "NO_SHOW",     label: "No asistió" },
-  { value: "CANCELLED",   label: "Cancelada" },
+// `labelKey` resuelve vía t(...) en el render — nunca en module scope.
+const STATUS_OPTIONS: Array<{ value: AppointmentStatus; labelKey: string }> = [
+  { value: "SCHEDULED",   labelKey: "agenda.filterPills.statusScheduled" },
+  { value: "CONFIRMED",   labelKey: "agenda.filterPills.statusConfirmed" },
+  { value: "CHECKED_IN",  labelKey: "agenda.filterPills.statusCheckedIn" },
+  { value: "IN_CHAIR",    labelKey: "agenda.filterPills.statusInChair" },
+  { value: "IN_PROGRESS", labelKey: "agenda.filterPills.statusInProgress" },
+  { value: "COMPLETED",   labelKey: "agenda.filterPills.statusCompleted" },
+  { value: "CHECKED_OUT", labelKey: "agenda.filterPills.statusCheckedOut" },
+  { value: "NO_SHOW",     labelKey: "agenda.filterPills.statusNoShow" },
+  { value: "CANCELLED",   labelKey: "agenda.filterPills.statusCancelled" },
 ];
 
 interface PillProps {
@@ -65,6 +67,7 @@ function Pill({ label, count, selected, children }: PillProps) {
 }
 
 export function AgendaFilterPills() {
+  const t = useT();
   const { state, setFilters, clearFilters } = useAgenda();
 
   const doctorOptions = state.doctors.filter((d) => d.activeInAgenda);
@@ -85,13 +88,13 @@ export function AgendaFilterPills() {
   return (
     <div className={styles.filtersRow}>
       <Pill
-        label="Doctores"
+        label={t("agenda.filterPills.doctors")}
         count={doctorOptions.length}
         selected={state.filters.doctorIds.length}
       >
         {() =>
           doctorOptions.length === 0 ? (
-            <div className={styles.filterPanelEmpty}>Sin doctores activos</div>
+            <div className={styles.filterPanelEmpty}>{t("agenda.filterPills.noActiveDoctors")}</div>
           ) : (
             <>
               {doctorOptions.map((d) => (
@@ -115,13 +118,13 @@ export function AgendaFilterPills() {
       </Pill>
 
       <Pill
-        label="Sillones"
+        label={t("agenda.filterPills.chairs")}
         count={resourceOptions.length}
         selected={state.filters.resourceIds.length}
       >
         {() =>
           resourceOptions.length === 0 ? (
-            <div className={styles.filterPanelEmpty}>Sin sillones registrados</div>
+            <div className={styles.filterPanelEmpty}>{t("agenda.filterPills.noChairsRegistered")}</div>
           ) : (
             <>
               {resourceOptions.map((r) => (
@@ -145,7 +148,7 @@ export function AgendaFilterPills() {
       </Pill>
 
       <Pill
-        label="Estado"
+        label={t("agenda.filterPills.status")}
         count={STATUS_OPTIONS.length}
         selected={state.filters.statuses.length}
       >
@@ -163,7 +166,7 @@ export function AgendaFilterPills() {
                   checked={state.filters.statuses.includes(s.value)}
                   readOnly
                 />
-                <span>{s.label}</span>
+                <span>{t(s.labelKey)}</span>
               </button>
             ))}
           </>
@@ -175,9 +178,9 @@ export function AgendaFilterPills() {
           type="button"
           className={styles.filterClearBtn}
           onClick={clearFilters}
-          title="Quitar todos los filtros"
+          title={t("agenda.filterPills.clearAllTitle")}
         >
-          Limpiar
+          {t("common.clear")}
         </button>
       )}
     </div>

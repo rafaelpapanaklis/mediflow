@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronLeft, ChevronRight, CalendarPlus, Search } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { useAgenda } from "./agenda-provider";
 import { AgendaFilterPills } from "./agenda-filter-pills";
@@ -9,11 +10,11 @@ import { todayInTz, getTzParts, tzLocalToUtc } from "@/lib/agenda/time-utils";
 import type { AgendaViewMode } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
 
-const VIEW_TABS: Array<{ value: AgendaViewMode; label: string }> = [
-  { value: "day",   label: "Día" },
-  { value: "week",  label: "Semana" },
-  { value: "month", label: "Mes" },
-  { value: "list",  label: "Lista" },
+const VIEW_TABS: Array<{ value: AgendaViewMode; labelKey: string }> = [
+  { value: "day",   labelKey: "agenda.topbar.viewDay" },
+  { value: "week",  labelKey: "agenda.topbar.viewWeek" },
+  { value: "month", labelKey: "agenda.topbar.viewMonth" },
+  { value: "list",  labelKey: "agenda.topbar.viewList" },
 ];
 
 function shiftDay(dayISO: string, timezone: string, deltaDays: number): string {
@@ -23,13 +24,17 @@ function shiftDay(dayISO: string, timezone: string, deltaDays: number): string {
   return `${p.year}-${p.month.toString().padStart(2, "0")}-${p.day.toString().padStart(2, "0")}`;
 }
 
-function formatHumanDate(dayISO: string, timezone: string): string {
+function formatHumanDate(
+  dayISO: string,
+  timezone: string,
+  t: ReturnType<typeof useT>,
+): string {
   const today = todayInTz(timezone);
   const tomorrow = shiftDay(today, timezone, 1);
   const yesterday = shiftDay(today, timezone, -1);
-  if (dayISO === today) return "Hoy";
-  if (dayISO === tomorrow) return "Mañana";
-  if (dayISO === yesterday) return "Ayer";
+  if (dayISO === today) return t("agenda.topbar.today");
+  if (dayISO === tomorrow) return t("agenda.topbar.tomorrow");
+  if (dayISO === yesterday) return t("agenda.topbar.yesterday");
   const utc = tzLocalToUtc(dayISO, 12, 0, timezone);
   return new Intl.DateTimeFormat("es-MX", {
     timeZone: timezone,
@@ -44,6 +49,7 @@ function formatHumanDate(dayISO: string, timezone: string): string {
 }
 
 export function AgendaTopbar() {
+  const t = useT();
   const { state, setDay, setViewMode, setSearchQuery, prefetchView } = useAgenda();
   const { open: openNew } = useNewAppointmentDialog();
 
@@ -63,19 +69,19 @@ export function AgendaTopbar() {
         <span>MediFlow</span>
       </div>
 
-      <div className={styles.viewTabs} role="tablist" aria-label="Vista de agenda">
-        {VIEW_TABS.map((t) => (
+      <div className={styles.viewTabs} role="tablist" aria-label={t("agenda.topbar.viewTabsLabel")}>
+        {VIEW_TABS.map((tab) => (
           <button
-            key={t.value}
+            key={tab.value}
             type="button"
             role="tab"
-            aria-selected={state.viewMode === t.value}
-            className={`${styles.viewTab} ${state.viewMode === t.value ? styles.active : ""}`}
-            onClick={() => setViewMode(t.value)}
-            onMouseEnter={() => state.viewMode !== t.value && prefetchView(t.value)}
-            onFocus={() => state.viewMode !== t.value && prefetchView(t.value)}
+            aria-selected={state.viewMode === tab.value}
+            className={`${styles.viewTab} ${state.viewMode === tab.value ? styles.active : ""}`}
+            onClick={() => setViewMode(tab.value)}
+            onMouseEnter={() => state.viewMode !== tab.value && prefetchView(tab.value)}
+            onFocus={() => state.viewMode !== tab.value && prefetchView(tab.value)}
           >
-            {t.label}
+            {t(tab.labelKey)}
           </button>
         ))}
       </div>
@@ -85,23 +91,23 @@ export function AgendaTopbar() {
           type="button"
           className={styles.dateNavBtn}
           onClick={() => setDay(shiftDay(state.dayISO, state.timezone, -1))}
-          aria-label="Día anterior"
+          aria-label={t("agenda.topbar.prevDay")}
         >
           <ChevronLeft size={14} />
         </button>
-        <span className={styles.dateLabel}>{formatHumanDate(state.dayISO, state.timezone)}</span>
+        <span className={styles.dateLabel}>{formatHumanDate(state.dayISO, state.timezone, t)}</span>
         <button
           type="button"
           className={styles.dateNavBtn}
           onClick={() => setDay(shiftDay(state.dayISO, state.timezone, 1))}
-          aria-label="Día siguiente"
+          aria-label={t("agenda.topbar.nextDay")}
         >
           <ChevronRight size={14} />
         </button>
       </div>
       {!isToday && (
         <button type="button" className={styles.todayBtn} onClick={() => setDay(today)}>
-          Hoy
+          {t("agenda.topbar.today")}
         </button>
       )}
       <DateField
@@ -119,7 +125,7 @@ export function AgendaTopbar() {
         <input
           type="search"
           className={styles.searchBox}
-          placeholder="Buscar paciente…"
+          placeholder={t("agenda.topbar.searchPlaceholder")}
           value={state.searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
@@ -130,7 +136,7 @@ export function AgendaTopbar() {
         onClick={() => openNew({})}
         className={styles.newApptBtn}
       >
-        <CalendarPlus size={13} /> Nueva cita
+        <CalendarPlus size={13} /> {t("agenda.topbar.newAppointment")}
       </button>
     </header>
   );

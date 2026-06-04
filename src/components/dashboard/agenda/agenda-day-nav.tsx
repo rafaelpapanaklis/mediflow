@@ -2,6 +2,8 @@
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { useT } from "@/i18n/i18n-provider";
+import type { TFunction } from "@/i18n/t";
 import { useAgenda } from "./agenda-provider";
 import { todayInTz, getTzParts, tzLocalToUtc } from "@/lib/agenda/time-utils";
 
@@ -12,14 +14,14 @@ function shiftDay(dayISO: string, timezone: string, deltaDays: number): string {
   return `${p.year}-${p.month.toString().padStart(2, "0")}-${p.day.toString().padStart(2, "0")}`;
 }
 
-function formatHumanDate(dayISO: string, timezone: string): string {
+function formatHumanDate(dayISO: string, timezone: string, t: TFunction): string {
   const today = todayInTz(timezone);
   const tomorrow = shiftDay(today, timezone, 1);
   const yesterday = shiftDay(today, timezone, -1);
 
-  if (dayISO === today) return "Hoy";
-  if (dayISO === tomorrow) return "Mañana";
-  if (dayISO === yesterday) return "Ayer";
+  if (dayISO === today) return t("agenda.dayNav.today");
+  if (dayISO === tomorrow) return t("agenda.dayNav.tomorrow");
+  if (dayISO === yesterday) return t("agenda.dayNav.yesterday");
 
   const utc = tzLocalToUtc(dayISO, 12, 0, timezone);
   return new Intl.DateTimeFormat("es-MX", {
@@ -34,6 +36,7 @@ function formatHumanDate(dayISO: string, timezone: string): string {
 }
 
 export function AgendaDayNav() {
+  const t = useT();
   const { state, setDay } = useAgenda();
   const today = todayInTz(state.timezone);
   const isToday = state.dayISO === today;
@@ -43,7 +46,7 @@ export function AgendaDayNav() {
       <button
         type="button"
         onClick={() => setDay(shiftDay(state.dayISO, state.timezone, -1))}
-        aria-label="Día anterior"
+        aria-label={t("agenda.dayNav.prevDay")}
         style={navBtnStyle}
       >
         <ChevronLeft size={14} />
@@ -58,12 +61,12 @@ export function AgendaDayNav() {
           fontFamily: "var(--font-sans, system-ui, sans-serif)",
         }}
       >
-        {formatHumanDate(state.dayISO, state.timezone)}
+        {formatHumanDate(state.dayISO, state.timezone, t)}
       </div>
       <button
         type="button"
         onClick={() => setDay(shiftDay(state.dayISO, state.timezone, 1))}
-        aria-label="Día siguiente"
+        aria-label={t("agenda.dayNav.nextDay")}
         style={navBtnStyle}
       >
         <ChevronRight size={14} />
@@ -75,7 +78,7 @@ export function AgendaDayNav() {
           onClick={() => setDay(today)}
           style={{ marginLeft: 4 }}
         >
-          Hoy
+          {t("agenda.dayNav.today")}
         </ButtonNew>
       )}
     </div>

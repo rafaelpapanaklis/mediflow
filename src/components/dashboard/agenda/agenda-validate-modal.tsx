@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { Check, X, ShieldAlert } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { useT } from "@/i18n/i18n-provider";
 import { useAgenda } from "./agenda-provider";
 import { formatSlotTime } from "@/lib/agenda/time-utils";
 import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
@@ -13,6 +14,7 @@ import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
 
 export function AgendaValidateModal() {
+  const t = useT();
   const { state, dispatch, closeModal } = useAgenda();
   const router = useRouter();
   const open = state.modalOpen === "validate";
@@ -61,7 +63,7 @@ export function AgendaValidateModal() {
     } catch (err) {
       dispatch({ type: "ROLLBACK_STATUS", original });
       toast.error(
-        err instanceof Error ? err.message : "No se pudo procesar",
+        err instanceof Error ? err.message : t("agenda.validateModal.processError"),
       );
     } finally {
       markBusy(appt.id, false);
@@ -76,17 +78,17 @@ export function AgendaValidateModal() {
       const result = await batchValidateAppointments("confirm", ids);
       if (result.failed.length === 0) {
         toast.success(
-          `${result.processed} cita${result.processed === 1 ? "" : "s"} confirmada${result.processed === 1 ? "" : "s"}`,
+          t("agenda.validateModal.confirmedToast", { count: result.processed }),
         );
       } else {
         toast.error(
-          `${result.failed.length} cita${result.failed.length === 1 ? "" : "s"} no se pudo confirmar`,
+          t("agenda.validateModal.confirmFailedToast", { count: result.failed.length }),
         );
       }
       router.refresh();
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Error al procesar el batch",
+        err instanceof Error ? err.message : t("agenda.validateModal.batchError"),
       );
     } finally {
       setBulkRunning(false);
@@ -103,18 +105,18 @@ export function AgendaValidateModal() {
               aria-hidden
               style={{ color: "var(--warning)", marginRight: 6, verticalAlign: "-2px" }}
             />
-            Validar citas pendientes
+            {t("agenda.validateModal.title")}
           </div>
           <div className={styles.validateSubtitle}>
             {pending.length === 0
-              ? "No hay citas pendientes de validar."
-              : `${pending.length} cita${pending.length === 1 ? "" : "s"} requieren confirmación.`}
+              ? t("agenda.validateModal.subtitleEmpty")
+              : t("agenda.validateModal.subtitleCount", { count: pending.length })}
           </div>
         </div>
         <div className={styles.modalBody}>
           {pending.length === 0 ? (
             <div className={styles.modalEmpty}>
-              Todas las citas han sido procesadas.
+              {t("agenda.validateModal.allProcessed")}
             </div>
           ) : (
             pending.map((a) => (
@@ -139,7 +141,7 @@ export function AgendaValidateModal() {
             className={styles.modalAddCancel}
             onClick={closeModal}
           >
-            Cerrar
+            {t("common.close")}
           </button>
           {pending.length > 0 && (
             <button
@@ -148,7 +150,9 @@ export function AgendaValidateModal() {
               onClick={() => void confirmAll()}
               disabled={bulkRunning}
             >
-              {bulkRunning ? "Confirmando…" : `Confirmar todas (${pending.length})`}
+              {bulkRunning
+                ? t("agenda.validateModal.confirming")
+                : t("agenda.validateModal.confirmAll", { count: pending.length })}
             </button>
           )}
         </div>
@@ -176,6 +180,7 @@ function ValidateRow({
   onConfirm,
   onReject,
 }: ValidateRowProps) {
+  const t = useT();
   return (
     <div className={styles.validateRow}>
       <div className={styles.validateRowMain}>
@@ -199,7 +204,7 @@ function ValidateRow({
             </span>
           )}
           {resourceName && <span>· {resourceName}</span>}
-          <span>· {appointment.reason ?? "Consulta"}</span>
+          <span>· {appointment.reason ?? t("agenda.validateModal.consultationDefault")}</span>
         </div>
         {appointment.overrideReason && (
           <div className={styles.validateRowReason}>
@@ -213,18 +218,18 @@ function ValidateRow({
           className={`${styles.validateAction} ${styles.danger}`}
           onClick={onReject}
           disabled={busy}
-          aria-label="Rechazar"
+          aria-label={t("agenda.validateModal.reject")}
         >
-          <X size={12} aria-hidden /> Rechazar
+          <X size={12} aria-hidden /> {t("agenda.validateModal.reject")}
         </button>
         <button
           type="button"
           className={`${styles.validateAction} ${styles.primary}`}
           onClick={onConfirm}
           disabled={busy}
-          aria-label="Confirmar"
+          aria-label={t("agenda.validateModal.confirm")}
         >
-          <Check size={12} aria-hidden /> Confirmar
+          <Check size={12} aria-hidden /> {t("agenda.validateModal.confirm")}
         </button>
       </div>
     </div>

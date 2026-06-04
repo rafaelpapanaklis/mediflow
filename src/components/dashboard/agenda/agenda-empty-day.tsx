@@ -3,8 +3,10 @@
 import { Calendar } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
+import { useT } from "@/i18n/i18n-provider";
 
 export function AgendaEmptyDay() {
+  const t = useT();
   const { open } = useNewAppointmentDialog();
 
   return (
@@ -44,7 +46,7 @@ export function AgendaEmptyDay() {
             marginBottom: 6,
           }}
         >
-          No hay profesionales activos
+          {t("agenda.emptyDay.title")}
         </h2>
         <p
           style={{
@@ -54,11 +56,11 @@ export function AgendaEmptyDay() {
             maxWidth: 360,
           }}
         >
-          Agrega un profesional desde Equipo o crea una cita para comenzar.
+          {t("agenda.emptyDay.description")}
         </p>
       </div>
       <ButtonNew variant="primary" onClick={() => open({})}>
-        Crear primera cita
+        {t("agenda.emptyDay.createFirstAppt")}
       </ButtonNew>
     </div>
   );

@@ -4,6 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { X, Calendar, Clock } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { formatTimeInTz } from "@/lib/agenda/date-ranges";
+import { useT } from "@/i18n/i18n-provider";
 
 export interface RescheduleConfirmProps {
   open: boolean;
@@ -26,6 +27,7 @@ function formatDateShort(iso: string, timezone: string): string {
 export function AgendaRescheduleConfirmModal({
   open, doctorName, originalStartsAt, newStartsAt, timezone, submitting, onConfirm, onCancel,
 }: RescheduleConfirmProps) {
+  const t = useT();
   const originalTime = formatTimeInTz(originalStartsAt, timezone);
   const originalDate = formatDateShort(originalStartsAt, timezone);
   const newTime = formatTimeInTz(newStartsAt, timezone);
@@ -37,9 +39,9 @@ export function AgendaRescheduleConfirmModal({
         <Dialog.Overlay style={overlayStyle} />
         <Dialog.Content style={dialogStyle} onEscapeKeyDown={onCancel} aria-describedby={undefined}>
           <header style={headerStyle}>
-            <Dialog.Title style={titleStyle}>Confirma la reprogramacion</Dialog.Title>
+            <Dialog.Title style={titleStyle}>{t("agenda.rescheduleConfirm.title")}</Dialog.Title>
             <Dialog.Close asChild>
-              <button type="button" aria-label="Cerrar" style={closeBtnStyle} disabled={submitting}>
+              <button type="button" aria-label={t("common.close")} style={closeBtnStyle} disabled={submitting}>
                 <X size={16} />
               </button>
             </Dialog.Close>
@@ -47,26 +49,26 @@ export function AgendaRescheduleConfirmModal({
 
           <div style={bodyStyle}>
             <div style={doctorRowStyle}>
-              <span style={{ color: "var(--text-3)", fontSize: 13 }}>Doctor</span>
+              <span style={{ color: "var(--text-3)", fontSize: 13 }}>{t("agenda.rescheduleConfirm.doctor")}</span>
               <span style={{ fontWeight: 600, fontSize: 13 }}>{doctorName}</span>
             </div>
 
             <div style={cardsRowStyle}>
               <div style={originalCardStyle}>
-                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Cita original</div>
+                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>{t("agenda.rescheduleConfirm.originalAppt")}</div>
                 <div style={statusRowStyle}>
                   <Calendar size={14} style={{ color: "var(--text-3)" }} aria-hidden />
-                  <span style={{ fontSize: 12, color: "var(--text-2)" }}>Reprogramada</span>
+                  <span style={{ fontSize: 12, color: "var(--text-2)" }}>{t("agenda.rescheduleConfirm.rescheduled")}</span>
                 </div>
                 <div style={{ ...timeStyle, textDecoration: "line-through", color: "var(--text-3)" }}>{originalTime}</div>
                 <div style={{ ...dateStyle, textDecoration: "line-through", color: "var(--text-3)" }}>{originalDate}</div>
               </div>
 
               <div style={newCardStyle}>
-                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Cita nueva</div>
+                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>{t("agenda.rescheduleConfirm.newAppt")}</div>
                 <div style={statusRowStyle}>
                   <Clock size={14} style={{ color: "var(--brand)" }} aria-hidden />
-                  <span style={{ fontSize: 12, color: "var(--brand)" }}>Pendiente</span>
+                  <span style={{ fontSize: 12, color: "var(--brand)" }}>{t("agenda.rescheduleConfirm.pending")}</span>
                 </div>
                 <div style={timeStyle}>{newTime}</div>
                 <div style={dateStyle}>{newDate}</div>
@@ -76,10 +78,10 @@ export function AgendaRescheduleConfirmModal({
 
           <footer style={footerStyle}>
             <ButtonNew variant="ghost" onClick={onCancel} disabled={submitting}>
-              Cancelar
+              {t("common.cancel")}
             </ButtonNew>
             <ButtonNew variant="primary" onClick={onConfirm} disabled={submitting}>
-              {submitting ? "Reprogramando..." : "Reprogramar"}
+              {submitting ? t("agenda.rescheduleConfirm.rescheduling") : t("agenda.rescheduleConfirm.reschedule")}
             </ButtonNew>
           </footer>
         </Dialog.Content>

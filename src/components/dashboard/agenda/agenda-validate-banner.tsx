@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { Check, X, ShieldAlert, ChevronDown } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 import { useAgenda } from "./agenda-provider";
 import { formatSlotTime } from "@/lib/agenda/time-utils";
 import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
@@ -17,6 +18,7 @@ import styles from "./agenda.module.css";
  * Cuando state.pendingSectionOpen es true, este banner aparece arriba del body.
  */
 export function AgendaValidateBanner() {
+  const t = useT();
   const { state, dispatch, togglePendingPanel } = useAgenda();
   const router = useRouter();
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
@@ -59,7 +61,7 @@ export function AgendaValidateBanner() {
       router.refresh();
     } catch (err) {
       dispatch({ type: "ROLLBACK_STATUS", original });
-      toast.error(err instanceof Error ? err.message : "No se pudo procesar");
+      toast.error(err instanceof Error ? err.message : t("agenda.validateBanner.processError"));
     } finally {
       markBusy(appt.id, false);
     }
@@ -73,29 +75,29 @@ export function AgendaValidateBanner() {
       const result = await batchValidateAppointments("confirm", ids);
       if (result.failed.length === 0) {
         toast.success(
-          `${result.processed} cita${result.processed === 1 ? "" : "s"} confirmada${result.processed === 1 ? "" : "s"}`,
+          t("agenda.validateBanner.confirmedToast", { count: result.processed }),
         );
       } else {
         toast.error(
-          `${result.failed.length} cita${result.failed.length === 1 ? "" : "s"} no se pudo confirmar`,
+          t("agenda.validateBanner.confirmFailedToast", { count: result.failed.length }),
         );
       }
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error al procesar el batch");
+      toast.error(err instanceof Error ? err.message : t("agenda.validateBanner.batchError"));
     } finally {
       setBulkRunning(false);
     }
   }
 
   return (
-    <section className={styles.validateBanner} aria-label="Citas pendientes de validar">
+    <section className={styles.validateBanner} aria-label={t("agenda.validateBanner.sectionLabel")}>
       <div className={styles.validateBannerHead}>
         <div className={styles.validateBannerTitle}>
           <ShieldAlert size={14} aria-hidden />
           <span>
             <strong>{pending.length}</strong>{" "}
-            cita{pending.length === 1 ? "" : "s"} pendiente{pending.length === 1 ? "" : "s"} de validar
+            {t("agenda.validateBanner.pendingCount", { count: pending.length })}
           </span>
         </div>
         <div className={styles.validateBannerActions}>
@@ -105,7 +107,7 @@ export function AgendaValidateBanner() {
               checked={notifyWA}
               onChange={(e) => setNotifyWA(e.target.checked)}
             />
-            <span>Notificar por WhatsApp</span>
+            <span>{t("agenda.validateBanner.notifyWhatsApp")}</span>
           </label>
           <button
             type="button"
@@ -113,14 +115,16 @@ export function AgendaValidateBanner() {
             onClick={() => void confirmAll()}
             disabled={bulkRunning}
           >
-            {bulkRunning ? "Confirmando…" : `✓ Aprobar todas (${pending.length})`}
+            {bulkRunning
+              ? t("agenda.validateBanner.confirming")
+              : t("agenda.validateBanner.approveAll", { count: pending.length })}
           </button>
           <button
             type="button"
             className={styles.validateBannerClose}
             onClick={() => togglePendingPanel(false)}
-            aria-label="Colapsar"
-            title="Colapsar"
+            aria-label={t("agenda.validateBanner.collapse")}
+            title={t("agenda.validateBanner.collapse")}
           >
             <ChevronDown size={14} />
           </button>
@@ -157,6 +161,7 @@ interface ValidateRowProps {
 function ValidateRow({
   appointment, doctorColor, resourceName, timezone, busy, onConfirm, onReject,
 }: ValidateRowProps) {
+  const t = useT();
   return (
     <li className={styles.validateBannerRow}>
       <div className={styles.validateBannerRowMain}>
@@ -177,7 +182,7 @@ function ValidateRow({
           </span>
         )}
         {resourceName && <span className={styles.validateBannerRowResource}>· {resourceName}</span>}
-        <span className={styles.validateBannerRowReason}>{appointment.reason ?? "Consulta"}</span>
+        <span className={styles.validateBannerRowReason}>{appointment.reason ?? t("agenda.validateBanner.consultationDefault")}</span>
         {appointment.overrideReason && (
           <span className={styles.validateBannerRowOverride}>
             «{appointment.overrideReason}»
@@ -190,8 +195,8 @@ function ValidateRow({
           className={styles.validateBannerActionBtn}
           onClick={onReject}
           disabled={busy}
-          aria-label="Rechazar"
-          title="Rechazar"
+          aria-label={t("agenda.validateBanner.reject")}
+          title={t("agenda.validateBanner.reject")}
         >
           <X size={12} aria-hidden />
         </button>
@@ -201,7 +206,7 @@ function ValidateRow({
           onClick={onConfirm}
           disabled={busy}
         >
-          <Check size={12} aria-hidden /> Aprobar
+          <Check size={12} aria-hidden /> {t("agenda.validateBanner.approve")}
         </button>
       </div>
     </li>

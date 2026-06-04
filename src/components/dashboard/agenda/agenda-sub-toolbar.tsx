@@ -4,14 +4,16 @@ import { useMemo } from "react";
 import { useAgenda } from "./agenda-provider";
 import { calendarDayISO } from "@/lib/agenda/date-ranges";
 import type { AgendaColumnMode } from "@/lib/agenda/types";
+import { useT } from "@/i18n/i18n-provider";
 import styles from "./agenda.module.css";
 
-const COLUMN_MODE_OPTIONS: Array<{ value: AgendaColumnMode; label: string }> = [
-  { value: "resource", label: "Sillones" },
-  { value: "doctor",   label: "Doctores" },
+const COLUMN_MODE_OPTIONS: Array<{ value: AgendaColumnMode; labelKey: string }> = [
+  { value: "resource", labelKey: "agenda.subToolbar.chairs" },
+  { value: "doctor",   labelKey: "agenda.subToolbar.doctors" },
 ];
 
 export function AgendaSubToolbar() {
+  const t = useT();
   const { state, setColumnMode, togglePendingPanel } = useAgenda();
 
   const isDayView = state.viewMode === "day";
@@ -51,44 +53,44 @@ export function AgendaSubToolbar() {
           <>
             <div className={styles.subStat}>
               <strong>{visibleAppts}</strong>
-              {`cita${visibleAppts === 1 ? "" : "s"} hoy`}
+              {t("agenda.subToolbar.apptsToday", { count: visibleAppts })}
             </div>
             <div className={styles.subStat}>
               <strong>{inSala}</strong>
-              en sala
+              {t("agenda.subToolbar.inWaitingRoom")}
             </div>
             {pendingCount > 0 ? (
               <button
                 type="button"
                 className={`${styles.subStat} ${styles.clickable} ${styles.warning}`}
                 onClick={() => togglePendingPanel()}
-                title="Mostrar / colapsar pendientes de validar"
+                title={t("agenda.subToolbar.togglePendingTitle")}
                 aria-expanded={state.pendingSectionOpen}
               >
                 <strong>{pendingCount}</strong>
-                {`pendiente${pendingCount === 1 ? "" : "s"} validar`}
+                {t("agenda.subToolbar.pendingValidation", { count: pendingCount })}
               </button>
             ) : (
               <div className={styles.subStat}>
                 <strong>{pendingCount}</strong>
-                pendientes validar
+                {t("agenda.subToolbar.pendingValidationPlural")}
               </div>
             )}
           </>
         ) : isWeekView ? (
           <div className={styles.subStat}>
             <strong>{visibleAppts}</strong>
-            citas esta semana
+            {t("agenda.subToolbar.apptsThisWeek")}
           </div>
         ) : isMonthView ? (
           <div className={styles.subStat}>
             <strong>{visibleAppts}</strong>
-            citas en el mes
+            {t("agenda.subToolbar.apptsThisMonth")}
           </div>
         ) : (
           <div className={styles.subStat}>
             <strong>{visibleAppts}</strong>
-            {`cita${visibleAppts === 1 ? "" : "s"}`}
+            {t("agenda.subToolbar.appts", { count: visibleAppts })}
           </div>
         )}
       </div>
@@ -96,8 +98,8 @@ export function AgendaSubToolbar() {
       <div className={styles.subToolbarRight}>
         {isDay && hasResources && hasDoctors && (
           <>
-            <span className={styles.subToolbarLabel}>Vista</span>
-            <div role="tablist" aria-label="Agrupar por" className={styles.segment}>
+            <span className={styles.subToolbarLabel}>{t("agenda.subToolbar.viewLabel")}</span>
+            <div role="tablist" aria-label={t("agenda.subToolbar.groupBy")} className={styles.segment}>
               {COLUMN_MODE_OPTIONS.map((opt) => (
                 <button
                   key={opt.value}
@@ -107,7 +109,7 @@ export function AgendaSubToolbar() {
                   className={`${styles.segmentBtn} ${state.columnMode === opt.value ? styles.active : ""}`}
                   onClick={() => setColumnMode(opt.value)}
                 >
-                  {opt.label}
+                  {t(opt.labelKey)}
                 </button>
               ))}
             </div>

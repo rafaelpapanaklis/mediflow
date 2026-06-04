@@ -752,5 +752,343 @@
       "endLabel": "End consultation",
       "endAria": "End consultation"
     }
+  },
+  "agenda": {
+    "pageClient": {
+      "waitlistMarkFailed": "Appointment created, but the waitlist entry could not be marked",
+      "overlapConflict": "Conflict: there is already an appointment at that time",
+      "doctorFallback": "Doctor",
+      "rescheduleSuccess": "Appointment rescheduled",
+      "rescheduleFailed": "The appointment could not be rescheduled",
+      "dayAgendaTitle": "Day agenda",
+      "professionalFallback": "Professional"
+    },
+    "apptCard": {
+      "approve": "Approve",
+      "approveFailed": "Could not approve",
+      "statusChangeFailed": "Could not change",
+      "consultationFallback": "Consultation",
+      "appointmentAria": "Appointment: {name} at {time}",
+      "nextStepTitle": "{label} ({name})",
+      "nextStepAria": "{label} appointment for {name}"
+    },
+    "column": {
+      "columnAriaLabel": "Column {title}"
+    },
+    "dayNav": {
+      "today": "Today",
+      "tomorrow": "Tomorrow",
+      "yesterday": "Yesterday",
+      "prevDay": "Previous day",
+      "nextDay": "Next day"
+    },
+    "detailPanel": {
+      "ariaLabel": "Appointment detail",
+      "emptyState": "Select an appointment to view its detail",
+      "closeAriaLabel": "Close detail",
+      "pendingValidation": "Pending validation",
+      "patient": "Patient",
+      "teleconsult": "Teleconsult",
+      "walkIn": "Walk-in",
+      "inPerson": "In person",
+      "alreadyInStatus": "The appointment is already in status {status}",
+      "statusUpdated": "Status updated",
+      "statusChangeError": "Could not change the status",
+      "whatsappError": "Could not send WhatsApp",
+      "reminderSent": "Reminder sent",
+      "sectionInfo": "Information",
+      "labelDoctor": "Doctor",
+      "labelTreatment": "Treatment",
+      "consultDefault": "Consultation",
+      "labelResource": "Resource",
+      "labelMode": "Mode",
+      "sectionStatus": "Status",
+      "validationPending": "Validation pending",
+      "record": "Record",
+      "recordTitle": "Open patient record",
+      "editTitle": "Edit date, doctor, chair, reason",
+      "sending": "Sending…",
+      "charge": "Charge",
+      "chargeTitle": "Charge / invoice the appointment",
+      "rescheduleTitle": "Create a new appointment pre-filled with the current data",
+      "actionReschedule": "Reschedule",
+      "actionConfirm": "Confirm",
+      "actionCheckIn": "Check-in",
+      "actionToChair": "Move to chair",
+      "actionStartConsult": "Start consultation",
+      "actionMarkCompleted": "Mark completed",
+      "actionMarkCheckout": "Mark checkout",
+      "actionCancel": "Cancel",
+      "actionMarkNoShow": "Mark no-show",
+      "moreStatusOptionsAria": "More status options",
+      "moreOptions": "More options",
+      "specialStatuses": "Special statuses",
+      "noActionsAvailable": "No actions available",
+      "reopenAppointment": "Reopen appointment",
+      "currentStatus": "Current status:"
+    },
+    "editApptModal": {
+      "title": "Edit appointment",
+      "invalidDateTime": "Invalid date or time",
+      "selectDoctor": "Select a doctor",
+      "apptUpdated": "Appointment updated",
+      "updateFailed": "Could not update",
+      "startTime": "Start time",
+      "durationMin": "Duration (min)",
+      "minutesOption": {
+        "one": "{count} min",
+        "other": "{count} min"
+      },
+      "doctor": "Doctor",
+      "selectOption": "— Select —",
+      "careLocation": "Care location",
+      "noLocationAssigned": "No location assigned",
+      "treatmentReason": "Treatment / reason",
+      "reasonPlaceholder": "e.g. Cleaning, Root canal, General consultation…",
+      "conflictLabel": "Conflict:",
+      "overrideReasonLabel": "Override reason (ADMIN only)",
+      "overrideReasonPlaceholder": "e.g. Double booking authorized by X",
+      "overrideAndSave": "Override and save"
+    },
+    "emptyDay": {
+      "title": "No active providers",
+      "description": "Add a provider from Team or create an appointment to get started.",
+      "createFirstAppt": "Create first appointment"
+    },
+    "emptyResources": {
+      "title": "Set up your chairs to get started",
+      "description": "Create chairs, rooms, or equipment to organize your schedule by resource. Each one will appear as a column in the day view.",
+      "createFirstChair": "Create first chair"
+    },
+    "filterPills": {
+      "statusScheduled": "Scheduled",
+      "statusConfirmed": "Confirmed",
+      "statusCheckedIn": "Checked in",
+      "statusInChair": "In chair",
+      "statusInProgress": "In progress",
+      "statusCompleted": "Completed",
+      "statusCheckedOut": "Checked out",
+      "statusNoShow": "No show",
+      "statusCancelled": "Cancelled",
+      "doctors": "Doctors",
+      "noActiveDoctors": "No active doctors",
+      "chairs": "Chairs",
+      "noChairsRegistered": "No chairs registered",
+      "status": "Status",
+      "clearAllTitle": "Clear all filters"
+    },
+    "listView": {
+      "empty": "There are no appointments in the selected range.",
+      "until": "until {end}",
+      "consultation": "Consultation",
+      "statusScheduled": "Scheduled",
+      "statusConfirmed": "Confirmed",
+      "statusCheckedIn": "Arrived",
+      "statusInChair": "In chair",
+      "statusInProgress": "In progress",
+      "statusCompleted": "Completed",
+      "statusCheckedOut": "Checked out",
+      "statusCancelled": "Cancelled",
+      "statusNoShow": "No show",
+      "apptCount": {
+        "one": "{count} appointment",
+        "other": "{count} appointments"
+      }
+    },
+    "monthView": {
+      "dowMon": "MON",
+      "dowTue": "TUE",
+      "dowWed": "WED",
+      "dowThu": "THU",
+      "dowFri": "FRI",
+      "dowSat": "SAT",
+      "dowSun": "SUN",
+      "apptCount": {
+        "one": "{count} appointment",
+        "other": "{count} appointments"
+      },
+      "dayCellAria": {
+        "one": "Open day view {iso}, {count} appointment",
+        "other": "Open day view {iso}, {count} appointments"
+      },
+      "dayCellTitle": "View {iso} in detailed view",
+      "viewApptsTitle": {
+        "one": "View {count} appointment on {iso}",
+        "other": "View {count} appointments on {iso}"
+      },
+      "viewApptsAria": {
+        "one": "View the {count} appointment on {iso}",
+        "other": "View the {count} appointments on {iso}"
+      },
+      "moreCount": "+{more} more"
+    },
+    "rescheduleConfirm": {
+      "title": "Confirm the reschedule",
+      "doctor": "Doctor",
+      "originalAppt": "Original appointment",
+      "rescheduled": "Rescheduled",
+      "newAppt": "New appointment",
+      "pending": "Pending",
+      "rescheduling": "Rescheduling...",
+      "reschedule": "Reschedule"
+    },
+    "resourcesModal": {
+      "teamTitle": "Team",
+      "resourcesTitle": "Chairs / Rooms / Equipment",
+      "teamSubtitle": "Clinic doctors shown as columns in the schedule.",
+      "resourcesSubtitle": "Chairs, rooms and equipment available to assign to appointments.",
+      "noDoctors": "There are no doctors in this clinic.",
+      "inviteFromTeam": "Invite them from Team →",
+      "inviteNewDoctors": "To invite new doctors go to Team →",
+      "colorUpdated": "Color updated",
+      "couldNotSave": "Could not save",
+      "changeColor": "Change color",
+      "removeFromAgenda": "Remove from schedule",
+      "showInAgenda": "Show in schedule",
+      "activeInAgenda": "Active in schedule",
+      "inactiveInAgenda": "Inactive in schedule"
+    },
+    "statusPopover": {
+      "couldNotChange": "Could not change",
+      "moreStatusActions": "More status actions",
+      "moreActions": "More actions",
+      "specialStatuses": "Special statuses",
+      "reopenAppt": "Reopen appointment"
+    },
+    "subToolbar": {
+      "chairs": "Chairs",
+      "doctors": "Doctors",
+      "inWaitingRoom": " in waiting room",
+      "togglePendingTitle": "Show / collapse pending validations",
+      "pendingValidationPlural": " pending validation",
+      "apptsThisWeek": " appointments this week",
+      "apptsThisMonth": " appointments this month",
+      "viewLabel": "View",
+      "groupBy": "Group by",
+      "apptsToday": {
+        "one": " appointment today",
+        "other": " appointments today"
+      },
+      "pendingValidation": {
+        "one": " pending validation",
+        "other": " pending validation"
+      },
+      "appts": {
+        "one": " appointment",
+        "other": " appointments"
+      }
+    },
+    "topbar": {
+      "viewDay": "Day",
+      "viewWeek": "Week",
+      "viewMonth": "Month",
+      "viewList": "List",
+      "viewTabsLabel": "Schedule view",
+      "today": "Today",
+      "tomorrow": "Tomorrow",
+      "yesterday": "Yesterday",
+      "prevDay": "Previous day",
+      "nextDay": "Next day",
+      "searchPlaceholder": "Search patient…",
+      "newAppointment": "New appointment"
+    },
+    "validateBanner": {
+      "sectionLabel": "Appointments pending validation",
+      "pendingCount": {
+        "one": "appointment pending validation",
+        "other": "appointments pending validation"
+      },
+      "notifyWhatsApp": "Notify via WhatsApp",
+      "confirming": "Confirming…",
+      "approveAll": "✓ Approve all ({count})",
+      "collapse": "Collapse",
+      "consultationDefault": "Consultation",
+      "reject": "Reject",
+      "approve": "Approve",
+      "processError": "Could not process",
+      "batchError": "Error processing the batch",
+      "confirmedToast": {
+        "one": "{count} appointment confirmed",
+        "other": "{count} appointments confirmed"
+      },
+      "confirmFailedToast": {
+        "one": "{count} appointment could not be confirmed",
+        "other": "{count} appointments could not be confirmed"
+      }
+    },
+    "validateModal": {
+      "title": "Validate pending appointments",
+      "subtitleEmpty": "There are no appointments pending validation.",
+      "subtitleCount": {
+        "one": "{count} appointment requires confirmation.",
+        "other": "{count} appointments require confirmation."
+      },
+      "allProcessed": "All appointments have been processed.",
+      "confirming": "Confirming…",
+      "confirmAll": "Confirm all ({count})",
+      "consultationDefault": "Consultation",
+      "reject": "Reject",
+      "confirm": "Confirm",
+      "processError": "Could not process",
+      "batchError": "Error processing the batch",
+      "confirmedToast": {
+        "one": "{count} appointment confirmed",
+        "other": "{count} appointments confirmed"
+      },
+      "confirmFailedToast": {
+        "one": "{count} appointment could not be confirmed",
+        "other": "{count} appointments could not be confirmed"
+      }
+    },
+    "waitlist": {
+      "title": "Waitlist",
+      "close": "Close waitlist",
+      "empty": "No patients on the waitlist.",
+      "loadError": "Could not load the waitlist",
+      "defaultReason": "Consultation",
+      "priorityHigh": "High",
+      "priorityNormal": "Normal",
+      "priorityLow": "Low",
+      "priorityTitle": "Priority: {priority}",
+      "relToday": "today",
+      "relYesterday": "yesterday",
+      "relDaysAgo": {
+        "one": "{count} day ago",
+        "other": "{count} days ago"
+      },
+      "relWeeksAgo": {
+        "one": "{count} wk ago",
+        "other": "{count} wks ago"
+      },
+      "relMonthsAgo": {
+        "one": "{count} mo ago",
+        "other": "{count} mos ago"
+      },
+      "schedule": "Schedule",
+      "discard": "Discard",
+      "scheduledToast": "{name} scheduled",
+      "scheduledMarkError": "Appointment created, but the entry could not be marked as scheduled",
+      "discardConfirm": "Discard {name} from the list?",
+      "discardedToast": "Discarded",
+      "discardError": "Could not discard"
+    },
+    "weekView": {
+      "dowMon": "MON",
+      "dowTue": "TUE",
+      "dowWed": "WED",
+      "dowThu": "THU",
+      "dowFri": "FRI",
+      "dowSat": "SAT",
+      "dowSun": "SUN",
+      "openDayAria": "Open day view {date}",
+      "openDayTitle": "View {date} in detailed view",
+      "dayColAria": "Day {date}"
+    },
+    "noShowRisk": {
+      "high": "High risk",
+      "medium": "Risk",
+      "probabilityTitle": "No-show probability: {pct}%",
+      "ariaLabel": "{label} of no-show: {pct}%"
+    }
   }
 }

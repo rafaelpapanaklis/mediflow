@@ -2,6 +2,8 @@
 
 import { createContext, useCallback, useContext, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useT } from "@/i18n/i18n-provider";
+import type { TFunction } from "@/i18n/t";
 import {
   DndContext,
   PointerSensor,
@@ -89,13 +91,14 @@ export function useDragOverlap(droppableId: string): DragOverlapMode {
 function AgendaShell({ highlightId }: { highlightId: string | null }) {
   const { state, dispatch, setDay, invalidateRangeCache } = useAgenda();
   const router = useRouter();
+  const t = useT();
   const { open: openNewAppointment } = useNewAppointmentDialog();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   );
 
-  const columns = computeColumns(state);
+  const columns = computeColumns(state, t);
   const detailOpen = state.selectedAppointmentId !== null;
 
   const [dragOverlap, setDragOverlap] = useState<DragOverlapState>({ overId: null, mode: null });
@@ -230,7 +233,7 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
               });
               router.refresh();
             } catch {
-              toast.error("Cita creada, pero no se pudo marcar la espera");
+              toast.error(t("agenda.pageClient.waitlistMarkFailed"));
             }
           },
         });
@@ -285,12 +288,12 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
           newResourceId,
         )
       ) {
-        toast.error("Conflicto: ya hay una cita en ese horario");
+        toast.error(t("agenda.pageClient.overlapConflict"));
         return;
       }
 
       const doctor = state.doctors.find((d) => d.id === (newDoctorId ?? currentDoctorId));
-      const doctorName = doctor?.shortName ?? doctor?.displayName ?? "Doctor";
+      const doctorName = doctor?.shortName ?? doctor?.displayName ?? t("agenda.pageClient.doctorFallback");
 
       setPendingReschedule({
         original,
@@ -312,6 +315,7 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
       state.doctors,
       openNewAppointment,
       router,
+      t,
     ],
   );
 
@@ -349,7 +353,7 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
       // antes de que revalidatePath del endpoint haya completado, y termina
       // sobrescribiendo el optimistic con datos viejos (bug observado).
       invalidateRangeCache();
-      toast.success("Cita reprogramada");
+      toast.success(t("agenda.pageClient.rescheduleSuccess"));
       setPendingReschedule(null);
       if (toDayISO !== state.dayISO) setDay(toDayISO);
     } catch (err) {
@@ -361,12 +365,12 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
           resourceId: newResourceId,
         }));
       } else {
-        toast.error("No se pudo reprogramar la cita");
+        toast.error(t("agenda.pageClient.rescheduleFailed"));
       }
     } finally {
       setRescheduling(false);
     }
-  }, [pendingReschedule, rescheduling, dispatch, state.dayISO, setDay, invalidateRangeCache]);
+  }, [pendingReschedule, rescheduling, dispatch, state.dayISO, setDay, invalidateRangeCache, t]);
 
   const handleCancelReschedule = useCallback(() => {
     if (rescheduling) return;
@@ -466,6 +470,7 @@ export interface AgendaColumnDescriptor {
 
 function computeColumns(
   state: ReturnType<typeof useAgenda>["state"],
+  t: TFunction,
 ): AgendaColumnDescriptor[] {
   const slotsAvailablePerColumn =
     ((state.dayEnd - state.dayStart) * 60) / state.slotMinutes;
@@ -477,7 +482,7 @@ function computeColumns(
         type: "unified",
         doctorId: null,
         resourceId: null,
-        title: "Agenda del día",
+        title: t("agenda.pageClient.dayAgendaTitle"),
         occupancyPct: occupancyOf(state.appointments, slotsAvailablePerColumn, state.slotMinutes),
       },
     ];
@@ -508,8 +513,8 @@ function computeColumns(
       const fromAppt = state.appointments.find((a) => a.doctor?.id === id)?.doctor;
       return {
         id,
-        displayName: fromAppt?.shortName ?? "Profesional",
-        shortName: fromAppt?.shortName ?? "Profesional",
+        displayName: fromAppt?.shortName ?? t("agenda.pageClient.professionalFallback"),
+        shortName: fromAppt?.shortName ?? t("agenda.pageClient.professionalFallback"),
         color: null,
         avatarUrl: null,
         activeInAgenda: false,

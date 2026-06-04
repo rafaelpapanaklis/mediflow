@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useRef } from "react";
 import { useDroppable } from "@dnd-kit/core";
+import { useT } from "@/i18n/i18n-provider";
 import { useAgenda } from "./agenda-provider";
 import { AgendaAppointmentCard } from "./agenda-appointment-card";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
@@ -17,6 +18,7 @@ import {
 import styles from "./agenda.module.css";
 
 export function AgendaColumn({ column }: { column: AgendaColumnDescriptor }) {
+  const t = useT();
   const { state } = useAgenda();
   const { open: openNewAppointment } = useNewAppointmentDialog();
   const ref = useRef<HTMLDivElement | null>(null);
@@ -160,7 +162,7 @@ export function AgendaColumn({ column }: { column: AgendaColumnDescriptor }) {
       className={`${styles.column} ${dropClass}`}
       onClick={handleClick}
       role="grid"
-      aria-label={`Columna ${column.title}`}
+      aria-label={t("agenda.column.columnAriaLabel", { title: column.title })}
       style={{
         height: `calc(${slotsTotal} * var(--mf-agenda-slot-h))`,
       }}

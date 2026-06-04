@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/i18n/i18n-provider";
+
 /**
  * NoShowRiskBadge — pill que muestra dot rojo/ámbar/verde según
  * NoShowPrediction.probability del appointment. Solo se renderiza si
@@ -21,19 +23,20 @@ interface Props {
 }
 
 export function NoShowRiskBadge({ probability, onClick, compact }: Props) {
+  const t = useT();
   if (probability < 0.4) return null;
 
   const isHigh = probability >= 0.6;
   const tone = isHigh ? HIGH : MEDIUM;
-  const label = isHigh ? "Alto riesgo" : "Riesgo";
+  const label = isHigh ? t("agenda.noShowRisk.high") : t("agenda.noShowRisk.medium");
   const pct = Math.round(probability * 100);
 
   return (
     <button
       type="button"
       onClick={onClick}
-      title={`Probabilidad de no-show: ${pct}%`}
-      aria-label={`${label} de no-show: ${pct}%`}
+      title={t("agenda.noShowRisk.probabilityTitle", { pct })}
+      aria-label={t("agenda.noShowRisk.ariaLabel", { label, pct })}
       style={{
         display: "inline-flex",
         alignItems: "center",

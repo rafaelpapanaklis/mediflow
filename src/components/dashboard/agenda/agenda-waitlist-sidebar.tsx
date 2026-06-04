@@ -6,15 +6,16 @@ import { CSS } from "@dnd-kit/utilities";
 import toast from "react-hot-toast";
 import { Calendar, X, Trash2, Clock, AlertTriangle } from "lucide-react";
 import { useAgenda } from "./agenda-provider";
+import { useT } from "@/i18n/i18n-provider";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { fetchWaitlist, updateWaitlist } from "@/lib/agenda/mutations";
 import type { WaitlistEntryDTO, WaitlistPriority } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
 
-const PRIORITY_LABEL: Record<WaitlistPriority, string> = {
-  HIGH: "Alta",
-  NORMAL: "Normal",
-  LOW: "Baja",
+const PRIORITY_LABEL_KEY: Record<WaitlistPriority, string> = {
+  HIGH: "agenda.waitlist.priorityHigh",
+  NORMAL: "agenda.waitlist.priorityNormal",
+  LOW: "agenda.waitlist.priorityLow",
 };
 
 const PRIORITY_COLOR: Record<WaitlistPriority, string> = {
@@ -30,18 +31,19 @@ function patientInitials(name: string): string {
   return (parts[0]![0] + parts[parts.length - 1]![0]).toUpperCase();
 }
 
-function relativeDate(iso: string): string {
+function relativeDate(iso: string, t: ReturnType<typeof useT>): string {
   const ms = Date.now() - new Date(iso).getTime();
   const days = Math.floor(ms / 86_400_000);
-  if (days <= 0) return "hoy";
-  if (days === 1) return "ayer";
-  if (days < 7) return `hace ${days} días`;
-  if (days < 30) return `hace ${Math.floor(days / 7)} sem`;
-  return `hace ${Math.floor(days / 30)} mes`;
+  if (days <= 0) return t("agenda.waitlist.relToday");
+  if (days === 1) return t("agenda.waitlist.relYesterday");
+  if (days < 7) return t("agenda.waitlist.relDaysAgo", { count: days });
+  if (days < 30) return t("agenda.waitlist.relWeeksAgo", { count: Math.floor(days / 7) });
+  return t("agenda.waitlist.relMonthsAgo", { count: Math.floor(days / 30) });
 }
 
 export function AgendaWaitlistSidebar() {
   const { state, toggleWaitlist } = useAgenda();
+  const t = useT();
   const [entries, setEntries] = useState<WaitlistEntryDTO[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -51,11 +53,11 @@ export function AgendaWaitlistSidebar() {
       const list = await fetchWaitlist();
       setEntries(list);
     } catch {
-      toast.error("No se pudo cargar la lista de espera");
+      toast.error(t("agenda.waitlist.loadError"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (state.waitlistOpen) void refresh();
@@ -64,27 +66,27 @@ export function AgendaWaitlistSidebar() {
   if (!state.waitlistOpen) return null;
 
   return (
-    <aside className={styles.waitlistSidebar} aria-label="Lista de espera">
+    <aside className={styles.waitlistSidebar} aria-label={t("agenda.waitlist.title")}>
       <div className={styles.waitlistHeader}>
         <div className={styles.waitlistTitle}>
-          Lista de espera
+          {t("agenda.waitlist.title")}
           <span className={styles.waitlistBadge}>{entries.length}</span>
         </div>
         <button
           type="button"
           className={styles.waitlistClose}
           onClick={() => toggleWaitlist(false)}
-          aria-label="Cerrar lista de espera"
+          aria-label={t("agenda.waitlist.close")}
         >
           <X size={14} />
         </button>
       </div>
       <div className={styles.waitlistBody}>
         {loading && entries.length === 0 ? (
-          <div className={styles.waitlistEmpty}>Cargando…</div>
+          <div className={styles.waitlistEmpty}>{t("common.loading")}</div>
         ) : entries.length === 0 ? (
           <div className={styles.waitlistEmpty}>
-            No hay pacientes en espera.
+            {t("agenda.waitlist.empty")}
           </div>
         ) : (
           entries.map((e) => (
@@ -109,6 +111,7 @@ interface WaitlistRowProps {
 
 function WaitlistRow({ entry, onRemove }: WaitlistRowProps) {
   const { open: openNew } = useNewAppointmentDialog();
+  const t = useT();
   const [busy, setBusy] = useState(false);
 
   const { attributes, listeners, setNodeRef, transform, isDragging } =
@@ -138,12 +141,10 @@ function WaitlistRow({ entry, onRemove }: WaitlistRowProps) {
             status: "FULFILLED",
             appointmentId: appt.id,
           });
-          toast.success(`${entry.patient.name} agendado`);
+          toast.success(t("agenda.waitlist.scheduledToast", { name: entry.patient.name }));
           onRemove();
         } catch {
-          toast.error(
-            "Cita creada, pero no se pudo marcar la entrada como agendada",
-          );
+          toast.error(t("agenda.waitlist.scheduledMarkError"));
         } finally {
           setBusy(false);
         }
@@ -155,14 +156,14 @@ function WaitlistRow({ entry, onRemove }: WaitlistRowProps) {
 
   async function discard() {
     if (busy) return;
-    if (!confirm(`¿Descartar a ${entry.patient.name} de la lista?`)) return;
+    if (!confirm(t("agenda.waitlist.discardConfirm", { name: entry.patient.name }))) return;
     setBusy(true);
     try {
       await updateWaitlist(entry.id, { status: "DISCARDED" });
-      toast.success("Descartado");
+      toast.success(t("agenda.waitlist.discardedToast"));
       onRemove();
     } catch {
-      toast.error("No se pudo descartar");
+      toast.error(t("agenda.waitlist.discardError"));
     } finally {
       setBusy(false);
     }
@@ -189,20 +190,20 @@ function WaitlistRow({ entry, onRemove }: WaitlistRowProps) {
         <div className={styles.waitlistItemMain}>
           <div className={styles.waitlistItemName}>{entry.patient.name}</div>
           <div className={styles.waitlistItemReason}>
-            {entry.reason ?? "Consulta"}
+            {entry.reason ?? t("agenda.waitlist.defaultReason")}
           </div>
         </div>
         <span
           className={styles.waitlistPriority}
           style={{ color: PRIORITY_COLOR[entry.priority] }}
-          title={`Prioridad: ${PRIORITY_LABEL[entry.priority]}`}
+          title={t("agenda.waitlist.priorityTitle", { priority: t(PRIORITY_LABEL_KEY[entry.priority]) })}
         >
           {entry.priority === "HIGH" && <AlertTriangle size={11} aria-hidden />}
-          {PRIORITY_LABEL[entry.priority]}
+          {t(PRIORITY_LABEL_KEY[entry.priority])}
         </span>
       </div>
       <div className={styles.waitlistItemMeta}>
-        <Clock size={10} aria-hidden /> {relativeDate(entry.createdAt)}
+        <Clock size={10} aria-hidden /> {relativeDate(entry.createdAt, t)}
         {entry.preferredWindow && <span>· {entry.preferredWindow}</span>}
         {entry.preferredDoctor && (
           <span>· {entry.preferredDoctor.shortName}</span>
@@ -215,7 +216,7 @@ function WaitlistRow({ entry, onRemove }: WaitlistRowProps) {
           onClick={schedule}
           disabled={busy}
         >
-          <Calendar size={11} aria-hidden /> Agendar
+          <Calendar size={11} aria-hidden /> {t("agenda.waitlist.schedule")}
         </button>
         <button
           type="button"
@@ -223,7 +224,7 @@ function WaitlistRow({ entry, onRemove }: WaitlistRowProps) {
           onClick={discard}
           disabled={busy}
         >
-          <Trash2 size={11} aria-hidden /> Descartar
+          <Trash2 size={11} aria-hidden /> {t("agenda.waitlist.discard")}
         </button>
       </div>
     </div>
