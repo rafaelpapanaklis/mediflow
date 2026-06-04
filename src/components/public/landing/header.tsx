@@ -68,7 +68,7 @@ export function Header({ isLoggedIn = false }: HeaderProps) {
                 Iniciar sesión
               </Link>
               <Link href="/signup" className="lp-btn lp-btn--primary">
-                Empieza gratis
+                Crear cuenta
               </Link>
             </>
           )}
@@ -126,7 +126,7 @@ export function Header({ isLoggedIn = false }: HeaderProps) {
                   className="lp-btn lp-btn--primary lp-btn--block"
                   onClick={close}
                 >
-                  Empieza gratis
+                  Crear cuenta
                 </Link>
               </>
             )}

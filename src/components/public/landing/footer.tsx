@@ -32,7 +32,7 @@ const COLUMNS: FooterColumn[] = [
   {
     title: "Empezar",
     links: [
-      { label: "Empieza gratis", href: "/signup" },
+      { label: "Crear cuenta", href: "/signup" },
       { label: "Ver demo", href: "/clinicas" },
       { label: "Iniciar sesión", href: "/login" },
       { label: "Roadmap", href: "/roadmap" },

@@ -19,7 +19,7 @@ export function CTAButtons() {
           boxShadow: "0 8px 24px rgba(124,58,237,0.35), inset 0 1px 0 rgba(255,255,255,0.15)",
         }}
       >
-        Empieza gratis <span aria-hidden="true">→</span>
+        Crear cuenta <span aria-hidden="true">→</span>
       </Link>
       <Link
         href="/clinicas"

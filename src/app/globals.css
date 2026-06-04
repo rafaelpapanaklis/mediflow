@@ -1452,7 +1452,7 @@
   --ld-shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
   --ld-shadow-md: 0 12px 30px -16px rgba(0,0,0,0.6);
   --ld-shadow-lg: 0 30px 60px rgba(0,0,0,0.55), 0 0 40px rgba(124,58,237,0.12);
-  --ld-grad-brand: linear-gradient(180deg, #8b5cf6, #7c3aed);
+  --ld-grad-brand: linear-gradient(180deg, #7c3aed, #6d28d9);  /* texto blanco AA (>=5.7:1) */
 
   /* Aliases que los componentes del design ref usan (shared.jsx, etc.) */
   --bg: var(--ld-bg);
@@ -1477,7 +1477,8 @@
      Dirección "precisión clínica": lienzo blanco, tinta casi negra, violeta
      como acento afilado, bordes hairline, sombras suaves en capas. */
   --ld-bg: #ffffff;
-  --ld-bg-2: #faf9fd;                  /* off-white con tinte violeta tenue */
+  --ld-bg-2: #f4f1fd;                  /* off-white con tinte violeta perceptible */
+  --ld-bg-3: #ede8fb;                  /* tinte violeta un poco más presente */
   --ld-fg: #15131d;                    /* títulos / texto fuerte (~16:1) */
   --ld-fg-muted: #57546a;              /* cuerpo (~6.8:1 AA) */
   --ld-fg-subtle: #76738a;             /* captions (~4.7:1 AA) */
@@ -1588,6 +1589,69 @@
 }
 .lp-section--tight { padding: clamp(48px, 6vw, 80px) 0; }
 .lp-section--tint { background: var(--ld-bg-2); }
+/* Tint con gradiente violeta tenue (más presencia de marca, sigue AA) */
+.lp-section--tint-grad {
+  background:
+    radial-gradient(900px 460px at 88% -12%, rgba(124,58,237,0.10), transparent 60%),
+    radial-gradient(700px 460px at 0% 112%, rgba(167,139,250,0.10), transparent 60%),
+    var(--ld-bg-2);
+}
+
+/* ── Banda violeta rellena (momento de marca; texto blanco AA) ── */
+.lp-band-violet {
+  position: relative;
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 58%, #5b21b6 100%);
+  color: #fff;
+  overflow: hidden;
+}
+.lp-band-violet::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(600px 300px at 12% -20%, rgba(255,255,255,0.16), transparent 60%),
+    radial-gradient(700px 360px at 100% 120%, rgba(0,0,0,0.18), transparent 60%);
+  pointer-events: none;
+}
+.lp-band-violet > * { position: relative; z-index: 1; }
+.lp-band-violet .lp-h2,
+.lp-band-violet .lp-h3,
+.lp-band-violet .lp-lead { color: #fff; }
+.lp-band-violet .lp-eyebrow { color: #e9d5ff; }
+.lp-band-violet .lp-eyebrow::before { background: #e9d5ff; }
+.lp-on-violet-strong { color: #fff; }
+.lp-on-violet-muted { color: rgba(255,255,255,0.82); }
+/* Gana a `.lp-band-violet .lp-lead{color:#fff}` para conservar el matiz muted */
+.lp-band-violet .lp-on-violet-muted { color: rgba(255,255,255,0.86); }
+
+/* Botones sobre fondo violeta */
+.lp-btn--on-violet {
+  background: #fff;
+  color: #5b21b6;
+  box-shadow: 0 10px 24px -10px rgba(0,0,0,0.4);
+}
+.lp-btn--on-violet:hover { transform: translateY(-1px); background: #faf8ff; }
+.lp-btn--ghost-on-violet {
+  background: rgba(255,255,255,0.10);
+  color: #fff;
+  border-color: rgba(255,255,255,0.55);
+}
+.lp-btn--ghost-on-violet:hover { background: rgba(255,255,255,0.18); border-color: #fff; }
+
+/* Glow violeta decorativo (hero) */
+.lp-violet-glow {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(820px 520px at 78% -8%, rgba(124,58,237,0.14), transparent 58%),
+    radial-gradient(680px 460px at -6% 8%, rgba(167,139,250,0.16), transparent 55%);
+}
+.landing-theme[data-mode="dark"] .lp-band-violet { color: #fff; }
+@media (prefers-reduced-motion: reduce) {
+  .landing-theme .lp-btn--on-violet:hover { transform: none; }
+}
 .lp-container {
   width: 100%;
   max-width: var(--lp-maxw);

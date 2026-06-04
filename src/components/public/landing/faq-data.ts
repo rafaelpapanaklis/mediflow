@@ -14,8 +14,8 @@ export const HOME_FAQS: FaqItem[] = [
     a: "Sí. La migración está incluida: importamos tus pacientes, historia clínica y radiografías sin costo en los planes PRO y CLINIC, normalmente en menos de 48 horas.",
   },
   {
-    q: "¿Necesito tarjeta para la prueba gratis?",
-    a: "No. Son 14 días gratis sin tarjeta. Pruebas todo el sistema y decides después; no hay cobros automáticos al terminar la prueba.",
+    q: "¿Cómo empiezo a usar MediFlow?",
+    a: "Creas tu cuenta, eliges tu plan y migramos tus datos. En los planes PRO y CLINIC la migración va incluida y tu clínica suele quedar lista el mismo día.",
   },
   {
     q: "¿Sirve para mi especialidad?",

@@ -85,9 +85,9 @@ function jsonLd() {
         inLanguage: "es-MX",
         offers: {
           "@type": "AggregateOffer",
-          priceCurrency: "USD",
-          lowPrice: "49",
-          highPrice: "249",
+          priceCurrency: "MXN",
+          lowPrice: "499",
+          highPrice: "1999",
           offerCount: "3",
           availability: "https://schema.org/InStock",
         },
