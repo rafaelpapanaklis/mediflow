@@ -76,7 +76,7 @@ export function Pricing() {
   const isAnnual = billing === "anual";
 
   return (
-    <section className="lp-section lp-section--tint-grad" id="pricing" aria-labelledby="price-h">
+    <section className="lp-section" id="precios" aria-labelledby="price-h">
       <div className="lp-container">
         <div className="lp-section-head">
           <p className="lp-eyebrow">Precios</p>
@@ -160,16 +160,16 @@ export function Pricing() {
 
       <style jsx>{`
         .lp-bill-toggle {
-          display: inline-flex;
+          display: flex;
+          width: fit-content;
           gap: 4px;
-          padding: 5px;
+          padding: 4px;
           margin: 0 auto clamp(28px, 4vw, 40px);
-          border-radius: 999px;
+          border-radius: 10px;
           background: var(--ld-surface);
           border: 1px solid var(--ld-border);
           box-shadow: var(--ld-shadow-sm);
         }
-        .lp-bill-toggle { display: flex; width: fit-content; }
         .lp-bill-opt {
           display: inline-flex;
           align-items: center;
@@ -180,33 +180,36 @@ export function Pricing() {
           font-size: 14px;
           font-weight: 500;
           color: var(--ld-fg-muted);
-          padding: 9px 18px;
-          border-radius: 999px;
+          padding: 8px 16px;
+          border-radius: 7px;
           cursor: pointer;
-          transition: background 0.18s, color 0.18s, box-shadow 0.18s;
+          transition: background 0.18s, color 0.18s;
         }
         .lp-bill-opt--active {
-          background: var(--ld-grad-brand);
-          color: #fff;
-          box-shadow: 0 6px 16px -8px rgba(124,58,237,0.6);
+          background: var(--ld-border-strong);
+          color: var(--ld-fg);
+          box-shadow: none;
         }
         .lp-bill-save {
           font-size: 10.5px;
           font-weight: 600;
           letter-spacing: 0.02em;
           padding: 2px 8px;
-          border-radius: 999px;
-          background: #fff;
-          color: var(--ld-brand-strong);
+          border-radius: 4px;
+          background: var(--ld-brand-weak);
+          border: 1px solid var(--ld-brand-weak-border);
+          color: var(--ld-brand-light);
         }
 
         .lp-price-card { position: relative; display: flex; flex-direction: column; height: 100%; }
-        .lp-price-popular { border-color: var(--ld-brand-weak-border); box-shadow: var(--ld-shadow-lg); }
+        .lp-price-popular { border-color: var(--ld-brand); box-shadow: none; }
         .lp-price-badge {
           position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
-          padding: 5px 14px; border-radius: 999px; background: var(--ld-grad-brand); color: #fff;
+          padding: 5px 12px; border-radius: 6px;
+          background: var(--ld-surface); color: var(--ld-brand-light);
+          border: 1px solid var(--ld-brand);
           font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em;
-          white-space: nowrap; box-shadow: var(--ld-shadow-sm);
+          white-space: nowrap; box-shadow: none;
         }
         .lp-price-name { margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ld-brand-strong); }
         .lp-price-desc { margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: var(--ld-fg-subtle); }

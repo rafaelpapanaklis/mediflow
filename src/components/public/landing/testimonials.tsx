@@ -20,7 +20,7 @@ const TESTIMONIALS: Testimonial[] = [
     quote:
       "Lo que me convenció fue el CFDI nativo. Antes facturábamos aparte; ahora todo en un clic y ahorro 4 horas a la semana.",
     name: "Dr. Ernesto Villalobos",
-    role: "Médico general · Consultorio Villalobos",
+    role: "Dentista · Clínica Dental Villalobos",
     city: "Monterrey",
   },
   {
@@ -28,7 +28,7 @@ const TESTIMONIALS: Testimonial[] = [
     quote:
       "La IA para radiografías no reemplaza mi ojo clínico, pero es una segunda opinión que mis pacientes valoran. Subió la aceptación de tratamientos.",
     name: "Dr. Alejandro Kuri",
-    role: "Endodoncista · Smile Studio",
+    role: "Dentista · Clínica Smile Studio",
     city: "Guadalajara",
   },
 ];
@@ -85,10 +85,10 @@ export function Testimonials() {
           font-size: 12px;
           line-height: 1;
           padding: 7px 12px;
-          border-radius: 100px;
-          background: rgba(16, 157, 107, 0.1);
-          color: #0d8f60;
-          border: 1px solid rgba(16, 157, 107, 0.22);
+          border-radius: 6px;
+          background: var(--ld-brand-weak);
+          color: var(--ld-brand-strong);
+          border: 1px solid var(--ld-brand-weak-border);
         }
         .lp-tst-quote {
           margin: 0;
@@ -111,8 +111,9 @@ export function Testimonials() {
           width: 38px;
           height: 38px;
           border-radius: 50%;
-          background: var(--ld-grad-brand);
-          color: #fff;
+          background: var(--ld-brand-weak);
+          border: 1px solid var(--ld-brand-weak-border);
+          color: var(--ld-brand-strong);
           font-family: var(--font-mono, ui-monospace, monospace);
           font-size: 13px;
           font-weight: 600;

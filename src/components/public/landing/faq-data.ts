@@ -10,7 +10,7 @@ export const HOME_FAQS: FaqItem[] = [
     a: "Sí. La facturación CFDI 4.0 está integrada y se timbra directo ante el SAT, y el expediente clínico cumple con la NOM-024-SSA3-2012. No necesitas un facturador aparte.",
   },
   {
-    q: "¿Puedo migrar mis pacientes desde Dentrix, Excel u otro sistema?",
+    q: "¿Puedo migrar mis pacientes desde Excel u otro sistema?",
     a: "Sí. La migración está incluida: importamos tus pacientes, historia clínica y radiografías sin costo en los planes PRO y CLINIC, normalmente en menos de 48 horas.",
   },
   {
@@ -18,8 +18,8 @@ export const HOME_FAQS: FaqItem[] = [
     a: "Creas tu cuenta, eliges tu plan y migramos tus datos. En los planes PRO y CLINIC la migración va incluida y tu clínica suele quedar lista el mismo día.",
   },
   {
-    q: "¿Sirve para mi especialidad?",
-    a: "MediFlow cubre 17 especialidades en 4 categorías —dental, médicas, salud mental y bienestar— y cada una tiene expedientes, flujos y reportes propios, no un formato genérico.",
+    q: "¿MediFlow sirve para mi consultorio dental?",
+    a: "Sí. MediFlow está hecho para clínicas dentales: odontograma interactivo, radiografías con análisis por IA, órdenes a laboratorios, inventario de insumos y CFDI — desde un consultorio de un dentista hasta varias sucursales.",
   },
   {
     q: "¿Los recordatorios por WhatsApp están incluidos?",

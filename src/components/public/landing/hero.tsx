@@ -2,7 +2,7 @@
 
 import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import Link from "next/link";
-import { PlayCircle, Check } from "lucide-react";
+import { Check } from "lucide-react";
 
 const TABS = [
   { id: "agenda", label: "Agenda" },
@@ -15,7 +15,7 @@ const AGENDA = [
   { time: "09:00", name: "María Ramírez", type: "Consulta", active: false },
   { time: "10:30", name: "Jorge López", type: "Limpieza", active: true },
   { time: "12:00", name: "Ana Pérez", type: "Control", active: false },
-  { time: "14:00", name: "Carlos Silva", type: "Endodoncia", active: false },
+  { time: "14:00", name: "Carlos Silva", type: "Revisión", active: false },
 ] as const;
 
 const KPIS = [
@@ -25,9 +25,9 @@ const KPIS = [
 ] as const;
 
 const PATIENTS = [
-  { initials: "MR", name: "María Ramírez", detail: "Ortodoncia · mes 6", next: "Hoy 10:30" },
+  { initials: "MR", name: "María Ramírez", detail: "Blanqueamiento · sesión 2", next: "Hoy 10:30" },
   { initials: "JL", name: "Jorge López", detail: "Limpieza · control", next: "Mar 18 jun" },
-  { initials: "AP", name: "Ana Pérez", detail: "Implante · cicatrización", next: "Jue 27 jun" },
+  { initials: "AP", name: "Ana Pérez", detail: "Corona · seguimiento", next: "Jue 27 jun" },
 ] as const;
 
 // Hallazgos del análisis con IA sobre la radiografía (posición en % sobre el visor).
@@ -56,8 +56,7 @@ export function Hero() {
   }
 
   return (
-    <section className="lp-section" aria-labelledby="hero-h" style={{ paddingTop: "clamp(48px,7vw,88px)", overflow: "hidden" }}>
-      <div className="lp-violet-glow" aria-hidden="true" />
+    <section className="lp-section lp-wire" aria-labelledby="hero-h" style={{ paddingTop: "clamp(48px,7vw,88px)", overflow: "hidden" }}>
       <div className="lp-container" style={{ position: "relative", zIndex: 1 }}>
         <div className="lp-hero-grid">
           {/* Columna izquierda: copy + CTAs */}
@@ -65,22 +64,22 @@ export function Hero() {
             <p className="lp-pill lp-animate lp-d1">Hecho en México · CFDI 4.0 nativo</p>
 
             <h1 id="hero-h" className="lp-h1 lp-animate lp-d2">
-              Toda tu clínica en <span className="lp-accent">una sola plataforma</span>.
+              Toda tu clínica dental, en <span className="lp-accent">una sola plataforma</span>.
             </h1>
 
             <p className="lp-lead lp-animate lp-d3">
-              Deja de hacer malabares con Dentrix, WhatsApp, Excel y un facturador
-              aparte. MediFlow es el sistema todo-en-uno para clínicas mexicanas.
+              Deja de hacer malabares con otros software, WhatsApp, Excel y un
+              facturador aparte. MediFlow es el sistema todo-en-uno para clínicas
+              dentales mexicanas.
             </p>
 
             <div className="lp-hero-cta lp-animate lp-d4">
               <div className="lp-hero-cta__row">
-                <Link href="/signup" className="lp-btn lp-btn--primary lp-btn--lg">
-                  Crear cuenta
+                <Link href="#precios" className="lp-btn lp-btn--primary lp-btn--lg">
+                  Ver Precios
                 </Link>
-                <Link href="/clinicas" className="lp-btn lp-btn--secondary lp-btn--lg">
-                  <PlayCircle size={20} strokeWidth={1.75} aria-hidden="true" />
-                  Ver demo
+                <Link href="#precios" className="lp-btn lp-btn--secondary lp-btn--lg">
+                  Ver Planes
                 </Link>
               </div>
               <span className="lp-mono" style={{ color: "var(--ld-fg-subtle)", fontSize: 12 }}>
@@ -98,7 +97,7 @@ export function Hero() {
             </ul>
           </div>
 
-          {/* Columna derecha: demo interactivo del panel */}
+          {/* Columna derecha: vista interactiva del panel */}
           <div className="lp-hero-figure lp-animate lp-d3">
             <div className="lp-mockup lp-hero-mockup">
               <div className="lp-mockup__bar" aria-hidden="true">
@@ -259,7 +258,7 @@ export function Hero() {
           display: inline-flex;
           gap: 4px;
           padding: 4px;
-          border-radius: 12px;
+          border-radius: 8px;
           background: var(--ld-surface-2);
           border: 1px solid var(--ld-border);
           align-self: flex-start;
@@ -289,7 +288,7 @@ export function Hero() {
         .lp-hero-agenda { display: flex; flex-direction: column; gap: 8px; }
         .lp-hero-slot {
           display: grid; grid-template-columns: 52px 1fr auto; align-items: center; gap: 12px;
-          padding: 11px 13px; border-radius: 10px; background: var(--ld-surface-2); border: 1px solid var(--ld-border);
+          padding: 11px 13px; border-radius: 8px; background: var(--ld-surface-2); border: 1px solid var(--ld-border);
         }
         .lp-hero-slot--active { background: var(--ld-brand-weak); border-color: var(--ld-brand-weak-border); }
         .lp-hero-slot__time { font-size: 12px; color: var(--ld-fg-muted); }
@@ -298,7 +297,7 @@ export function Hero() {
         .lp-hero-slot--active .lp-hero-slot__chip { color: var(--ld-brand-strong); border-color: var(--ld-brand-weak-border); }
 
         .lp-hero-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding-top: 4px; }
-        .lp-hero-kpi { display: flex; flex-direction: column; gap: 5px; padding: 13px; border-radius: 10px; background: var(--ld-surface-2); border: 1px solid var(--ld-border); }
+        .lp-hero-kpi { display: flex; flex-direction: column; gap: 5px; padding: 13px; border-radius: 8px; background: var(--ld-surface-2); border: 1px solid var(--ld-border); }
         .lp-hero-kpi__label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ld-fg-subtle); }
         .lp-hero-kpi__value { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; color: var(--ld-fg); }
 
@@ -306,12 +305,13 @@ export function Hero() {
         .lp-hero-patients { display: flex; flex-direction: column; gap: 8px; }
         .lp-hero-patient {
           display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px;
-          padding: 12px 14px; border-radius: 10px; background: var(--ld-surface-2); border: 1px solid var(--ld-border);
+          padding: 12px 14px; border-radius: 8px; background: var(--ld-surface-2); border: 1px solid var(--ld-border);
         }
         .lp-hero-patient--active { background: var(--ld-brand-weak); border-color: var(--ld-brand-weak-border); }
         .lp-hero-avatar {
           width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center;
-          font-size: 12px; font-weight: 600; color: #fff; background: var(--ld-grad-brand);
+          font-size: 12px; font-weight: 600; color: var(--ld-brand);
+          background: var(--ld-brand-weak); border: 1px solid var(--ld-brand-weak-border);
         }
         .lp-hero-patient__info { display: flex; flex-direction: column; min-width: 0; }
         .lp-hero-patient__name { font-size: 13.5px; font-weight: 600; color: var(--ld-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -324,8 +324,8 @@ export function Hero() {
         .lp-hero-xray-wrap { display: flex; flex-direction: column; gap: 12px; }
         .lp-hero-xray {
           position: relative; margin: 0; width: 100%; aspect-ratio: 16 / 9;
-          border-radius: 12px; overflow: hidden; border: 1px solid var(--ld-border);
-          background: radial-gradient(120% 120% at 50% 30%, #3a3550 0%, #1c1830 70%, #141022 100%);
+          border-radius: 8px; overflow: hidden; border: 1px solid var(--ld-border);
+          background: radial-gradient(120% 120% at 50% 30%, #2c2c2c 0%, #161616 70%, #101010 100%);
         }
         .lp-hero-xray__teeth { position: absolute; inset: 18% 6% 14%; display: flex; gap: 4%; align-items: stretch; }
         .lp-hero-tooth {
@@ -339,23 +339,23 @@ export function Hero() {
         .lp-hero-mark__tag {
           position: absolute; top: -10px; left: -1px; transform: translateY(-100%);
           font-size: 10px; font-weight: 500; white-space: nowrap;
-          padding: 3px 7px; border-radius: 6px; color: #fff; background: rgba(20,16,34,0.92);
+          padding: 3px 7px; border-radius: 6px; color: #fff; background: rgba(10,10,10,0.92);
           border: 1px solid rgba(255,255,255,0.14);
         }
         .lp-hero-mark--alta .lp-hero-mark__tag { box-shadow: -2px 0 0 #f87171 inset; }
         .lp-hero-mark--media .lp-hero-mark__tag { box-shadow: -2px 0 0 #fbbf24 inset; }
         .lp-hero-xray__legend { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; font-size: 12px; color: var(--ld-fg-muted); }
         .lp-hero-xray__ai { display: inline-flex; align-items: center; gap: 7px; color: var(--ld-brand-strong); font-weight: 500; }
-        .lp-hero-xray__pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--ld-brand); box-shadow: 0 0 0 0 rgba(124,58,237,0.5); animation: lp-xray-pulse 1.8s ease-out infinite; }
+        .lp-hero-xray__pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--ld-brand); box-shadow: 0 0 0 0 rgba(103,152,255,0.5); animation: lp-xray-pulse 1.8s ease-out infinite; }
         .lp-hero-xray__sev { display: inline-flex; align-items: center; gap: 6px; }
         .lp-hero-xray__sev :global(.lp-dot-alta),
         .lp-hero-xray__sev :global(.lp-dot-media) { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
         :global(.lp-dot-alta) { background: #ef4444; }
         :global(.lp-dot-media) { background: #f59e0b; }
         @keyframes lp-xray-pulse {
-          0% { box-shadow: 0 0 0 0 rgba(124,58,237,0.5); }
-          70% { box-shadow: 0 0 0 7px rgba(124,58,237,0); }
-          100% { box-shadow: 0 0 0 0 rgba(124,58,237,0); }
+          0% { box-shadow: 0 0 0 0 rgba(103,152,255,0.5); }
+          70% { box-shadow: 0 0 0 7px rgba(103,152,255,0); }
+          100% { box-shadow: 0 0 0 0 rgba(103,152,255,0); }
         }
         @media (prefers-reduced-motion: reduce) {
           .lp-hero-xray__pulse { animation: none; }

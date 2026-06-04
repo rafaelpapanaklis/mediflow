@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
+import { Inter, JetBrains_Mono } from "next/font/google";
+import { AnnouncementBar } from "@/components/public/landing/announcement-bar";
 import { Header } from "@/components/public/landing/header";
 import { Hero } from "@/components/public/landing/hero";
 import { SocialProof } from "@/components/public/landing/social-proof";
 import { Features } from "@/components/public/landing/features";
 import { Steps } from "@/components/public/landing/steps";
-import { Specialties } from "@/components/public/landing/specialties";
 import { Comparison } from "@/components/public/landing/comparison";
 import { Testimonials } from "@/components/public/landing/testimonials";
 import { Pricing } from "@/components/public/landing/pricing";
@@ -16,28 +17,31 @@ import { HOME_FAQS } from "@/components/public/landing/faq-data";
 import { SITE_URL, SITE_NAME } from "@/lib/seo";
 import { getSession } from "@/lib/auth";
 
+// Fuentes de la HOME (solo aquí, sin tocar el layout raíz que usa el panel):
+// Inter para todo y JetBrains Mono para eyebrows/labels. Se exponen como
+// variables CSS y se mapean a --font-sans/--font-mono bajo data-mode="dovetail".
+const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-inter-home", display: "swap" });
+const jbmono = JetBrains_Mono({ subsets: ["latin"], weight: ["400"], variable: "--font-jbm-home", display: "swap" });
+
 // getSession lee cookies → la landing pasa a dynamic. El contenido renderizado
 // es idéntico para SEO (los bots sin cookies ven el flujo no-logueado).
 export const dynamic = "force-dynamic";
 
-const HOME_TITLE = "MediFlow — El sistema todo-en-uno para clínicas en México";
+const HOME_TITLE = "MediFlow — Software para clínicas dentales en México";
 const HOME_DESC =
-  "Deja de hacer malabares con Dentrix, WhatsApp, Excel y un facturador aparte. MediFlow reúne agenda, expediente, facturación CFDI 4.0, WhatsApp e IA en una sola plataforma para clínicas mexicanas.";
+  "Deja de hacer malabares con otros software, WhatsApp, Excel y un facturador aparte. MediFlow reúne agenda, expediente con odontograma, radiografías con IA, facturación CFDI 4.0 y WhatsApp en una sola plataforma para clínicas dentales mexicanas.";
 
-// Metadata específico de la home. No usa openGraph.images para que la imagen
-// la provea la convención de archivo (src/app/opengraph-image.tsx). No afecta
-// el SEO de /[slug], que define su propio metadata vía generateMetadata.
 export const metadata: Metadata = {
   title: HOME_TITLE,
   description: HOME_DESC,
   keywords: [
-    "software para clínicas",
-    "sistema todo-en-uno clínicas",
-    "expediente clínico digital",
-    "agenda médica con WhatsApp",
-    "facturación CFDI 4.0",
-    "software médico México",
-    "software dental México",
+    "software dental",
+    "software para dentistas México",
+    "expediente dental con odontograma",
+    "radiografías dentales con IA",
+    "facturación CFDI 4.0 dental",
+    "agenda dental con WhatsApp",
+    "software para consultorio dental",
   ],
   alternates: { canonical: SITE_URL + "/" },
   robots: { index: true, follow: true },
@@ -52,7 +56,7 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image", title: HOME_TITLE, description: HOME_DESC },
 };
 
-// JSON-LD: Organization + WebSite + SoftwareApplication (con AggregateOffer que
+// JSON-LD: Organization + WebSite + SoftwareApplication (AggregateOffer MXN que
 // refleja los 3 planes visibles) + FAQPage (mismo contenido que el acordeón).
 function jsonLd() {
   return {
@@ -64,7 +68,7 @@ function jsonLd() {
         name: SITE_NAME,
         url: SITE_URL + "/",
         description: HOME_DESC,
-        slogan: "El sistema todo-en-uno para clínicas mexicanas",
+        slogan: "El software todo-en-uno para clínicas dentales mexicanas",
         areaServed: { "@type": "Country", name: "México" },
       },
       {
@@ -91,11 +95,7 @@ function jsonLd() {
           offerCount: "3",
           availability: "https://schema.org/InStock",
         },
-        aggregateRating: {
-          "@type": "AggregateRating",
-          ratingValue: "4.9",
-          reviewCount: "812",
-        },
+        aggregateRating: { "@type": "AggregateRating", ratingValue: "4.9", reviewCount: "812" },
       },
       {
         "@type": "FAQPage",
@@ -111,25 +111,26 @@ function jsonLd() {
 }
 
 export default async function HomePage() {
-  // Detecta si el usuario tiene sesión Supabase activa para que el Header
-  // muestre "Ir al panel" en vez de "Iniciar sesión".
   const user = await getSession();
   const isLoggedIn = user !== null && user !== undefined;
 
   return (
-    <div className="landing-theme" data-mode="light" style={{ minHeight: "100vh" }}>
+    <div
+      className={`landing-theme ${inter.variable} ${jbmono.variable}`}
+      data-mode="dovetail"
+      style={{ minHeight: "100vh" }}
+    >
       <script
         type="application/ld+json"
-        // JSON-LD estático y de confianza (sin datos de usuario) → seguro.
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd()) }}
       />
+      <AnnouncementBar />
       <Header isLoggedIn={isLoggedIn} />
       <main>
         <Hero />
         <SocialProof />
         <Features />
         <Steps />
-        <Specialties />
         <Comparison />
         <Testimonials />
         <Pricing />

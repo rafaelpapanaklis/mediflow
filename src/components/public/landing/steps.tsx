@@ -12,7 +12,7 @@ const STEPS: Step[] = [
     num: "01",
     Icon: ClipboardCheck,
     title: "Configura tu clínica en 15 minutos",
-    desc: "Importamos tus pacientes desde Excel, Dentrix o el sistema que uses hoy. Sin perder datos.",
+    desc: "Importamos tus pacientes desde Excel u otro software que uses hoy. Sin perder datos.",
   },
   {
     num: "02",

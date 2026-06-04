@@ -1,75 +1,70 @@
-const STATS = [
-  { value: "−73%", label: "Faltas a citas" },
-  { value: "+4 h", label: "Ahorradas por semana" },
-  { value: "+28%", label: "Aceptación de tratamientos" },
-  { value: "100%", label: "CFDI timbrado" },
-] as const;
+import { CalendarCheck, Clock, TrendingUp, ReceiptText, type LucideIcon } from "lucide-react";
+
+const STATS: { value: string; label: string; icon: LucideIcon }[] = [
+  { value: "−73%", label: "Faltas a citas", icon: CalendarCheck },
+  { value: "+4 h", label: "Ahorradas por semana", icon: Clock },
+  { value: "+28%", label: "Aceptación de tratamientos", icon: TrendingUp },
+  { value: "100%", label: "CFDI timbrado", icon: ReceiptText },
+];
 
 export function SocialProof() {
   return (
-    <section className="lp-section lp-section--tight lp-band-violet" aria-labelledby="proof-h">
-      <div className="lp-container" style={{ textAlign: "center" }}>
-        <p className="lp-eyebrow" style={{ justifyContent: "center" }}>Resultados reales</p>
-        <h2
-          id="proof-h"
-          className="lp-h2"
-          style={{ fontSize: "clamp(24px,3vw,34px)", maxWidth: 640, margin: "0 auto" }}
-        >
-          Lo que cambia al mes de usar MediFlow
-        </h2>
+    <section className="lp-section lp-section--tight" aria-labelledby="proof-h">
+      <div className="lp-container">
+        <div className="lp-section-head">
+          <p className="lp-eyebrow">RESULTADOS REALES</p>
+          <h2 id="proof-h" className="lp-h2" style={{ fontSize: "clamp(24px,3vw,34px)" }}>
+            Lo que cambia al mes de usar MediFlow
+          </h2>
+        </div>
 
-        <ul className="lp-proof-stats" role="list">
-          {STATS.map((s) => (
-            <li key={s.label} className="lp-proof-stat">
-              <span className="lp-proof-stat__value">{s.value}</span>
-              <span className="lp-proof-stat__label">{s.label}</span>
-            </li>
-          ))}
+        <ul className="lp-grid lp-grid-4 lp-proof-grid">
+          {STATS.map((s) => {
+            const Icon = s.icon;
+            return (
+              <li key={s.label} className="lp-card lp-proof-card">
+                <span className="lp-proof-card__icon" aria-hidden="true">
+                  <Icon size={20} strokeWidth={1.75} />
+                </span>
+                <span className="lp-proof-card__value">{s.value}</span>
+                <span className="lp-proof-card__label">{s.label}</span>
+              </li>
+            );
+          })}
         </ul>
       </div>
 
       <style>{`
-        .lp-proof-stats {
-          list-style: none;
-          margin: clamp(32px, 4vw, 48px) 0 0;
-          padding: 0;
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 1px;
-        }
-        .lp-proof-stat {
+        .lp-proof-grid { list-style: none; margin: 0; padding: 0; }
+        .lp-proof-card {
           display: flex;
           flex-direction: column;
-          align-items: center;
-          gap: 8px;
-          padding: 8px 16px;
-          position: relative;
+          gap: 10px;
+          padding: 24px;
         }
-        .lp-proof-stat + .lp-proof-stat::before {
-          content: "";
-          position: absolute;
-          left: 0;
-          top: 12%;
-          height: 76%;
-          width: 1px;
-          background: rgba(255,255,255,0.22);
+        .lp-proof-card__icon {
+          display: grid;
+          place-items: center;
+          width: 36px;
+          height: 36px;
+          border-radius: 8px;
+          background: var(--ld-brand-weak);
+          border: 1px solid var(--ld-brand-weak-border);
+          color: var(--ld-brand);
+          margin-bottom: 4px;
         }
-        .lp-proof-stat__value {
+        .lp-proof-card__value {
           font-family: var(--font-sans, system-ui, sans-serif);
-          font-weight: 700;
-          font-size: clamp(30px, 4.4vw, 44px);
-          letter-spacing: -0.03em;
+          font-weight: 600;
+          font-size: 40px;
           line-height: 1;
-          color: #fff;
+          letter-spacing: -0.03em;
+          color: var(--ld-fg);
         }
-        .lp-proof-stat__label {
-          font-size: 13px;
-          line-height: 1.35;
-          color: rgba(255,255,255,0.95);
-        }
-        @media (max-width: 700px) {
-          .lp-proof-stats { grid-template-columns: repeat(2, 1fr); gap: 28px 1px; }
-          .lp-proof-stat:nth-child(odd)::before { display: none; }
+        .lp-proof-card__label {
+          font-size: 14px;
+          line-height: 1.4;
+          color: var(--ld-fg-muted);
         }
       `}</style>
     </section>

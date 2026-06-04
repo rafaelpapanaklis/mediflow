@@ -36,7 +36,6 @@ const KEY_ROWS: CompareRow[] = [
 
 const EXTRA_ROWS: CompareRow[] = [
   { feature: "Mi Clínica Visual (editor 2.5D del consultorio)", mediflow: yes, others: no, manual: no },
-  { feature: "Especialidades: orto, endo, perio, implantes, odontopediatría", mediflow: yes, others: partial, manual: no },
   { feature: "Inventario de insumos", mediflow: yes, others: partial, manual: partial },
   { feature: "Recetas digitales con firma", mediflow: yes, others: partial, manual: no },
   { feature: "Consentimientos digitales", mediflow: yes, others: partial, manual: no },
@@ -66,7 +65,7 @@ function CompareCell({ cell }: { cell: Cell }) {
       );
     case "partial":
       return (
-        <span role="img" aria-label="Parcial" style={{ display: "inline-flex", color: "#b45309" }}>
+        <span role="img" aria-label="Parcial" style={{ display: "inline-flex", color: "var(--ld-fg-muted)" }}>
           <Minus size={18} strokeWidth={2} aria-hidden="true" />
         </span>
       );

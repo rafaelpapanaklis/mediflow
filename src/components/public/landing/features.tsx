@@ -2,11 +2,14 @@ import {
   Calendar,
   MessageCircle,
   FileText,
-  ReceiptText,
   ScanLine,
+  ReceiptText,
+  ShieldCheck,
+  Building2,
   Truck,
   FlaskConical,
   Smartphone,
+  Package,
   BarChart3,
   type LucideIcon,
 } from "lucide-react";
@@ -17,6 +20,8 @@ type Feature = {
   desc: string;
 };
 
+// Funciones REALES del panel dental (verificadas en sidebar.tsx + rutas
+// dashboard/**). MediFlow es solo para clínicas odontológicas por ahora.
 const FEATURES: Feature[] = [
   {
     icon: Calendar,
@@ -34,29 +39,44 @@ const FEATURES: Feature[] = [
     desc: "Expediente clínico digital con odontograma interactivo e historial completo por paciente.",
   },
   {
-    icon: ReceiptText,
-    title: "Facturación CFDI 4.0",
-    desc: "Timbra CFDI 4.0 ante el SAT al momento de cobrar. Sin facturador aparte ni subir archivos.",
-  },
-  {
     icon: ScanLine,
     title: "Radiografías con IA",
     desc: "Sube la radiografía y la IA marca hallazgos sugeridos en segundos. Una segunda opinión instantánea.",
   },
   {
+    icon: ReceiptText,
+    title: "Facturación CFDI 4.0",
+    desc: "Timbra CFDI 4.0 ante el SAT al momento de cobrar. Sin facturador aparte ni subir archivos.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Cumplimiento NOM-024",
+    desc: "Expediente clínico conforme a la NOM-024-SSA3-2012, con bitácora de auditoría completa.",
+  },
+  {
+    icon: Building2,
+    title: "Mi Clínica Visual",
+    desc: "Editor 2.5D de tu consultorio: ubica sillones y salas, y administra el espacio desde el panel.",
+  },
+  {
     icon: Truck,
     title: "Proveedores",
-    desc: "Compra insumos a proveedores desde el panel y mantén tu inventario bajo control.",
+    desc: "Compra insumos dentales a proveedores desde el panel y mantén tu inventario bajo control.",
   },
   {
     icon: FlaskConical,
-    title: "Laboratorios",
-    desc: "Envía órdenes a laboratorios dentales y da seguimiento a cada trabajo sin perder el hilo.",
+    title: "Laboratorios dentales",
+    desc: "Envía órdenes a laboratorios y da seguimiento a cada trabajo sin perder el hilo.",
   },
   {
     icon: Smartphone,
     title: "Portal del paciente",
     desc: "Tus pacientes agendan, pagan y consultan su historial desde el celular.",
+  },
+  {
+    icon: Package,
+    title: "Inventario",
+    desc: "Control de stock de resinas, anestésicos y consumibles, con alertas antes de quedarte sin material.",
   },
   {
     icon: BarChart3,
@@ -67,16 +87,16 @@ const FEATURES: Feature[] = [
 
 export function Features() {
   return (
-    <section className="lp-section" id="features" aria-labelledby="features-h">
+    <section className="lp-section lp-wire" id="features" aria-labelledby="features-h">
       <div className="lp-container">
         <div className="lp-section-head">
-          <p className="lp-eyebrow">Todo en una plataforma</p>
+          <p className="lp-eyebrow">TODO EN UNA PLATAFORMA</p>
           <h2 id="features-h" className="lp-h2">
-            Nueve módulos. Cero herramientas sueltas.
+            Todo tu consultorio dental, en módulos conectados.
           </h2>
           <p className="lp-lead">
-            Reemplaza Dentrix, WhatsApp, Excel y tu facturador con un solo
-            sistema conectado.
+            Reemplaza otros software, WhatsApp, Excel y tu facturador con un solo
+            sistema. Todo se comunica, nada se captura dos veces.
           </p>
         </div>
         <div className="lp-grid lp-grid-3">

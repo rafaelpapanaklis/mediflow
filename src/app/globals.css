@@ -2023,6 +2023,182 @@
   .landing-theme .lp-faq__icon { transition: none; }
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   DOVETAIL — tema oscuro de la HOME (data-mode="dovetail"). AISLADO del
+   dark base (.landing-theme sin data-mode) que usa /[slug]: solo aplica
+   bajo [data-mode="dovetail"]. Mapea la paleta Dovetail sobre los tokens
+   tokens --ld y --lp que ya consumen los componentes .lp, y añade los
+   overrides del sistema (botón relleno blanco, sin sombras, radios 8px,
+   grid wireframe, acento azul cornflower SOLO funcional).
+   ═══════════════════════════════════════════════════════════════════ */
+.landing-theme[data-mode="dovetail"] {
+  --ld-bg: #0a0a0a;
+  --ld-bg-2: #0a0a0a;            /* sin bandas alternas: continúa el canvas */
+  --ld-bg-3: #141414;
+  --ld-fg: #ffffff;
+  --ld-fg-muted: #a7a7a7;
+  --ld-fg-subtle: #909090;      /* AA >=4.5:1 también sobre tarjetas #1e1e1e/#141414 */
+  --ld-border: #1e1e1e;
+  --ld-border-strong: #454545;
+
+  --ld-brand: #6798ff;
+  --ld-brand-strong: #6798ff;   /* acento sobre #0a0a0a (~6:1) */
+  --ld-brand-light: #8fb2ff;
+  --ld-brand-weak: rgba(103,152,255,0.12);
+  --ld-brand-weak-border: rgba(103,152,255,0.32);
+  --ld-ring: #6798ff;
+
+  --ld-surface: #1e1e1e;        /* tarjetas / botones */
+  --ld-surface-2: #141414;      /* anidado / inputs */
+  --ld-popover-border: #313131;
+
+  --ld-shadow-sm: none;
+  --ld-shadow-md: none;
+  --ld-shadow-lg: none;
+  --ld-grad-brand: #1e1e1e;     /* Dovetail no usa azul de fondo; fallback neutro */
+
+  --lp-radius: 8px;             /* firma Dovetail: esquina de 8px */
+  --lp-radius-lg: 8px;
+
+  /* Fuentes de la home: Inter + JetBrains Mono (next/font en page.tsx) */
+  --font-sans: var(--font-inter-home, 'Inter', system-ui, sans-serif);
+  --font-mono: var(--font-jbm-home, 'JetBrains Mono', ui-monospace, monospace);
+  font-family: var(--font-sans);
+  letter-spacing: -0.011em;
+}
+
+.landing-theme[data-mode="dovetail"] .lp-header {
+  background: rgba(10,10,10,0.82);
+  border-bottom-color: #1e1e1e;
+}
+
+/* Display engineered: peso 600, tracking negativo fuerte */
+.landing-theme[data-mode="dovetail"] .lp-h1 { font-weight: 600; letter-spacing: -0.034em; }
+.landing-theme[data-mode="dovetail"] .lp-h2 { font-weight: 600; letter-spacing: -0.026em; }
+.landing-theme[data-mode="dovetail"] .lp-h3 { font-weight: 600; }
+
+/* Eyebrow: JetBrains Mono, gris, mayúsculas, tracking positivo */
+.landing-theme[data-mode="dovetail"] .lp-eyebrow {
+  color: var(--ld-fg-muted);
+  letter-spacing: 0.085em;
+  font-weight: 400;
+}
+.landing-theme[data-mode="dovetail"] .lp-eyebrow::before { background: var(--ld-border-strong); opacity: 1; }
+
+/* Pills / chips: superficie carbón con hairline, esquina discreta */
+.landing-theme[data-mode="dovetail"] .lp-pill {
+  background: var(--ld-surface);
+  border-color: #313131;
+  color: var(--ld-brand);
+  border-radius: 6px;
+}
+.landing-theme[data-mode="dovetail"] .lp-chip {
+  background: var(--ld-surface);
+  border-color: #313131;
+  color: var(--ld-fg-muted);
+  border-radius: 6px;
+}
+
+/* Tarjetas: #1e1e1e, hairline, sin sombra ni hover-lift */
+.landing-theme[data-mode="dovetail"] .lp-card {
+  background: var(--ld-surface);
+  border-color: #1e1e1e;
+  box-shadow: none;
+}
+.landing-theme[data-mode="dovetail"] .lp-card--hover:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: #454545;
+}
+.landing-theme[data-mode="dovetail"] .lp-card__icon {
+  background: var(--ld-brand-weak);
+  border-color: var(--ld-brand-weak-border);
+  color: var(--ld-brand);
+}
+
+/* Botones: primario relleno BLANCO, secundario outline #454545, sin sombra.
+   El acento azul NUNCA va de fondo de botón. */
+.landing-theme[data-mode="dovetail"] .lp-btn { border-radius: 8px; }
+.landing-theme[data-mode="dovetail"] .lp-btn--primary {
+  background: #ffffff;
+  color: #0a0a0a;
+  border: 1px solid #ffffff;
+  box-shadow: none;
+}
+.landing-theme[data-mode="dovetail"] .lp-btn--primary:hover {
+  background: #ececec;
+  border-color: #ececec;
+  transform: none;
+  box-shadow: none;
+}
+.landing-theme[data-mode="dovetail"] .lp-btn--secondary {
+  background: transparent;
+  color: #ffffff;
+  border: 1px solid var(--ld-border-strong);
+  box-shadow: none;
+}
+.landing-theme[data-mode="dovetail"] .lp-btn--secondary:hover {
+  background: #1e1e1e;
+  border-color: #585858;
+  color: #ffffff;
+  transform: none;
+}
+.landing-theme[data-mode="dovetail"] .lp-btn--ghost { color: var(--ld-fg-muted); }
+.landing-theme[data-mode="dovetail"] .lp-btn--ghost:hover { color: #fff; background: #1e1e1e; }
+
+/* Banda violeta antigua → neutralizada por si quedara algún uso */
+.landing-theme[data-mode="dovetail"] .lp-band-violet {
+  background: var(--ld-surface);
+  border: 1px solid #1e1e1e;
+  color: #fff;
+}
+.landing-theme[data-mode="dovetail"] .lp-band-violet::after { display: none; }
+
+/* Sin bandas alternas ni gradiente violeta */
+.landing-theme[data-mode="dovetail"] .lp-section--tint,
+.landing-theme[data-mode="dovetail"] .lp-section--tint-grad {
+  background: #0a0a0a;
+  background-image: none;
+}
+
+/* Comparativa: columna MediFlow con tinte azul sutil + hairline azul */
+.landing-theme[data-mode="dovetail"] .lp-compare__col-mediflow {
+  background: rgba(103,152,255,0.06);
+  border-color: rgba(103,152,255,0.30);
+}
+.landing-theme[data-mode="dovetail"] .lp-compare thead .lp-compare__col-mediflow { color: var(--ld-brand); border-top-color: rgba(103,152,255,0.30); }
+.landing-theme[data-mode="dovetail"] .lp-yes { color: #6798ff; }
+
+/* FAQ */
+.landing-theme[data-mode="dovetail"] .lp-faq__item { background: var(--ld-surface); border-color: #1e1e1e; box-shadow: none; border-radius: 8px; }
+.landing-theme[data-mode="dovetail"] .lp-faq__item[open] { border-color: #313131; }
+.landing-theme[data-mode="dovetail"] .lp-faq__icon { color: var(--ld-brand); }
+
+/* Firma de esquina 8px (normaliza radios base que eran 13-14px) */
+.landing-theme[data-mode="dovetail"] .lp-card__icon { border-radius: 8px; }
+.landing-theme[data-mode="dovetail"] .lp-trust__item { border-radius: 8px; }
+.landing-theme[data-mode="dovetail"] .lp-trust__icon { border-radius: 8px; }
+.landing-theme[data-mode="dovetail"] .lp-compare thead .lp-compare__col-mediflow { border-top-left-radius: 8px; border-top-right-radius: 8px; }
+.landing-theme[data-mode="dovetail"] .lp-compare tbody tr:last-child .lp-compare__col-mediflow { border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; }
+
+/* Grid wireframe (motivo "blueprint"): grid 1px #1e1e1e, celdas ~56px,
+   con máscara que lo desvanece. Solo en secciones con .lp-wire. */
+.lp-wire { position: relative; }
+.landing-theme[data-mode="dovetail"] .lp-wire::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(to right, rgba(255,255,255,0.025) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,0.025) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(ellipse 95% 75% at 50% 0%, #000 25%, transparent 78%);
+  mask-image: radial-gradient(ellipse 95% 75% at 50% 0%, #000 25%, transparent 78%);
+}
+.lp-wire > * { position: relative; z-index: 1; }
+
 @keyframes cmdOverlayIn {
   from { opacity: 0; }
   to   { opacity: 1; }
