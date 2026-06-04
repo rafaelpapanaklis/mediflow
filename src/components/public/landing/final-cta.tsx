@@ -1,135 +1,83 @@
 import Link from "next/link";
 
+const TRUST = ["Migración incluida", "Soporte en español", "CFDI 4.0"];
+
 export function FinalCTA() {
   return (
-    <section
-      style={{
-        position: "relative",
-        padding: "120px 48px",
-        overflow: "hidden",
-      }}
-    >
-      {/* Ambient backgrounds */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          inset: 0,
-          background:
-            "radial-gradient(ellipse at 50% 50%, rgba(124,58,237,0.18), transparent 55%), radial-gradient(ellipse at 80% 60%, rgba(52,211,153,0.10), transparent 55%)",
-          pointerEvents: "none",
-        }}
-      />
-
-      <div
-        style={{
-          position: "relative",
-          maxWidth: 900,
-          margin: "0 auto",
-          textAlign: "center",
-          padding: "80px 48px",
-          borderRadius: 24,
-          background:
-            "linear-gradient(135deg, rgba(124,58,237,0.15), rgba(52,211,153,0.08))",
-          border: "1px solid rgba(124,58,237,0.3)",
-          boxShadow: "0 0 80px rgba(124,58,237,0.2)",
-        }}
-      >
-        <h2
-          style={{
-            fontFamily: "var(--font-sans, system-ui, sans-serif)",
-            fontWeight: 700,
-            fontSize: "clamp(32px, 5vw, 48px)",
-            letterSpacing: "-0.035em",
-            lineHeight: 1.05,
-            margin: 0,
-            color: "var(--ld-fg, var(--fg))",
-          }}
-        >
-          ¿Listo para ver MediFlow en tu clínica?
-        </h2>
-
-        <p
-          style={{
-            fontSize: 17,
-            color: "var(--ld-fg-muted, var(--fg-muted))",
-            maxWidth: 560,
-            margin: "24px auto 36px",
-            lineHeight: 1.55,
-          }}
-        >
-          Empieza gratis hoy. 14 días sin cargo. Cancela cuando quieras.
-        </p>
-
+    <section className="lp-section" aria-labelledby="cta-h">
+      <div className="lp-container">
         <div
-          className="ld-cta-buttons"
+          className="lp-card lp-cta-panel"
           style={{
-            display: "flex",
-            gap: 12,
-            justifyContent: "center",
-            flexWrap: "wrap",
+            background: "var(--ld-brand-weak)",
+            borderColor: "var(--ld-brand-weak-border)",
+            borderRadius: "var(--lp-radius-lg, 22px)",
+            textAlign: "center",
+            maxWidth: 880,
+            margin: "0 auto",
           }}
         >
-          <Link
-            href="/signup"
-            style={{
-              padding: "14px 24px",
-              borderRadius: 10,
-              background: "linear-gradient(180deg, #8b5cf6, #7c3aed)",
-              color: "white",
-              fontWeight: 500,
-              fontSize: 14,
-              textDecoration: "none",
-              boxShadow:
-                "0 10px 30px -8px rgba(124,58,237,0.6), inset 0 1px 0 rgba(255,255,255,0.2)",
-              transition: "all 0.2s",
-            }}
-          >
-            Empieza gratis →
-          </Link>
-          <Link
-            href="/demo"
-            style={{
-              padding: "14px 24px",
-              borderRadius: 10,
-              border: "1px solid rgba(255,255,255,0.12)",
-              background: "rgba(255,255,255,0.03)",
-              color: "var(--ld-fg, var(--fg))",
-              fontSize: 14,
-              fontWeight: 500,
-              textDecoration: "none",
-              transition: "all 0.2s",
-            }}
-          >
-            Agendar demo
-          </Link>
-        </div>
+          <h2 id="cta-h" className="lp-h2">
+            ¿Listo para ver MediFlow en tu clínica?
+          </h2>
+          <p className="lp-lead" style={{ margin: "0 auto" }}>
+            Empieza gratis hoy. 14 días, sin tarjeta. Cancela cuando quieras.
+          </p>
 
-        <div
-          style={{
-            marginTop: 28,
-            display: "flex",
-            justifyContent: "center",
-            gap: 24,
-            flexWrap: "wrap",
-            fontSize: 12,
-            color: "var(--ld-fg-muted, var(--fg-muted))",
-            fontFamily: "var(--font-mono, ui-monospace, monospace)",
-            letterSpacing: "0.02em",
-          }}
-        >
-          <span>✓ Cancela cuando quieras</span>
-          <span>✓ Migración incluida</span>
-          <span>✓ Soporte en español</span>
+          <div className="lp-cta-actions">
+            <Link href="/signup" className="lp-btn lp-btn--primary lp-btn--lg">
+              Empieza gratis
+            </Link>
+            <Link href="/clinicas" className="lp-btn lp-btn--secondary lp-btn--lg">
+              Ver demo
+            </Link>
+          </div>
+
+          <ul className="lp-cta-trust lp-mono" aria-label="Beneficios incluidos">
+            {TRUST.map((item, i) => (
+              <li key={item} className="lp-cta-trust__item">
+                {i > 0 && (
+                  <span className="lp-cta-trust__sep" aria-hidden="true">
+                    ·
+                  </span>
+                )}
+                {item}
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
 
       <style>{`
-        @media (max-width: 768px) {
-          .ld-cta-buttons > a {
-            width: 100%;
-            text-align: center;
-          }
+        .lp-cta-panel {
+          padding: clamp(2.5rem, 6vw, 4rem);
+        }
+        .lp-cta-actions {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
+          gap: 0.875rem;
+          margin-top: 2rem;
+        }
+        .lp-cta-trust {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5rem 0.625rem;
+          margin: 1.75rem 0 0;
+          padding: 0;
+          list-style: none;
+          font-size: 12px;
+          color: var(--ld-fg-subtle);
+        }
+        .lp-cta-trust__item {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.625rem;
+        }
+        .lp-cta-trust__sep {
+          color: var(--ld-fg-subtle);
         }
       `}</style>
     </section>

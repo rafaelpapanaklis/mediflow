@@ -6,47 +6,43 @@ interface FooterColumn {
   links: { label: string; href: string }[];
 }
 
+// Solo rutas reales del repo + anclas de secciones de la home. Sin /about,
+// /blog, /docs… que no existen (evita 404s).
 const COLUMNS: FooterColumn[] = [
   {
     title: "Producto",
     links: [
-      { label: "Features", href: "#features" },
-      { label: "Precios", href: "#pricing" },
+      { label: "Funciones", href: "#features" },
       { label: "Especialidades", href: "#specialties" },
-      { label: "Integrations", href: "/integrations" },
+      { label: "Comparativa", href: "#comparison" },
+      { label: "Precios", href: "#pricing" },
+      { label: "Preguntas frecuentes", href: "#faq" },
     ],
   },
   {
-    title: "Empresa",
+    title: "Especialidades",
     links: [
-      { label: "Sobre", href: "/about" },
-      { label: "Blog", href: "/blog" },
-      { label: "Contacto", href: "/contact" },
+      { label: "Odontología general", href: "/odontologia-general" },
+      { label: "Medicina general", href: "/medicina-general" },
+      { label: "Psicología", href: "/psicologia" },
+      { label: "Nutrición", href: "/nutricion" },
+      { label: "Ver las 17", href: "#specialties" },
+    ],
+  },
+  {
+    title: "Empezar",
+    links: [
+      { label: "Empieza gratis", href: "/signup" },
+      { label: "Ver demo", href: "/clinicas" },
+      { label: "Iniciar sesión", href: "/login" },
+      { label: "Roadmap", href: "/roadmap" },
     ],
   },
   {
     title: "Legal",
     links: [
-      { label: "Términos", href: "/legal/terms" },
-      { label: "Privacidad", href: "/legal/privacy" },
-      { label: "CFDI", href: "/legal/cfdi" },
-      { label: "NOM-024", href: "/legal/nom-024" },
-    ],
-  },
-  {
-    title: "Soporte",
-    links: [
-      { label: "Docs", href: "/docs" },
-      { label: "Estado", href: "/status" },
-      { label: "Contacto", href: "/support" },
-    ],
-  },
-  {
-    title: "Redes",
-    links: [
-      { label: "Twitter", href: "https://twitter.com/mediflow" },
-      { label: "LinkedIn", href: "https://linkedin.com/company/mediflow" },
-      { label: "Instagram", href: "https://instagram.com/mediflow" },
+      { label: "Aviso de privacidad", href: "/privacidad" },
+      { label: "Política de privacidad", href: "/legal/privacy" },
     ],
   },
 ];
@@ -59,175 +55,85 @@ const SOCIALS = [
 
 export function Footer() {
   return (
-    <footer
-      style={{
-        borderTop: "1px solid var(--ld-border, var(--border))",
-        background: "rgba(0,0,0,0.3)",
-        padding: "80px 48px 40px",
-      }}
-    >
-      <div style={{ maxWidth: 1280, margin: "0 auto" }}>
-        <div className="ld-footer-grid">
-          {COLUMNS.map((col) => (
-            <div key={col.title}>
-              <h4
-                style={{
-                  fontFamily:
-                    "var(--font-mono, ui-monospace, monospace)",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.15em",
-                  color: "var(--ld-fg, var(--fg))",
-                  margin: 0,
-                  marginBottom: 16,
-                }}
-              >
-                {col.title}
-              </h4>
-              <ul
-                style={{
-                  listStyle: "none",
-                  padding: 0,
-                  margin: 0,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 10,
-                }}
-              >
-                {col.links.map((l) => {
-                  const isExternal = l.href.startsWith("http");
-                  const linkStyle = {
-                    fontSize: 13,
-                    color: "var(--ld-fg-muted, var(--fg-muted))",
-                    textDecoration: "none",
-                    transition: "color 0.2s",
-                  } as const;
-                  return (
-                    <li key={l.label}>
-                      {isExternal ? (
-                        <a
-                          href={l.href}
-                          className="ld-footer-link"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={linkStyle}
-                        >
-                          {l.label}
-                        </a>
-                      ) : (
-                        <Link
-                          href={l.href}
-                          className="ld-footer-link"
-                          style={linkStyle}
-                        >
-                          {l.label}
-                        </Link>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
+    <footer className="lp-section--tint" style={{ borderTop: "1px solid var(--ld-border)" }}>
+      <div className="lp-container" style={{ paddingTop: 72, paddingBottom: 40 }}>
+        <div className="lp-footer-grid">
+          {/* Brand */}
+          <div className="lp-footer-brand">
+            <Link href="/" aria-label="MediFlow — inicio" style={{ textDecoration: "none" }}>
+              <Logo size={24} color="var(--ld-brand-strong)" />
+            </Link>
+            <p style={{ marginTop: 16, fontSize: 14, lineHeight: 1.55, color: "var(--ld-fg-muted)", maxWidth: 280 }}>
+              El sistema todo-en-uno para clínicas mexicanas: agenda, WhatsApp,
+              expediente, CFDI 4.0 e IA en una sola plataforma.
+            </p>
+            <div style={{ marginTop: 18, display: "flex", gap: 16, flexWrap: "wrap" }}>
+              {SOCIALS.map((s) => (
+                <a
+                  key={s.label}
+                  href={s.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="lp-footer-link lp-mono"
+                  style={{ fontSize: 12, color: "var(--ld-fg-subtle)", textDecoration: "none" }}
+                >
+                  {s.label}
+                </a>
+              ))}
             </div>
+          </div>
+
+          {COLUMNS.map((col) => (
+            <nav key={col.title} aria-label={col.title}>
+              <h3 className="lp-mono" style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--ld-fg)", margin: "0 0 16px" }}>
+                {col.title}
+              </h3>
+              <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 11 }}>
+                {col.links.map((l) => (
+                  <li key={l.label}>
+                    <Link href={l.href} className="lp-footer-link" style={{ fontSize: 14, color: "var(--ld-fg-muted)", textDecoration: "none" }}>
+                      {l.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
           ))}
         </div>
 
-        {/* HR */}
-        <div
-          style={{
-            height: 1,
-            background: "var(--ld-border, var(--border))",
-            margin: "48px 0 24px",
-          }}
-        />
+        <hr className="lp-divider" style={{ margin: "44px 0 24px" }} />
 
-        {/* Bottom row */}
-        <div
-          className="ld-footer-bottom"
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 20,
-            flexWrap: "wrap",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 16,
-              flexWrap: "wrap",
-            }}
-          >
-            <Logo size={20} color="var(--ld-brand-light, var(--brand-light))" />
-            <span
-              style={{
-                fontSize: 12,
-                color: "var(--ld-fg-muted, var(--fg-muted))",
-                fontFamily:
-                  "var(--font-mono, ui-monospace, monospace)",
-              }}
-            >
-              © 2026 MediFlow · Hecho en México 🇲🇽
-            </span>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              gap: 18,
-              flexWrap: "wrap",
-            }}
-          >
-            {SOCIALS.map((s) => (
-              <a
-                key={s.label}
-                href={s.href}
-                className="ld-footer-link"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  fontSize: 12,
-                  color: "var(--ld-fg-muted, var(--fg-muted))",
-                  textDecoration: "none",
-                  fontFamily:
-                    "var(--font-mono, ui-monospace, monospace)",
-                  letterSpacing: "0.04em",
-                  transition: "color 0.2s",
-                }}
-              >
-                {s.label}
-              </a>
-            ))}
-          </div>
+        <div className="lp-footer-bottom">
+          <span className="lp-mono" style={{ fontSize: 12.5, color: "var(--ld-fg-subtle)" }}>
+            © 2026 MediFlow · Hecho en México <span aria-hidden="true">🇲🇽</span>
+          </span>
+          <span className="lp-mono" style={{ fontSize: 12.5, color: "var(--ld-fg-subtle)" }}>
+            CFDI 4.0 · NOM-024 · Datos cifrados
+          </span>
         </div>
       </div>
 
       <style>{`
-        .ld-footer-grid {
+        .lp-footer-grid {
           display: grid;
-          grid-template-columns: repeat(5, 1fr);
+          grid-template-columns: 1.6fr repeat(4, 1fr);
           gap: 40px;
         }
-        .ld-footer-link:hover {
-          color: var(--ld-fg, var(--fg)) !important;
+        .lp-footer-link { transition: color 0.15s; }
+        .lp-footer-link:hover { color: var(--ld-fg) !important; }
+        .lp-footer-bottom {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          flex-wrap: wrap;
         }
-        @media (max-width: 1024px) {
-          .ld-footer-grid {
-            grid-template-columns: repeat(2, 1fr);
-            gap: 32px 24px;
-          }
+        @media (max-width: 860px) {
+          .lp-footer-grid { grid-template-columns: repeat(2, 1fr); gap: 32px 24px; }
+          .lp-footer-brand { grid-column: 1 / -1; }
         }
-        @media (max-width: 768px) {
-          .ld-footer-grid {
-            grid-template-columns: 1fr;
-            gap: 28px;
-          }
-          .ld-footer-bottom {
-            flex-direction: column;
-            align-items: flex-start;
-          }
+        @media (max-width: 480px) {
+          .lp-footer-grid { grid-template-columns: 1fr; }
         }
       `}</style>
     </footer>

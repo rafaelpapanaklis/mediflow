@@ -1,133 +1,269 @@
-import { Glow } from "./primitives/glow";
-import { GridBg } from "./primitives/grid-bg";
-import { Pill } from "./primitives/pill";
-import { FloatCard } from "./primitives/float-card";
-import { CTAButtons } from "./primitives/cta-buttons";
-import { DashboardMockup } from "./mockups/dashboard-mockup";
-import { WhatsAppCard } from "./mockups/whatsapp-card";
-import { MiniRadio } from "./mockups/mini-radio";
+import Link from "next/link";
+import { PlayCircle, Check } from "lucide-react";
+
+const MONO = "var(--font-mono, ui-monospace, monospace)";
+
+// Datos estáticos del mockup (sin estado: server component).
+const AGENDA = [
+  { time: "09:00", name: "María Ramírez", type: "Consulta", active: false },
+  { time: "10:30", name: "Jorge López", type: "Limpieza", active: true },
+  { time: "12:00", name: "Ana Pérez", type: "Control", active: false },
+  { time: "14:00", name: "Carlos Silva", type: "Endodoncia", active: false },
+] as const;
+
+const KPIS = [
+  { label: "Citas hoy", value: "12" },
+  { label: "Ingresos", value: "$18,400" },
+  { label: "Ocupación", value: "87%" },
+] as const;
+
+const TRUST = [
+  "800+ clínicas",
+  "CFDI 4.0 · NOM-024",
+  "Soporte en español",
+] as const;
 
 export function Hero() {
   return (
-    <section style={{ position: "relative", overflow: "hidden", paddingBottom: 80 }}>
-      <div aria-hidden="true" style={{
-        position: "absolute", inset: 0,
-        background: "linear-gradient(180deg, #1a0b2e 0%, var(--ld-bg) 70%)",
-        pointerEvents: "none",
-      }} />
-      <Glow x="50%" y="5%" size={1400} opacity={0.5} />
-      <div aria-hidden="true" style={{
-        position: "absolute", inset: 0,
-        background: "radial-gradient(ellipse at 85% 40%, rgba(52,211,153,0.12), transparent 50%)",
-      }} />
-      <GridBg opacity={0.035} />
-
-      <div style={{ position: "relative", maxWidth: 1280, margin: "0 auto", padding: "120px 48px 0" }}>
-        <div className="ld-hero-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1.15fr", gap: 56, alignItems: "center" }}>
-          <div>
-            <div style={{ marginBottom: 24 }}><Pill>Hecho en México · CFDI 4.0 nativo</Pill></div>
-            <h1 style={{
-              fontFamily: "var(--font-sans, system-ui, sans-serif)",
-              fontWeight: 700,
-              fontSize: "clamp(40px, 6vw, 72px)",
-              letterSpacing: "-0.045em",
-              lineHeight: 0.95,
-              margin: 0,
-              marginBottom: 24,
-              color: "var(--ld-fg)",
-            }}>
-              El sistema operativo<br />
-              <span style={{
-                background: "linear-gradient(90deg, #c4b5fd 0%, #7c3aed 50%, #34d399 100%)",
-                WebkitBackgroundClip: "text",
-                backgroundClip: "text",
-                color: "transparent",
-              }}>de tu clínica.</span>
-            </h1>
-            <p style={{ fontSize: 18, color: "var(--ld-fg-muted)", maxWidth: 500, lineHeight: 1.55, marginBottom: 32 }}>
-              Agenda, expedientes, facturación CFDI, WhatsApp e IA para radiografías — en una sola plataforma diseñada para clínicas mexicanas.
+    <section
+      className="lp-section"
+      aria-labelledby="hero-h"
+      style={{ paddingTop: "clamp(48px,7vw,88px)" }}
+    >
+      <div className="lp-container">
+        <div className="lp-hero-grid">
+          {/* Columna izquierda: copy + CTAs */}
+          <div className="lp-hero-copy">
+            <p className="lp-pill lp-animate lp-d1">
+              Hecho en México · CFDI 4.0 nativo
             </p>
-            <CTAButtons />
-            <div style={{ marginTop: 36, display: "flex", gap: 22, fontSize: 12, color: "var(--ld-fg-muted)", flexWrap: "wrap" }}>
-              <span>✓ Cancela cuando quieras</span>
-              <span>✓ 14 días gratis</span>
-              <span>✓ Soporte en español</span>
-              <span>✓ Migración incluida</span>
-            </div>
-          </div>
 
-          <div className="ld-hero-collage" style={{ position: "relative", height: 560 }}>
-            <div style={{ position: "absolute", top: 0, right: 0, width: 520, zIndex: 2 }}>
-              <FloatCard title="agenda.semana">
-                <div style={{ overflow: "hidden", borderRadius: 10 }}>
-                  <DashboardMockup scale={0.52} animate />
-                </div>
-              </FloatCard>
-            </div>
+            <h1 id="hero-h" className="lp-h1 lp-animate lp-d2">
+              Toda tu clínica en{" "}
+              <span className="lp-accent">una sola plataforma</span>.
+            </h1>
 
-            <div style={{ position: "absolute", top: 260, left: -20, width: 260, zIndex: 3 }}>
-              <FloatCard title="factura · CFDI 4.0">
-                <div style={{ fontSize: 11, color: "var(--ld-fg-muted)", marginBottom: 8, fontFamily: "var(--font-mono, ui-monospace, monospace)" }}>Folio AB-00342</div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
-                  <span style={{ color: "var(--ld-fg)" }}>Consulta general</span>
-                  <span style={{ color: "var(--ld-fg)" }}>$800.00</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
-                  <span style={{ color: "var(--ld-fg-muted)" }}>IVA 16%</span>
-                  <span style={{ color: "var(--ld-fg-muted)" }}>$128.00</span>
-                </div>
-                <div style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "8px 0" }} />
-                <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-sans, system-ui, sans-serif)", fontWeight: 600, color: "var(--ld-fg)" }}>
-                  <span>Total</span><span>$928.00</span>
-                </div>
-                <div style={{
-                  marginTop: 12, padding: "6px 10px", borderRadius: 6,
-                  background: "rgba(52,211,153,0.12)",
-                  border: "1px solid rgba(52,211,153,0.25)",
-                  fontSize: 11, color: "#34d399",
-                  display: "flex", alignItems: "center", gap: 6,
-                }}>
-                  <span>✓</span> Timbrada ante SAT
-                </div>
-              </FloatCard>
-            </div>
+            <p className="lp-lead lp-animate lp-d3">
+              Deja de hacer malabares con Dentrix, WhatsApp, Excel y un
+              facturador aparte. MediFlow es el sistema todo-en-uno para
+              clínicas mexicanas.
+            </p>
 
-            <div style={{ position: "absolute", top: 380, right: 40, width: 240, zIndex: 3 }}>
-              <FloatCard title="radiografía · IA">
-                <MiniRadio />
-                <div style={{ fontSize: 11, color: "#fbbf24", marginTop: 10, fontWeight: 500 }}>⚠ 2 caries detectadas</div>
-                <div style={{ fontSize: 10, color: "var(--ld-fg-muted)" }}>Molar superior y premolar inferior</div>
-              </FloatCard>
-            </div>
-
-            <div style={{ position: "absolute", top: 180, left: -40, zIndex: 4 }}>
-              <WhatsAppCard />
-            </div>
-          </div>
-        </div>
-
-        <div style={{
-          display: "flex", justifyContent: "center", gap: 40, flexWrap: "wrap",
-          fontSize: 11, color: "var(--ld-fg-muted)",
-          textTransform: "uppercase", letterSpacing: "0.15em",
-          marginTop: 100, paddingTop: 32,
-          borderTop: "1px solid var(--ld-border)",
-        }}>
-          {[["+800","clínicas activas"],["17","especialidades"],["2.4M","citas gestionadas"],["99.9%","uptime"]].map(([v, l], i, arr) => (
-            <span key={l} style={{ display: "flex", alignItems: "center", gap: 20 }}>
-              <span>
-                <b style={{ color: "var(--ld-fg)", fontSize: 14, fontWeight: 500, letterSpacing: "-0.02em", textTransform: "none" }}>{v}</b> {l}
+            <div className="lp-hero-cta lp-animate lp-d4">
+              <div className="lp-hero-cta__row">
+                <Link href="/signup" className="lp-btn lp-btn--primary lp-btn--lg">
+                  Empieza gratis
+                </Link>
+                <Link href="/clinicas" className="lp-btn lp-btn--secondary lp-btn--lg">
+                  <PlayCircle size={20} strokeWidth={1.75} aria-hidden="true" />
+                  Ver demo
+                </Link>
+              </div>
+              <span
+                className="lp-mono"
+                style={{ color: "var(--ld-fg-subtle)", fontSize: 12 }}
+              >
+                14 días · sin tarjeta
               </span>
-              {i < arr.length - 1 && <span style={{ opacity: 0.3 }}>•</span>}
-            </span>
-          ))}
+            </div>
+
+            <ul className="lp-hero-trust lp-animate lp-d5">
+              {TRUST.map((item) => (
+                <li key={item} className="lp-hero-trust__item">
+                  <Check size={16} strokeWidth={1.75} aria-hidden="true" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Columna derecha: mockup del panel (decorativo) */}
+          <figure className="lp-hero-figure lp-animate lp-d3" aria-hidden="true">
+            <div className="lp-mockup lp-hero-mockup">
+              <div className="lp-mockup__bar">
+                <span className="lp-mockup__dot" style={{ background: "#ff5f57" }} />
+                <span className="lp-mockup__dot" style={{ background: "#febc2e" }} />
+                <span className="lp-mockup__dot" style={{ background: "#28c840" }} />
+                <span className="lp-hero-mockup__url lp-mono">app.mediflow.mx</span>
+              </div>
+
+              <div className="lp-hero-mockup__body">
+                <div className="lp-hero-mockup__head">
+                  <span className="lp-hero-mockup__title">Agenda del día</span>
+                  <span className="lp-hero-mockup__date lp-mono">lun 4 jun</span>
+                </div>
+
+                <div className="lp-hero-agenda">
+                  {AGENDA.map((slot) => (
+                    <div
+                      key={slot.time}
+                      className={
+                        slot.active
+                          ? "lp-hero-slot lp-hero-slot--active"
+                          : "lp-hero-slot"
+                      }
+                    >
+                      <span className="lp-hero-slot__time lp-mono">{slot.time}</span>
+                      <span className="lp-hero-slot__name">{slot.name}</span>
+                      <span className="lp-hero-slot__chip">{slot.type}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="lp-hero-kpis">
+                  {KPIS.map((kpi) => (
+                    <div key={kpi.label} className="lp-hero-kpi">
+                      <span className="lp-hero-kpi__label lp-mono">{kpi.label}</span>
+                      <span className="lp-hero-kpi__value">{kpi.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </figure>
         </div>
       </div>
 
       <style>{`
-        @media (max-width: 960px) {
-          .ld-hero-grid { grid-template-columns: 1fr !important; }
-          .ld-hero-collage { height: auto !important; min-height: 480px; }
+        .lp-hero-grid {
+          display: grid;
+          grid-template-columns: 1fr 1.1fr;
+          gap: clamp(32px, 5vw, 56px);
+          align-items: center;
+        }
+        .lp-hero-copy > * { margin-block: 0; }
+        .lp-hero-copy > * + * { margin-top: 22px; }
+
+        .lp-hero-cta {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          align-items: flex-start;
+        }
+        .lp-hero-cta__row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 14px;
+        }
+
+        .lp-hero-trust {
+          list-style: none;
+          padding: 0;
+          margin: 0;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 12px 22px;
+        }
+        .lp-hero-trust__item {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          font-size: 13px;
+          color: var(--ld-fg-muted);
+        }
+        .lp-hero-trust__item svg { color: var(--ld-brand-strong); flex-shrink: 0; }
+
+        /* ---- Mockup del panel ---- */
+        .lp-hero-figure { margin: 0; min-width: 0; }
+        .lp-hero-mockup { width: 100%; }
+        .lp-hero-mockup__url {
+          margin-left: auto;
+          font-size: 12px;
+          color: var(--ld-fg-subtle);
+        }
+        .lp-hero-mockup__body {
+          padding: clamp(16px, 2.4vw, 24px);
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+        .lp-hero-mockup__head {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 12px;
+        }
+        .lp-hero-mockup__title {
+          font-size: 15px;
+          font-weight: 600;
+          letter-spacing: -0.01em;
+          color: var(--ld-fg);
+        }
+        .lp-hero-mockup__date { font-size: 12px; color: var(--ld-fg-subtle); }
+
+        .lp-hero-agenda { display: flex; flex-direction: column; gap: 8px; }
+        .lp-hero-slot {
+          display: grid;
+          grid-template-columns: 52px 1fr auto;
+          align-items: center;
+          gap: 12px;
+          padding: 11px 13px;
+          border-radius: 10px;
+          background: var(--ld-surface-2);
+          border: 1px solid var(--ld-border);
+        }
+        .lp-hero-slot--active {
+          background: var(--ld-brand-weak);
+          border-color: var(--ld-brand-weak-border);
+        }
+        .lp-hero-slot__time { font-size: 12px; color: var(--ld-fg-muted); }
+        .lp-hero-slot__name {
+          font-size: 13.5px;
+          font-weight: 500;
+          color: var(--ld-fg);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .lp-hero-slot__chip {
+          font-size: 11px;
+          color: var(--ld-fg-muted);
+          padding: 3px 10px;
+          border-radius: 999px;
+          background: var(--ld-surface);
+          border: 1px solid var(--ld-border);
+          white-space: nowrap;
+        }
+        .lp-hero-slot--active .lp-hero-slot__chip {
+          color: var(--ld-brand-strong);
+          border-color: var(--ld-brand-weak-border);
+          background: var(--ld-surface);
+        }
+
+        .lp-hero-kpis {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 12px;
+          padding-top: 4px;
+        }
+        .lp-hero-kpi {
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+          padding: 13px;
+          border-radius: 10px;
+          background: var(--ld-surface-2);
+          border: 1px solid var(--ld-border);
+        }
+        .lp-hero-kpi__label {
+          font-size: 11px;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          color: var(--ld-fg-subtle);
+        }
+        .lp-hero-kpi__value {
+          font-size: 18px;
+          font-weight: 600;
+          letter-spacing: -0.02em;
+          color: var(--ld-fg);
+        }
+
+        @media (max-width: 900px) {
+          .lp-hero-grid { grid-template-columns: 1fr; }
+          .lp-hero-figure { order: 2; }
+        }
+        @media (max-width: 420px) {
+          .lp-hero-kpis { grid-template-columns: 1fr; }
         }
       `}</style>
     </section>

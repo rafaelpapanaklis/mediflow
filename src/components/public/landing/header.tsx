@@ -1,130 +1,152 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Menu, X } from "lucide-react";
 import { Logo } from "./primitives/logo";
 import { SpecialtiesDropdown } from "./specialties-dropdown";
 
 interface HeaderProps {
   // Cuando el visitante ya tiene sesión Supabase activa, el header muestra
-  // "Ir al dashboard" en vez de los CTA de login/signup. Lo decide el server
-  // component padre (src/app/page.tsx) llamando getSession() — no metemos
-  // un fetch client-side para evitar un flash en cada carga.
+  // "Ir al panel" en vez de los CTA de login/signup. Lo decide el server
+  // component padre (src/app/page.tsx) — no metemos un fetch client-side para
+  // evitar un flash en cada carga.
   isLoggedIn?: boolean;
 }
 
+// Enlaces de navegación. Definidos fuera del JSX porque son estáticos.
+const NAV_LINKS: { label: string; href: string }[] = [
+  { label: "Funciones", href: "#features" },
+  { label: "Especialidades", href: "#specialties" },
+  { label: "Comparativa", href: "#comparison" },
+  { label: "Precios", href: "#pricing" },
+];
+
 export function Header({ isLoggedIn = false }: HeaderProps) {
-  const [mode, setMode] = useState<"dark" | "light">("dark");
-  const [mounted, setMounted] = useState(false);
+  const [open, setOpen] = useState(false);
+  const close = () => setOpen(false);
+  const burgerRef = useRef<HTMLButtonElement>(null);
 
+  // Cerrar el menú móvil con Escape y devolver el foco a la hamburguesa.
   useEffect(() => {
-    const saved = typeof window !== "undefined" ? localStorage.getItem("ld-theme") : null;
-    if (saved === "light" || saved === "dark") setMode(saved);
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (!mounted) return;
-    document.documentElement.querySelector(".landing-theme")?.setAttribute("data-mode", mode);
-    try { localStorage.setItem("ld-theme", mode); } catch {}
-  }, [mode, mounted]);
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setOpen(false);
+        burgerRef.current?.focus();
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
 
   return (
-    <div style={{
-      position: "sticky",
-      top: 0,
-      zIndex: 100,
-      backdropFilter: "blur(16px)",
-      background: mode === "dark" ? "rgba(10,10,15,0.7)" : "rgba(255,255,255,0.7)",
-      borderBottom: "1px solid var(--ld-border)",
-    }}>
-      <div style={{
-        maxWidth: 1280,
-        margin: "0 auto",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "16px 48px",
-      }}>
-        <Link href="/" style={{ textDecoration: "none" }}>
-          <Logo size={22} color="var(--ld-brand-light)" />
+    <header className="lp-header">
+      <div className="lp-header__inner">
+        {/* Marca */}
+        <Link href="/" aria-label="MediFlow — inicio" style={{ textDecoration: "none" }}>
+          <Logo size={22} color="var(--ld-brand-strong)" />
         </Link>
 
-        <div
-          className="ld-nav-links"
-          style={{
-            display: "flex",
-            gap: 28,
-            fontSize: 13,
-            color: "var(--ld-fg-muted)",
-            alignItems: "center",
-          }}
-        >
-          <Link href="#features" style={{ color: "inherit", textDecoration: "none" }}>Producto</Link>
+        {/* Navegación principal — el CSS global la oculta <860px */}
+        <nav className="lp-nav-links" aria-label="Principal">
+          <Link href="#features">Funciones</Link>
           <SpecialtiesDropdown />
-          <Link href="#pricing" style={{ color: "inherit", textDecoration: "none" }}>Precios</Link>
-          <Link href="#testimonials" style={{ color: "inherit", textDecoration: "none" }}>Clientes</Link>
-        </div>
+          <Link href="#comparison">Comparativa</Link>
+          <Link href="#pricing">Precios</Link>
+        </nav>
 
-        <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 13 }}>
-          <button
-            type="button"
-            onClick={() => setMode(m => (m === "dark" ? "light" : "dark"))}
-            aria-label={mode === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
-            style={{
-              width: 32, height: 32, borderRadius: 8,
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid var(--ld-border)",
-              color: "var(--ld-fg)", cursor: "pointer",
-              display: "grid", placeItems: "center",
-            }}
-          >
-            {mode === "dark" ? "🌙" : "☀"}
-          </button>
+        {/* Acciones */}
+        <div className="lp-header__actions">
           {isLoggedIn ? (
-            <Link
-              href="/dashboard"
-              style={{
-                padding: "8px 14px",
-                borderRadius: 8,
-                background: "linear-gradient(180deg, #8b5cf6, #7c3aed)",
-                color: "#fff",
-                fontWeight: 500,
-                textDecoration: "none",
-                boxShadow: "0 4px 12px rgba(124,58,237,0.3)",
-              }}
-            >
-              Ir al dashboard →
+            <Link href="/dashboard" className="lp-btn lp-btn--primary">
+              Ir al panel
             </Link>
           ) : (
             <>
-              <Link href="/login" style={{ color: "var(--ld-fg-muted)", textDecoration: "none" }}>
+              <Link href="/login" className="lp-btn lp-btn--ghost">
                 Iniciar sesión
               </Link>
-              <Link
-                href="/signup"
-                style={{
-                  padding: "8px 14px",
-                  borderRadius: 8,
-                  background: "linear-gradient(180deg, #8b5cf6, #7c3aed)",
-                  color: "#fff",
-                  fontWeight: 500,
-                  textDecoration: "none",
-                  boxShadow: "0 4px 12px rgba(124,58,237,0.3)",
-                }}
-              >
-                Prueba gratis →
+              <Link href="/signup" className="lp-btn lp-btn--primary">
+                Empieza gratis
               </Link>
             </>
           )}
+
+          {/* Hamburguesa — el CSS global la muestra solo <860px */}
+          <button
+            type="button"
+            ref={burgerRef}
+            className="lp-burger"
+            aria-label={open ? "Cerrar menú" : "Abrir menú"}
+            aria-expanded={open}
+            aria-controls="lp-mobile-menu"
+            onClick={() => setOpen((o) => !o)}
+          >
+            {open ? (
+              <X size={22} strokeWidth={1.75} aria-hidden="true" />
+            ) : (
+              <Menu size={22} strokeWidth={1.75} aria-hidden="true" />
+            )}
+          </button>
         </div>
       </div>
 
-      <style jsx>{`
-        @media (max-width: 768px) {
-          .ld-nav-links { display: none !important; }
+      {/* Menú móvil — display:none en CSS global; se muestra solo cuando open */}
+      {open && (
+        <div id="lp-mobile-menu" className="lp-mobile-menu" style={{ display: "flex" }}>
+          <nav aria-label="Móvil" className="lp-header-mobile-nav">
+            {NAV_LINKS.map((l) => (
+              <Link key={l.href} href={l.href} onClick={close}>
+                {l.label}
+              </Link>
+            ))}
+          </nav>
+
+          <div className="lp-header-mobile-cta">
+            {isLoggedIn ? (
+              <Link
+                href="/dashboard"
+                className="lp-btn lp-btn--primary lp-btn--block"
+                onClick={close}
+              >
+                Ir al panel
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="lp-btn lp-btn--secondary lp-btn--block"
+                  onClick={close}
+                >
+                  Iniciar sesión
+                </Link>
+                <Link
+                  href="/signup"
+                  className="lp-btn lp-btn--primary lp-btn--block"
+                  onClick={close}
+                >
+                  Empieza gratis
+                </Link>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        .lp-header-mobile-nav {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .lp-header-mobile-cta {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          margin-top: 14px;
         }
       `}</style>
-    </div>
+    </header>
   );
 }

@@ -1,207 +1,137 @@
-const MONO = "var(--font-mono, ui-monospace, monospace)";
-const DISPLAY = "var(--font-sans, system-ui, sans-serif)";
-
-interface Quote {
-  q:      string;
-  name:   string;
-  role:   string;
-  city:   string;
+type Testimonial = {
   metric: string;
-}
+  quote: string;
+  name: string;
+  role: string;
+  city: string;
+};
 
-const QUOTES: Quote[] = [
+const TESTIMONIALS: Testimonial[] = [
   {
-    q: "Dejamos Excel y WhatsApp manual. En 3 meses bajamos las faltas a citas de 22% a 6%. El recordatorio automático por WhatsApp se paga solo.",
+    metric: "−73% faltas",
+    quote:
+      "Dejamos Excel y WhatsApp manual. En 3 meses bajamos las faltas a citas de 22% a 6%. El recordatorio automático se paga solo.",
     name: "Dra. Mariana Ochoa",
     role: "Directora · Clínica Dental Polanco",
     city: "CDMX",
-    metric: "-73% faltas",
   },
   {
-    q: "Lo que me convenció fue el CFDI nativo. Antes usábamos un sistema europeo que no timbraba; teníamos que facturar aparte. Ahora todo en un click.",
+    metric: "4 h/semana",
+    quote:
+      "Lo que me convenció fue el CFDI nativo. Antes facturábamos aparte; ahora todo en un clic y ahorro 4 horas a la semana.",
     name: "Dr. Ernesto Villalobos",
     role: "Médico general · Consultorio Villalobos",
     city: "Monterrey",
-    metric: "4h/semana ahorradas",
   },
   {
-    q: "La IA para radiografías es impresionante. No reemplaza mi ojo clínico, pero es una segunda opinión instantánea que mis pacientes valoran mucho.",
+    metric: "+28% aceptación",
+    quote:
+      "La IA para radiografías no reemplaza mi ojo clínico, pero es una segunda opinión que mis pacientes valoran. Subió la aceptación de tratamientos.",
     name: "Dr. Alejandro Kuri",
     role: "Endodoncista · Smile Studio",
     city: "Guadalajara",
-    metric: "+28% conversión",
   },
 ];
 
-function initials(name: string): string {
-  return name
-    .split(" ")
-    .slice(-2)
-    .map((n) => n[0] ?? "")
-    .join("");
+function getInitials(name: string): string {
+  const parts = name
+    .replace(/^(Dra?\.)\s+/i, "")
+    .trim()
+    .split(/\s+/);
+  const first = parts[0]?.[0] ?? "";
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
+  return (first + last).toUpperCase();
 }
 
 export function Testimonials() {
   return (
-    <section
-      id="testimonials"
-      style={{
-        position: "relative",
-        padding: "120px 48px",
-        maxWidth: 1280,
-        margin: "0 auto",
-      }}
-    >
-      {/* Section header */}
-      <div style={{ textAlign: "center", maxWidth: 640, margin: "0 auto 56px" }}>
-        <div
-          style={{
-            fontFamily: MONO,
-            fontSize: 11,
-            color: "var(--ld-brand-light, var(--brand-light))",
-            letterSpacing: "0.15em",
-            textTransform: "uppercase",
-            marginBottom: 14,
-          }}
-        >
-          Clientes
+    <section className="lp-section lp-section--tint" id="testimonials" aria-labelledby="tst-h">
+      <div className="lp-container">
+        <div className="lp-section-head">
+          <p className="lp-eyebrow">Clientes</p>
+          <h2 id="tst-h" className="lp-h2">
+            Clínicas que crecen con MediFlow.
+          </h2>
         </div>
-        <h2
-          style={{
-            fontFamily: DISPLAY,
-            fontWeight: 600,
-            fontSize: 48,
-            letterSpacing: "-0.035em",
-            lineHeight: 1.05,
-            margin: 0,
-            color: "var(--ld-fg, var(--fg))",
-          }}
-        >
-          Clínicas que crecen con MediFlow.
-        </h2>
+        <div className="lp-grid lp-grid-3">
+          {TESTIMONIALS.map((t) => (
+            <figure key={t.name} className="lp-card lp-tst-card">
+              <span className="lp-tst-metric">{t.metric}</span>
+              <blockquote className="lp-tst-quote">{t.quote}</blockquote>
+              <figcaption className="lp-tst-caption">
+                <span className="lp-tst-avatar" aria-hidden="true">
+                  {getInitials(t.name)}
+                </span>
+                <span className="lp-tst-who">
+                  <span className="lp-tst-name">{t.name}</span>
+                  <span className="lp-tst-role">
+                    {t.role} · {t.city}
+                  </span>
+                </span>
+              </figcaption>
+            </figure>
+          ))}
+        </div>
       </div>
-
-      {/* Cards grid */}
-      <div
-        className="testimonial-grid"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
-          gap: 20,
-        }}
-      >
-        {QUOTES.map((q, i) => {
-          const isFeatured = i === 1;
-          return (
-            <div
-              key={q.name}
-              style={{
-                padding: 28,
-                borderRadius: 16,
-                background: isFeatured
-                  ? "linear-gradient(180deg, rgba(124,58,237,0.1), rgba(124,58,237,0.02))"
-                  : "linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.005))",
-                border: `1px solid ${
-                  isFeatured
-                    ? "rgba(124,58,237,0.25)"
-                    : "var(--ld-border, var(--border))"
-                }`,
-                display: "flex",
-                flexDirection: "column",
-              }}
-            >
-              {/* Metric pill */}
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignSelf: "flex-start",
-                  padding: "5px 10px",
-                  borderRadius: 100,
-                  background: "rgba(52,211,153,0.12)",
-                  border: "1px solid rgba(52,211,153,0.25)",
-                  fontSize: 11,
-                  color: "#34d399",
-                  fontFamily: MONO,
-                  marginBottom: 20,
-                }}
-              >
-                {q.metric}
-              </div>
-
-              {/* Quote */}
-              <div
-                style={{
-                  fontFamily: DISPLAY,
-                  fontSize: 16,
-                  color: "var(--ld-fg, var(--fg))",
-                  lineHeight: 1.55,
-                  marginBottom: 24,
-                  fontWeight: 400,
-                }}
-              >
-                &ldquo;{q.q}&rdquo;
-              </div>
-
-              {/* Author */}
-              <div
-                style={{
-                  marginTop: "auto",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  paddingTop: 20,
-                  borderTop: "1px solid var(--ld-border, var(--border))",
-                }}
-              >
-                <div
-                  style={{
-                    width: 38,
-                    height: 38,
-                    borderRadius: 38,
-                    background: `linear-gradient(135deg, hsl(${
-                      260 + i * 30
-                    }, 70%, 60%), hsl(${280 + i * 30}, 60%, 45%))`,
-                    display: "grid",
-                    placeItems: "center",
-                    color: "white",
-                    fontFamily: DISPLAY,
-                    fontWeight: 600,
-                    fontSize: 13,
-                    flexShrink: 0,
-                  }}
-                >
-                  {initials(q.name)}
-                </div>
-                <div>
-                  <div
-                    style={{
-                      fontSize: 13,
-                      color: "var(--ld-fg, var(--fg))",
-                      fontWeight: 500,
-                    }}
-                  >
-                    {q.name}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: "var(--ld-fg-muted, var(--fg-muted))",
-                    }}
-                  >
-                    {q.role} · {q.city}
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
       <style>{`
-        @media (max-width: 768px) {
-          #testimonials .testimonial-grid {
-            grid-template-columns: 1fr !important;
-          }
+        .lp-tst-card {
+          display: flex;
+          flex-direction: column;
+          gap: 18px;
+        }
+        .lp-tst-metric {
+          align-self: flex-start;
+          font-family: var(--font-mono, ui-monospace, monospace);
+          font-size: 12px;
+          line-height: 1;
+          padding: 7px 12px;
+          border-radius: 100px;
+          background: rgba(16, 157, 107, 0.1);
+          color: #0d8f60;
+          border: 1px solid rgba(16, 157, 107, 0.22);
+        }
+        .lp-tst-quote {
+          margin: 0;
+          color: var(--ld-fg);
+          font-size: 16px;
+          line-height: 1.55;
+        }
+        .lp-tst-caption {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin-top: auto;
+          padding-top: 4px;
+        }
+        .lp-tst-avatar {
+          flex: none;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 38px;
+          height: 38px;
+          border-radius: 50%;
+          background: var(--ld-grad-brand);
+          color: #fff;
+          font-family: var(--font-mono, ui-monospace, monospace);
+          font-size: 13px;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+        }
+        .lp-tst-who {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          min-width: 0;
+        }
+        .lp-tst-name {
+          color: var(--ld-fg);
+          font-size: 14px;
+          font-weight: 600;
+        }
+        .lp-tst-role {
+          color: var(--ld-fg-subtle);
+          font-size: 12px;
         }
       `}</style>
     </section>

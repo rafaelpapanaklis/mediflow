@@ -1,357 +1,221 @@
 import Link from "next/link";
+import { Check } from "lucide-react";
 
 interface Plan {
-  id: string;
   name: string;
-  price: number;
-  tagline: string;
-  description: string;
-  popular?: boolean;
+  desc: string;
+  price: string;
+  cta: { label: string; href: string };
   features: string[];
-  cta: string;
-  ctaHref: string;
+  popular: boolean;
 }
 
 const PLANS: Plan[] = [
   {
-    id: "basic",
-    name: "BASIC",
-    price: 49,
-    tagline: "Para empezar",
-    description: "Solo o arrancando tu práctica.",
+    name: "Basic",
+    desc: "Para empezar tu práctica.",
+    price: "49",
+    cta: { label: "Empieza gratis", href: "/signup?plan=basic" },
     features: [
       "1 profesional · 1 sucursal",
       "Hasta 500 pacientes",
-      "Agenda y recordatorios WhatsApp",
+      "Agenda y recordatorios por WhatsApp",
       "Expediente clínico digital",
       "CFDI (50 timbres/mes)",
       "Soporte por email",
     ],
-    cta: "Empezar gratis",
-    ctaHref: "/signup?plan=basic",
+    popular: false,
   },
   {
-    id: "pro",
-    name: "PRO",
-    price: 99,
-    tagline: "Lo más elegido",
-    description: "La elección de clínicas en crecimiento.",
-    popular: true,
+    name: "Pro",
+    desc: "La elección de clínicas en crecimiento.",
+    price: "99",
+    cta: { label: "Empieza gratis", href: "/signup?plan=pro" },
     features: [
       "Hasta 3 profesionales",
       "Pacientes ilimitados",
-      "Todo lo de BASIC, más:",
+      "Todo lo de BASIC, y además:",
       "IA para radiografías (50/mes)",
-      "Teleconsulta integrada",
       "Portal del paciente",
       "CFDI ilimitado",
       "Soporte prioritario",
     ],
-    cta: "Prueba 14 días gratis",
-    ctaHref: "/signup?plan=pro",
+    popular: true,
   },
   {
-    id: "clinic",
-    name: "CLINIC",
-    price: 249,
-    tagline: "Multi-sucursal",
-    description: "Para grupos y multi-sede.",
+    name: "Clinic",
+    desc: "Para grupos y multi-sede.",
+    price: "249",
+    cta: { label: "Empieza gratis", href: "/signup?plan=clinic" },
     features: [
       "Profesionales ilimitados",
       "Hasta 5 sucursales",
-      "Todo lo de PRO, más:",
-      "IA radiografías ilimitada",
-      "API + white-label",
-      "Customer Success Manager",
+      "Todo lo de PRO, y además:",
+      "IA de radiografías ilimitada",
       "Reportes consolidados",
+      "Customer Success Manager",
       "Soporte 24/7",
     ],
-    cta: "Hablar con ventas",
-    ctaHref: "/contact?plan=clinic",
+    popular: false,
   },
 ];
 
 export function Pricing() {
   return (
-    <section
-      id="pricing"
-      style={{
-        position: "relative",
-        padding: "120px 48px",
-        maxWidth: 1280,
-        margin: "0 auto",
-      }}
-    >
-      {/* Header */}
-      <div
-        style={{
-          textAlign: "center",
-          maxWidth: 680,
-          margin: "0 auto 56px",
-        }}
-      >
-        <div
-          style={{
-            fontFamily: "var(--font-mono, ui-monospace, monospace)",
-            fontSize: 11,
-            color: "var(--ld-brand-light, var(--brand-light))",
-            letterSpacing: "0.15em",
-            textTransform: "uppercase",
-            marginBottom: 14,
-          }}
-        >
-          Precios
+    <section className="lp-section lp-section--tint" id="pricing" aria-labelledby="price-h">
+      <div className="lp-container">
+        <div className="lp-section-head">
+          <p className="lp-eyebrow">Precios</p>
+          <h2 id="price-h" className="lp-h2">Tres planes. Sin sorpresas.</h2>
+          <p className="lp-lead">14 días gratis · sin tarjeta · migración, soporte y CFDI incluidos.</p>
         </div>
-        <h2
-          style={{
-            fontFamily: "var(--font-sans, system-ui, sans-serif)",
-            fontWeight: 600,
-            fontSize: "clamp(32px, 5vw, 48px)",
-            letterSpacing: "-0.035em",
-            lineHeight: 1.05,
-            margin: 0,
-            color: "var(--ld-fg, var(--fg))",
-          }}
-        >
-          Simple. Predecible. Como debería ser.
-        </h2>
-        <p
-          style={{
-            fontSize: 17,
-            color: "var(--ld-fg-muted, var(--fg-muted))",
-            marginTop: 20,
-            lineHeight: 1.55,
-          }}
-        >
-          Sin sorpresas, sin costos por timbre CFDI en PRO y CLINIC. Cancela
-          cuando quieras.
+
+        <div className="lp-grid lp-grid-3" style={{ alignItems: "start" }}>
+          {PLANS.map((plan) => (
+            <article
+              key={plan.name}
+              className={`lp-card lp-price-card${plan.popular ? " lp-price-popular" : ""}`}
+            >
+              {plan.popular && (
+                <span className="lp-mono lp-price-badge" aria-hidden="true">
+                  El más elegido
+                </span>
+              )}
+
+              <p className="lp-mono lp-price-name">{plan.name}</p>
+              <p className="lp-price-desc">{plan.desc}</p>
+
+              <p className="lp-price-amount">
+                <span className="lp-price-currency">$</span>
+                <span className="lp-price-value">{plan.price}</span>
+                <span className="lp-price-period">USD/mes</span>
+              </p>
+
+              <Link
+                href={plan.cta.href}
+                className={`lp-btn lp-btn--block ${plan.popular ? "lp-btn--primary" : "lp-btn--secondary"}`}
+              >
+                {plan.cta.label}
+              </Link>
+
+              <hr className="lp-divider lp-price-divider" />
+
+              <ul className="lp-price-features">
+                {plan.features.map((feature) => (
+                  <li key={feature} className="lp-price-feature">
+                    <Check size={16} strokeWidth={1.75} className="lp-price-check" aria-hidden="true" />
+                    <span>{feature}</span>
+                  </li>
+                ))}
+              </ul>
+            </article>
+          ))}
+        </div>
+
+        <p className="lp-price-foot">
+          Todos los planes incluyen migración gratuita, soporte en español y cumplimiento CFDI 4.0 / NOM-024.
         </p>
       </div>
 
-      {/* Plan cards grid */}
-      <div className="ld-pricing-grid">
-        {PLANS.map((p) => (
-          <div
-            key={p.id}
-            className="ld-pricing-card"
-            style={{
-              padding: 28,
-              borderRadius: 18,
-              background: p.popular
-                ? "linear-gradient(180deg, rgba(124,58,237,0.12), rgba(124,58,237,0.03))"
-                : "linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.005))",
-              border: `1px solid ${
-                p.popular
-                  ? "rgba(124,58,237,0.4)"
-                  : "var(--ld-border, var(--border))"
-              }`,
-              boxShadow: p.popular
-                ? "0 0 60px rgba(124,58,237,0.15), 0 20px 40px -20px rgba(124,58,237,0.3)"
-                : "none",
-              position: "relative",
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
-            {p.popular && (
-              <div
-                style={{
-                  position: "absolute",
-                  top: -12,
-                  left: 28,
-                  padding: "4px 12px",
-                  borderRadius: 100,
-                  background: "linear-gradient(90deg, #a78bfa, #7c3aed)",
-                  color: "white",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                  fontFamily:
-                    "var(--font-mono, ui-monospace, monospace)",
-                }}
-              >
-                Más popular
-              </div>
-            )}
-
-            {/* Name + tagline */}
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "baseline",
-                marginBottom: 6,
-              }}
-            >
-              <div
-                style={{
-                  fontFamily: "var(--font-sans, system-ui, sans-serif)",
-                  fontWeight: 600,
-                  fontSize: 18,
-                  letterSpacing: "0.05em",
-                  color: p.popular
-                    ? "#a78bfa"
-                    : "var(--ld-fg, var(--fg))",
-                }}
-              >
-                {p.name}
-              </div>
-              {!p.popular && (
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "var(--ld-fg-muted, var(--fg-muted))",
-                  }}
-                >
-                  {p.tagline}
-                </div>
-              )}
-            </div>
-
-            {/* Description */}
-            <div
-              style={{
-                fontSize: 13,
-                color: "var(--ld-fg-muted, var(--fg-muted))",
-                marginBottom: 8,
-                lineHeight: 1.4,
-              }}
-            >
-              {p.description}
-            </div>
-
-            {/* Price */}
-            <div
-              style={{
-                marginTop: 16,
-                marginBottom: 24,
-                display: "flex",
-                alignItems: "baseline",
-                gap: 6,
-              }}
-            >
-              <span
-                style={{
-                  fontFamily: "var(--font-sans, system-ui, sans-serif)",
-                  fontWeight: 700,
-                  fontSize: 48,
-                  letterSpacing: "-0.04em",
-                  color: "var(--ld-fg, var(--fg))",
-                }}
-              >
-                ${p.price}
-              </span>
-              <span
-                style={{
-                  fontSize: 14,
-                  color: "var(--ld-fg-muted, var(--fg-muted))",
-                }}
-              >
-                USD/mes
-              </span>
-            </div>
-
-            {/* CTA button */}
-            <Link
-              href={p.ctaHref}
-              style={{
-                display: "block",
-                padding: "12px 20px",
-                borderRadius: 10,
-                textAlign: "center",
-                background: p.popular
-                  ? "linear-gradient(180deg, #8b5cf6, #7c3aed)"
-                  : "rgba(255,255,255,0.04)",
-                border: p.popular
-                  ? "none"
-                  : "1px solid rgba(255,255,255,0.08)",
-                color: p.popular ? "white" : "var(--ld-fg, var(--fg))",
-                fontSize: 14,
-                fontWeight: 500,
-                textDecoration: "none",
-                boxShadow: p.popular
-                  ? "0 10px 30px -8px rgba(124,58,237,0.6), inset 0 1px 0 rgba(255,255,255,0.2)"
-                  : "none",
-                marginBottom: 24,
-                transition: "all 0.2s",
-              }}
-            >
-              {p.cta} →
-            </Link>
-
-            <div
-              style={{
-                height: 1,
-                background: "var(--ld-border, var(--border))",
-                marginBottom: 20,
-              }}
-            />
-
-            {/* Features */}
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 10,
-              }}
-            >
-              {p.features.map((f, i) => (
-                <div
-                  key={i}
-                  style={{
-                    display: "flex",
-                    gap: 10,
-                    fontSize: 13,
-                    color: "var(--ld-fg-muted, var(--fg-muted))",
-                    lineHeight: 1.45,
-                  }}
-                >
-                  <span
-                    style={{
-                      color: p.popular
-                        ? "#a78bfa"
-                        : "var(--ld-fg-muted, var(--fg-muted))",
-                      flexShrink: 0,
-                    }}
-                    aria-hidden="true"
-                  >
-                    ✓
-                  </span>
-                  <span>{f}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Footer note */}
-      <div
-        style={{
-          textAlign: "center",
-          marginTop: 48,
-          fontSize: 13,
-          color: "var(--ld-fg-muted, var(--fg-muted))",
-          lineHeight: 1.6,
-        }}
-      >
-        Todos los planes incluyen: Migración gratuita · Actualizaciones ·
-        Soporte en español · Cumplimiento CFDI/NOM-024
-      </div>
-
       <style>{`
-        .ld-pricing-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 16px;
-          align-items: start;
+        .lp-price-card {
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          height: 100%;
         }
-        @media (max-width: 768px) {
-          .ld-pricing-grid {
-            grid-template-columns: 1fr;
-            gap: 20px;
-          }
+        .lp-price-popular {
+          border-color: var(--ld-brand-weak-border);
+          box-shadow: var(--ld-shadow-lg);
+        }
+        .lp-price-badge {
+          position: absolute;
+          top: -12px;
+          left: 50%;
+          transform: translateX(-50%);
+          padding: 5px 14px;
+          border-radius: 999px;
+          background: var(--ld-grad-brand);
+          color: #fff;
+          font-size: 11px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          white-space: nowrap;
+          box-shadow: var(--ld-shadow-sm);
+        }
+        .lp-price-name {
+          margin: 0;
+          font-size: 13px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.14em;
+          color: var(--ld-brand-strong);
+        }
+        .lp-price-desc {
+          margin: 8px 0 0;
+          font-size: 14px;
+          line-height: 1.5;
+          color: var(--ld-fg-subtle);
+        }
+        .lp-price-amount {
+          display: flex;
+          align-items: baseline;
+          gap: 4px;
+          margin: 22px 0 0;
+          flex-wrap: wrap;
+        }
+        .lp-price-currency {
+          font-size: 24px;
+          font-weight: 700;
+          color: var(--ld-fg);
+          line-height: 1;
+        }
+        .lp-price-value {
+          font-size: 46px;
+          font-weight: 700;
+          color: var(--ld-fg);
+          line-height: 1;
+          letter-spacing: -0.02em;
+        }
+        .lp-price-period {
+          font-size: 14px;
+          color: var(--ld-fg-muted);
+        }
+        .lp-price-card .lp-btn--block {
+          margin-top: 24px;
+        }
+        .lp-price-divider {
+          margin: 24px 0;
+        }
+        .lp-price-features {
+          list-style: none;
+          padding: 0;
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 13px;
+        }
+        .lp-price-feature {
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+          font-size: 14px;
+          line-height: 1.45;
+          color: var(--ld-fg-muted);
+        }
+        .lp-price-check {
+          flex-shrink: 0;
+          margin-top: 2px;
+          color: var(--ld-brand-strong);
+        }
+        .lp-price-foot {
+          margin: 36px auto 0;
+          max-width: 620px;
+          text-align: center;
+          font-size: 13px;
+          line-height: 1.5;
+          color: var(--ld-fg-subtle);
         }
       `}</style>
     </section>
