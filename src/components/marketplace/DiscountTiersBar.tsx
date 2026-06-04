@@ -13,6 +13,7 @@
  */
 import { Check, Gift, Info } from "lucide-react";
 import { getDiscountTier } from "@/lib/marketplace/pricing";
+import { useT } from "@/i18n/i18n-provider";
 
 interface DiscountTiersBarProps {
   cartCount: number;
@@ -25,8 +26,9 @@ const TIERS = [
 ];
 
 export function DiscountTiersBar({ cartCount }: DiscountTiersBarProps) {
+  const t = useT();
   const currentTier = getDiscountTier(cartCount);
-  const nextTier    = TIERS.find((t) => cartCount < t.count);
+  const nextTier    = TIERS.find((tier) => cartCount < tier.count);
   const progress    = nextTier ? (cartCount / nextTier.count) * 100 : 100;
 
   return (
@@ -41,9 +43,9 @@ export function DiscountTiersBar({ cartCount }: DiscountTiersBarProps) {
               <Gift className="w-5 h-5 text-amber-300" aria-hidden />
             </div>
             <div>
-              <h2 className="text-base font-semibold tracking-tight">Descuentos por paquete</h2>
+              <h2 className="text-base font-semibold tracking-tight">{t("pages.discountTiers.title")}</h2>
               <p className="text-sm text-slate-300 mt-0.5">
-                Más módulos = más ahorro. Combina las especialidades que tu clínica necesite.
+                {t("pages.discountTiers.subtitle")}
               </p>
             </div>
           </div>
@@ -54,7 +56,7 @@ export function DiscountTiersBar({ cartCount }: DiscountTiersBarProps) {
               className="bg-emerald-500/20 backdrop-blur border border-emerald-400/30 rounded-lg px-3 py-2 flex items-center gap-2 flex-shrink-0"
             >
               <Check className="w-4 h-4 text-emerald-300" strokeWidth={3} aria-hidden />
-              <span className="text-sm font-medium text-emerald-100">{currentTier.discount}% activo</span>
+              <span className="text-sm font-medium text-emerald-100">{t("pages.discountTiers.activeDiscount", { discount: currentTier.discount })}</span>
             </div>
           )}
         </div>
@@ -68,13 +70,13 @@ export function DiscountTiersBar({ cartCount }: DiscountTiersBarProps) {
           </div>
 
           <div className="absolute inset-0 flex items-center">
-            {TIERS.map((t) => {
-              const reached = cartCount >= t.count;
+            {TIERS.map((tier) => {
+              const reached = cartCount >= tier.count;
               return (
                 <div
-                  key={t.count}
+                  key={tier.count}
                   className="absolute"
-                  style={{ left: `calc(${(t.count / 10) * 100}% - 8px)`, top: 0 }}
+                  style={{ left: `calc(${(tier.count / 10) * 100}% - 8px)`, top: 0 }}
                 >
                   <div className={`w-4 h-4 rounded-full border-2 transition-all ${
                     reached
@@ -90,18 +92,18 @@ export function DiscountTiersBar({ cartCount }: DiscountTiersBarProps) {
         </div>
 
         <div className="grid grid-cols-3 mt-5 gap-4">
-          {TIERS.map((t) => {
-            const reached = cartCount >= t.count;
+          {TIERS.map((tier) => {
+            const reached = cartCount >= tier.count;
             return (
               <div
-                key={t.count}
+                key={tier.count}
                 className={`text-center p-3 rounded-lg transition-all ${reached ? "bg-white/5" : ""}`}
               >
                 <div className={`text-3xl font-bold tracking-tight ${reached ? "text-white" : "text-slate-500"}`}>
-                  {t.discount}%
+                  {tier.discount}%
                 </div>
                 <div className={`text-xs mt-1 ${reached ? "text-slate-200" : "text-slate-500"}`}>
-                  {t.label}
+                  {t("pages.discountTiers.modulesCount", { count: tier.count })}
                 </div>
               </div>
             );
@@ -116,12 +118,12 @@ export function DiscountTiersBar({ cartCount }: DiscountTiersBarProps) {
           >
             <Info className="w-4 h-4 text-blue-300 flex-shrink-0" aria-hidden />
             <span className="text-slate-300">
-              Agrega{" "}
+              {t("pages.discountTiers.addPrefix")}{" "}
               <strong className="text-white">
-                {nextTier.count - cartCount} módulo{nextTier.count - cartCount > 1 ? "s" : ""} más
+                {t("pages.discountTiers.modulesMore", { count: nextTier.count - cartCount })}
               </strong>{" "}
-              para desbloquear el{" "}
-              <strong className="text-white">{nextTier.discount}% de descuento</strong>
+              {t("pages.discountTiers.toUnlock")}{" "}
+              <strong className="text-white">{t("pages.discountTiers.percentDiscount", { discount: nextTier.discount })}</strong>
             </span>
           </div>
         )}

@@ -4,6 +4,7 @@ import { useState } from "react";
 import toast from "react-hot-toast";
 import { CreditCard, Loader2 } from "lucide-react";
 import type { PlanId } from "@/lib/billing/plans";
+import { useT } from "@/i18n/i18n-provider";
 
 export interface PlanCardData {
   id: PlanId;
@@ -20,6 +21,7 @@ interface Props {
 const POPULAR_PLAN_ID: PlanId = "PRO";
 
 export function SuspendedPlanCards({ plans }: Props) {
+  const t = useT();
   const [pendingPlan, setPendingPlan] = useState<PlanId | null>(null);
 
   async function handleStripeCheckout(plan: PlanId) {
@@ -33,11 +35,11 @@ export function SuspendedPlanCards({ plans }: Props) {
       });
       const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
       if (!res.ok || !data.url) {
-        throw new Error(data.error ?? "No se pudo iniciar el checkout");
+        throw new Error(data.error ?? t("pages.suspended.checkoutError"));
       }
       window.location.href = data.url;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo iniciar el checkout");
+      toast.error(err instanceof Error ? err.message : t("pages.suspended.checkoutError"));
       setPendingPlan(null);
     }
   }
@@ -72,7 +74,7 @@ export function SuspendedPlanCards({ plans }: Props) {
                 className="mb-2 text-[10px] font-bold uppercase tracking-wider"
                 style={{ color: "var(--brand)" }}
               >
-                ★ Más popular
+                {t("pages.suspended.mostPopular")}
               </div>
             )}
             <div className="mb-1 text-base font-bold">{plan.name}</div>
@@ -80,7 +82,7 @@ export function SuspendedPlanCards({ plans }: Props) {
               className="mb-4 text-2xl font-extrabold"
               style={{ color: "var(--brand)" }}
             >
-              ${plan.priceMxn}/mes
+              ${plan.priceMxn}{t("pages.suspended.perMonth")}
             </div>
             <ul className="mb-5 space-y-1.5">
               {plan.features.map((f) => (
@@ -101,14 +103,14 @@ export function SuspendedPlanCards({ plans }: Props) {
                 disabled={pendingPlan !== null}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold text-white shadow transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                 style={{ background: "var(--brand)" }}
-                aria-label={`Pagar ${plan.name} con tarjeta`}
+                aria-label={t("pages.suspended.payWithCardAria", { name: plan.name })}
               >
                 {isPending ? (
                   <Loader2 size={14} className="animate-spin" aria-hidden />
                 ) : (
                   <CreditCard size={14} aria-hidden />
                 )}
-                {isPending ? "Redirigiendo…" : "Pagar con tarjeta"}
+                {isPending ? t("pages.suspended.redirecting") : t("pages.suspended.payWithCard")}
               </button>
               <button
                 type="button"
@@ -121,12 +123,12 @@ export function SuspendedPlanCards({ plans }: Props) {
                 }}
                 aria-label={
                   plan.paypalUrl
-                    ? `Pagar ${plan.name} con PayPal`
-                    : `PayPal próximamente para ${plan.name}`
+                    ? t("pages.suspended.payWithPaypalAria", { name: plan.name })
+                    : t("pages.suspended.paypalComingSoonAria", { name: plan.name })
                 }
-                title={plan.paypalUrl ? undefined : "PayPal — próximamente"}
+                title={plan.paypalUrl ? undefined : t("pages.suspended.paypalComingSoon")}
               >
-                {plan.paypalUrl ? "Pagar con PayPal" : "PayPal — próximamente"}
+                {plan.paypalUrl ? t("pages.suspended.payWithPaypal") : t("pages.suspended.paypalComingSoon")}
               </button>
             </div>
           </div>

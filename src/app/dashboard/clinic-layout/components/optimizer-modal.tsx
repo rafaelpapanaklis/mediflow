@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Sparkles, X, Check, RefreshCw } from "lucide-react";
 import type { LiveAppointment } from "@/lib/floor-plan/elements";
+import { useT } from "@/i18n/i18n-provider";
 import styles from "./optimizer-modal.module.css";
 
 interface ChairInfo {
@@ -117,6 +118,7 @@ interface Props {
 }
 
 export function OptimizerModal({ appointments, chairs, onClose }: Props) {
+  const t = useT();
   const [phase, setPhase] = useState<Phase>("idle");
   const [result, setResult] = useState<OptimizerResult | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>("");
@@ -161,7 +163,7 @@ export function OptimizerModal({ appointments, chairs, onClose }: Props) {
       setResult(r);
       setPhase("done");
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "error_desconocido");
+      setErrorMsg(err instanceof Error ? err.message : t("pages.clinicLayout.optimizerUnknownError"));
       setPhase("error");
     }
   }
@@ -185,7 +187,7 @@ export function OptimizerModal({ appointments, chairs, onClose }: Props) {
       }}
       role="dialog"
       aria-modal="true"
-      aria-label="Optimizador de agenda con IA"
+      aria-label={t("pages.clinicLayout.optimizerAriaLabel")}
     >
       <div className={styles.modal}>
         <div className={styles.header}>
@@ -193,19 +195,19 @@ export function OptimizerModal({ appointments, chairs, onClose }: Props) {
             <Sparkles size={22} aria-hidden />
           </span>
           <div className={styles.headerText}>
-            <div className={styles.headerTitle}>Optimizador de Agenda con IA</div>
+            <div className={styles.headerTitle}>{t("pages.clinicLayout.optimizerTitle")}</div>
             <div className={styles.headerSubtitle}>
-              Analiza y reorganiza las citas del día para maximizar eficiencia
+              {t("pages.clinicLayout.optimizerSubtitle")}
             </div>
           </div>
-          <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Cerrar">
+          <button type="button" className={styles.closeBtn} onClick={onClose} aria-label={t("common.close")}>
             <X size={14} aria-hidden />
           </button>
         </div>
 
         <div className={styles.body}>
           <div className={styles.section}>
-            <div className={styles.sectionTitle}>Agenda Actual</div>
+            <div className={styles.sectionTitle}>{t("pages.clinicLayout.optimizerCurrentSchedule")}</div>
             <HourLabels />
             {chairs.map((c) => (
               <MiniLane
@@ -219,7 +221,7 @@ export function OptimizerModal({ appointments, chairs, onClose }: Props) {
               />
             ))}
             {chairs.length === 0 && (
-              <div className={styles.empty}>No hay sillones registrados en la agenda.</div>
+              <div className={styles.empty}>{t("pages.clinicLayout.optimizerNoChairs")}</div>
             )}
           </div>
 
@@ -228,45 +230,45 @@ export function OptimizerModal({ appointments, chairs, onClose }: Props) {
               <div className={styles.dots}>
                 <span /><span /><span />
               </div>
-              <div className={styles.thinkingTitle}>La IA está analizando tu agenda…</div>
+              <div className={styles.thinkingTitle}>{t("pages.clinicLayout.optimizerThinkingTitle")}</div>
               <div className={styles.thinkingSub}>
-                Identificando tiempos muertos y oportunidades de optimización
+                {t("pages.clinicLayout.optimizerThinkingSub")}
               </div>
             </div>
           )}
 
           {phase === "error" && (
-            <div className={styles.error}>Error al procesar: {errorMsg}</div>
+            <div className={styles.error}>{t("pages.clinicLayout.optimizerProcessError", { error: errorMsg })}</div>
           )}
 
           {phase === "done" && result && (
             <>
               <div className={styles.stats}>
                 <StatBadge
-                  label="Tiempo muerto ahorrado"
+                  label={t("pages.clinicLayout.optimizerStatDeadTime")}
                   value={`${result.stats.deadTimeSavedMins} min`}
                   variant="green"
                 />
                 <StatBadge
-                  label="Pacientes adicionales"
+                  label={t("pages.clinicLayout.optimizerStatExtraPatients")}
                   value={`+${result.stats.extraPatientsCapacity}`}
                   variant="blue"
                 />
                 <StatBadge
-                  label="Eficiencia del día"
+                  label={t("pages.clinicLayout.optimizerStatEfficiency")}
                   value={`${result.stats.efficiency}%`}
                   variant="violet"
                 />
               </div>
 
               <div className={styles.reasoning}>
-                <strong>Cambios realizados:</strong> {result.reasoning}
+                <strong>{t("pages.clinicLayout.optimizerChangesMade")}</strong> {result.reasoning}
               </div>
 
               <div className={styles.section}>
                 <div className={styles.sectionTitle}>
-                  Agenda Optimizada
-                  <span className={styles.sectionBadge}>Nueva</span>
+                  {t("pages.clinicLayout.optimizerOptimizedSchedule")}
+                  <span className={styles.sectionBadge}>{t("pages.clinicLayout.optimizerBadgeNew")}</span>
                 </div>
                 <HourLabels />
                 {chairs.map((c) => (
@@ -287,9 +289,9 @@ export function OptimizerModal({ appointments, chairs, onClose }: Props) {
 
               <div className={styles.diff}>
                 <div className={styles.diffHeader}>
-                  <span>Paciente</span>
-                  <span>Antes</span>
-                  <span className={styles.diffHeaderAfter}>Optimizado</span>
+                  <span>{t("pages.clinicLayout.optimizerColPatient")}</span>
+                  <span>{t("pages.clinicLayout.optimizerColBefore")}</span>
+                  <span className={styles.diffHeaderAfter}>{t("pages.clinicLayout.optimizerColOptimized")}</span>
                 </div>
                 {result.optimized.map((apt, i) => {
                   const orig = appointments.find((a) => a.patient === apt.patient);
@@ -312,7 +314,7 @@ export function OptimizerModal({ appointments, chairs, onClose }: Props) {
                       </span>
                       <span className={styles.diffAfter}>
                         {apt.start ? `${fmtT(apt.start)} · ${newChair}` : "—"}
-                        {changed && <span className={styles.changeBadge}>Cambio</span>}
+                        {changed && <span className={styles.changeBadge}>{t("pages.clinicLayout.optimizerBadgeChanged")}</span>}
                       </span>
                     </div>
                   );
@@ -324,16 +326,16 @@ export function OptimizerModal({ appointments, chairs, onClose }: Props) {
 
         <div className={styles.footer}>
           <button type="button" className={styles.btnGhost} onClick={onClose}>
-            Cerrar
+            {t("common.close")}
           </button>
           {phase === "idle" && (
             <button type="button" className={styles.btnPrimary} onClick={runOptimizer}>
-              <Sparkles size={13} aria-hidden /> Optimizar con IA
+              <Sparkles size={13} aria-hidden /> {t("pages.clinicLayout.optimizerRunBtn")}
             </button>
           )}
           {phase === "error" && (
             <button type="button" className={styles.btnPrimary} onClick={runOptimizer}>
-              <RefreshCw size={13} aria-hidden /> Reintentar
+              <RefreshCw size={13} aria-hidden /> {t("common.retry")}
             </button>
           )}
           {phase === "done" && !applied && (
@@ -342,17 +344,15 @@ export function OptimizerModal({ appointments, chairs, onClose }: Props) {
               className={styles.btnSuccess}
               onClick={() => {
                 setApplied(true);
-                alert(
-                  "Optimización aplicada visualmente. La actualización masiva de citas requiere confirmación adicional (TODO: endpoint de aplicación).",
-                );
+                alert(t("pages.clinicLayout.optimizerApplyAlert"));
               }}
             >
-              <Check size={13} aria-hidden /> Aplicar
+              <Check size={13} aria-hidden /> {t("pages.clinicLayout.optimizerApplyBtn")}
             </button>
           )}
           {phase === "done" && (
             <button type="button" className={styles.btnRegen} onClick={runOptimizer}>
-              Regenerar
+              {t("pages.clinicLayout.optimizerRegenBtn")}
             </button>
           )}
         </div>

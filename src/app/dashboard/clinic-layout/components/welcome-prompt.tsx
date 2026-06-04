@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Building2, FileWarning, Sparkles } from "lucide-react";
 import toast from "react-hot-toast";
+import { useT } from "@/i18n/i18n-provider";
 import promptStyles from "./welcome-prompt.module.css";
 
 interface ChairResource {
@@ -17,6 +18,7 @@ export function WelcomePrompt({
 }: {
   onLoaded: (data: { elements: unknown[]; chairs: ChairResource[]; chairsCreated: number }) => void;
 }) {
+  const t = useT();
   const [loading, setLoading] = useState<"demo" | "empty" | null>(null);
 
   const loadDemo = async () => {
@@ -32,11 +34,11 @@ export function WelcomePrompt({
       });
       toast.success(
         data.created?.chairs
-          ? `Layout demo cargado · ${data.created.chairs} sillones creados`
-          : "Layout demo cargado",
+          ? t("pages.clinicLayout.welcomeDemoLoadedWithChairs", { count: data.created.chairs })
+          : t("pages.clinicLayout.welcomeDemoLoaded"),
       );
     } catch {
-      toast.error("No se pudo cargar el demo");
+      toast.error(t("pages.clinicLayout.welcomeDemoLoadFailed"));
     } finally {
       setLoading(null);
     }
@@ -49,7 +51,7 @@ export function WelcomePrompt({
       if (!res.ok) throw new Error();
       onLoaded({ elements: [], chairs: [], chairsCreated: 0 });
     } catch {
-      toast.error("Error al inicializar layout");
+      toast.error(t("pages.clinicLayout.welcomeInitFailed"));
     } finally {
       setLoading(null);
     }
@@ -61,11 +63,9 @@ export function WelcomePrompt({
         <div className={promptStyles.icon}>
           <Building2 size={32} aria-hidden />
         </div>
-        <h1 className={promptStyles.title}>Diseña tu clínica</h1>
+        <h1 className={promptStyles.title}>{t("pages.clinicLayout.welcomeTitle")}</h1>
         <p className={promptStyles.subtitle}>
-          Empieza con un layout de ejemplo (recepción + 3 consultorios + sala de
-          rayos X + esterilización + baño) o construye desde cero arrastrando
-          elementos al canvas.
+          {t("pages.clinicLayout.welcomeSubtitle")}
         </p>
 
         <div className={promptStyles.cta}>
@@ -76,7 +76,7 @@ export function WelcomePrompt({
             disabled={loading !== null}
           >
             <Sparkles size={14} aria-hidden />
-            {loading === "demo" ? "Cargando demo…" : "Cargar layout demo"}
+            {loading === "demo" ? t("pages.clinicLayout.welcomeLoadingDemo") : t("pages.clinicLayout.welcomeLoadDemoBtn")}
           </button>
           <button
             type="button"
@@ -84,16 +84,14 @@ export function WelcomePrompt({
             onClick={startEmpty}
             disabled={loading !== null}
           >
-            {loading === "empty" ? "Iniciando…" : "Empezar de cero"}
+            {loading === "empty" ? t("pages.clinicLayout.welcomeStarting") : t("pages.clinicLayout.welcomeStartEmptyBtn")}
           </button>
         </div>
 
         <div className={promptStyles.info}>
           <FileWarning size={11} aria-hidden />
           <span>
-            El demo crea automáticamente 3 Resources tipo CHAIR (Consultorio 1,
-            2 y 3) en la agenda. Si ya tienes sillones registrados con esos
-            nombres, los reusa.
+            {t("pages.clinicLayout.welcomeInfo")}
           </span>
         </div>
       </div>

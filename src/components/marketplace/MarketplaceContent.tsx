@@ -24,6 +24,7 @@ import type { TrialStatus } from "@/lib/marketplace/access-control";
 import { ModuleCard, type ModuleStatus } from "./ModuleCard";
 import { DiscountTiersBar } from "./DiscountTiersBar";
 import { FloatingCart } from "./FloatingCart";
+import { useT } from "@/i18n/i18n-provider";
 
 interface MarketplaceContentProps {
   modules: Module[];
@@ -34,6 +35,19 @@ interface MarketplaceContentProps {
 
 const TABS = ["Todos", "Dental", "Pediatría", "Cardiología", "Dermatología", "Ginecología", "Nutrición", "Estética"] as const;
 type Tab = (typeof TABS)[number];
+
+// Map de categoría (valor de DB, no traducir el valor) -> llave de traducción para
+// la etiqueta visible del tab. La llave se resuelve con t() en render, nunca aquí.
+const TAB_LABEL_KEYS: Record<Tab, string> = {
+  "Todos":        "common.all",
+  "Dental":       "pages.marketplace.tabDental",
+  "Pediatría":    "pages.marketplace.tabPediatria",
+  "Cardiología":  "pages.marketplace.tabCardiologia",
+  "Dermatología": "pages.marketplace.tabDermatologia",
+  "Ginecología":  "pages.marketplace.tabGinecologia",
+  "Nutrición":    "pages.marketplace.tabNutricion",
+  "Estética":     "pages.marketplace.tabEstetica",
+};
 
 function computeStatus(
   m: Module,
@@ -53,6 +67,7 @@ export function MarketplaceContent({
   trialStatus,
   initialCart,
 }: MarketplaceContentProps) {
+  const t = useT();
   const router = useRouter();
   const [cart, setCart] = useState<string[]>(initialCart);
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
@@ -101,13 +116,13 @@ export function MarketplaceContent({
         const res = await addToCart(moduleId);
         if (!res.ok) {
           setCart((prev) => prev.filter((id) => id !== moduleId)); // rollback
-          toast.error(res.error ?? "No se pudo agregar al carrito");
+          toast.error(res.error ?? t("pages.marketplace.addError"));
         } else if (res.moduleIds) {
           setCart(res.moduleIds);
         }
       } catch (err) {
         setCart((prev) => prev.filter((id) => id !== moduleId));
-        toast.error("No se pudo agregar al carrito");
+        toast.error(t("pages.marketplace.addError"));
         console.error("[marketplace.add]", err);
       } finally {
         markPending(moduleId, false);
@@ -124,13 +139,13 @@ export function MarketplaceContent({
         const res = await removeFromCart(moduleId);
         if (!res.ok) {
           setCart((prev) => [...prev, moduleId]); // rollback
-          toast.error(res.error ?? "No se pudo quitar del carrito");
+          toast.error(res.error ?? t("pages.marketplace.removeError"));
         } else if (res.moduleIds) {
           setCart(res.moduleIds);
         }
       } catch (err) {
         setCart((prev) => [...prev, moduleId]);
-        toast.error("No se pudo quitar del carrito");
+        toast.error(t("pages.marketplace.removeError"));
         console.error("[marketplace.remove]", err);
       } finally {
         markPending(moduleId, false);
@@ -142,14 +157,14 @@ export function MarketplaceContent({
     <div className="px-2 sm:px-4 lg:px-6 max-w-[1400px]">
       <header className="mb-6">
         <h1 className="text-[28px] font-semibold text-[var(--text-1)] tracking-tight leading-tight">
-          Marketplace de módulos
+          {t("pages.marketplace.title")}
         </h1>
         <p className="text-[var(--text-2)] mt-1 text-[15px]">
           {trialStatus?.isExpired
-            ? "Tu prueba terminó. Activa los módulos que necesitas para continuar."
+            ? t("pages.marketplace.subtitleExpired")
             : trialStatus
-              ? `Estás probando todos los módulos gratis. Compra los que más uses para conservarlos después del día 14.`
-              : "Activa los módulos que necesitas para tu clínica."}
+              ? t("pages.marketplace.subtitleTrial")
+              : t("pages.marketplace.subtitleDefault")}
         </p>
       </header>
 
@@ -158,35 +173,35 @@ export function MarketplaceContent({
       <div className="mb-5 flex items-center justify-between gap-4 flex-wrap">
         <div
           role="tablist"
-          aria-label="Filtrar módulos por categoría"
+          aria-label={t("pages.marketplace.filterByCategory")}
           className="flex items-center gap-1 bg-[var(--bg-hover)] p-1 rounded-lg overflow-x-auto"
         >
-          {TABS.map((t) => (
+          {TABS.map((tab) => (
             <button
-              key={t}
+              key={tab}
               type="button"
               role="tab"
-              aria-selected={activeTab === t}
-              onClick={() => setActiveTab(t)}
+              aria-selected={activeTab === tab}
+              onClick={() => setActiveTab(tab)}
               className={`px-3.5 py-1.5 text-sm rounded-md whitespace-nowrap transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${
-                activeTab === t
+                activeTab === tab
                   ? "bg-[var(--bg-elev)] text-[var(--text-1)] font-medium shadow-sm"
                   : "text-[var(--text-2)] hover:text-[var(--text-1)]"
               }`}
             >
-              {t}
+              {t(TAB_LABEL_KEYS[tab])}
             </button>
           ))}
         </div>
         <div className="relative flex-shrink-0">
           <Search className="w-4 h-4 text-[var(--text-3)] absolute left-3 top-1/2 -translate-y-1/2" aria-hidden />
           <label htmlFor="mp-search" className="sr-only">
-            Buscar módulo
+            {t("pages.marketplace.searchLabel")}
           </label>
           <input
             id="mp-search"
             type="search"
-            placeholder="Buscar módulo..."
+            placeholder={t("pages.marketplace.searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9 pr-4 py-2 bg-[var(--bg-elev)] border border-[var(--border-soft)] text-[var(--text-1)] placeholder:text-[var(--text-3)] rounded-md text-sm w-64 focus:outline-none focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand-soft)]"
@@ -211,7 +226,7 @@ export function MarketplaceContent({
         })}
         {filtered.length === 0 && (
           <div className="col-span-full text-center text-[var(--text-3)] py-16 text-sm">
-            No hay módulos que coincidan con la búsqueda.
+            {t("pages.marketplace.noModulesMatch")}
           </div>
         )}
       </div>

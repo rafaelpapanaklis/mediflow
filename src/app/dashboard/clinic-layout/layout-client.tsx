@@ -53,6 +53,7 @@ import { WelcomePrompt } from "./components/welcome-prompt";
 import { OptimizerModal } from "./components/optimizer-modal";
 import { Share2 } from "lucide-react";
 import { getChairStatus } from "@/lib/floor-plan/live-mode";
+import { useT } from "@/i18n/i18n-provider";
 import styles from "./clinic-layout.module.css";
 
 interface Chair {
@@ -94,6 +95,7 @@ export function ClinicLayoutClient({
   initialMetadata,
   chairs,
 }: Props) {
+  const t = useT();
   const askConfirm = useConfirm();
   const catalog = useMemo(() => getCatalogForClinic(clinic.category), [clinic.category]);
 
@@ -251,7 +253,7 @@ export function ClinicLayoutClient({
         setSavedAt(new Date());
       } catch {
         setSaveState("error");
-        toast.error("No se pudo guardar el layout");
+        toast.error(t("pages.clinicLayout.saveError"));
       }
     }, AUTOSAVE_DELAY_MS);
 
@@ -268,10 +270,10 @@ export function ClinicLayoutClient({
     }
     const update = () => {
       const sec = Math.max(0, Math.floor((Date.now() - savedAt.getTime()) / 1000));
-      if (sec < 5) setSavedAgo("ahora");
-      else if (sec < 60) setSavedAgo(`hace ${sec}s`);
-      else if (sec < 3600) setSavedAgo(`hace ${Math.floor(sec / 60)} min`);
-      else setSavedAgo("hace > 1 h");
+      if (sec < 5) setSavedAgo(t("pages.clinicLayout.agoNow"));
+      else if (sec < 60) setSavedAgo(t("pages.clinicLayout.agoSeconds", { count: sec }));
+      else if (sec < 3600) setSavedAgo(t("pages.clinicLayout.agoMinutes", { count: Math.floor(sec / 60) }));
+      else setSavedAgo(t("pages.clinicLayout.agoOverHour"));
     };
     update();
     const id = setInterval(update, 1000);
@@ -420,13 +422,13 @@ export function ClinicLayoutClient({
                     orderIndex: created.orderIndex ?? prev.length,
                   },
                 ]);
-                toast.success(`Sillón "${created.name}" creado en la agenda`);
+                toast.success(t("pages.clinicLayout.chairCreated", { name: created.name }));
               }
             } else {
-              toast.error("No se pudo crear el Resource en la agenda");
+              toast.error(t("pages.clinicLayout.resourceCreateError"));
             }
           } catch {
-            toast.error("Error al crear Resource");
+            toast.error(t("pages.clinicLayout.resourceCreateErrorGeneric"));
           }
         }
       }
@@ -474,14 +476,13 @@ export function ClinicLayoutClient({
       let alsoDeleteResource = false;
       if (elem.resourceId) {
         const chair = liveChairs.find((c) => c.id === elem.resourceId);
-        const chairName = chair?.name ?? "este sillón";
+        const chairName = chair?.name ?? t("pages.clinicLayout.thisChair");
         alsoDeleteResource = await askConfirm({
-          title: `¿Eliminar "${chairName}" también de la agenda?`,
-          description:
-            "Confirmar elimina el sillón del layout Y del recurso de agenda (irreversible). Cancelar solo lo quita del layout y mantiene el sillón disponible en la agenda.",
+          title: t("pages.clinicLayout.deleteChairTitle", { name: chairName }),
+          description: t("pages.clinicLayout.deleteChairDescription"),
           variant: "danger",
-          confirmText: "Eliminar de ambos",
-          cancelText: "Solo del layout",
+          confirmText: t("pages.clinicLayout.deleteFromBoth"),
+          cancelText: t("pages.clinicLayout.onlyFromLayout"),
         });
       }
 
@@ -499,20 +500,20 @@ export function ClinicLayoutClient({
           });
           if (res.ok) {
             setChairsState((prev) => prev.filter((c) => c.id !== elem.resourceId));
-            toast.success("Sillón eliminado del layout y de la agenda");
+            toast.success(t("pages.clinicLayout.chairDeletedBoth"));
           } else if (res.status === 409) {
             const body = (await res.json().catch(() => ({}))) as { count?: number };
             const n = body.count ?? 0;
             toast.error(
               n > 0
-                ? `No se pudo archivar: ${n} cita${n === 1 ? "" : "s"} activa${n === 1 ? "" : "s"}. Cancela o reagenda primero. (Quitado solo del layout.)`
-                : "No se pudo eliminar de la agenda: hay citas asociadas. Quitado solo del layout.",
+                ? t("pages.clinicLayout.archiveBlockedActiveAppointments", { count: n })
+                : t("pages.clinicLayout.deleteBlockedAssociated"),
             );
           } else {
-            toast.error("No se pudo eliminar de la agenda. Quitado solo del layout.");
+            toast.error(t("pages.clinicLayout.deleteAgendaError"));
           }
         } catch {
-          toast.error("Error al eliminar Resource. Quitado solo del layout.");
+          toast.error(t("pages.clinicLayout.deleteResourceError"));
         }
       }
     },
@@ -988,11 +989,11 @@ export function ClinicLayoutClient({
   /** Etiqueta + ícono + color del pill de iluminación en el topbar. */
   const lightingMeta = useMemo(() => {
     const h = lightingHour;
-    if (h >= 6 && h < 9) return { label: "Mañana", color: "#F59E0B", Icon: Sunrise };
-    if (h >= 9 && h < 17) return { label: "Día", color: "#4A90E2", Icon: Sun };
-    if (h >= 17 && h < 20) return { label: "Tarde", color: "#EA580C", Icon: Sunset };
-    return { label: "Noche", color: "#6366F1", Icon: Moon };
-  }, [lightingHour]);
+    if (h >= 6 && h < 9) return { label: t("pages.clinicLayout.lightingMorning"), color: "#F59E0B", Icon: Sunrise };
+    if (h >= 9 && h < 17) return { label: t("pages.clinicLayout.lightingDay"), color: "#4A90E2", Icon: Sun };
+    if (h >= 17 && h < 20) return { label: t("pages.clinicLayout.lightingAfternoon"), color: "#EA580C", Icon: Sunset };
+    return { label: t("pages.clinicLayout.lightingNight"), color: "#6366F1", Icon: Moon };
+  }, [lightingHour, t]);
 
   /* ─── Renders ─── */
 
@@ -1004,8 +1005,8 @@ export function ClinicLayoutClient({
           <div className={styles.mobileBlockIcon}>
             <Monitor size={32} aria-hidden />
           </div>
-          <h1>Abre en una computadora</h1>
-          <p>El editor requiere ≥ 1024 px de ancho.</p>
+          <h1>{t("pages.clinicLayout.openOnComputer")}</h1>
+          <p>{t("pages.clinicLayout.editorWidthShort")}</p>
         </div>
         <div className={styles.welcomeWrap}>
           <WelcomePrompt
@@ -1030,12 +1031,8 @@ export function ClinicLayoutClient({
         <div className={styles.mobileBlockIcon}>
           <Monitor size={32} aria-hidden />
         </div>
-        <h1>Abre en una computadora</h1>
-        <p>
-          El editor visual de Mi Clínica Visual requiere una pantalla amplia
-          (≥ 1024 px) para arrastrar elementos con precisión. Vuelve a entrar
-          desde tu computadora.
-        </p>
+        <h1>{t("pages.clinicLayout.openOnComputer")}</h1>
+        <p>{t("pages.clinicLayout.editorWidthLong")}</p>
       </div>
 
       <div className={styles.page}>
@@ -1057,7 +1054,7 @@ export function ClinicLayoutClient({
               onClick={() => setLiveMode(false)}
               aria-pressed={!liveMode}
             >
-              Edición
+              {t("pages.clinicLayout.modeEdit")}
             </button>
             <button
               type="button"
@@ -1065,7 +1062,7 @@ export function ClinicLayoutClient({
               onClick={() => setLiveMode(true)}
               aria-pressed={liveMode}
             >
-              En Vivo
+              {t("pages.clinicLayout.modeLive")}
             </button>
           </div>
 
@@ -1075,9 +1072,9 @@ export function ClinicLayoutClient({
               type="button"
               className={styles.optimizerBtn}
               onClick={() => setShowOptimizer(true)}
-              title="Sugerencias de IA para reorganizar la agenda del día"
+              title={t("pages.clinicLayout.optimizeTitle")}
             >
-              <Sparkles size={13} aria-hidden /> Optimizar con IA
+              <Sparkles size={13} aria-hidden /> {t("pages.clinicLayout.optimizeWithAi")}
             </button>
           )}
           {liveMode && liveConfig.enabled && liveConfig.slug && (
@@ -1086,7 +1083,7 @@ export function ClinicLayoutClient({
               target="_blank"
               rel="noopener noreferrer"
               className={styles.toolbarBtn}
-              title="Abrir vista pública en nueva pestaña"
+              title={t("pages.clinicLayout.openPublicView")}
             >
               <ExternalLink size={13} aria-hidden /> {liveConfig.slug}
             </Link>
@@ -1095,9 +1092,9 @@ export function ClinicLayoutClient({
             type="button"
             className={styles.toolbarBtn}
             onClick={() => setShareOpen(true)}
-            title="Compartir vista en vivo"
+            title={t("pages.clinicLayout.shareLiveTitle")}
           >
-            <Share2 size={13} aria-hidden /> Compartir
+            <Share2 size={13} aria-hidden /> {t("pages.clinicLayout.share")}
           </button>
           {/* Pill de iluminación dinámica — click avanza 3 horas y previsualiza
               el filtro feColorMatrix sobre el canvas. */}
@@ -1105,7 +1102,7 @@ export function ClinicLayoutClient({
             type="button"
             className={styles.lightingPill}
             onClick={() => setLightingHour((h) => (h + 3) % 24)}
-            title="Simulación de iluminación — click para avanzar 3 h"
+            title={t("pages.clinicLayout.lightingSimTitle")}
             style={{ color: lightingMeta.color }}
           >
             <lightingMeta.Icon size={13} aria-hidden />
@@ -1130,14 +1127,14 @@ export function ClinicLayoutClient({
               aria-hidden
             />
             {saveState === "saving"
-              ? "Guardando…"
+              ? t("pages.clinicLayout.savingEllipsis")
               : saveState === "pending"
-              ? "Cambios sin guardar"
+              ? t("pages.clinicLayout.unsavedChanges")
               : saveState === "error"
-              ? "Error al guardar"
+              ? t("pages.clinicLayout.saveErrorShort")
               : savedAgo
-              ? `Guardado ${savedAgo}`
-              : "Sin cambios"}
+              ? t("pages.clinicLayout.savedAgo", { ago: savedAgo })
+              : t("pages.clinicLayout.noChanges")}
           </span>
 
           {!liveMode && (
@@ -1147,15 +1144,15 @@ export function ClinicLayoutClient({
                 className={styles.toolbarBtn}
                 onClick={undo}
                 disabled={history.length <= 1}
-                title="Deshacer (⌘Z)"
+                title={t("pages.clinicLayout.undoTitle")}
               >
-                <Undo2 size={13} aria-hidden /> Deshacer
+                <Undo2 size={13} aria-hidden /> {t("pages.clinicLayout.undo")}
               </button>
               <button
                 type="button"
                 className={styles.toolbarBtn}
                 onClick={() => setZoom((z) => Math.max(0.4, z / 1.1))}
-                title="Zoom -"
+                title={t("pages.clinicLayout.zoomOut")}
               >
                 <ZoomOut size={13} aria-hidden />
               </button>
@@ -1164,7 +1161,7 @@ export function ClinicLayoutClient({
                 type="button"
                 className={styles.toolbarBtn}
                 onClick={() => setZoom((z) => Math.min(2.2, z * 1.1))}
-                title="Zoom +"
+                title={t("pages.clinicLayout.zoomIn")}
               >
                 <ZoomIn size={13} aria-hidden />
               </button>
@@ -1175,21 +1172,21 @@ export function ClinicLayoutClient({
                   setZoom(1);
                   setPanOffset({ x: 0, y: 0 });
                 }}
-                title="Restablecer 1:1"
+                title={t("pages.clinicLayout.reset1to1")}
               >
                 <Maximize2 size={13} aria-hidden /> 1:1
               </button>
               <div
                 className={styles.toolToggleGroup}
                 role="group"
-                aria-label="Herramienta activa"
+                aria-label={t("pages.clinicLayout.activeTool")}
               >
                 <button
                   type="button"
                   className={`${styles.toolToggleBtn} ${!panMode ? styles.toolToggleBtnActive : ""}`}
                   onClick={() => setPanMode(false)}
                   aria-pressed={!panMode}
-                  title="Seleccionar (V)"
+                  title={t("pages.clinicLayout.toolSelect")}
                 >
                   <MousePointer2 size={13} aria-hidden />
                   <kbd>V</kbd>
@@ -1199,7 +1196,7 @@ export function ClinicLayoutClient({
                   className={`${styles.toolToggleBtn} ${panMode ? styles.toolToggleBtnActive : ""}`}
                   onClick={() => setPanMode(true)}
                   aria-pressed={panMode}
-                  title="Mano / Pan (H)"
+                  title={t("pages.clinicLayout.toolHand")}
                 >
                   <Hand size={13} aria-hidden />
                   <kbd>H</kbd>
@@ -1207,7 +1204,7 @@ export function ClinicLayoutClient({
               </div>
 
               <span className={styles.kbdHint}>
-                <kbd>R</kbd> rota · <kbd>Del</kbd> borra · <kbd>⌘Z</kbd> deshacer
+                <kbd>R</kbd> {t("pages.clinicLayout.kbdRotate")} · <kbd>Del</kbd> {t("pages.clinicLayout.kbdDelete")} · <kbd>⌘Z</kbd> {t("pages.clinicLayout.kbdUndo")}
               </span>
             </>
           )}
@@ -1220,8 +1217,8 @@ export function ClinicLayoutClient({
             aria-hidden={!liveMode}
           >
             <Lock size={26} aria-hidden />
-            <strong>Modo En Vivo</strong>
-            Edición desactivada — vuelve a Edición para cambiar el layout.
+            <strong>{t("pages.clinicLayout.liveModeTitle")}</strong>
+            {t("pages.clinicLayout.editingDisabled")}
           </div>
           {catalog.grouped.map((group) => (
             <div key={group.id}>
@@ -1240,23 +1237,23 @@ export function ClinicLayoutClient({
               </button>
               {!collapsed[group.id] && (
                 <div className={styles.categoryGrid}>
-                  {group.types.map((t) => {
-                    const placedChairs = t.isChair
-                      ? elements.filter((e) => e.type === t.key && e.resourceId).length
+                  {group.types.map((item) => {
+                    const placedChairs = item.isChair
+                      ? elements.filter((e) => e.type === item.key && e.resourceId).length
                       : 0;
-                    const totalChairs = t.isChair ? liveChairs.length : 0;
+                    const totalChairs = item.isChair ? liveChairs.length : 0;
                     return (
                       <div
-                        key={t.key}
+                        key={item.key}
                         className={styles.elementCard}
-                        onMouseDown={() => onSidebarMouseDown(t.key)}
-                        title={t.label}
+                        onMouseDown={() => onSidebarMouseDown(item.key)}
+                        title={item.label}
                       >
                         <svg width="40" height="40" viewBox="0 0 40 40">
-                          <g dangerouslySetInnerHTML={{ __html: t.icon }} />
+                          <g dangerouslySetInnerHTML={{ __html: item.icon }} />
                         </svg>
-                        <span className={styles.elementCardLabel}>{t.label}</span>
-                        {t.isChair && totalChairs > 0 && (
+                        <span className={styles.elementCardLabel}>{item.label}</span>
+                        {item.isChair && totalChairs > 0 && (
                           <span className={styles.elementCardChairCount}>
                             {placedChairs}/{totalChairs}
                           </span>
@@ -1333,7 +1330,7 @@ export function ClinicLayoutClient({
                   fill="white"
                 >
                   {elementHover.label}
-                  {elementHover.isOpen ? " · abierto" : ""}
+                  {elementHover.isOpen ? ` · ${t("pages.clinicLayout.openSuffix")}` : ""}
                 </text>
               </g>
             )}
@@ -1393,7 +1390,7 @@ export function ClinicLayoutClient({
                   // /dashboard/patients/[id] requiere ese segmento.
                   if (!apt.patientId) {
                     toast.error(
-                      "El expediente no está disponible para esta cita aún.",
+                      t("pages.clinicLayout.recordNotAvailable"),
                     );
                     return;
                   }
@@ -1413,9 +1410,9 @@ export function ClinicLayoutClient({
             <div className={styles.propEmpty}>
               <MousePointer2 size={36} aria-hidden className={styles.propEmptyIcon} />
               <div>
-                <strong>Selecciona un elemento</strong>
+                <strong>{t("pages.clinicLayout.selectElement")}</strong>
                 <div style={{ fontSize: 12, marginTop: 6 }}>
-                  Arrastra desde la paleta o haz click en un elemento del canvas.
+                  {t("pages.clinicLayout.selectElementHint")}
                 </div>
               </div>
             </div>
@@ -1429,13 +1426,13 @@ export function ClinicLayoutClient({
                 </span>
                 <div>
                   <div className={styles.propTypePreviewName}>{selectedType.label}</div>
-                  <div className={styles.propTypePreviewMeta}>Elemento #{selectedElement.id}</div>
+                  <div className={styles.propTypePreviewMeta}>{t("pages.clinicLayout.elementNumber", { id: selectedElement.id })}</div>
                 </div>
               </div>
 
               {selectedType.isChair && (
                 <div className={styles.propGroup}>
-                  <div className={styles.propLabel}>Sillón asignado</div>
+                  <div className={styles.propLabel}>{t("pages.clinicLayout.assignedChair")}</div>
                   <select
                     className={styles.propChairSelect}
                     value={selectedElement.resourceId ?? ""}
@@ -1445,23 +1442,23 @@ export function ClinicLayoutClient({
                       })
                     }
                   >
-                    <option value="">— Sin asignar —</option>
+                    <option value="">{t("pages.clinicLayout.unassigned")}</option>
                     {availableChairs.map((c) => (
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
                   <div className={styles.propChairHint}>
                     {liveChairs.length === 0 ? (
-                      <>No hay sillones registrados. <a href="/dashboard/resources">Crea uno en Recursos →</a></>
+                      <>{t("pages.clinicLayout.noChairsRegistered")} <a href="/dashboard/resources">{t("pages.clinicLayout.createInResources")}</a></>
                     ) : (
-                      <>El sillón conecta este elemento con la agenda en modo En Vivo.</>
+                      <>{t("pages.clinicLayout.chairConnectsHint")}</>
                     )}
                   </div>
                 </div>
               )}
 
               <div className={styles.propGroup}>
-                <div className={styles.propLabel}>Posición</div>
+                <div className={styles.propLabel}>{t("pages.clinicLayout.position")}</div>
                 <div className={styles.propInputRow}>
                   <input
                     type="number"
@@ -1483,7 +1480,7 @@ export function ClinicLayoutClient({
               </div>
 
               <div className={styles.propGroup}>
-                <div className={styles.propLabel}>Rotación</div>
+                <div className={styles.propLabel}>{t("pages.clinicLayout.rotation")}</div>
                 <div className={styles.propRotationRow}>
                   {[0, 90, 180, 270].map((deg) => (
                     <button
@@ -1499,13 +1496,13 @@ export function ClinicLayoutClient({
               </div>
 
               <div className={styles.propGroup}>
-                <div className={styles.propLabel}>Atajos</div>
+                <div className={styles.propLabel}>{t("pages.clinicLayout.shortcuts")}</div>
                 <ul className={styles.propKbdList}>
-                  <li className={styles.propKbdRow}><span>Rotar</span><code>R</code></li>
-                  <li className={styles.propKbdRow}><span>Eliminar</span><code>Del</code></li>
-                  <li className={styles.propKbdRow}><span>Duplicar</span><code>⌘D</code></li>
-                  <li className={styles.propKbdRow}><span>Deshacer</span><code>⌘Z</code></li>
-                  <li className={styles.propKbdRow}><span>Pan</span><code>H</code></li>
+                  <li className={styles.propKbdRow}><span>{t("pages.clinicLayout.shortcutRotate")}</span><code>R</code></li>
+                  <li className={styles.propKbdRow}><span>{t("common.delete")}</span><code>Del</code></li>
+                  <li className={styles.propKbdRow}><span>{t("pages.clinicLayout.shortcutDuplicate")}</span><code>⌘D</code></li>
+                  <li className={styles.propKbdRow}><span>{t("pages.clinicLayout.shortcutUndo")}</span><code>⌘Z</code></li>
+                  <li className={styles.propKbdRow}><span>{t("pages.clinicLayout.shortcutPan")}</span><code>H</code></li>
                 </ul>
               </div>
 
@@ -1514,7 +1511,7 @@ export function ClinicLayoutClient({
                 className={styles.propDeleteBtn}
                 onClick={() => deleteElement(selectedElement.id)}
               >
-                <Trash2 size={13} aria-hidden /> Eliminar elemento
+                <Trash2 size={13} aria-hidden /> {t("pages.clinicLayout.deleteElement")}
               </button>
             </>
           )}

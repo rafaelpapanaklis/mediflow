@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bell, BellOff, Clock, Users } from "lucide-react";
 import type { LiveAppointment } from "@/lib/floor-plan/elements";
+import { useT } from "@/i18n/i18n-provider";
 import waitingStyles from "./waiting-room.module.css";
 
 export interface WaitingRoomEntry {
@@ -47,6 +48,7 @@ export function WaitingRoom({
   chairs: ChairInfo[];
   enableSound?: boolean;
 }) {
+  const t = useT();
   const [announcement, setAnnouncement] = useState<CallAnnouncement | null>(null);
   const [soundOn, setSoundOn] = useState(enableSound);
   const prevWaitingIdsRef = useRef<Set<string>>(new Set());
@@ -65,7 +67,7 @@ export function WaitingRoom({
           const apt = appointments.find((a) => a.id === id);
           if (apt?.resourceId) {
             const chair = chairs.find((c) => c.id === apt.resourceId);
-            const chairName = chair?.name ?? "Sillón";
+            const chairName = chair?.name ?? t("pages.clinicLayout.waitingChairFallback");
             announcedIdsRef.current.add(id);
             setAnnouncement({
               id,
@@ -100,7 +102,7 @@ export function WaitingRoom({
   const formatWait = (entry: WaitingRoomEntry) => {
     const ref = entry.checkedInAt ? new Date(entry.checkedInAt) : new Date(entry.scheduledAt);
     const min = Math.max(0, Math.floor((Date.now() - ref.getTime()) / 60_000));
-    if (min === 0) return "ahora";
+    if (min === 0) return t("pages.clinicLayout.waitingNow");
     if (min < 60) return `${min} min`;
     return `${Math.floor(min / 60)}h ${min % 60}m`;
   };
@@ -121,14 +123,14 @@ export function WaitingRoom({
 
       <header className={waitingStyles.header}>
         <span className={waitingStyles.headerTitle}>
-          <Users size={13} aria-hidden /> Sala de espera
+          <Users size={13} aria-hidden /> {t("pages.clinicLayout.waitingRoomTitle")}
         </span>
         <span className={waitingStyles.headerCount}>{sortedWaiting.length}</span>
         <button
           type="button"
           className={waitingStyles.soundBtn}
           onClick={() => setSoundOn((v) => !v)}
-          title={soundOn ? "Sonido del llamado: activo" : "Sonido del llamado: silenciado"}
+          title={soundOn ? t("pages.clinicLayout.waitingSoundOn") : t("pages.clinicLayout.waitingSoundOff")}
           aria-pressed={soundOn}
         >
           {soundOn ? <Bell size={12} aria-hidden /> : <BellOff size={12} aria-hidden />}
@@ -137,7 +139,7 @@ export function WaitingRoom({
 
       {sortedWaiting.length === 0 ? (
         <div className={waitingStyles.empty}>
-          Sin pacientes esperando.
+          {t("pages.clinicLayout.waitingEmpty")}
         </div>
       ) : (
         <ul className={waitingStyles.list}>
@@ -174,17 +176,17 @@ function playChime() {
       { freq: 880, start: 0 },
       { freq: 1320, start: 0.18 },
     ];
-    for (const t of tones) {
+    for (const tone of tones) {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = "sine";
-      osc.frequency.value = t.freq;
-      gain.gain.setValueAtTime(0, now + t.start);
-      gain.gain.linearRampToValueAtTime(0.18, now + t.start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + t.start + 0.5);
+      osc.frequency.value = tone.freq;
+      gain.gain.setValueAtTime(0, now + tone.start);
+      gain.gain.linearRampToValueAtTime(0.18, now + tone.start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + tone.start + 0.5);
       osc.connect(gain).connect(ctx.destination);
-      osc.start(now + t.start);
-      osc.stop(now + t.start + 0.5);
+      osc.start(now + tone.start);
+      osc.stop(now + tone.start + 0.5);
     }
     setTimeout(() => ctx.close().catch(() => {}), 1200);
   } catch {

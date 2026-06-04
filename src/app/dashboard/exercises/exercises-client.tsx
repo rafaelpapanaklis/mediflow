@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Exercise {
   id: string;
@@ -19,6 +20,7 @@ interface Exercise {
 }
 
 export function ExercisesClient({ initialExercises }: { initialExercises: Exercise[] }) {
+  const t = useT();
   const askConfirm = useConfirm();
   const [exercises, setExercises] = useState<Exercise[]>(initialExercises);
   const [search, setSearch] = useState("");
@@ -30,7 +32,7 @@ export function ExercisesClient({ initialExercises }: { initialExercises: Exerci
   );
 
   async function handleAdd() {
-    if (!form.name.trim()) { toast.error("El nombre es requerido"); return; }
+    if (!form.name.trim()) { toast.error(t("pages.exercises.nameRequired")); return; }
     try {
       const res = await fetch("/api/inventory", {
         method: "POST",
@@ -50,26 +52,26 @@ export function ExercisesClient({ initialExercises }: { initialExercises: Exerci
       setExercises(prev => [...prev, created]);
       setShowAdd(false);
       setForm({ name: "", description: "", muscleGroup: "", sets: 3, reps: 12 });
-      toast.success("Ejercicio agregado");
+      toast.success(t("pages.exercises.added"));
     } catch {
-      toast.error("Error al agregar ejercicio");
+      toast.error(t("pages.exercises.addError"));
     }
   }
 
   async function handleDelete(id: string) {
     if (!(await askConfirm({
-      title: "¿Eliminar ejercicio?",
-      description: "El ejercicio se quitará del catálogo. Esta acción no se puede deshacer.",
+      title: t("pages.exercises.deleteTitle"),
+      description: t("pages.exercises.deleteDescription"),
       variant: "danger",
-      confirmText: "Eliminar",
+      confirmText: t("common.delete"),
     }))) return;
     try {
       const res = await fetch(`/api/inventory/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Error al eliminar");
       setExercises(prev => prev.filter(e => e.id !== id));
-      toast.success("Ejercicio eliminado");
+      toast.success(t("pages.exercises.deleted"));
     } catch {
-      toast.error("Error al eliminar");
+      toast.error(t("pages.exercises.deleteError"));
     }
   }
 
@@ -77,11 +79,11 @@ export function ExercisesClient({ initialExercises }: { initialExercises: Exerci
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-extrabold">Biblioteca de Ejercicios</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{exercises.length} ejercicios registrados</p>
+          <h1 className="text-2xl font-extrabold">{t("pages.exercises.title")}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{t("pages.exercises.registeredCount", { count: exercises.length })}</p>
         </div>
         <Button onClick={() => setShowAdd(true)}>
-          <Plus className="w-5 h-5 mr-2" /> Agregar ejercicio
+          <Plus className="w-5 h-5 mr-2" /> {t("pages.exercises.addExercise")}
         </Button>
       </div>
 
@@ -90,7 +92,7 @@ export function ExercisesClient({ initialExercises }: { initialExercises: Exerci
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
         <input
           className="flex h-11 w-full rounded-xl border border-border bg-card pl-11 pr-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-          placeholder="Buscar ejercicio o grupo muscular..."
+          placeholder={t("pages.exercises.searchPlaceholder")}
           value={search} onChange={e => setSearch(e.target.value)}
         />
       </div>
@@ -112,7 +114,7 @@ export function ExercisesClient({ initialExercises }: { initialExercises: Exerci
                   {exercise.unit}
                 </span>
                 <span className="text-sm text-muted-foreground">
-                  {exercise.quantity} series x {exercise.minQuantity} reps
+                  {t("pages.exercises.setsReps", { sets: exercise.quantity, reps: exercise.minQuantity })}
                 </span>
               </div>
             </div>
@@ -122,7 +124,7 @@ export function ExercisesClient({ initialExercises }: { initialExercises: Exerci
         <div className="text-center py-16 text-muted-foreground">
           <Dumbbell className="w-12 h-12 mx-auto mb-3 opacity-20" />
           <p className="text-base font-semibold">
-            {search ? "Sin resultados" : "Sin ejercicios registrados"}
+            {search ? t("common.noResults") : t("pages.exercises.emptyState")}
           </p>
         </div>
       )}
@@ -132,37 +134,37 @@ export function ExercisesClient({ initialExercises }: { initialExercises: Exerci
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-              <h2 className="text-lg font-bold">Agregar ejercicio</h2>
+              <h2 className="text-lg font-bold">{t("pages.exercises.addExercise")}</h2>
               <button onClick={() => setShowAdd(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
             </div>
             <div className="px-6 py-5 space-y-4">
               <div className="space-y-1.5">
-                <Label className="text-sm">Nombre del ejercicio *</Label>
+                <Label className="text-sm">{t("pages.exercises.nameLabel")}</Label>
                 <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-                  placeholder="Ej: Sentadilla búlgara"
+                  placeholder={t("pages.exercises.namePlaceholder")}
                   value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-sm">Descripción</Label>
+                <Label className="text-sm">{t("common.description")}</Label>
                 <textarea className="flex min-h-[70px] w-full rounded-xl border border-border bg-card px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-                  placeholder="Instrucciones o notas"
+                  placeholder={t("pages.exercises.descriptionPlaceholder")}
                   value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-sm">Grupo muscular</Label>
+                <Label className="text-sm">{t("pages.exercises.muscleGroupLabel")}</Label>
                 <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-                  placeholder="Ej: Piernas, Espalda, Core"
+                  placeholder={t("pages.exercises.muscleGroupPlaceholder")}
                   value={form.muscleGroup} onChange={e => setForm(f => ({ ...f, muscleGroup: e.target.value }))} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-sm">Series</Label>
+                  <Label className="text-sm">{t("pages.exercises.setsLabel")}</Label>
                   <input type="number" min="1"
                     className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
                     value={form.sets} onChange={e => setForm(f => ({ ...f, sets: parseInt(e.target.value) || 1 }))} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-sm">Repeticiones</Label>
+                  <Label className="text-sm">{t("pages.exercises.repsLabel")}</Label>
                   <input type="number" min="1"
                     className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
                     value={form.reps} onChange={e => setForm(f => ({ ...f, reps: parseInt(e.target.value) || 1 }))} />
@@ -170,8 +172,8 @@ export function ExercisesClient({ initialExercises }: { initialExercises: Exerci
               </div>
             </div>
             <div className="px-6 pb-6 flex gap-3">
-              <Button variant="outline" onClick={() => setShowAdd(false)} className="flex-1 h-11 text-base">Cancelar</Button>
-              <Button onClick={handleAdd} className="flex-1 h-11 text-base">Agregar</Button>
+              <Button variant="outline" onClick={() => setShowAdd(false)} className="flex-1 h-11 text-base">{t("common.cancel")}</Button>
+              <Button onClick={handleAdd} className="flex-1 h-11 text-base">{t("common.add")}</Button>
             </div>
           </div>
         </div>

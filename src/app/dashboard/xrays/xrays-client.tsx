@@ -29,6 +29,7 @@ import {
 import toast from "react-hot-toast";
 import styles from "./xrays.module.css";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Patient {
   id: string;
@@ -90,12 +91,12 @@ interface Props {
 }
 
 const CATEGORIES = [
-  { id: "XRAY_PERIAPICAL",   label: "Periapical" },
-  { id: "XRAY_PANORAMIC",    label: "Panorámica" },
-  { id: "XRAY_CEPHALOMETRIC", label: "Cefalométrica" },
-  { id: "XRAY_BITEWING",     label: "Bitewing" },
-  { id: "PHOTO_INTRAORAL",   label: "Foto intraoral" },
-  { id: "OTHER",             label: "Otro" },
+  { id: "XRAY_PERIAPICAL",   labelKey: "pages.xrays.catPeriapical" },
+  { id: "XRAY_PANORAMIC",    labelKey: "pages.xrays.catPanoramic" },
+  { id: "XRAY_CEPHALOMETRIC", labelKey: "pages.xrays.catCephalometric" },
+  { id: "XRAY_BITEWING",     labelKey: "pages.xrays.catBitewing" },
+  { id: "PHOTO_INTRAORAL",   labelKey: "pages.xrays.catIntraoralPhoto" },
+  { id: "OTHER",             labelKey: "pages.xrays.catOther" },
 ];
 
 const SEV_COLOR: Record<AiFinding["severity"], string> = {
@@ -104,11 +105,11 @@ const SEV_COLOR: Record<AiFinding["severity"], string> = {
   baja: "#06b6d4",
   informativo: "#10b981",
 };
-const SEV_LABEL: Record<AiFinding["severity"], string> = {
-  alta: "Alta",
-  media: "Media",
-  baja: "Baja",
-  informativo: "Info",
+const SEV_LABEL_KEY: Record<AiFinding["severity"], string> = {
+  alta: "pages.xrays.sevHigh",
+  media: "pages.xrays.sevMedium",
+  baja: "pages.xrays.sevLow",
+  informativo: "pages.xrays.sevInfo",
 };
 
 type Tab = "ai" | "measurements" | "notes";
@@ -210,6 +211,7 @@ export function XraysClient({
   initialFileId,
   lockedToPatient = false,
 }: Props) {
+  const t = useT();
   const askConfirm = useConfirm();
   const [files, setFiles] = useState<PatientFile[]>(initialFiles);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(
@@ -400,11 +402,11 @@ export function XraysClient({
 
   const handleUploadClick = useCallback(() => {
     if (!selectedPatient) {
-      toast.error("Selecciona primero un paciente");
+      toast.error(t("pages.xrays.selectPatientFirst"));
       return;
     }
     fileInputRef.current?.click();
-  }, [selectedPatient]);
+  }, [selectedPatient, t]);
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -418,19 +420,19 @@ export function XraysClient({
       const res = await fetch("/api/xrays", { method: "POST", body: form });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? "Error al subir");
+        throw new Error(err.error ?? t("pages.xrays.uploadError"));
       }
       const record = await res.json();
       setFiles((prev) => [{ ...record, patient: selectedPatient }, ...prev]);
       setActiveFileId(record.id);
-      toast.success("Radiografía subida");
+      toast.success(t("pages.xrays.uploadSuccess"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error al subir");
+      toast.error(err instanceof Error ? err.message : t("pages.xrays.uploadError"));
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  }, [selectedPatient]);
+  }, [selectedPatient, t]);
 
   const handleAnalyze = useCallback(
     async (mode: "GENERAL" | "PERIODONTAL_BONE_LOSS" | "PERIIMPLANT_BONE_LOSS" = "GENERAL") => {
@@ -441,7 +443,7 @@ export function XraysClient({
         const res = await fetch(url, { method: "POST" });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          throw new Error(err.error ?? "Error al analizar");
+          throw new Error(err.error ?? t("pages.xrays.analyzeError"));
         }
         const data = await res.json();
         setFiles((prev) =>
@@ -460,38 +462,38 @@ export function XraysClient({
         );
         toast.success(
           mode === "PERIODONTAL_BONE_LOSS"
-            ? "Análisis periodontal completo"
+            ? t("pages.xrays.analyzePeriodontalDone")
             : mode === "PERIIMPLANT_BONE_LOSS"
-              ? "Análisis periimplantar completo"
-              : "Análisis IA completo",
+              ? t("pages.xrays.analyzePeriimplantDone")
+              : t("pages.xrays.analyzeAiDone"),
         );
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Error al analizar");
+        toast.error(err instanceof Error ? err.message : t("pages.xrays.analyzeError"));
       } finally {
         setAnalyzing(false);
       }
     },
-    [activeFile],
+    [activeFile, t],
   );
 
   const handleDelete = useCallback(async () => {
     if (!activeFile) return;
     if (!(await askConfirm({
-      title: `¿Eliminar "${activeFile.name}"?`,
-      description: "La radiografía y sus anotaciones se eliminan permanentemente del expediente del paciente.",
+      title: t("pages.xrays.deleteConfirmTitle", { name: activeFile.name }),
+      description: t("pages.xrays.deleteConfirmDesc"),
       variant: "danger",
-      confirmText: "Eliminar",
+      confirmText: t("common.delete"),
     }))) return;
     try {
       const res = await fetch(`/api/xrays/${activeFile.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
       setFiles((prev) => prev.filter((f) => f.id !== activeFile.id));
       setActiveFileId((prev) => (prev === activeFile.id ? null : prev));
-      toast.success("Radiografía eliminada");
+      toast.success(t("pages.xrays.deleteSuccess"));
     } catch {
-      toast.error("Error al eliminar");
+      toast.error(t("pages.xrays.deleteError"));
     }
-  }, [activeFile, askConfirm]);
+  }, [activeFile, askConfirm, t]);
 
   const handleSaveNotes = useCallback(async () => {
     if (!activeFile) return;
@@ -509,20 +511,20 @@ export function XraysClient({
             : f,
         ),
       );
-      toast.success("Notas guardadas");
+      toast.success(t("pages.xrays.notesSaved"));
     } catch {
-      toast.error("Error al guardar notas");
+      toast.error(t("pages.xrays.notesSaveError"));
     }
-  }, [activeFile, notesDraft]);
+  }, [activeFile, notesDraft, t]);
 
   const handleGeneratePlan = useCallback(() => {
     if (findings.length === 0) {
-      toast("Sin hallazgos · primero analiza con IA", { icon: "ℹ️" });
+      toast(t("pages.xrays.noFindingsAnalyzeFirst"), { icon: "ℹ️" });
       return;
     }
     const total = findings.length;
-    toast.success(`Plan generado · ${total} procedimiento${total === 1 ? "" : "s"} sugerido${total === 1 ? "" : "s"}`);
-  }, [findings]);
+    toast.success(t("pages.xrays.planGenerated", { count: total }));
+  }, [findings, t]);
 
   const toggleCompare = useCallback(() => {
     if (compareMode) {
@@ -531,7 +533,7 @@ export function XraysClient({
       return;
     }
     if (filteredFiles.length < 2) {
-      toast("Necesitas al menos 2 radiografías", { icon: "ℹ️" });
+      toast(t("pages.xrays.needTwoXrays"), { icon: "ℹ️" });
       return;
     }
     setCompareMode(true);
@@ -540,7 +542,7 @@ export function XraysClient({
       const other = filteredFiles.find((f) => f.id !== activeFileId);
       if (other) setCompareFileId(other.id);
     }
-  }, [compareMode, filteredFiles, activeFileId, compareFileId]);
+  }, [compareMode, filteredFiles, activeFileId, compareFileId, t]);
 
   const aiPercent = aiLimit > 0 ? Math.min(100, Math.round((aiUsed / aiLimit) * 100)) : 0;
 
@@ -681,15 +683,15 @@ export function XraysClient({
   const handleClearAnnotations = useCallback(async () => {
     if (annotations.length === 0 && !drafting) return;
     if (!(await askConfirm({
-      title: "¿Borrar todas las anotaciones?",
-      description: "Se eliminarán mediciones, ángulos y trazos manuales de esta radiografía.",
+      title: t("pages.xrays.clearAnnotationsTitle"),
+      description: t("pages.xrays.clearAnnotationsDesc"),
       variant: "danger",
-      confirmText: "Borrar",
+      confirmText: t("pages.xrays.clearAnnotationsConfirm"),
     }))) return;
     setAnnotations([]);
     setDrafting(null);
-    toast.success("Anotaciones borradas");
-  }, [annotations.length, drafting, askConfirm]);
+    toast.success(t("pages.xrays.annotationsCleared"));
+  }, [annotations.length, drafting, askConfirm, t]);
 
   const handleZoomBtn = useCallback((dir: "in" | "out" | "fit") => {
     if (dir === "fit") {
@@ -728,7 +730,7 @@ export function XraysClient({
       {mobileTimelineOpen && (
         <button
           type="button"
-          aria-label="Cerrar historial"
+          aria-label={t("pages.xrays.closeHistory")}
           className={styles.mobileBackdrop}
           onClick={() => setMobileTimelineOpen(false)}
         />
@@ -740,21 +742,21 @@ export function XraysClient({
           type="button"
           className={styles.mobileMenuBtn}
           onClick={() => setMobileTimelineOpen(true)}
-          aria-label="Abrir historial de radiografías"
+          aria-label={t("pages.xrays.openHistory")}
         >
           <Menu size={16} aria-hidden />
         </button>
         <div className={styles.topbarTitle}>
           <span className={styles.topbarTitleIcon}><Sparkles size={14} aria-hidden /></span>
-          Radiografías
+          {t("pages.xrays.title")}
         </div>
         {lockedToPatient ? (
           <a
             href="/dashboard/xrays"
             className={styles.topbarBtn}
-            title="Volver a la lista de pacientes"
+            title={t("pages.xrays.backToPatientList")}
           >
-            ← Cambiar paciente
+            ← {t("pages.xrays.changePatient")}
           </a>
         ) : (
           <select
@@ -768,7 +770,7 @@ export function XraysClient({
             className={styles.topbarBtn}
             style={{ minWidth: 200, fontFamily: "inherit" }}
           >
-            <option value="">Todos los pacientes</option>
+            <option value="">{t("pages.xrays.allPatients")}</option>
             {patients.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.firstName} {p.lastName} · {p.patientNumber}
@@ -790,7 +792,7 @@ export function XraysClient({
           onClick={() => activeFile && window.open(activeFile.url, "_blank")}
           disabled={!activeFile}
         >
-          <FileDown size={13} aria-hidden /> Exportar
+          <FileDown size={13} aria-hidden /> {t("common.export")}
         </button>
         <button
           type="button"
@@ -798,7 +800,7 @@ export function XraysClient({
           onClick={handleUploadClick}
           disabled={uploading}
         >
-          <Upload size={13} aria-hidden /> {uploading ? "Subiendo…" : "Subir radiografía"}
+          <Upload size={13} aria-hidden /> {uploading ? t("pages.xrays.uploading") : t("pages.xrays.uploadXray")}
         </button>
         <input
           ref={fileInputRef}
@@ -814,15 +816,15 @@ export function XraysClient({
         className={styles.timeline}
         role={mobileTimelineOpen ? "dialog" : undefined}
         aria-modal={mobileTimelineOpen ? "true" : undefined}
-        aria-label="Historial de radiografías"
+        aria-label={t("pages.xrays.xrayHistory")}
       >
         <div className={styles.timelineHeader}>
-          <span className={styles.timelineLabel}>Historial · {filteredFiles.length}</span>
+          <span className={styles.timelineLabel}>{t("pages.xrays.historyLabel")} · {filteredFiles.length}</span>
           <div style={{ position: "relative" }}>
             <Search size={11} aria-hidden style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", color: "var(--text-3)" }} />
             <input
               type="text"
-              placeholder="Buscar…"
+              placeholder={t("common.searchPlaceholder")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className={styles.timelineSearch}
@@ -836,14 +838,14 @@ export function XraysClient({
           onClick={handleUploadClick}
           disabled={uploading}
         >
-          <Upload size={12} aria-hidden /> Subir radiografía
+          <Upload size={12} aria-hidden /> {t("pages.xrays.uploadXray")}
         </button>
         <div className={styles.timelineList}>
           {filteredFiles.length === 0 ? (
             <div className={styles.emptyState}>
               {selectedPatient
-                ? "Sin radiografías. Sube la primera arriba."
-                : "Selecciona un paciente para ver su historial."}
+                ? t("pages.xrays.timelineEmptyUploadFirst")
+                : t("pages.xrays.timelineEmptySelectPatient")}
             </div>
           ) : (
             filteredFiles.map((f) => {
@@ -880,13 +882,16 @@ export function XraysClient({
                   </div>
                   <div className={styles.xrayCardInfo}>
                     <span className={styles.xrayCardType}>
-                      {CATEGORIES.find((c) => c.id === f.category)?.label ?? "Otro"}
+                      {(() => {
+                        const cat = CATEGORIES.find((c) => c.id === f.category);
+                        return cat ? t(cat.labelKey) : t("pages.xrays.catOther");
+                      })()}
                     </span>
                     <span className={styles.xrayCardDate}>{formatDate(f.takenAt ?? f.createdAt)}</span>
                     {findingsCount > 0 && (
                       <span className={styles.xrayCardFindings}>
                         <span className={styles.xrayCardFindingsDot} aria-hidden />
-                        {findingsCount} hallazgo{findingsCount === 1 ? "" : "s"}
+                        {t("pages.xrays.findingsCount", { count: findingsCount })}
                       </span>
                     )}
                   </div>
@@ -899,29 +904,29 @@ export function XraysClient({
 
       {/* ── Visor central (DARK) ── */}
       <main className={styles.viewer}>
-        <div className={styles.viewerToolbar} role="toolbar" aria-label="Herramientas del visor">
+        <div className={styles.viewerToolbar} role="toolbar" aria-label={t("pages.xrays.viewerTools")}>
           {/* Mapa de etiquetas humanas para tools — title críptico
               ("pan", "zoom") + aria-label descriptivo. data-active y
               aria-pressed comunican estado al lector de pantalla. */}
           {(
             [
-              { id: "pan", label: "Mover imagen" },
-              { id: "zoom", label: "Zoom" },
-              { id: "rotate", label: "Rotar 90°" },
+              { id: "pan", label: t("pages.xrays.toolPan") },
+              { id: "zoom", label: t("pages.xrays.toolZoom") },
+              { id: "rotate", label: t("pages.xrays.toolRotate") },
             ] as Array<{ id: Tool; label: string }>
-          ).map((t) => {
-            const Icon = t.id === "pan" ? Move : t.id === "zoom" ? ZoomIn : RotateCw;
-            const isActive = tool === t.id;
+          ).map((ti) => {
+            const Icon = ti.id === "pan" ? Move : ti.id === "zoom" ? ZoomIn : RotateCw;
+            const isActive = tool === ti.id;
             return (
               <button
-                key={t.id}
+                key={ti.id}
                 type="button"
                 className={styles.toolBtn}
                 data-active={isActive}
                 aria-pressed={isActive}
-                onClick={() => setTool(t.id)}
-                title={t.label}
-                aria-label={t.label}
+                onClick={() => setTool(ti.id)}
+                title={ti.label}
+                aria-label={ti.label}
               >
                 <Icon size={15} aria-hidden />
               </button>
@@ -930,23 +935,23 @@ export function XraysClient({
           <span className={styles.toolDivider} />
           {(
             [
-              { id: "measure", label: "Regla (medir distancia)" },
-              { id: "angle", label: "Ángulo" },
-              { id: "annotate", label: "Lápiz (anotar)" },
+              { id: "measure", label: t("pages.xrays.toolRuler") },
+              { id: "angle", label: t("pages.xrays.toolAngle") },
+              { id: "annotate", label: t("pages.xrays.toolPencil") },
             ] as Array<{ id: Tool; label: string }>
-          ).map((t) => {
-            const Icon = t.id === "measure" ? Ruler : t.id === "angle" ? Triangle : Pencil;
-            const isActive = tool === t.id;
+          ).map((ti) => {
+            const Icon = ti.id === "measure" ? Ruler : ti.id === "angle" ? Triangle : Pencil;
+            const isActive = tool === ti.id;
             return (
               <button
-                key={t.id}
+                key={ti.id}
                 type="button"
                 className={styles.toolBtn}
                 data-active={isActive}
                 aria-pressed={isActive}
-                onClick={() => setTool(t.id)}
-                title={t.label}
-                aria-label={t.label}
+                onClick={() => setTool(ti.id)}
+                title={ti.label}
+                aria-label={ti.label}
               >
                 <Icon size={15} aria-hidden />
               </button>
@@ -959,16 +964,16 @@ export function XraysClient({
             data-active={inverted}
             aria-pressed={inverted}
             onClick={() => setInverted((v) => !v)}
-            title="Invertir colores"
-            aria-label="Invertir colores"
+            title={t("pages.xrays.invertColors")}
+            aria-label={t("pages.xrays.invertColors")}
           >
             <Contrast size={15} aria-hidden />
           </button>
           <button
             type="button"
             className={styles.toolBtn}
-            title="Voltear horizontal"
-            aria-label="Voltear horizontal"
+            title={t("pages.xrays.flipHorizontal")}
+            aria-label={t("pages.xrays.flipHorizontal")}
           >
             <FlipHorizontal size={15} aria-hidden />
           </button>
@@ -978,18 +983,18 @@ export function XraysClient({
             className={styles.toolBtn}
             onClick={handleClearAnnotations}
             disabled={annotations.length === 0}
-            title="Borrar todas las anotaciones"
-            aria-label="Borrar todas las anotaciones"
+            title={t("pages.xrays.clearAllAnnotations")}
+            aria-label={t("pages.xrays.clearAllAnnotations")}
           >
             <Eraser size={15} aria-hidden />
           </button>
           <span className={styles.toolDivider} />
           <label className={styles.toolSlider}>
-            Brillo
+            {t("pages.xrays.brightness")}
             <input
               type="range" min={50} max={150} value={brightness}
               onChange={(e) => setBrightness(Number(e.target.value))}
-              aria-label={`Brillo: ${brightness}%`}
+              aria-label={t("pages.xrays.brightnessValue", { value: brightness })}
               aria-valuenow={brightness}
               aria-valuemin={50}
               aria-valuemax={150}
@@ -997,11 +1002,11 @@ export function XraysClient({
             <strong style={{ fontFamily: "var(--font-mono, monospace)" }}>{brightness}%</strong>
           </label>
           <label className={styles.toolSlider}>
-            Contraste
+            {t("pages.xrays.contrast")}
             <input
               type="range" min={50} max={200} value={contrast}
               onChange={(e) => setContrast(Number(e.target.value))}
-              aria-label={`Contraste: ${contrast}%`}
+              aria-label={t("pages.xrays.contrastValue", { value: contrast })}
               aria-valuenow={contrast}
               aria-valuemin={50}
               aria-valuemax={200}
@@ -1015,10 +1020,10 @@ export function XraysClient({
             data-active={compareMode}
             aria-pressed={compareMode}
             onClick={toggleCompare}
-            title="Comparar dos radiografías lado a lado"
-            aria-label="Comparar dos radiografías lado a lado"
+            title={t("pages.xrays.compareTooltip")}
+            aria-label={t("pages.xrays.compareTooltip")}
           >
-            <GitCompareArrows size={13} aria-hidden /> Compare
+            <GitCompareArrows size={13} aria-hidden /> {t("pages.xrays.compare")}
           </button>
           <button
             type="button"
@@ -1026,11 +1031,11 @@ export function XraysClient({
             data-active={aiVisible}
             aria-pressed={aiVisible}
             onClick={() => setAiVisible((v) => !v)}
-            title={aiVisible ? "Ocultar overlays de IA" : "Mostrar overlays de IA"}
-            aria-label={aiVisible ? "Ocultar overlays de IA" : "Mostrar overlays de IA"}
+            title={aiVisible ? t("pages.xrays.hideAiOverlays") : t("pages.xrays.showAiOverlays")}
+            aria-label={aiVisible ? t("pages.xrays.hideAiOverlays") : t("pages.xrays.showAiOverlays")}
           >
             {aiVisible ? <Eye size={13} aria-hidden /> : <EyeOff size={13} aria-hidden />}
-            IA
+            {t("pages.xrays.aiLabel")}
             {findings.length > 0 && <span className={styles.aiCount}>{findings.length}</span>}
           </button>
         </div>
@@ -1052,8 +1057,8 @@ export function XraysClient({
               <Sparkles size={40} aria-hidden style={{ opacity: 0.3, marginBottom: 12 }} />
               <div>
                 {selectedPatient
-                  ? "Sin radiografías para este paciente."
-                  : "Selecciona un paciente arriba para empezar."}
+                  ? t("pages.xrays.viewerEmptyNoXrays")
+                  : t("pages.xrays.viewerEmptySelectPatient")}
               </div>
             </div>
           ) : compareMode && compareFile ? (
@@ -1069,7 +1074,7 @@ export function XraysClient({
                     className={inverted ? styles.viewerImgInverted : styles.viewerImg}
                   />
                 ) : (
-                  <div className={styles.viewerEmpty}>Archivo no es imagen</div>
+                  <div className={styles.viewerEmpty}>{t("pages.xrays.fileNotImage")}</div>
                 )}
               </div>
               <div className={styles.compareSlot}>
@@ -1083,7 +1088,7 @@ export function XraysClient({
                     className={inverted ? styles.viewerImgInverted : styles.viewerImg}
                   />
                 ) : (
-                  <div className={styles.viewerEmpty}>Archivo no es imagen</div>
+                  <div className={styles.viewerEmpty}>{t("pages.xrays.fileNotImage")}</div>
                 )}
               </div>
             </>
@@ -1112,9 +1117,9 @@ export function XraysClient({
                 </div>
               ) : (
                 <div className={styles.viewerEmpty}>
-                  Este archivo no es una imagen. <br />
+                  {t("pages.xrays.fileNotImageLong")} <br />
                   <a href={activeFile.url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand)" }}>
-                    Abrir en pestaña nueva →
+                    {t("pages.xrays.openInNewTab")} →
                   </a>
                 </div>
               )}
@@ -1146,14 +1151,17 @@ export function XraysClient({
 
               <div className={styles.viewerInfoCard}>
                 <span className={styles.viewerInfoCardTitle}>
-                  {CATEGORIES.find((c) => c.id === activeFile.category)?.label ?? "Radiografía"}
+                  {(() => {
+                    const cat = CATEGORIES.find((c) => c.id === activeFile.category);
+                    return cat ? t(cat.labelKey) : t("pages.xrays.title");
+                  })()}
                 </span>
                 <span className={styles.viewerInfoCardMeta}>
                   {formatDate(activeFile.takenAt ?? activeFile.createdAt)}
                 </span>
                 {activeFile.toothNumber && (
                   <span className={styles.viewerInfoCardMeta}>
-                    Diente: {activeFile.toothNumber}
+                    {t("pages.xrays.tooth")}: {activeFile.toothNumber}
                   </span>
                 )}
               </div>
@@ -1162,7 +1170,7 @@ export function XraysClient({
                 <button
                   type="button"
                   className={styles.zoomBtn}
-                  title="Zoom +"
+                  title={t("pages.xrays.zoomIn")}
                   onClick={() => handleZoomBtn("in")}
                 >
                   <Plus size={13} aria-hidden />
@@ -1170,7 +1178,7 @@ export function XraysClient({
                 <button
                   type="button"
                   className={styles.zoomBtn}
-                  title="Zoom -"
+                  title={t("pages.xrays.zoomOut")}
                   onClick={() => handleZoomBtn("out")}
                 >
                   <Minus size={13} aria-hidden />
@@ -1178,16 +1186,16 @@ export function XraysClient({
                 <button
                   type="button"
                   className={styles.zoomBtn}
-                  title="Ajustar al visor"
+                  title={t("pages.xrays.fitToViewer")}
                   onClick={() => handleZoomBtn("fit")}
                 >
                   <Maximize2 size={13} aria-hidden />
                 </button>
               </div>
               <div className={styles.statusBar}>
-                Zoom: {Math.round(zoom * 100)}% · Rotación: {rotation}° · Brillo: {brightness}% · Contraste: {contrast}% · Tool: {tool}
-                {savingAnn && <> · <em style={{ color: "#a78bfa" }}>guardando…</em></>}
-                {drafting && <> · <em>{drafting.type === "ruler" ? "click 2 puntos" : drafting.type === "angle" ? `${drafting.points.length}/3 puntos` : "dibujando…"}</em></>}
+                {t("pages.xrays.statusZoom")}: {Math.round(zoom * 100)}% · {t("pages.xrays.statusRotation")}: {rotation}° · {t("pages.xrays.brightness")}: {brightness}% · {t("pages.xrays.contrast")}: {contrast}% · {t("pages.xrays.statusTool")}: {tool}
+                {savingAnn && <> · <em style={{ color: "#a78bfa" }}>{t("common.saving")}</em></>}
+                {drafting && <> · <em>{drafting.type === "ruler" ? t("pages.xrays.draftClickTwoPoints") : drafting.type === "angle" ? t("pages.xrays.draftAnglePoints", { count: drafting.points.length }) : t("pages.xrays.draftDrawing")}</em></>}
               </div>
             </>
           )}
@@ -1202,7 +1210,7 @@ export function XraysClient({
             className={`${styles.rightTab} ${tab === "ai" ? styles.rightTabActive : ""}`}
             onClick={() => setTab("ai")}
           >
-            Hallazgos IA
+            {t("pages.xrays.tabAiFindings")}
             {findings.length > 0 && <span className={styles.rightTabBadge}>{findings.length}</span>}
           </button>
           <button
@@ -1210,14 +1218,14 @@ export function XraysClient({
             className={`${styles.rightTab} ${tab === "measurements" ? styles.rightTabActive : ""}`}
             onClick={() => setTab("measurements")}
           >
-            Mediciones
+            {t("pages.xrays.tabMeasurements")}
           </button>
           <button
             type="button"
             className={`${styles.rightTab} ${tab === "notes" ? styles.rightTabActive : ""}`}
             onClick={() => setTab("notes")}
           >
-            Notas
+            {t("common.notes")}
           </button>
         </div>
 
@@ -1225,16 +1233,15 @@ export function XraysClient({
           {tab === "ai" && (
             <>
               {!activeFile ? (
-                <div className={styles.emptyState}>Selecciona una radiografía para ver hallazgos IA.</div>
+                <div className={styles.emptyState}>{t("pages.xrays.selectXrayForFindings")}</div>
               ) : !aiAnalysis ? (
                 <>
                   <div className={styles.aiSummary}>
                     <div className={styles.aiSummaryTitle}>
-                      <Sparkles size={13} aria-hidden /> Análisis IA pendiente
+                      <Sparkles size={13} aria-hidden /> {t("pages.xrays.aiAnalysisPending")}
                     </div>
                     <div className={styles.aiSummaryText}>
-                      Esta radiografía aún no ha sido analizada. Genera el análisis automático
-                      para detectar caries, lesiones periapicales, calidad ósea y más.
+                      {t("pages.xrays.aiAnalysisPendingDesc")}
                     </div>
                   </div>
                   <div className={styles.actionsRow} style={{ flexDirection: "column", gap: 6 }}>
@@ -1245,7 +1252,7 @@ export function XraysClient({
                       disabled={analyzing || aiUsed >= aiLimit}
                     >
                       <Sparkles size={13} aria-hidden />
-                      {analyzing ? "Analizando…" : "Analizar con IA"}
+                      {analyzing ? t("pages.xrays.analyzing") : t("pages.xrays.analyzeWithAi")}
                     </button>
                     <div style={{ display: "flex", gap: 6 }}>
                       <button
@@ -1253,26 +1260,26 @@ export function XraysClient({
                         className={styles.actionBtn}
                         onClick={() => handleAnalyze("PERIODONTAL_BONE_LOSS")}
                         disabled={analyzing || aiUsed >= aiLimit}
-                        title="Pérdida ósea horizontal/vertical por sitio"
+                        title={t("pages.xrays.periodontalTooltip")}
                         style={{ flex: 1, fontSize: 11 }}
                       >
-                        Periodontal
+                        {t("pages.xrays.periodontal")}
                       </button>
                       <button
                         type="button"
                         className={styles.actionBtn}
                         onClick={() => handleAnalyze("PERIIMPLANT_BONE_LOSS")}
                         disabled={analyzing || aiUsed >= aiLimit}
-                        title="Pérdida ósea mesial/distal alrededor del implante"
+                        title={t("pages.xrays.periimplantTooltip")}
                         style={{ flex: 1, fontSize: 11 }}
                       >
-                        Periimplantar
+                        {t("pages.xrays.periimplant")}
                       </button>
                     </div>
                   </div>
                   {aiLimit > 0 && (
                     <div style={{ fontSize: 10, color: "var(--text-3)", textAlign: "center" }}>
-                      Uso IA: {aiUsed.toLocaleString()} / {aiLimit.toLocaleString()} ({aiPercent}%)
+                      {t("pages.xrays.aiUsage")}: {aiUsed.toLocaleString()} / {aiLimit.toLocaleString()} ({aiPercent}%)
                     </div>
                   )}
                 </>
@@ -1280,7 +1287,7 @@ export function XraysClient({
                 <>
                   <div className={styles.aiSummary}>
                     <div className={styles.aiSummaryTitle}>
-                      <Sparkles size={13} aria-hidden /> Resumen IA
+                      <Sparkles size={13} aria-hidden /> {t("pages.xrays.aiSummary")}
                       {aiAnalysis.mode && aiAnalysis.mode !== "GENERAL" && (
                         <span
                           className={styles.aiSummaryVersion}
@@ -1292,8 +1299,8 @@ export function XraysClient({
                           }}
                         >
                           {aiAnalysis.mode === "PERIODONTAL_BONE_LOSS"
-                            ? "Periodontal"
-                            : "Periimplantar"}
+                            ? t("pages.xrays.periodontal")
+                            : t("pages.xrays.periimplant")}
                         </span>
                       )}
                       {aiAnalysis.modelVersion && (
@@ -1304,7 +1311,7 @@ export function XraysClient({
                     {avgConfidence > 0 && (
                       <div className={styles.confidenceWrap}>
                         <div className={styles.confidenceLabel}>
-                          <span>Confianza global</span>
+                          <span>{t("pages.xrays.globalConfidence")}</span>
                           <strong>{Math.round(avgConfidence * 100)}%</strong>
                         </div>
                         <div className={styles.confidenceBar}>
@@ -1319,9 +1326,9 @@ export function XraysClient({
 
                   <div className={styles.findingsHeader}>
                     <span className={styles.findingsHeaderLabel}>
-                      Hallazgos detectados ({findings.length})
+                      {t("pages.xrays.findingsDetected", { count: findings.length })}
                     </span>
-                    <button type="button" className={styles.findingsHeaderSort}>Por severidad</button>
+                    <button type="button" className={styles.findingsHeaderSort}>{t("pages.xrays.bySeverity")}</button>
                   </div>
 
                   <div className={styles.findingsList}>
@@ -1346,17 +1353,17 @@ export function XraysClient({
                             setHighlightedFindingId(f.id);
                           }
                         }}
-                        aria-label={`Hallazgo F${f.id}: ${f.title}, severidad ${SEV_LABEL[f.severity]}`}
+                        aria-label={t("pages.xrays.findingAriaLabel", { id: f.id, title: f.title, severity: t(SEV_LABEL_KEY[f.severity]) })}
                       >
                         <span className={styles.findingIcon}>F{f.id}</span>
                         <div className={styles.findingBody}>
                           <div className={styles.findingTitle}>
                             {f.title}
-                            {f.tooth && <span style={{ color: "var(--text-3)", fontWeight: 500 }}> · diente {f.tooth}</span>}
+                            {f.tooth && <span style={{ color: "var(--text-3)", fontWeight: 500 }}> · {t("pages.xrays.toothInline", { tooth: f.tooth })}</span>}
                           </div>
                           <div className={styles.findingMeta}>
                             <span className={styles.findingMetaSev} style={{ color: SEV_COLOR[f.severity] }}>
-                              {SEV_LABEL[f.severity]}
+                              {t(SEV_LABEL_KEY[f.severity])}
                             </span>
                             {f.confidence != null && <span>· {Math.round(f.confidence * 100)}%</span>}
                           </div>
@@ -1365,18 +1372,18 @@ export function XraysClient({
                           <button
                             type="button"
                             className={styles.findingActionBtn}
-                            title="Aceptar"
-                            aria-label={`Aceptar hallazgo: ${f.title}`}
-                            onClick={(e) => { e.stopPropagation(); toast.success(`Aceptado: ${f.title}`); }}
+                            title={t("pages.xrays.accept")}
+                            aria-label={t("pages.xrays.acceptFinding", { title: f.title })}
+                            onClick={(e) => { e.stopPropagation(); toast.success(t("pages.xrays.accepted", { title: f.title })); }}
                           >
                             <Check size={11} aria-hidden />
                           </button>
                           <button
                             type="button"
                             className={styles.findingActionBtn}
-                            title="Rechazar"
-                            aria-label={`Rechazar hallazgo: ${f.title}`}
-                            onClick={(e) => { e.stopPropagation(); toast(`Rechazado: ${f.title}`, { icon: "✕" }); }}
+                            title={t("pages.xrays.reject")}
+                            aria-label={t("pages.xrays.rejectFinding", { title: f.title })}
+                            onClick={(e) => { e.stopPropagation(); toast(t("pages.xrays.rejected", { title: f.title }), { icon: "✕" }); }}
                           >
                             <XIcon size={11} aria-hidden />
                           </button>
@@ -1387,13 +1394,13 @@ export function XraysClient({
 
                   <div className={styles.severityKey}>
                     <span className={styles.severityKeyItem}>
-                      <span className={styles.severityKeyDot} style={{ background: SEV_COLOR.alta }} /> Alta
+                      <span className={styles.severityKeyDot} style={{ background: SEV_COLOR.alta }} /> {t("pages.xrays.sevHigh")}
                     </span>
                     <span className={styles.severityKeyItem}>
-                      <span className={styles.severityKeyDot} style={{ background: SEV_COLOR.media }} /> Media
+                      <span className={styles.severityKeyDot} style={{ background: SEV_COLOR.media }} /> {t("pages.xrays.sevMedium")}
                     </span>
                     <span className={styles.severityKeyItem}>
-                      <span className={styles.severityKeyDot} style={{ background: SEV_COLOR.baja }} /> Baja
+                      <span className={styles.severityKeyDot} style={{ background: SEV_COLOR.baja }} /> {t("pages.xrays.sevLow")}
                     </span>
                   </div>
 
@@ -1403,14 +1410,14 @@ export function XraysClient({
                       className={`${styles.actionBtn} ${styles.actionBtnPrimary}`}
                       onClick={handleGeneratePlan}
                     >
-                      <Sparkles size={13} aria-hidden /> Generar plan tx
+                      <Sparkles size={13} aria-hidden /> {t("pages.xrays.generateTxPlan")}
                     </button>
                     <button
                       type="button"
                       className={styles.actionBtn}
                       onClick={() => activeFile && window.open(activeFile.url, "_blank")}
                     >
-                      <FileDown size={13} aria-hidden /> Exportar
+                      <FileDown size={13} aria-hidden /> {t("common.export")}
                     </button>
                   </div>
                 </>
@@ -1420,21 +1427,21 @@ export function XraysClient({
 
           {tab === "measurements" && (
             <div className={styles.emptyState}>
-              Las mediciones se guardarán al usar las herramientas de regla y ángulo.
+              {t("pages.xrays.measurementsEmpty")}
             </div>
           )}
 
           {tab === "notes" && (
             <>
               {!activeFile ? (
-                <div className={styles.emptyState}>Selecciona una radiografía.</div>
+                <div className={styles.emptyState}>{t("pages.xrays.selectXray")}</div>
               ) : (
                 <>
                   <textarea
                     className={styles.notesArea}
                     value={notesDraft}
                     onChange={(e) => setNotesDraft(e.target.value)}
-                    placeholder="Notas del doctor sobre esta radiografía…"
+                    placeholder={t("pages.xrays.notesPlaceholder")}
                   />
                   <div className={styles.actionsRow}>
                     <button
@@ -1443,7 +1450,7 @@ export function XraysClient({
                       onClick={handleSaveNotes}
                       disabled={notesDraft === (activeFile.doctorNotes ?? "")}
                     >
-                      Guardar nota
+                      {t("pages.xrays.saveNote")}
                     </button>
                     <button
                       type="button"
@@ -1451,12 +1458,12 @@ export function XraysClient({
                       onClick={handleDelete}
                       style={{ color: "#dc2626" }}
                     >
-                      <Trash2 size={13} aria-hidden /> Eliminar archivo
+                      <Trash2 size={13} aria-hidden /> {t("pages.xrays.deleteFile")}
                     </button>
                   </div>
                   {activeFile.doctorNotesUpdatedAt && (
                     <div style={{ fontSize: 10, color: "var(--text-3)", textAlign: "center" }}>
-                      Actualizado: {formatDate(activeFile.doctorNotesUpdatedAt)}
+                      {t("pages.xrays.updatedAt")}: {formatDate(activeFile.doctorNotesUpdatedAt)}
                     </div>
                   )}
                 </>

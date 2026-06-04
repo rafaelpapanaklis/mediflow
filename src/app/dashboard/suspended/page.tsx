@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PLANS, type PlanId } from "@/lib/billing/plans";
 import { SuspendedPlanCards, type PlanCardData } from "./suspended-client";
+import { getServerT } from "@/i18n/server";
 
 const BANK_INFO = {
   nombre: "Efthymios Rafail Papanaklis",
@@ -31,7 +32,8 @@ function getPaypalUrl(plan: PlanId): string | null {
   return url && url.length > 0 ? url : null;
 }
 
-export default function SuspendedPage() {
+export default async function SuspendedPage() {
+  const { t } = await getServerT();
   const planCards: PlanCardData[] = PLANS.map((p) => ({
     id: p.id,
     name: p.name,
@@ -48,11 +50,10 @@ export default function SuspendedPage() {
           ⏰
         </div>
         <h1 className="mb-4 max-w-2xl text-4xl font-extrabold tracking-tight md:text-5xl">
-          Tu plan expiró
+          {t("pages.suspended.planExpiredTitle")}
         </h1>
         <p className="mb-8 max-w-xl text-base text-muted-foreground md:text-lg">
-          Tu acceso al panel está bloqueado. Para seguir usando MediFlow y
-          retomar tus citas, expedientes y facturación, renueva tu plan.
+          {t("pages.suspended.planExpiredDescription")}
         </p>
         <div className="flex flex-col items-center gap-3 sm:flex-row">
           <a
@@ -63,20 +64,20 @@ export default function SuspendedPage() {
               boxShadow: "0 10px 30px -8px var(--brand-soft, rgba(124,58,237,0.4))",
             }}
           >
-            Renovar plan ↓
+            {t("pages.suspended.renewPlanCta")}
           </a>
           <a
             href="mailto:soporte@mediflow.app"
             className="inline-flex items-center justify-center rounded-xl border border-border bg-card px-6 py-4 text-base font-semibold text-foreground transition hover:bg-muted"
           >
-            Hablar con soporte
+            {t("pages.suspended.contactSupport")}
           </a>
         </div>
         <Link
           href="/login"
           className="mt-10 text-xs text-muted-foreground transition hover:text-foreground"
         >
-          ← Volver al login
+          {t("pages.suspended.backToLogin")}
         </Link>
       </section>
 
@@ -86,11 +87,10 @@ export default function SuspendedPage() {
         className="mx-auto max-w-4xl scroll-mt-8 px-4 pb-20"
       >
         <h2 className="mb-2 text-center text-2xl font-bold tracking-tight">
-          Elige tu plan
+          {t("pages.suspended.choosePlanTitle")}
         </h2>
         <p className="mb-8 text-center text-sm text-muted-foreground">
-          Pago instantáneo con tarjeta o PayPal — tu cuenta se reactiva
-          automáticamente. Si prefieres SPEI, los datos están más abajo.
+          {t("pages.suspended.choosePlanDescription")}
         </p>
 
         <SuspendedPlanCards plans={planCards} />
@@ -104,18 +104,18 @@ export default function SuspendedPage() {
             className="mb-5 text-xs font-bold uppercase tracking-wider"
             style={{ color: "var(--brand)" }}
           >
-            💳 Alternativa: pago por transferencia SPEI
+            {t("pages.suspended.speiAlternativeLabel")}
           </div>
           <div className="grid gap-5 sm:grid-cols-3">
             <div>
               <div className="mb-1 text-xs text-muted-foreground">
-                Nombre del beneficiario
+                {t("pages.suspended.beneficiaryName")}
               </div>
               <div className="text-sm font-semibold">{BANK_INFO.nombre}</div>
             </div>
             <div>
               <div className="mb-1 text-xs text-muted-foreground">
-                CLABE interbancaria
+                {t("pages.suspended.clabe")}
               </div>
               <div
                 className="font-mono text-xl font-extrabold tracking-wider"
@@ -125,7 +125,7 @@ export default function SuspendedPage() {
               </div>
             </div>
             <div>
-              <div className="mb-1 text-xs text-muted-foreground">Banco</div>
+              <div className="mb-1 text-xs text-muted-foreground">{t("pages.suspended.bank")}</div>
               <div className="text-sm font-semibold">{BANK_INFO.banco}</div>
             </div>
           </div>
@@ -137,16 +137,14 @@ export default function SuspendedPage() {
               color: "rgb(180, 83, 9)",
             }}
           >
-            <strong>Importante:</strong> en el concepto de tu transferencia
-            escribe el nombre de tu clínica. Por SPEI tu acceso se reactiva
-            en máximo 24 horas hábiles después de confirmar el pago. Con
-            tarjeta o PayPal la reactivación es inmediata.
+            <strong>{t("pages.suspended.importantLabel")}</strong>{" "}
+            {t("pages.suspended.speiImportantNote")}
           </div>
         </div>
 
         {/* Contacto */}
         <div className="mt-6 text-center text-sm text-muted-foreground">
-          ¿Ya realizaste el pago por SPEI? Escríbenos a{" "}
+          {t("pages.suspended.alreadyPaidPrefix")}{" "}
           <a
             href="mailto:soporte@mediflow.app"
             className="font-semibold hover:underline"
@@ -154,7 +152,7 @@ export default function SuspendedPage() {
           >
             soporte@mediflow.app
           </a>{" "}
-          o por WhatsApp para activar tu cuenta de inmediato.
+          {t("pages.suspended.alreadyPaidSuffix")}
         </div>
       </section>
     </div>

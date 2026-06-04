@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Booking {
   id: string;
@@ -16,6 +17,7 @@ interface Booking {
 }
 
 export function ResourceBookingsClient({ initialBookings }: { initialBookings: Booking[] }) {
+  const t = useT();
   const askConfirm = useConfirm();
   const [bookings, setBookings] = useState<Booking[]>(initialBookings);
   const [showAdd, setShowAdd] = useState(false);
@@ -33,7 +35,7 @@ export function ResourceBookingsClient({ initialBookings }: { initialBookings: B
 
   async function handleAdd() {
     if (!form.resourceType.trim() || !form.resourceName.trim() || !form.startTime || !form.endTime) {
-      toast.error("Todos los campos son requeridos");
+      toast.error(t("pages.resourceBookings.allFieldsRequired"));
       return;
     }
     try {
@@ -53,25 +55,25 @@ export function ResourceBookingsClient({ initialBookings }: { initialBookings: B
       setBookings(prev => [...prev, created].sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()));
       setShowAdd(false);
       setForm({ resourceType: "", resourceName: "", startTime: "", endTime: "" });
-      toast.success("Reserva creada");
+      toast.success(t("pages.resourceBookings.bookingCreated"));
     } catch {
-      toast.error("Error al crear reserva");
+      toast.error(t("pages.resourceBookings.bookingCreateError"));
     }
   }
 
   async function handleDelete(id: string) {
     if (!(await askConfirm({
-      title: "¿Eliminar reserva?",
-      description: "El recurso quedará disponible nuevamente para ese horario.",
+      title: t("pages.resourceBookings.deleteConfirmTitle"),
+      description: t("pages.resourceBookings.deleteConfirmDescription"),
       variant: "danger",
-      confirmText: "Eliminar",
+      confirmText: t("common.delete"),
     }))) return;
     try {
       await fetch(`/api/resources/${id}`, { method: "DELETE" });
       setBookings(prev => prev.filter(b => b.id !== id));
-      toast.success("Reserva eliminada");
+      toast.success(t("pages.resourceBookings.bookingDeleted"));
     } catch {
-      toast.error("Error al eliminar");
+      toast.error(t("pages.resourceBookings.deleteError"));
     }
   }
 
@@ -83,13 +85,13 @@ export function ResourceBookingsClient({ initialBookings }: { initialBookings: B
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-extrabold">Reservas legacy</h1>
+          <h1 className="text-2xl font-extrabold">{t("pages.resourceBookings.title")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Reservas del día — {bookings.length} registradas · Página legacy (no aparece en menú)
+            {t("pages.resourceBookings.subtitle", { count: bookings.length })}
           </p>
         </div>
         <Button onClick={() => setShowAdd(true)}>
-          <Plus className="w-5 h-5 mr-2" /> Nueva reserva
+          <Plus className="w-5 h-5 mr-2" /> {t("pages.resourceBookings.newBooking")}
         </Button>
       </div>
 
@@ -127,7 +129,7 @@ export function ResourceBookingsClient({ initialBookings }: { initialBookings: B
       ) : (
         <div className="text-center py-16 text-muted-foreground">
           <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-20" />
-          <p className="text-base font-semibold">Sin reservas para hoy</p>
+          <p className="text-base font-semibold">{t("pages.resourceBookings.emptyToday")}</p>
         </div>
       )}
 
@@ -135,31 +137,31 @@ export function ResourceBookingsClient({ initialBookings }: { initialBookings: B
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-              <h2 className="text-lg font-bold">Nueva reserva</h2>
+              <h2 className="text-lg font-bold">{t("pages.resourceBookings.newBooking")}</h2>
               <button onClick={() => setShowAdd(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
             </div>
             <div className="px-6 py-5 space-y-4">
               <div className="space-y-1.5">
-                <Label className="text-sm">Tipo de recurso *</Label>
+                <Label className="text-sm">{t("pages.resourceBookings.resourceTypeLabel")}</Label>
                 <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-                  placeholder="Ej: Consultorio, Equipo, Sala"
+                  placeholder={t("pages.resourceBookings.resourceTypePlaceholder")}
                   value={form.resourceType} onChange={e => setForm(f => ({ ...f, resourceType: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-sm">Nombre del recurso *</Label>
+                <Label className="text-sm">{t("pages.resourceBookings.resourceNameLabel")}</Label>
                 <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-                  placeholder="Ej: Consultorio 1, Láser CO2"
+                  placeholder={t("pages.resourceBookings.resourceNamePlaceholder")}
                   value={form.resourceName} onChange={e => setForm(f => ({ ...f, resourceName: e.target.value }))} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-sm">Hora inicio *</Label>
+                  <Label className="text-sm">{t("pages.resourceBookings.startTimeLabel")}</Label>
                   <input type="time"
                     className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
                     value={form.startTime} onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-sm">Hora fin *</Label>
+                  <Label className="text-sm">{t("pages.resourceBookings.endTimeLabel")}</Label>
                   <input type="time"
                     className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
                     value={form.endTime} onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))} />
@@ -167,8 +169,8 @@ export function ResourceBookingsClient({ initialBookings }: { initialBookings: B
               </div>
             </div>
             <div className="px-6 pb-6 flex gap-3">
-              <Button variant="outline" onClick={() => setShowAdd(false)} className="flex-1 h-11 text-base">Cancelar</Button>
-              <Button onClick={handleAdd} className="flex-1 h-11 text-base">Crear reserva</Button>
+              <Button variant="outline" onClick={() => setShowAdd(false)} className="flex-1 h-11 text-base">{t("common.cancel")}</Button>
+              <Button onClick={handleAdd} className="flex-1 h-11 text-base">{t("pages.resourceBookings.createBooking")}</Button>
             </div>
           </div>
         </div>

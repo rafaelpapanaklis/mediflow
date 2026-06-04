@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Clock, ExternalLink, FileText } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 import { toScreen } from "@/lib/floor-plan/iso";
 import {
   STATUS_COLORS,
@@ -249,6 +250,7 @@ export function LiveStatusPanel({
    */
   onOpenOdontogram?: (apt: LiveAppointment) => void;
 }) {
+  const t = useT();
   const placedChairs = useMemo(
     () =>
       elements
@@ -264,7 +266,7 @@ export function LiveStatusPanel({
   if (placedChairs.length === 0) {
     return (
       <div className={liveStyles.statusEmpty}>
-        Asigna sillones a los elementos del layout para verlos aquí.
+        {t("pages.clinicLayout.assignChairsHint")}
       </div>
     );
   }
@@ -306,9 +308,9 @@ export function LiveStatusPanel({
                       type="button"
                       className={liveStyles.statusOdontogramBtn}
                       onClick={() => onOpenOdontogram(apt)}
-                      title="Abrir expediente / odontograma"
+                      title={t("pages.clinicLayout.openRecordOdontogram")}
                     >
-                      <FileText size={11} aria-hidden /> Odontograma
+                      <FileText size={11} aria-hidden /> {t("pages.clinicLayout.odontogram")}
                     </button>
                   )}
                 </>
@@ -317,11 +319,11 @@ export function LiveStatusPanel({
                   <div className={liveStyles.statusPatient}>{maskPatient(next.patient, showFullNames)}</div>
                   <div className={liveStyles.statusTreatment}>{next.treatment}</div>
                   <div className={liveStyles.statusFooter}>
-                    Próxima · {fmtHM(next.start)}
+                    {t("pages.clinicLayout.next")} · {fmtHM(next.start)}
                   </div>
                 </>
               ) : (
-                <div className={liveStyles.statusFree}>Sin citas pendientes</div>
+                <div className={liveStyles.statusFree}>{t("pages.clinicLayout.noPendingAppointments")}</div>
               )}
             </div>
           </div>
@@ -348,6 +350,7 @@ export function LiveTimeline({
   onSeek: (d: Date) => void;
   onResetNow: () => void;
 }) {
+  const t = useT();
   const now = new Date();
   const nowFrac = timelineFraction(now);
   const viewFrac = timelineFraction(viewTime);
@@ -379,11 +382,11 @@ export function LiveTimeline({
   return (
     <div className={liveStyles.timeline}>
       <div className={liveStyles.timelineHeader}>
-        <span className={liveStyles.timelineTitle}>Agenda del día</span>
+        <span className={liveStyles.timelineTitle}>{t("pages.clinicLayout.dayAgenda")}</span>
         <span className={liveStyles.timelineLegend}>
-          <span><span style={{ background: STATUS_COLORS.ocupado }} /> Ocupado</span>
-          <span><span style={{ background: STATUS_COLORS.proximo }} /> Próximo</span>
-          <span><span style={{ background: STATUS_COLORS.libre }} /> Libre</span>
+          <span><span style={{ background: STATUS_COLORS.ocupado }} /> {t("pages.clinicLayout.legendOccupied")}</span>
+          <span><span style={{ background: STATUS_COLORS.proximo }} /> {t("pages.clinicLayout.legendUpcoming")}</span>
+          <span><span style={{ background: STATUS_COLORS.libre }} /> {t("pages.clinicLayout.legendFree")}</span>
         </span>
         {isPast && (
           <button
@@ -391,7 +394,7 @@ export function LiveTimeline({
             className={liveStyles.timelineNowBtn}
             onClick={onResetNow}
           >
-            ↻ Volver a ahora
+            ↻ {t("pages.clinicLayout.backToNow")}
           </button>
         )}
       </div>

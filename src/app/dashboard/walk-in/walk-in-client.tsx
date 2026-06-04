@@ -5,6 +5,7 @@ import { Plus, X, Clock, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
+import { useT } from "@/i18n/i18n-provider";
 
 interface QueueItem {
   id: string;
@@ -18,12 +19,12 @@ interface QueueItem {
   completedAt: string | null;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  WAITING: "Esperando",
-  ASSIGNED: "Asignado",
-  IN_PROGRESS: "En atención",
-  COMPLETED: "Completado",
-  CANCELLED: "Cancelado",
+const STATUS_LABEL_KEYS: Record<string, string> = {
+  WAITING: "pages.walkIn.statusWaiting",
+  ASSIGNED: "pages.walkIn.statusAssigned",
+  IN_PROGRESS: "pages.walkIn.statusInProgress",
+  COMPLETED: "pages.walkIn.statusCompleted",
+  CANCELLED: "pages.walkIn.statusCancelled",
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -53,9 +54,13 @@ function ElapsedTimer({ since }: { since: string }) {
 }
 
 export function WalkInClient({ initialQueue }: { initialQueue: QueueItem[] }) {
+  const t = useT();
   const [queue, setQueue] = useState<QueueItem[]>(initialQueue);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ patientName: "", service: "" });
+
+  const statusLabel = (status: string) =>
+    STATUS_LABEL_KEYS[status] ? t(STATUS_LABEL_KEYS[status]) : status;
 
   // Auto-refresh cada 30s con pausa cuando la pestaña no está visible.
   useEffect(() => {
@@ -87,7 +92,7 @@ export function WalkInClient({ initialQueue }: { initialQueue: QueueItem[] }) {
 
   async function handleAdd() {
     if (!form.patientName.trim() || !form.service.trim()) {
-      toast.error("Nombre y servicio son requeridos");
+      toast.error(t("pages.walkIn.nameServiceRequired"));
       return;
     }
     try {
@@ -101,9 +106,9 @@ export function WalkInClient({ initialQueue }: { initialQueue: QueueItem[] }) {
       setQueue(prev => [...prev, created]);
       setShowAdd(false);
       setForm({ patientName: "", service: "" });
-      toast.success("Paciente agregado a la fila");
+      toast.success(t("pages.walkIn.patientAdded"));
     } catch {
-      toast.error("Error al agregar");
+      toast.error(t("pages.walkIn.addError"));
     }
   }
 
@@ -117,9 +122,9 @@ export function WalkInClient({ initialQueue }: { initialQueue: QueueItem[] }) {
       if (!res.ok) throw new Error();
       const updated = await res.json();
       setQueue(prev => prev.map(q => q.id === id ? updated : q));
-      toast.success(`Estado actualizado: ${STATUS_LABELS[updated.status] || updated.status}`);
+      toast.success(t("pages.walkIn.statusUpdatedToast", { status: statusLabel(updated.status) }));
     } catch {
-      toast.error("Error al actualizar");
+      toast.error(t("pages.walkIn.updateError"));
     }
   }
 
@@ -130,11 +135,11 @@ export function WalkInClient({ initialQueue }: { initialQueue: QueueItem[] }) {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-extrabold">Fila de Espera</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{activeQueue.length} pacientes en espera</p>
+          <h1 className="text-2xl font-extrabold">{t("pages.walkIn.title")}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{t("pages.walkIn.waitingCount", { count: activeQueue.length })}</p>
         </div>
         <Button onClick={() => setShowAdd(true)}>
-          <UserPlus className="w-5 h-5 mr-2" /> Agregar paciente
+          <UserPlus className="w-5 h-5 mr-2" /> {t("pages.walkIn.addPatient")}
         </Button>
       </div>
 
@@ -148,32 +153,32 @@ export function WalkInClient({ initialQueue }: { initialQueue: QueueItem[] }) {
                 <p className="text-sm text-muted-foreground">{item.service}</p>
               </div>
               <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${STATUS_COLORS[item.status] || ""}`}>
-                {STATUS_LABELS[item.status] || item.status}
+                {statusLabel(item.status)}
               </span>
             </div>
             <div className="flex items-center gap-4 text-muted-foreground mb-3">
               <div className="flex items-center gap-1">
                 <Clock className="w-3.5 h-3.5" />
-                <span className="text-xs">Llegó: {new Date(item.joinedAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}</span>
+                <span className="text-xs">{t("pages.walkIn.arrived")} {new Date(item.joinedAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}</span>
               </div>
               <div className="flex items-center gap-1">
                 <Clock className="w-3.5 h-3.5" />
-                <span className="text-xs">Esperando: </span>
+                <span className="text-xs">{t("pages.walkIn.waitingLabel")} </span>
                 <ElapsedTimer since={item.joinedAt} />
               </div>
             </div>
             <div className="flex gap-2">
               {item.status === "WAITING" && (
-                <Button size="sm" variant="outline" onClick={() => handleAction(item.id, "assign")}>Asignar</Button>
+                <Button size="sm" variant="outline" onClick={() => handleAction(item.id, "assign")}>{t("pages.walkIn.assign")}</Button>
               )}
               {(item.status === "WAITING" || item.status === "ASSIGNED") && (
-                <Button size="sm" onClick={() => handleAction(item.id, "start")}>Iniciar</Button>
+                <Button size="sm" onClick={() => handleAction(item.id, "start")}>{t("pages.walkIn.start")}</Button>
               )}
               {item.status === "IN_PROGRESS" && (
-                <Button size="sm" onClick={() => handleAction(item.id, "complete")}>Completar</Button>
+                <Button size="sm" onClick={() => handleAction(item.id, "complete")}>{t("pages.walkIn.complete")}</Button>
               )}
               {item.status !== "COMPLETED" && item.status !== "CANCELLED" && (
-                <Button size="sm" variant="outline" className="text-rose-500 border-rose-300 hover:bg-rose-50" onClick={() => handleAction(item.id, "cancel")}>Cancelar</Button>
+                <Button size="sm" variant="outline" className="text-rose-500 border-rose-300 hover:bg-rose-50" onClick={() => handleAction(item.id, "cancel")}>{t("common.cancel")}</Button>
               )}
             </div>
           </div>
@@ -181,7 +186,7 @@ export function WalkInClient({ initialQueue }: { initialQueue: QueueItem[] }) {
         {activeQueue.length === 0 && (
           <div className="text-center py-16 text-muted-foreground">
             <UserPlus className="w-12 h-12 mx-auto mb-3 opacity-20" />
-            <p className="text-base font-semibold">Sin pacientes en espera</p>
+            <p className="text-base font-semibold">{t("pages.walkIn.emptyActive")}</p>
           </div>
         )}
       </div>
@@ -189,7 +194,7 @@ export function WalkInClient({ initialQueue }: { initialQueue: QueueItem[] }) {
       {/* Done queue */}
       {doneQueue.length > 0 && (
         <div>
-          <h2 className="text-lg font-bold mb-3 text-muted-foreground">Atendidos hoy</h2>
+          <h2 className="text-lg font-bold mb-3 text-muted-foreground">{t("pages.walkIn.attendedToday")}</h2>
           <div className="space-y-2">
             {doneQueue.map(item => (
               <div key={item.id} className="bg-muted/50 border border-border/50 rounded-xl p-4 flex items-center justify-between">
@@ -198,7 +203,7 @@ export function WalkInClient({ initialQueue }: { initialQueue: QueueItem[] }) {
                   <p className="text-xs text-muted-foreground">{item.service}</p>
                 </div>
                 <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${STATUS_COLORS[item.status] || ""}`}>
-                  {STATUS_LABELS[item.status] || item.status}
+                  {statusLabel(item.status)}
                 </span>
               </div>
             ))}
@@ -211,26 +216,26 @@ export function WalkInClient({ initialQueue }: { initialQueue: QueueItem[] }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-              <h2 className="text-lg font-bold">Agregar a la fila</h2>
-              <button onClick={() => setShowAdd(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
+              <h2 className="text-lg font-bold">{t("pages.walkIn.addToQueue")}</h2>
+              <button onClick={() => setShowAdd(false)} aria-label={t("common.close")} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
             </div>
             <div className="px-6 py-5 space-y-4">
               <div className="space-y-1.5">
-                <Label className="text-sm">Nombre del paciente *</Label>
+                <Label className="text-sm">{t("pages.walkIn.patientNameLabel")}</Label>
                 <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-                  placeholder="Nombre completo"
+                  placeholder={t("pages.walkIn.fullNamePlaceholder")}
                   value={form.patientName} onChange={e => setForm(f => ({ ...f, patientName: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-sm">Servicio *</Label>
+                <Label className="text-sm">{t("pages.walkIn.serviceLabel")}</Label>
                 <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-                  placeholder="Ej: Consulta general, Limpieza dental"
+                  placeholder={t("pages.walkIn.servicePlaceholder")}
                   value={form.service} onChange={e => setForm(f => ({ ...f, service: e.target.value }))} />
               </div>
             </div>
             <div className="px-6 pb-6 flex gap-3">
-              <Button variant="outline" onClick={() => setShowAdd(false)} className="flex-1 h-11 text-base">Cancelar</Button>
-              <Button onClick={handleAdd} className="flex-1 h-11 text-base">Agregar</Button>
+              <Button variant="outline" onClick={() => setShowAdd(false)} className="flex-1 h-11 text-base">{t("common.cancel")}</Button>
+              <Button onClick={handleAdd} className="flex-1 h-11 text-base">{t("common.add")}</Button>
             </div>
           </div>
         </div>

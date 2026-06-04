@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, Copy, ExternalLink, Tv, X, Save } from "lucide-react";
 import toast from "react-hot-toast";
+import { useT } from "@/i18n/i18n-provider";
 
 interface TVDisplay {
   id: string;
@@ -26,16 +27,16 @@ interface TVDisplayConfig {
   brandColor?: string | null;
 }
 
-const MODE_LABELS = {
-  OPERATIONAL: "Operativo (sala de espera)",
-  MARKETING:   "Marketing (carrusel)",
-  HYBRID:      "Hybrid (split 60/40)",
+const MODE_LABEL_KEYS = {
+  OPERATIONAL: "pages.tvModes.modeOperationalLabel",
+  MARKETING:   "pages.tvModes.modeMarketingLabel",
+  HYBRID:      "pages.tvModes.modeHybridLabel",
 };
 
-const MODE_DESCRIPTIONS = {
-  OPERATIONAL: "Muestra turnos en tiempo real, llamada de pacientes, tiempos.",
-  MARKETING:   "Carrusel de promociones + testimonios + branding clínica.",
-  HYBRID:      "Split: arriba turnos, abajo carrusel de marketing.",
+const MODE_DESCRIPTION_KEYS = {
+  OPERATIONAL: "pages.tvModes.modeOperationalDesc",
+  MARKETING:   "pages.tvModes.modeMarketingDesc",
+  HYBRID:      "pages.tvModes.modeHybridDesc",
 };
 
 const EMPTY_CONFIG: TVDisplayConfig = {
@@ -47,6 +48,7 @@ const EMPTY_CONFIG: TVDisplayConfig = {
 };
 
 export function TvModesClient() {
+  const t = useT();
   const [displays, setDisplays] = useState<TVDisplay[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<TVDisplay | null>(null);
@@ -62,21 +64,21 @@ export function TvModesClient() {
       const j = await res.json();
       setDisplays(j.displays);
     } catch {
-      toast.error("Error al cargar pantallas TV");
+      toast.error(t("pages.tvModes.loadError"));
     } finally {
       setLoading(false);
     }
   }
 
   async function handleDelete(d: TVDisplay) {
-    if (!confirm(`¿Eliminar "${d.name}"? La URL ${d.publicSlug} dejará de funcionar.`)) return;
+    if (!confirm(t("pages.tvModes.deleteConfirm", { name: d.name, slug: d.publicSlug }))) return;
     try {
       const res = await fetch(`/api/tv-displays/${d.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
-      toast.success("Pantalla eliminada");
+      toast.success(t("pages.tvModes.deleted"));
       refetch();
     } catch {
-      toast.error("Error al eliminar");
+      toast.error(t("pages.tvModes.deleteError"));
     }
   }
 
@@ -90,13 +92,13 @@ export function TvModesClient() {
       if (!res.ok) throw new Error();
       refetch();
     } catch {
-      toast.error("Error al actualizar");
+      toast.error(t("pages.tvModes.updateError"));
     }
   }
 
   function copyUrl(slug: string) {
     const url = `${window.location.origin}/tv/${slug}`;
-    navigator.clipboard.writeText(url).then(() => toast.success("URL copiada"));
+    navigator.clipboard.writeText(url).then(() => toast.success(t("pages.tvModes.urlCopied")));
   }
 
   return (
@@ -104,10 +106,10 @@ export function TvModesClient() {
       <header style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
         <div>
           <h1 style={{ fontSize: "clamp(18px, 1.5vw, 24px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
-            Pantallas TV
+            {t("pages.tvModes.title")}
           </h1>
           <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, margin: 0 }}>
-            Gestiona pantallas para sala de espera. Cada una tiene su URL pública.
+            {t("pages.tvModes.subtitle")}
           </p>
         </div>
         <button
@@ -122,18 +124,18 @@ export function TvModesClient() {
             boxShadow: "0 6px 18px -6px rgba(124, 58, 237, 0.5)",
           }}
         >
-          <Plus size={14} aria-hidden /> Crear pantalla
+          <Plus size={14} aria-hidden /> {t("pages.tvModes.createScreen")}
         </button>
       </header>
 
       {loading ? (
-        <Box>Cargando…</Box>
+        <Box>{t("common.loading")}</Box>
       ) : displays.length === 0 ? (
         <Box>
           <Tv size={32} style={{ color: "var(--text-4)", margin: "0 auto 12px" }} aria-hidden />
-          <strong style={{ color: "var(--text-2)", display: "block" }}>Sin pantallas configuradas</strong>
+          <strong style={{ color: "var(--text-2)", display: "block" }}>{t("pages.tvModes.emptyTitle")}</strong>
           <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 6 }}>
-            Crea tu primera pantalla y obtén un URL público para mostrarla en una TV de sala.
+            {t("pages.tvModes.emptyDesc")}
           </p>
           <button
             type="button"
@@ -145,7 +147,7 @@ export function TvModesClient() {
               cursor: "pointer", fontFamily: "inherit",
             }}
           >
-            + Crear primera pantalla
+            {t("pages.tvModes.createFirstScreen")}
           </button>
         </Box>
       ) : (
@@ -167,17 +169,17 @@ export function TvModesClient() {
                     <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text-1)", margin: 0 }}>{d.name}</h3>
                     {!d.active && (
                       <span style={{ fontSize: 10, fontWeight: 700, color: "var(--text-3)", background: "var(--bg-elev-2)", padding: "2px 8px", borderRadius: 999 }}>
-                        INACTIVA
+                        {t("pages.tvModes.inactiveBadge")}
                       </span>
                     )}
                   </div>
                   <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4 }}>
-                    {MODE_LABELS[d.mode]} · {MODE_DESCRIPTIONS[d.mode]}
+                    {t(MODE_LABEL_KEYS[d.mode])} · {t(MODE_DESCRIPTION_KEYS[d.mode])}
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                  <IconBtn label="Editar" onClick={() => setEditing(d)} icon={<Pencil size={13} aria-hidden />} />
-                  <IconBtn label="Eliminar" onClick={() => handleDelete(d)} icon={<Trash2 size={13} aria-hidden />} danger />
+                  <IconBtn label={t("common.edit")} onClick={() => setEditing(d)} icon={<Pencil size={13} aria-hidden />} />
+                  <IconBtn label={t("common.delete")} onClick={() => handleDelete(d)} icon={<Trash2 size={13} aria-hidden />} danger />
                 </div>
               </div>
 
@@ -200,8 +202,8 @@ export function TvModesClient() {
                 <button
                   type="button"
                   onClick={() => copyUrl(d.publicSlug)}
-                  title="Copiar URL pública"
-                  aria-label="Copiar URL pública"
+                  title={t("pages.tvModes.copyPublicUrl")}
+                  aria-label={t("pages.tvModes.copyPublicUrl")}
                   style={{ width: 26, height: 26, display: "grid", placeItems: "center", background: "transparent", border: "1px solid var(--border-soft)", borderRadius: 6, color: "var(--text-3)", cursor: "pointer" }}
                 >
                   <Copy size={11} aria-hidden />
@@ -210,8 +212,8 @@ export function TvModesClient() {
                   href={`/tv/${d.publicSlug}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  title="Abrir vista pública"
-                  aria-label="Abrir vista pública"
+                  title={t("pages.tvModes.openPublicView")}
+                  aria-label={t("pages.tvModes.openPublicView")}
                   style={{ width: 26, height: 26, display: "grid", placeItems: "center", background: "transparent", border: "1px solid var(--border-soft)", borderRadius: 6, color: "var(--text-3)", textDecoration: "none" }}
                 >
                   <ExternalLink size={11} aria-hidden />
@@ -228,7 +230,7 @@ export function TvModesClient() {
                   padding: 0,
                 }}
               >
-                {d.active ? "Desactivar" : "Activar"}
+                {d.active ? t("pages.tvModes.deactivate") : t("pages.tvModes.activate")}
               </button>
             </div>
           ))}
@@ -250,6 +252,7 @@ function TvDisplayModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const t = useT();
   const [name, setName] = useState(display?.name ?? "");
   const [mode, setMode] = useState<"OPERATIONAL" | "MARKETING" | "HYBRID">(display?.mode ?? "OPERATIONAL");
   const [config, setConfig] = useState<TVDisplayConfig>(display?.config ?? EMPTY_CONFIG);
@@ -263,7 +266,7 @@ function TvDisplayModal({
 
   async function save() {
     if (!name.trim()) {
-      toast.error("Nombre requerido");
+      toast.error(t("pages.tvModes.nameRequired"));
       return;
     }
     setSaving(true);
@@ -274,10 +277,10 @@ function TvDisplayModal({
         body: JSON.stringify({ name: name.trim(), mode, config }),
       });
       if (!res.ok) throw new Error();
-      toast.success(display ? "Pantalla actualizada" : "Pantalla creada");
+      toast.success(display ? t("pages.tvModes.updated") : t("pages.tvModes.created"));
       onSaved();
     } catch {
-      toast.error("Error al guardar");
+      toast.error(t("pages.tvModes.saveError"));
     } finally {
       setSaving(false);
     }
@@ -325,9 +328,9 @@ function TvDisplayModal({
       >
         <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-soft)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h3 id="tv-modal-title" style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>
-            {display ? `Editar ${display.name}` : "Nueva pantalla TV"}
+            {display ? t("pages.tvModes.editTitle", { name: display.name }) : t("pages.tvModes.newScreenTitle")}
           </h3>
-          <button type="button" onClick={onClose} aria-label="Cerrar" style={{
+          <button type="button" onClick={onClose} aria-label={t("common.close")} style={{
             width: 28, height: 28, display: "grid", placeItems: "center",
             background: "transparent", border: "1px solid var(--border-soft)",
             borderRadius: 7, color: "var(--text-3)", cursor: "pointer",
@@ -337,30 +340,30 @@ function TvDisplayModal({
         </div>
 
         <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14, overflowY: "auto" }}>
-          <Field label="Nombre">
+          <Field label={t("common.name")}>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ej. TV recepción principal"
+              placeholder={t("pages.tvModes.namePlaceholder")}
               className="input-new"
             />
           </Field>
 
-          <Field label="Modo">
+          <Field label={t("pages.tvModes.modeLabel")}>
             <select value={mode} onChange={(e) => setMode(e.target.value as "OPERATIONAL" | "MARKETING" | "HYBRID")} className="input-new">
-              <option value="OPERATIONAL">Operativo (sala de espera)</option>
-              <option value="MARKETING">Marketing (carrusel)</option>
-              <option value="HYBRID">Hybrid (split 60/40)</option>
+              <option value="OPERATIONAL">{t("pages.tvModes.modeOperationalLabel")}</option>
+              <option value="MARKETING">{t("pages.tvModes.modeMarketingLabel")}</option>
+              <option value="HYBRID">{t("pages.tvModes.modeHybridLabel")}</option>
             </select>
             <span style={{ fontSize: 11, color: "var(--text-4)", marginTop: 4 }}>
-              {MODE_DESCRIPTIONS[mode]}
+              {t(MODE_DESCRIPTION_KEYS[mode])}
             </span>
           </Field>
 
           {(mode === "MARKETING" || mode === "HYBRID") && (
             <>
-              <Field label="Color de marca (hex)">
+              <Field label={t("pages.tvModes.brandColorLabel")}>
                 <input
                   type="text"
                   value={config.brandColor ?? ""}
@@ -369,7 +372,7 @@ function TvDisplayModal({
                   className="input-new mono"
                 />
               </Field>
-              <Field label="URL del logo (opcional)">
+              <Field label={t("pages.tvModes.brandLogoLabel")}>
                 <input
                   type="url"
                   value={config.brandLogo ?? ""}
@@ -381,13 +384,13 @@ function TvDisplayModal({
               <div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                   <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                    Promociones (carrusel)
+                    {t("pages.tvModes.promotionsLabel")}
                   </span>
                   <button type="button" onClick={addPromo} style={{
                     fontSize: 11, fontWeight: 600, color: "var(--brand)",
                     background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit",
                   }}>
-                    + Agregar
+                    + {t("common.add")}
                   </button>
                 </div>
                 {(config.promotions ?? []).map((p, idx) => (
@@ -400,7 +403,7 @@ function TvDisplayModal({
                         promos[idx] = { ...promos[idx]!, title: e.target.value };
                         setConfig({ ...config, promotions: promos });
                       }}
-                      placeholder="Título"
+                      placeholder={t("pages.tvModes.promoTitlePlaceholder")}
                       className="input-new"
                       style={{ fontSize: 12 }}
                     />
@@ -412,7 +415,7 @@ function TvDisplayModal({
                         promos[idx] = { ...promos[idx]!, description: e.target.value };
                         setConfig({ ...config, promotions: promos });
                       }}
-                      placeholder="Descripción"
+                      placeholder={t("common.description")}
                       className="input-new"
                       style={{ fontSize: 12 }}
                     />
@@ -426,11 +429,11 @@ function TvDisplayModal({
                         promos[idx] = { ...promos[idx]!, durationSec: Number(e.target.value) || 8 };
                         setConfig({ ...config, promotions: promos });
                       }}
-                      placeholder="seg"
+                      placeholder={t("pages.tvModes.promoSecPlaceholder")}
                       className="input-new mono"
                       style={{ fontSize: 12 }}
                     />
-                    <button type="button" onClick={() => removePromo(idx)} aria-label="Quitar promoción" style={{
+                    <button type="button" onClick={() => removePromo(idx)} aria-label={t("pages.tvModes.removePromo")} style={{
                       width: 28, height: 28, display: "grid", placeItems: "center",
                       background: "transparent", border: "1px solid var(--border-soft)",
                       borderRadius: 6, color: "#dc2626", cursor: "pointer",
@@ -441,7 +444,7 @@ function TvDisplayModal({
                 ))}
                 {(config.promotions ?? []).length === 0 && (
                   <div style={{ fontSize: 11, color: "var(--text-4)", padding: 8, textAlign: "center" }}>
-                    Sin promociones — agrega al menos una para el carrusel.
+                    {t("pages.tvModes.noPromotions")}
                   </div>
                 )}
               </div>
@@ -449,14 +452,14 @@ function TvDisplayModal({
           )}
 
           {(mode === "HYBRID") && (
-            <Field label="Mostrar tiempos de espera estimados">
+            <Field label={t("pages.tvModes.showWaitTimesLabel")}>
               <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13 }}>
                 <input
                   type="checkbox"
                   checked={config.showWaitTimes ?? true}
                   onChange={(e) => setConfig({ ...config, showWaitTimes: e.target.checked })}
                 />
-                Sí, calcula tiempo de espera por paciente check-in
+                {t("pages.tvModes.showWaitTimesCheckbox")}
               </label>
             </Field>
           )}
@@ -469,7 +472,7 @@ function TvDisplayModal({
             border: "1px solid var(--border-strong)", borderRadius: 8,
             cursor: "pointer", fontFamily: "inherit",
           }}>
-            Cancelar
+            {t("common.cancel")}
           </button>
           <button type="button" onClick={save} disabled={saving} style={{
             padding: "8px 16px", fontSize: 13, fontWeight: 700,
@@ -479,7 +482,7 @@ function TvDisplayModal({
             display: "inline-flex", alignItems: "center", gap: 6,
           }}>
             <Save size={13} aria-hidden />
-            {saving ? "Guardando…" : (display ? "Actualizar" : "Crear")}
+            {saving ? t("common.saving") : (display ? t("common.update") : t("common.create"))}
           </button>
         </div>
       </div>

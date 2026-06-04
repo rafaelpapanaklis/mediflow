@@ -16,6 +16,7 @@
 import { Check, Lock, Plus } from "lucide-react";
 import type { Module } from "@prisma/client";
 import { getModuleIcon } from "@/lib/marketplace/icons";
+import { useT } from "@/i18n/i18n-provider";
 
 export type ModuleStatus = "purchased" | "trial" | "available" | "locked";
 
@@ -45,24 +46,25 @@ const CATEGORY_BADGE: Record<string, string> = {
 interface BadgeStyle {
   classes: string;
   dot: string;
-  label: string;
+  // Llave de traducción para la etiqueta visible; se resuelve con t() en render.
+  labelKey: string;
 }
 
 const STATUS_BADGE: Record<ModuleStatus, BadgeStyle | null> = {
   purchased: {
     classes: "bg-blue-500/10 text-blue-700 dark:text-blue-300 ring-1 ring-inset ring-blue-500/20",
     dot:     "bg-blue-500",
-    label:   "Comprado",
+    labelKey: "pages.moduleCard.badgePurchased",
   },
   trial: {
     classes: "bg-violet-500/10 text-violet-700 dark:text-violet-300 ring-1 ring-inset ring-violet-500/20",
     dot:     "bg-violet-500",
-    label:   "Trial activo",
+    labelKey: "pages.moduleCard.badgeTrial",
   },
   available: {
     classes: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-500/20",
     dot:     "bg-emerald-500",
-    label:   "Disponible",
+    labelKey: "pages.moduleCard.badgeAvailable",
   },
   locked: null, // muestra candado en lugar de badge
 };
@@ -75,6 +77,7 @@ export function ModuleCard({
   onAddToCart,
   onRemoveFromCart,
 }: ModuleCardProps) {
+  const t = useT();
   const Icon = getModuleIcon(m.iconKey);
   const isPurchased = status === "purchased";
   const isLocked    = status === "locked";
@@ -101,7 +104,7 @@ export function ModuleCard({
         {badge && (
           <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium ${badge.classes}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} aria-hidden />
-            {badge.label}
+            {t(badge.labelKey)}
           </div>
         )}
       </div>
@@ -134,7 +137,7 @@ export function ModuleCard({
             <span className={`text-lg font-semibold ${isLocked ? "text-[var(--text-3)]" : "text-[var(--text-1)]"}`}>
               ${m.priceMxnMonthly}
             </span>
-            <span className="text-xs text-[var(--text-3)] ml-1">MXN/mes</span>
+            <span className="text-xs text-[var(--text-3)] ml-1">{t("pages.moduleCard.perMonth")}</span>
           </div>
         </div>
 
@@ -145,25 +148,25 @@ export function ModuleCard({
             className="w-full text-sm font-medium px-3 py-2 rounded-md bg-blue-500/10 text-blue-700 dark:text-blue-300 ring-1 ring-inset ring-blue-500/20 flex items-center justify-center gap-2 cursor-not-allowed"
           >
             <Check className="w-4 h-4" strokeWidth={2.5} aria-hidden />
-            Ya comprado · Activo en tu cuenta
+            {t("pages.moduleCard.alreadyPurchased")}
           </div>
         ) : inCart ? (
           <button
             type="button"
             onClick={onRemoveFromCart}
             disabled={pending}
-            aria-label={`Quitar ${m.name} del carrito`}
+            aria-label={t("pages.moduleCard.removeAria", { name: m.name })}
             className="w-full text-sm font-medium px-3 py-2 rounded-md bg-blue-500/10 text-blue-700 dark:text-blue-300 ring-1 ring-inset ring-blue-500/20 hover:bg-blue-500/15 transition-all duration-150 active:scale-[0.97] flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
           >
             <Check className="w-4 h-4" strokeWidth={2.5} aria-hidden />
-            En el carrito
+            {t("pages.moduleCard.inCart")}
           </button>
         ) : (
           <button
             type="button"
             onClick={onAddToCart}
             disabled={pending}
-            aria-label={isLocked ? `Comprar ${m.name} para desbloquear` : `Agregar ${m.name} al carrito`}
+            aria-label={isLocked ? t("pages.moduleCard.buyToUnlockAria", { name: m.name }) : t("pages.moduleCard.addAria", { name: m.name })}
             className={`w-full text-sm font-medium px-3 py-2 rounded-md transition-all duration-150 active:scale-[0.97] flex items-center justify-center gap-1.5 disabled:opacity-60 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-elev)] ${
               isLocked
                 ? "bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500/50"
@@ -171,7 +174,7 @@ export function ModuleCard({
             }`}
           >
             <Plus className="w-4 h-4" strokeWidth={2.5} aria-hidden />
-            {isLocked ? "Comprar para desbloquear" : "Agregar al carrito"}
+            {isLocked ? t("pages.moduleCard.buyToUnlock") : t("pages.moduleCard.addToCart")}
           </button>
         )}
       </div>

@@ -14,6 +14,7 @@
 import { Trash2 } from "lucide-react";
 import type { Module } from "@prisma/client";
 import { getModuleIcon } from "@/lib/marketplace/icons";
+import { useT } from "@/i18n/i18n-provider";
 
 interface CartItemProps {
   module: Module;
@@ -21,6 +22,7 @@ interface CartItemProps {
 }
 
 export function CartItem({ module: m, onRemove }: CartItemProps) {
+  const t = useT();
   const Icon = getModuleIcon(m.iconKey);
 
   return (
@@ -33,12 +35,12 @@ export function CartItem({ module: m, onRemove }: CartItemProps) {
         <div className="text-xs text-[var(--text-3)]">{m.category}</div>
       </div>
       <div className="text-sm font-semibold text-[var(--text-1)] flex-shrink-0">
-        ${m.priceMxnMonthly} MXN/mes
+        ${m.priceMxnMonthly} {t("pages.marketplace.mxnPerMonth")}
       </div>
       <button
         type="button"
         onClick={onRemove}
-        aria-label={`Eliminar ${m.name} del carrito`}
+        aria-label={t("pages.marketplace.removeFromCart", { name: m.name })}
         className="p-2 rounded-md text-[var(--text-3)] hover:text-red-600 dark:hover:text-red-400 hover:bg-red-500/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
       >
         <Trash2 className="w-4 h-4" aria-hidden />

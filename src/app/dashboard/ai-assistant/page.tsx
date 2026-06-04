@@ -31,6 +31,8 @@ import {
   Menu,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { useT } from "@/i18n/i18n-provider";
+import type { TFunction } from "@/i18n/t";
 import styles from "./ai-assistant.module.css";
 
 interface Message {
@@ -52,44 +54,44 @@ interface Conversation {
 const SUGGESTIONS = [
   {
     icon: Stethoscope,
-    title: "Diagnóstico diferencial",
-    desc: "Paciente con síntomas X/Y/Z, dame DDx",
-    text: "Paciente con los siguientes síntomas, dame diagnóstico diferencial: ",
+    titleKey: "pages.aiAssistant.suggestDdxTitle",
+    descKey: "pages.aiAssistant.suggestDdxDesc",
+    textKey: "pages.aiAssistant.suggestDdxText",
   },
   {
     icon: Pill,
-    title: "Dosis de medicamento",
-    desc: "Verifica posología estándar",
-    text: "¿Cuál es la dosis estándar de ",
+    titleKey: "pages.aiAssistant.suggestDoseTitle",
+    descKey: "pages.aiAssistant.suggestDoseDesc",
+    textKey: "pages.aiAssistant.suggestDoseText",
   },
   {
     icon: FileText,
-    title: "Redactar SOAP",
-    desc: "Estructura una nota de evolución",
-    text: "Ayúdame a redactar una nota SOAP para un paciente con: ",
+    titleKey: "pages.aiAssistant.suggestSoapTitle",
+    descKey: "pages.aiAssistant.suggestSoapDesc",
+    textKey: "pages.aiAssistant.suggestSoapText",
   },
   {
     icon: ClipboardList,
-    title: "Estudios a pedir",
-    desc: "Lab y gabinete recomendados",
-    text: "¿Qué estudios de laboratorio y gabinete recomendarías para: ",
+    titleKey: "pages.aiAssistant.suggestStudiesTitle",
+    descKey: "pages.aiAssistant.suggestStudiesDesc",
+    textKey: "pages.aiAssistant.suggestStudiesText",
   },
 ];
 
 const SLASH_COMMANDS = [
-  { cmd: "/paciente", name: "Buscar paciente", desc: "Cargar contexto de un paciente al chat", icon: Users },
-  { cmd: "/soap",     name: "Generar nota SOAP", desc: "Redacta SOAP a partir de los síntomas", icon: FileText },
-  { cmd: "/receta",   name: "Generar receta", desc: "Receta con dosis y duración", icon: Pill },
-  { cmd: "/odontograma", name: "Resumir odontograma", desc: "Estado dental + tratamientos", icon: ClipboardList },
-  { cmd: "/cotizar",  name: "Generar cotización", desc: "Procedimientos + costos sugeridos", icon: Receipt },
+  { cmd: "/paciente", nameKey: "pages.aiAssistant.slashPatientName", descKey: "pages.aiAssistant.slashPatientDesc", icon: Users },
+  { cmd: "/soap",     nameKey: "pages.aiAssistant.slashSoapName", descKey: "pages.aiAssistant.slashSoapDesc", icon: FileText },
+  { cmd: "/receta",   nameKey: "pages.aiAssistant.slashRxName", descKey: "pages.aiAssistant.slashRxDesc", icon: Pill },
+  { cmd: "/odontograma", nameKey: "pages.aiAssistant.slashOdontogramName", descKey: "pages.aiAssistant.slashOdontogramDesc", icon: ClipboardList },
+  { cmd: "/cotizar",  nameKey: "pages.aiAssistant.slashQuoteName", descKey: "pages.aiAssistant.slashQuoteDesc", icon: Receipt },
 ];
 
 const QUICK_ACTIONS = [
-  { label: "/soap", icon: FileText },
-  { label: "Resumir historia", icon: ClipboardList },
-  { label: "Preguntar sobre xray", icon: Sparkles },
-  { label: "/receta", icon: Pill },
-  { label: "WhatsApp paciente", icon: Send },
+  { label: "/soap", labelKey: null, icon: FileText },
+  { label: "Resumir historia", labelKey: "pages.aiAssistant.quickSummarizeHistory", icon: ClipboardList },
+  { label: "Preguntar sobre xray", labelKey: "pages.aiAssistant.quickAskXray", icon: Sparkles },
+  { label: "/receta", labelKey: null, icon: Pill },
+  { label: "WhatsApp paciente", labelKey: "pages.aiAssistant.quickWhatsappPatient", icon: Send },
 ];
 
 const STORAGE_KEY = "mf:ai-conversations:v1";
@@ -123,19 +125,20 @@ function formatTime(ts: number): string {
   }).format(date);
 }
 
-function formatRelative(ts: number): string {
+function formatRelative(ts: number, t: TFunction): string {
   const diff = Date.now() - ts;
   const min = Math.floor(diff / 60_000);
-  if (min < 1) return "ahora";
-  if (min < 60) return `hace ${min} min`;
+  if (min < 1) return t("pages.aiAssistant.relativeNow");
+  if (min < 60) return t("pages.aiAssistant.relativeMin", { min });
   const h = Math.floor(min / 60);
-  if (h < 24) return `hace ${h}h`;
+  if (h < 24) return t("pages.aiAssistant.relativeHour", { h });
   const d = Math.floor(h / 24);
-  if (d < 7) return `hace ${d}d`;
+  if (d < 7) return t("pages.aiAssistant.relativeDay", { d });
   return new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short" }).format(new Date(ts));
 }
 
 export default function AIAssistantPage() {
+  const t = useT();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -233,7 +236,7 @@ export default function AIAssistantPage() {
   const startNew = useCallback(() => {
     const newConv: Conversation = {
       id: makeId(),
-      title: "Nueva conversación",
+      title: t("pages.aiAssistant.newConversation"),
       updatedAt: Date.now(),
       messages: [],
       group: "clinico",
@@ -243,7 +246,7 @@ export default function AIAssistantPage() {
     setInput("");
     setError(null);
     setTimeout(() => textareaRef.current?.focus(), 50);
-  }, []);
+  }, [t]);
 
   const sendMessage = useCallback(async (textOverride?: string) => {
     const text = (textOverride ?? input).trim();
@@ -305,7 +308,7 @@ export default function AIAssistantPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error ?? "Error al consultar IA");
+        throw new Error(data.error ?? t("pages.aiAssistant.errorQuery"));
       }
 
       const reply = String(data.reply ?? "");
@@ -340,7 +343,7 @@ export default function AIAssistantPage() {
         }),
       );
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Error al consultar IA";
+      const msg = err instanceof Error ? err.message : t("pages.aiAssistant.errorQuery");
       setError(msg);
       setConversations((prev) =>
         prev.map((c) => {
@@ -351,7 +354,7 @@ export default function AIAssistantPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeId, input, loading, messages]);
+  }, [activeId, input, loading, messages, t]);
 
   const handleKey = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (slashOpen) {
@@ -396,7 +399,7 @@ export default function AIAssistantPage() {
       };
       recorder.onstop = async () => {
         setRecording(false);
-        stream.getTracks().forEach((t) => t.stop());
+        stream.getTracks().forEach((track) => track.stop());
         const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
         const form = new FormData();
         form.append("audio", blob, "voice.webm");
@@ -404,22 +407,22 @@ export default function AIAssistantPage() {
           const res = await fetch("/api/ai/transcribe", { method: "POST", body: form });
           if (!res.ok) {
             // Endpoint puede no existir todavía — degradación silenciosa
-            toast("Transcripción de voz pendiente de configurar", { icon: "🎙️" });
+            toast(t("pages.aiAssistant.voicePending"), { icon: "🎙️" });
             return;
           }
           const data = await res.json();
           if (data.text) setInput((prev) => `${prev}${prev ? " " : ""}${data.text}`);
         } catch {
-          toast("Error de transcripción", { icon: "⚠️" });
+          toast(t("pages.aiAssistant.voiceError"), { icon: "⚠️" });
         }
       };
       recorder.start();
       recorderRef.current = recorder;
       setRecording(true);
     } catch {
-      toast.error("No se pudo acceder al micrófono");
+      toast.error(t("pages.aiAssistant.micError"));
     }
-  }, [recording]);
+  }, [recording, t]);
 
   const insertCommand = useCallback((cmd: string) => {
     setInput((prev) => {
@@ -438,7 +441,7 @@ export default function AIAssistantPage() {
       {mobileSidebarOpen && (
         <button
           type="button"
-          aria-label="Cerrar historial"
+          aria-label={t("pages.aiAssistant.closeHistory")}
           className={styles.mobileBackdrop}
           onClick={() => setMobileSidebarOpen(false)}
         />
@@ -448,15 +451,15 @@ export default function AIAssistantPage() {
         className={styles.sidebar}
         role={mobileSidebarOpen ? "dialog" : undefined}
         aria-modal={mobileSidebarOpen ? "true" : undefined}
-        aria-label="Historial de conversaciones"
+        aria-label={t("pages.aiAssistant.conversationsHistory")}
       >
         <div className={styles.sidebarHeader}>
           <div className={styles.brandTitle}>
             <span className={styles.brandIcon}><Sparkles size={14} aria-hidden /></span>
-            Asistente IA
+            {t("pages.aiAssistant.brandTitle")}
           </div>
           <button type="button" className={styles.newConvBtn} onClick={startNew}>
-            <Plus size={13} aria-hidden /> Nueva conversación
+            <Plus size={13} aria-hidden /> {t("pages.aiAssistant.newConversation")}
             <kbd>⌘K</kbd>
           </button>
           <div className={styles.searchWrap}>
@@ -464,7 +467,7 @@ export default function AIAssistantPage() {
             <input
               type="text"
               className={styles.searchInput}
-              placeholder="Buscar conversaciones…"
+              placeholder={t("pages.aiAssistant.searchPlaceholder")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -476,7 +479,7 @@ export default function AIAssistantPage() {
             const items = grouped[g];
             if (items.length === 0) return null;
             const Icon = g === "clinico" ? ChartLine : g === "admin" ? Calendar : Users;
-            const label = g === "clinico" ? "Clínico" : g === "admin" ? "Administrativo" : "Pacientes";
+            const label = g === "clinico" ? t("pages.aiAssistant.groupClinical") : g === "admin" ? t("pages.aiAssistant.groupAdmin") : t("pages.aiAssistant.groupPatients");
             return (
               <div key={g}>
                 <div className={styles.convGroupLabel}>
@@ -494,7 +497,7 @@ export default function AIAssistantPage() {
                     }}
                   >
                     <span className={styles.convItemTitle}>{c.title}</span>
-                    <span className={styles.convItemTime}>{formatRelative(c.updatedAt)}</span>
+                    <span className={styles.convItemTime}>{formatRelative(c.updatedAt, t)}</span>
                   </button>
                 ))}
               </div>
@@ -504,7 +507,7 @@ export default function AIAssistantPage() {
             <div style={{ padding: "20px 12px" }}>
               {search ? (
                 <div style={{ fontSize: 12, color: "var(--text-3)", textAlign: "center" }}>
-                  Sin resultados para "{search}"
+                  {t("pages.aiAssistant.noResultsFor", { search })}
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, textAlign: "center", padding: "16px 8px" }}>
@@ -512,10 +515,10 @@ export default function AIAssistantPage() {
                     <Sparkles size={20} aria-hidden />
                   </div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
-                    Sin conversaciones aún
+                    {t("pages.aiAssistant.noConversationsYet")}
                   </div>
                   <div style={{ fontSize: 11.5, color: "var(--text-3)", lineHeight: 1.5, maxWidth: 220 }}>
-                    Pregúntale a la IA sobre pacientes, agenda o cualquier dato de tu clínica.
+                    {t("pages.aiAssistant.emptyHint")}
                   </div>
                   <button
                     type="button"
@@ -533,7 +536,7 @@ export default function AIAssistantPage() {
                       fontFamily: "inherit",
                     }}
                   >
-                    <Plus size={11} aria-hidden /> Empezar
+                    <Plus size={11} aria-hidden /> {t("pages.aiAssistant.start")}
                   </button>
                 </div>
               )}
@@ -544,8 +547,8 @@ export default function AIAssistantPage() {
         <div className={styles.userBlock}>
           <div className={styles.userAvatar}>DR</div>
           <div style={{ minWidth: 0 }}>
-            <div className={styles.userName}>Doctor</div>
-            <div className={styles.userRole}>Sesión activa · IA Claude</div>
+            <div className={styles.userName}>{t("pages.aiAssistant.doctor")}</div>
+            <div className={styles.userRole}>{t("pages.aiAssistant.activeSession")}</div>
           </div>
         </div>
       </aside>
@@ -558,36 +561,36 @@ export default function AIAssistantPage() {
             type="button"
             className={styles.mobileMenuBtn}
             onClick={() => setMobileSidebarOpen(true)}
-            aria-label="Abrir historial de conversaciones"
+            aria-label={t("pages.aiAssistant.openHistory")}
           >
             <Menu size={16} aria-hidden />
           </button>
           <div className={styles.chatHeaderInfo}>
             <h1 className={styles.chatTitle}>
               <Sparkles size={14} aria-hidden style={{ color: "var(--brand)" }} />
-              {activeConv?.title ?? "Asistente IA Clínico"}
+              {activeConv?.title ?? t("pages.aiAssistant.clinicalAssistant")}
             </h1>
             <div className={styles.chatMeta}>
-              claude-sonnet-4-6 · {messages.length} mensaje{messages.length === 1 ? "" : "s"}
+              claude-sonnet-4-6 · {t("pages.aiAssistant.messageCount", { count: messages.length })}
             </div>
           </div>
           <div className={styles.chatHeaderActions}>
-            <button type="button" className={styles.iconBtn} title="Compartir" aria-label="Compartir conversación">
+            <button type="button" className={styles.iconBtn} title={t("pages.aiAssistant.share")} aria-label={t("pages.aiAssistant.shareConversation")}>
               <Share2 size={14} aria-hidden />
             </button>
-            <button type="button" className={styles.iconBtn} title="Exportar" aria-label="Exportar conversación">
+            <button type="button" className={styles.iconBtn} title={t("common.export")} aria-label={t("pages.aiAssistant.exportConversation")}>
               <Download size={14} aria-hidden />
             </button>
             <button
               type="button"
               className={styles.iconBtn}
-              title="Nueva conversación"
-              aria-label="Iniciar nueva conversación"
+              title={t("pages.aiAssistant.newConversation")}
+              aria-label={t("pages.aiAssistant.startNewConversation")}
               onClick={startNew}
             >
               <RotateCcw size={14} aria-hidden />
             </button>
-            <button type="button" className={styles.iconBtn} title="Más" aria-label="Más opciones">
+            <button type="button" className={styles.iconBtn} title={t("pages.aiAssistant.more")} aria-label={t("pages.aiAssistant.moreOptions")}>
               <MoreHorizontal size={14} aria-hidden />
             </button>
           </div>
@@ -598,23 +601,21 @@ export default function AIAssistantPage() {
             {messages.length === 0 ? (
               <div className={styles.welcome}>
                 <div className={styles.welcomeIcon}><Sparkles size={26} aria-hidden /></div>
-                <h2 className={styles.welcomeTitle}>Asistente IA Clínico</h2>
+                <h2 className={styles.welcomeTitle}>{t("pages.aiAssistant.clinicalAssistant")}</h2>
                 <p className={styles.welcomeText}>
-                  Apoyo informativo para diagnósticos diferenciales, dosis, redacción de
-                  notas SOAP, recetas y revisiones rápidas. Sus sugerencias no reemplazan
-                  el criterio clínico.
+                  {t("pages.aiAssistant.welcomeText")}
                 </p>
                 <div className={styles.suggestionsGrid}>
                   {SUGGESTIONS.map((s) => (
                     <button
-                      key={s.title}
+                      key={s.titleKey}
                       type="button"
                       className={styles.suggestion}
-                      onClick={() => setInput(s.text)}
+                      onClick={() => setInput(t(s.textKey))}
                     >
                       <span className={styles.suggestionIcon}><s.icon size={14} aria-hidden /></span>
-                      <span className={styles.suggestionTitle}>{s.title}</span>
-                      <span className={styles.suggestionDesc}>{s.desc}</span>
+                      <span className={styles.suggestionTitle}>{t(s.titleKey)}</span>
+                      <span className={styles.suggestionDesc}>{t(s.descKey)}</span>
                     </button>
                   ))}
                 </div>
@@ -632,7 +633,7 @@ export default function AIAssistantPage() {
                   <div className={styles.messageRow}>
                     <div className={styles.messageMeta}>
                       <span className={styles.messageName}>
-                        {m.role === "user" ? "Doctor" : "Asistente IA"}
+                        {m.role === "user" ? t("pages.aiAssistant.doctor") : t("pages.aiAssistant.aiAssistant")}
                       </span>
                       <span className={styles.messageTimestamp}>{formatTime(m.timestamp)}</span>
                       {m.role === "assistant" && (
@@ -673,7 +674,7 @@ export default function AIAssistantPage() {
                   }}
                 >
                   <qa.icon size={11} aria-hidden />
-                  {qa.label.startsWith("/") ? <code>{qa.label}</code> : qa.label}
+                  {qa.label.startsWith("/") ? <code>{qa.label}</code> : (qa.labelKey ? t(qa.labelKey) : qa.label)}
                 </button>
               ))}
             </div>
@@ -692,8 +693,8 @@ export default function AIAssistantPage() {
                     <span className={styles.slashItemIcon}><c.icon size={13} aria-hidden /></span>
                     <span className={styles.slashItemBody}>
                       <span className={styles.slashItemCmd}>{c.cmd}</span>
-                      <span className={styles.slashItemName}>{c.name}</span>
-                      <span className={styles.slashItemDesc}>{c.desc}</span>
+                      <span className={styles.slashItemName}>{t(c.nameKey)}</span>
+                      <span className={styles.slashItemDesc}>{t(c.descKey)}</span>
                     </span>
                   </button>
                 ))}
@@ -702,7 +703,7 @@ export default function AIAssistantPage() {
               <textarea
                 ref={textareaRef}
                 className={styles.composerTextarea}
-                placeholder="Pregúntame sobre un paciente, escribe / para comandos…"
+                placeholder={t("pages.aiAssistant.composerPlaceholder")}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKey}
@@ -710,15 +711,15 @@ export default function AIAssistantPage() {
                 rows={1}
               />
               <div className={styles.composerBar}>
-                <button type="button" className={styles.composerActionBtn} title="Adjuntar" aria-label="Adjuntar archivo">
+                <button type="button" className={styles.composerActionBtn} title={t("pages.aiAssistant.attach")} aria-label={t("pages.aiAssistant.attachFile")}>
                   <Paperclip size={15} aria-hidden />
                 </button>
                 <button
                   type="button"
                   className={`${styles.composerActionBtn} ${recording ? styles.recording : ""}`}
                   onClick={toggleVoice}
-                  title={recording ? "Detener grabación" : "Voz"}
-                  aria-label={recording ? "Detener grabación de voz" : "Grabar mensaje de voz"}
+                  title={recording ? t("pages.aiAssistant.stopRecording") : t("pages.aiAssistant.voice")}
+                  aria-label={recording ? t("pages.aiAssistant.stopVoiceRecording") : t("pages.aiAssistant.recordVoiceMessage")}
                   aria-pressed={recording}
                 >
                   <Mic size={15} aria-hidden />
@@ -730,7 +731,7 @@ export default function AIAssistantPage() {
                       type="button"
                       className={styles.contextPillRemove}
                       onClick={() => setInput("")}
-                      aria-label="Borrar texto"
+                      aria-label={t("pages.aiAssistant.clearText")}
                     >
                       <X size={10} aria-hidden />
                     </button>
@@ -742,8 +743,8 @@ export default function AIAssistantPage() {
                   className={styles.sendBtn}
                   onClick={() => sendMessage()}
                   disabled={!input.trim() || loading}
-                  title="Enviar"
-                  aria-label="Enviar mensaje"
+                  title={t("common.send")}
+                  aria-label={t("pages.aiAssistant.sendMessage")}
                 >
                   <Send size={14} aria-hidden />
                 </button>
@@ -751,7 +752,7 @@ export default function AIAssistantPage() {
             </div>
 
             <div className={styles.composerHint}>
-              <kbd>↵</kbd> enviar · <kbd>⇧↵</kbd> nueva línea · <kbd>/</kbd> comandos · <kbd>⌘K</kbd> nuevo chat
+              <kbd>↵</kbd> {t("pages.aiAssistant.hintSend")} · <kbd>⇧↵</kbd> {t("pages.aiAssistant.hintNewLine")} · <kbd>/</kbd> {t("pages.aiAssistant.hintCommands")} · <kbd>⌘K</kbd> {t("pages.aiAssistant.hintNewChat")}
             </div>
           </div>
         </div>

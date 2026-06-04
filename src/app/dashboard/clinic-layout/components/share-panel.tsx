@@ -14,6 +14,7 @@ import {
 import toast from "react-hot-toast";
 import shareStyles from "./share-panel.module.css";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { useT } from "@/i18n/i18n-provider";
 
 interface ShareConfig {
   enabled: boolean;
@@ -31,6 +32,7 @@ export function SharePanel({
   clinicName: string;
   onClose: () => void;
 }) {
+  const t = useT();
   const askConfirm = useConfirm();
   const [enabled, setEnabled] = useState(initial.enabled);
   const [slug, setSlug] = useState(initial.slug ?? slugify(clinicName));
@@ -46,7 +48,7 @@ export function SharePanel({
 
   const saveAll = async () => {
     if (!slug.trim()) {
-      toast.error("Define un slug primero");
+      toast.error(t("pages.clinicLayout.shareDefineSlugFirst"));
       return;
     }
     setSaving(true);
@@ -67,13 +69,13 @@ export function SharePanel({
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         if (res.status === 409) {
-          toast.error("Ese slug ya está en uso por otra clínica");
+          toast.error(t("pages.clinicLayout.shareSlugInUse"));
         } else if (err.error === "invalid_slug") {
-          toast.error("Slug inválido. Usa solo a-z, 0-9 y guiones (3-50 chars).");
+          toast.error(t("pages.clinicLayout.shareInvalidSlug"));
         } else if (err.error === "password_too_short") {
-          toast.error("La contraseña debe tener al menos 4 caracteres");
+          toast.error(t("pages.clinicLayout.sharePasswordTooShort"));
         } else {
-          toast.error("No se pudo guardar");
+          toast.error(t("pages.clinicLayout.shareSaveFailed"));
         }
         return;
       }
@@ -81,10 +83,10 @@ export function SharePanel({
       setHasPassword(Boolean(data.hasPassword));
       setPassword("");
       setSavedOk(true);
-      toast.success("Configuración guardada");
+      toast.success(t("pages.clinicLayout.shareConfigSaved"));
       setTimeout(() => setSavedOk(false), 2500);
     } catch {
-      toast.error("Error de red");
+      toast.error(t("pages.clinicLayout.shareNetworkError"));
     } finally {
       setSaving(false);
     }
@@ -92,10 +94,10 @@ export function SharePanel({
 
   const removePassword = async () => {
     if (!(await askConfirm({
-      title: "¿Quitar la contraseña?",
-      description: "La URL pública quedará accesible para cualquiera que la conozca, sin protección.",
+      title: t("pages.clinicLayout.shareRemovePasswordTitle"),
+      description: t("pages.clinicLayout.shareRemovePasswordDesc"),
       variant: "warning",
-      confirmText: "Quitar contraseña",
+      confirmText: t("pages.clinicLayout.shareRemovePasswordConfirm"),
     }))) return;
     setSaving(true);
     try {
@@ -107,9 +109,9 @@ export function SharePanel({
       if (!res.ok) throw new Error();
       setHasPassword(false);
       setPassword("");
-      toast.success("Contraseña eliminada");
+      toast.success(t("pages.clinicLayout.sharePasswordRemoved"));
     } catch {
-      toast.error("No se pudo quitar la contraseña");
+      toast.error(t("pages.clinicLayout.sharePasswordRemoveFailed"));
     } finally {
       setSaving(false);
     }
@@ -119,9 +121,9 @@ export function SharePanel({
     if (!publicUrl) return;
     try {
       await navigator.clipboard.writeText(publicUrl);
-      toast.success("URL copiada");
+      toast.success(t("pages.clinicLayout.shareUrlCopied"));
     } catch {
-      toast.error("No se pudo copiar");
+      toast.error(t("pages.clinicLayout.shareCopyFailed"));
     }
   };
 
@@ -132,9 +134,9 @@ export function SharePanel({
           <div className={shareStyles.headerInfo}>
             <span className={shareStyles.headerIcon}><Share2 size={18} aria-hidden /></span>
             <div>
-              <h2 className={shareStyles.title}>Compartir vista en vivo</h2>
+              <h2 className={shareStyles.title}>{t("pages.clinicLayout.shareTitle")}</h2>
               <p className={shareStyles.subtitle}>
-                URL pública para mostrar en TV de sala de espera. Abre directamente sin login.
+                {t("pages.clinicLayout.shareSubtitle")}
               </p>
             </div>
           </div>
@@ -142,7 +144,7 @@ export function SharePanel({
             type="button"
             className={shareStyles.closeBtn}
             onClick={onClose}
-            aria-label="Cerrar"
+            aria-label={t("common.close")}
           >
             <X size={16} aria-hidden />
           </button>
@@ -157,16 +159,16 @@ export function SharePanel({
               onChange={(e) => setEnabled(e.target.checked)}
             />
             <div>
-              <span className={shareStyles.toggleLabel}>Habilitar URL pública</span>
+              <span className={shareStyles.toggleLabel}>{t("pages.clinicLayout.shareEnableLabel")}</span>
               <span className={shareStyles.toggleHint}>
-                Cuando esté apagado, /live/{slug || "…"} responderá 404.
+                {t("pages.clinicLayout.shareEnableHint", { slug: slug || "…" })}
               </span>
             </div>
           </label>
 
           {/* Slug */}
           <label className={shareStyles.field}>
-            <span className={shareStyles.fieldLabel}>Slug en URL</span>
+            <span className={shareStyles.fieldLabel}>{t("pages.clinicLayout.shareSlugLabel")}</span>
             <div className={shareStyles.slugInputWrap}>
               <span className={shareStyles.slugPrefix}>
                 {typeof window !== "undefined" ? `${window.location.host}/live/` : "/live/"}
@@ -182,17 +184,17 @@ export function SharePanel({
               />
             </div>
             <span className={shareStyles.fieldHint}>
-              Solo a-z, 0-9 y guiones. Único entre todas las clínicas MediFlow.
+              {t("pages.clinicLayout.shareSlugHint")}
             </span>
           </label>
 
           {/* Password */}
           <div className={shareStyles.field}>
             <span className={shareStyles.fieldLabel}>
-              Contraseña (opcional)
+              {t("pages.clinicLayout.sharePasswordLabel")}
               {hasPassword && (
                 <span className={shareStyles.passwordSet}>
-                  <Check size={11} aria-hidden /> configurada
+                  <Check size={11} aria-hidden /> {t("pages.clinicLayout.sharePasswordConfigured")}
                 </span>
               )}
             </span>
@@ -201,7 +203,7 @@ export function SharePanel({
                 type={showPasswordRaw ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={hasPassword ? "(deja vacío para mantener)" : "(sin contraseña)"}
+                placeholder={hasPassword ? t("pages.clinicLayout.sharePasswordKeepPlaceholder") : t("pages.clinicLayout.sharePasswordNonePlaceholder")}
                 className={shareStyles.passwordInput}
                 autoComplete="new-password"
               />
@@ -209,7 +211,7 @@ export function SharePanel({
                 type="button"
                 className={shareStyles.passwordEye}
                 onClick={() => setShowPasswordRaw((v) => !v)}
-                aria-label={showPasswordRaw ? "Ocultar" : "Mostrar"}
+                aria-label={showPasswordRaw ? t("pages.clinicLayout.shareHidePassword") : t("pages.clinicLayout.shareShowPassword")}
               >
                 {showPasswordRaw ? <EyeOff size={14} aria-hidden /> : <Eye size={14} aria-hidden />}
               </button>
@@ -221,11 +223,11 @@ export function SharePanel({
                 onClick={removePassword}
                 disabled={saving}
               >
-                Quitar contraseña
+                {t("pages.clinicLayout.shareRemovePasswordLink")}
               </button>
             )}
             <span className={shareStyles.fieldHint}>
-              Si la URL es pública (compartida en redes), recomendamos usar contraseña.
+              {t("pages.clinicLayout.sharePasswordHint")}
             </span>
           </div>
 
@@ -237,9 +239,9 @@ export function SharePanel({
               onChange={(e) => setShowPatientNames(e.target.checked)}
             />
             <div>
-              <span className={shareStyles.toggleLabel}>Mostrar nombres de pacientes</span>
+              <span className={shareStyles.toggleLabel}>{t("pages.clinicLayout.shareShowPatientNames")}</span>
               <span className={shareStyles.toggleHint}>
-                Por defecto solo iniciales (ej. M.G.). HIPAA / LGPD friendly.
+                {t("pages.clinicLayout.shareShowPatientNamesHint")}
               </span>
             </div>
           </label>
@@ -255,7 +257,7 @@ export function SharePanel({
                     className={shareStyles.previewBtn}
                     onClick={copyUrl}
                   >
-                    <Copy size={12} aria-hidden /> Copiar
+                    <Copy size={12} aria-hidden /> {t("pages.clinicLayout.shareCopy")}
                   </button>
                   <a
                     href={publicUrl}
@@ -263,13 +265,13 @@ export function SharePanel({
                     rel="noopener noreferrer"
                     className={shareStyles.previewBtn}
                   >
-                    <ExternalLink size={12} aria-hidden /> Abrir
+                    <ExternalLink size={12} aria-hidden /> {t("pages.clinicLayout.shareOpen")}
                   </a>
                 </div>
               </div>
               <div className={shareStyles.qrWrap}>
                 <QRCodeSVG value={publicUrl} size={140} bgColor="#FFFFFF" fgColor="#1A2540" />
-                <span className={shareStyles.qrLabel}>Escanea para abrir en otra pantalla</span>
+                <span className={shareStyles.qrLabel}>{t("pages.clinicLayout.shareQrLabel")}</span>
               </div>
             </div>
           )}
@@ -277,7 +279,7 @@ export function SharePanel({
 
         <footer className={shareStyles.footer}>
           <button type="button" className={shareStyles.cancelBtn} onClick={onClose}>
-            Cancelar
+            {t("common.cancel")}
           </button>
           <button
             type="button"
@@ -286,11 +288,11 @@ export function SharePanel({
             disabled={saving}
           >
             {savedOk ? (
-              <><Check size={13} aria-hidden /> Guardado</>
+              <><Check size={13} aria-hidden /> {t("pages.clinicLayout.shareSaved")}</>
             ) : saving ? (
-              "Guardando…"
+              t("common.saving")
             ) : (
-              "Guardar configuración"
+              t("pages.clinicLayout.shareSaveConfig")
             )}
           </button>
         </footer>

@@ -21,6 +21,7 @@
  */
 import { ChevronRight, ShoppingCart } from "lucide-react";
 import { calculateTotal, getDiscountTier, type BillingCycle } from "@/lib/marketplace/pricing";
+import { useT } from "@/i18n/i18n-provider";
 
 interface FloatingCartProps {
   prices: number[];
@@ -29,6 +30,7 @@ interface FloatingCartProps {
 }
 
 export function FloatingCart({ prices, billingCycle, onClick }: FloatingCartProps) {
+  const t = useT();
   if (prices.length === 0) return null;
 
   const totals = calculateTotal(prices, billingCycle);
@@ -39,7 +41,7 @@ export function FloatingCart({ prices, billingCycle, onClick }: FloatingCartProp
       <button
         type="button"
         onClick={onClick}
-        aria-label={`Ver carrito · ${prices.length} módulo${prices.length > 1 ? "s" : ""} · $${totals.final.toLocaleString("es-MX")} MXN`}
+        aria-label={t("pages.floatingCart.ariaLabel", { count: prices.length, total: totals.final.toLocaleString("es-MX") })}
         className="bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-white text-white dark:text-slate-900 rounded-2xl shadow-2xl shadow-slate-900/20 dark:shadow-black/40 ring-1 ring-white/5 dark:ring-slate-900/10 px-5 py-4 flex items-center gap-4 transition-all duration-200 hover:scale-[1.03] active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-elev)]"
       >
         <div className="relative">
@@ -54,11 +56,11 @@ export function FloatingCart({ prices, billingCycle, onClick }: FloatingCartProp
         <div className="text-left">
           <div className="text-xs text-slate-400 dark:text-slate-500">
             {tier
-              ? `${tier.discount}% descuento aplicado`
-              : `${prices.length} módulo${prices.length > 1 ? "s" : ""}`}
+              ? t("pages.floatingCart.discountApplied", { discount: tier.discount })
+              : t("pages.floatingCart.modulesCount", { count: prices.length })}
           </div>
           <div className="text-sm font-semibold">
-            ${totals.final.toLocaleString("es-MX")} MXN/{billingCycle === "annual" ? "año" : "mes"}
+            ${totals.final.toLocaleString("es-MX")} MXN/{billingCycle === "annual" ? t("pages.floatingCart.year") : t("pages.floatingCart.month")}
           </div>
         </div>
         <ChevronRight className="w-4 h-4 text-slate-400 dark:text-slate-500" aria-hidden />

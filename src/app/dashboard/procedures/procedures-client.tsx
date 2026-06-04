@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { formatCurrency } from "@/lib/utils";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { useT } from "@/i18n/i18n-provider";
 import {
   Plus,
   Search,
@@ -32,16 +33,16 @@ interface Props {
   initialProcedures: Procedure[];
 }
 
-const CATEGORY_OPTIONS: { value: string; label: string }[] = [
-  { value: "general", label: "General" },
-  { value: "dental", label: "Dental" },
-  { value: "aesthetic", label: "Estética" },
-  { value: "laboratory", label: "Laboratorio" },
-  { value: "consultation", label: "Consulta" },
+const CATEGORY_OPTIONS: { value: string; labelKey: string }[] = [
+  { value: "general", labelKey: "pages.procedures.catGeneral" },
+  { value: "dental", labelKey: "pages.procedures.catDental" },
+  { value: "aesthetic", labelKey: "pages.procedures.catAesthetic" },
+  { value: "laboratory", labelKey: "pages.procedures.catLaboratory" },
+  { value: "consultation", labelKey: "pages.procedures.catConsultation" },
 ];
 
-const CATEGORY_LABEL: Record<string, string> = Object.fromEntries(
-  CATEGORY_OPTIONS.map((c) => [c.value, c.label])
+const CATEGORY_LABEL_KEY: Record<string, string> = Object.fromEntries(
+  CATEGORY_OPTIONS.map((c) => [c.value, c.labelKey])
 );
 
 interface FormState {
@@ -65,6 +66,7 @@ const EMPTY_FORM: FormState = {
 };
 
 export function ProceduresClient({ initialProcedures }: Props) {
+  const t = useT();
   const router = useRouter();
   const askConfirm = useConfirm();
   const [procedures, setProcedures] = useState<Procedure[]>(initialProcedures);
@@ -124,12 +126,12 @@ export function ProceduresClient({ initialProcedures }: Props) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) {
-      toast.error("El nombre es requerido");
+      toast.error(t("pages.procedures.nameRequired"));
       return;
     }
     const price = Number(form.basePrice);
     if (Number.isNaN(price) || price < 0) {
-      toast.error("Precio inválido");
+      toast.error(t("pages.procedures.invalidPrice"));
       return;
     }
 
@@ -153,13 +155,13 @@ export function ProceduresClient({ initialProcedures }: Props) {
         });
         if (!res.ok) {
           const j = await res.json().catch(() => ({}));
-          throw new Error(j.error ?? "Error al actualizar");
+          throw new Error(j.error ?? t("pages.procedures.updateError"));
         }
         const updated: Procedure = await res.json();
         setProcedures((prev) =>
           prev.map((p) => (p.id === updated.id ? updated : p))
         );
-        toast.success("Procedimiento actualizado");
+        toast.success(t("pages.procedures.updated"));
         router.refresh();
       } else {
         const res = await fetch("/api/procedures", {
@@ -169,18 +171,18 @@ export function ProceduresClient({ initialProcedures }: Props) {
         });
         if (!res.ok) {
           const j = await res.json().catch(() => ({}));
-          throw new Error(j.error ?? "Error al crear");
+          throw new Error(j.error ?? t("pages.procedures.createError"));
         }
         const created: Procedure = await res.json();
         setProcedures((prev) => [created, ...prev]);
-        toast.success("Procedimiento creado");
+        toast.success(t("pages.procedures.created"));
         router.refresh();
       }
       setModalOpen(false);
       setEditing(null);
       setForm(EMPTY_FORM);
     } catch (err: any) {
-      toast.error(err.message ?? "Error");
+      toast.error(err.message ?? t("common.genericError"));
     } finally {
       setSaving(false);
     }
@@ -199,32 +201,32 @@ export function ProceduresClient({ initialProcedures }: Props) {
         body: JSON.stringify({ isActive: next }),
       });
       if (!res.ok) throw new Error();
-      toast.success(next ? "Activado" : "Desactivado");
+      toast.success(next ? t("pages.procedures.activated") : t("pages.procedures.deactivated"));
       router.refresh();
     } catch {
       // revert
       setProcedures((prev) =>
         prev.map((x) => (x.id === p.id ? { ...x, isActive: p.isActive } : x))
       );
-      toast.error("Error al actualizar estado");
+      toast.error(t("pages.procedures.statusUpdateError"));
     }
   }
 
   async function handleDelete(p: Procedure) {
     if (!(await askConfirm({
-      title: `¿Eliminar "${p.name}"?`,
-      description: "Esta acción no se puede deshacer. El procedimiento dejará de aparecer en el catálogo de citas.",
+      title: t("pages.procedures.deleteTitle", { name: p.name }),
+      description: t("pages.procedures.deleteDescription"),
       variant: "danger",
-      confirmText: "Eliminar",
+      confirmText: t("common.delete"),
     }))) return;
     try {
       const res = await fetch(`/api/procedures/${p.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
       setProcedures((prev) => prev.filter((x) => x.id !== p.id));
-      toast.success("Procedimiento eliminado");
+      toast.success(t("pages.procedures.deleted"));
       router.refresh();
     } catch {
-      toast.error("Error al eliminar");
+      toast.error(t("pages.procedures.deleteError"));
     }
   }
 
@@ -236,11 +238,11 @@ export function ProceduresClient({ initialProcedures }: Props) {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl lg:text-3xl font-extrabold text-foreground">
-            Catálogo de Procedimientos
+            {t("pages.procedures.title")}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {procedures.length} procedimiento{procedures.length === 1 ? "" : "s"}{" "}
-            · {activeCount} activo{activeCount === 1 ? "" : "s"}
+            {t("pages.procedures.countProcedures", { count: procedures.length })}{" "}
+            · {t("pages.procedures.countActive", { count: activeCount })}
           </p>
         </div>
         <button
@@ -248,7 +250,7 @@ export function ProceduresClient({ initialProcedures }: Props) {
           className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm rounded-xl shadow-card transition-colors"
         >
           <Plus className="w-4 h-4" />
-          Nuevo procedimiento
+          {t("pages.procedures.newProcedure")}
         </button>
       </div>
 
@@ -256,9 +258,7 @@ export function ProceduresClient({ initialProcedures }: Props) {
       <div className="flex gap-3 p-4 bg-brand-600/15 border border-brand-200 dark:border-brand-800/40 rounded-2xl">
         <Info className="w-5 h-5 text-brand-600 dark:text-brand-400 flex-shrink-0 mt-0.5" />
         <p className="text-sm text-brand-900 dark:text-brand-100 leading-relaxed">
-          Estos procedimientos aparecen como opciones en el expediente dental.
-          Cuando el doctor marque procedimientos en una consulta, se creará
-          automáticamente una factura borrador con estos precios.
+          {t("pages.procedures.infoBanner")}
         </p>
       </div>
 
@@ -269,7 +269,7 @@ export function ProceduresClient({ initialProcedures }: Props) {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar por nombre, código o categoría..."
+          placeholder={t("pages.procedures.searchPlaceholder")}
           className="w-full pl-10 pr-4 py-2.5 bg-card border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
         />
       </div>
@@ -280,8 +280,8 @@ export function ProceduresClient({ initialProcedures }: Props) {
           <Tag className="w-10 h-10 text-slate-300 mx-auto mb-3" />
           <p className="text-sm text-muted-foreground">
             {procedures.length === 0
-              ? "Aún no tienes procedimientos. Crea el primero para comenzar."
-              : "No se encontraron procedimientos con ese criterio."}
+              ? t("pages.procedures.emptyNoProcedures")
+              : t("pages.procedures.emptyNoMatch")}
           </p>
         </div>
       ) : (
@@ -293,7 +293,7 @@ export function ProceduresClient({ initialProcedures }: Props) {
             >
               <div className="px-5 py-3 border-b border-border bg-muted/50">
                 <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  {CATEGORY_LABEL[category] ?? category}
+                  {CATEGORY_LABEL_KEY[category] ? t(CATEGORY_LABEL_KEY[category]) : category}
                   <span className="ml-2 text-muted-foreground font-semibold">
                     ({items.length})
                   </span>
@@ -303,12 +303,12 @@ export function ProceduresClient({ initialProcedures }: Props) {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border">
-                      <th className="px-5 py-3">Nombre</th>
-                      <th className="px-3 py-3">Código SAT</th>
-                      <th className="px-3 py-3 text-right">Precio</th>
-                      <th className="px-3 py-3">Duración</th>
-                      <th className="px-3 py-3">Estado</th>
-                      <th className="px-5 py-3 text-right">Acciones</th>
+                      <th className="px-5 py-3">{t("common.name")}</th>
+                      <th className="px-3 py-3">{t("pages.procedures.colSatCode")}</th>
+                      <th className="px-3 py-3 text-right">{t("pages.procedures.colPrice")}</th>
+                      <th className="px-3 py-3">{t("pages.procedures.colDuration")}</th>
+                      <th className="px-3 py-3">{t("common.status")}</th>
+                      <th className="px-5 py-3 text-right">{t("common.actions")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -339,7 +339,7 @@ export function ProceduresClient({ initialProcedures }: Props) {
                           {p.duration ? (
                             <span className="inline-flex items-center gap-1">
                               <Clock className="w-3.5 h-3.5" />
-                              {p.duration} min
+                              {t("pages.procedures.minutes", { count: p.duration })}
                             </span>
                           ) : (
                             "—"
@@ -353,21 +353,21 @@ export function ProceduresClient({ initialProcedures }: Props) {
                                 : "bg-muted text-muted-foreground"
                             }`}
                           >
-                            {p.isActive ? "Activo" : "Inactivo"}
+                            {p.isActive ? t("pages.procedures.active") : t("pages.procedures.inactive")}
                           </span>
                         </td>
                         <td className="px-5 py-3">
                           <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() => openEdit(p)}
-                              title="Editar"
+                              title={t("common.edit")}
                               className="p-1.5 rounded-lg text-muted-foreground hover:text-brand-600 hover:bg-brand-600/15 dark:hover:bg-brand-900/20 transition-colors"
                             >
                               <Pencil className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => toggleActive(p)}
-                              title={p.isActive ? "Desactivar" : "Activar"}
+                              title={p.isActive ? t("pages.procedures.deactivate") : t("pages.procedures.activate")}
                               className={`p-1.5 rounded-lg transition-colors ${
                                 p.isActive
                                   ? "text-muted-foreground hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20"
@@ -378,7 +378,7 @@ export function ProceduresClient({ initialProcedures }: Props) {
                             </button>
                             <button
                               onClick={() => handleDelete(p)}
-                              title="Eliminar"
+                              title={t("common.delete")}
                               className="p-1.5 rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -405,7 +405,7 @@ export function ProceduresClient({ initialProcedures }: Props) {
           <div className="relative bg-card border border-border rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
               <h2 className="text-lg font-bold text-foreground">
-                {editing ? "Editar procedimiento" : "Nuevo procedimiento"}
+                {editing ? t("pages.procedures.editProcedure") : t("pages.procedures.newProcedure")}
               </h2>
               <button
                 onClick={closeModal}
@@ -417,14 +417,14 @@ export function ProceduresClient({ initialProcedures }: Props) {
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
-                  Nombre <span className="text-red-500">*</span>
+                  {t("common.name")} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="Ej: Limpieza dental"
+                  placeholder={t("pages.procedures.namePlaceholder")}
                   className="w-full px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
                 />
               </div>
@@ -432,19 +432,19 @@ export function ProceduresClient({ initialProcedures }: Props) {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
-                    Código SAT
+                    {t("pages.procedures.colSatCode")}
                   </label>
                   <input
                     type="text"
                     value={form.code}
                     onChange={(e) => setForm({ ...form, code: e.target.value })}
-                    placeholder="Opcional"
+                    placeholder={t("pages.procedures.optional")}
                     className="w-full px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
-                    Categoría
+                    {t("pages.procedures.category")}
                   </label>
                   <select
                     value={form.category}
@@ -455,7 +455,7 @@ export function ProceduresClient({ initialProcedures }: Props) {
                   >
                     {CATEGORY_OPTIONS.map((c) => (
                       <option key={c.value} value={c.value}>
-                        {c.label}
+                        {t(c.labelKey)}
                       </option>
                     ))}
                   </select>
@@ -465,7 +465,7 @@ export function ProceduresClient({ initialProcedures }: Props) {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
-                    Precio base MXN <span className="text-red-500">*</span>
+                    {t("pages.procedures.basePriceMxn")} <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -482,7 +482,7 @@ export function ProceduresClient({ initialProcedures }: Props) {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
-                    Duración (min)
+                    {t("pages.procedures.durationMin")}
                   </label>
                   <input
                     type="number"
@@ -491,7 +491,7 @@ export function ProceduresClient({ initialProcedures }: Props) {
                     onChange={(e) =>
                       setForm({ ...form, duration: e.target.value })
                     }
-                    placeholder="Opcional"
+                    placeholder={t("pages.procedures.optional")}
                     className="w-full px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500"
                   />
                 </div>
@@ -499,7 +499,7 @@ export function ProceduresClient({ initialProcedures }: Props) {
 
               <div>
                 <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
-                  Descripción
+                  {t("common.description")}
                 </label>
                 <textarea
                   value={form.description}
@@ -507,7 +507,7 @@ export function ProceduresClient({ initialProcedures }: Props) {
                     setForm({ ...form, description: e.target.value })
                   }
                   rows={3}
-                  placeholder="Opcional"
+                  placeholder={t("pages.procedures.optional")}
                   className="w-full px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 resize-none"
                 />
               </div>
@@ -522,7 +522,7 @@ export function ProceduresClient({ initialProcedures }: Props) {
                   className="w-4 h-4 rounded border-border text-brand-600 focus:ring-brand-500/40"
                 />
                 <span className="text-sm font-semibold text-muted-foreground">
-                  Activo
+                  {t("pages.procedures.active")}
                 </span>
               </label>
 
@@ -533,14 +533,14 @@ export function ProceduresClient({ initialProcedures }: Props) {
                   disabled={saving}
                   className="px-4 py-2 text-sm font-semibold text-muted-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-50"
                 >
-                  Cancelar
+                  {t("common.cancel")}
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
                   className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-60"
                 >
-                  {saving ? "Guardando..." : editing ? "Guardar cambios" : "Crear"}
+                  {saving ? t("common.saving") : editing ? t("pages.procedures.saveChanges") : t("common.create")}
                 </button>
               </div>
             </form>

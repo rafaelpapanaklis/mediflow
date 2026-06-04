@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
+import { getServerT } from "@/i18n/server";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,7 @@ interface PageProps {
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "paid"]);
 
 export default async function SuspendedSuccessPage({ searchParams }: PageProps) {
+  const { t } = await getServerT();
   const user = await getCurrentUser();
   const clinic = user.clinic;
   const sessionId = searchParams?.session_id ?? null;
@@ -41,11 +43,10 @@ export default async function SuspendedSuccessPage({ searchParams }: PageProps) 
             <CheckCircle2 size={40} aria-hidden />
           </div>
           <h1 className="mb-3 text-3xl font-extrabold tracking-tight md:text-4xl">
-            ¡Pago confirmado!
+            {t("pages.suspended.paymentConfirmedTitle")}
           </h1>
           <p className="mb-8 max-w-md text-base text-muted-foreground">
-            Tu plan está activo. Ya puedes volver al dashboard y seguir usando
-            MediFlow sin interrupciones.
+            {t("pages.suspended.paymentConfirmedDescription")}
           </p>
           <Link
             href="/dashboard"
@@ -55,7 +56,7 @@ export default async function SuspendedSuccessPage({ searchParams }: PageProps) 
               boxShadow: "0 10px 30px -8px rgba(124, 58, 237, 0.4)",
             }}
           >
-            Ir al dashboard →
+            {t("pages.suspended.goToDashboard")}
           </Link>
         </>
       ) : (
@@ -71,11 +72,10 @@ export default async function SuspendedSuccessPage({ searchParams }: PageProps) 
             <Loader2 size={40} aria-hidden className="animate-spin" />
           </div>
           <h1 className="mb-3 text-3xl font-extrabold tracking-tight md:text-4xl">
-            Estamos confirmando tu pago
+            {t("pages.suspended.confirmingPaymentTitle")}
           </h1>
           <p className="mb-8 max-w-md text-base text-muted-foreground">
-            En unos segundos podrás acceder al panel. Si tarda más de un
-            minuto, recarga esta página o escríbenos a soporte.
+            {t("pages.suspended.confirmingPaymentDescription")}
           </p>
           <div className="flex flex-col gap-3 sm:flex-row">
             <Link
@@ -86,20 +86,20 @@ export default async function SuspendedSuccessPage({ searchParams }: PageProps) 
                 boxShadow: "0 10px 30px -8px rgba(124, 58, 237, 0.4)",
               }}
             >
-              Volver a verificar
+              {t("pages.suspended.checkAgain")}
             </Link>
             <a
               href="mailto:soporte@mediflow.app"
               className="inline-flex items-center justify-center rounded-xl border border-border bg-card px-6 py-3 text-base font-semibold text-foreground transition hover:bg-muted"
             >
-              Hablar con soporte
+              {t("pages.suspended.contactSupport")}
             </a>
           </div>
         </>
       )}
       {sessionId && (
         <div className="mt-10 text-[10px] uppercase tracking-wider text-muted-foreground">
-          Referencia: {sessionId.slice(-12)}
+          {t("pages.suspended.reference")} {sessionId.slice(-12)}
         </div>
       )}
     </div>

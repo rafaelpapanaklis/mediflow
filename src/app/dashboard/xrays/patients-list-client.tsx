@@ -11,6 +11,7 @@ import {
   ArrowRight,
   type LucideIcon,
 } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 import styles from "./patients-list.module.css";
 
 interface PatientRow {
@@ -42,16 +43,16 @@ function getInitials(p: PatientRow): string {
   return `${p.firstName[0] ?? ""}${p.lastName[0] ?? ""}`.toUpperCase();
 }
 
-function formatRelative(iso: string | null): string {
-  if (!iso) return "Sin radiografías";
+function formatRelative(iso: string | null, t: ReturnType<typeof useT>): string {
+  if (!iso) return t("pages.xrays.noXrays");
   const date = new Date(iso);
   const diff = Date.now() - date.getTime();
   const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  if (days === 0) return "Hoy";
-  if (days === 1) return "Ayer";
-  if (days < 7) return `Hace ${days} días`;
-  if (days < 30) return `Hace ${Math.floor(days / 7)} sem.`;
-  if (days < 365) return `Hace ${Math.floor(days / 30)} meses`;
+  if (days === 0) return t("pages.xrays.today");
+  if (days === 1) return t("pages.xrays.yesterday");
+  if (days < 7) return t("pages.xrays.daysAgo", { count: days });
+  if (days < 30) return t("pages.xrays.weeksAgo", { count: Math.floor(days / 7) });
+  if (days < 365) return t("pages.xrays.monthsAgo", { count: Math.floor(days / 30) });
   return new Intl.DateTimeFormat("es-MX", {
     day: "numeric", month: "short", year: "numeric",
   }).format(date);
@@ -65,6 +66,7 @@ function isRecent(iso: string | null): boolean {
 }
 
 export function XraysPatientsList({ patients }: Props) {
+  const t = useT();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
 
@@ -100,9 +102,9 @@ export function XraysPatientsList({ patients }: Props) {
         <div className={styles.titleRow}>
           <span className={styles.titleIcon}><FileImage size={18} aria-hidden /></span>
           <div>
-            <h1 className={styles.title}>Radiografías</h1>
+            <h1 className={styles.title}>{t("pages.xrays.title")}</h1>
             <p className={styles.subtitle}>
-              Selecciona un paciente para ver y analizar su historial radiográfico.
+              {t("pages.xrays.subtitle")}
             </p>
           </div>
         </div>
@@ -111,7 +113,7 @@ export function XraysPatientsList({ patients }: Props) {
           <input
             type="text"
             className={styles.searchInput}
-            placeholder="Buscar paciente por nombre o número…"
+            placeholder={t("pages.xrays.searchPatientPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             autoFocus
@@ -121,33 +123,33 @@ export function XraysPatientsList({ patients }: Props) {
 
       <div className={styles.layout}>
         <aside className={styles.filtersAside}>
-          <div className={styles.filtersLabel}>Filtros</div>
+          <div className={styles.filtersLabel}>{t("common.filters")}</div>
           <FilterButton
             active={filter === "all"}
             onClick={() => setFilter("all")}
             icon={Users}
-            label="Todos los pacientes"
+            label={t("pages.xrays.filterAll")}
             count={counts.all}
           />
           <FilterButton
             active={filter === "with"}
             onClick={() => setFilter("with")}
             icon={FileImage}
-            label="Con radiografías"
+            label={t("pages.xrays.filterWith")}
             count={counts.with}
           />
           <FilterButton
             active={filter === "recent"}
             onClick={() => setFilter("recent")}
             icon={AlarmClock}
-            label={`Recientes (${RECENT_THRESHOLD_DAYS}d)`}
+            label={t("pages.xrays.filterRecent", { days: RECENT_THRESHOLD_DAYS })}
             count={counts.recent}
           />
           <FilterButton
             active={filter === "without"}
             onClick={() => setFilter("without")}
             icon={CircleSlash}
-            label="Sin radiografías"
+            label={t("pages.xrays.filterWithout")}
             count={counts.without}
           />
         </aside>
@@ -156,8 +158,8 @@ export function XraysPatientsList({ patients }: Props) {
           {filtered.length === 0 ? (
             <div className={styles.emptyState}>
               <FileImage size={42} aria-hidden style={{ opacity: 0.3, marginBottom: 12 }} />
-              <h3>Sin resultados</h3>
-              <p>{search ? "Ajusta el buscador o quita filtros." : "No hay pacientes que cumplan el filtro."}</p>
+              <h3>{t("common.noResults")}</h3>
+              <p>{search ? t("pages.xrays.emptyAdjustSearch") : t("pages.xrays.emptyNoMatch")}</p>
             </div>
           ) : (
             filtered.map((p) => {
@@ -175,7 +177,7 @@ export function XraysPatientsList({ patients }: Props) {
                     </span>
                     <span className={styles.rowMeta}>
                       <code className={styles.rowMetaId}>{p.patientNumber}</code>
-                      {age !== null && <span>· {age} años</span>}
+                      {age !== null && <span>· {t("pages.xrays.yearsOld", { count: age })}</span>}
                       {p.gender && <span>· {p.gender === "MALE" ? "M" : p.gender === "FEMALE" ? "F" : "—"}</span>}
                     </span>
                   </div>
@@ -183,7 +185,7 @@ export function XraysPatientsList({ patients }: Props) {
                     <span className={p.xrayCount > 0 ? styles.rowCount : styles.rowCountZero}>
                       <FileImage size={11} aria-hidden /> {p.xrayCount}
                     </span>
-                    <span className={styles.rowDate}>{formatRelative(p.lastXrayAt)}</span>
+                    <span className={styles.rowDate}>{formatRelative(p.lastXrayAt, t)}</span>
                   </div>
                   <span className={styles.rowChevron} aria-hidden>
                     <ArrowRight size={14} />

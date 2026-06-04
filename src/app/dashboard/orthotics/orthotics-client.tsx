@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { useT } from "@/i18n/i18n-provider";
 
 interface PipelineItem {
   id: string;
@@ -20,12 +21,12 @@ interface PipelineItem {
 }
 
 const STAGES = [
-  { key: "evaluacion",    label: "Evaluación" },
-  { key: "molde",         label: "Molde" },
-  { key: "laboratorio",   label: "En laboratorio" },
-  { key: "listo",         label: "Listo" },
-  { key: "entregado",     label: "Entregado" },
-  { key: "ajuste",        label: "Ajuste" },
+  { key: "evaluacion",    labelKey: "pages.orthotics.stageEvaluation" },
+  { key: "molde",         labelKey: "pages.orthotics.stageMold" },
+  { key: "laboratorio",   labelKey: "pages.orthotics.stageInLab" },
+  { key: "listo",         labelKey: "pages.orthotics.stageReady" },
+  { key: "entregado",     labelKey: "pages.orthotics.stageDelivered" },
+  { key: "ajuste",        labelKey: "pages.orthotics.stageAdjustment" },
 ];
 
 const STAGE_COLORS: Record<string, string> = {
@@ -46,6 +47,7 @@ function getDaysInStage(createdAt: string): number {
 }
 
 export function OrthoticsClient({ initialItems }: { initialItems: PipelineItem[] }) {
+  const t = useT();
   const askConfirm = useConfirm();
   const [items, setItems] = useState<PipelineItem[]>(initialItems);
   const [showAdd, setShowAdd] = useState(false);
@@ -53,7 +55,7 @@ export function OrthoticsClient({ initialItems }: { initialItems: PipelineItem[]
 
   async function handleAdd() {
     if (!form.patientName.trim() || !form.type.trim()) {
-      toast.error("Nombre del paciente y tipo son requeridos");
+      toast.error(t("pages.orthotics.patientNameAndTypeRequired"));
       return;
     }
     try {
@@ -75,9 +77,9 @@ export function OrthoticsClient({ initialItems }: { initialItems: PipelineItem[]
       setItems(prev => [...prev, created]);
       setShowAdd(false);
       setForm({ patientName: "", type: "", notes: "" });
-      toast.success("Orden creada");
+      toast.success(t("pages.orthotics.orderCreated"));
     } catch {
-      toast.error("Error al crear orden");
+      toast.error(t("pages.orthotics.orderCreateError"));
     }
   }
 
@@ -85,7 +87,7 @@ export function OrthoticsClient({ initialItems }: { initialItems: PipelineItem[]
     const currentStage = getStage(item.category);
     const currentIdx = STAGES.findIndex(s => s.key === currentStage);
     if (currentIdx === -1 || currentIdx >= STAGES.length - 1) {
-      toast.error("Ya está en la última etapa");
+      toast.error(t("pages.orthotics.alreadyLastStage"));
       return;
     }
     const nextStage = STAGES[currentIdx + 1].key;
@@ -98,25 +100,25 @@ export function OrthoticsClient({ initialItems }: { initialItems: PipelineItem[]
       if (!res.ok) throw new Error();
       const updated = await res.json();
       setItems(prev => prev.map(i => i.id === item.id ? { ...i, category: updated.category } : i));
-      toast.success(`Avanzado a: ${STAGES[currentIdx + 1].label}`);
+      toast.success(t("pages.orthotics.advancedTo", { stage: t(STAGES[currentIdx + 1].labelKey) }));
     } catch {
-      toast.error("Error al avanzar etapa");
+      toast.error(t("pages.orthotics.advanceError"));
     }
   }
 
   async function handleDelete(id: string) {
     if (!(await askConfirm({
-      title: "¿Eliminar esta orden?",
-      description: "La orden de ortótica se quitará del pipeline.",
+      title: t("pages.orthotics.deleteOrderTitle"),
+      description: t("pages.orthotics.deleteOrderDescription"),
       variant: "danger",
-      confirmText: "Eliminar",
+      confirmText: t("common.delete"),
     }))) return;
     try {
       await fetch(`/api/inventory/${id}`, { method: "DELETE" });
       setItems(prev => prev.filter(i => i.id !== id));
-      toast.success("Orden eliminada");
+      toast.success(t("pages.orthotics.orderDeleted"));
     } catch {
-      toast.error("Error al eliminar");
+      toast.error(t("common.genericError"));
     }
   }
 
@@ -124,11 +126,11 @@ export function OrthoticsClient({ initialItems }: { initialItems: PipelineItem[]
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-extrabold">Pipeline Ortopédicos</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{items.length} órdenes en proceso</p>
+          <h1 className="text-2xl font-extrabold">{t("pages.orthotics.title")}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{t("pages.orthotics.ordersInProgress", { count: items.length })}</p>
         </div>
         <Button onClick={() => setShowAdd(true)}>
-          <Plus className="w-5 h-5 mr-2" /> Nueva orden
+          <Plus className="w-5 h-5 mr-2" /> {t("pages.orthotics.newOrder")}
         </Button>
       </div>
 
@@ -139,7 +141,7 @@ export function OrthoticsClient({ initialItems }: { initialItems: PipelineItem[]
           return (
             <div key={stage.key} className="min-h-[200px]">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-bold">{stage.label}</h3>
+                <h3 className="text-sm font-bold">{t(stage.labelKey)}</h3>
                 <span className="text-xs font-bold bg-muted px-2 py-0.5 rounded-full">{stageItems.length}</span>
               </div>
               <div className="space-y-2">
@@ -158,14 +160,14 @@ export function OrthoticsClient({ initialItems }: { initialItems: PipelineItem[]
                       </div>
                       {item.description && <p className="text-xs text-muted-foreground mt-1">{item.description}</p>}
                       <p className="text-xs text-muted-foreground mt-1">
-                        {days === 0 ? "Hoy" : `${days} día${days > 1 ? "s" : ""}`} en esta etapa
+                        {days === 0 ? t("pages.orthotics.todayInStage") : t("pages.orthotics.daysInStage", { count: days })}
                       </p>
                       {!isLast && (
                         <button
                           onClick={() => advanceStage(item)}
                           className="mt-2 flex items-center gap-1 text-xs font-bold text-brand-600 hover:text-brand-700 transition-colors"
                         >
-                          Avanzar <ChevronRight className="w-3.5 h-3.5" />
+                          {t("pages.orthotics.advance")} <ChevronRight className="w-3.5 h-3.5" />
                         </button>
                       )}
                     </div>
@@ -173,7 +175,7 @@ export function OrthoticsClient({ initialItems }: { initialItems: PipelineItem[]
                 })}
                 {stageItems.length === 0 && (
                   <div className="text-center py-6 text-muted-foreground">
-                    <p className="text-xs">Vacío</p>
+                    <p className="text-xs">{t("pages.orthotics.empty")}</p>
                   </div>
                 )}
               </div>
@@ -185,7 +187,7 @@ export function OrthoticsClient({ initialItems }: { initialItems: PipelineItem[]
       {items.length === 0 && (
         <div className="text-center py-16 text-muted-foreground mt-4">
           <Footprints className="w-12 h-12 mx-auto mb-3 opacity-20" />
-          <p className="text-base font-semibold">Sin órdenes de ortopédicos</p>
+          <p className="text-base font-semibold">{t("pages.orthotics.noOrders")}</p>
         </div>
       )}
 
@@ -194,32 +196,32 @@ export function OrthoticsClient({ initialItems }: { initialItems: PipelineItem[]
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-              <h2 className="text-lg font-bold">Nueva orden ortopédica</h2>
+              <h2 className="text-lg font-bold">{t("pages.orthotics.newOrderModalTitle")}</h2>
               <button onClick={() => setShowAdd(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
             </div>
             <div className="px-6 py-5 space-y-4">
               <div className="space-y-1.5">
-                <Label className="text-sm">Nombre del paciente *</Label>
+                <Label className="text-sm">{t("pages.orthotics.patientNameLabel")}</Label>
                 <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-                  placeholder="Nombre completo"
+                  placeholder={t("pages.orthotics.fullNamePlaceholder")}
                   value={form.patientName} onChange={e => setForm(f => ({ ...f, patientName: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-sm">Tipo de ortopédico *</Label>
+                <Label className="text-sm">{t("pages.orthotics.orthoticTypeLabel")}</Label>
                 <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-                  placeholder="Ej: Plantilla, Férula, Órtesis"
+                  placeholder={t("pages.orthotics.orthoticTypePlaceholder")}
                   value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-sm">Notas</Label>
+                <Label className="text-sm">{t("common.notes")}</Label>
                 <textarea className="flex min-h-[70px] w-full rounded-xl border border-border bg-card px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20 resize-none"
-                  placeholder="Observaciones adicionales"
+                  placeholder={t("pages.orthotics.notesPlaceholder")}
                   value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
               </div>
             </div>
             <div className="px-6 pb-6 flex gap-3">
-              <Button variant="outline" onClick={() => setShowAdd(false)} className="flex-1 h-11 text-base">Cancelar</Button>
-              <Button onClick={handleAdd} className="flex-1 h-11 text-base">Crear orden</Button>
+              <Button variant="outline" onClick={() => setShowAdd(false)} className="flex-1 h-11 text-base">{t("common.cancel")}</Button>
+              <Button onClick={handleAdd} className="flex-1 h-11 text-base">{t("pages.orthotics.createOrder")}</Button>
             </div>
           </div>
         </div>

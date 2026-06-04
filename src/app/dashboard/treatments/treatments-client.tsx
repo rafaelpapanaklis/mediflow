@@ -11,14 +11,15 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { CardNew }   from "@/components/ui/design-system/card-new";
 import { fmtMXN, formatRelativeDate } from "@/lib/format";
+import { useT } from "@/i18n/i18n-provider";
 import toast from "react-hot-toast";
 
 type StatusTone = "success" | "warning" | "danger" | "neutral" | "info" | "brand";
-const STATUS_TONE: Record<string, { tone: StatusTone; label: string }> = {
-  ACTIVE:    { tone: "success", label: "Activo" },
-  COMPLETED: { tone: "neutral", label: "Completado" },
-  ABANDONED: { tone: "danger",  label: "Abandonado" },
-  PAUSED:    { tone: "warning", label: "Pausado" },
+const STATUS_TONE: Record<string, { tone: StatusTone; labelKey: string }> = {
+  ACTIVE:    { tone: "success", labelKey: "pages.treatments.statusActive" },
+  COMPLETED: { tone: "neutral", labelKey: "pages.treatments.statusCompleted" },
+  ABANDONED: { tone: "danger",  labelKey: "pages.treatments.statusAbandoned" },
+  PAUSED:    { tone: "warning", labelKey: "pages.treatments.statusPaused" },
 };
 
 interface Session { id: string; sessionNumber: number; completedAt: string | null; notes: string | null }
@@ -55,6 +56,7 @@ interface Props {
 }
 
 export function TreatmentsClient({ treatments: initial, patients, doctors, currentUserId, isAdmin, clinicSlug }: Props) {
+  const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [treatments, setTreatments] = useState<Treatment[]>(initial);
@@ -94,30 +96,30 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
   }, [searchParams]);
 
   const now = new Date();
-  const filtered = treatments.filter(t => {
+  const filtered = treatments.filter(tp => {
     if (filter === "ALL")     return true;
-    if (filter === "OVERDUE") return t.status === "ACTIVE" && !!t.nextExpectedDate && new Date(t.nextExpectedDate) < now;
-    return t.status === filter;
+    if (filter === "OVERDUE") return tp.status === "ACTIVE" && !!tp.nextExpectedDate && new Date(tp.nextExpectedDate) < now;
+    return tp.status === filter;
   });
 
   // Stats
-  const active    = treatments.filter(t => t.status === "ACTIVE").length;
-  const overdue   = treatments.filter(t => t.status === "ACTIVE" && t.nextExpectedDate && new Date(t.nextExpectedDate) < now).length;
-  const completed = treatments.filter(t => t.status === "COMPLETED").length;
+  const active    = treatments.filter(tp => tp.status === "ACTIVE").length;
+  const overdue   = treatments.filter(tp => tp.status === "ACTIVE" && tp.nextExpectedDate && new Date(tp.nextExpectedDate) < now).length;
+  const completed = treatments.filter(tp => tp.status === "COMPLETED").length;
 
-  function daysOverdue(t: Treatment) {
-    if (!t.nextExpectedDate) return 0;
-    const diff = now.getTime() - new Date(t.nextExpectedDate).getTime();
+  function daysOverdue(tp: Treatment) {
+    if (!tp.nextExpectedDate) return 0;
+    const diff = now.getTime() - new Date(tp.nextExpectedDate).getTime();
     return Math.max(0, Math.floor(diff / (24 * 60 * 60 * 1000)));
   }
 
-  function progressPct(t: Treatment) {
-    return t.totalSessions > 0 ? Math.round((t.sessions.length / t.totalSessions) * 100) : 0;
+  function progressPct(tp: Treatment) {
+    return tp.totalSessions > 0 ? Math.round((tp.sessions.length / tp.totalSessions) * 100) : 0;
   }
 
   async function createPlan() {
-    if (!form.patientId) { toast.error("Selecciona un paciente"); return; }
-    if (!form.name.trim()) { toast.error("Ingresa un nombre para el plan"); return; }
+    if (!form.patientId) { toast.error(t("pages.treatments.selectPatientError")); return; }
+    if (!form.name.trim()) { toast.error(t("pages.treatments.enterNameError")); return; }
     setSaving(true);
     try {
       const res = await fetch("/api/treatments", {
@@ -137,7 +139,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
       setTreatments(prev => [data, ...prev]);
       setShowNew(false);
       setForm({ patientId:"", doctorId:currentUserId, name:"", description:"", totalSessions:"6", sessionIntervalDays:"30", totalCost:"" });
-      toast.success("Plan de tratamiento creado");
+      toast.success(t("pages.treatments.planCreated"));
       router.refresh();
     } catch (err: any) { toast.error(err.message); }
     finally { setSaving(false); }
@@ -158,17 +160,17 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
       if (!res.ok) throw new Error(data.error);
 
       // Update state locally (optimistic update)
-      setTreatments(prev => prev.map(t => {
-        if (t.id !== treatmentId) return t;
+      setTreatments(prev => prev.map(tp => {
+        if (tp.id !== treatmentId) return tp;
         const newSession: Session = {
-          id: `temp-${Date.now()}`, sessionNumber: t.sessions.length + 1,
+          id: `temp-${Date.now()}`, sessionNumber: tp.sessions.length + 1,
           completedAt: new Date().toISOString(), notes: sessionNote.trim() || null,
         };
         return {
-          ...t,
-          sessions:        [...t.sessions, newSession],
+          ...tp,
+          sessions:        [...tp.sessions, newSession],
           status:          data.completed ? "COMPLETED" : "ACTIVE",
-          nextExpectedDate:data.completed ? null : new Date(Date.now() + t.sessionIntervalDays * 24 * 60 * 60 * 1000).toISOString(),
+          nextExpectedDate:data.completed ? null : new Date(Date.now() + tp.sessionIntervalDays * 24 * 60 * 60 * 1000).toISOString(),
         };
       }));
 
@@ -183,7 +185,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
       setAddingSession(null);
       setSessionNote("");
       setSelInv([]);
-      toast.success(data.completed ? "¡Tratamiento completado!" : `Sesión ${data.sessionNumber} registrada`);
+      toast.success(data.completed ? t("pages.treatments.treatmentCompletedToast") : t("pages.treatments.sessionRecorded", { num: data.sessionNumber }));
       router.refresh();
     } catch (err: any) { toast.error(err.message); }
     finally { setSaving(false); }
@@ -196,11 +198,11 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
         body: JSON.stringify({ status }),
       });
       if (!res.ok) throw new Error("Error");
-      setTreatments(prev => prev.map(t => t.id === treatmentId ? { ...t, status } : t));
+      setTreatments(prev => prev.map(tp => tp.id === treatmentId ? { ...tp, status } : tp));
       if (selected?.id === treatmentId) setSelected(prev => prev ? { ...prev, status } : null);
-      toast.success("Estado actualizado");
+      toast.success(t("pages.treatments.statusUpdated"));
       router.refresh();
-    } catch { toast.error("Error al actualizar"); }
+    } catch { toast.error(t("pages.treatments.updateError")); }
   }
 
   return (
@@ -210,29 +212,29 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
         <div>
           <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
-            Tratamientos
+            {t("pages.treatments.title")}
           </h1>
           <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
-            Seguimiento de planes de tratamiento activos
+            {t("pages.treatments.subtitle")}
           </p>
         </div>
         <ButtonNew variant="primary" icon={<Plus size={14} />} onClick={() => setShowNew(true)}>
-          Nuevo plan
+          {t("pages.treatments.newPlan")}
         </ButtonNew>
       </div>
 
       {/* KPIs */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginBottom: 20 }}>
-        <KpiCard label="Planes activos"   value={String(active)}    icon={Activity} />
-        <KpiCard label="Con atraso"       value={String(overdue)}   icon={AlertTriangle} />
-        <KpiCard label="Completados"      value={String(completed)} icon={CheckCircle} />
-        <KpiCard label="Total pacientes"  value={String(new Set(treatments.map(t => t.patient.id)).size)} icon={Clock} />
+        <KpiCard label={t("pages.treatments.kpiActivePlans")}   value={String(active)}    icon={Activity} />
+        <KpiCard label={t("pages.treatments.kpiOverdue")}       value={String(overdue)}   icon={AlertTriangle} />
+        <KpiCard label={t("pages.treatments.kpiCompleted")}     value={String(completed)} icon={CheckCircle} />
+        <KpiCard label={t("pages.treatments.kpiTotalPatients")} value={String(new Set(treatments.map(tp => tp.patient.id)).size)} icon={Clock} />
       </div>
 
       {/* Filters */}
       <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
         <div className="segment-new">
-          {[["ALL","Todos"],["ACTIVE","Activos"],["OVERDUE","En riesgo"],["COMPLETED","Completados"],["PAUSED","Pausados"]].map(([val, label]) => (
+          {[["ALL",t("common.all")],["ACTIVE",t("pages.treatments.filterActive")],["OVERDUE",t("pages.treatments.filterAtRisk")],["COMPLETED",t("pages.treatments.filterCompleted")],["PAUSED",t("pages.treatments.filterPaused")]].map(([val, label]) => (
             <button
               key={val}
               type="button"
@@ -251,25 +253,25 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
           <div style={{ padding: 48, textAlign: "center", color: "var(--text-3)" }}>
             <Activity size={32} style={{ color: "var(--text-4)", margin: "0 auto 12px" }} />
             <div style={{ color: "var(--text-2)", fontSize: 14, fontWeight: 500, marginBottom: 4 }}>
-              Sin planes de tratamiento
+              {t("pages.treatments.emptyTitle")}
             </div>
-            <div style={{ fontSize: 12 }}>Crea el primer plan para un paciente</div>
+            <div style={{ fontSize: 12 }}>{t("pages.treatments.emptyHint")}</div>
           </div>
         </CardNew>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {filtered.map(t => {
-            const pct     = progressPct(t);
-            const od      = daysOverdue(t);
-            const isLate  = t.status === "ACTIVE" && od > 0;
-            const cfg     = STATUS_TONE[t.status] ?? STATUS_TONE.ACTIVE;
-            const patientName = `${t.patient.firstName} ${t.patient.lastName}`;
+          {filtered.map(tp => {
+            const pct     = progressPct(tp);
+            const od      = daysOverdue(tp);
+            const isLate  = tp.status === "ACTIVE" && od > 0;
+            const cfg     = STATUS_TONE[tp.status] ?? STATUS_TONE.ACTIVE;
+            const patientName = `${tp.patient.firstName} ${tp.patient.lastName}`;
 
             return (
               <button
-                key={t.id}
+                key={tp.id}
                 type="button"
-                onClick={() => setSelected(t)}
+                onClick={() => setSelected(tp)}
                 className="card"
                 style={{
                   textAlign: "left",
@@ -284,30 +286,30 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                   transition: "border-color .15s",
                 }}
               >
-                <div style={{ width: 3, height: 40, borderRadius: 2, background: t.doctor.color, flexShrink: 0 }} />
+                <div style={{ width: 3, height: 40, borderRadius: 2, background: tp.doctor.color, flexShrink: 0 }} />
 
                 <AvatarNew name={patientName} size="sm" />
 
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{t.name}</span>
-                    <BadgeNew tone={cfg.tone} dot>{cfg.label}</BadgeNew>
-                    {isLate && <BadgeNew tone="warning" dot>{od}d sin venir</BadgeNew>}
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{tp.name}</span>
+                    <BadgeNew tone={cfg.tone} dot>{t(cfg.labelKey)}</BadgeNew>
+                    {isLate && <BadgeNew tone="warning" dot>{t("pages.treatments.daysWithoutVisit", { days: od })}</BadgeNew>}
                   </div>
                   <div style={{ fontSize: 11, color: "var(--text-3)" }}>
                     <Link
-                      href={`/dashboard/patients/${t.patient.id}`}
+                      href={`/dashboard/patients/${tp.patient.id}`}
                       onClick={e => e.stopPropagation()}
                       style={{ color: "#c4b5fd", fontWeight: 500, textDecoration: "none" }}
                     >
                       {patientName}
                     </Link>
                     <span style={{ margin: "0 6px" }}>·</span>
-                    Dr/a. {t.doctor.firstName} {t.doctor.lastName}
-                    {t.nextExpectedDate && (
+                    {t("pages.treatments.doctorPrefix")} {tp.doctor.firstName} {tp.doctor.lastName}
+                    {tp.nextExpectedDate && (
                       <>
                         <span style={{ margin: "0 6px" }}>·</span>
-                        Próxima: {formatRelativeDate(t.nextExpectedDate)}
+                        {t("pages.treatments.nextLabel")} {formatRelativeDate(tp.nextExpectedDate)}
                       </>
                     )}
                   </div>
@@ -315,13 +317,13 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
 
                 <div style={{ textAlign: "right", flexShrink: 0, minWidth: 120 }}>
                   <div className="mono" style={{ fontSize: 13, color: "var(--text-1)", fontWeight: 600 }}>
-                    {t.sessions.length}/{t.totalSessions} sesiones
+                    {t("pages.treatments.sessionsCount", { done: tp.sessions.length, total: tp.totalSessions })}
                   </div>
                   <div style={{ width: 100, height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2, marginTop: 6, marginLeft: "auto", overflow: "hidden" }}>
                     <div style={{ width: `${pct}%`, height: "100%", background: "var(--brand)", borderRadius: 2 }} />
                   </div>
                   <div className="mono" style={{ fontSize: 10, color: "var(--text-3)", marginTop: 4 }}>
-                    {fmtMXN(t.totalCost)}
+                    {fmtMXN(tp.totalCost)}
                   </div>
                 </div>
 
@@ -347,7 +349,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                 </div>
                 <div style={{ marginLeft: 8 }}>
                   <BadgeNew tone={(STATUS_TONE[selected.status] ?? STATUS_TONE.ACTIVE).tone} dot>
-                    {(STATUS_TONE[selected.status] ?? STATUS_TONE.ACTIVE).label}
+                    {t((STATUS_TONE[selected.status] ?? STATUS_TONE.ACTIVE).labelKey)}
                   </BadgeNew>
                 </div>
               </div>
@@ -355,7 +357,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                 onClick={() => setSelected(null)}
                 type="button"
                 className="btn-new btn-new--ghost btn-new--sm"
-                aria-label="Cerrar"
+                aria-label={t("common.close")}
               >
                 <X size={14} />
               </button>
@@ -365,7 +367,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
               {/* Patient + doctor info */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px", marginBottom: 18 }}>
                 <div style={{ padding: 12, background: "var(--bg-elev-2)", border: "1px solid var(--border-soft)", borderRadius: 10 }}>
-                  <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 4 }}>Paciente</div>
+                  <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 4 }}>{t("pages.treatments.patientLabel")}</div>
                   <Link
                     href={`/dashboard/patients/${selected.patient.id}`}
                     onClick={() => setSelected(null)}
@@ -378,11 +380,11 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                   )}
                 </div>
                 <div style={{ padding: 12, background: "var(--bg-elev-2)", border: "1px solid var(--border-soft)", borderRadius: 10 }}>
-                  <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 4 }}>Doctor</div>
+                  <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 4 }}>{t("pages.treatments.doctorLabel")}</div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <div style={{ width: 10, height: 10, borderRadius: "50%", background: selected.doctor.color, flexShrink: 0 }} />
                     <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
-                      Dr/a. {selected.doctor.firstName} {selected.doctor.lastName}
+                      {t("pages.treatments.doctorPrefix")} {selected.doctor.firstName} {selected.doctor.lastName}
                     </span>
                   </div>
                 </div>
@@ -391,7 +393,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
               {/* Progress bar */}
               <div style={{ marginBottom: 18 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 8 }}>
-                  <span style={{ fontWeight: 600, color: "var(--text-1)" }}>Progreso</span>
+                  <span style={{ fontWeight: 600, color: "var(--text-1)" }}>{t("pages.treatments.progress")}</span>
                   <span className="mono" style={{ color: "var(--text-3)" }}>
                     {selected.sessions.length}/{selected.totalSessions} ({progressPct(selected)}%)
                   </span>
@@ -413,9 +415,9 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
               {/* Stats grid */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 18 }}>
                 {[
-                  { label: "Costo total", val: formatCurrency(selected.totalCost) },
-                  { label: "Intervalo",   val: `${selected.sessionIntervalDays} días` },
-                  { label: "Sesiones",    val: `${selected.sessions.length}/${selected.totalSessions}` },
+                  { label: t("pages.treatments.statTotalCost"), val: formatCurrency(selected.totalCost) },
+                  { label: t("pages.treatments.statInterval"),  val: t("pages.treatments.daysValue", { days: selected.sessionIntervalDays }) },
+                  { label: t("pages.treatments.statSessions"),  val: `${selected.sessions.length}/${selected.totalSessions}` },
                 ].map(s => (
                   <div
                     key={s.label}
@@ -437,7 +439,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
               {/* Sessions timeline */}
               <div style={{ marginBottom: 18 }}>
                 <div className="form-section__title">
-                  Sesiones
+                  {t("pages.treatments.sessionsHeading")}
                   <span className="form-section__rule" />
                 </div>
                 <div style={{ position: "relative", paddingLeft: 28 }}>
@@ -474,7 +476,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                       }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                           <div>
-                            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-1)" }}>Sesión {s.sessionNumber}</div>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-1)" }}>{t("pages.treatments.sessionLabel", { num: s.sessionNumber })}</div>
                             {s.notes && <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4 }}>{s.notes}</div>}
                           </div>
                           {s.completedAt && (
@@ -510,7 +512,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                         fontSize: 12,
                         color: "var(--text-3)",
                       }}>
-                        Sesión {selected.sessions.length + i + 1} · Pendiente
+                        {t("pages.treatments.sessionLabel", { num: selected.sessions.length + i + 1 })} · {t("pages.treatments.pending")}
                       </div>
                     </div>
                   ))}
@@ -523,14 +525,14 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                   {addingSession === selected.id ? (
                     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                       <div className="form-section__title">
-                        Registrar sesión
+                        {t("pages.treatments.recordSession")}
                         <span className="form-section__rule" />
                       </div>
                       <div className="field-new">
-                        <label className="field-new__label">Notas de la sesión</label>
+                        <label className="field-new__label">{t("pages.treatments.sessionNotesLabel")}</label>
                         <textarea
                           className="input-new"
-                          placeholder="Observaciones, progreso o notas clínicas (opcional)"
+                          placeholder={t("pages.treatments.sessionNotesPlaceholder")}
                           rows={3}
                           value={sessionNote}
                           onChange={e => setSessionNote(e.target.value)}
@@ -564,7 +566,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                           variant="ghost"
                           onClick={() => { setAddingSession(null); setSessionNote(""); setSelInv([]); }}
                         >
-                          Cancelar
+                          {t("common.cancel")}
                         </ButtonNew>
                         <ButtonNew
                           variant="primary"
@@ -572,7 +574,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                           disabled={saving}
                           icon={<CheckCircle size={14} />}
                         >
-                          {saving ? "Guardando…" : "Confirmar sesión"}
+                          {saving ? t("pages.treatments.savingEllipsis") : t("pages.treatments.confirmSession")}
                         </ButtonNew>
                       </div>
                     </div>
@@ -583,7 +585,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                       icon={<Plus size={14} />}
                       style={{ width: "100%", justifyContent: "center" }}
                     >
-                      Registrar sesión completada
+                      {t("pages.treatments.recordCompletedSession")}
                     </ButtonNew>
                   )}
                 </div>
@@ -597,14 +599,14 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                     onClick={() => changeStatus(selected.id, "PAUSED")}
                     style={{ flex: 1, justifyContent: "center" }}
                   >
-                    Pausar
+                    {t("pages.treatments.pause")}
                   </ButtonNew>
                   <ButtonNew
                     variant="danger"
                     onClick={() => changeStatus(selected.id, "ABANDONED")}
                     style={{ flex: 1, justifyContent: "center" }}
                   >
-                    Marcar abandonado
+                    {t("pages.treatments.markAbandoned")}
                   </ButtonNew>
                 </div>
               )}
@@ -614,7 +616,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                   onClick={() => changeStatus(selected.id, "ACTIVE")}
                   style={{ width: "100%", justifyContent: "center" }}
                 >
-                  Reactivar tratamiento
+                  {t("pages.treatments.reactivateTreatment")}
                 </ButtonNew>
               )}
             </div>
@@ -627,12 +629,12 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
         <div className="modal-overlay" onClick={() => setShowNew(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal__header">
-              <div className="modal__title">Nuevo plan de tratamiento</div>
+              <div className="modal__title">{t("pages.treatments.newPlanTitle")}</div>
               <button
                 type="button"
                 onClick={() => setShowNew(false)}
                 className="btn-new btn-new--ghost btn-new--sm"
-                aria-label="Cerrar"
+                aria-label={t("common.close")}
               >
                 <X size={14} />
               </button>
@@ -643,20 +645,20 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                 {/* Información general */}
                 <div>
                   <div className="form-section__title">
-                    Información general
+                    {t("pages.treatments.generalInfo")}
                     <span className="form-section__rule" />
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     <div className="field-new">
                       <label className="field-new__label">
-                        Paciente <span className="req">*</span>
+                        {t("pages.treatments.patientLabel")} <span className="req">*</span>
                       </label>
                       <select
                         className="input-new"
                         value={form.patientId}
                         onChange={e => setForm(f => ({ ...f, patientId: e.target.value }))}
                       >
-                        <option value="">Selecciona un paciente</option>
+                        <option value="">{t("pages.treatments.selectPatientOption")}</option>
                         {patients.map(p => (
                           <option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>
                         ))}
@@ -666,7 +668,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                     {isAdmin && (
                       <div className="field-new">
                         <label className="field-new__label">
-                          Doctor <span className="req">*</span>
+                          {t("pages.treatments.doctorLabel")} <span className="req">*</span>
                         </label>
                         <select
                           className="input-new"
@@ -674,7 +676,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                           onChange={e => setForm(f => ({ ...f, doctorId: e.target.value }))}
                         >
                           {doctors.map(d => (
-                            <option key={d.id} value={d.id}>Dr/a. {d.firstName} {d.lastName}</option>
+                            <option key={d.id} value={d.id}>{t("pages.treatments.doctorPrefix")} {d.firstName} {d.lastName}</option>
                           ))}
                         </select>
                       </div>
@@ -682,34 +684,34 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
 
                     <div className="field-new">
                       <label className="field-new__label">
-                        Nombre del tratamiento <span className="req">*</span>
+                        {t("pages.treatments.treatmentNameLabel")} <span className="req">*</span>
                       </label>
                       <input
                         className="input-new"
-                        placeholder="Ej: Ortodoncia 18 meses"
+                        placeholder={t("pages.treatments.treatmentNamePlaceholder")}
                         value={form.name}
                         onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                       />
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-                        {COMMON_TREATMENTS.slice(0, 5).map(t => (
+                        {COMMON_TREATMENTS.slice(0, 5).map(suggestion => (
                           <button
-                            key={t}
+                            key={suggestion}
                             type="button"
-                            onClick={() => setForm(f => ({ ...f, name: t }))}
+                            onClick={() => setForm(f => ({ ...f, name: suggestion }))}
                             className="tag-new"
                             style={{ cursor: "pointer" }}
                           >
-                            {t}
+                            {suggestion}
                           </button>
                         ))}
                       </div>
                     </div>
 
                     <div className="field-new">
-                      <label className="field-new__label">Descripción</label>
+                      <label className="field-new__label">{t("common.description")}</label>
                       <textarea
                         className="input-new"
-                        placeholder="Notas o detalles del plan (opcional)"
+                        placeholder={t("pages.treatments.descriptionPlaceholder")}
                         rows={2}
                         value={form.description}
                         onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
@@ -721,12 +723,12 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                 {/* Plan de sesiones */}
                 <div>
                   <div className="form-section__title">
-                    Plan de sesiones
+                    {t("pages.treatments.sessionPlan")}
                     <span className="form-section__rule" />
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "12px 14px" }}>
                     <div className="field-new">
-                      <label className="field-new__label">Total de sesiones</label>
+                      <label className="field-new__label">{t("pages.treatments.totalSessionsLabel")}</label>
                       <input
                         type="number"
                         min="1"
@@ -737,7 +739,7 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                       />
                     </div>
                     <div className="field-new">
-                      <label className="field-new__label">Días entre sesiones</label>
+                      <label className="field-new__label">{t("pages.treatments.daysBetweenSessionsLabel")}</label>
                       <input
                         type="number"
                         min="1"
@@ -753,11 +755,11 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
                 {/* Costos */}
                 <div>
                   <div className="form-section__title">
-                    Costo
+                    {t("pages.treatments.cost")}
                     <span className="form-section__rule" />
                   </div>
                   <div className="field-new">
-                    <label className="field-new__label">Costo total del tratamiento (MXN)</label>
+                    <label className="field-new__label">{t("pages.treatments.totalCostLabel")}</label>
                     <input
                       type="number"
                       min="0"
@@ -773,14 +775,14 @@ export function TreatmentsClient({ treatments: initial, patients, doctors, curre
 
             <div className="modal__footer">
               <ButtonNew variant="ghost" onClick={() => setShowNew(false)}>
-                Cancelar
+                {t("common.cancel")}
               </ButtonNew>
               <ButtonNew
                 variant="primary"
                 onClick={createPlan}
                 disabled={saving || !form.patientId || !form.name.trim()}
               >
-                {saving ? "Creando…" : "Crear plan"}
+                {saving ? t("pages.treatments.creatingEllipsis") : t("pages.treatments.createPlan")}
               </ButtonNew>
             </div>
           </div>
@@ -800,6 +802,7 @@ function InventoryPicker({ clinicItems, selected, loading, onOpen, onAdd, onQtyC
   onQtyChange: (id: string, qty: number) => void;
   onRemove: (id: string) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -811,7 +814,7 @@ function InventoryPicker({ clinicItems, selected, loading, onOpen, onAdd, onQtyC
   return (
     <div className="field-new">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-        <label className="field-new__label" style={{ margin: 0 }}>Insumos utilizados</label>
+        <label className="field-new__label" style={{ margin: 0 }}>{t("pages.treatments.suppliesUsed")}</label>
         <button
           type="button"
           onClick={() => { setOpen(o => !o); if (!open) onOpen(); }}
@@ -825,7 +828,7 @@ function InventoryPicker({ clinicItems, selected, loading, onOpen, onAdd, onQtyC
             padding: 0,
           }}
         >
-          {open ? "Cerrar" : "+ Agregar insumo"}
+          {open ? t("common.close") : `+ ${t("pages.treatments.addSupply")}`}
         </button>
       </div>
 
@@ -881,7 +884,7 @@ function InventoryPicker({ clinicItems, selected, loading, onOpen, onAdd, onQtyC
                   color: "var(--danger)", background: "transparent", border: "none",
                   marginLeft: 4, fontSize: 14, fontWeight: 700, cursor: "pointer",
                 }}
-                aria-label="Eliminar insumo"
+                aria-label={t("pages.treatments.removeSupply")}
               >
                 ×
               </button>
@@ -896,7 +899,7 @@ function InventoryPicker({ clinicItems, selected, loading, onOpen, onAdd, onQtyC
           <div style={{ padding: 8, borderBottom: "1px solid var(--border-soft)" }}>
             <input
               className="input-new"
-              placeholder="Buscar insumo…"
+              placeholder={t("pages.treatments.searchSupplyPlaceholder")}
               value={search}
               onChange={e => setSearch(e.target.value)}
               autoFocus
@@ -904,11 +907,11 @@ function InventoryPicker({ clinicItems, selected, loading, onOpen, onAdd, onQtyC
           </div>
           {loading ? (
             <div style={{ padding: 12, fontSize: 12, color: "var(--text-3)", textAlign: "center" }}>
-              Cargando inventario…
+              {t("pages.treatments.loadingInventory")}
             </div>
           ) : filtered.length === 0 ? (
             <div style={{ padding: 12, fontSize: 12, color: "var(--text-3)", textAlign: "center" }}>
-              Sin insumos{search ? " que coincidan" : " en inventario"}
+              {search ? t("pages.treatments.noMatchingSupplies") : t("pages.treatments.noSuppliesInInventory")}
             </div>
           ) : (
             <div style={{ maxHeight: 200, overflowY: "auto" }}>
@@ -942,11 +945,11 @@ function InventoryPicker({ clinicItems, selected, loading, onOpen, onAdd, onQtyC
                         {item.name}
                       </div>
                       <div style={{ fontSize: 10, color: "var(--text-3)" }}>
-                        {item.category} · {item.quantity} {item.unit} disponibles
+                        {item.category} · {item.quantity} {item.unit} {t("pages.treatments.available")}
                       </div>
                     </div>
                     {isSelected && (
-                      <span style={{ fontSize: 10, color: "var(--success)", fontWeight: 700, flexShrink: 0 }}>✓ Agregado</span>
+                      <span style={{ fontSize: 10, color: "var(--success)", fontWeight: 700, flexShrink: 0 }}>✓ {t("pages.treatments.added")}</span>
                     )}
                   </button>
                 );
