@@ -30,5 +30,78 @@
       },
       "waitingRoom": "En sala de espera"
     }
+  },
+  "sidebar": {
+    "nav": {
+      "home": "Hoy",
+      "appointments": "Agenda",
+      "patients": "Pacientes",
+      "inbox": "Inbox",
+      "messages": "Mensajes",
+      "marketplace": "Marketplace",
+      "ai": "IA asistente",
+      "xrays": "Radiografías",
+      "before-after": "Antes/Después",
+      "formulas": "Fórmulas",
+      "exercises": "Ejercicios",
+      "orthotics": "Ortesis",
+      "pediatrics": "Odontopediatría",
+      "endodontics": "Endodoncia",
+      "periodontics": "Periodoncia",
+      "orthodontics": "Ortodoncia",
+      "implants": "Implantología",
+      "packages": "Paquetes",
+      "resources": "Recursos",
+      "inventory": "Inventario",
+      "suppliers": "Proveedores",
+      "compras": "Mis compras",
+      "laboratorios": "Laboratorios",
+      "ordenes-laboratorio": "Mis órdenes de laboratorio",
+      "billing": "Facturación",
+      "analytics": "Analytics",
+      "tv-modes": "Pantallas TV",
+      "reports": "Reportes",
+      "team": "Equipo",
+      "landing": "Página web",
+      "procedures": "Procedimientos",
+      "clinic-layout": "Mi Clínica Visual",
+      "settings": "Configuración"
+    },
+    "section": {
+      "clinico": "Clínico",
+      "catalogo": "Catálogo",
+      "specialties": "Especialidades",
+      "admin": "Administración"
+    },
+    "role": {
+      "owner": "Owner",
+      "admin": "Admin",
+      "doctor": "Doctor/a",
+      "receptionist": "Recepción",
+      "readonly": "Solo lectura",
+      "accountant": "Contabilidad"
+    },
+    "itemPending": {
+      "one": "{count} pendiente",
+      "other": "{count} pendientes"
+    },
+    "consultInProgress": "Consulta en curso",
+    "newAppointment": "Nueva cita",
+    "newAppointmentAria": "Crear nueva cita",
+    "navAria": "Navegación principal",
+    "mobileNav": "Navegación",
+    "closeNav": "Cerrar navegación",
+    "asideAria": "Navegación lateral",
+    "clinicSwitcherAria": "Clínica activa: {name}. Cambiar clínica.",
+    "clinics": "Clínicas",
+    "current": "ACTUAL",
+    "switchToLight": "Cambiar a modo claro",
+    "switchToDark": "Cambiar a modo oscuro",
+    "modeLight": "Modo claro",
+    "modeDark": "Modo oscuro",
+    "expand": "Expandir sidebar",
+    "collapse": "Colapsar sidebar",
+    "userMenuAria": "Usuario: {name}. Abrir menú de sesión.",
+    "logout": "Cerrar sesión"
   }
 }

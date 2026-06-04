@@ -30,5 +30,78 @@
       },
       "waitingRoom": "In waiting room"
     }
+  },
+  "sidebar": {
+    "nav": {
+      "home": "Today",
+      "appointments": "Schedule",
+      "patients": "Patients",
+      "inbox": "Inbox",
+      "messages": "Messages",
+      "marketplace": "Marketplace",
+      "ai": "AI assistant",
+      "xrays": "X-rays",
+      "before-after": "Before/After",
+      "formulas": "Formulas",
+      "exercises": "Exercises",
+      "orthotics": "Orthotics",
+      "pediatrics": "Pediatric dentistry",
+      "endodontics": "Endodontics",
+      "periodontics": "Periodontics",
+      "orthodontics": "Orthodontics",
+      "implants": "Implantology",
+      "packages": "Packages",
+      "resources": "Resources",
+      "inventory": "Inventory",
+      "suppliers": "Suppliers",
+      "compras": "My purchases",
+      "laboratorios": "Labs",
+      "ordenes-laboratorio": "My lab orders",
+      "billing": "Billing",
+      "analytics": "Analytics",
+      "tv-modes": "TV displays",
+      "reports": "Reports",
+      "team": "Team",
+      "landing": "Website",
+      "procedures": "Procedures",
+      "clinic-layout": "My Visual Clinic",
+      "settings": "Settings"
+    },
+    "section": {
+      "clinico": "Clinical",
+      "catalogo": "Catalog",
+      "specialties": "Specialties",
+      "admin": "Administration"
+    },
+    "role": {
+      "owner": "Owner",
+      "admin": "Admin",
+      "doctor": "Doctor",
+      "receptionist": "Reception",
+      "readonly": "Read-only",
+      "accountant": "Accounting"
+    },
+    "itemPending": {
+      "one": "{count} pending",
+      "other": "{count} pending"
+    },
+    "consultInProgress": "Consultation in progress",
+    "newAppointment": "New appointment",
+    "newAppointmentAria": "Create new appointment",
+    "navAria": "Main navigation",
+    "mobileNav": "Navigation",
+    "closeNav": "Close navigation",
+    "asideAria": "Sidebar navigation",
+    "clinicSwitcherAria": "Active clinic: {name}. Switch clinic.",
+    "clinics": "Clinics",
+    "current": "CURRENT",
+    "switchToLight": "Switch to light mode",
+    "switchToDark": "Switch to dark mode",
+    "modeLight": "Light mode",
+    "modeDark": "Dark mode",
+    "expand": "Expand sidebar",
+    "collapse": "Collapse sidebar",
+    "userMenuAria": "User: {name}. Open session menu.",
+    "logout": "Log out"
   }
 }

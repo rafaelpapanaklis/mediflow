@@ -26,6 +26,7 @@ import {
   ORTHODONTICS_MODULE_KEY,
 } from "@/lib/specialties/keys";
 import { setSidebarSectionCollapsed } from "@/app/actions/sidebar";
+import { useT } from "@/i18n/i18n-provider";
 
 // ═══════════════════════════════════════════════════════════════════
 // Tipos
@@ -108,12 +109,6 @@ type Section = "workspace" | "clinico" | "catalogo" | "specialties" | "admin";
 // encabezado). El orden define el render en el nav.
 const COLLAPSIBLE_SECTIONS = ["clinico", "catalogo", "specialties", "admin"] as const;
 type CollapsibleSectionId = (typeof COLLAPSIBLE_SECTIONS)[number];
-const SECTION_LABELS: Record<CollapsibleSectionId, string> = {
-  clinico: "Clínico",
-  catalogo: "Catálogo",
-  specialties: "Especialidades",
-  admin: "Administración",
-};
 
 interface NavItemDef {
   id: string;
@@ -301,6 +296,7 @@ function shouldShowItem(
 // ═══════════════════════════════════════════════════════════════════
 
 export function Sidebar(props: SidebarProps) {
+  const t = useT();
   const pathname = usePathname();
   const counts = useSidebarCounts();
   const activeConsult = useActiveConsult().consult;
@@ -459,11 +455,11 @@ export function Sidebar(props: SidebarProps) {
           {!collapsed && (
             <>
               <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
-                {item.label}
+                {t(`sidebar.nav.${item.id}`)}
               </span>
               {count > 0 && (
                 <span
-                  aria-label={`${count} pendiente${count === 1 ? "" : "s"}`}
+                  aria-label={t("sidebar.itemPending", { count })}
                   style={{
                     fontFamily: "var(--font-mono, monospace)",
                     fontSize: 10,
@@ -482,8 +478,8 @@ export function Sidebar(props: SidebarProps) {
               )}
               {hasConsultBadge && (
                 <span
-                  aria-label="Consulta en curso"
-                  title="Consulta en curso"
+                  aria-label={t("sidebar.consultInProgress")}
+                  title={t("sidebar.consultInProgress")}
                   style={{
                     width: 6, height: 6, borderRadius: "50%",
                     background: "var(--success)",
@@ -532,7 +528,7 @@ export function Sidebar(props: SidebarProps) {
                   gap: 8,
                 }}
               >
-                {item.label}
+                {t(`sidebar.nav.${item.id}`)}
                 {count > 0 && (
                   <span
                     style={{
@@ -556,7 +552,7 @@ export function Sidebar(props: SidebarProps) {
 
       return content;
     },
-    [pathname, collapsed, activeConsult, getCount],
+    [pathname, collapsed, activeConsult, getCount, t],
   );
 
   const { open: openNewAppointment } = useNewAppointmentDialog();
@@ -588,7 +584,7 @@ export function Sidebar(props: SidebarProps) {
                 <button
                   type="button"
                   onClick={() => openNewAppointment({ openAgendaAfter: true })}
-                  aria-label="Crear nueva cita"
+                  aria-label={t("sidebar.newAppointmentAria")}
                   style={{
                     margin: "8px auto 12px",
                     width: 36,
@@ -621,7 +617,7 @@ export function Sidebar(props: SidebarProps) {
                   boxShadow: "0 4px 12px rgba(15,10,30,0.15)",
                   zIndex: 200,
                 }}>
-                  Nueva cita
+                  {t("sidebar.newAppointment")}
                 </Tooltip.Content>
               </Tooltip.Portal>
             </Tooltip.Root>
@@ -630,7 +626,7 @@ export function Sidebar(props: SidebarProps) {
           <button
             type="button"
             onClick={() => openNewAppointment({ openAgendaAfter: true })}
-            aria-label="Crear nueva cita"
+            aria-label={t("sidebar.newAppointmentAria")}
             style={{
               margin: "10px 12px 14px",
               padding: "9px 14px",
@@ -660,13 +656,13 @@ export function Sidebar(props: SidebarProps) {
             }}
           >
             <Plus size={15} aria-hidden />
-            Nueva cita
+            {t("sidebar.newAppointment")}
           </button>
         )
       )}
 
       <nav
-        aria-label="Navegación principal"
+        aria-label={t("sidebar.navAria")}
         className="scrollbar-thin"
         style={{
           flex: 1,
@@ -696,7 +692,7 @@ export function Sidebar(props: SidebarProps) {
                 <CollapsibleSection
                   key={sec}
                   id={sec}
-                  label={SECTION_LABELS[sec]}
+                  label={t(`sidebar.section.${sec}`)}
                   collapsed={collapsedSections.has(sec)}
                   onToggle={() => toggleSection(sec)}
                 >
@@ -733,7 +729,7 @@ export function Sidebar(props: SidebarProps) {
             />
             <aside
               role="dialog"
-              aria-label="Navegación"
+              aria-label={t("sidebar.mobileNav")}
               aria-modal="true"
               className="mf-sidebar-mobile-panel"
               style={{
@@ -753,7 +749,7 @@ export function Sidebar(props: SidebarProps) {
               <button
                 type="button"
                 onClick={() => setMobileOpen(false)}
-                aria-label="Cerrar navegación"
+                aria-label={t("sidebar.closeNav")}
                 style={{
                   position: "absolute",
                   top: 10, right: 10,
@@ -779,7 +775,7 @@ export function Sidebar(props: SidebarProps) {
   return (
     <Tooltip.Provider>
       <aside
-        aria-label="Navegación lateral"
+        aria-label={t("sidebar.asideAria")}
         className={`sidebar-new ${collapsed ? "mf-sidebar--collapsed" : ""}`}
         style={{
           width: collapsed ? 68 : undefined,
@@ -805,6 +801,7 @@ function ClinicSwitcher({
   plan: ClinicPlan;
   allClinics: SidebarClinicRef[];
 }) {
+  const t = useT();
   const router = useRouter();
   const hasOthers = allClinics.filter((c) => c.clinicId !== clinicId).length > 0;
   const initials = clinicName
@@ -894,7 +891,7 @@ function ClinicSwitcher({
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger
-        aria-label={`Clínica activa: ${clinicName}. Cambiar clínica.`}
+        aria-label={t("sidebar.clinicSwitcherAria", { name: clinicName })}
         style={brandStyle}
         onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; }}
         onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
@@ -923,7 +920,7 @@ function ClinicSwitcher({
               color: "var(--text-3)",
             }}
           >
-            Clínicas
+            {t("sidebar.clinics")}
           </div>
           {allClinics.map((c) => {
             const isCurrent = c.clinicId === clinicId;
@@ -962,7 +959,7 @@ function ClinicSwitcher({
                       fontWeight: 600,
                     }}
                   >
-                    ACTUAL
+                    {t("sidebar.current")}
                   </span>
                 )}
               </DropdownMenu.Item>
@@ -1050,6 +1047,7 @@ function SidebarFooter({
   onToggleCollapse: () => void;
   user: SidebarUser;
 }) {
+  const t = useT();
   const [isDark, setIsDark] = useState<boolean>(false);
 
   useEffect(() => {
@@ -1085,12 +1083,12 @@ function SidebarFooter({
     .split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
 
   const roleLabel: Record<UserRole, string> = {
-    SUPER_ADMIN: "Owner",
-    ADMIN: "Admin",
-    DOCTOR: "Doctor/a",
-    RECEPTIONIST: "Recepción",
-    READONLY: "Solo lectura",
-    ACCOUNTANT: "Contabilidad",
+    SUPER_ADMIN: t("sidebar.role.owner"),
+    ADMIN: t("sidebar.role.admin"),
+    DOCTOR: t("sidebar.role.doctor"),
+    RECEPTIONIST: t("sidebar.role.receptionist"),
+    READONLY: t("sidebar.role.readonly"),
+    ACCOUNTANT: t("sidebar.role.accountant"),
   };
 
   return (
@@ -1115,7 +1113,7 @@ function SidebarFooter({
         <button
           type="button"
           onClick={toggleTheme}
-          aria-label={isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+          aria-label={isDark ? t("sidebar.switchToLight") : t("sidebar.switchToDark")}
           style={{
             flex: collapsed ? undefined : 1,
             display: "flex",
@@ -1141,13 +1139,13 @@ function SidebarFooter({
           }}
         >
           {isDark ? <Sun size={14} aria-hidden /> : <Moon size={14} aria-hidden />}
-          {!collapsed && (isDark ? "Modo claro" : "Modo oscuro")}
+          {!collapsed && (isDark ? t("sidebar.modeLight") : t("sidebar.modeDark"))}
         </button>
 
         <button
           type="button"
           onClick={onToggleCollapse}
-          aria-label={collapsed ? "Expandir sidebar" : "Colapsar sidebar"}
+          aria-label={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
           aria-pressed={collapsed}
           style={{
             flexShrink: 0,
@@ -1179,7 +1177,7 @@ function SidebarFooter({
 
       <DropdownMenu.Root>
         <DropdownMenu.Trigger
-          aria-label={`Usuario: ${displayName}. Abrir menú de sesión.`}
+          aria-label={t("sidebar.userMenuAria", { name: displayName })}
           style={{
             display: "flex",
             alignItems: "center",
@@ -1264,7 +1262,7 @@ function SidebarFooter({
               }}
             >
               <LogOut size={14} />
-              Cerrar sesión
+              {t("sidebar.logout")}
             </DropdownMenu.Item>
           </DropdownMenu.Content>
         </DropdownMenu.Portal>
