@@ -69,6 +69,10 @@ export async function PATCH(req: NextRequest) {
   if (body.timezone !== undefined && typeof body.timezone === "string" && body.timezone.length > 0) {
     data.timezone = body.timezone;
   }
+  // Idioma del panel por clínica: solo "es" | "en".
+  if (body.locale !== undefined) {
+    data.locale = body.locale === "en" ? "en" : "es";
+  }
 
   const updated = await prisma.clinic.update({
     where: { id: dbUser.clinicId },

@@ -99,6 +99,21 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
     } catch { toast.error("Error al guardar"); } finally { setSaving(false); }
   }
 
+  // Idioma del panel: guarda el locale de la clínica y recarga para cargar el diccionario.
+  async function saveLocale(next: string) {
+    const locale = next === "en" ? "en" : "es";
+    setClinic((c: any) => ({ ...c, locale }));
+    try {
+      const res = await fetch("/api/clinic", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locale }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(locale === "en" ? "Language updated" : "Idioma actualizado");
+      setTimeout(() => window.location.reload(), 600);
+    } catch { toast.error("Error al guardar idioma"); }
+  }
+
   async function saveUser() {
     setSaving(true);
     try {
@@ -259,6 +274,20 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             </select>
             <div className="text-[11px] text-muted-foreground">
               Afecta todos los horarios visibles: agenda, citas, recordatorios. Tras guardar, recarga la pagina.
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Idioma del panel · Panel language</Label>
+            <select
+              className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
+              value={clinic.locale ?? "es"}
+              onChange={e => saveLocale(e.target.value)}
+            >
+              <option value="es">Español</option>
+              <option value="en">English</option>
+            </select>
+            <div className="text-[11px] text-muted-foreground">
+              Cambia el idioma de todo el panel para tu clínica. Al guardar, la página se recargará.
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
