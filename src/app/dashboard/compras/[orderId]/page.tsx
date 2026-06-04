@@ -28,6 +28,7 @@ import {
 } from "@/lib/suppliers/types";
 import { orderInclude, toSupplierOrderDTO } from "@/lib/suppliers/serializers";
 import { B2B_PAYMENT_METHOD_LABELS, isB2BPaymentMethod } from "@/lib/payments-b2b";
+import { getServerT } from "@/i18n/server";
 import { PayWithMercadoPago } from "./pay-mercadopago";
 import { OrderActions } from "./order-actions";
 
@@ -50,17 +51,18 @@ const PAYMENT_STATUS_TONES: Record<SupplierPaymentStatus, BadgeTone> = {
 
 // Pasos del stepper de avance del pedido (derivado de order.status — sin query).
 // CANCELLED es terminal y se trata aparte (no forma parte del riel).
-const STATUS_STEPS: { key: SupplierOrderStatus; label: string; Icon: typeof Package }[] = [
-  { key: "PENDING", label: "Pendiente", Icon: ClipboardList },
-  { key: "CONFIRMED", label: "Confirmado", Icon: CheckCircle2 },
-  { key: "SHIPPED", label: "Enviado", Icon: Truck },
-  { key: "DELIVERED", label: "Entregado", Icon: Package },
+const STATUS_STEPS: { key: SupplierOrderStatus; labelKey: string; Icon: typeof Package }[] = [
+  { key: "PENDING", labelKey: "procurement.orderDetail.stepPending", Icon: ClipboardList },
+  { key: "CONFIRMED", labelKey: "procurement.orderDetail.stepConfirmed", Icon: CheckCircle2 },
+  { key: "SHIPPED", labelKey: "procurement.orderDetail.stepShipped", Icon: Truck },
+  { key: "DELIVERED", labelKey: "procurement.orderDetail.stepDelivered", Icon: Package },
 ];
 
 const fmtFullDate = (iso: string): string =>
   new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
 
 export default async function Page({ params }: { params: { orderId: string } }) {
+  const { t } = await getServerT();
   const user = await getCurrentUser();
 
   const order = await prisma.supplierOrder.findFirst({
@@ -71,14 +73,14 @@ export default async function Page({ params }: { params: { orderId: string } }) 
   if (!order) notFound();
 
   const dto = toSupplierOrderDTO(order);
-  const supplierName = dto.supplier?.businessName ?? "Proveedor";
+  const supplierName = dto.supplier?.businessName ?? t("procurement.orderDetail.supplierFallback");
 
   // Datos para mostrar "cómo pagar" según el método elegido.
   const method = dto.paymentMethod;
   const methodLabel =
     method && isB2BPaymentMethod(method)
       ? B2B_PAYMENT_METHOD_LABELS[method]
-      : (method ?? "Por acordar con el proveedor");
+      : (method ?? t("procurement.orderDetail.methodTBD"));
   const isPaid = dto.paymentStatus === "PAID";
 
   // Cuentas bancarias del proveedor (sólo se necesitan para transferencia).
@@ -120,7 +122,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
         }}
       >
         <ArrowLeft size={14} />
-        Volver a compras
+        {t("procurement.orderDetail.backToPurchases")}
       </Link>
 
       {/* ── Hero con glow violeta + icon-chip gradiente + número mono + badges ── */}
@@ -199,7 +201,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
       </div>
 
       {/* ── Stepper horizontal de avance (derivado de order.status, sin query) ── */}
-      <CardNew title="Estado del pedido">
+      <CardNew title={t("procurement.orderDetail.orderStatusTitle")}>
         <span
           aria-hidden
           style={{
@@ -239,10 +241,10 @@ export default async function Page({ params }: { params: { orderId: string } }) 
             </span>
             <div>
               <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>
-                Pedido cancelado
+                {t("procurement.orderDetail.cancelledTitle")}
               </div>
               <p style={{ color: "var(--text-3)", fontSize: 13, margin: 0 }}>
-                Este pedido fue cancelado y ya no avanzará en el proceso.
+                {t("procurement.orderDetail.cancelledDesc")}
               </p>
             </div>
           </div>
@@ -315,7 +317,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
                       color: reached ? "var(--text-1)" : "var(--text-3)",
                     }}
                   >
-                    {step.label}
+                    {t(step.labelKey)}
                   </div>
                 </div>
               );
@@ -325,7 +327,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
       </CardNew>
 
       {/* ── Proveedor ── */}
-      <CardNew title="Proveedor">
+      <CardNew title={t("procurement.orderDetail.supplierTitle")}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span
             style={{
@@ -357,14 +359,14 @@ export default async function Page({ params }: { params: { orderId: string } }) 
               }}
             >
               <Building2 size={12} />
-              Proveedor del marketplace
+              {t("procurement.orderDetail.marketplaceSupplier")}
             </div>
           </div>
         </div>
       </CardNew>
 
       {/* ── Artículos ── */}
-      <CardNew title="Artículos" sub={`${dto.items.length} producto${dto.items.length === 1 ? "" : "s"}`}>
+      <CardNew title={t("procurement.orderDetail.itemsTitle")} sub={t("procurement.orderDetail.productCount", { count: dto.items.length })}>
         <span
           aria-hidden
           style={{
@@ -380,10 +382,10 @@ export default async function Page({ params }: { params: { orderId: string } }) 
           <table className="table-new">
             <thead>
               <tr>
-                <th>Producto</th>
-                <th style={{ textAlign: "center" }}>Cantidad</th>
-                <th style={{ textAlign: "right" }}>Precio unit.</th>
-                <th style={{ textAlign: "right" }}>Importe</th>
+                <th>{t("procurement.orderDetail.colProduct")}</th>
+                <th style={{ textAlign: "center" }}>{t("procurement.orderDetail.colQuantity")}</th>
+                <th style={{ textAlign: "right" }}>{t("procurement.orderDetail.colUnitPrice")}</th>
+                <th style={{ textAlign: "right" }}>{t("procurement.orderDetail.colAmount")}</th>
               </tr>
             </thead>
             <tbody>
@@ -443,7 +445,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
               color: "var(--text-2)",
             }}
           >
-            <span>Subtotal</span>
+            <span>{t("procurement.orderDetail.subtotal")}</span>
             <span className="mono">{fmtMXNdec(dto.subtotal)}</span>
           </div>
           <div
@@ -455,7 +457,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
               fontWeight: 600,
             }}
           >
-            <span>Total</span>
+            <span>{t("common.total")}</span>
             <span className="mono" style={{ fontWeight: 700, fontSize: 17, color: "var(--violet-400)" }}>
               {fmtMXNdec(dto.total)}
             </span>
@@ -464,7 +466,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
       </CardNew>
 
       {/* ── Detalles del pedido (método de pago / notas) ── */}
-      <CardNew title="Detalles del pedido">
+      <CardNew title={t("procurement.orderDetail.detailsTitle")}>
         <div style={{ display: "flex", flexDirection: "column", gap: 14, fontSize: 13 }}>
           <div>
             <div
@@ -481,7 +483,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
               }}
             >
               <DollarSign size={12} style={{ color: "var(--violet-400)" }} />
-              Método de pago
+              {t("procurement.orderDetail.paymentMethod")}
             </div>
             <div style={{ color: "var(--text-1)", fontSize: 14 }}>{methodLabel}</div>
           </div>
@@ -502,7 +504,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
                 }}
               >
                 <FileText size={12} style={{ color: "var(--violet-400)" }} />
-                Notas
+                {t("procurement.orderDetail.notes")}
               </div>
               <p
                 style={{
@@ -532,7 +534,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
               }}
             >
               <Clock size={12} style={{ color: "var(--violet-400)" }} />
-              Fecha de creación
+              {t("procurement.orderDetail.createdDate")}
             </div>
             <div style={{ color: "var(--text-1)", fontSize: 14 }}>{fmtFullDate(dto.createdAt)}</div>
           </div>
@@ -540,7 +542,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
       </CardNew>
 
       {/* ── Cómo pagar ── */}
-      <CardNew title="Pago">
+      <CardNew title={t("procurement.orderDetail.paymentTitle")}>
         {isPaid ? (
           <div
             style={{
@@ -568,10 +570,10 @@ export default async function Page({ params }: { params: { orderId: string } }) 
               <CheckCircle2 size={18} />
             </span>
             <div>
-              <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>Pedido pagado</div>
+              <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>{t("procurement.orderDetail.orderPaid")}</div>
               {fmtPaidAt && (
                 <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0 }}>
-                  Pago registrado el {fmtPaidAt}.
+                  {t("procurement.orderDetail.paymentRecordedOn", { date: fmtPaidAt })}
                 </p>
               )}
             </div>
@@ -580,8 +582,8 @@ export default async function Page({ params }: { params: { orderId: string } }) 
           bankAccounts.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <p style={{ fontSize: 13, color: "var(--text-2)", margin: 0, lineHeight: 1.5 }}>
-                Transfiere el total de <strong>{fmtMXNdec(dto.total)}</strong> a la cuenta del
-                proveedor y avísale por chat con tu comprobante.
+                {t("procurement.orderDetail.transferIntroBefore")} <strong>{fmtMXNdec(dto.total)}</strong>{" "}
+                {t("procurement.orderDetail.transferIntroAfter")}
               </p>
               {bankAccounts.map((a) => (
                 <div
@@ -598,15 +600,15 @@ export default async function Page({ params }: { params: { orderId: string } }) 
                 >
                   <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
                     {a.bank}
-                    {a.isPrimary ? " · Principal" : ""}
+                    {a.isPrimary ? ` · ${t("procurement.orderDetail.primaryAccount")}` : ""}
                   </div>
-                  <div style={{ fontSize: 12, color: "var(--text-3)" }}>Titular: {a.holderName}</div>
+                  <div style={{ fontSize: 12, color: "var(--text-3)" }}>{t("procurement.orderDetail.accountHolder", { name: a.holderName })}</div>
                   <div className="mono" style={{ fontSize: 12, color: "var(--text-2)" }}>
-                    CLABE {a.clabe}
+                    {t("procurement.orderDetail.clabeLabel", { clabe: a.clabe })}
                   </div>
                   {a.accountNumber && (
                     <div className="mono" style={{ fontSize: 12, color: "var(--text-3)" }}>
-                      Cuenta {a.accountNumber}
+                      {t("procurement.orderDetail.accountLabel", { account: a.accountNumber })}
                     </div>
                   )}
                 </div>
@@ -614,18 +616,17 @@ export default async function Page({ params }: { params: { orderId: string } }) 
             </div>
           ) : (
             <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0, lineHeight: 1.5 }}>
-              El proveedor aún no ha registrado sus datos bancarios. Contáctalo por chat para
-              coordinar la transferencia.
+              {t("procurement.orderDetail.noBankData")}
             </p>
           )
         ) : method === "CASH" ? (
           <p style={{ fontSize: 13, color: "var(--text-2)", margin: 0, lineHeight: 1.5 }}>
-            Paga en efectivo al recibir el pedido. El proveedor marcará la orden como pagada.
+            {t("procurement.orderDetail.cashInfo")}
           </p>
         ) : method === "MERCADOPAGO" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <p style={{ fontSize: 13, color: "var(--text-2)", margin: 0, lineHeight: 1.5 }}>
-              Paga en línea con MercadoPago de forma segura. El cobro va directo al proveedor.
+              {t("procurement.orderDetail.mpInfo")}
             </p>
             {mpAvailable ? (
               <div>
@@ -633,13 +634,13 @@ export default async function Page({ params }: { params: { orderId: string } }) 
               </div>
             ) : (
               <p style={{ fontSize: 12, color: "var(--text-3)", margin: 0 }}>
-                El proveedor desactivó MercadoPago. Contáctalo por chat para otra forma de pago.
+                {t("procurement.orderDetail.mpDisabled")}
               </p>
             )}
           </div>
         ) : (
           <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0, lineHeight: 1.5 }}>
-            Coordina el pago directamente con el proveedor.
+            {t("procurement.orderDetail.coordinateDirectly")}
           </p>
         )}
       </CardNew>
@@ -650,7 +651,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
           href={`/dashboard/proveedor-chat/${dto.supplierId}`}
           className="btn-new btn-new--secondary"
         >
-          Contactar al proveedor
+          {t("procurement.orderDetail.contactSupplier")}
         </Link>
       </div>
     </div>

@@ -5,6 +5,7 @@ import type { Prisma } from "@prisma/client";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { getServerT } from "@/i18n/server";
 import { prisma } from "@/lib/prisma";
 import { Landmark, Banknote, CreditCard, CheckCircle2, Info, ClipboardList, ArrowLeft } from "lucide-react";
 import { CardNew, BadgeNew } from "@/components/ui/design-system";
@@ -33,9 +34,10 @@ const PAYMENT_STATUS_TONES: Record<DentalLabPaymentStatus, BadgeTone> = {
   PAID: "success",
 };
 
-const PAYMENT_STATUS_LABELS: Record<DentalLabPaymentStatus, string> = {
-  UNPAID: "Sin pagar",
-  PAID: "Pagado",
+// id de estado de pago → translation-key (resuelta con t() al renderizar).
+const PAYMENT_STATUS_LABEL_KEYS: Record<DentalLabPaymentStatus, string> = {
+  UNPAID: "procurement.orderDetail.payUnpaid",
+  PAID: "procurement.orderDetail.payPaid",
 };
 
 const orderInclude = {
@@ -75,6 +77,7 @@ const fmtFullDateTime = (iso: string): string =>
   });
 
 export default async function Page({ params }: { params: { orderId: string } }) {
+  const { t } = await getServerT();
   const user = await getCurrentUser();
 
   const order = await prisma.dentalLabOrder.findFirst({
@@ -84,7 +87,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
 
   if (!order) notFound();
 
-  const labName = order.lab?.name ?? "Laboratorio";
+  const labName = order.lab?.name ?? t("procurement.orderDetail.labFallback");
   const status = order.status as DentalLabOrderStatus;
   const statusMeta = DENTAL_LAB_ORDER_STATUS[status];
 
@@ -118,10 +121,10 @@ export default async function Page({ params }: { params: { orderId: string } }) 
     etaAt: order.etaAt ? order.etaAt.toISOString() : null,
     pickupAt: order.pickupAt ? order.pickupAt.toISOString() : null,
     courier: (order.courier as unknown as OrderTrackingProps["courier"]) ?? null,
-    origin: { label: "LAB", name: labName, mapsUrl: order.lab?.mapsUrl ?? null },
+    origin: { label: t("procurement.orderDetail.routeLab"), name: labName, mapsUrl: order.lab?.mapsUrl ?? null },
     destination: {
-      label: "CLÍNICA",
-      name: order.clinic?.name ?? "Tu clínica",
+      label: t("procurement.orderDetail.routeClinic"),
+      name: order.clinic?.name ?? t("procurement.orderDetail.yourClinic"),
       mapsUrl: order.clinic?.mapsUrl ?? null,
     },
   };
@@ -142,7 +145,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
         }}
       >
         <ArrowLeft size={14} />
-        Volver a órdenes de laboratorio
+        {t("procurement.orderDetail.backToOrders")}
       </Link>
 
       {/* ── Hero / encabezado ── */}
@@ -177,9 +180,9 @@ export default async function Page({ params }: { params: { orderId: string } }) 
               {statusMeta.label}
             </BadgeNew>
             <BadgeNew tone={PAYMENT_STATUS_TONES[order.paymentStatus]} dot>
-              {PAYMENT_STATUS_LABELS[order.paymentStatus]}
+              {t(PAYMENT_STATUS_LABEL_KEYS[order.paymentStatus])}
             </BadgeNew>
-            {order.priority && <BadgeNew tone="warning">Prioritario</BadgeNew>}
+            {order.priority && <BadgeNew tone="warning">{t("procurement.orderDetail.priority")}</BadgeNew>}
           </div>
         </div>
       </header>
@@ -188,21 +191,21 @@ export default async function Page({ params }: { params: { orderId: string } }) 
       {showTracking && (
         <>
           <OrderTrackingHero {...tracking} />
-          <CardNew title="Ruta del mensajero" sub="LAB → CLÍNICA · vista ilustrativa del recorrido">
+          <CardNew title={t("procurement.orderDetail.courierRoute")} sub={t("procurement.orderDetail.courierRouteSub")}>
             <OrderRouteMap {...tracking} />
           </CardNew>
         </>
       )}
 
-      <CardNew title="Importe">
+      <CardNew title={t("procurement.orderDetail.amount")}>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--text-3)" }}>
-            <span>Precio base</span>
+            <span>{t("procurement.orderDetail.basePrice")}</span>
             <span>{fmtMXNdec(order.basePrice)}</span>
           </div>
           {order.extrasTotal > 0 && (
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--text-3)" }}>
-              <span>Extras</span>
+              <span>{t("procurement.orderDetail.extras")}</span>
               <span>{fmtMXNdec(order.extrasTotal)}</span>
             </div>
           )}
@@ -221,7 +224,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
               border: "1px solid var(--border-brand)",
             }}
           >
-            <span>Total</span>
+            <span>{t("common.total")}</span>
             <span className="mono" style={{ fontSize: 16, fontWeight: 700, color: "var(--violet-400)" }}>
               {fmtMXNdec(order.total)}
             </span>
@@ -229,7 +232,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
         </div>
       </CardNew>
 
-      <CardNew title="Cómo pagar">
+      <CardNew title={t("procurement.orderDetail.howToPay")}>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div
             style={{
@@ -241,13 +244,13 @@ export default async function Page({ params }: { params: { orderId: string } }) 
             }}
           >
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <span style={{ fontSize: 12, color: "var(--text-3)" }}>Método de pago</span>
+              <span style={{ fontSize: 12, color: "var(--text-3)" }}>{t("procurement.orderDetail.paymentMethod")}</span>
               <span style={{ fontSize: 14, color: "var(--text-1)", fontWeight: 500 }}>
-                {methodLabel ?? "Por acordar con el laboratorio"}
+                {methodLabel ?? t("procurement.orderDetail.toAgreeWithLab")}
               </span>
             </div>
             <BadgeNew tone={PAYMENT_STATUS_TONES[order.paymentStatus]} dot>
-              {PAYMENT_STATUS_LABELS[order.paymentStatus]}
+              {t(PAYMENT_STATUS_LABEL_KEYS[order.paymentStatus])}
             </BadgeNew>
           </div>
 
@@ -267,19 +270,22 @@ export default async function Page({ params }: { params: { orderId: string } }) 
             >
               <CheckCircle2 size={18} style={{ color: "var(--success)", flexShrink: 0 }} />
               <span>
-                Pago confirmado
-                {order.paidAt ? ` el ${fmtFullDate(order.paidAt.toISOString())}` : ""}.
+                {order.paidAt
+                  ? t("procurement.orderDetail.paymentConfirmedOn", {
+                      date: fmtFullDate(order.paidAt.toISOString()),
+                    })
+                  : t("procurement.orderDetail.paymentConfirmed")}
               </span>
             </div>
           ) : method === "TRANSFER" ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-2)", fontSize: 13 }}>
                 <Landmark size={15} style={{ color: "var(--violet-400)" }} />
-                Transfiere por SPEI a la cuenta del laboratorio:
+                {t("procurement.orderDetail.transferSpei")}
               </div>
               {bankAccounts.length === 0 ? (
                 <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0 }}>
-                  El laboratorio aún no registró sus cuentas bancarias. Escríbele para coordinar el pago.
+                  {t("procurement.orderDetail.noBankAccounts")}
                 </p>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -302,17 +308,17 @@ export default async function Page({ params }: { params: { orderId: string } }) 
                         </span>
                         {acc.isPrimary && (
                           <BadgeNew tone="brand" dot>
-                            Principal
+                            {t("procurement.orderDetail.primaryAccount")}
                           </BadgeNew>
                         )}
                       </div>
                       <div style={{ fontSize: 12, color: "var(--text-3)" }}>{acc.holderName}</div>
                       <div className="mono" style={{ fontSize: 13, color: "var(--text-1)" }}>
-                        CLABE {acc.clabe}
+                        {t("procurement.orderDetail.clabe", { clabe: acc.clabe })}
                       </div>
                       {acc.accountNumber && (
                         <div className="mono" style={{ fontSize: 11, color: "var(--text-4)" }}>
-                          Cuenta {acc.accountNumber}
+                          {t("procurement.orderDetail.accountNumber", { account: acc.accountNumber })}
                         </div>
                       )}
                     </div>
@@ -320,7 +326,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
                 </div>
               )}
               <p style={{ fontSize: 11, color: "var(--text-4)", margin: 0, lineHeight: 1.5 }}>
-                Usa el número de orden {order.orderNumber} como referencia de tu transferencia.
+                {t("procurement.orderDetail.transferReference", { orderNumber: order.orderNumber })}
               </p>
             </div>
           ) : method === "CASH" ? (
@@ -338,14 +344,14 @@ export default async function Page({ params }: { params: { orderId: string } }) 
               }}
             >
               <Banknote size={18} style={{ color: "var(--info)", flexShrink: 0 }} />
-              <span>Paga en efectivo al recibir el trabajo.</span>
+              <span>{t("procurement.orderDetail.payCashOnDelivery")}</span>
             </div>
           ) : method === "MERCADOPAGO" ? (
             mpReady ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-2)", fontSize: 13 }}>
                   <CreditCard size={15} style={{ color: "var(--violet-400)" }} />
-                  Paga en línea de forma segura con MercadoPago.
+                  {t("procurement.orderDetail.payOnlineMercadoPago")}
                 </div>
                 <PayWithMercadoPago orderId={order.id} />
               </div>
@@ -364,21 +370,21 @@ export default async function Page({ params }: { params: { orderId: string } }) 
                 }}
               >
                 <Info size={18} style={{ color: "var(--warning)", flexShrink: 0 }} />
-                <span>El laboratorio aún no terminó de configurar MercadoPago. Escríbele para coordinar el pago.</span>
+                <span>{t("procurement.orderDetail.mpNotReady")}</span>
               </div>
             )
           ) : (
             <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0 }}>
-              El método de pago se acordará directamente con el laboratorio.
+              {t("procurement.orderDetail.paymentToAgreeDirectly")}
             </p>
           )}
         </div>
       </CardNew>
 
-      <CardNew title="Seguimiento">
+      <CardNew title={t("procurement.orderDetail.tracking")}>
         {timeline.length === 0 ? (
           <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0 }}>
-            Aún no hay eventos para esta orden.
+            {t("procurement.orderDetail.noEvents")}
           </p>
         ) : (
           <div style={{ display: "flex", flexDirection: "column" }}>
@@ -408,8 +414,10 @@ export default async function Page({ params }: { params: { orderId: string } }) 
                       {ev.at
                         ? fmtFullDateTime(ev.at.toISOString())
                         : ev.eta
-                          ? `Estimado: ${fmtFullDateTime(ev.eta.toISOString())}`
-                          : "Pendiente"}
+                          ? t("procurement.orderDetail.estimated", {
+                              date: fmtFullDateTime(ev.eta.toISOString()),
+                            })
+                          : t("procurement.orderDetail.pending")}
                     </div>
                     {ev.detail && (
                       <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2, whiteSpace: "pre-wrap" }}>
@@ -429,25 +437,25 @@ export default async function Page({ params }: { params: { orderId: string } }) 
         )}
       </CardNew>
 
-      <CardNew title="Detalles de la orden">
+      <CardNew title={t("procurement.orderDetail.orderDetailsTitle")}>
         <dl style={{ display: "flex", flexDirection: "column", gap: 14, margin: 0 }}>
           {order.patientName && (
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <dt style={{ fontSize: 12, color: "var(--text-3)" }}>Paciente</dt>
+              <dt style={{ fontSize: 12, color: "var(--text-3)" }}>{t("procurement.orderDetail.patient")}</dt>
               <dd style={{ fontSize: 14, color: "var(--text-1)", margin: 0 }}>{order.patientName}</dd>
             </div>
           )}
 
           {order.internalRef && (
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <dt style={{ fontSize: 12, color: "var(--text-3)" }}>Referencia interna</dt>
+              <dt style={{ fontSize: 12, color: "var(--text-3)" }}>{t("procurement.orderDetail.internalRef")}</dt>
               <dd style={{ fontSize: 14, color: "var(--text-1)", margin: 0 }}>{order.internalRef}</dd>
             </div>
           )}
 
           {order.notes && (
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <dt style={{ fontSize: 12, color: "var(--text-3)" }}>Notas</dt>
+              <dt style={{ fontSize: 12, color: "var(--text-3)" }}>{t("procurement.orderDetail.notes")}</dt>
               <dd style={{ fontSize: 14, color: "var(--text-1)", margin: 0, whiteSpace: "pre-wrap" }}>
                 {order.notes}
               </dd>
@@ -455,7 +463,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
           )}
 
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <dt style={{ fontSize: 12, color: "var(--text-3)" }}>Fecha de creación</dt>
+            <dt style={{ fontSize: 12, color: "var(--text-3)" }}>{t("procurement.orderDetail.createdDate")}</dt>
             <dd style={{ fontSize: 14, color: "var(--text-1)", margin: 0 }}>
               {fmtFullDate(order.createdAt.toISOString())}
             </dd>
@@ -463,7 +471,7 @@ export default async function Page({ params }: { params: { orderId: string } }) 
         </dl>
       </CardNew>
 
-      <CardNew title="Acciones">
+      <CardNew title={t("procurement.orderDetail.actions")}>
         <CancelOrderButton orderId={order.id} status={status} />
       </CardNew>
 

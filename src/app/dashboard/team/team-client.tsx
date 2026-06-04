@@ -12,14 +12,16 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import toast from "react-hot-toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { PermissionsModal } from "@/components/dashboard/team/permissions-modal";
+import { useT } from "@/i18n/i18n-provider";
 
 type RoleTone = "success" | "info" | "warning" | "brand" | "neutral";
-const ROLE_TONE: Record<string, { tone: RoleTone; label: string }> = {
-  SUPER_ADMIN:  { tone: "brand",   label: "Super Admin" },
-  ADMIN:        { tone: "info",    label: "Administrador/a" },
-  DOCTOR:       { tone: "success", label: "Doctor/a" },
-  RECEPTIONIST: { tone: "warning", label: "Recepción" },
-  READONLY:     { tone: "neutral", label: "Solo lectura" },
+// labelKey -> resolved via t() at render time (never call t() at module scope).
+const ROLE_TONE: Record<string, { tone: RoleTone; labelKey: string }> = {
+  SUPER_ADMIN:  { tone: "brand",   labelKey: "settings.team.roleSuperAdmin" },
+  ADMIN:        { tone: "info",    labelKey: "settings.team.roleAdmin" },
+  DOCTOR:       { tone: "success", labelKey: "settings.team.roleDoctor" },
+  RECEPTIONIST: { tone: "warning", labelKey: "settings.team.roleReceptionist" },
+  READONLY:     { tone: "neutral", labelKey: "settings.team.roleReadonly" },
 };
 
 const DOCTOR_COLORS = [
@@ -27,25 +29,27 @@ const DOCTOR_COLORS = [
   "#0891b2","#db2777","#4338ca","#16a34a","#dc2626",
   "#9333ea","#0284c7","#f97316","#84cc16",
 ];
+// labelKey/descKey -> resolved via t() at render time inside MemberForm.
 const ROLES = [
-  { value:"DOCTOR",       label:"Doctor/a",         icon:"🩺", desc:"Sus pacientes y citas" },
-  { value:"ADMIN",        label:"Administrador/a",  icon:"🛡️", desc:"Acceso completo"        },
-  { value:"RECEPTIONIST", label:"Recepción",        icon:"📋", desc:"Agenda y citas"          },
+  { value:"DOCTOR",       labelKey:"settings.team.roleDoctor",       icon:"🩺", descKey:"settings.team.roleDoctorDesc" },
+  { value:"ADMIN",        labelKey:"settings.team.roleAdmin",        icon:"🛡️", descKey:"settings.team.roleAdminDesc"  },
+  { value:"RECEPTIONIST", labelKey:"settings.team.roleReceptionist", icon:"📋", descKey:"settings.team.roleReceptionistDesc" },
 ];
 // MediFlow es DENTAL — solo specialties dentales en el selector del
 // equipo. Si el SaaS expande a multi-specialty, restaurar la lista
 // general aquí.
-const SPECIALTIES = [
-  "Odontología General",
-  "Ortodoncia",
-  "Endodoncia",
-  "Periodoncia",
-  "Cirugía Maxilofacial",
-  "Implantología",
-  "Odontopediatría",
-  "Prostodoncia",
-  "Estética Dental",
-  "Otra",
+// id = código estable; nameKey -> resolved via t() at render time.
+const SPECIALTIES: { id: string; nameKey: string }[] = [
+  { id: "Odontología General",  nameKey: "settings.team.specGeneral" },
+  { id: "Ortodoncia",           nameKey: "settings.team.specOrtho" },
+  { id: "Endodoncia",           nameKey: "settings.team.specEndo" },
+  { id: "Periodoncia",          nameKey: "settings.team.specPerio" },
+  { id: "Cirugía Maxilofacial", nameKey: "settings.team.specMaxillofacial" },
+  { id: "Implantología",        nameKey: "settings.team.specImplant" },
+  { id: "Odontopediatría",      nameKey: "settings.team.specPediatric" },
+  { id: "Prostodoncia",         nameKey: "settings.team.specProstho" },
+  { id: "Estética Dental",      nameKey: "settings.team.specEsthetic" },
+  { id: "Otra",                 nameKey: "settings.team.specOther" },
 ];
 
 interface FormState {
@@ -89,6 +93,7 @@ function MemberForm({
   // de confirm + POST + display del tempPassword vive en TeamClient.
   onResetPassword?: () => void;
 }) {
+  const t = useT();
   const [svcInput, setSvcInput] = useState("");
 
   function set(k: keyof FormState, v: any) {
@@ -106,7 +111,7 @@ function MemberForm({
       {/* Name */}
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label className="text-base font-semibold">Nombre *</Label>
+          <Label className="text-base font-semibold">{t("settings.team.firstNameLabel")}</Label>
           <input
             autoFocus
             className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
@@ -116,7 +121,7 @@ function MemberForm({
           />
         </div>
         <div className="space-y-1.5">
-          <Label className="text-base font-semibold">Apellido *</Label>
+          <Label className="text-base font-semibold">{t("settings.team.lastNameLabel")}</Label>
           <input
             className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
             placeholder="García"
@@ -128,7 +133,7 @@ function MemberForm({
 
       {/* Email */}
       <div className="space-y-1.5">
-        <Label className="text-base font-semibold">Email *</Label>
+        <Label className="text-base font-semibold">{t("settings.team.emailLabel")}</Label>
         <input
           type="email"
           className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
@@ -139,21 +144,21 @@ function MemberForm({
         />
         {!isEdit && (
           <p className="text-sm text-muted-foreground">
-            La cuenta se crea al instante. Se muestra una contraseña temporal para compartir con el doctor.
+            {t("settings.team.emailHint")}
           </p>
         )}
       </div>
 
       {/* Role */}
       <div className="space-y-1.5">
-        <Label className="text-base font-semibold">Rol</Label>
+        <Label className="text-base font-semibold">{t("settings.team.roleLabel")}</Label>
         <div className="grid grid-cols-3 gap-2">
           {ROLES.map(r => (
             <button key={r.value} type="button" onClick={() => set("role", r.value)}
               className={`flex flex-col items-center p-3 rounded-xl border-2 text-center transition-all ${form.role === r.value ? "border-brand-500 bg-brand-600/15" : "border-border hover:border-slate-400"}`}>
               <span className="text-xl mb-1">{r.icon}</span>
-              <span className="text-sm font-bold">{r.label}</span>
-              <span className="text-xs text-muted-foreground mt-0.5 leading-tight">{r.desc}</span>
+              <span className="text-sm font-bold">{t(r.labelKey)}</span>
+              <span className="text-xs text-muted-foreground mt-0.5 leading-tight">{t(r.descKey)}</span>
             </button>
           ))}
         </div>
@@ -162,17 +167,17 @@ function MemberForm({
       {/* Specialty + Phone */}
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label className="text-base font-semibold">Especialidad</Label>
+          <Label className="text-base font-semibold">{t("settings.team.specialtyLabel")}</Label>
           <select
             className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
             value={form.specialty}
             onChange={e => set("specialty", e.target.value)}>
-            <option value="">Sin especialidad</option>
-            {SPECIALTIES.map(s => <option key={s}>{s}</option>)}
+            <option value="">{t("settings.team.noSpecialty")}</option>
+            {SPECIALTIES.map(s => <option key={s.id} value={s.id}>{t(s.nameKey)}</option>)}
           </select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-base font-semibold">Teléfono</Label>
+          <Label className="text-base font-semibold">{t("settings.team.phoneLabel")}</Label>
           <input
             className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
             placeholder="+52 999 000 0000"
@@ -184,11 +189,11 @@ function MemberForm({
 
       {/* Services */}
       <div className="space-y-1.5">
-        <Label className="text-base font-semibold">Servicios / Tratamientos que realiza</Label>
+        <Label className="text-base font-semibold">{t("settings.team.servicesLabel")}</Label>
         <div className="flex gap-2">
           <input
             className="flex h-11 flex-1 rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
-            placeholder="Ej: Ortodoncia, Implantes, Limpieza…"
+            placeholder={t("settings.team.servicesPlaceholder")}
             value={svcInput}
             onChange={e => setSvcInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addSvc(); } }}
@@ -198,7 +203,7 @@ function MemberForm({
             +
           </button>
         </div>
-        <p className="text-xs text-muted-foreground">Presiona Enter o coma para agregar cada servicio</p>
+        <p className="text-xs text-muted-foreground">{t("settings.team.servicesHint")}</p>
         {form.services.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-1">
             {form.services.map(s => (
@@ -214,10 +219,10 @@ function MemberForm({
 
       {/* NOM-024 — Datos del médico */}
       <div className="space-y-3 pt-1">
-        <Label className="text-base font-semibold">Identificación profesional (NOM-024)</Label>
+        <Label className="text-base font-semibold">{t("settings.team.profIdLabel")}</Label>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <Label className="text-sm text-muted-foreground">Cédula profesional</Label>
+            <Label className="text-sm text-muted-foreground">{t("settings.team.cedulaProfLabel")}</Label>
             <input
               className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base font-mono focus:outline-none"
               placeholder="1234567"
@@ -227,10 +232,10 @@ function MemberForm({
             />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-sm text-muted-foreground">Cédula de especialidad</Label>
+            <Label className="text-sm text-muted-foreground">{t("settings.team.cedulaEspLabel")}</Label>
             <input
               className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base font-mono focus:outline-none"
-              placeholder="Si tiene"
+              placeholder={t("settings.team.cedulaEspPlaceholder")}
               maxLength={15}
               value={form.cedulaEspecialidad}
               onChange={e => set("cedulaEspecialidad", e.target.value.trim())}
@@ -238,10 +243,10 @@ function MemberForm({
           </div>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-sm text-muted-foreground">Especialidad oficial (NOM-024)</Label>
+          <Label className="text-sm text-muted-foreground">{t("settings.team.especialidadOficialLabel")}</Label>
           <input
             className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
-            placeholder="Ej. Odontología, Pediatría — texto formal para recetas"
+            placeholder={t("settings.team.especialidadOficialPlaceholder")}
             maxLength={100}
             value={form.especialidad}
             onChange={e => set("especialidad", e.target.value)}
@@ -251,7 +256,7 @@ function MemberForm({
 
       {/* Color */}
       <div className="space-y-2">
-        <Label className="text-base font-semibold">Color en agenda</Label>
+        <Label className="text-base font-semibold">{t("settings.team.colorLabel")}</Label>
         <div className="flex gap-2 flex-wrap">
           {DOCTOR_COLORS.map(c => (
             <button key={c} type="button" onClick={() => set("color", c)}
@@ -262,7 +267,7 @@ function MemberForm({
         {form.color && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <div className="w-4 h-4 rounded" style={{ background: form.color }} />
-            Así se verán las citas de este doctor en el calendario
+            {t("settings.team.colorHint")}
           </div>
         )}
       </div>
@@ -273,10 +278,9 @@ function MemberForm({
        *  tempPassword en el banner de arriba. */}
       {isEdit && onResetPassword && (
         <div className="border-t border-border pt-4 mt-2">
-          <Label className="text-base font-semibold">Acceso del usuario</Label>
+          <Label className="text-base font-semibold">{t("settings.team.userAccessLabel")}</Label>
           <p className="text-sm text-muted-foreground mt-1 mb-3">
-            Resetear la contraseña genera una nueva contraseña temporal.
-            La actual deja de funcionar.
+            {t("settings.team.resetPasswordHint")}
           </p>
           <Button
             type="button"
@@ -285,16 +289,16 @@ function MemberForm({
             disabled={loading}
             className="w-full h-11 text-base"
           >
-            Resetear contraseña
+            {t("settings.team.resetPasswordBtn")}
           </Button>
         </div>
       )}
 
       {/* Buttons */}
       <div className="flex gap-3 pt-2">
-        <Button variant="outline" onClick={onCancel} className="flex-1 h-12 text-base">Cancelar</Button>
+        <Button variant="outline" onClick={onCancel} className="flex-1 h-12 text-base">{t("common.cancel")}</Button>
         <Button onClick={onSubmit} disabled={loading} className="flex-1 h-12 text-base">
-          {loading ? "Guardando…" : isEdit ? "Guardar cambios" : "Crear doctor"}
+          {loading ? t("common.saving") : isEdit ? t("common.saveChanges") : t("settings.team.createDoctorBtn")}
         </Button>
       </div>
     </div>
@@ -333,6 +337,7 @@ function MemberPhoto({
   member: TeamMember;
   onChange: (avatarUrl: string | null) => void;
 }) {
+  const t = useT();
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const fullName = `${member.firstName} ${member.lastName}`;
@@ -343,11 +348,11 @@ function MemberPhoto({
     e.target.value = "";
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      toast.error("Solo se permiten imágenes");
+      toast.error(t("settings.team.onlyImages"));
       return;
     }
     if (file.size > MAX_AVATAR_BYTES) {
-      toast.error("La imagen es muy grande (máx 8MB)");
+      toast.error(t("settings.team.imageTooLarge"));
       return;
     }
     setUploading(true);
@@ -357,7 +362,7 @@ function MemberPhoto({
       fd.append("field", "avatar");
       const up = await fetch("/api/landing-upload", { method: "POST", body: fd });
       const upData = await up.json();
-      if (!up.ok) throw new Error(upData.error ?? "Error al subir la imagen");
+      if (!up.ok) throw new Error(upData.error ?? t("settings.team.uploadImageError"));
 
       const res = await fetch(`/api/team/${member.id}`, {
         method: "PATCH",
@@ -365,12 +370,12 @@ function MemberPhoto({
         body: JSON.stringify({ avatarUrl: upData.url }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Error al guardar la foto");
+      if (!res.ok) throw new Error(data.error ?? t("settings.team.savePhotoError"));
 
       onChange(upData.url);
-      toast.success("Foto actualizada");
+      toast.success(t("settings.team.photoUpdated"));
     } catch (err: any) {
-      toast.error(err.message ?? "No se pudo subir la foto");
+      toast.error(err.message ?? t("settings.team.uploadPhotoFailed"));
     } finally {
       setUploading(false);
     }
@@ -385,11 +390,11 @@ function MemberPhoto({
         body: JSON.stringify({ avatarUrl: null }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Error al quitar la foto");
+      if (!res.ok) throw new Error(data.error ?? t("settings.team.removePhotoError"));
       onChange(null);
-      toast.success("Foto eliminada");
+      toast.success(t("settings.team.photoRemoved"));
     } catch (err: any) {
-      toast.error(err.message ?? "No se pudo quitar la foto");
+      toast.error(err.message ?? t("settings.team.removePhotoFailed"));
     } finally {
       setUploading(false);
     }
@@ -410,7 +415,7 @@ function MemberPhoto({
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={member.avatarUrl}
-              alt={`Foto de ${fullName}`}
+              alt={t("settings.team.photoOfAlt", { name: fullName })}
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
           ) : (
@@ -434,8 +439,8 @@ function MemberPhoto({
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={uploading}
-          aria-label={member.avatarUrl ? `Cambiar foto de ${fullName}` : `Subir foto de ${fullName}`}
-          title="Subir foto"
+          aria-label={member.avatarUrl ? t("settings.team.changePhotoAria", { name: fullName }) : t("settings.team.uploadPhotoAria", { name: fullName })}
+          title={t("settings.team.uploadPhotoTitle")}
           style={{
             position: "absolute", right: -2, bottom: -2,
             width: 26, height: 26, borderRadius: "50%",
@@ -462,13 +467,13 @@ function MemberPhoto({
         <button
           type="button"
           onClick={removePhoto}
-          aria-label={`Quitar foto de ${fullName}`}
+          aria-label={t("settings.team.removePhotoAria", { name: fullName })}
           style={{
             fontSize: 11, color: "var(--text-3)", background: "none",
             border: "none", cursor: "pointer", textDecoration: "underline",
           }}
         >
-          Quitar foto
+          {t("settings.team.removePhotoBtn")}
         </button>
       )}
     </div>
@@ -479,6 +484,7 @@ function MemberPhoto({
 interface Props { team: TeamMember[]; currentUserId: string; currentUserRole: string; clinicName: string }
 
 export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, clinicName }: Props) {
+  const t = useT();
   const router = useRouter();
   const askConfirm = useConfirm();
   const [team,       setTeam]       = useState<TeamMember[]>(initialTeam);
@@ -521,7 +527,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
   async function createDoctor() {
     // Read current form state directly — no stale closure issue
     if (!form.firstName.trim() || !form.lastName.trim() || !form.email.trim()) {
-      toast.error("Nombre, apellido y email son requeridos");
+      toast.error(t("settings.team.requiredFields"));
       return;
     }
     setLoading(true);
@@ -538,7 +544,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
       setTempPassFor(`${data.firstName} ${data.lastName}`);
       setShowNew(false);
       setForm(emptyForm());
-      toast.success(`✅ Doctor ${data.firstName} ${data.lastName} creado`);
+      toast.success(t("settings.team.doctorCreatedToast", { name: `${data.firstName} ${data.lastName}` }));
       router.refresh();
     } catch (err: any) {
       toast.error(err.message);
@@ -559,7 +565,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
       if (!res.ok) throw new Error(data.error);
       setTeam(prev => prev.map(m => m.id === editMember.id ? { ...m, ...form } : m));
       setEditMember(null);
-      toast.success("Datos actualizados");
+      toast.success(t("settings.team.dataUpdated"));
       router.refresh();
     } catch (err: any) {
       toast.error(err.message);
@@ -569,17 +575,17 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
   }
 
   async function toggleActive(m: TeamMember) {
-    if (m.id === currentUserId) { toast.error("No puedes desactivarte"); return; }
+    if (m.id === currentUserId) { toast.error(t("settings.team.cannotDeactivateSelf")); return; }
     try {
       const res = await fetch(`/api/team/${m.id}`, {
         method:"PATCH", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ isActive: !m.isActive }),
       });
       if (!res.ok) throw new Error();
-      setTeam(prev => prev.map(t => t.id === m.id ? { ...t, isActive: !m.isActive } : t));
-      toast.success(m.isActive ? "Doctor desactivado" : "Doctor reactivado");
+      setTeam(prev => prev.map(mem => mem.id === m.id ? { ...mem, isActive: !m.isActive } : mem));
+      toast.success(m.isActive ? t("settings.team.doctorDeactivated") : t("settings.team.doctorReactivated"));
       router.refresh();
-    } catch { toast.error("Error"); }
+    } catch { toast.error(t("common.genericError")); }
   }
 
   // Reset de contraseña vía Supabase Admin API. Solo SUPER_ADMIN, target
@@ -589,50 +595,50 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
   async function resetPassword(m: TeamMember) {
     if (!isSuperAdmin) return;
     if (m.role === "SUPER_ADMIN") {
-      toast.error("No se puede resetear contraseña de un SUPER_ADMIN");
+      toast.error(t("settings.team.cannotResetSuperAdmin"));
       return;
     }
     if (!(await askConfirm({
-      title: `¿Resetear contraseña de ${m.firstName} ${m.lastName}?`,
-      description: "Se genera una contraseña temporal nueva. La actual deja de funcionar al instante. Tendrás que entregársela al usuario por canal seguro — solo se muestra una vez.",
+      title: t("settings.team.resetPasswordConfirmTitle", { name: `${m.firstName} ${m.lastName}` }),
+      description: t("settings.team.resetPasswordConfirmDesc"),
       variant: "danger",
-      confirmText: "Resetear contraseña",
+      confirmText: t("settings.team.resetPasswordBtn"),
     }))) return;
 
     try {
       const res = await fetch(`/api/team/${m.id}/reset-password`, { method: "POST" });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Error al resetear contraseña");
+      if (!res.ok) throw new Error(data.error ?? t("settings.team.resetPasswordError"));
       // Cerramos el modal de edit y mostramos el banner amarillo de tempPassword
       // (mismo componente que se usa cuando se crea un doctor nuevo).
       setEditMember(null);
       setTempPass(data.tempPassword ?? null);
       setTempPassMode(data.tempPassword ? "reset" : null);
       setTempPassFor(`${m.firstName} ${m.lastName}`);
-      toast.success(`Contraseña reseteada para ${m.firstName} ${m.lastName}`);
+      toast.success(t("settings.team.passwordResetForToast", { name: `${m.firstName} ${m.lastName}` }));
     } catch (err: any) {
-      toast.error(err.message ?? "Error al resetear contraseña");
+      toast.error(err.message ?? t("settings.team.resetPasswordError"));
     }
   }
 
   async function deleteMember(m: TeamMember) {
-    if (m.id === currentUserId) { toast.error("No puedes eliminarte"); return; }
+    if (m.id === currentUserId) { toast.error(t("settings.team.cannotDeleteSelf")); return; }
     if (!(await askConfirm({
-      title: `¿Eliminar a ${m.firstName} ${m.lastName}?`,
-      description: "Si tiene citas o registros, será desactivado en lugar de eliminado.",
+      title: t("settings.team.deleteConfirmTitle", { name: `${m.firstName} ${m.lastName}` }),
+      description: t("settings.team.deleteConfirmDesc"),
       variant: "danger",
-      confirmText: "Eliminar",
+      confirmText: t("common.delete"),
     }))) return;
     try {
       const res = await fetch(`/api/team/${m.id}`, { method:"DELETE" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       if (data.deactivated) {
-        setTeam(prev => prev.map(t => t.id === m.id ? { ...t, isActive:false } : t));
-        toast.success("Doctor desactivado (tiene registros)");
+        setTeam(prev => prev.map(mem => mem.id === m.id ? { ...mem, isActive:false } : mem));
+        toast.success(t("settings.team.doctorDeactivatedHasRecords"));
       } else {
-        setTeam(prev => prev.filter(t => t.id !== m.id));
-        toast.success("Doctor eliminado");
+        setTeam(prev => prev.filter(mem => mem.id !== m.id));
+        toast.success(t("settings.team.doctorDeleted"));
       }
       router.refresh();
     } catch (err: any) { toast.error(err.message); }
@@ -663,14 +669,14 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
         <div>
           <h1 style={{ fontSize: "clamp(16px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
-            Equipo médico
+            {t("settings.team.title")}
           </h1>
           <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
-            {clinicName} · {active} miembro{active !== 1 ? "s" : ""} activo{active !== 1 ? "s" : ""}
+            {clinicName} · {t("settings.team.activeMembersCount", { count: active })}
           </p>
         </div>
         <ButtonNew variant="primary" icon={<Plus size={14} />} onClick={() => { setForm(emptyForm()); setShowNew(true); }}>
-          Invitar miembro
+          {t("settings.team.inviteMember")}
         </ButtonNew>
       </div>
 
@@ -688,13 +694,15 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: "#fcd34d", marginBottom: 4 }}>
                 {tempPassMode === "reset"
-                  ? `Contraseña reseteada${tempPassFor ? ` — ${tempPassFor}` : ""}`
-                  : `Doctor creado — contraseña temporal`}
+                  ? (tempPassFor
+                      ? t("settings.team.bannerResetTitleNamed", { name: tempPassFor })
+                      : t("settings.team.bannerResetTitle"))
+                  : t("settings.team.bannerCreateTitle")}
               </div>
               <div style={{ fontSize: 11, color: "#fcd34d", opacity: 0.8, marginBottom: 10 }}>
                 {tempPassMode === "reset"
-                  ? "Comparte esta contraseña con el usuario por canal seguro. La anterior ya no funciona. Solo se muestra una vez — si la pierdes, hay que resetear de nuevo."
-                  : "Comparte esta contraseña con el doctor. Puede cambiarla en Configuración → Seguridad."}
+                  ? t("settings.team.bannerResetDesc")
+                  : t("settings.team.bannerCreateDesc")}
               </div>
               <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                 <code className="mono" style={{
@@ -706,7 +714,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                   letterSpacing: 2,
                 }}>{tempPass}</code>
                 <ButtonNew variant="secondary" size="sm" onClick={copyPass} icon={copied ? <Check size={12} /> : <Copy size={12} />}>
-                  {copied ? "Copiado" : "Copiar"}
+                  {copied ? t("settings.team.copied") : t("settings.team.copy")}
                 </ButtonNew>
               </div>
             </div>
@@ -714,7 +722,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
               onClick={() => { setTempPass(null); setTempPassMode(null); setTempPassFor(""); }}
               type="button"
               className="btn-new btn-new--ghost btn-new--sm"
-              aria-label="Cerrar"
+              aria-label={t("common.close")}
             >
               <X size={12} />
             </button>
@@ -724,10 +732,10 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
 
       {/* Stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginBottom: 20 }}>
-        <KpiCard label="Total activos"      value={String(active)}   icon={UsersIcon} />
-        <KpiCard label="Doctores"           value={String(doctors)}  icon={Stethoscope} />
-        <KpiCard label="Administradores"    value={String(admins)}   icon={Shield} />
-        <KpiCard label="Total miembros"     value={String(team.length)} icon={UsersIcon} />
+        <KpiCard label={t("settings.team.kpiTotalActive")}  value={String(active)}   icon={UsersIcon} />
+        <KpiCard label={t("settings.team.kpiDoctors")}      value={String(doctors)}  icon={Stethoscope} />
+        <KpiCard label={t("settings.team.kpiAdmins")}       value={String(admins)}   icon={Shield} />
+        <KpiCard label={t("settings.team.kpiTotalMembers")} value={String(team.length)} icon={UsersIcon} />
       </div>
 
       {/* Filter */}
@@ -740,7 +748,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
               onClick={() => setFilter(f)}
               className={`segment-new__btn ${filter === f ? "segment-new__btn--active" : ""}`}
             >
-              {f === "active" ? "Activos" : f === "all" ? "Todos" : "Inactivos"}
+              {f === "active" ? t("settings.team.filterActive") : f === "all" ? t("common.all") : t("settings.team.filterInactive")}
             </button>
           ))}
         </div>
@@ -751,7 +759,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
         <CardNew>
           <div style={{ padding: 40, textAlign: "center" }}>
             <UsersIcon size={32} style={{ color: "var(--text-4)", margin: "0 auto 12px" }} />
-            <p style={{ color: "var(--text-2)", fontSize: 14, fontWeight: 500 }}>No hay miembros</p>
+            <p style={{ color: "var(--text-2)", fontSize: 14, fontWeight: 500 }}>{t("settings.team.noMembers")}</p>
             <div style={{ marginTop: 12 }}>
               <ButtonNew
                 variant="primary"
@@ -759,7 +767,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                 icon={<Plus size={14} />}
                 onClick={() => { setForm(emptyForm()); setShowNew(true); }}
               >
-                Agregar primer doctor
+                {t("settings.team.addFirstDoctor")}
               </ButtonNew>
             </div>
           </div>
@@ -775,7 +783,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                   <MemberPhoto
                     member={m}
                     onChange={url =>
-                      setTeam(prev => prev.map(t => (t.id === m.id ? { ...t, avatarUrl: url } : t)))
+                      setTeam(prev => prev.map(mem => (mem.id === m.id ? { ...mem, avatarUrl: url } : mem)))
                     }
                   />
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 12, flexWrap: "wrap", justifyContent: "center" }}>
@@ -783,7 +791,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                       {fullName}
                     </h3>
                     {m.id === currentUserId && (
-                      <span className="tag-new" style={{ color: "#c4b5fd", borderColor: "rgba(124,58,237,0.2)", background: "var(--brand-soft)" }}>Tú</span>
+                      <span className="tag-new" style={{ color: "#c4b5fd", borderColor: "rgba(124,58,237,0.2)", background: "var(--brand-soft)" }}>{t("settings.team.youTag")}</span>
                     )}
                   </div>
                   <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>{m.email}</div>
@@ -791,8 +799,8 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                     <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>{m.specialty}</div>
                   )}
                   <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
-                    <BadgeNew tone={roleCfg.tone} dot>{roleCfg.label}</BadgeNew>
-                    {!m.isActive && <BadgeNew tone="danger" dot>Inactivo</BadgeNew>}
+                    <BadgeNew tone={roleCfg.tone} dot>{t(roleCfg.labelKey)}</BadgeNew>
+                    {!m.isActive && <BadgeNew tone="danger" dot>{t("settings.team.inactiveBadge")}</BadgeNew>}
                   </div>
 
                   {m.services?.length > 0 && (
@@ -817,13 +825,13 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                     width: "100%",
                   }}>
                     <div>
-                      <div style={{ fontSize: 9, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Citas</div>
+                      <div style={{ fontSize: 9, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{t("settings.team.statsAppointments")}</div>
                       <div className="mono" style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)", marginTop: 2 }}>
                         {m._count.appointments}
                       </div>
                     </div>
                     <div>
-                      <div style={{ fontSize: 9, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Expedientes</div>
+                      <div style={{ fontSize: 9, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{t("settings.team.statsRecords")}</div>
                       <div className="mono" style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)", marginTop: 2 }}>
                         {m._count.records}
                       </div>
@@ -833,7 +841,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                   {/* Actions */}
                   <div style={{ display: "flex", gap: 6, marginTop: 14, justifyContent: "center", flexWrap: "wrap" }}>
                     <ButtonNew size="sm" variant="secondary" icon={<Edit size={12} />} onClick={() => openEdit(m)}>
-                      Editar
+                      {t("common.edit")}
                     </ButtonNew>
                     {/* Permisos: solo visible para SUPER_ADMIN, y NO sobre otros
                      *  SUPER_ADMIN (defensa contra lock-out cruzado en endpoint).
@@ -846,7 +854,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                         icon={<ShieldCheck size={12} />}
                         onClick={() => setPermsMember(m)}
                       >
-                        Permisos
+                        {t("settings.team.permissions")}
                       </ButtonNew>
                     )}
                     {m.id !== currentUserId && (
@@ -856,7 +864,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                           onClick={() => toggleActive(m)}
                           className="btn-new btn-new--ghost btn-new--sm"
                           style={{ padding: 0, width: 28 }}
-                          title={m.isActive ? "Desactivar" : "Activar"}
+                          title={m.isActive ? t("settings.team.deactivateTitle") : t("settings.team.activateTitle")}
                         >
                           {m.isActive ? <UserX size={12} /> : <UserCheck size={12} />}
                         </button>
@@ -865,7 +873,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
                           onClick={() => deleteMember(m)}
                           className="btn-new btn-new--ghost btn-new--sm"
                           style={{ padding: 0, width: 28 }}
-                          title="Eliminar"
+                          title={t("common.delete")}
                         >
                           <Trash2 size={12} />
                         </button>
@@ -886,7 +894,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
           onClick={e => { if (e.target === e.currentTarget) setShowNew(false); }}>
           <div className="bg-card rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-card z-10">
-              <h2 className="text-lg font-bold">Agregar doctor</h2>
+              <h2 className="text-lg font-bold">{t("settings.team.addDoctorTitle")}</h2>
               <button onClick={() => setShowNew(false)} className="p-1.5 rounded-xl hover:bg-muted">
                 <X className="w-5 h-5"/>
               </button>
@@ -907,7 +915,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
           onClick={e => { if (e.target === e.currentTarget) setEditMember(null); }}>
           <div className="bg-card rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-card z-10">
-              <h2 className="text-lg font-bold">Editar — {editMember.firstName} {editMember.lastName}</h2>
+              <h2 className="text-lg font-bold">{t("settings.team.editTitle", { name: `${editMember.firstName} ${editMember.lastName}` })}</h2>
               <button onClick={() => setEditMember(null)} className="p-1.5 rounded-xl hover:bg-muted">
                 <X className="w-5 h-5"/>
               </button>

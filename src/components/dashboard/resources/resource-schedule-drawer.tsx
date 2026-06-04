@@ -5,6 +5,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import toast from "react-hot-toast";
 import { X, Copy, Plus, Trash2, Clock } from "lucide-react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { useT } from "@/i18n/i18n-provider";
 import {
   getResourceSchedule,
   saveResourceSchedule,
@@ -23,7 +24,16 @@ interface Props {
   onClose: () => void;
 }
 
-const DAY_LABELS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+// Maps each weekday index to a translation key; resolved via t() at render time.
+const DAY_LABEL_KEYS = [
+  "procurement.resScheduleDrawer.dayMonday",
+  "procurement.resScheduleDrawer.dayTuesday",
+  "procurement.resScheduleDrawer.dayWednesday",
+  "procurement.resScheduleDrawer.dayThursday",
+  "procurement.resScheduleDrawer.dayFriday",
+  "procurement.resScheduleDrawer.daySaturday",
+  "procurement.resScheduleDrawer.daySunday",
+];
 
 function emptyWeek(): WeekScheduleDTO {
   return {
@@ -53,6 +63,7 @@ function isApiError(err: unknown): err is ApiError {
 }
 
 export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
+  const t = useT();
   const askConfirm = useConfirm();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -66,7 +77,7 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
       setAlwaysOpen(body.alwaysOpen);
       setWeek(body.schedule ?? emptyWeek());
     } catch {
-      toast.error("No se pudo cargar el horario");
+      toast.error(t("procurement.resScheduleDrawer.loadError"));
     } finally {
       setLoading(false);
     }
@@ -124,22 +135,22 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
   async function clearSchedule() {
     if (!resource) return;
     const confirmed = await askConfirm({
-      title: "¿Borrar horario?",
-      description: "Este recurso volverá a estar disponible 24/7. Las citas existentes no se modifican.",
+      title: t("procurement.resScheduleDrawer.clearConfirmTitle"),
+      description: t("procurement.resScheduleDrawer.clearConfirmDesc"),
       variant: "warning",
-      confirmText: "Borrar horario",
+      confirmText: t("procurement.resScheduleDrawer.clearConfirmAction"),
     });
     if (!confirmed) return;
     setSaving(true);
     try {
       await saveResourceSchedule(resource.id, null);
-      toast.success("Horario eliminado");
+      toast.success(t("procurement.resScheduleDrawer.clearSuccess"));
       setAlwaysOpen(true);
       setWeek(emptyWeek());
     } catch (err) {
       const reason = isApiError(err)
-        ? err.reason ?? err.error ?? "No se pudo guardar"
-        : "No se pudo guardar";
+        ? err.reason ?? err.error ?? t("procurement.resScheduleDrawer.saveError")
+        : t("procurement.resScheduleDrawer.saveError");
       toast.error(reason);
     } finally {
       setSaving(false);
@@ -151,13 +162,14 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
     // Client-side validation for the most common mistakes — server also validates.
     for (let d = 0; d <= 6; d++) {
       const windows = week.days[d as 0 | 1 | 2 | 3 | 4 | 5 | 6];
+      const dayLabel = t(DAY_LABEL_KEYS[d]!);
       for (const w of windows) {
         if (!isHHMM(w.startTime) || !isHHMM(w.endTime)) {
-          toast.error(`${DAY_LABELS[d]}: formato de hora inválido (usa HH:MM)`);
+          toast.error(t("procurement.resScheduleDrawer.invalidTimeFormat", { day: dayLabel }));
           return;
         }
         if (w.startTime >= w.endTime) {
-          toast.error(`${DAY_LABELS[d]}: la hora de inicio debe ser menor que la de fin`);
+          toast.error(t("procurement.resScheduleDrawer.startBeforeEnd", { day: dayLabel }));
           return;
         }
       }
@@ -165,7 +177,7 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
       const sorted = [...windows].sort((a, b) => a.startTime.localeCompare(b.startTime));
       for (let i = 1; i < sorted.length; i++) {
         if (sorted[i]!.startTime < sorted[i - 1]!.endTime) {
-          toast.error(`${DAY_LABELS[d]}: las ventanas se solapan`);
+          toast.error(t("procurement.resScheduleDrawer.windowsOverlap", { day: dayLabel }));
           return;
         }
       }
@@ -176,12 +188,12 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
       const body = await saveResourceSchedule(resource.id, week);
       setAlwaysOpen(body.alwaysOpen);
       setWeek(body.schedule ?? emptyWeek());
-      toast.success("Horario guardado");
+      toast.success(t("procurement.resScheduleDrawer.saveSuccess"));
       onClose();
     } catch (err) {
       const reason = isApiError(err)
-        ? err.reason ?? err.error ?? "No se pudo guardar"
-        : "No se pudo guardar";
+        ? err.reason ?? err.error ?? t("procurement.resScheduleDrawer.saveError")
+        : t("procurement.resScheduleDrawer.saveError");
       toast.error(reason);
     } finally {
       setSaving(false);
@@ -198,10 +210,10 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
               <Clock size={18} className={styles.headerIcon} aria-hidden />
               <div>
                 <Dialog.Title className={styles.title}>
-                  Horario · {resource?.name ?? ""}
+                  {t("procurement.resScheduleDrawer.title")} · {resource?.name ?? ""}
                 </Dialog.Title>
                 <p className={styles.subtitle}>
-                  Define en qué días y franjas horarias este recurso está disponible.
+                  {t("procurement.resScheduleDrawer.subtitle")}
                 </p>
               </div>
             </div>
@@ -209,7 +221,7 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
               <button
                 type="button"
                 className={styles.closeBtn}
-                aria-label="Cerrar"
+                aria-label={t("common.close")}
                 disabled={saving}
               >
                 <X size={16} />
@@ -219,20 +231,19 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
 
           <div className={styles.body}>
             {loading ? (
-              <div className={styles.loading}>Cargando…</div>
+              <div className={styles.loading}>{t("common.loading")}</div>
             ) : alwaysOpen && week.days[0].length === 0 ? (
               <div className={styles.banner}>
-                <div className={styles.bannerTitle}>Disponible siempre</div>
+                <div className={styles.bannerTitle}>{t("procurement.resScheduleDrawer.alwaysAvailableTitle")}</div>
                 <div className={styles.bannerText}>
-                  Este recurso no tiene horario configurado: la agenda lo trata como disponible 24/7.
-                  Agrega un horario para limitar a franjas específicas.
+                  {t("procurement.resScheduleDrawer.alwaysAvailableText")}
                 </div>
                 <button
                   type="button"
                   className={styles.bannerBtn}
                   onClick={enableSchedule}
                 >
-                  Configurar horario
+                  {t("procurement.resScheduleDrawer.configureSchedule")}
                 </button>
               </div>
             ) : (
@@ -242,28 +253,29 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
                     type="button"
                     className={styles.quickBtn}
                     onClick={copyMondayToWeekdays}
-                    title="Copiar el horario del lunes a martes-viernes"
+                    title={t("procurement.resScheduleDrawer.copyMondayTitle")}
                   >
-                    <Copy size={12} /> Copiar Lunes a L-V
+                    <Copy size={12} /> {t("procurement.resScheduleDrawer.copyMonday")}
                   </button>
                 </div>
 
-                {DAY_LABELS.map((label, dIdx) => {
+                {DAY_LABEL_KEYS.map((labelKey, dIdx) => {
+                  const label = t(labelKey);
                   const day = dIdx as 0 | 1 | 2 | 3 | 4 | 5 | 6;
                   const windows = week.days[day];
                   return (
-                    <div key={label} className={styles.dayBlock}>
+                    <div key={labelKey} className={styles.dayBlock}>
                       <div className={styles.dayHead}>
                         <span className={styles.dayLabel}>{label}</span>
                         {windows.length === 0 && (
-                          <span className={styles.closedBadge}>Cerrado</span>
+                          <span className={styles.closedBadge}>{t("procurement.resScheduleDrawer.closed")}</span>
                         )}
                         <button
                           type="button"
                           className={styles.addWindowBtn}
                           onClick={() => addWindow(day)}
                         >
-                          <Plus size={11} /> Añadir
+                          <Plus size={11} /> {t("common.add")}
                         </button>
                       </div>
                       {windows.length > 0 && (
@@ -277,7 +289,7 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
                                 onChange={(e) =>
                                   updateWindow(day, i, { startTime: e.target.value })
                                 }
-                                aria-label={`${label} ventana ${i + 1} inicio`}
+                                aria-label={t("procurement.resScheduleDrawer.windowStartAria", { day: label, n: i + 1 })}
                               />
                               <span className={styles.windowArrow}>→</span>
                               <input
@@ -287,14 +299,14 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
                                 onChange={(e) =>
                                   updateWindow(day, i, { endTime: e.target.value })
                                 }
-                                aria-label={`${label} ventana ${i + 1} fin`}
+                                aria-label={t("procurement.resScheduleDrawer.windowEndAria", { day: label, n: i + 1 })}
                               />
                               <button
                                 type="button"
                                 className={styles.removeWindowBtn}
                                 onClick={() => removeWindow(day, i)}
-                                aria-label={`Eliminar ventana ${i + 1}`}
-                                title="Eliminar ventana"
+                                aria-label={t("procurement.resScheduleDrawer.removeWindowAria", { n: i + 1 })}
+                                title={t("procurement.resScheduleDrawer.removeWindowTitle")}
                               >
                                 <Trash2 size={12} />
                               </button>
@@ -317,7 +329,7 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
                 onClick={() => void clearSchedule()}
                 disabled={saving}
               >
-                Borrar horario (24/7)
+                {t("procurement.resScheduleDrawer.clearSchedule")}
               </button>
             )}
             <div className={styles.footerRight}>
@@ -327,7 +339,7 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
                 onClick={onClose}
                 disabled={saving}
               >
-                Cancelar
+                {t("common.cancel")}
               </button>
               <button
                 type="button"
@@ -335,7 +347,7 @@ export function ResourceScheduleDrawer({ resource, isOpen, onClose }: Props) {
                 onClick={() => void handleSave()}
                 disabled={saving || loading || alwaysOpen}
               >
-                {saving ? "Guardando…" : "Guardar horario"}
+                {saving ? t("common.saving") : t("procurement.resScheduleDrawer.saveSchedule")}
               </button>
             </div>
           </div>

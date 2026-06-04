@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { CardNew, ButtonNew, BadgeNew, KpiCard } from "@/components/ui/design-system";
 import { fmtMXN } from "@/lib/format";
+import { useT } from "@/i18n/i18n-provider";
 
 interface SupplierData {
   id: string;
@@ -72,11 +73,12 @@ interface DetailInfo {
 
 /** Fila de 5 estrellas (relleno hasta el redondeo del valor). */
 function StarRow({ value, size = 15 }: { value: number; size?: number }) {
+  const t = useT();
   const rounded = Math.round(value);
   return (
     <span
       style={{ display: "inline-flex", gap: 2, lineHeight: 0 }}
-      aria-label={`${value.toFixed(1)} de 5 estrellas`}
+      aria-label={t("procurement.supplierDetail.starsOf5", { rating: value.toFixed(1) })}
     >
       {[1, 2, 3, 4, 5].map((i) => (
         <Star
@@ -159,6 +161,7 @@ function ProductCard({
   onAdd: () => void;
   loading: boolean;
 }) {
+  const t = useT();
   const [imgError, setImgError] = useState(false);
   const [hover, setHover] = useState(false);
   const outOfStock = product.stock === 0;
@@ -249,7 +252,7 @@ function ProductCard({
         )}
 
         <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginTop: "auto" }}>
-          <span style={{ color: "var(--text-3)", fontSize: 12 }}>desde</span>
+          <span style={{ color: "var(--text-3)", fontSize: 12 }}>{t("procurement.supplierDetail.priceFrom")}</span>
           <span style={{ color: "var(--text-1)", fontWeight: 700, fontSize: 18 }}>
             {fmtMXN(product.price)}
           </span>
@@ -259,15 +262,15 @@ function ProductCard({
         <div>
           {outOfStock ? (
             <BadgeNew tone="danger" dot>
-              Sin stock
+              {t("procurement.supplierDetail.stockOut")}
             </BadgeNew>
           ) : product.stock <= 5 ? (
             <BadgeNew tone="warning" dot>
-              Pocas piezas
+              {t("procurement.supplierDetail.stockLow")}
             </BadgeNew>
           ) : (
             <BadgeNew tone="success" dot>
-              Disponible
+              {t("procurement.supplierDetail.stockAvailable")}
             </BadgeNew>
           )}
         </div>
@@ -284,7 +287,7 @@ function ProductCard({
           >
             <button
               type="button"
-              aria-label="Disminuir cantidad"
+              aria-label={t("procurement.supplierDetail.decreaseQty")}
               disabled={outOfStock || qty <= 1}
               onClick={() => onQty(Math.max(1, qty - 1))}
               style={{
@@ -315,7 +318,7 @@ function ProductCard({
             </span>
             <button
               type="button"
-              aria-label="Aumentar cantidad"
+              aria-label={t("procurement.supplierDetail.increaseQty")}
               disabled={outOfStock || qty >= product.stock}
               onClick={() => onQty(Math.min(product.stock, qty + 1))}
               style={{
@@ -344,7 +347,7 @@ function ProductCard({
               onClick={onAdd}
               style={{ width: "100%" }}
             >
-              Agregar
+              {t("common.add")}
             </ButtonNew>
           </div>
         </div>
@@ -354,6 +357,7 @@ function ProductCard({
 }
 
 export function SupplierDetailClient({ supplier, products }: SupplierDetailClientProps) {
+  const t = useT();
   const [qty, setQty] = useState<Record<string, number>>({});
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [logoError, setLogoError] = useState(false);
@@ -407,10 +411,10 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
       const j = await res.json().catch(() => ({}));
       const next = typeof j.isFavorite === "boolean" ? j.isFavorite : !prev;
       setInfo((cur) => (cur ? { ...cur, isFavorite: next } : cur));
-      toast.success(next ? "Agregado a favoritos" : "Quitado de favoritos");
+      toast.success(next ? t("procurement.supplierDetail.toastFavAdded") : t("procurement.supplierDetail.toastFavRemoved"));
     } catch {
       setInfo((cur) => (cur ? { ...cur, isFavorite: prev } : cur)); // revertir
-      toast.error("No se pudo actualizar el favorito");
+      toast.error(t("procurement.supplierDetail.toastFavError"));
     } finally {
       setFavBusy(false);
     }
@@ -431,14 +435,14 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        throw new Error(j.error || "No se pudo enviar la reseña");
+        throw new Error(j.error || t("procurement.supplierDetail.toastReviewError"));
       }
-      toast.success("¡Gracias por tu reseña!");
+      toast.success(t("procurement.supplierDetail.toastReviewThanks"));
       setRevComment("");
       setRevRating(5);
       await loadInfo(); // refresca reseñas + canReview + reputación
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Error al enviar la reseña";
+      const msg = err instanceof Error ? err.message : t("procurement.supplierDetail.toastReviewErrorGeneric");
       toast.error(msg);
     } finally {
       setRevSubmitting(false);
@@ -468,12 +472,12 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        throw new Error(j.error || "No se pudo agregar al carrito");
+        throw new Error(j.error || t("procurement.supplierDetail.toastCartError"));
       }
-      toast.success("Agregado al carrito");
+      toast.success(t("procurement.supplierDetail.toastCartAdded"));
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Error al agregar al carrito";
-      toast.error(msg || "Error al agregar al carrito");
+      const msg = e instanceof Error ? e.message : t("procurement.supplierDetail.toastCartErrorGeneric");
+      toast.error(msg || t("procurement.supplierDetail.toastCartErrorGeneric"));
     } finally {
       setLoadingId(null);
     }
@@ -495,7 +499,7 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
         }}
       >
         <ArrowLeft size={14} />
-        Proveedores
+        {t("procurement.supplierDetail.backToSuppliers")}
       </Link>
 
       {/* Encabezado de la ficha (hero con glow violeta) */}
@@ -599,7 +603,7 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
               )}
               <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
                 <Boxes size={13} />
-                {products.length} producto{products.length === 1 ? "" : "s"}
+                {t("procurement.supplierDetail.productCount", { count: products.length })}
               </span>
               {ratingCount > 0 && (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -637,12 +641,12 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
             onClick={toggleFavorite}
             disabled={favBusy || !info}
             aria-pressed={isFavorite}
-            aria-label={isFavorite ? "Quitar de favoritos" : "Agregar a favoritos"}
+            aria-label={isFavorite ? t("procurement.supplierDetail.removeFavorite") : t("procurement.supplierDetail.addFavorite")}
             className="btn-new btn-new--secondary"
             style={{ color: isFavorite ? "#e11d48" : undefined, opacity: favBusy || !info ? 0.6 : 1 }}
           >
             <Heart size={14} fill={isFavorite ? "#e11d48" : "none"} />
-            {isFavorite ? "En favoritos" : "Favorito"}
+            {isFavorite ? t("procurement.supplierDetail.inFavorites") : t("procurement.supplierDetail.favorite")}
           </button>
           <Link
             href={`/dashboard/proveedor-chat/${supplier.id}`}
@@ -650,7 +654,7 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
             style={{ textDecoration: "none" }}
           >
             <MessageCircle size={14} />
-            Chatear
+            {t("procurement.supplierDetail.chat")}
           </Link>
           <Link
             href="/dashboard/compras"
@@ -658,7 +662,7 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
             style={{ textDecoration: "none" }}
           >
             <ShoppingCart size={14} />
-            Ver carrito
+            {t("procurement.supplierDetail.viewCart")}
           </Link>
         </div>
       </div>
@@ -672,10 +676,10 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
           marginBottom: 16,
         }}
       >
-        <KpiCard label="Productos" value={String(products.length)} icon={Boxes} />
-        <KpiCard label="Disponibles" value={String(availableCount)} icon={CheckCircle2} />
+        <KpiCard label={t("procurement.supplierDetail.kpiProducts")} value={String(products.length)} icon={Boxes} />
+        <KpiCard label={t("procurement.supplierDetail.kpiAvailable")} value={String(availableCount)} icon={CheckCircle2} />
         <KpiCard
-          label="Desde"
+          label={t("procurement.supplierDetail.kpiFrom")}
           value={minPrice != null ? fmtMXN(minPrice) : "—"}
           icon={DollarSign}
         />
@@ -714,7 +718,7 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
           >
             <Store size={15} />
           </span>
-          Datos de contacto
+          {t("procurement.supplierDetail.contactInfo")}
           <span className="form-section__rule" />
         </div>
 
@@ -755,7 +759,7 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
                   style={{ ...contactItemStyle, color: "var(--brand)", textDecoration: "none" }}
                 >
                   <Navigation size={14} />
-                  Ver en Google Maps
+                  {t("procurement.supplierDetail.viewOnMaps")}
                 </a>
               )}
               {supplier.whatsapp && (
@@ -777,7 +781,7 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
                   style={{ ...contactItemStyle, color: "var(--brand)", textDecoration: "none" }}
                 >
                   <Globe size={14} />
-                  Sitio web
+                  {t("procurement.supplierDetail.website")}
                 </a>
               )}
             </div>
@@ -789,7 +793,7 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
               {supplier.minOrderAmount != null && (
                 <span style={contactItemStyle}>
                   <DollarSign size={14} style={{ color: "var(--text-3)" }} />
-                  Pedido mínimo:&nbsp;
+                  {t("procurement.supplierDetail.minOrder")}&nbsp;
                   <strong style={{ color: "var(--text-1)", fontWeight: 600 }}>
                     {fmtMXN(supplier.minOrderAmount)}
                   </strong>
@@ -806,7 +810,7 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
 
           {supplier.paymentMethods.length > 0 && (
             <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-              <span style={{ color: "var(--text-3)", fontSize: 13 }}>Métodos de pago:</span>
+              <span style={{ color: "var(--text-3)", fontSize: 13 }}>{t("procurement.supplierDetail.paymentMethods")}</span>
               {supplier.paymentMethods.map((m) => (
                 <BadgeNew key={m} tone="neutral">
                   {m}
@@ -844,7 +848,7 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
               margin: 0,
             }}
           >
-            Productos
+            {t("procurement.supplierDetail.productsHeading")}
           </h2>
           <span style={{ color: "var(--text-3)", fontSize: 13 }}>({products.length})</span>
         </div>
@@ -876,7 +880,7 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
                 <Package size={26} />
               </div>
               <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>
-                Aún sin productos publicados
+                {t("procurement.supplierDetail.emptyProductsTitle")}
               </div>
               <p
                 style={{
@@ -887,8 +891,7 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
                   lineHeight: 1.5,
                 }}
               >
-                Este proveedor aún no tiene productos en su catálogo. Vuelve más tarde o
-                escríbele directamente para consultar disponibilidad.
+                {t("procurement.supplierDetail.emptyProductsText")}
               </p>
             </div>
           </CardNew>
@@ -941,7 +944,7 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
               margin: 0,
             }}
           >
-            Reseñas
+            {t("procurement.supplierDetail.reviewsHeading")}
           </h2>
           {ratingCount > 0 && (
             <span
@@ -976,12 +979,11 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
                 }}
               />
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>Deja tu reseña</div>
+                <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>{t("procurement.supplierDetail.reviewFormTitle")}</div>
                 <p style={{ color: "var(--text-3)", fontSize: 13, margin: 0, lineHeight: 1.5 }}>
-                  Tienes un pedido entregado con este proveedor. Cuéntale a otras clínicas cómo fue tu
-                  experiencia.
+                  {t("procurement.supplierDetail.reviewFormSubtitle")}
                 </p>
-                <div style={{ display: "inline-flex", gap: 4 }} role="radiogroup" aria-label="Calificación">
+                <div style={{ display: "inline-flex", gap: 4 }} role="radiogroup" aria-label={t("procurement.supplierDetail.ratingLabel")}>
                   {[1, 2, 3, 4, 5].map((i) => {
                     const on = (revHover || revRating) >= i;
                     return (
@@ -992,7 +994,7 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
                         onMouseEnter={() => setRevHover(i)}
                         onMouseLeave={() => setRevHover(0)}
                         role="radio"
-                        aria-label={`${i} estrella${i === 1 ? "" : "s"}`}
+                        aria-label={t("procurement.supplierDetail.starCount", { count: i })}
                         aria-checked={revRating === i}
                         style={{
                           background: "transparent",
@@ -1011,8 +1013,8 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
                 <textarea
                   value={revComment}
                   onChange={(e) => setRevComment(e.target.value)}
-                  aria-label="Escribe tu reseña"
-                  placeholder="Cuéntanos sobre la calidad, el envío y la atención (opcional)"
+                  aria-label={t("procurement.supplierDetail.reviewTextareaLabel")}
+                  placeholder={t("procurement.supplierDetail.reviewTextareaPlaceholder")}
                   rows={3}
                   style={{
                     width: "100%",
@@ -1035,7 +1037,7 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
                     disabled={revSubmitting}
                     onClick={submitReview}
                   >
-                    {revSubmitting ? "Enviando…" : "Enviar reseña"}
+                    {revSubmitting ? t("procurement.supplierDetail.reviewSending") : t("procurement.supplierDetail.reviewSubmit")}
                   </ButtonNew>
                 </div>
               </div>
@@ -1077,7 +1079,7 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
                     </span>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>
-                        {r.clinicName ?? "Clínica"}
+                        {r.clinicName ?? t("procurement.supplierDetail.clinicFallback")}
                       </div>
                       <StarRow value={r.rating} size={13} />
                     </div>
@@ -1103,7 +1105,7 @@ export function SupplierDetailClient({ supplier, products }: SupplierDetailClien
             <div
               style={{ padding: "32px 24px", textAlign: "center", color: "var(--text-3)", fontSize: 13 }}
             >
-              {info ? "Este proveedor aún no tiene reseñas." : "Cargando reseñas…"}
+              {info ? t("procurement.supplierDetail.noReviewsYet") : t("procurement.supplierDetail.loadingReviews")}
             </div>
           </CardNew>
         )}

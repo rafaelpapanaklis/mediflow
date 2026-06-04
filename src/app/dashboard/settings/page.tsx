@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { SettingsClient } from "./settings-client";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
+import { getServerT } from "@/i18n/server";
 
 export const metadata: Metadata = { title: "Configuración — MediFlow" };
 
@@ -16,6 +17,7 @@ interface Props {
 export default async function SettingsPage({ searchParams }: Props) {
   const user = await getCurrentUser();
   requirePermissionOrRedirect(user, "settings.view");
+  const { t } = await getServerT();
 
   const clinic = await prisma.clinic.findUnique({
     where:   { id: user.clinicId },
@@ -29,7 +31,7 @@ export default async function SettingsPage({ searchParams }: Props) {
   });
 
   return (
-    <ErrorBoundary fallbackTitle="Error al cargar configuración">
+    <ErrorBoundary fallbackTitle={t("settings.page.errorBoundaryTitle")}>
       <SettingsClient
         user={user as any}
         clinic={clinic as any}

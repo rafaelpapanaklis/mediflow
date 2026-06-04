@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { ShieldCheck, Upload, AlertTriangle, Check } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 interface CertInfo {
   id: string;
@@ -23,6 +24,7 @@ interface Props {
 const DAYS_WARN = 30;
 
 export function SignatureClient({ cert }: Props) {
+  const t = useT();
   const router = useRouter();
   const [cerFile, setCerFile] = useState<File | null>(null);
   const [keyFile, setKeyFile] = useState<File | null>(null);
@@ -45,7 +47,7 @@ export function SignatureClient({ cert }: Props) {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!cerFile || !keyFile || !keyPassword) {
-      toast.error("Selecciona .cer + .key e ingresa la contraseña");
+      toast.error(t("settings.signature.selectFilesError"));
       return;
     }
     setSubmitting(true);
@@ -61,17 +63,17 @@ export function SignatureClient({ cert }: Props) {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error ?? "Error al cargar certificado");
+        toast.error(data.error ?? t("settings.signature.uploadError"));
         setSubmitting(false);
         return;
       }
-      toast.success("Certificado FIEL registrado");
+      toast.success(t("settings.signature.uploadSuccess"));
       setCerFile(null); setKeyFile(null); setKeyPassword("");
       if (cerInputRef.current) cerInputRef.current.value = "";
       if (keyInputRef.current) keyInputRef.current.value = "";
       router.refresh();
     } catch (err) {
-      toast.error(`Error: ${String(err)}`);
+      toast.error(`${t("settings.signature.errorPrefix")}: ${String(err)}`);
     } finally {
       setSubmitting(false);
     }
@@ -81,11 +83,10 @@ export function SignatureClient({ cert }: Props) {
     <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 720, margin: "0 auto" }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4, display: "inline-flex", alignItems: "center", gap: 10 }}>
         <ShieldCheck size={20} aria-hidden style={{ color: "var(--brand, #2563eb)" }} />
-        Firma electrónica FIEL/SAT
+        {t("settings.signature.title")}
       </h1>
       <p style={{ fontSize: 13, color: "var(--text-3, #64748b)", marginBottom: 24 }}>
-        Carga tu e.firma del SAT (.cer + .key + contraseña) para firmar digitalmente recetas y notas
-        clínicas con validez legal según LFEA.
+        {t("settings.signature.intro")}
       </p>
 
       {cert && (
@@ -101,25 +102,25 @@ export function SignatureClient({ cert }: Props) {
           <div style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 700, fontSize: 14, marginBottom: 10, color: expired ? "#b91c1c" : expiringSoon ? "#92400e" : "#065f46" }}>
             {expired ? <AlertTriangle size={16} aria-hidden /> : <Check size={16} aria-hidden />}
             {expired
-              ? "Certificado vencido"
+              ? t("settings.signature.statusExpired")
               : expiringSoon
-                ? `Vence en ${daysToExpiry} días — renovar pronto`
-                : "Certificado activo"}
+                ? t("settings.signature.statusExpiringSoon", { count: daysToExpiry ?? 0 })
+                : t("settings.signature.statusActive")}
           </div>
-          <Row label="Serial" value={cert.cerSerial} mono />
-          <Row label="Emisor" value={cert.cerIssuer} />
-          <Row label="RFC titular" value={cert.rfc} mono />
-          <Row label="Válido desde" value={new Date(cert.validFrom).toLocaleDateString("es-MX")} />
-          <Row label="Válido hasta" value={new Date(cert.validUntil).toLocaleDateString("es-MX")} />
+          <Row label={t("settings.signature.rowSerial")} value={cert.cerSerial} mono />
+          <Row label={t("settings.signature.rowIssuer")} value={cert.cerIssuer} />
+          <Row label={t("settings.signature.rowRfc")} value={cert.rfc} mono />
+          <Row label={t("settings.signature.rowValidFrom")} value={new Date(cert.validFrom).toLocaleDateString("es-MX")} />
+          <Row label={t("settings.signature.rowValidUntil")} value={new Date(cert.validUntil).toLocaleDateString("es-MX")} />
         </div>
       )}
 
       <form onSubmit={submit} style={{ background: "var(--bg-elev, #fff)", border: "1px solid var(--border-soft, #e2e8f0)", borderRadius: 12, padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
         <h2 style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>
-          {cert ? "Reemplazar certificado" : "Cargar certificado"}
+          {cert ? t("settings.signature.replaceCert") : t("settings.signature.uploadCert")}
         </h2>
 
-        <Field label=".cer (certificado público SAT, formato DER)" required>
+        <Field label={t("settings.signature.cerLabel")} required>
           <input
             ref={cerInputRef}
             type="file"
@@ -129,7 +130,7 @@ export function SignatureClient({ cert }: Props) {
           />
         </Field>
 
-        <Field label=".key (llave privada SAT, formato DER PKCS#8)" required>
+        <Field label={t("settings.signature.keyLabel")} required>
           <input
             ref={keyInputRef}
             type="file"
@@ -139,13 +140,13 @@ export function SignatureClient({ cert }: Props) {
           />
         </Field>
 
-        <Field label="Contraseña de la llave privada" required>
+        <Field label={t("settings.signature.passwordLabel")} required>
           <input
             type="password"
             value={keyPassword}
             onChange={(e) => setKeyPassword(e.target.value)}
             autoComplete="off"
-            placeholder="Tu contraseña SAT"
+            placeholder={t("settings.signature.passwordPlaceholder")}
             style={{
               padding: "10px 12px",
               border: "1px solid var(--border-soft, #cbd5e1)",
@@ -157,9 +158,7 @@ export function SignatureClient({ cert }: Props) {
         </Field>
 
         <div style={{ fontSize: 11, color: "var(--text-3, #64748b)", lineHeight: 1.5 }}>
-          La contraseña NO se guarda en MediFlow. La .key se cifra con AES-256-GCM
-          usando una clave maestra que vive solo en variables de entorno de Vercel.
-          Cada vez que firmes un documento, se te pedirá la contraseña.
+          {t("settings.signature.securityNote")}
         </div>
 
         <button
@@ -182,7 +181,7 @@ export function SignatureClient({ cert }: Props) {
           }}
         >
           <Upload size={14} aria-hidden />
-          {submitting ? "Cargando…" : (cert ? "Reemplazar certificado" : "Cargar certificado")}
+          {submitting ? t("settings.signature.uploading") : (cert ? t("settings.signature.replaceCert") : t("settings.signature.uploadCert"))}
         </button>
       </form>
     </div>

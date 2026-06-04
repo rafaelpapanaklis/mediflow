@@ -15,6 +15,7 @@ import {
   Heart,
 } from "lucide-react";
 import { BadgeNew, KpiCard } from "@/components/ui/design-system";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Supplier {
   id: string;
@@ -37,12 +38,13 @@ const STAR_COLOR = "#f5b301";
 
 /** Estrellas de calificación + "(nº reseñas)". Sin reseñas → texto atenuado. */
 function StarRating({ rating, count }: { rating: number; count: number }) {
+  const t = useT();
   const rounded = Math.round(rating);
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
       <span
         style={{ display: "inline-flex", gap: 1 }}
-        aria-label={count > 0 ? `${rating.toFixed(1)} de 5 estrellas` : "Sin reseñas"}
+        aria-label={count > 0 ? t("procurement.suppliersClient.starsOf5", { rating: rating.toFixed(1) }) : t("procurement.suppliersClient.noReviews")}
       >
         {[0, 1, 2, 3, 4].map((i) => {
           const on = count > 0 && i < rounded;
@@ -62,7 +64,7 @@ function StarRating({ rating, count }: { rating: number; count: number }) {
           ({count})
         </span>
       ) : (
-        <span style={{ fontSize: 12, color: "var(--text-3)" }}>Sin reseñas</span>
+        <span style={{ fontSize: 12, color: "var(--text-3)" }}>{t("procurement.suppliersClient.noReviews")}</span>
       )}
     </div>
   );
@@ -122,6 +124,7 @@ function SupplierCard({
   onToggleFavorite: (id: string) => void;
   busy: boolean;
 }) {
+  const t = useT();
   const [hover, setHover] = useState(false);
   const location = [supplier.city, supplier.state].filter(Boolean).join(", ");
 
@@ -131,7 +134,7 @@ function SupplierCard({
           el corazón vive fuera del ancla que envuelve la tarjeta). */}
       <button
         type="button"
-        aria-label={supplier.isFavorite ? "Quitar de favoritos" : "Agregar a favoritos"}
+        aria-label={supplier.isFavorite ? t("procurement.suppliersClient.removeFavorite") : t("procurement.suppliersClient.addFavorite")}
         aria-pressed={supplier.isFavorite}
         disabled={busy}
         onClick={(e) => {
@@ -294,8 +297,7 @@ function SupplierCard({
               }}
             >
               <Package size={12} style={{ color: "var(--violet-400)" }} />
-              {supplier.productCount}{" "}
-              {supplier.productCount === 1 ? "producto" : "productos"}
+              {t("procurement.suppliersClient.productCount", { count: supplier.productCount })}
             </span>
             {/* CTA visual: <span> (no <button>) para no anidar interactivos
                 dentro del <Link> que envuelve la card; la navegación la
@@ -304,7 +306,7 @@ function SupplierCard({
               className={`btn-new btn-new--${hover ? "primary" : "secondary"} btn-new--sm`}
               style={{ flexShrink: 0 }}
             >
-              Ver proveedor
+              {t("procurement.suppliersClient.viewSupplier")}
               <ChevronRight size={14} />
             </span>
           </div>
@@ -316,6 +318,7 @@ function SupplierCard({
 }
 
 export function SuppliersClient({ initialSuppliers }: { initialSuppliers: Supplier[] }) {
+  const t = useT();
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [onlyFavorites, setOnlyFavorites] = useState(false);
@@ -457,10 +460,10 @@ export function SuppliersClient({ initialSuppliers }: { initialSuppliers: Suppli
                 margin: 0,
               }}
             >
-              Proveedores
+              {t("procurement.suppliersClient.heroTitle")}
             </h1>
             <p style={{ color: "var(--text-3)", fontSize: 14, marginTop: 4 }}>
-              Explora proveedores y abastece tu clínica con su catálogo.
+              {t("procurement.suppliersClient.heroSubtitle")}
             </p>
           </div>
         </div>
@@ -476,9 +479,9 @@ export function SuppliersClient({ initialSuppliers }: { initialSuppliers: Suppli
             marginBottom: 20,
           }}
         >
-          <KpiCard label="Proveedores" value={String(kpis.total)} icon={Building2} />
-          <KpiCard label="Categorías" value={String(kpis.categories)} icon={Layers} />
-          <KpiCard label="Productos" value={String(kpis.products)} icon={Boxes} />
+          <KpiCard label={t("procurement.suppliersClient.kpiSuppliers")} value={String(kpis.total)} icon={Building2} />
+          <KpiCard label={t("procurement.suppliersClient.kpiCategories")} value={String(kpis.categories)} icon={Layers} />
+          <KpiCard label={t("procurement.suppliersClient.kpiProducts")} value={String(kpis.products)} icon={Boxes} />
         </div>
       )}
 
@@ -499,7 +502,7 @@ export function SuppliersClient({ initialSuppliers }: { initialSuppliers: Suppli
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar proveedor…"
+                placeholder={t("procurement.suppliersClient.searchPlaceholder")}
               />
             </div>
 
@@ -526,7 +529,7 @@ export function SuppliersClient({ initialSuppliers }: { initialSuppliers: Suppli
                 }}
               >
                 <Heart size={13} fill={onlyFavorites ? "currentColor" : "none"} />
-                Solo favoritos
+                {t("procurement.suppliersClient.onlyFavorites")}
                 {favoriteCount > 0 ? ` (${favoriteCount})` : ""}
               </button>
 
@@ -540,7 +543,7 @@ export function SuppliersClient({ initialSuppliers }: { initialSuppliers: Suppli
                   color: "var(--text-3)",
                 }}
               >
-                Ordenar
+                {t("procurement.suppliersClient.sortLabel")}
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as SortKey)}
@@ -555,8 +558,8 @@ export function SuppliersClient({ initialSuppliers }: { initialSuppliers: Suppli
                     border: "1px solid var(--border-soft)",
                   }}
                 >
-                  <option value="rating">Calificación</option>
-                  <option value="name">Nombre</option>
+                  <option value="rating">{t("procurement.suppliersClient.sortRating")}</option>
+                  <option value="name">{t("procurement.suppliersClient.sortName")}</option>
                 </select>
               </label>
             </div>
@@ -565,7 +568,7 @@ export function SuppliersClient({ initialSuppliers }: { initialSuppliers: Suppli
           {categories.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
               <CategoryChip
-                label="Todas"
+                label={t("procurement.suppliersClient.categoryAll")}
                 active={activeCategory === null}
                 onClick={() => setActiveCategory(null)}
               />
@@ -586,17 +589,17 @@ export function SuppliersClient({ initialSuppliers }: { initialSuppliers: Suppli
       {initialSuppliers.length === 0 ? (
         <EmptyState
           icon={<Store size={26} />}
-          title="Aún no hay proveedores disponibles"
-          text="En cuanto haya proveedores dados de alta aparecerán aquí para que puedas explorar su catálogo y abastecer tu clínica."
+          title={t("procurement.suppliersClient.emptyNoneTitle")}
+          text={t("procurement.suppliersClient.emptyNoneText")}
         />
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={onlyFavorites ? <Heart size={26} /> : <Search size={26} />}
-          title={onlyFavorites ? "Aún no tienes favoritos" : "Sin resultados"}
+          title={onlyFavorites ? t("procurement.suppliersClient.emptyFavoritesTitle") : t("common.noResults")}
           text={
             onlyFavorites
-              ? "Marca proveedores con el corazón para tenerlos a la mano aquí, o quita el filtro “Solo favoritos”."
-              : "No encontramos proveedores con esos criterios. Prueba con otra búsqueda o quita los filtros de categoría."
+              ? t("procurement.suppliersClient.emptyFavoritesText")
+              : t("procurement.suppliersClient.emptyFilteredText")
           }
         />
       ) : (

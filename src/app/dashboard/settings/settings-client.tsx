@@ -7,15 +7,27 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
+import { useT } from "@/i18n/i18n-provider";
 import toast from "react-hot-toast";
 
-const DAYS        = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
+// Días de la semana: el id apunta a una llave i18n; la etiqueta visible se
+// resuelve con t(id) en el render (nunca a nivel de módulo).
+const DAYS        = [
+  "settings.clientDays.monday",
+  "settings.clientDays.tuesday",
+  "settings.clientDays.wednesday",
+  "settings.clientDays.thursday",
+  "settings.clientDays.friday",
+  "settings.clientDays.saturday",
+  "settings.clientDays.sunday",
+];
 // MediFlow es DENTAL — solo categorías dentales en el selector de
 // clínica. La lista completa de categorías legacy queda en el enum
 // ClinicCategory de Prisma para no romper datos históricos.
+// labelKey apunta a una llave i18n; se resuelve con t(labelKey) en el render.
 const CATEGORIES = [
-  { id:"DENTAL", label:"Odontología" },
-  { id:"OTHER",  label:"Otra" },
+  { id:"DENTAL", labelKey:"settings.clientCategory.dental" },
+  { id:"OTHER",  labelKey:"settings.clientCategory.other" },
 ];
 const TIMEZONES = [
   { id: "America/Mexico_City",  label: "Ciudad de Mexico (GMT-6)" },
@@ -53,6 +65,7 @@ interface TeamMember { id: string; firstName: string; lastName: string; role: st
 interface Props { user: any; clinic: any; initialTab?: string; gcalStatus?: string; teamMembers?: TeamMember[] }
 
 export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, teamMembers: initTeam = [] }: Props) {
+  const t = useT();
   const [tab,      setTab]      = useState(initialTab || "clinica");
   const [saving,   setSaving]   = useState(false);
   const [user,     setUser]     = useState(initUser);
@@ -65,8 +78,8 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
 
   // Show toast feedback from Google Calendar OAuth redirect
   useEffect(() => {
-    if (gcalStatus === "success") toast.success("Google Calendar conectado exitosamente");
-    if (gcalStatus === "error") toast.error("Error al conectar Google Calendar — verifica tus credenciales");
+    if (gcalStatus === "success") toast.success(t("settings.client.gcalConnectedToast"));
+    if (gcalStatus === "error") toast.error(t("settings.client.gcalConnectErrorToast"));
   }, [gcalStatus]);
 
   // CFDI form state
@@ -95,8 +108,8 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
         body: JSON.stringify({ name:clinic.name, city:clinic.city, phone:clinic.phone, email:clinic.email, address:clinic.address, mapsUrl:clinic.mapsUrl, description:clinic.description, isPublic, category:clinic.category, clues:clinic.clues, timezone:clinic.timezone })
       });
       if (!res.ok) throw new Error();
-      toast.success("Datos de la clínica actualizados");
-    } catch { toast.error("Error al guardar"); } finally { setSaving(false); }
+      toast.success(t("settings.client.clinicSavedToast"));
+    } catch { toast.error(t("settings.client.saveErrorToast")); } finally { setSaving(false); }
   }
 
   // Idioma del panel: guarda el locale de la clínica y recarga para cargar el diccionario.
@@ -122,13 +135,13 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
         body: JSON.stringify({ firstName:user.firstName, lastName:user.lastName, phone:user.phone, specialty:user.specialty }),
       });
       if (!res.ok) throw new Error();
-      toast.success("Perfil actualizado");
-    } catch { toast.error("Error al guardar"); } finally { setSaving(false); }
+      toast.success(t("settings.client.profileSavedToast"));
+    } catch { toast.error(t("settings.client.saveErrorToast")); } finally { setSaving(false); }
   }
 
   async function saveCfdi() {
-    if (!cfdiForm.rfcEmisor.trim()) { toast.error("RFC es requerido"); return; }
-    if (!cfdiForm.cpEmisor.trim() || cfdiForm.cpEmisor.length !== 5) { toast.error("Código postal debe tener 5 dígitos"); return; }
+    if (!cfdiForm.rfcEmisor.trim()) { toast.error(t("settings.client.rfcRequiredToast")); return; }
+    if (!cfdiForm.cpEmisor.trim() || cfdiForm.cpEmisor.length !== 5) { toast.error(t("settings.client.cpLengthToast")); return; }
     setSaving(true);
     try {
       const res = await fetch("/api/settings/cfdi", {
@@ -137,20 +150,20 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error");
-      toast.success("✅ Datos fiscales configurados — ya puedes timbrar CFDIs");
+      toast.success(t("settings.client.cfdiSavedToast"));
       setClinic((c: any) => ({ ...c, facturApiEnabled: true, ...cfdiForm }));
     } catch (err: any) { toast.error(err.message); } finally { setSaving(false); }
   }
 
   async function changePassword() {
-    if (pwForm.next !== pwForm.confirm) { toast.error("Las contraseñas no coinciden"); return; }
-    if (pwForm.next.length < 8) { toast.error("Mínimo 8 caracteres"); return; }
+    if (pwForm.next !== pwForm.confirm) { toast.error(t("settings.client.pwMismatchToast")); return; }
+    if (pwForm.next.length < 8) { toast.error(t("settings.client.pwMinLengthToast")); return; }
     setSaving(true);
     try {
       const supabase = createClient();
       const { error } = await supabase.auth.updateUser({ password: pwForm.next });
       if (error) throw error;
-      toast.success("Contraseña actualizada");
+      toast.success(t("settings.client.pwUpdatedToast"));
       setPwForm({ current:"", next:"", confirm:"" });
     } catch (e: any) { toast.error(e.message ?? "Error"); } finally { setSaving(false); }
   }
@@ -159,9 +172,9 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
     try {
       const res = await fetch("/api/google", { method:"DELETE" });
       if (!res.ok) throw new Error();
-      toast.success("Google Calendar desconectado");
+      toast.success(t("settings.client.gcalDisconnectedToast"));
       setUser((u: any) => ({ ...u, googleCalendarEnabled:false, googleCalendarEmail:null }));
-    } catch { toast.error("Error al desconectar"); }
+    } catch { toast.error(t("settings.client.gcalDisconnectErrorToast")); }
   }
 
   const [team, setTeam] = useState<TeamMember[]>(initTeam);
@@ -180,9 +193,9 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
         body: JSON.stringify({ services: updated }),
       });
       if (!res.ok) throw new Error();
-      setTeam(t => t.map(m => m.id === memberId ? { ...m, services: updated } : m));
-      toast.success("Servicio agregado");
-    } catch { toast.error("Error al guardar"); }
+      setTeam(prev => prev.map(m => m.id === memberId ? { ...m, services: updated } : m));
+      toast.success(t("settings.client.serviceAddedToast"));
+    } catch { toast.error(t("settings.client.saveErrorToast")); }
     finally { setSavingServices(null); }
   }
 
@@ -197,49 +210,49 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
         body: JSON.stringify({ services: updated }),
       });
       if (!res.ok) throw new Error();
-      setTeam(t => t.map(m => m.id === memberId ? { ...m, services: updated } : m));
-      toast.success("Servicio eliminado");
-    } catch { toast.error("Error al guardar"); }
+      setTeam(prev => prev.map(m => m.id === memberId ? { ...m, services: updated } : m));
+      toast.success(t("settings.client.serviceRemovedToast"));
+    } catch { toast.error(t("settings.client.saveErrorToast")); }
     finally { setSavingServices(null); }
   }
 
   const isAdminUser = initUser.role === "ADMIN" || initUser.role === "SUPER_ADMIN";
 
   const TABS = [
-    { id:"clinica",      label:"Mi clínica",    icon:Building,      show:true        },
-    { id:"subscription", label:"Suscripción",   icon:CreditCard,    show:isAdminUser },
-    { id:"servicios",    label:"Servicios",     icon:Zap,           show:isAdminUser },
-    { id:"perfil",       label:"Mi perfil",     icon:User,          show:true        },
-    { id:"facturacion",  label:"Facturación",   icon:Receipt,       show:isAdminUser },
-    { id:"ia",           label:"Asistente IA",  icon:Bot,           show:true        },
-    { id:"integraciones",label:"Integraciones", icon:CalendarCheck, show:true        },
-    { id:"horarios",     label:"Horarios",      icon:Clock,         show:isAdminUser },
-    { id:"seguridad",    label:"Seguridad",     icon:Shield,        show:true        },
-  ].filter(t => t.show);
+    { id:"clinica",      label:t("settings.client.tabClinic"),       icon:Building,      show:true        },
+    { id:"subscription", label:t("settings.client.tabSubscription"), icon:CreditCard,    show:isAdminUser },
+    { id:"servicios",    label:t("settings.client.tabServices"),     icon:Zap,           show:isAdminUser },
+    { id:"perfil",       label:t("settings.client.tabProfile"),      icon:User,          show:true        },
+    { id:"facturacion",  label:t("settings.client.tabBilling"),      icon:Receipt,       show:isAdminUser },
+    { id:"ia",           label:t("settings.client.tabAi"),           icon:Bot,           show:true        },
+    { id:"integraciones",label:t("settings.client.tabIntegrations"), icon:CalendarCheck, show:true        },
+    { id:"horarios",     label:t("settings.client.tabHours"),        icon:Clock,         show:isAdminUser },
+    { id:"seguridad",    label:t("settings.client.tabSecurity"),     icon:Shield,        show:true        },
+  ].filter(item => item.show);
 
   return (
     <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
       <div style={{ marginBottom: 22 }}>
         <h1 style={{ fontSize: "clamp(16px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>
-          Configuración
+          {t("settings.client.pageTitle")}
         </h1>
         <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
-          Personaliza tu clínica, perfil e integraciones
+          {t("settings.client.pageSubtitle")}
         </p>
       </div>
 
       {/* Layout: sidebar vertical + panel */}
       <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
         <div style={{ width: 220, display: "flex", flexDirection: "column", gap: 2, flexShrink: 0, position: "sticky", top: 24 }}>
-          {TABS.map(t => (
+          {TABS.map(item => (
             <button
-              key={t.id}
+              key={item.id}
               type="button"
-              onClick={() => setTab(t.id)}
-              className={`vnav-item ${tab === t.id ? "vnav-item--active" : ""}`}
+              onClick={() => setTab(item.id)}
+              className={`vnav-item ${tab === item.id ? "vnav-item--active" : ""}`}
             >
-              <t.icon size={14} />
-              <span>{t.label}</span>
+              <item.icon size={14} />
+              <span>{item.label}</span>
             </button>
           ))}
         </div>
@@ -251,20 +264,20 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       {/* ── CLÍNICA ── */}
       {tab === "clinica" && (
         <div className="bg-card border border-border rounded-2xl p-6 shadow-card max-w-lg space-y-4">
-          <h2 className="text-base font-bold">Datos de la clínica</h2>
+          <h2 className="text-base font-bold">{t("settings.client.clinicDataTitle")}</h2>
           <div className="space-y-1.5">
-            <Label>Nombre de la clínica</Label>
+            <Label>{t("settings.client.clinicNameLabel")}</Label>
             <Input value={clinic.name ?? ""} onChange={e => setClinic((c: any) => ({ ...c, name: e.target.value }))} />
           </div>
           <div className="space-y-1.5">
-            <Label>Categoría</Label>
+            <Label>{t("settings.client.categoryLabel")}</Label>
             <select className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
               value={clinic.category ?? "OTHER"} onChange={e => setClinic((c: any) => ({ ...c, category: e.target.value }))}>
-              {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+              {CATEGORIES.map(c => <option key={c.id} value={c.id}>{t(c.labelKey)}</option>)}
             </select>
           </div>
           <div className="space-y-1.5">
-            <Label>Zona horaria</Label>
+            <Label>{t("settings.client.timezoneLabel")}</Label>
             <select
               className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
               value={clinic.timezone ?? "America/Mexico_City"}
@@ -273,7 +286,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               {TIMEZONES.map(tz => <option key={tz.id} value={tz.id}>{tz.label}</option>)}
             </select>
             <div className="text-[11px] text-muted-foreground">
-              Afecta todos los horarios visibles: agenda, citas, recordatorios. Tras guardar, recarga la pagina.
+              {t("settings.client.timezoneHelp")}
             </div>
           </div>
           <div className="space-y-1.5">
@@ -291,41 +304,41 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5"><Label>Ciudad</Label><Input value={clinic.city ?? ""} onChange={e => setClinic((c: any) => ({ ...c, city: e.target.value }))} /></div>
-            <div className="space-y-1.5"><Label>Dirección</Label><Input value={clinic.address ?? ""} onChange={e => setClinic((c: any) => ({ ...c, address: e.target.value }))} /></div>
+            <div className="space-y-1.5"><Label>{t("settings.client.cityLabel")}</Label><Input value={clinic.city ?? ""} onChange={e => setClinic((c: any) => ({ ...c, city: e.target.value }))} /></div>
+            <div className="space-y-1.5"><Label>{t("settings.client.addressLabel")}</Label><Input value={clinic.address ?? ""} onChange={e => setClinic((c: any) => ({ ...c, address: e.target.value }))} /></div>
           </div>
           <div className="space-y-1.5">
-            <Label>Link de Google Maps de tu clínica</Label>
+            <Label>{t("settings.client.mapsLinkLabel")}</Label>
             <Input
               placeholder="https://maps.app.goo.gl/…"
               value={clinic.mapsUrl ?? ""}
               onChange={e => setClinic((c: any) => ({ ...c, mapsUrl: e.target.value }))}
             />
             <div className="text-[11px] text-muted-foreground">
-              Pega el enlace de Google Maps; el laboratorio lo usará para recoger el producto en tu clínica.
+              {t("settings.client.mapsLinkHelp")}
             </div>
           </div>
-          <div className="space-y-1.5"><Label>Teléfono</Label><Input value={clinic.phone ?? ""} onChange={e => setClinic((c: any) => ({ ...c, phone: e.target.value }))} /></div>
-          <div className="space-y-1.5"><Label>Email de contacto</Label><Input type="email" value={clinic.email ?? ""} onChange={e => setClinic((c: any) => ({ ...c, email: e.target.value }))} /></div>
+          <div className="space-y-1.5"><Label>{t("settings.client.phoneLabel")}</Label><Input value={clinic.phone ?? ""} onChange={e => setClinic((c: any) => ({ ...c, phone: e.target.value }))} /></div>
+          <div className="space-y-1.5"><Label>{t("settings.client.contactEmailLabel")}</Label><Input type="email" value={clinic.email ?? ""} onChange={e => setClinic((c: any) => ({ ...c, email: e.target.value }))} /></div>
           {/* NOM-024 — CLUES Sector Salud */}
           <div className="space-y-1.5">
-            <Label>CLUES (Sector Salud)</Label>
+            <Label>{t("settings.client.cluesLabel")}</Label>
             <Input
               maxLength={11}
-              placeholder="11 caracteres oficiales — opcional"
+              placeholder={t("settings.client.cluesPlaceholder")}
               value={clinic.clues ?? ""}
               onChange={e => setClinic((c: any) => ({ ...c, clues: e.target.value.toUpperCase().trim() }))}
             />
             <div className="text-[11px] text-muted-foreground">
-              Clave Única de Establecimientos de Salud. Requerida para reportes oficiales NOM-024.
+              {t("settings.client.cluesHelp")}
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label>Descripción corta (visible en el directorio)</Label>
+            <Label>{t("settings.client.descriptionLabel")}</Label>
             <textarea
               className="flex w-full rounded-xl border border-border bg-card px-4 py-3 text-sm focus:outline-none resize-none"
               rows={2}
-              placeholder="Ej: Clínica dental especializada en ortodoncia e implantes en Mérida"
+              placeholder={t("settings.client.descriptionPlaceholder")}
               value={clinic.description ?? ""}
               onChange={e => setClinic((c: any) => ({ ...c, description: e.target.value }))}
             />
@@ -333,12 +346,12 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           <div className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-colors ${isPublic ? "border-blue-500 bg-blue-600/10" : "border-border bg-transparent"}`}>
             <div>
               <div className={`text-sm font-bold ${isPublic ? "text-blue-700 dark:text-blue-300" : "text-foreground"}`}>
-                {isPublic ? "🌐 Clínica pública" : "🔒 Clínica privada"}
+                {isPublic ? t("settings.client.publicClinicLabel") : t("settings.client.privateClinicLabel")}
               </div>
               <div className={`text-xs mt-0.5 ${isPublic ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground"}`}>
                 {isPublic
-                  ? "Apareces en el directorio /clinicas y recibes reservas en línea"
-                  : "Solo tu equipo accede. No apareces en el directorio público."}
+                  ? t("settings.client.publicClinicDesc")
+                  : t("settings.client.privateClinicDesc")}
               </div>
             </div>
             <button type="button" onClick={() => setIsPublic((p: boolean) => !p)}
@@ -349,9 +362,9 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           </div>
           <div className="pt-2 flex items-center justify-between">
             <span className={`text-sm font-bold px-3 py-1 rounded-full border ${clinic.plan==="CLINIC"?"bg-violet-50 text-violet-700 border-violet-200":clinic.plan==="PRO"?"bg-brand-600/15 text-brand-700 border-brand-200":"bg-muted text-muted-foreground border-border"}`}>
-              Plan {clinic.plan}
+              {t("settings.client.planBadge", { plan: clinic.plan })}
             </span>
-            <Button onClick={saveClinic} disabled={saving}>{saving ? "Guardando…" : "Guardar cambios"}</Button>
+            <Button onClick={saveClinic} disabled={saving}>{saving ? t("common.saving") : t("common.saveChanges")}</Button>
           </div>
         </div>
       )}
@@ -360,13 +373,13 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       {tab === "servicios" && (
         <div className="space-y-5 max-w-2xl">
           <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
-            <h2 className="text-base font-bold mb-1">Servicios por profesional</h2>
+            <h2 className="text-base font-bold mb-1">{t("settings.client.servicesTitle")}</h2>
             <p className="text-sm text-muted-foreground mb-5">
-              Asigna los servicios que ofrece cada profesional. Estos aparecerán en la página de reservas para que los pacientes elijan.
+              {t("settings.client.servicesSubtitle")}
             </p>
 
             {team.length === 0 ? (
-              <div className="text-sm text-muted-foreground text-center py-8">No hay profesionales activos</div>
+              <div className="text-sm text-muted-foreground text-center py-8">{t("settings.client.noActiveProfessionals")}</div>
             ) : (
               <div className="space-y-4">
                 {team.map(member => (
@@ -377,20 +390,20 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                       </div>
                       <div>
                         <div className="text-sm font-bold">{member.firstName} {member.lastName}</div>
-                        <div className="text-xs text-muted-foreground">{member.role === "SUPER_ADMIN" ? "Super Admin" : member.role === "ADMIN" ? "Administrador/a" : member.role === "RECEPTIONIST" ? "Recepción" : "Doctor/a"}</div>
+                        <div className="text-xs text-muted-foreground">{member.role === "SUPER_ADMIN" ? t("settings.client.roleSuperAdmin") : member.role === "ADMIN" ? t("settings.client.roleAdmin") : member.role === "RECEPTIONIST" ? t("settings.client.roleReceptionist") : t("settings.client.roleDoctor")}</div>
                       </div>
                     </div>
 
                     {/* Current services */}
                     <div className="flex flex-wrap gap-1.5 mb-3">
                       {member.services.length === 0 && (
-                        <span className="text-xs text-muted-foreground italic">Sin servicios asignados — agrega al menos uno</span>
+                        <span className="text-xs text-muted-foreground italic">{t("settings.client.noServicesAssigned")}</span>
                       )}
                       {member.services.map(svc => (
                         <span key={svc} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-brand-600/15 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
                           {svc}
                           <button onClick={() => removeServiceFromMember(member.id, svc)}
-                            className="ml-0.5 text-brand-400 hover:text-rose-500 transition-colors" title="Quitar">×</button>
+                            className="ml-0.5 text-brand-400 hover:text-rose-500 transition-colors" title={t("settings.client.removeServiceTitle")}>×</button>
                         </span>
                       ))}
                     </div>
@@ -399,7 +412,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                     <div className="flex gap-2">
                       <input
                         className="flex-1 h-9 rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-                        placeholder="Ej: Consulta general, Ortodoncia, Limpieza…"
+                        placeholder={t("settings.client.servicePlaceholder")}
                         onKeyDown={e => {
                           if (e.key === "Enter") {
                             addServiceToMember(member.id, (e.target as HTMLInputElement).value);
@@ -415,7 +428,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                           addServiceToMember(member.id, input.value);
                           input.value = "";
                         }}>
-                        {savingServices === member.id ? "…" : "+ Agregar"}
+                        {savingServices === member.id ? "…" : t("settings.client.addServiceBtn")}
                       </Button>
                     </div>
                   </div>
@@ -429,15 +442,15 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       {/* ── PERFIL ── */}
       {tab === "perfil" && (
         <div className="bg-card border border-border rounded-2xl p-6 shadow-card max-w-lg space-y-4">
-          <h2 className="text-base font-bold">Tu perfil profesional</h2>
+          <h2 className="text-base font-bold">{t("settings.client.profileTitle")}</h2>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5"><Label>Nombre</Label><Input value={user.firstName ?? ""} onChange={e => setUser((u: any) => ({ ...u, firstName: e.target.value }))} /></div>
-            <div className="space-y-1.5"><Label>Apellido</Label><Input value={user.lastName ?? ""} onChange={e => setUser((u: any) => ({ ...u, lastName: e.target.value }))} /></div>
+            <div className="space-y-1.5"><Label>{t("settings.client.firstNameLabel")}</Label><Input value={user.firstName ?? ""} onChange={e => setUser((u: any) => ({ ...u, firstName: e.target.value }))} /></div>
+            <div className="space-y-1.5"><Label>{t("settings.client.lastNameLabel")}</Label><Input value={user.lastName ?? ""} onChange={e => setUser((u: any) => ({ ...u, lastName: e.target.value }))} /></div>
           </div>
-          <div className="space-y-1.5"><Label>Email</Label><Input value={user.email ?? ""} disabled className="opacity-60" /></div>
-          <div className="space-y-1.5"><Label>Teléfono</Label><Input value={user.phone ?? ""} onChange={e => setUser((u: any) => ({ ...u, phone: e.target.value }))} /></div>
+          <div className="space-y-1.5"><Label>{t("settings.client.emailLabel")}</Label><Input value={user.email ?? ""} disabled className="opacity-60" /></div>
+          <div className="space-y-1.5"><Label>{t("settings.client.phoneLabel")}</Label><Input value={user.phone ?? ""} onChange={e => setUser((u: any) => ({ ...u, phone: e.target.value }))} /></div>
           <div className="flex justify-end pt-2">
-            <Button onClick={saveUser} disabled={saving}>{saving ? "Guardando…" : "Guardar perfil"}</Button>
+            <Button onClick={saveUser} disabled={saving}>{saving ? t("common.saving") : t("settings.client.saveProfileBtn")}</Button>
           </div>
         </div>
       )}
@@ -448,23 +461,23 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           <div className="bg-card border border-border rounded-2xl p-6 shadow-card space-y-5">
             <div className="flex items-start justify-between">
               <div>
-                <h2 className="text-base font-bold">Facturación CFDI 4.0</h2>
-                <p className="text-sm text-muted-foreground mt-0.5">Configura tu RFC para timbrar facturas electrónicas válidas ante el SAT</p>
+                <h2 className="text-base font-bold">{t("settings.client.cfdiTitle")}</h2>
+                <p className="text-sm text-muted-foreground mt-0.5">{t("settings.client.cfdiSubtitle")}</p>
               </div>
               {clinic.facturApiEnabled && (
                 <span className="text-sm font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 px-3 py-1 rounded-full">
-                  ✅ Activo
+                  {t("settings.client.cfdiActiveBadge")}
                 </span>
               )}
             </div>
 
             <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 text-sm text-blue-700 dark:text-blue-300">
-              <strong>Powered by Facturapi</strong> — Tu RFC es el emisor. Cada factura que generes queda timbrada ante el SAT automáticamente. El paciente puede descargar XML y PDF.
+              <strong>{t("settings.client.cfdiPoweredByTitle")}</strong>{t("settings.client.cfdiPoweredByBody")}
             </div>
 
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <Label className="text-base font-semibold">RFC del emisor *</Label>
+                <Label className="text-base font-semibold">{t("settings.client.rfcLabel")}</Label>
                 <Input
                   placeholder="Ej: XAXX010101000"
                   value={cfdiForm.rfcEmisor}
@@ -472,22 +485,22 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   className="font-mono text-base uppercase"
                   maxLength={13}
                 />
-                <p className="text-xs text-muted-foreground">RFC de la clínica o del médico según facture</p>
+                <p className="text-xs text-muted-foreground">{t("settings.client.rfcHelp")}</p>
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-base font-semibold">Razón social *</Label>
+                <Label className="text-base font-semibold">{t("settings.client.razonSocialLabel")}</Label>
                 <Input
-                  placeholder="Nombre exacto como aparece en el SAT"
+                  placeholder={t("settings.client.razonSocialPlaceholder")}
                   value={cfdiForm.razonSocial}
                   onChange={e => setCfdiForm(f => ({ ...f, razonSocial: e.target.value.toUpperCase() }))}
                   className="uppercase"
                 />
-                <p className="text-xs text-muted-foreground">Debe coincidir exactamente con tu Constancia de Situación Fiscal</p>
+                <p className="text-xs text-muted-foreground">{t("settings.client.razonSocialHelp")}</p>
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-base font-semibold">Régimen fiscal *</Label>
+                <Label className="text-base font-semibold">{t("settings.client.regimenLabel")}</Label>
                 <select className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none"
                   value={cfdiForm.regimenFiscal} onChange={e => setCfdiForm(f => ({ ...f, regimenFiscal: e.target.value }))}>
                   {REGIMENES.map(r => <option key={r.clave} value={r.clave}>{r.clave} — {r.desc}</option>)}
@@ -495,7 +508,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-base font-semibold">Código postal fiscal *</Label>
+                <Label className="text-base font-semibold">{t("settings.client.cpFiscalLabel")}</Label>
                 <Input
                   placeholder="Ej: 97000"
                   value={cfdiForm.cpEmisor}
@@ -508,7 +521,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
 
             <div className="pt-2 flex gap-3">
               <Button onClick={saveCfdi} disabled={saving} className="flex-1">
-                {saving ? "Configurando…" : "💾 Guardar configuración fiscal"}
+                {saving ? t("settings.client.cfdiSavingBtn") : t("settings.client.cfdiSaveBtn")}
               </Button>
               <a href="https://www.facturapi.io" target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-1.5 px-4 py-2 border border-border rounded-xl text-sm font-semibold hover:bg-muted transition-colors">
@@ -517,7 +530,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             </div>
 
             <div className="text-xs text-muted-foreground bg-muted/30 rounded-xl p-3">
-              <strong>Nota:</strong> Para timbrar necesitas también subir tu Certificado de Sello Digital (CSD) en el dashboard de Facturapi. Esto es un requisito del SAT y no se puede hacer desde aquí por seguridad.
+              <strong>{t("settings.client.cfdiNoteLabel")}</strong>{t("settings.client.cfdiNoteBody")}
             </div>
           </div>
         </div>
@@ -532,8 +545,8 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 <Bot className="w-6 h-6 text-violet-600" />
               </div>
               <div>
-                <h2 className="text-base font-bold">Asistente IA Clínico</h2>
-                <p className="text-sm text-muted-foreground">Uso mensual de consultas con IA</p>
+                <h2 className="text-base font-bold">{t("settings.client.aiTitle")}</h2>
+                <p className="text-sm text-muted-foreground">{t("settings.client.aiSubtitle")}</p>
               </div>
             </div>
 
@@ -541,7 +554,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             <div className="mb-5">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-semibold text-muted-foreground flex items-center gap-1.5">
-                  <Zap className="w-4 h-4 text-violet-500" /> Tokens usados este mes
+                  <Zap className="w-4 h-4 text-violet-500" /> {t("settings.client.aiTokensUsedThisMonth")}
                 </span>
                 <span className="text-sm font-bold">{aiUsed.toLocaleString()} / {aiLimit.toLocaleString()}</span>
               </div>
@@ -550,17 +563,17 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   style={{ width:`${aiPercent}%` }} />
               </div>
               <div className="flex items-center justify-between mt-1.5">
-                <span className="text-sm text-muted-foreground">{aiPercent}% usado</span>
-                <span className="text-sm font-semibold text-violet-600">{aiRemaining.toLocaleString()} tokens restantes</span>
+                <span className="text-sm text-muted-foreground">{t("settings.client.aiPercentUsed", { percent: aiPercent })}</span>
+                <span className="text-sm font-semibold text-violet-600">{t("settings.client.aiTokensRemaining", { count: aiRemaining.toLocaleString() })}</span>
               </div>
             </div>
 
             {/* Stats */}
             <div className="grid grid-cols-3 gap-3 mb-5">
               {[
-                { label:"Tokens restantes", val:aiRemaining.toLocaleString(), color:"text-violet-600" },
-                { label:"Consultas aprox.", val:Math.floor(aiRemaining/800).toString(), color:"text-foreground" },
-                { label:"Costo estimado",   val:`~$${((aiUsed/1_000_000)*1).toFixed(4)} USD`, color:"text-emerald-600" },
+                { label:t("settings.client.aiStatTokensRemaining"), val:aiRemaining.toLocaleString(), color:"text-violet-600" },
+                { label:t("settings.client.aiStatConsultations"), val:Math.floor(aiRemaining/800).toString(), color:"text-foreground" },
+                { label:t("settings.client.aiStatEstimatedCost"),   val:`~$${((aiUsed/1_000_000)*1).toFixed(4)} USD`, color:"text-emerald-600" },
               ].map(s => (
                 <div key={s.label} className="bg-muted/20 rounded-xl p-3 text-center">
                   <div className={`text-xl font-extrabold ${s.color}`}>{s.val}</div>
@@ -570,7 +583,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             </div>
 
             <div className="bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800 rounded-xl p-4 text-sm text-violet-700 dark:text-violet-300">
-              <strong>¿Cómo funciona?</strong> Cada consulta con el asistente usa aproximadamente 800 tokens. El límite se renueva automáticamente el primer día de cada mes. Usa Claude Haiku — el modelo más eficiente de Anthropic.
+              <strong>{t("settings.client.aiHowItWorksTitle")}</strong>{t("settings.client.aiHowItWorksBody")}
             </div>
           </div>
         </div>
@@ -586,12 +599,12 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 <div className="w-11 h-11 rounded-2xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-2xl">📅</div>
                 <div>
                   <h2 className="text-base font-bold">Google Calendar</h2>
-                  <p className="text-sm text-muted-foreground">Sincroniza tus citas automáticamente</p>
+                  <p className="text-sm text-muted-foreground">{t("settings.client.gcalSubtitle")}</p>
                 </div>
               </div>
               {gcalConnected
-                ? <span className="text-sm font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 px-3 py-1 rounded-full">✅ Conectado</span>
-                : <span className="text-sm font-bold bg-muted text-muted-foreground px-3 py-1 rounded-full">No conectado</span>}
+                ? <span className="text-sm font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 px-3 py-1 rounded-full">{t("settings.client.gcalConnectedBadge")}</span>
+                : <span className="text-sm font-bold bg-muted text-muted-foreground px-3 py-1 rounded-full">{t("settings.client.gcalNotConnectedBadge")}</span>}
             </div>
 
             {gcalConnected ? (
@@ -599,21 +612,21 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 <div className="flex items-center gap-3 p-3 bg-emerald-50 dark:bg-emerald-950/20 rounded-xl border border-emerald-200 dark:border-emerald-800">
                   <CalendarCheck className="w-5 h-5 text-emerald-600 flex-shrink-0" />
                   <div>
-                    <div className="text-sm font-bold text-emerald-700 dark:text-emerald-300">Cuenta conectada</div>
+                    <div className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{t("settings.client.gcalAccountConnected")}</div>
                     <div className="text-sm text-emerald-600 dark:text-emerald-400">{user.googleCalendarEmail}</div>
                   </div>
                 </div>
-                <p className="text-sm text-muted-foreground">Cada nueva cita que se agende para ti aparecerá automáticamente en tu Google Calendar con recordatorio 24h antes.</p>
+                <p className="text-sm text-muted-foreground">{t("settings.client.gcalConnectedDesc")}</p>
                 <Button variant="outline" onClick={disconnectGcal} className="border-rose-300 text-rose-700 hover:bg-rose-50">
-                  Desconectar Google Calendar
+                  {t("settings.client.gcalDisconnectBtn")}
                 </Button>
               </div>
             ) : (
               <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">Conecta tu Google Calendar para que cada cita agendada para ti aparezca automáticamente con recordatorios.</p>
+                <p className="text-sm text-muted-foreground">{t("settings.client.gcalConnectDesc")}</p>
                 <a href="/api/google"
                   className="flex items-center gap-2 px-4 py-2.5 bg-card border-2 border-border rounded-xl font-semibold text-base hover:border-blue-400 transition-colors w-fit">
-                  <span className="text-xl">G</span> Conectar con Google
+                  <span className="text-xl">G</span> {t("settings.client.gcalConnectBtn")}
                 </a>
               </div>
             )}
@@ -626,12 +639,12 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 <div className="w-11 h-11 rounded-2xl bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-2xl">💬</div>
                 <div>
                   <h2 className="text-base font-bold">WhatsApp Business</h2>
-                  <p className="text-sm text-muted-foreground">Recordatorios automáticos a pacientes</p>
+                  <p className="text-sm text-muted-foreground">{t("settings.client.whatsappSubtitle")}</p>
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground mb-3">Configura WhatsApp Cloud API para enviar recordatorios automáticos de citas a los pacientes.</p>
+              <p className="text-sm text-muted-foreground mb-3">{t("settings.client.whatsappDesc")}</p>
               <a href="/dashboard/whatsapp" className="text-sm font-semibold text-brand-600 hover:underline">
-                Ir a configuración de WhatsApp →
+                {t("settings.client.whatsappLink")}
               </a>
             </div>
           )}
@@ -641,7 +654,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       {/* ── HORARIOS ── */}
       {tab === "horarios" && (
         <div className="bg-card border border-border rounded-2xl p-6 shadow-card max-w-lg">
-          <h2 className="text-base font-bold mb-4">Horario de atención</h2>
+          <h2 className="text-base font-bold mb-4">{t("settings.client.hoursTitle")}</h2>
           <div className="space-y-3">
             {DAYS.map((day, i) => {
               const s = schedule[i] ?? { enabled:false, open:"09:00", close:"18:00" };
@@ -650,26 +663,26 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   <input type="checkbox" checked={s.enabled}
                     onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...sc[i], enabled:e.target.checked } }))}
                     className="w-4 h-4 rounded accent-brand-600 flex-shrink-0" />
-                  <span className={`text-base font-semibold w-24 ${s.enabled ? "text-brand-700 dark:text-brand-300" : "text-muted-foreground"}`}>{day}</span>
+                  <span className={`text-base font-semibold w-24 ${s.enabled ? "text-brand-700 dark:text-brand-300" : "text-muted-foreground"}`}>{t(day)}</span>
                   {s.enabled ? (
                     <>
                       <input type="time" value={s.open}
                         onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...sc[i], open:e.target.value } }))}
                         className="h-9 w-26 rounded-xl border border-border bg-card px-3 text-sm font-mono focus:outline-none" />
-                      <span className="text-muted-foreground text-sm">a</span>
+                      <span className="text-muted-foreground text-sm">{t("settings.client.hoursTo")}</span>
                       <input type="time" value={s.close}
                         onChange={e => setSchedule(sc => ({ ...sc, [i]:{ ...sc[i], close:e.target.value } }))}
                         className="h-9 w-26 rounded-xl border border-border bg-card px-3 text-sm font-mono focus:outline-none" />
                     </>
                   ) : (
-                    <span className="text-sm text-muted-foreground">Cerrado</span>
+                    <span className="text-sm text-muted-foreground">{t("settings.client.hoursClosed")}</span>
                   )}
                 </div>
               );
             })}
           </div>
           <div className="flex justify-end mt-5">
-            <Button onClick={() => toast.success("Horarios guardados")}>Guardar horarios</Button>
+            <Button onClick={() => toast.success(t("settings.client.hoursSavedToast"))}>{t("settings.client.hoursSaveBtn")}</Button>
           </div>
         </div>
       )}
@@ -678,22 +691,22 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       {tab === "seguridad" && (
         <div className="space-y-5 max-w-lg">
           <div className="bg-card border border-border rounded-2xl p-6 shadow-card space-y-4">
-            <h2 className="text-base font-bold">Cambiar contraseña</h2>
-            <div className="space-y-1.5"><Label>Nueva contraseña</Label>
-              <Input type="password" autoComplete="new-password" placeholder="Mínimo 8 caracteres" value={pwForm.next} onChange={e => setPwForm(f => ({ ...f, next:e.target.value }))} />
+            <h2 className="text-base font-bold">{t("settings.client.changePasswordTitle")}</h2>
+            <div className="space-y-1.5"><Label>{t("settings.client.newPasswordLabel")}</Label>
+              <Input type="password" autoComplete="new-password" placeholder={t("settings.client.newPasswordPlaceholder")} value={pwForm.next} onChange={e => setPwForm(f => ({ ...f, next:e.target.value }))} />
             </div>
-            <div className="space-y-1.5"><Label>Confirmar contraseña</Label>
-              <Input type="password" autoComplete="new-password" placeholder="Repite la nueva contraseña" value={pwForm.confirm} onChange={e => setPwForm(f => ({ ...f, confirm:e.target.value }))} />
+            <div className="space-y-1.5"><Label>{t("settings.client.confirmPasswordLabel")}</Label>
+              <Input type="password" autoComplete="new-password" placeholder={t("settings.client.confirmPasswordPlaceholder")} value={pwForm.confirm} onChange={e => setPwForm(f => ({ ...f, confirm:e.target.value }))} />
             </div>
-            <Button onClick={changePassword} disabled={saving || !pwForm.next}>{saving ? "Actualizando…" : "Cambiar contraseña"}</Button>
+            <Button onClick={changePassword} disabled={saving || !pwForm.next}>{saving ? t("settings.client.changingPasswordBtn") : t("settings.client.changePasswordBtn")}</Button>
           </div>
           <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
-            <h2 className="text-base font-bold mb-4">Información de tu cuenta</h2>
+            <h2 className="text-base font-bold mb-4">{t("settings.client.accountInfoTitle")}</h2>
             <div className="space-y-2 text-sm">
               {[
-                { label:"Email",       val:initUser.email },
-                { label:"Rol",         val:initUser.role },
-                { label:"Miembro desde",val:new Date(initUser.createdAt).toLocaleDateString("es-MX",{day:"numeric",month:"long",year:"numeric"}) },
+                { label:t("settings.client.accountEmailLabel"),       val:initUser.email },
+                { label:t("settings.client.accountRoleLabel"),         val:initUser.role },
+                { label:t("settings.client.accountMemberSinceLabel"),val:new Date(initUser.createdAt).toLocaleDateString("es-MX",{day:"numeric",month:"long",year:"numeric"}) },
               ].map(r => (
                 <div key={r.label} className="flex justify-between py-2.5 border-b border-border/60">
                   <span className="text-muted-foreground">{r.label}</span>

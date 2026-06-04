@@ -42,6 +42,7 @@ import {
 } from "@/lib/laboratorios/types";
 import { B2B_PAYMENT_METHOD_LABELS, type B2BPaymentMethod } from "@/lib/payments-b2b";
 import { OrderChatDock } from "@/components/laboratorios/order-chat-dock";
+import { useT } from "@/i18n/i18n-provider";
 
 // services en el header son keys del catálogo (s1..s9). Label corto + fallback.
 function serviceLabel(key: string): string {
@@ -144,12 +145,13 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function deliveryLabel(s: ServiceData): string | null {
+function deliveryLabel(s: ServiceData, t: ReturnType<typeof useT>): string | null {
   if (s.daysMin != null && s.daysMax != null) {
-    return s.daysMin === s.daysMax ? `${s.daysMin} días` : `${s.daysMin}–${s.daysMax} días`;
+    const range = s.daysMin === s.daysMax ? `${s.daysMin}` : `${s.daysMin}–${s.daysMax}`;
+    return t("procurement.labDetail.deliveryDays", { range });
   }
-  if (s.daysMax != null) return `hasta ${s.daysMax} días`;
-  if (s.daysMin != null) return `desde ${s.daysMin} días`;
+  if (s.daysMax != null) return t("procurement.labDetail.deliveryUpToDays", { days: s.daysMax });
+  if (s.daysMin != null) return t("procurement.labDetail.deliveryFromDays", { days: s.daysMin });
   return null;
 }
 
@@ -202,7 +204,8 @@ function ServiceCard({
   service: ServiceData;
   onSelect: () => void;
 }) {
-  const delivery = deliveryLabel(service);
+  const t = useT();
+  const delivery = deliveryLabel(service, t);
   const [hover, setHover] = useState(false);
 
   return (
@@ -277,7 +280,7 @@ function ServiceCard({
       )}
 
       <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginTop: "auto" }}>
-        <span style={{ color: "var(--text-3)", fontSize: 12 }}>desde</span>
+        <span style={{ color: "var(--text-3)", fontSize: 12 }}>{t("procurement.labDetail.priceFrom")}</span>
         <span style={{ color: "var(--text-1)", fontWeight: 700, fontSize: 18 }}>
           {fmtMXN(service.priceFrom)}
         </span>
@@ -295,7 +298,7 @@ function ServiceCard({
           }}
         >
           <Clock size={12} />
-          Entrega {delivery}
+          {t("procurement.labDetail.deliveryPrefix")} {delivery}
         </div>
       )}
 
@@ -306,13 +309,14 @@ function ServiceCard({
         onClick={onSelect}
         style={{ width: "100%", marginTop: 4 }}
       >
-        Solicitar este servicio
+        {t("procurement.labDetail.requestThisService")}
       </ButtonNew>
     </div>
   );
 }
 
 export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps) {
+  const t = useT();
   const router = useRouter();
   const [logoError, setLogoError] = useState(false);
 
@@ -373,15 +377,15 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
       const f = incoming[i];
       const ext = fileExt(f.name);
       if (!ext || !ACCEPT_EXT.includes(ext)) {
-        toast.error(`"${f.name}": formato no permitido`);
+        toast.error(t("procurement.labDetail.fileFormatNotAllowed", { name: f.name }));
         continue;
       }
       if (f.size > MAX_BYTES) {
-        toast.error(`"${f.name}" supera ${DENTAL_LAB_FILE_MAX_MB} MB`);
+        toast.error(t("procurement.labDetail.fileExceedsMax", { name: f.name, max: DENTAL_LAB_FILE_MAX_MB }));
         continue;
       }
       if (f.size <= 0) {
-        toast.error(`"${f.name}" está vacío`);
+        toast.error(t("procurement.labDetail.fileEmpty", { name: f.name }));
         continue;
       }
       accepted.push(f);
@@ -413,7 +417,7 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        throw new Error(j.error || "No se pudo solicitar la orden");
+        throw new Error(j.error || t("procurement.labDetail.orderRequestFailed"));
       }
       const created = await res.json().catch(() => ({}));
       const orderId: string | undefined = created.orderId;
@@ -439,11 +443,13 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
 
       if (failed > 0) {
         toast.error(
-          `Orden creada, pero ${failed} archivo${failed === 1 ? "" : "s"} no se pudo subir`,
+          t("procurement.labDetail.orderCreatedFilesFailed", { count: failed }),
         );
       } else {
         toast.success(
-          created.orderNumber ? `Orden ${created.orderNumber} solicitada` : "Orden solicitada",
+          created.orderNumber
+            ? t("procurement.labDetail.orderRequestedNumber", { number: created.orderNumber })
+            : t("procurement.labDetail.orderRequested"),
         );
       }
 
@@ -451,8 +457,8 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
       setModalOpen(false);
       router.refresh();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Error al solicitar la orden";
-      toast.error(msg || "Error al solicitar la orden");
+      const msg = err instanceof Error ? err.message : t("procurement.labDetail.orderRequestError");
+      toast.error(msg || t("procurement.labDetail.orderRequestError"));
     } finally {
       setSubmitting(false);
     }
@@ -474,7 +480,7 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
         }}
       >
         <ArrowLeft size={14} />
-        Laboratorios
+        {t("procurement.labDetail.backToLabs")}
       </Link>
 
       {/* Encabezado de la ficha */}
@@ -576,13 +582,13 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
               {lab.onTimePct != null && (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
                   <Clock size={13} />
-                  {lab.onTimePct}% a tiempo
+                  {t("procurement.labDetail.onTimePct", { pct: lab.onTimePct })}
                 </span>
               )}
               {lab.totalOrders > 0 && (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
                   <ClipboardList size={13} />
-                  {lab.totalOrders} órdenes
+                  {t("procurement.labDetail.ordersCount", { count: lab.totalOrders })}
                 </span>
               )}
             </div>
@@ -608,10 +614,10 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
             style={{ cursor: "pointer" }}
           >
             <MessageCircle size={14} />
-            Chatear
+            {t("procurement.labDetail.chat")}
           </button>
           <ButtonNew variant="primary" icon={<Send size={14} />} onClick={() => openModal("")}>
-            Solicitar orden
+            {t("procurement.labDetail.requestOrder")}
           </ButtonNew>
         </div>
       </div>
@@ -657,7 +663,7 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
 
           {lab.coverageZones.length > 0 && (
             <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-              <span style={{ color: "var(--text-3)", fontSize: 13 }}>Cobertura:</span>
+              <span style={{ color: "var(--text-3)", fontSize: 13 }}>{t("procurement.labDetail.coverage")}</span>
               {lab.coverageZones.map((z) => (
                 <BadgeNew key={z} tone="neutral">
                   {z}
@@ -708,7 +714,7 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
             >
               <MapPin size={15} />
             </span>
-            Ubicación del laboratorio
+            {t("procurement.labDetail.labLocation")}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {hasLocation ? (
@@ -727,13 +733,13 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                     style={{ ...contactItemStyle, color: "var(--brand)", textDecoration: "none" }}
                   >
                     <Navigation size={14} />
-                    Ver en Google Maps
+                    {t("procurement.labDetail.viewOnGoogleMaps")}
                   </a>
                 )}
               </div>
             ) : (
               <span style={{ color: "var(--text-3)", fontSize: 13 }}>
-                Este laboratorio aún no publicó su dirección.
+                {t("procurement.labDetail.noAddressYet")}
               </span>
             )}
 
@@ -773,7 +779,7 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <TrafficBadge lab={lab} />
                   <span style={{ color: "var(--text-3)", fontSize: 12 }}>
-                    tiempo estimado de recolección / entrega
+                    {t("procurement.labDetail.estimatedPickupDelivery")}
                   </span>
                 </div>
                 <span style={{ color: "var(--text-2)", fontSize: 12, lineHeight: 1.45 }}>
@@ -804,7 +810,7 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
             <Layers size={15} />
           </span>
           <h2 style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 18, margin: 0 }}>
-            Servicios
+            {t("procurement.labDetail.services")}
           </h2>
           <span style={{ color: "var(--text-3)", fontSize: 13 }}>({services.length})</span>
         </div>
@@ -836,11 +842,10 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                 <Layers size={26} />
               </div>
               <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>
-                Aún sin servicios con precio
+                {t("procurement.labDetail.noPricedServicesTitle")}
               </div>
               <p style={{ color: "var(--text-3)", fontSize: 13, margin: 0, maxWidth: 340, lineHeight: 1.5 }}>
-                Este laboratorio aún no publicó servicios con precio. Puedes solicitar una orden
-                general con el botón “Solicitar orden”.
+                {t("procurement.labDetail.noPricedServicesDesc")}
               </p>
             </div>
           </CardNew>
@@ -898,10 +903,10 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                 >
                   <Send size={15} />
                 </span>
-                Solicitar servicio
+                {t("procurement.labDetail.requestService")}
               </Dialog.Title>
               <Dialog.Close asChild>
-                <button type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label="Cerrar">
+                <button type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label={t("common.close")}>
                   <X size={14} />
                 </button>
               </Dialog.Close>
@@ -915,7 +920,7 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   <div>
                     <label style={labelStyle} htmlFor="lab-order-service">
-                      Servicio
+                      {t("procurement.labDetail.serviceLabel")}
                     </label>
                     <select
                       id="lab-order-service"
@@ -923,10 +928,10 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                       onChange={(e) => setServiceId(e.target.value)}
                       style={inputStyle}
                     >
-                      <option value="">Sin servicio específico</option>
+                      <option value="">{t("procurement.labDetail.noSpecificService")}</option>
                       {services.map((s) => (
                         <option key={s.id} value={s.id}>
-                          {s.name} — desde {fmtMXN(s.priceFrom)}
+                          {t("procurement.labDetail.serviceOption", { name: s.name, price: fmtMXN(s.priceFrom) })}
                         </option>
                       ))}
                     </select>
@@ -936,7 +941,7 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                   {lab.paymentMethods.length > 0 ? (
                     <div>
                       <label style={labelStyle} htmlFor="lab-order-payment">
-                        Método de pago
+                        {t("procurement.labDetail.paymentMethod")}
                       </label>
                       <select
                         id="lab-order-payment"
@@ -951,12 +956,12 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                         ))}
                       </select>
                       <span style={{ display: "block", color: "var(--text-4)", fontSize: 11, marginTop: 4 }}>
-                        La orden se crea sin pagar; coordinas el pago según el método elegido.
+                        {t("procurement.labDetail.paymentMethodHint")}
                       </span>
                     </div>
                   ) : (
                     <div style={{ color: "var(--text-3)", fontSize: 12, lineHeight: 1.5 }}>
-                      Este laboratorio aún no configuró métodos de pago; se acuerda directamente con él.
+                      {t("procurement.labDetail.noPaymentMethods")}
                     </div>
                   )}
 
@@ -987,14 +992,14 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                         }}
                       >
                         <DollarSign size={12} />
-                        Costo estimado
+                        {t("procurement.labDetail.estimatedCost")}
                       </div>
                       <div style={{ color: "var(--text-1)", fontWeight: 700, fontSize: 18 }}>
-                        {selectedService ? fmtMXN(selectedService.priceFrom) : "Por cotizar"}
+                        {selectedService ? fmtMXN(selectedService.priceFrom) : t("procurement.labDetail.toBeQuoted")}
                       </div>
                       {selectedService && (
                         <div style={{ color: "var(--text-3)", fontSize: 11, marginTop: 2 }}>
-                          desde · / {selectedService.unit}
+                          {t("procurement.labDetail.fromPerUnit", { unit: selectedService.unit })}
                         </div>
                       )}
                     </div>
@@ -1018,7 +1023,7 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                         }}
                       >
                         <TrafficVehicle size={12} />
-                        Entrega estimada (ETA)
+                        {t("procurement.labDetail.estimatedDeliveryEta")}
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <TrafficVehicle size={14} style={{ color: trafficVars(traffic.tone).base }} />
@@ -1063,19 +1068,19 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                       <Package size={15} />
                     </span>
                     <div style={{ fontSize: 12, lineHeight: 1.5 }}>
-                      <span style={{ color: "var(--text-2)" }}>Recolección: </span>
+                      <span style={{ color: "var(--text-2)" }}>{t("procurement.labDetail.pickupLabel")} </span>
                       {clinic.address ? (
                         <span style={{ color: "var(--text-1)" }}>
-                          el laboratorio recoge en tu clínica — {clinic.address}
+                          {t("procurement.labDetail.pickupAtClinic", { address: clinic.address })}
                         </span>
                       ) : (
                         <span style={{ color: "var(--text-3)" }}>
-                          aún no registras la dirección de tu clínica.{" "}
+                          {t("procurement.labDetail.noClinicAddress")}{" "}
                           <Link
                             href="/dashboard/settings"
                             style={{ color: "var(--brand)", textDecoration: "none" }}
                           >
-                            Configúrala en Ajustes
+                            {t("procurement.labDetail.configureInSettings")}
                           </Link>
                         </span>
                       )}
@@ -1091,25 +1096,25 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                   >
                     <div>
                       <label style={labelStyle} htmlFor="lab-order-patient">
-                        Paciente (opcional)
+                        {t("procurement.labDetail.patientOptional")}
                       </label>
                       <input
                         id="lab-order-patient"
                         value={patientName}
                         onChange={(e) => setPatientName(e.target.value)}
-                        placeholder="Nombre del paciente"
+                        placeholder={t("procurement.labDetail.patientPlaceholder")}
                         style={inputStyle}
                       />
                     </div>
                     <div>
                       <label style={labelStyle} htmlFor="lab-order-ref">
-                        Referencia interna (opcional)
+                        {t("procurement.labDetail.internalRefOptional")}
                       </label>
                       <input
                         id="lab-order-ref"
                         value={internalRef}
                         onChange={(e) => setInternalRef(e.target.value)}
-                        placeholder="Ej. REF-1234"
+                        placeholder={t("procurement.labDetail.internalRefPlaceholder")}
                         style={inputStyle}
                       />
                     </div>
@@ -1117,13 +1122,13 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
 
                   <div>
                     <label style={labelStyle} htmlFor="lab-order-notes">
-                      Notas / instrucciones (opcional)
+                      {t("procurement.labDetail.notesOptional")}
                     </label>
                     <textarea
                       id="lab-order-notes"
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
-                      placeholder="Color, material, indicaciones especiales…"
+                      placeholder={t("procurement.labDetail.notesPlaceholder")}
                       rows={3}
                       style={{ ...inputStyle, resize: "vertical" }}
                     />
@@ -1131,7 +1136,7 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
 
                   {/* Archivos */}
                   <div>
-                    <label style={labelStyle}>Archivos (escaneos, diseños, radiografías)</label>
+                    <label style={labelStyle}>{t("procurement.labDetail.filesLabel")}</label>
                     <label
                       onDragOver={(e) => {
                         e.preventDefault();
@@ -1185,10 +1190,10 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                         <Upload size={18} />
                       </span>
                       <span style={{ fontSize: 13, color: "var(--text-2)" }}>
-                        Arrastra o haz clic para subir
+                        {t("procurement.labDetail.dragOrClickToUpload")}
                       </span>
                       <span style={{ fontSize: 11 }}>
-                        {DENTAL_LAB_FILE_ACCEPT.join(", ")} · máx {DENTAL_LAB_FILE_MAX_MB} MB c/u
+                        {t("procurement.labDetail.fileAcceptHint", { formats: DENTAL_LAB_FILE_ACCEPT.join(", "), max: DENTAL_LAB_FILE_MAX_MB })}
                       </span>
                     </label>
 
@@ -1228,7 +1233,7 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                             <button
                               type="button"
                               onClick={() => removeFile(i)}
-                              aria-label={`Quitar ${f.name}`}
+                              aria-label={t("procurement.labDetail.removeFile", { name: f.name })}
                               style={{
                                 display: "inline-flex",
                                 alignItems: "center",
@@ -1264,21 +1269,21 @@ export function LabDetailClient({ lab, services, clinic }: LabDetailClientProps)
                       onChange={(e) => setPriority(e.target.checked)}
                       style={{ width: 15, height: 15, cursor: "pointer" }}
                     />
-                    Marcar como orden prioritaria
+                    {t("procurement.labDetail.markAsPriority")}
                   </label>
 
                   <p style={{ color: "var(--text-4)", fontSize: 11, margin: 0, lineHeight: 1.5 }}>
-                    La orden se crea en estado “Solicitada”. El pago se acuerda con el laboratorio.
+                    {t("procurement.labDetail.orderStatusNote")}
                   </p>
                 </div>
               </div>
 
               <div className="modal__footer">
                 <ButtonNew type="button" variant="ghost" onClick={() => handleOpenChange(false)}>
-                  Cancelar
+                  {t("common.cancel")}
                 </ButtonNew>
                 <ButtonNew type="submit" variant="primary" icon={<Send size={14} />} disabled={submitting}>
-                  {submitting ? "Enviando…" : "Solicitar orden"}
+                  {submitting ? t("procurement.labDetail.submitting") : t("procurement.labDetail.requestOrder")}
                 </ButtonNew>
               </div>
             </form>

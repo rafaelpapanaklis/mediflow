@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { Plus, GripVertical, Archive, RotateCcw, EyeOff, Eye, Clock } from "lucide-react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { useT } from "@/i18n/i18n-provider";
 import {
   createResource,
   deleteResource,
@@ -56,6 +57,7 @@ export function ResourcesManager({
   variant = "page",
   onChange,
 }: ResourcesManagerProps) {
+  const t = useT();
   const router = useRouter();
   const askConfirm = useConfirm();
   const [resources, setResources] = useState<ResourceDTO[]>(initialResources);
@@ -92,7 +94,7 @@ export function ResourcesManager({
       const body = (await res.json()) as { resources: ResourceDTO[] };
       setResources(body.resources);
     } catch {
-      toast.error("No se pudo cargar la lista");
+      toast.error(t("procurement.resourcesManager.loadError"));
     } finally {
       setBusy(false);
     }
@@ -146,8 +148,8 @@ export function ResourcesManager({
         setResources([...rebuilt, ...resources.filter(isArchived)]);
       }
       const reason = isApiError(err)
-        ? err.reason ?? err.error ?? "No se pudo reordenar"
-        : "No se pudo reordenar";
+        ? err.reason ?? err.error ?? t("procurement.resourcesManager.reorderError")
+        : t("procurement.resourcesManager.reorderError");
       toast.error(reason);
     }
   }
@@ -169,8 +171,8 @@ export function ResourcesManager({
     } catch (err) {
       setResources((prev) => prev.map((r) => (r.id === id ? original : r)));
       const reason = isApiError(err)
-        ? err.reason ?? err.error ?? "No se pudo guardar"
-        : "No se pudo guardar";
+        ? err.reason ?? err.error ?? t("procurement.resourcesManager.saveError")
+        : t("procurement.resourcesManager.saveError");
       toast.error(reason);
     }
   }
@@ -179,11 +181,10 @@ export function ResourcesManager({
     const target = resources.find((r) => r.id === id);
     if (!target) return;
     const confirmed = await askConfirm({
-      title: `¿Archivar "${target.name}"?`,
-      description:
-        "Las citas existentes no se borran. Puedes restaurarlo desde 'Ver archivados'.",
+      title: t("procurement.resourcesManager.archiveConfirmTitle", { name: target.name }),
+      description: t("procurement.resourcesManager.archiveConfirmDesc"),
       variant: "warning",
-      confirmText: "Archivar",
+      confirmText: t("procurement.resourcesManager.archiveAction"),
     });
     if (!confirmed) return;
 
@@ -194,7 +195,7 @@ export function ResourcesManager({
     );
     try {
       await deleteResource(id);
-      toast.success("Recurso archivado");
+      toast.success(t("procurement.resourcesManager.archiveSuccess"));
       router.refresh();
     } catch (err) {
       setResources(original);
@@ -206,13 +207,13 @@ export function ResourcesManager({
         const n = err.count ?? 0;
         toast.error(
           n > 0
-            ? `No se puede archivar: ${n} cita${n === 1 ? "" : "s"} activa${n === 1 ? "" : "s"}. Cancela o reagenda primero.`
-            : "No se puede archivar: tiene citas activas asociadas.",
+            ? t("procurement.resourcesManager.archiveBlockedCount", { count: n })
+            : t("procurement.resourcesManager.archiveBlockedGeneric"),
         );
       } else {
         const reason = isApiError(err)
-          ? err.reason ?? err.error ?? "No se pudo archivar"
-          : "No se pudo archivar";
+          ? err.reason ?? err.error ?? t("procurement.resourcesManager.archiveError")
+          : t("procurement.resourcesManager.archiveError");
         toast.error(reason);
       }
     }
@@ -226,13 +227,13 @@ export function ResourcesManager({
     try {
       const updated = await updateResource(id, { isActive: true });
       setResources((prev) => prev.map((r) => (r.id === id ? { ...r, ...updated, isActive: true } : r)));
-      toast.success("Recurso restaurado");
+      toast.success(t("procurement.resourcesManager.restoreSuccess"));
       router.refresh();
     } catch (err) {
       setResources(original);
       const reason = isApiError(err)
-        ? err.reason ?? err.error ?? "No se pudo restaurar"
-        : "No se pudo restaurar";
+        ? err.reason ?? err.error ?? t("procurement.resourcesManager.restoreError")
+        : t("procurement.resourcesManager.restoreError");
       toast.error(reason);
     }
   }
@@ -241,13 +242,13 @@ export function ResourcesManager({
     try {
       const created = await createResource({ name, kind, color });
       setResources((prev) => [...prev, { ...created, isActive: true }]);
-      toast.success("Recurso añadido");
+      toast.success(t("procurement.resourcesManager.addSuccess"));
       setAdding(false);
       router.refresh();
     } catch (err) {
       const reason = isApiError(err)
-        ? err.reason ?? err.error ?? "No se pudo crear"
-        : "No se pudo crear";
+        ? err.reason ?? err.error ?? t("procurement.resourcesManager.createError")
+        : t("procurement.resourcesManager.createError");
       toast.error(reason);
     }
   }
@@ -259,9 +260,9 @@ export function ResourcesManager({
       {variant === "page" && (
         <div className={styles.pageHeader}>
           <div>
-            <h1 className={styles.pageTitle}>Recursos</h1>
+            <h1 className={styles.pageTitle}>{t("procurement.resourcesManager.pageTitle")}</h1>
             <p className={styles.pageSubtitle}>
-              Sillones, salas y equipos disponibles para asignar a citas.
+              {t("procurement.resourcesManager.pageSubtitle")}
             </p>
           </div>
           <div className={styles.toolbar}>
@@ -273,7 +274,7 @@ export function ResourcesManager({
               aria-pressed={showArchived}
             >
               {showArchived ? <Eye size={14} /> : <EyeOff size={14} />}
-              {showArchived ? "Ocultar archivados" : "Ver archivados"}
+              {showArchived ? t("procurement.resourcesManager.hideArchived") : t("procurement.resourcesManager.showArchived")}
             </button>
           </div>
         </div>
@@ -289,7 +290,7 @@ export function ResourcesManager({
             aria-pressed={showArchived}
           >
             {showArchived ? <Eye size={14} /> : <EyeOff size={14} />}
-            {showArchived ? "Ocultar archivados" : "Ver archivados"}
+            {showArchived ? t("procurement.resourcesManager.hideArchived") : t("procurement.resourcesManager.showArchived")}
           </button>
         </div>
       )}
@@ -298,8 +299,8 @@ export function ResourcesManager({
         {showingList.length === 0 && !adding && (
           <div className={styles.empty}>
             {showArchived
-              ? "No hay recursos archivados."
-              : "No hay sillones, salas ni equipos. Añade uno para empezar."}
+              ? t("procurement.resourcesManager.emptyArchived")
+              : t("procurement.resourcesManager.emptyActive")}
           </div>
         )}
 
@@ -346,7 +347,7 @@ export function ResourcesManager({
               className={styles.addBtn}
               onClick={() => setAdding(true)}
             >
-              <Plus size={12} /> Añadir sillón / sala / equipo
+              <Plus size={12} /> {t("procurement.resourcesManager.addResource")}
             </button>
           )
         )}
@@ -392,6 +393,7 @@ function ResourceRow({
   onRestore,
   onOpenSchedule,
 }: ResourceRowProps) {
+  const t = useT();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [name, setName] = useState(resource.name);
   const [kind, setKind] = useState<ResourceKind>(resource.kind);
@@ -426,7 +428,7 @@ function ResourceRow({
           onClick={() => canEdit && !archived && setPickerOpen((v) => !v)}
           role="button"
           tabIndex={0}
-          aria-label="Cambiar color"
+          aria-label={t("procurement.resourcesManager.changeColorAria")}
         />
         {pickerOpen && (
           <div className={styles.swatchPicker}>
@@ -443,7 +445,7 @@ function ResourceRow({
                 }}
                 role="button"
                 tabIndex={0}
-                aria-label={`Color ${c}`}
+                aria-label={t("procurement.resourcesManager.colorAria", { color: c })}
               />
             ))}
           </div>
@@ -472,7 +474,7 @@ function ResourceRow({
         ))}
       </select>
       {archived ? (
-        <span className={styles.archivedBadge}>Archivado</span>
+        <span className={styles.archivedBadge}>{t("procurement.resourcesManager.archivedBadge")}</span>
       ) : (
         <span />
       )}
@@ -481,8 +483,8 @@ function ResourceRow({
           type="button"
           className={styles.rowAction}
           onClick={onOpenSchedule}
-          aria-label={`Horarios de ${resource.name}`}
-          title="Horarios"
+          aria-label={t("procurement.resourcesManager.scheduleAria", { name: resource.name })}
+          title={t("procurement.resourcesManager.scheduleTitle")}
         >
           <Clock size={12} />
         </button>
@@ -493,8 +495,8 @@ function ResourceRow({
             type="button"
             className={`${styles.rowAction} ${styles.rowActionRestore}`}
             onClick={onRestore}
-            aria-label={`Restaurar ${resource.name}`}
-            title="Restaurar"
+            aria-label={t("procurement.resourcesManager.restoreAria", { name: resource.name })}
+            title={t("procurement.resourcesManager.restoreTitle")}
           >
             <RotateCcw size={12} />
           </button>
@@ -503,8 +505,8 @@ function ResourceRow({
             type="button"
             className={styles.rowAction}
             onClick={onArchive}
-            aria-label={`Archivar ${resource.name}`}
-            title="Archivar"
+            aria-label={t("procurement.resourcesManager.archiveAria", { name: resource.name })}
+            title={t("procurement.resourcesManager.archiveTitle")}
           >
             <Archive size={12} />
           </button>
@@ -520,6 +522,7 @@ interface ResourceAddFormProps {
 }
 
 function ResourceAddForm({ onCancel, onSave }: ResourceAddFormProps) {
+  const t = useT();
   const [name, setName] = useState("");
   const [kind, setKind] = useState<ResourceKind>("SILLA_DENTAL");
   const [color, setColor] = useState<string | null>(ADD_FORM_SWATCHES[0]!);
@@ -540,13 +543,13 @@ function ResourceAddForm({ onCancel, onSave }: ResourceAddFormProps) {
         <input
           type="text"
           className={styles.addInput}
-          placeholder="Nombre (ej. Sillón 3)"
+          placeholder={t("procurement.resourcesManager.namePlaceholder")}
           value={name}
           onChange={(e) => setName(e.target.value)}
           autoFocus
         />
         <label className={styles.addLabel} htmlFor="resource-add-kind">
-          Tipo
+          {t("procurement.resourcesManager.typeLabel")}
         </label>
         <select
           id="resource-add-kind"
@@ -560,14 +563,14 @@ function ResourceAddForm({ onCancel, onSave }: ResourceAddFormProps) {
         </select>
       </div>
       <div className={styles.addFormRow}>
-        <span className={styles.addLabel}>Color</span>
-        <div className={styles.swatchInlineRow} role="radiogroup" aria-label="Color del recurso">
+        <span className={styles.addLabel}>{t("procurement.resourcesManager.colorLabel")}</span>
+        <div className={styles.swatchInlineRow} role="radiogroup" aria-label={t("procurement.resourcesManager.colorGroupAria")}>
           {ADD_FORM_SWATCHES.map((c) => (
             <span
               key={c}
               role="radio"
               aria-checked={c === color}
-              aria-label={`Color ${c}`}
+              aria-label={t("procurement.resourcesManager.colorAria", { color: c })}
               tabIndex={0}
               className={`${styles.swatchInline} ${c === color ? styles.selected : ""}`}
               style={{ background: c }}
@@ -583,9 +586,9 @@ function ResourceAddForm({ onCancel, onSave }: ResourceAddFormProps) {
           <span
             role="radio"
             aria-checked={color === null}
-            aria-label="Sin color"
+            aria-label={t("procurement.resourcesManager.noColor")}
             tabIndex={0}
-            title="Sin color"
+            title={t("procurement.resourcesManager.noColor")}
             className={`${styles.swatchInline} ${styles.swatchNone} ${color === null ? styles.selected : ""}`}
             onClick={() => setColor(null)}
             onKeyDown={(e) => {
@@ -604,14 +607,14 @@ function ResourceAddForm({ onCancel, onSave }: ResourceAddFormProps) {
           onClick={onCancel}
           disabled={saving}
         >
-          Cancelar
+          {t("common.cancel")}
         </button>
         <button
           type="submit"
           className={styles.addBtnSave}
           disabled={!name.trim() || saving}
         >
-          {saving ? "Guardando…" : "Añadir"}
+          {saving ? t("common.saving") : t("common.add")}
         </button>
       </div>
     </form>

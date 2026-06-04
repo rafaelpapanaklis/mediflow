@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import { useT } from "@/i18n/i18n-provider";
 
 interface ArcoRow {
   id: string;
@@ -23,18 +24,18 @@ interface Props {
   isSuperAdmin: boolean;
 }
 
-const TYPE_LABEL: Record<ArcoRow["type"], string> = {
-  ACCESS: "Acceso",
-  RECTIFICATION: "Rectificación",
-  CANCELLATION: "Cancelación",
-  OPPOSITION: "Oposición",
+const TYPE_LABEL_KEY: Record<ArcoRow["type"], string> = {
+  ACCESS: "settings.arco.typeAccess",
+  RECTIFICATION: "settings.arco.typeRectification",
+  CANCELLATION: "settings.arco.typeCancellation",
+  OPPOSITION: "settings.arco.typeOpposition",
 };
 
-const STATUS_LABEL: Record<ArcoRow["status"], string> = {
-  PENDING: "Pendiente",
-  IN_PROGRESS: "En proceso",
-  RESOLVED: "Resuelto",
-  REJECTED: "Rechazado",
+const STATUS_LABEL_KEY: Record<ArcoRow["status"], string> = {
+  PENDING: "settings.arco.statusPending",
+  IN_PROGRESS: "settings.arco.statusInProgress",
+  RESOLVED: "settings.arco.statusResolved",
+  REJECTED: "settings.arco.statusRejected",
 };
 
 const STATUS_COLOR: Record<ArcoRow["status"], string> = {
@@ -45,22 +46,23 @@ const STATUS_COLOR: Record<ArcoRow["status"], string> = {
 };
 
 export function ArcoRequestsClient({ clinicRequests, anonymousRequests, isSuperAdmin }: Props) {
+  const t = useT();
   const router = useRouter();
   const [editing, setEditing] = useState<ArcoRow | null>(null);
 
   return (
     <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1200, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Solicitudes ARCO</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>{t("settings.arco.title")}</h1>
       <p style={{ fontSize: 13, color: "var(--text-3, #64748b)", marginBottom: 24 }}>
-        Acceso, Rectificación, Cancelación y Oposición — LFPDPPP. Plazo legal 20 días hábiles.
+        {t("settings.arco.subtitle")}
       </p>
 
-      <Section title={`De esta clínica (${clinicRequests.length})`}>
+      <Section title={t("settings.arco.sectionClinic", { count: clinicRequests.length })}>
         <Table rows={clinicRequests} onEdit={setEditing} />
       </Section>
 
       {isSuperAdmin && (
-        <Section title={`Anónimas / sin clínica (${anonymousRequests.length}) — solo SUPER_ADMIN`}>
+        <Section title={t("settings.arco.sectionAnonymous", { count: anonymousRequests.length })}>
           <Table rows={anonymousRequests} onEdit={setEditing} />
         </Section>
       )}
@@ -69,7 +71,7 @@ export function ArcoRequestsClient({ clinicRequests, anonymousRequests, isSuperA
         <EditModal
           request={editing}
           onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); router.refresh(); toast.success("Solicitud actualizada"); }}
+          onSaved={() => { setEditing(null); router.refresh(); toast.success(t("settings.arco.toastUpdated")); }}
         />
       )}
     </div>
@@ -88,10 +90,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function Table({ rows, onEdit }: { rows: ArcoRow[]; onEdit: (r: ArcoRow) => void }) {
+  const t = useT();
   if (rows.length === 0) {
     return (
       <div style={{ padding: 20, background: "var(--bg-elev, #f8fafc)", border: "1px solid var(--border-soft, #e2e8f0)", borderRadius: 10, fontSize: 13, color: "var(--text-3, #64748b)" }}>
-        Sin solicitudes.
+        {t("settings.arco.emptyTable")}
       </div>
     );
   }
@@ -100,11 +103,11 @@ function Table({ rows, onEdit }: { rows: ArcoRow[]; onEdit: (r: ArcoRow) => void
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
         <thead>
           <tr style={{ background: "var(--bg-elev-2, #f1f5f9)" }}>
-            <Th>Fecha</Th>
-            <Th>Tipo</Th>
-            <Th>Email</Th>
-            <Th>Razón</Th>
-            <Th>Status</Th>
+            <Th>{t("common.date")}</Th>
+            <Th>{t("settings.arco.colType")}</Th>
+            <Th>{t("settings.arco.colEmail")}</Th>
+            <Th>{t("settings.arco.colReason")}</Th>
+            <Th>{t("settings.arco.colStatus")}</Th>
             <Th />
           </tr>
         </thead>
@@ -112,7 +115,7 @@ function Table({ rows, onEdit }: { rows: ArcoRow[]; onEdit: (r: ArcoRow) => void
           {rows.map((r) => (
             <tr key={r.id} style={{ borderTop: "1px solid var(--border-soft, #f1f5f9)" }}>
               <Td>{new Date(r.createdAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}</Td>
-              <Td><strong>{TYPE_LABEL[r.type]}</strong></Td>
+              <Td><strong>{t(TYPE_LABEL_KEY[r.type])}</strong></Td>
               <Td><code style={{ fontFamily: "monospace", fontSize: 12 }}>{r.email}</code></Td>
               <Td>
                 <div style={{ maxWidth: 360, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -121,7 +124,7 @@ function Table({ rows, onEdit }: { rows: ArcoRow[]; onEdit: (r: ArcoRow) => void
               </Td>
               <Td>
                 <span style={{ padding: "2px 8px", fontSize: 11, fontWeight: 700, borderRadius: 99, color: "#fff", background: STATUS_COLOR[r.status] }}>
-                  {STATUS_LABEL[r.status]}
+                  {t(STATUS_LABEL_KEY[r.status])}
                 </span>
               </Td>
               <Td>
@@ -130,7 +133,7 @@ function Table({ rows, onEdit }: { rows: ArcoRow[]; onEdit: (r: ArcoRow) => void
                   onClick={() => onEdit(r)}
                   style={{ padding: "5px 10px", fontSize: 12, background: "var(--bg-elev-2, #f1f5f9)", border: "1px solid var(--border-soft, #cbd5e1)", borderRadius: 8, cursor: "pointer", fontFamily: "inherit" }}
                 >
-                  Gestionar
+                  {t("settings.arco.manage")}
                 </button>
               </Td>
             </tr>
@@ -149,6 +152,7 @@ function Td({ children }: { children?: React.ReactNode }) {
 }
 
 function EditModal({ request, onClose, onSaved }: { request: ArcoRow; onClose: () => void; onSaved: () => void }) {
+  const t = useT();
   const [status, setStatus] = useState(request.status);
   const [notes, setNotes] = useState(request.resolvedNotes ?? "");
   const [saving, setSaving] = useState(false);
@@ -164,7 +168,7 @@ function EditModal({ request, onClose, onSaved }: { request: ArcoRow; onClose: (
       if (!res.ok) throw new Error();
       onSaved();
     } catch {
-      toast.error("Error al guardar");
+      toast.error(t("settings.arco.toastSaveError"));
     } finally {
       setSaving(false);
     }
@@ -184,46 +188,46 @@ function EditModal({ request, onClose, onSaved }: { request: ArcoRow; onClose: (
       <div style={{ background: "var(--bg-elev, #fff)", border: "1px solid var(--border-strong, #94a3b8)", borderRadius: 14, width: "100%", maxWidth: 540 }}>
         <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-soft, #e2e8f0)" }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>
-            Solicitud {TYPE_LABEL[request.type]} · {request.email}
+            {t("settings.arco.modalTitle", { type: t(TYPE_LABEL_KEY[request.type]) })} · {request.email}
           </h3>
         </div>
         <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
           <div>
-            <Label>Razón del solicitante</Label>
+            <Label>{t("settings.arco.requesterReason")}</Label>
             <p style={{ marginTop: 4, padding: 10, background: "var(--bg-elev-2, #f1f5f9)", borderRadius: 8, fontSize: 13, whiteSpace: "pre-wrap" }}>
               {request.reason}
             </p>
           </div>
           <div>
-            <Label>Status</Label>
+            <Label>{t("settings.arco.colStatus")}</Label>
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as ArcoRow["status"])}
               style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border-soft, #cbd5e1)", borderRadius: 8, fontFamily: "inherit", fontSize: 13, marginTop: 4 }}
             >
-              <option value="PENDING">Pendiente</option>
-              <option value="IN_PROGRESS">En proceso</option>
-              <option value="RESOLVED">Resuelto</option>
-              <option value="REJECTED">Rechazado</option>
+              <option value="PENDING">{t("settings.arco.statusPending")}</option>
+              <option value="IN_PROGRESS">{t("settings.arco.statusInProgress")}</option>
+              <option value="RESOLVED">{t("settings.arco.statusResolved")}</option>
+              <option value="REJECTED">{t("settings.arco.statusRejected")}</option>
             </select>
           </div>
           <div>
-            <Label>Notas internas / respuesta</Label>
+            <Label>{t("settings.arco.internalNotes")}</Label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value.slice(0, 4000))}
               rows={5}
-              placeholder="Acciones tomadas, fundamento de rechazo, datos entregados…"
+              placeholder={t("settings.arco.notesPlaceholder")}
               style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border-soft, #cbd5e1)", borderRadius: 8, fontFamily: "inherit", fontSize: 13, marginTop: 4, resize: "vertical" }}
             />
           </div>
         </div>
         <div style={{ padding: "14px 20px", borderTop: "1px solid var(--border-soft, #e2e8f0)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
           <button type="button" onClick={onClose} style={{ padding: "8px 14px", fontSize: 13, fontWeight: 600, background: "transparent", color: "var(--text-2, #475569)", border: "1px solid var(--border-strong, #94a3b8)", borderRadius: 8, cursor: "pointer", fontFamily: "inherit" }}>
-            Cancelar
+            {t("common.cancel")}
           </button>
           <button type="button" onClick={save} disabled={saving} style={{ padding: "8px 16px", fontSize: 13, fontWeight: 700, background: "var(--brand, #2563eb)", color: "#fff", border: "1px solid var(--brand, #2563eb)", borderRadius: 8, cursor: saving ? "wait" : "pointer", fontFamily: "inherit" }}>
-            {saving ? "Guardando…" : "Guardar"}
+            {saving ? t("common.saving") : t("common.save")}
           </button>
         </div>
       </div>

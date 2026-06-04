@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { BadgeNew, KpiCard } from "@/components/ui/design-system";
+import { useT } from "@/i18n/i18n-provider";
 import {
   DENTAL_LAB_SERVICES,
   DENTAL_LAB_TRAFFIC,
@@ -120,6 +121,7 @@ function LabLogo({ lab }: { lab: Lab }) {
 }
 
 function LabCard({ lab }: { lab: Lab }) {
+  const t = useT();
   const [hover, setHover] = useState(false);
   const location = [lab.city, lab.state].filter(Boolean).join(", ");
   const showRating = lab.rating != null && lab.rating > 0;
@@ -332,7 +334,7 @@ function LabCard({ lab }: { lab: Lab }) {
               }}
             >
               <Layers size={12} style={{ color: "var(--violet-400)" }} />
-              {lab.serviceCount} {lab.serviceCount === 1 ? "servicio" : "servicios"}
+              {t("procurement.labsClient.serviceCount", { count: lab.serviceCount })}
             </span>
             {/* CTA visual: <span> (no <button>) para no anidar interactivos
                 dentro del <Link> que envuelve la card; la navegación la
@@ -341,7 +343,7 @@ function LabCard({ lab }: { lab: Lab }) {
               className={`btn-new btn-new--${hover ? "primary" : "secondary"} btn-new--sm`}
               style={{ flexShrink: 0 }}
             >
-              Ver laboratorio
+              {t("procurement.labsClient.viewLab")}
               <ChevronRight size={14} />
             </span>
           </div>
@@ -352,6 +354,7 @@ function LabCard({ lab }: { lab: Lab }) {
 }
 
 export function LaboratoriosClient({ initialLabs }: { initialLabs: Lab[] }) {
+  const t = useT();
   const [search, setSearch] = useState("");
   const [activeService, setActiveService] = useState<string | null>(null);
 
@@ -456,10 +459,10 @@ export function LaboratoriosClient({ initialLabs }: { initialLabs: Lab[] }) {
                 margin: 0,
               }}
             >
-              Laboratorios
+              {t("procurement.labsClient.heroTitle")}
             </h1>
             <p style={{ color: "var(--text-3)", fontSize: 14, marginTop: 4 }}>
-              Explora laboratorios dentales y solicita órdenes en minutos.
+              {t("procurement.labsClient.heroSubtitle")}
             </p>
           </div>
         </div>
@@ -475,11 +478,11 @@ export function LaboratoriosClient({ initialLabs }: { initialLabs: Lab[] }) {
             marginBottom: 20,
           }}
         >
-          <KpiCard label="Laboratorios" value={String(kpis.total)} icon={Building2} />
-          <KpiCard label="Tipos de servicio" value={String(kpis.categories)} icon={Layers} />
-          <KpiCard label="Entrega rápida" value={String(kpis.fast)} icon={Bike} />
+          <KpiCard label={t("procurement.labsClient.kpiLabs")} value={String(kpis.total)} icon={Building2} />
+          <KpiCard label={t("procurement.labsClient.kpiServiceTypes")} value={String(kpis.categories)} icon={Layers} />
+          <KpiCard label={t("procurement.labsClient.kpiFastDelivery")} value={String(kpis.fast)} icon={Bike} />
           <KpiCard
-            label="Rating promedio"
+            label={t("procurement.labsClient.kpiAvgRating")}
             value={kpis.avgRating != null ? kpis.avgRating.toFixed(1) : "—"}
             icon={Star}
           />
@@ -494,14 +497,14 @@ export function LaboratoriosClient({ initialLabs }: { initialLabs: Lab[] }) {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar laboratorio…"
+              placeholder={t("procurement.labsClient.searchPlaceholder")}
             />
           </div>
 
           {services.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
               <ServiceChip
-                label="Todos"
+                label={t("common.all")}
                 active={activeService === null}
                 onClick={() => setActiveService(null)}
               />
@@ -522,14 +525,14 @@ export function LaboratoriosClient({ initialLabs }: { initialLabs: Lab[] }) {
       {initialLabs.length === 0 ? (
         <EmptyState
           icon={<FlaskConical size={26} />}
-          title="Aún no hay laboratorios disponibles"
-          text="En cuanto haya laboratorios dados de alta aparecerán aquí para que puedas explorarlos y solicitar órdenes."
+          title={t("procurement.labsClient.emptyTitle")}
+          text={t("procurement.labsClient.emptyText")}
         />
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={<Search size={26} />}
-          title="Sin resultados"
-          text="No encontramos laboratorios con esos criterios. Prueba con otra búsqueda o quita los filtros de servicio."
+          title={t("common.noResults")}
+          text={t("procurement.labsClient.noResultsText")}
         />
       ) : (
         <div

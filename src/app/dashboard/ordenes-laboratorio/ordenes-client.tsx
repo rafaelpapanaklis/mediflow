@@ -9,6 +9,7 @@ import { CardNew } from "@/components/ui/design-system/card-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { useT } from "@/i18n/i18n-provider";
 import { fmtMXNdec, formatRelativeDate } from "@/lib/format";
 import {
   type DentalLabOrderDTO,
@@ -29,10 +30,10 @@ const PAYMENT_STATUS_TONE: Record<DentalLabPaymentStatus, BadgeTone> = {
   PAID: "success",
 };
 
-// Estado de pago → label es-MX (no hay mapa en el contrato; solo dos valores).
-const PAYMENT_STATUS_LABELS: Record<DentalLabPaymentStatus, string> = {
-  UNPAID: "Sin pagar",
-  PAID: "Pagado",
+// Estado de pago → translation-key (resuelta con t() al renderizar; solo dos valores).
+const PAYMENT_STATUS_LABEL_KEYS: Record<DentalLabPaymentStatus, string> = {
+  UNPAID: "procurement.ordenesClient.payUnpaid",
+  PAID: "procurement.ordenesClient.payPaid",
 };
 
 interface Props {
@@ -40,6 +41,7 @@ interface Props {
 }
 
 export function OrdenesClient({ orders }: Props) {
+  const t = useT();
   const router = useRouter();
 
   const kpis = useMemo(() => {
@@ -91,10 +93,10 @@ export function OrdenesClient({ orders }: Props) {
                 margin: 0,
               }}
             >
-              Órdenes de laboratorio
+              {t("procurement.ordenesClient.title")}
             </h1>
             <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
-              El historial de tus órdenes enviadas a laboratorios dentales.
+              {t("procurement.ordenesClient.subtitle")}
             </p>
           </div>
         </div>
@@ -103,7 +105,7 @@ export function OrdenesClient({ orders }: Props) {
           icon={<Beaker size={14} />}
           onClick={() => router.push("/dashboard/laboratorios")}
         >
-          Explorar laboratorios
+          {t("procurement.ordenesClient.exploreLabs")}
         </ButtonNew>
       </div>
 
@@ -116,9 +118,9 @@ export function OrdenesClient({ orders }: Props) {
           marginBottom: 20,
         }}
       >
-        <KpiCard label="Órdenes" value={String(kpis.orders)} icon={Package} />
-        <KpiCard label="En proceso" value={String(kpis.enProceso)} icon={Loader} />
-        <KpiCard label="Entregadas" value={String(kpis.entregadas)} icon={Beaker} />
+        <KpiCard label={t("procurement.ordenesClient.kpiOrders")} value={String(kpis.orders)} icon={Package} />
+        <KpiCard label={t("procurement.ordenesClient.kpiInProcess")} value={String(kpis.enProceso)} icon={Loader} />
+        <KpiCard label={t("procurement.ordenesClient.kpiDelivered")} value={String(kpis.entregadas)} icon={Beaker} />
       </div>
 
       {/* ── Mis órdenes ── */}
@@ -134,18 +136,18 @@ export function OrdenesClient({ orders }: Props) {
                   marginBottom: 4,
                 }}
               >
-                Aún no tienes órdenes
+                {t("procurement.ordenesClient.emptyTitle")}
               </div>
               <div style={{ fontSize: 12 }}>
-                Cuando envíes una orden a un laboratorio aparecerá aquí.
+                {t("procurement.ordenesClient.emptyBody")}
               </div>
             </div>
           </CardNew>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {orders.map((order) => {
-              const labName = order.lab?.name ?? "Laboratorio";
-              const detail = order.patientName ?? order.internalRef ?? "Sin referencia";
+              const labName = order.lab?.name ?? t("procurement.ordenesClient.labFallback");
+              const detail = order.patientName ?? order.internalRef ?? t("procurement.ordenesClient.noReference");
               return (
                 <button
                   key={order.id}
@@ -185,7 +187,7 @@ export function OrdenesClient({ orders }: Props) {
                         {DENTAL_LAB_ORDER_STATUS[order.status].label}
                       </BadgeNew>
                       <BadgeNew tone={PAYMENT_STATUS_TONE[order.paymentStatus]} dot>
-                        {PAYMENT_STATUS_LABELS[order.paymentStatus]}
+                        {t(PAYMENT_STATUS_LABEL_KEYS[order.paymentStatus])}
                       </BadgeNew>
                     </div>
                     <div style={{ fontSize: 11, color: "var(--text-3)" }}>
@@ -230,6 +232,7 @@ export function CancelOrderButton({
   orderId: string;
   status: DentalLabOrderStatus;
 }) {
+  const t = useT();
   const router = useRouter();
   const confirm = useConfirm();
   const [saving, setSaving] = useState(false);
@@ -239,11 +242,11 @@ export function CancelOrderButton({
 
   async function cancelOrder() {
     const ok = await confirm({
-      title: "¿Cancelar esta orden?",
-      description: "Esta acción no se puede deshacer.",
+      title: t("procurement.ordenesClient.cancelConfirmTitle"),
+      description: t("procurement.ordenesClient.cancelConfirmDesc"),
       variant: "danger",
-      confirmText: "Cancelar orden",
-      cancelText: "Volver",
+      confirmText: t("procurement.ordenesClient.cancelConfirmText"),
+      cancelText: t("common.back"),
     });
     if (!ok) return;
     setSaving(true);
@@ -255,12 +258,12 @@ export function CancelOrderButton({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "No se pudo cancelar la orden.");
+        throw new Error(data.error ?? t("procurement.ordenesClient.cancelFailed"));
       }
-      toast.success("Orden cancelada");
+      toast.success(t("procurement.ordenesClient.cancelSuccess"));
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error al cancelar");
+      toast.error(err instanceof Error ? err.message : t("procurement.ordenesClient.cancelError"));
     } finally {
       setSaving(false);
     }
@@ -269,7 +272,9 @@ export function CancelOrderButton({
   if (terminal) {
     return (
       <p style={{ fontSize: 12, color: "var(--text-3)", margin: 0 }}>
-        Esta orden está {status === "ENTREGADA" ? "entregada" : "cancelada"}; no hay más acciones.
+        {status === "ENTREGADA"
+          ? t("procurement.ordenesClient.terminalDelivered")
+          : t("procurement.ordenesClient.terminalCancelled")}
       </p>
     );
   }

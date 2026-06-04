@@ -16,6 +16,7 @@ import {
   EyeOff,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { useT } from "@/i18n/i18n-provider";
 import styles from "./integrations.module.css";
 
 type Status = "ok" | "warn" | "off";
@@ -42,6 +43,7 @@ export function IntegrationsClient({
   clinic: ClinicCreds;
   serverStatus: ServerStatus;
 }) {
+  const t = useT();
   const [twilioSid, setTwilioSid] = useState(clinic.twilioAccountSid ?? "");
   const [twilioToken, setTwilioToken] = useState(clinic.twilioAuthToken ?? "");
   const [twilioNumber, setTwilioNumber] = useState(clinic.twilioWhatsappNumber ?? "");
@@ -78,16 +80,16 @@ export function IntegrationsClient({
         }),
       });
       if (!res.ok) {
-        const t = await res.text().catch(() => "");
-        throw new Error(t || "Error al guardar");
+        const errText = await res.text().catch(() => "");
+        throw new Error(errText || t("settings.integrations.saveError"));
       }
-      toast.success("Credenciales WhatsApp guardadas");
+      toast.success(t("settings.integrations.twilioSaved"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error al guardar");
+      toast.error(err instanceof Error ? err.message : t("settings.integrations.saveError"));
     } finally {
       setSavingTwilio(false);
     }
-  }, [twilioSid, twilioToken, twilioNumber]);
+  }, [twilioSid, twilioToken, twilioNumber, t]);
 
   const saveEmail = useCallback(async () => {
     setSavingEmail(true);
@@ -98,28 +100,26 @@ export function IntegrationsClient({
         body: JSON.stringify({ postmarkInboundEmail: postmarkEmail || null }),
       });
       if (!res.ok) {
-        const t = await res.text().catch(() => "");
-        throw new Error(t || "Error al guardar");
+        const errText = await res.text().catch(() => "");
+        throw new Error(errText || t("settings.integrations.saveError"));
       }
-      toast.success("Dirección de correo guardada");
+      toast.success(t("settings.integrations.emailSaved"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error al guardar");
+      toast.error(err instanceof Error ? err.message : t("settings.integrations.saveError"));
     } finally {
       setSavingEmail(false);
     }
-  }, [postmarkEmail]);
+  }, [postmarkEmail, t]);
 
   return (
     <div className={styles.page}>
       <header className={styles.header}>
         <Link href="/dashboard/settings" className={styles.backLink}>
-          <ArrowLeft size={14} aria-hidden /> Configuración
+          <ArrowLeft size={14} aria-hidden /> {t("settings.integrations.backToSettings")}
         </Link>
-        <h1 className={styles.title}>Integraciones</h1>
+        <h1 className={styles.title}>{t("settings.integrations.title")}</h1>
         <p className={styles.subtitle}>
-          Conecta los servicios externos que alimentan el inbox unificado y el
-          asistente clínico de IA. Cada clínica tiene credenciales propias —
-          un número de WhatsApp, un correo entrante.
+          {t("settings.integrations.subtitle")}
         </p>
       </header>
 
@@ -133,8 +133,7 @@ export function IntegrationsClient({
             <div className={styles.cardHeaderInfo}>
               <h2 className={styles.cardTitle}>WhatsApp Business</h2>
               <p className={styles.cardDesc}>
-                Vía Twilio Conversations. Las pacientes te escriben a un solo
-                número de la clínica y el inbox unificado lo enruta al staff.
+                {t("settings.integrations.twilioDesc")}
               </p>
             </div>
             <StatusBadge status={twilioStatus} />
@@ -143,14 +142,14 @@ export function IntegrationsClient({
           <div className={styles.cardBody}>
             <Field
               label="Twilio Account SID"
-              hint="Identificador de tu cuenta Twilio (empieza con AC…)"
+              hint={t("settings.integrations.twilioSidHint")}
               value={twilioSid}
               onChange={setTwilioSid}
               placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
             />
             <Field
               label="Twilio Auth Token"
-              hint="Mantenlo privado — nunca lo compartas en chats o screenshots."
+              hint={t("settings.integrations.twilioTokenHint")}
               value={twilioToken}
               onChange={setTwilioToken}
               placeholder="••••••••••••••••••••••••••••••••"
@@ -160,21 +159,21 @@ export function IntegrationsClient({
                   type="button"
                   className={styles.fieldSuffixBtn}
                   onClick={() => setShowToken((v) => !v)}
-                  aria-label={showToken ? "Ocultar token" : "Mostrar token"}
+                  aria-label={showToken ? t("settings.integrations.hideToken") : t("settings.integrations.showToken")}
                 >
                   {showToken ? <EyeOff size={13} aria-hidden /> : <Eye size={13} aria-hidden />}
                 </button>
               }
             />
             <Field
-              label="Número WhatsApp (E.164)"
-              hint="Formato internacional con +. Ejemplo: +5215512345678"
+              label={t("settings.integrations.whatsappNumberLabel")}
+              hint={t("settings.integrations.whatsappNumberHint")}
               value={twilioNumber}
               onChange={setTwilioNumber}
               placeholder="+5215512345678"
             />
             <div className={styles.webhookBlock}>
-              <span className={styles.webhookLabel}>Webhook a configurar en Twilio</span>
+              <span className={styles.webhookLabel}>{t("settings.integrations.webhookTwilio")}</span>
               <code className={styles.webhookUrl}>
                 https://&lt;tu-dominio&gt;/api/webhooks/twilio/whatsapp
               </code>
@@ -189,7 +188,7 @@ export function IntegrationsClient({
               disabled={savingTwilio}
             >
               <Save size={12} aria-hidden />
-              {savingTwilio ? "Guardando…" : "Guardar credenciales"}
+              {savingTwilio ? t("common.saving") : t("settings.integrations.saveCredentials")}
             </button>
           </footer>
         </section>
@@ -201,10 +200,9 @@ export function IntegrationsClient({
               <Mail size={18} aria-hidden />
             </div>
             <div className={styles.cardHeaderInfo}>
-              <h2 className={styles.cardTitle}>Email entrante</h2>
+              <h2 className={styles.cardTitle}>{t("settings.integrations.emailTitle")}</h2>
               <p className={styles.cardDesc}>
-                Vía Postmark Inbound Parse. La clínica recibe correos en una
-                dirección dedicada y aparecen como threads en el inbox.
+                {t("settings.integrations.emailDesc")}
               </p>
             </div>
             <StatusBadge status={emailStatus} />
@@ -212,14 +210,14 @@ export function IntegrationsClient({
 
           <div className={styles.cardBody}>
             <Field
-              label="Dirección entrante de la clínica"
-              hint="Ejemplo: clinica-aurora@inbox.mediflow.app"
+              label={t("settings.integrations.inboundAddressLabel")}
+              hint={t("settings.integrations.inboundAddressHint")}
               value={postmarkEmail}
               onChange={setPostmarkEmail}
               placeholder="clinica-xxx@inbox.mediflow.app"
             />
             <div className={styles.webhookBlock}>
-              <span className={styles.webhookLabel}>Webhook a configurar en Postmark</span>
+              <span className={styles.webhookLabel}>{t("settings.integrations.webhookPostmark")}</span>
               <code className={styles.webhookUrl}>
                 https://&lt;tu-dominio&gt;/api/webhooks/postmark/inbound
               </code>
@@ -228,11 +226,11 @@ export function IntegrationsClient({
               <span className={styles.envCheckLabel}>POSTMARK_INBOUND_SECRET</span>
               {serverStatus.postmarkInbound ? (
                 <span className={styles.envCheckOk}>
-                  <CheckCircle2 size={11} aria-hidden /> configurado
+                  <CheckCircle2 size={11} aria-hidden /> {t("settings.integrations.configured")}
                 </span>
               ) : (
                 <span className={styles.envCheckOff}>
-                  <XCircle size={11} aria-hidden /> no configurado
+                  <XCircle size={11} aria-hidden /> {t("settings.integrations.notConfigured")}
                 </span>
               )}
             </div>
@@ -246,7 +244,7 @@ export function IntegrationsClient({
               disabled={savingEmail}
             >
               <Save size={12} aria-hidden />
-              {savingEmail ? "Guardando…" : "Guardar dirección"}
+              {savingEmail ? t("common.saving") : t("settings.integrations.saveAddress")}
             </button>
           </footer>
         </section>
@@ -258,11 +256,9 @@ export function IntegrationsClient({
               <Sparkles size={18} aria-hidden />
             </div>
             <div className={styles.cardHeaderInfo}>
-              <h2 className={styles.cardTitle}>Asistente clínico (Claude)</h2>
+              <h2 className={styles.cardTitle}>{t("settings.integrations.aiTitle")}</h2>
               <p className={styles.cardDesc}>
-                Anthropic Claude potencia el asistente clínico, audio-to-SOAP
-                y análisis de radiografías. Configurada por administrador a
-                nivel plataforma.
+                {t("settings.integrations.aiDesc")}
               </p>
             </div>
             <StatusBadge status={aiStatus} />
@@ -273,18 +269,17 @@ export function IntegrationsClient({
               <span className={styles.envCheckLabel}>ANTHROPIC_API_KEY</span>
               {serverStatus.anthropic ? (
                 <span className={styles.envCheckOk}>
-                  <CheckCircle2 size={11} aria-hidden /> configurada en servidor
+                  <CheckCircle2 size={11} aria-hidden /> {t("settings.integrations.configuredOnServer")}
                 </span>
               ) : (
                 <span className={styles.envCheckOff}>
-                  <XCircle size={11} aria-hidden /> falta — configúrala en Vercel
+                  <XCircle size={11} aria-hidden /> {t("settings.integrations.missingConfigureVercel")}
                 </span>
               )}
             </div>
             <p className={styles.cardNote}>
-              Esta integración es a nivel plataforma, no por clínica. Para
-              activarla añade <code>ANTHROPIC_API_KEY</code> en las env vars
-              del proyecto y haz un redeploy.
+              {t("settings.integrations.aiNotePrefix")}{" "}
+              <code>ANTHROPIC_API_KEY</code> {t("settings.integrations.aiNoteSuffix")}
             </p>
           </div>
         </section>
@@ -296,11 +291,9 @@ export function IntegrationsClient({
               <Mic size={18} aria-hidden />
             </div>
             <div className={styles.cardHeaderInfo}>
-              <h2 className={styles.cardTitle}>Transcripción de voz (Whisper)</h2>
+              <h2 className={styles.cardTitle}>{t("settings.integrations.sttTitle")}</h2>
               <p className={styles.cardDesc}>
-                OpenAI Whisper transcribe audio a texto para voice input del
-                asistente y para crear notas SOAP automáticamente desde
-                grabaciones de consulta.
+                {t("settings.integrations.sttDesc")}
               </p>
             </div>
             <StatusBadge status={sttStatus} />
@@ -311,17 +304,16 @@ export function IntegrationsClient({
               <span className={styles.envCheckLabel}>OPENAI_API_KEY</span>
               {serverStatus.openai ? (
                 <span className={styles.envCheckOk}>
-                  <CheckCircle2 size={11} aria-hidden /> configurada en servidor
+                  <CheckCircle2 size={11} aria-hidden /> {t("settings.integrations.configuredOnServer")}
                 </span>
               ) : (
                 <span className={styles.envCheckOff}>
-                  <XCircle size={11} aria-hidden /> falta — configúrala en Vercel
+                  <XCircle size={11} aria-hidden /> {t("settings.integrations.missingConfigureVercel")}
                 </span>
               )}
             </div>
             <p className={styles.cardNote}>
-              Mientras no esté configurada, audio-to-SOAP devolverá un mock y
-              el voice input estará deshabilitado.
+              {t("settings.integrations.sttNote")}
             </p>
           </div>
         </section>
@@ -331,23 +323,24 @@ export function IntegrationsClient({
 }
 
 function StatusBadge({ status }: { status: Status }) {
+  const t = useT();
   if (status === "ok") {
     return (
       <span className={`${styles.statusBadge} ${styles.statusOk}`}>
-        <CheckCircle2 size={11} aria-hidden /> Activa
+        <CheckCircle2 size={11} aria-hidden /> {t("settings.integrations.statusActive")}
       </span>
     );
   }
   if (status === "warn") {
     return (
       <span className={`${styles.statusBadge} ${styles.statusWarn}`}>
-        <AlertTriangle size={11} aria-hidden /> Incompleta
+        <AlertTriangle size={11} aria-hidden /> {t("settings.integrations.statusIncomplete")}
       </span>
     );
   }
   return (
     <span className={`${styles.statusBadge} ${styles.statusOff}`}>
-      <XCircle size={11} aria-hidden /> Desactivada
+      <XCircle size={11} aria-hidden /> {t("settings.integrations.statusDisabled")}
     </span>
   );
 }

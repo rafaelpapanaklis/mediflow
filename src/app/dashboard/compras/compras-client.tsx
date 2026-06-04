@@ -34,6 +34,7 @@ import {
   SUPPLIER_PAYMENT_STATUS_LABELS,
 } from "@/lib/suppliers/types";
 import { B2B_PAYMENT_METHOD_LABELS, type B2BPaymentMethod } from "@/lib/payments-b2b";
+import { useT } from "@/i18n/i18n-provider";
 
 type BadgeTone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
 
@@ -60,6 +61,7 @@ interface Props {
 }
 
 export function ComprasClient({ carts, orders }: Props) {
+  const t = useT();
   const router = useRouter();
   const confirm = useConfirm();
   const [tab, setTab] = useState<Tab>("carrito");
@@ -102,11 +104,11 @@ export function ComprasClient({ carts, orders }: Props) {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "No se pudo actualizar la cantidad");
+        throw new Error(data.error ?? t("procurement.comprasClient.couldNotUpdateQty"));
       }
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error al actualizar");
+      toast.error(err instanceof Error ? err.message : t("procurement.comprasClient.updateError"));
     } finally {
       clearBusy(itemId);
     }
@@ -114,10 +116,10 @@ export function ComprasClient({ carts, orders }: Props) {
 
   async function removeItem(itemId: string, productName: string) {
     const ok = await confirm({
-      title: "¿Quitar producto?",
-      description: `Se quitará "${productName}" de tu carrito.`,
+      title: t("procurement.comprasClient.removeProductTitle"),
+      description: t("procurement.comprasClient.removeProductDesc", { productName }),
       variant: "danger",
-      confirmText: "Quitar",
+      confirmText: t("procurement.comprasClient.remove"),
     });
     if (!ok) return;
     markBusy(itemId);
@@ -125,12 +127,12 @@ export function ComprasClient({ carts, orders }: Props) {
       const res = await fetch(`/api/compras/cart/${itemId}`, { method: "DELETE" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "No se pudo quitar el producto");
+        throw new Error(data.error ?? t("procurement.comprasClient.couldNotRemoveProduct"));
       }
-      toast.success("Producto quitado");
+      toast.success(t("procurement.comprasClient.productRemoved"));
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error al quitar");
+      toast.error(err instanceof Error ? err.message : t("procurement.comprasClient.removeError"));
     } finally {
       clearBusy(itemId);
     }
@@ -143,13 +145,13 @@ export function ComprasClient({ carts, orders }: Props) {
       const res = await fetch(`/api/compras/orders/${orderId}/reorder`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data?.error ?? "No se pudo reordenar este pedido.");
+        throw new Error(data?.error ?? t("procurement.comprasClient.couldNotReorder"));
       }
-      toast.success("Productos agregados al carrito");
+      toast.success(t("procurement.comprasClient.productsAddedToCart"));
       setTab("carrito");
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error al reordenar");
+      toast.error(err instanceof Error ? err.message : t("procurement.comprasClient.reorderError"));
     } finally {
       clearBusy(orderId);
     }
@@ -215,10 +217,10 @@ export function ComprasClient({ carts, orders }: Props) {
                 margin: 0,
               }}
             >
-              Compras
+              {t("procurement.comprasClient.heroTitle")}
             </h1>
             <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, marginBottom: 0 }}>
-              Tu carrito y el historial de pedidos a proveedores.
+              {t("procurement.comprasClient.heroSubtitle")}
             </p>
           </div>
         </div>
@@ -227,7 +229,7 @@ export function ComprasClient({ carts, orders }: Props) {
           icon={<Store size={14} />}
           onClick={() => router.push("/dashboard/suppliers")}
         >
-          Explorar proveedores
+          {t("procurement.comprasClient.exploreSuppliers")}
         </ButtonNew>
       </div>
 
@@ -240,9 +242,9 @@ export function ComprasClient({ carts, orders }: Props) {
           marginBottom: 20,
         }}
       >
-        <KpiCard label="Artículos en carrito" value={String(kpis.totalItems)} icon={ShoppingCart} />
-        <KpiCard label="Proveedores" value={String(kpis.suppliers)} icon={Store} />
-        <KpiCard label="Pedidos" value={String(kpis.orders)} icon={Package} />
+        <KpiCard label={t("procurement.comprasClient.kpiItemsInCart")} value={String(kpis.totalItems)} icon={ShoppingCart} />
+        <KpiCard label={t("procurement.comprasClient.kpiSuppliers")} value={String(kpis.suppliers)} icon={Store} />
+        <KpiCard label={t("procurement.comprasClient.kpiOrders")} value={String(kpis.orders)} icon={Package} />
       </div>
 
       {/* Tabs */}
@@ -253,14 +255,14 @@ export function ComprasClient({ carts, orders }: Props) {
             onClick={() => setTab("carrito")}
             className={`segment-new__btn ${tab === "carrito" ? "segment-new__btn--active" : ""}`}
           >
-            Carrito
+            {t("procurement.comprasClient.tabCart")}
           </button>
           <button
             type="button"
             onClick={() => setTab("pedidos")}
             className={`segment-new__btn ${tab === "pedidos" ? "segment-new__btn--active" : ""}`}
           >
-            Mis pedidos
+            {t("procurement.comprasClient.tabMyOrders")}
           </button>
         </div>
       </div>
@@ -294,7 +296,7 @@ export function ComprasClient({ carts, orders }: Props) {
                 <ShoppingCart size={26} />
               </div>
               <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>
-                Tu carrito está vacío
+                {t("procurement.comprasClient.cartEmptyTitle")}
               </div>
               <p
                 style={{
@@ -305,7 +307,7 @@ export function ComprasClient({ carts, orders }: Props) {
                   lineHeight: 1.5,
                 }}
               >
-                Explora el catálogo de proveedores y agrega productos para armar tu pedido.
+                {t("procurement.comprasClient.cartEmptyDesc")}
               </p>
               <ButtonNew
                 variant="primary"
@@ -321,14 +323,14 @@ export function ComprasClient({ carts, orders }: Props) {
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {carts.map((cart) => {
               const subtotal = cartSubtotal(cart);
-              const businessName = cart.supplier?.businessName ?? "Proveedor";
+              const businessName = cart.supplier?.businessName ?? t("procurement.comprasClient.supplierFallback");
               return (
                 <CardNew
                   key={cart.id}
                   title={businessName}
                   action={
                     <span style={{ fontSize: 12, color: "var(--text-3)", fontWeight: 500 }}>
-                      {cart.items.length} {cart.items.length === 1 ? "producto" : "productos"}
+                      {t("procurement.comprasClient.productCount", { count: cart.items.length })}
                     </span>
                   }
                 >
@@ -370,7 +372,7 @@ export function ComprasClient({ carts, orders }: Props) {
                           {image ? (
                             <img
                               src={image}
-                              alt={product?.name ?? "Producto"}
+                              alt={product?.name ?? t("procurement.comprasClient.productFallback")}
                               style={{
                                 width: 52,
                                 height: 52,
@@ -410,7 +412,7 @@ export function ComprasClient({ carts, orders }: Props) {
                                 whiteSpace: "nowrap",
                               }}
                             >
-                              {product?.name ?? "Producto"}
+                              {product?.name ?? t("procurement.comprasClient.productFallback")}
                             </div>
                             <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
                               {fmtMXNdec(unitPrice)}
@@ -423,7 +425,7 @@ export function ComprasClient({ carts, orders }: Props) {
                             <ButtonNew
                               variant="ghost"
                               size="sm"
-                              aria-label="Disminuir cantidad"
+                              aria-label={t("procurement.comprasClient.decreaseQty")}
                               disabled={isBusy || item.quantity <= 1}
                               onClick={() => changeQuantity(item.id, item.quantity - 1)}
                               icon={<Minus size={12} />}
@@ -443,7 +445,7 @@ export function ComprasClient({ carts, orders }: Props) {
                             <ButtonNew
                               variant="ghost"
                               size="sm"
-                              aria-label="Aumentar cantidad"
+                              aria-label={t("procurement.comprasClient.increaseQty")}
                               disabled={isBusy}
                               onClick={() => changeQuantity(item.id, item.quantity + 1)}
                               icon={<Plus size={12} />}
@@ -469,9 +471,9 @@ export function ComprasClient({ carts, orders }: Props) {
                           <ButtonNew
                             variant="ghost"
                             size="sm"
-                            aria-label="Quitar producto"
+                            aria-label={t("procurement.comprasClient.removeProductAria")}
                             disabled={isBusy}
-                            onClick={() => removeItem(item.id, product?.name ?? "este producto")}
+                            onClick={() => removeItem(item.id, product?.name ?? t("procurement.comprasClient.thisProductFallback"))}
                             icon={<Trash2 size={12} />}
                           />
                         </div>
@@ -493,7 +495,7 @@ export function ComprasClient({ carts, orders }: Props) {
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                      <span style={{ fontSize: 12, color: "var(--text-3)" }}>Subtotal</span>
+                      <span style={{ fontSize: 12, color: "var(--text-3)" }}>{t("procurement.comprasClient.subtotal")}</span>
                       <span
                         className="mono"
                         style={{ fontSize: 16, fontWeight: 700, color: "var(--text-1)" }}
@@ -506,7 +508,7 @@ export function ComprasClient({ carts, orders }: Props) {
                       icon={<CreditCard size={14} />}
                       onClick={() => setCheckoutCart(cart)}
                     >
-                      Realizar pedido
+                      {t("procurement.comprasClient.placeOrder")}
                     </ButtonNew>
                   </div>
                 </CardNew>
@@ -544,7 +546,7 @@ export function ComprasClient({ carts, orders }: Props) {
                 <Package size={26} />
               </div>
               <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 14 }}>
-                Aún no tienes pedidos
+                {t("procurement.comprasClient.ordersEmptyTitle")}
               </div>
               <p
                 style={{
@@ -555,15 +557,14 @@ export function ComprasClient({ carts, orders }: Props) {
                   lineHeight: 1.5,
                 }}
               >
-                Cuando realices un pedido a un proveedor aparecerá aquí para que puedas darle
-                seguimiento.
+                {t("procurement.comprasClient.ordersEmptyDesc")}
               </p>
             </div>
           </CardNew>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {orders.map((order) => {
-              const businessName = order.supplier?.businessName ?? "Proveedor";
+              const businessName = order.supplier?.businessName ?? t("procurement.comprasClient.supplierFallback");
               const itemCount = order.items.reduce((s, it) => s + it.quantity, 0);
               return (
                 <div
@@ -658,7 +659,7 @@ export function ComprasClient({ carts, orders }: Props) {
                           whiteSpace: "nowrap",
                         }}
                       >
-                        {itemCount} {itemCount === 1 ? "producto" : "productos"}
+                        {t("procurement.comprasClient.productCount", { count: itemCount })}
                       </span>
                     </div>
                   </div>
@@ -680,7 +681,7 @@ export function ComprasClient({ carts, orders }: Props) {
 
                   {/* Total */}
                   <div style={{ textAlign: "right", flexShrink: 0, minWidth: 96 }}>
-                    <div style={{ color: "var(--text-4)", fontSize: 11, marginBottom: 2 }}>Total</div>
+                    <div style={{ color: "var(--text-4)", fontSize: 11, marginBottom: 2 }}>{t("common.total")}</div>
                     <div
                       className="mono"
                       style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 15 }}
@@ -692,8 +693,8 @@ export function ComprasClient({ carts, orders }: Props) {
                   <ButtonNew
                     variant="ghost"
                     size="sm"
-                    aria-label="Reordenar"
-                    title="Volver a agregar estos productos al carrito"
+                    aria-label={t("procurement.comprasClient.reorder")}
+                    title={t("procurement.comprasClient.reorderTitle")}
                     disabled={busy.has(order.id)}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -732,6 +733,7 @@ function CheckoutModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const t = useT();
   const open = cart !== null;
 
   // Métodos de pago: SÓLO los que el proveedor tiene habilitados (rails B2B).
@@ -760,7 +762,7 @@ function CheckoutModal({
   async function submit() {
     if (!cart) return;
     if (!paymentMethod) {
-      toast.error("Selecciona un método de pago");
+      toast.error(t("procurement.comprasClient.selectPaymentMethod"));
       return;
     }
     setSubmitting(true);
@@ -775,17 +777,17 @@ function CheckoutModal({
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "No se pudo crear el pedido");
-      toast.success("Pedido creado");
+      if (!res.ok) throw new Error(data.error ?? t("procurement.comprasClient.couldNotCreateOrder"));
+      toast.success(t("procurement.comprasClient.orderCreated"));
       onCreated();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error al crear el pedido");
+      toast.error(err instanceof Error ? err.message : t("procurement.comprasClient.createOrderError"));
     } finally {
       setSubmitting(false);
     }
   }
 
-  const businessName = cart?.supplier?.businessName ?? "el proveedor";
+  const businessName = cart?.supplier?.businessName ?? t("procurement.comprasClient.theSupplierFallback");
 
   return (
     <Dialog.Root open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
@@ -807,10 +809,10 @@ function CheckoutModal({
         >
           <div className="modal__header">
             <Dialog.Title className="modal__title">
-              Realizar pedido a {businessName}
+              {t("procurement.comprasClient.placeOrderTo", { businessName })}
             </Dialog.Title>
             <Dialog.Close asChild>
-              <button type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label="Cerrar">
+              <button type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label={t("common.close")}>
                 <X size={14} />
               </button>
             </Dialog.Close>
@@ -832,21 +834,20 @@ function CheckoutModal({
                 >
                   <Info size={16} style={{ color: "#fcd34d", flexShrink: 0, marginTop: 1 }} />
                   <span style={{ fontSize: 12, color: "#fcd34d", lineHeight: 1.5 }}>
-                    Este proveedor aún no ha configurado métodos de pago. Contáctalo por chat para
-                    coordinar el pago.
+                    {t("procurement.comprasClient.noPaymentMethods")}
                   </span>
                 </div>
               ) : (
                 <>
                   <div className="form-section__title">
                     <CreditCard size={15} style={{ color: "var(--violet-400)" }} />
-                    <span>Pago</span>
+                    <span>{t("procurement.comprasClient.payment")}</span>
                     <span className="form-section__rule" />
                   </div>
 
                   {/* Método de pago */}
                   <div className="field-new">
-                    <label className="field-new__label">Método de pago</label>
+                    <label className="field-new__label">{t("procurement.comprasClient.paymentMethod")}</label>
                     <select
                       className="input-new"
                       value={paymentMethod}
@@ -875,10 +876,10 @@ function CheckoutModal({
                     <Info size={16} style={{ color: "var(--text-3)", flexShrink: 0, marginTop: 1 }} />
                     <span style={{ fontSize: 12, color: "var(--text-2)", lineHeight: 1.5 }}>
                       {paymentMethod === "MERCADOPAGO"
-                        ? "Podrás pagar en línea con MercadoPago desde el detalle del pedido."
+                        ? t("procurement.comprasClient.noticeMercadoPago")
                         : paymentMethod === "TRANSFER"
-                          ? "Verás los datos bancarios (CLABE) del proveedor en el detalle del pedido."
-                          : "Pagas en efectivo al recibir el pedido."}
+                          ? t("procurement.comprasClient.noticeTransfer")
+                          : t("procurement.comprasClient.noticeCash")}
                     </span>
                   </div>
                 </>
@@ -886,10 +887,10 @@ function CheckoutModal({
 
               {/* Notas */}
               <div className="field-new">
-                <label className="field-new__label">Notas para el proveedor</label>
+                <label className="field-new__label">{t("procurement.comprasClient.notesForSupplier")}</label>
                 <textarea
                   className="input-new"
-                  placeholder="Indicaciones de entrega, referencias, etc. (opcional)"
+                  placeholder={t("procurement.comprasClient.notesPlaceholder")}
                   rows={3}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
@@ -901,11 +902,11 @@ function CheckoutModal({
           <div className="modal__footer">
             <Dialog.Close asChild>
               <ButtonNew variant="ghost" type="button">
-                Cancelar
+                {t("common.cancel")}
               </ButtonNew>
             </Dialog.Close>
             <ButtonNew variant="primary" onClick={submit} disabled={submitting || noMethods}>
-              {submitting ? "Creando…" : "Confirmar pedido"}
+              {submitting ? t("procurement.comprasClient.creating") : t("procurement.comprasClient.confirmOrder")}
             </ButtonNew>
           </div>
         </Dialog.Content>

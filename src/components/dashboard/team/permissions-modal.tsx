@@ -12,10 +12,12 @@ import {
   type PermissionKey,
 } from "@/lib/auth/permissions";
 import type { Role } from "@prisma/client";
+import { useT } from "@/i18n/i18n-provider";
 
+// labelKey -> resolved via t() at render time (never call t() at module scope).
 const ROLE_LABEL: Record<string, string> = {
-  SUPER_ADMIN: "Super Admin", ADMIN: "Administrador/a", DOCTOR: "Doctor/a",
-  RECEPTIONIST: "Recepción", READONLY: "Solo lectura",
+  SUPER_ADMIN: "settings.team.roleSuperAdmin", ADMIN: "settings.team.roleAdmin", DOCTOR: "settings.team.roleDoctor",
+  RECEPTIONIST: "settings.team.roleReceptionist", READONLY: "settings.team.roleReadonly",
 };
 
 interface MemberLike {
@@ -36,6 +38,7 @@ interface PermissionsModalProps {
 }
 
 export function PermissionsModal({ open, member, onClose, onSaved }: PermissionsModalProps) {
+  const t = useT();
   // useDefault: true → checkboxes deshabilitados, mostrando los del rol.
   // false → habilitados, editando el override del usuario.
   const [useDefault, setUseDefault] = useState(true);
@@ -95,14 +98,14 @@ export function PermissionsModal({ open, member, onClose, onSaved }: Permissions
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? "Error al guardar permisos");
+        throw new Error(err.error ?? t("settings.permissions.saveError"));
       }
       const data = await res.json();
       onSaved(member.id, data.permissionsOverride ?? []);
-      toast.success("Permisos actualizados");
+      toast.success(t("settings.permissions.updated"));
       onClose();
     } catch (err: any) {
-      toast.error(err.message ?? "Error");
+      toast.error(err.message ?? t("common.genericError"));
     } finally {
       setSaving(false);
     }
@@ -117,7 +120,7 @@ export function PermissionsModal({ open, member, onClose, onSaved }: Permissions
         <DialogHeader>
           <DialogTitle className="text-foreground font-bold flex items-center gap-2">
             <Shield size={16} className="text-violet-600 dark:text-violet-400" />
-            Permisos de {fullName}
+            {t("settings.team.permissionsOf", { name: fullName })}
           </DialogTitle>
         </DialogHeader>
 
@@ -132,11 +135,10 @@ export function PermissionsModal({ open, member, onClose, onSaved }: Permissions
             />
             <div className="flex-1">
               <div className="text-sm font-semibold text-foreground">
-                Usar default del rol <span className="font-mono text-xs text-muted-foreground">{ROLE_LABEL[memberRole] ?? memberRole}</span>
+                {t("settings.permissions.useRoleDefault")} <span className="font-mono text-xs text-muted-foreground">{ROLE_LABEL[memberRole] ? t(ROLE_LABEL[memberRole]) : memberRole}</span>
               </div>
               <div className="text-[11px] text-muted-foreground mt-0.5">
-                Cuando está activado, este usuario hereda los permisos por defecto de su rol.
-                Desmárcalo para personalizar permiso por permiso.
+                {t("settings.permissions.useRoleDefaultHint")}
               </div>
             </div>
           </label>
@@ -172,7 +174,7 @@ export function PermissionsModal({ open, member, onClose, onSaved }: Permissions
                             {key}
                             {isInRoleDefault && (
                               <span className="text-[9px] px-1 py-px rounded bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
-                                rol
+                                {t("settings.permissions.roleBadge")}
                               </span>
                             )}
                           </div>
@@ -187,9 +189,9 @@ export function PermissionsModal({ open, member, onClose, onSaved }: Permissions
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button variant="outline" onClick={onClose} disabled={saving}>{t("common.cancel")}</Button>
           <Button onClick={save} disabled={saving}>
-            {saving ? "Guardando…" : useDefault ? "Volver a default del rol" : `Guardar permisos (${selected.size})`}
+            {saving ? t("common.saving") : useDefault ? t("settings.permissions.revertToRoleDefault") : t("settings.permissions.savePermissionsCount", { count: selected.size })}
           </Button>
         </DialogFooter>
       </DialogContent>

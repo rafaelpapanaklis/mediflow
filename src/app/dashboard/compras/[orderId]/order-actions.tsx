@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { RotateCcw, Download } from "lucide-react";
 import toast from "react-hot-toast";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { useT } from "@/i18n/i18n-provider";
 
 // Acciones cliente del detalle de pedido:
 //  - Reordenar: vuelve a agregar los productos del pedido al carrito y te lleva
@@ -12,6 +13,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 //    precio vigente y omite productos no disponibles.
 //  - Descargar comprobante: abre el PDF del pedido en una pestaña nueva.
 export function OrderActions({ orderId }: { orderId: string }) {
+  const t = useT();
   const router = useRouter();
   const [reordering, setReordering] = useState(false);
 
@@ -21,13 +23,13 @@ export function OrderActions({ orderId }: { orderId: string }) {
       const res = await fetch(`/api/compras/orders/${orderId}/reorder`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data?.error ?? "No se pudo reordenar este pedido.");
+        throw new Error(data?.error ?? t("procurement.orderActions.reorderFailed"));
       }
-      toast.success("Productos agregados al carrito");
+      toast.success(t("procurement.orderActions.addedToCart"));
       // Vamos al carrito (pestaña por defecto de /dashboard/compras).
       router.push("/dashboard/compras");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Error al reordenar");
+      toast.error(e instanceof Error ? e.message : t("procurement.orderActions.reorderError"));
       setReordering(false);
     }
   }
@@ -44,14 +46,14 @@ export function OrderActions({ orderId }: { orderId: string }) {
         disabled={reordering}
         icon={<RotateCcw size={14} />}
       >
-        {reordering ? "Agregando…" : "Reordenar"}
+        {reordering ? t("procurement.orderActions.adding") : t("procurement.orderActions.reorder")}
       </ButtonNew>
       <ButtonNew
         variant="secondary"
         onClick={downloadReceipt}
         icon={<Download size={14} />}
       >
-        Descargar comprobante
+        {t("procurement.orderActions.downloadReceipt")}
       </ButtonNew>
     </>
   );

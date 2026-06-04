@@ -10,24 +10,26 @@ import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { fmtMXN }    from "@/lib/format";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { useT } from "@/i18n/i18n-provider";
+import type { TFunction } from "@/i18n/t";
 
 const DENTAL_ICONS = [
-  { id: "implante-plateado",  src: "/icons/dental/implante-plateado.png",  label: "Implante plateado"  },
-  { id: "implante-azul",      src: "/icons/dental/implante-azul.png",      label: "Implante azul"      },
-  { id: "implante-dorado",    src: "/icons/dental/implante-dorado.png",    label: "Implante dorado"    },
-  { id: "gasas",              src: "/icons/dental/gasas.png",              label: "Gasas/consumibles"  },
-  { id: "algodon",            src: "/icons/dental/algodon.png",            label: "Algodón/rollos"     },
-  { id: "jeringa-verde",      src: "/icons/dental/jeringa-verde.png",      label: "Jeringa/anestesia"  },
-  { id: "fresa-jeringa",      src: "/icons/dental/fresa-jeringa.png",      label: "Fresa/instrumental" },
-  { id: "frasco-azul",        src: "/icons/dental/frasco-azul.png",        label: "Frasco/solución"    },
-  { id: "cemento",            src: "/icons/dental/cemento.png",            label: "Cemento/material"   },
-  { id: "brackets",           src: "/icons/dental/brackets.png",           label: "Brackets"           },
-  { id: "cadenas",            src: "/icons/dental/cadenas.png",            label: "Cadenas elásticas"  },
-  { id: "implante-solo",      src: "/icons/dental/implante-solo.png",      label: "Implante"           },
-  { id: "limas",              src: "/icons/dental/limas.png",              label: "Limas/endodoncia"   },
-  { id: "tijeras",            src: "/icons/dental/tijeras.png",            label: "Tijeras/cirugía"    },
-  { id: "esterilizacion",     src: "/icons/dental/esterilizacion.png",     label: "Esterilización"     },
-  { id: "guantes-cubrebocas", src: "/icons/dental/guantes-cubrebocas.png", label: "Guantes/cubrebocas" },
+  { id: "implante-plateado",  src: "/icons/dental/implante-plateado.png",  labelKey: "procurement.inventoryClient.iconImplantePlateado"  },
+  { id: "implante-azul",      src: "/icons/dental/implante-azul.png",      labelKey: "procurement.inventoryClient.iconImplanteAzul"      },
+  { id: "implante-dorado",    src: "/icons/dental/implante-dorado.png",    labelKey: "procurement.inventoryClient.iconImplanteDorado"    },
+  { id: "gasas",              src: "/icons/dental/gasas.png",              labelKey: "procurement.inventoryClient.iconGasas"  },
+  { id: "algodon",            src: "/icons/dental/algodon.png",            labelKey: "procurement.inventoryClient.iconAlgodon"     },
+  { id: "jeringa-verde",      src: "/icons/dental/jeringa-verde.png",      labelKey: "procurement.inventoryClient.iconJeringa"  },
+  { id: "fresa-jeringa",      src: "/icons/dental/fresa-jeringa.png",      labelKey: "procurement.inventoryClient.iconFresa" },
+  { id: "frasco-azul",        src: "/icons/dental/frasco-azul.png",        labelKey: "procurement.inventoryClient.iconFrasco"    },
+  { id: "cemento",            src: "/icons/dental/cemento.png",            labelKey: "procurement.inventoryClient.iconCemento"   },
+  { id: "brackets",           src: "/icons/dental/brackets.png",           labelKey: "procurement.inventoryClient.iconBrackets"           },
+  { id: "cadenas",            src: "/icons/dental/cadenas.png",            labelKey: "procurement.inventoryClient.iconCadenas"  },
+  { id: "implante-solo",      src: "/icons/dental/implante-solo.png",      labelKey: "procurement.inventoryClient.iconImplante"           },
+  { id: "limas",              src: "/icons/dental/limas.png",              labelKey: "procurement.inventoryClient.iconLimas"   },
+  { id: "tijeras",            src: "/icons/dental/tijeras.png",            labelKey: "procurement.inventoryClient.iconTijeras"    },
+  { id: "esterilizacion",     src: "/icons/dental/esterilizacion.png",     labelKey: "procurement.inventoryClient.iconEsterilizacion"     },
+  { id: "guantes-cubrebocas", src: "/icons/dental/guantes-cubrebocas.png", labelKey: "procurement.inventoryClient.iconGuantes" },
 ];
 
 const CATEGORY_EMOJI: Record<string, string> = {
@@ -59,11 +61,11 @@ interface Item {
 
 type StatusTab = "todos" | "disponible" | "poco" | "sin";
 
-const STATUS_FILTERS: { id: StatusTab; label: string }[] = [
-  { id: "todos",      label: "Todos" },
-  { id: "disponible", label: "Disponibles" },
-  { id: "poco",       label: "Stock bajo" },
-  { id: "sin",        label: "Agotados" },
+const STATUS_FILTERS: { id: StatusTab; labelKey: string }[] = [
+  { id: "todos",      labelKey: "common.all" },
+  { id: "disponible", labelKey: "procurement.inventoryClient.filterAvailable" },
+  { id: "poco",       labelKey: "procurement.inventoryClient.filterLowStock" },
+  { id: "sin",        labelKey: "procurement.inventoryClient.filterOutOfStock" },
 ];
 
 function getStatus(item: Item): StatusTab {
@@ -72,18 +74,19 @@ function getStatus(item: Item): StatusTab {
   return "disponible";
 }
 
-function statusBadge(s: StatusTab) {
-  if (s === "sin")        return <BadgeNew tone="danger"  dot>Agotado</BadgeNew>;
-  if (s === "poco")       return <BadgeNew tone="warning" dot>Bajo</BadgeNew>;
-  return <BadgeNew tone="success" dot>OK</BadgeNew>;
+function statusBadge(s: StatusTab, t: TFunction) {
+  if (s === "sin")        return <BadgeNew tone="danger"  dot>{t("procurement.inventoryClient.badgeOut")}</BadgeNew>;
+  if (s === "poco")       return <BadgeNew tone="warning" dot>{t("procurement.inventoryClient.badgeLow")}</BadgeNew>;
+  return <BadgeNew tone="success" dot>{t("procurement.inventoryClient.badgeOk")}</BadgeNew>;
 }
 
 function ItemIcon({ iconId, category, size = 40 }: { iconId: string; category: string; size?: number }) {
+  const t = useT();
   const [err, setErr] = useState(false);
   const icon = DENTAL_ICONS.find(i => i.id === iconId);
   if (icon && !err) {
     return (
-      <img src={icon.src} alt={icon.label} onError={() => setErr(true)}
+      <img src={icon.src} alt={t(icon.labelKey)} onError={() => setErr(true)}
         style={{ width: size, height: size, background: "var(--bg-elev-2)", border: "1px solid var(--border-soft)", padding: 4, borderRadius: 8 }}
         className="object-contain flex-shrink-0" />
     );
@@ -104,10 +107,11 @@ function ItemIcon({ iconId, category, size = 40 }: { iconId: string; category: s
 }
 
 function IconPicker({ selected, onSelect }: { selected: string; onSelect: (id: string) => void }) {
+  const t = useT();
   return (
     <div>
       <div className="form-section__title">
-        Ícono
+        {t("procurement.inventoryClient.icon")}
         <span className="form-section__rule" />
       </div>
       <div style={{
@@ -124,7 +128,7 @@ function IconPicker({ selected, onSelect }: { selected: string; onSelect: (id: s
             key={icon.id}
             type="button"
             onClick={() => onSelect(icon.id)}
-            title={icon.label}
+            title={t(icon.labelKey)}
             style={{
               width: 36,
               height: 36,
@@ -137,7 +141,7 @@ function IconPicker({ selected, onSelect }: { selected: string; onSelect: (id: s
               transition: "all .12s",
             }}
           >
-            <img src={icon.src} alt={icon.label}
+            <img src={icon.src} alt={t(icon.labelKey)}
               style={{ width: 26, height: 26, objectFit: "contain" }}
               onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
           </button>
@@ -148,6 +152,7 @@ function IconPicker({ selected, onSelect }: { selected: string; onSelect: (id: s
 }
 
 export function InventoryClient({ initialItems }: { initialItems: Item[]; specialty?: string }) {
+  const t = useT();
   const askConfirm = useConfirm();
   const [items, setItems]       = useState<Item[]>(initialItems);
   const [tab, setTab]           = useState<StatusTab>("todos");
@@ -200,7 +205,7 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
       setItems(prev => prev.map(i => i.id === id ? { ...i, quantity: updated.quantity } : i));
       setEditQty(prev => { const n = { ...prev }; delete n[id]; return n; });
       toast.success(`${item.name}: ${updated.quantity} ${item.unit}`);
-    } catch { toast.error("Error"); } finally {
+    } catch { toast.error(t("common.genericError")); } finally {
       setLoadingIds(s => { const n = new Set(s); n.delete(id); return n; });
     }
   }
@@ -215,7 +220,7 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
       });
       const updated = await res.json();
       setItems(prev => prev.map(i => i.id === id ? { ...i, quantity: updated.quantity } : i));
-    } catch { toast.error("Error"); } finally {
+    } catch { toast.error(t("common.genericError")); } finally {
       setLoadingIds(s => { const n = new Set(s); n.delete(id); return n; });
     }
   }
@@ -230,7 +235,7 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
   }
 
   async function addItem() {
-    if (!newItem.name.trim()) { toast.error("El nombre es requerido"); return; }
+    if (!newItem.name.trim()) { toast.error(t("procurement.inventoryClient.nameRequired")); return; }
     const finalCategory = newItem.category === "Otro"
       ? (newItem.customCategory.trim() || "Otro")
       : newItem.category;
@@ -252,22 +257,22 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
       setItems(prev => [...prev, created]);
       setShowAdd(false);
       setNewItem({ name:"", description:"", category:"Instrumental básico", customCategory:"", quantity:0, minQuantity:5, unit:"pza", iconId:"fresa-jeringa" });
-      toast.success("Artículo agregado");
+      toast.success(t("procurement.inventoryClient.itemAdded"));
       setTab(getStatus(created));
-    } catch { toast.error("Error"); }
+    } catch { toast.error(t("common.genericError")); }
   }
 
   async function deleteItem(id: string) {
     const item = items.find(i => i.id === id);
     if (!(await askConfirm({
-      title: `¿Eliminar "${item?.name ?? "artículo"}"?`,
-      description: "El artículo se quitará del inventario. Esta acción no se puede deshacer.",
+      title: t("procurement.inventoryClient.deleteTitle", { name: item?.name ?? t("procurement.inventoryClient.itemFallback") }),
+      description: t("procurement.inventoryClient.deleteDesc"),
       variant: "danger",
-      confirmText: "Eliminar",
+      confirmText: t("common.delete"),
     }))) return;
     await fetch(`/api/inventory/${id}`, { method: "DELETE" });
     setItems(prev => prev.filter(i => i.id !== id));
-    toast.success("Eliminado");
+    toast.success(t("procurement.inventoryClient.deleted"));
   }
 
   return (
@@ -275,22 +280,22 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ fontSize: "clamp(16px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>Inventario</h1>
+          <h1 style={{ fontSize: "clamp(16px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>{t("procurement.inventoryClient.title")}</h1>
           <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
-            {items.length} artículos registrados · {kpis.totalQty.toLocaleString("es-MX")} unidades en stock
+            {t("procurement.inventoryClient.subtitle", { items: items.length, units: kpis.totalQty.toLocaleString("es-MX") })}
           </p>
         </div>
         <ButtonNew variant="primary" icon={<Plus size={14} />} onClick={() => setShowAdd(true)}>
-          Nuevo artículo
+          {t("procurement.inventoryClient.newItem")}
         </ButtonNew>
       </div>
 
       {/* KPIs */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginBottom: 20 }}>
-        <KpiCard label="Total artículos" value={String(items.length)}       icon={Package} />
-        <KpiCard label="Stock bajo"      value={String(kpis.lowCount)}      icon={Package} />
-        <KpiCard label="Agotados"        value={String(kpis.outCount)}      icon={Package} />
-        <KpiCard label="Valor total"     value={fmtMXN(kpis.totalValue)}    icon={Package} />
+        <KpiCard label={t("procurement.inventoryClient.kpiTotalItems")} value={String(items.length)}       icon={Package} />
+        <KpiCard label={t("procurement.inventoryClient.kpiLowStock")}      value={String(kpis.lowCount)}      icon={Package} />
+        <KpiCard label={t("procurement.inventoryClient.kpiOutOfStock")}        value={String(kpis.outCount)}      icon={Package} />
+        <KpiCard label={t("procurement.inventoryClient.kpiTotalValue")}     value={fmtMXN(kpis.totalValue)}    icon={Package} />
       </div>
 
       {/* Filters */}
@@ -300,7 +305,7 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar artículo o categoría…"
+            placeholder={t("procurement.inventoryClient.searchPlaceholder")}
           />
         </div>
         <div className="segment-new">
@@ -311,7 +316,7 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
               onClick={() => setTab(f.id)}
               className={`segment-new__btn ${tab === f.id ? "segment-new__btn--active" : ""}`}
             >
-              {f.label}
+              {t(f.labelKey)}
             </button>
           ))}
         </div>
@@ -323,12 +328,12 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
           <div style={{ padding: "48px 24px", textAlign: "center" }}>
             <Package size={32} style={{ color: "var(--text-4)", margin: "0 auto 12px" }} />
             <p style={{ color: "var(--text-3)", fontSize: 13 }}>
-              {search ? "Sin resultados" : tab === "todos" ? "No hay artículos todavía" : "No hay artículos en este estado"}
+              {search ? t("common.noResults") : tab === "todos" ? t("procurement.inventoryClient.emptyNoItems") : t("procurement.inventoryClient.emptyNoItemsInState")}
             </p>
             {items.length === 0 && (
               <div style={{ marginTop: 12 }}>
                 <ButtonNew variant="primary" size="sm" icon={<Plus size={14} />} onClick={() => setShowAdd(true)}>
-                  Agregar primer artículo
+                  {t("procurement.inventoryClient.addFirstItem")}
                 </ButtonNew>
               </div>
             )}
@@ -337,12 +342,12 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
           <table className="table-new">
             <thead>
               <tr>
-                <th>Artículo</th>
-                <th>Categoría</th>
-                <th style={{ textAlign: "right" }}>Cantidad</th>
-                <th style={{ textAlign: "right" }}>Mínimo</th>
-                <th>Estado</th>
-                <th style={{ textAlign: "right" }}>Acciones</th>
+                <th>{t("procurement.inventoryClient.colItem")}</th>
+                <th>{t("procurement.inventoryClient.colCategory")}</th>
+                <th style={{ textAlign: "right" }}>{t("procurement.inventoryClient.colQuantity")}</th>
+                <th style={{ textAlign: "right" }}>{t("procurement.inventoryClient.colMinimum")}</th>
+                <th>{t("common.status")}</th>
+                <th style={{ textAlign: "right" }}>{t("common.actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -390,7 +395,7 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
                             disabled={isLoad}
                             className="btn-new btn-new--primary btn-new--sm"
                             style={{ padding: 0, width: 28 }}
-                            aria-label="Confirmar"
+                            aria-label={t("common.confirm")}
                           >
                             <Check size={12} />
                           </button>
@@ -404,7 +409,7 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
                             color: qtyColor, fontWeight: 600, fontSize: 14,
                             background: "transparent", border: "none", cursor: "pointer",
                           }}
-                          title="Click para editar"
+                          title={t("procurement.inventoryClient.clickToEdit")}
                         >
                           {item.quantity} {item.unit}
                         </button>
@@ -422,7 +427,7 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
                         }}
                       />
                     </td>
-                    <td>{statusBadge(status)}</td>
+                    <td>{statusBadge(status, t)}</td>
                     <td style={{ textAlign: "right" }}>
                       <div style={{ display: "inline-flex", gap: 4 }}>
                         <button
@@ -431,7 +436,7 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
                           onClick={() => changeQty(item.id, -1)}
                           className="btn-new btn-new--ghost btn-new--sm"
                           style={{ padding: 0, width: 28, color: "var(--danger)" }}
-                          aria-label="Quitar uno"
+                          aria-label={t("procurement.inventoryClient.removeOne")}
                         >
                           <Minus size={12} />
                         </button>
@@ -441,7 +446,7 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
                           onClick={() => changeQty(item.id, 1)}
                           className="btn-new btn-new--ghost btn-new--sm"
                           style={{ padding: 0, width: 28, color: "var(--success)" }}
-                          aria-label="Agregar uno"
+                          aria-label={t("procurement.inventoryClient.addOne")}
                         >
                           <Plus size={12} />
                         </button>
@@ -450,7 +455,7 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
                           onClick={() => deleteItem(item.id)}
                           className="btn-new btn-new--ghost btn-new--sm"
                           style={{ padding: 0, width: 28 }}
-                          aria-label="Eliminar"
+                          aria-label={t("common.delete")}
                         >
                           <Trash2 size={12} />
                         </button>
@@ -499,12 +504,12 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
             }}
           >
             <div className="modal__header">
-              <Dialog.Title className="modal__title">Nuevo artículo</Dialog.Title>
+              <Dialog.Title className="modal__title">{t("procurement.inventoryClient.newItem")}</Dialog.Title>
               <Dialog.Close asChild>
                 <button
                   type="button"
                   className="btn-new btn-new--ghost btn-new--sm"
-                  aria-label="Cerrar"
+                  aria-label={t("common.close")}
                 >
                   <X size={14} />
                 </button>
@@ -520,50 +525,50 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
 
               <div style={{ marginBottom: 22 }}>
                 <div className="form-section__title">
-                  Información
+                  {t("procurement.inventoryClient.sectionInfo")}
                   <span className="form-section__rule" />
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "12px 14px" }}>
                   <div className="field-new">
-                    <label className="field-new__label">Nombre <span className="req">*</span></label>
+                    <label className="field-new__label">{t("procurement.inventoryClient.fieldName")} <span className="req">*</span></label>
                     <input
                       className="input-new"
-                      placeholder="Ej: Resina compuesta A2"
+                      placeholder={t("procurement.inventoryClient.namePlaceholder")}
                       value={newItem.name}
                       onChange={e => setNewItem(n => ({ ...n, name: e.target.value }))}
                     />
                   </div>
                   <div className="field-new">
-                    <label className="field-new__label">Para qué sirve</label>
+                    <label className="field-new__label">{t("procurement.inventoryClient.fieldPurpose")}</label>
                     <textarea
                       className="input-new"
                       style={{ height: 60, paddingTop: 8, resize: "vertical" }}
-                      placeholder="Ej: Para restauraciones del sector anterior"
+                      placeholder={t("procurement.inventoryClient.purposePlaceholder")}
                       value={newItem.description}
                       onChange={e => setNewItem(n => ({ ...n, description: e.target.value }))}
                     />
                   </div>
                   <div className="field-new">
-                    <label className="field-new__label">Categoría</label>
+                    <label className="field-new__label">{t("procurement.inventoryClient.fieldCategory")}</label>
                     <select
                       className="input-new"
                       value={newItem.category}
                       onChange={e => setNewItem(n => ({ ...n, category: e.target.value }))}
                     >
-                      <option>Instrumental básico</option>
-                      <option>Fresas dentales</option>
-                      <option>Materiales de restauración</option>
-                      <option>Ortodoncia</option>
-                      <option>Endodoncia</option>
-                      <option>Cirugía e implantes</option>
-                      <option>Consumibles</option>
-                      <option>Otro</option>
+                      <option value="Instrumental básico">{t("procurement.inventoryClient.catBasicInstruments")}</option>
+                      <option value="Fresas dentales">{t("procurement.inventoryClient.catDentalBurs")}</option>
+                      <option value="Materiales de restauración">{t("procurement.inventoryClient.catRestorativeMaterials")}</option>
+                      <option value="Ortodoncia">{t("procurement.inventoryClient.catOrthodontics")}</option>
+                      <option value="Endodoncia">{t("procurement.inventoryClient.catEndodontics")}</option>
+                      <option value="Cirugía e implantes">{t("procurement.inventoryClient.catSurgeryImplants")}</option>
+                      <option value="Consumibles">{t("procurement.inventoryClient.catConsumables")}</option>
+                      <option value="Otro">{t("procurement.inventoryClient.catOther")}</option>
                     </select>
                     {newItem.category === "Otro" && (
                       <input
                         className="input-new"
                         style={{ marginTop: 6 }}
-                        placeholder="Escribe el nombre de la categoría"
+                        placeholder={t("procurement.inventoryClient.customCategoryPlaceholder")}
                         value={newItem.customCategory}
                         onChange={e => setNewItem(n => ({ ...n, customCategory: e.target.value }))}
                       />
@@ -574,12 +579,12 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
 
               <div>
                 <div className="form-section__title">
-                  Stock inicial
+                  {t("procurement.inventoryClient.sectionInitialStock")}
                   <span className="form-section__rule" />
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px 14px" }}>
                   <div className="field-new">
-                    <label className="field-new__label">Cantidad</label>
+                    <label className="field-new__label">{t("procurement.inventoryClient.fieldQuantity")}</label>
                     <input
                       type="number" min={0}
                       className="input-new mono"
@@ -588,7 +593,7 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
                     />
                   </div>
                   <div className="field-new">
-                    <label className="field-new__label">Alerta si &lt;</label>
+                    <label className="field-new__label">{t("procurement.inventoryClient.fieldAlertIfBelow")}</label>
                     <input
                       type="number" min={0}
                       className="input-new mono"
@@ -597,7 +602,7 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
                     />
                   </div>
                   <div className="field-new">
-                    <label className="field-new__label">Unidad</label>
+                    <label className="field-new__label">{t("procurement.inventoryClient.fieldUnit")}</label>
                     <select
                       className="input-new"
                       value={newItem.unit}
@@ -614,9 +619,9 @@ export function InventoryClient({ initialItems }: { initialItems: Item[]; specia
 
             <div className="modal__footer">
               <Dialog.Close asChild>
-                <ButtonNew variant="ghost" type="button">Cancelar</ButtonNew>
+                <ButtonNew variant="ghost" type="button">{t("common.cancel")}</ButtonNew>
               </Dialog.Close>
-              <ButtonNew variant="primary" onClick={addItem}>Agregar artículo</ButtonNew>
+              <ButtonNew variant="primary" onClick={addItem}>{t("procurement.inventoryClient.addItem")}</ButtonNew>
             </div>
           </Dialog.Content>
         </Dialog.Portal>
