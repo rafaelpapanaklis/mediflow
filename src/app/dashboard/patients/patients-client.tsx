@@ -39,6 +39,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { useT } from "@/i18n/i18n-provider";
+import type { TFunction } from "@/i18n/t";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { NewPatientModal } from "@/components/dashboard/new-patient-modal";
 import { DateField } from "@/components/ui/date-field";
@@ -118,15 +120,16 @@ const VIEW_STORAGE_KEY = "mf:patients:view";
 const COLUMNS_STORAGE_KEY = "mf:patients:cols";
 const PAGE_SIZE = 30;
 
-const ALL_COLUMNS: Array<{ id: ColumnId; label: string; required?: boolean }> = [
-  { id: "patient", label: "Paciente", required: true },
-  { id: "contact", label: "Contacto" },
-  { id: "lastVisit", label: "Última visita" },
-  { id: "nextAppointment", label: "Próxima cita" },
-  { id: "balance", label: "Saldo" },
-  { id: "doctor", label: "Doctor" },
-  { id: "tags", label: "Etiquetas" },
-  { id: "status", label: "Estado" },
+// `labelKey` resuelve vía t(labelKey) en tiempo de render (nunca t() en módulo).
+const ALL_COLUMNS: Array<{ id: ColumnId; labelKey: string; required?: boolean }> = [
+  { id: "patient", labelKey: "patients.list.colPatient", required: true },
+  { id: "contact", labelKey: "patients.list.colContact" },
+  { id: "lastVisit", labelKey: "patients.list.colLastVisit" },
+  { id: "nextAppointment", labelKey: "patients.list.colNextAppointment" },
+  { id: "balance", labelKey: "patients.list.colBalance" },
+  { id: "doctor", labelKey: "patients.list.colDoctor" },
+  { id: "tags", labelKey: "patients.list.colTags" },
+  { id: "status", labelKey: "patients.list.colStatus" },
 ];
 const DEFAULT_VISIBLE: ColumnId[] = ALL_COLUMNS.map((c) => c.id);
 
@@ -135,26 +138,27 @@ const DEFAULT_VISIBLE: ColumnId[] = ALL_COLUMNS.map((c) => c.id);
 function initials(p: { firstName: string; lastName: string }): string {
   return `${p.firstName[0] ?? ""}${p.lastName[0] ?? ""}`.toUpperCase();
 }
-function formatRelative(iso: string | null): {
+// Recibe `t` (no se llama t() en módulo): el texto relativo se localiza en render.
+function formatRelative(iso: string | null, t: TFunction): {
   text: string;
   tone: "recent" | "old" | "never" | "future";
 } {
-  if (!iso) return { text: "Nunca", tone: "never" };
+  if (!iso) return { text: t("patients.relative.never"), tone: "never" };
   const date = new Date(iso);
   const diff = date.getTime() - Date.now();
   const absDays = Math.floor(Math.abs(diff) / (1000 * 60 * 60 * 24));
   if (diff > 0) {
-    if (absDays === 0) return { text: "Hoy", tone: "future" };
-    if (absDays === 1) return { text: "Mañana", tone: "future" };
-    if (absDays < 7) return { text: `En ${absDays}d`, tone: "future" };
-    if (absDays < 30) return { text: `En ${Math.round(absDays / 7)} sem.`, tone: "future" };
+    if (absDays === 0) return { text: t("patients.relative.today"), tone: "future" };
+    if (absDays === 1) return { text: t("patients.relative.tomorrow"), tone: "future" };
+    if (absDays < 7) return { text: t("patients.relative.inDays", { days: absDays }), tone: "future" };
+    if (absDays < 30) return { text: t("patients.relative.inWeeks", { weeks: Math.round(absDays / 7) }), tone: "future" };
     return { text: new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short" }).format(date), tone: "future" };
   }
-  if (absDays === 0) return { text: "Hoy", tone: "recent" };
-  if (absDays === 1) return { text: "Ayer", tone: "recent" };
-  if (absDays < 30) return { text: `Hace ${absDays}d`, tone: "recent" };
-  if (absDays < 365) return { text: `Hace ${Math.round(absDays / 30)} meses`, tone: "old" };
-  return { text: `Hace ${Math.floor(absDays / 365)} años`, tone: "old" };
+  if (absDays === 0) return { text: t("patients.relative.today"), tone: "recent" };
+  if (absDays === 1) return { text: t("patients.relative.yesterday"), tone: "recent" };
+  if (absDays < 30) return { text: t("patients.relative.daysAgo", { days: absDays }), tone: "recent" };
+  if (absDays < 365) return { text: t("patients.relative.monthsAgo", { months: Math.round(absDays / 30) }), tone: "old" };
+  return { text: t("patients.relative.yearsAgo", { years: Math.floor(absDays / 365) }), tone: "old" };
 }
 function formatMoney(n: number): string {
   return new Intl.NumberFormat("es-MX", {
@@ -212,6 +216,7 @@ function computePages(current: number, total: number): Array<number | "..."> {
 /* ─── Componente principal ─── */
 
 export function PatientsClient({ doctors }: Props) {
+  const t = useT();
   const router = useRouter();
   const askConfirm = useConfirm();
 
@@ -326,13 +331,13 @@ export function PatientsClient({ doctors }: Props) {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Error al cargar pacientes");
+        setError(err instanceof Error ? err.message : t("patients.list.loadError"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [queryString, page, reloadKey]);
+  }, [queryString, page, reloadKey, t]);
 
   const handleSort = useCallback((col: SortCol) => {
     if (sortCol !== col) {
@@ -387,7 +392,7 @@ export function PatientsClient({ doctors }: Props) {
     })
       .then((r) => {
         if (!r.ok) throw new Error();
-        toast.success(willBeVip ? "Marcado VIP" : "VIP removido");
+        toast.success(willBeVip ? t("patients.list.markedVip") : t("patients.list.vipRemoved"));
       })
       .catch(() => {
         setData((prev) =>
@@ -395,9 +400,9 @@ export function PatientsClient({ doctors }: Props) {
             ? { ...prev, patients: prev.patients.map((p) => (p.id === patientId ? { ...p, isVip: target.isVip, tags: target.tags } : p)) }
             : prev,
         );
-        toast.error("Error");
+        toast.error(t("patients.list.vipError"));
       });
-  }, [data]);
+  }, [data, t]);
 
   const patients = data?.patients ?? [];
   const allSelected = patients.length > 0 && patients.every((p) => selected.has(p.id));
@@ -502,10 +507,10 @@ export function PatientsClient({ doctors }: Props) {
   const bulkArchive = async () => {
     if (selected.size === 0) return;
     if (!(await askConfirm({
-      title: `¿Archivar ${selected.size} ${selected.size === 1 ? "paciente" : "pacientes"}?`,
-      description: "Los pacientes archivados se ocultan de la lista activa pero conservan su historial clínico.",
+      title: t("patients.bulk.archiveConfirmTitle", { count: selected.size }),
+      description: t("patients.bulk.archiveConfirmDescription"),
       variant: "warning",
-      confirmText: "Archivar",
+      confirmText: t("patients.bulk.archiveConfirmText"),
     }))) return;
     const ids = Array.from(selected);
     try {
@@ -518,19 +523,27 @@ export function PatientsClient({ doctors }: Props) {
           }),
         ),
       );
-      toast.success(`${ids.length} pacientes archivados`);
+      toast.success(t("patients.bulk.archivedToast", { count: ids.length }));
       setSelected(new Set());
       setData(null);
       setPage(1);
     } catch {
-      toast.error("Error al archivar");
+      toast.error(t("patients.bulk.archiveError"));
     }
   };
 
   const bulkExportCsv = () => {
     const rows = patients.filter((p) => selected.has(p.id));
     if (rows.length === 0) return;
-    const headers = ["ID", "Nombre", "Teléfono", "Email", "Edad", "Status", "Saldo"];
+    const headers = [
+      t("patients.export.colId"),
+      t("patients.export.colName"),
+      t("patients.export.colPhone"),
+      t("patients.export.colEmail"),
+      t("patients.export.colAge"),
+      t("patients.export.colStatus"),
+      t("patients.export.colBalance"),
+    ];
     const csv = [
       headers.join(","),
       ...rows.map((p) =>
@@ -544,7 +557,7 @@ export function PatientsClient({ doctors }: Props) {
     a.download = `pacientes-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success(`Exportados ${rows.length} pacientes`);
+    toast.success(t("patients.export.successToast", { count: rows.length }));
   };
 
   const applyDrawer = () => {
@@ -568,10 +581,10 @@ export function PatientsClient({ doctors }: Props) {
       <div className={styles.filtersRow}>
         <div className={styles.pillGroup}>
           {([
-            { id: "ALL" as const, label: "Todos", count: stats?.total },
-            { id: "ACTIVE" as const, label: "Activos", count: stats?.active },
-            { id: "INACTIVE" as const, label: "Inactivos", count: stats?.inactive },
-            { id: "ARCHIVED" as const, label: "Archivados", count: stats?.archived },
+            { id: "ALL" as const, label: t("common.all"), count: stats?.total },
+            { id: "ACTIVE" as const, label: t("patients.statusFilter.active"), count: stats?.active },
+            { id: "INACTIVE" as const, label: t("patients.statusFilter.inactive"), count: stats?.inactive },
+            { id: "ARCHIVED" as const, label: t("patients.statusFilter.archived"), count: stats?.archived },
           ]).map((f) => (
             <button
               key={f.id}
@@ -589,11 +602,11 @@ export function PatientsClient({ doctors }: Props) {
         <span className={styles.pillDivider} aria-hidden />
         <div className={styles.pillGroup}>
           {([
-            { id: "debt" as QuickFilter, label: "Con deuda", count: stats?.withDebt },
-            { id: "vip" as QuickFilter, label: "VIP" },
-            { id: "nextAppt" as QuickFilter, label: "Próxima cita", count: stats?.nextAppointmentsWeek },
-            { id: "birthdayWeek" as QuickFilter, label: "Cumple esta semana" },
-            { id: "noContact6m" as QuickFilter, label: "Sin contacto 6m" },
+            { id: "debt" as QuickFilter, label: t("patients.quickFilter.withDebt"), count: stats?.withDebt },
+            { id: "vip" as QuickFilter, label: t("patients.quickFilter.vip") },
+            { id: "nextAppt" as QuickFilter, label: t("patients.quickFilter.nextAppointment"), count: stats?.nextAppointmentsWeek },
+            { id: "birthdayWeek" as QuickFilter, label: t("patients.quickFilter.birthdayWeek") },
+            { id: "noContact6m" as QuickFilter, label: t("patients.quickFilter.noContact6m") },
           ]).map((q) => (
             <button
               key={q.id}
@@ -618,7 +631,7 @@ export function PatientsClient({ doctors }: Props) {
             type="text"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Buscar paciente, teléfono, email…"
+            placeholder={t("patients.toolbar.searchPlaceholder")}
             className={styles.searchInput}
             spellCheck={false}
           />
@@ -630,24 +643,24 @@ export function PatientsClient({ doctors }: Props) {
             type="button"
             className={`${styles.viewToggleBtn} ${view === "list" ? styles.viewToggleBtnActive : ""}`}
             onClick={() => { setView("list"); writeJSONLS(VIEW_STORAGE_KEY, "list"); }}
-            title="Lista (G)"
+            title={t("patients.toolbar.viewListTitle")}
           >
-            <Rows3 size={13} aria-hidden /> Lista
+            <Rows3 size={13} aria-hidden /> {t("patients.toolbar.viewList")}
           </button>
           <button
             type="button"
             className={`${styles.viewToggleBtn} ${view === "grid" ? styles.viewToggleBtnActive : ""}`}
             onClick={() => { setView("grid"); writeJSONLS(VIEW_STORAGE_KEY, "grid"); }}
-            title="Grid (G)"
+            title={t("patients.toolbar.viewGridTitle")}
           >
-            <LayoutGrid size={13} aria-hidden /> Grid
+            <LayoutGrid size={13} aria-hidden /> {t("patients.toolbar.viewGrid")}
             <kbd>G</kbd>
           </button>
         </div>
 
         <div className={styles.dropdownWrap}>
           <button type="button" className={styles.btn} onClick={() => setColsDropdownOpen((v) => !v)}>
-            <Columns3 size={13} aria-hidden /> Columnas
+            <Columns3 size={13} aria-hidden /> {t("patients.toolbar.columns")}
             <ChevronDown size={11} aria-hidden />
           </button>
           {colsDropdownOpen && (
@@ -657,7 +670,7 @@ export function PatientsClient({ doctors }: Props) {
                 onClick={() => setColsDropdownOpen(false)}
               />
               <div className={styles.dropdown}>
-                <div className={styles.dropdownLabel}>Mostrar columnas</div>
+                <div className={styles.dropdownLabel}>{t("patients.toolbar.showColumns")}</div>
                 {ALL_COLUMNS.map((c) => {
                   const inputId = `col-toggle-${c.id}`;
                   return (
@@ -669,8 +682,8 @@ export function PatientsClient({ doctors }: Props) {
                         disabled={c.required}
                         onChange={() => toggleColumn(c.id)}
                       />
-                      <span>{c.label}</span>
-                      {c.required && <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--text-4)" }}>fija</span>}
+                      <span>{t(c.labelKey)}</span>
+                      {c.required && <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--text-4)" }}>{t("patients.toolbar.columnFixed")}</span>}
                     </label>
                   );
                 })}
@@ -690,9 +703,9 @@ export function PatientsClient({ doctors }: Props) {
               visitFrom: advVisitFrom, visitTo: advVisitTo,
             });
           }}
-          title="Más filtros (F)"
+          title={t("patients.toolbar.moreFiltersTitle")}
         >
-          <Filter size={13} aria-hidden /> Más filtros
+          <Filter size={13} aria-hidden /> {t("patients.toolbar.moreFilters")}
         </button>
 
         <span className={styles.toolbarSpacer} />
@@ -701,35 +714,35 @@ export function PatientsClient({ doctors }: Props) {
           type="button"
           className={`${styles.btn} ${styles.btnPrimary}`}
           onClick={() => setNewPatientOpen(true)}
-          title="Nuevo paciente (N)"
+          title={t("patients.toolbar.newPatientTitle")}
         >
-          <Plus size={13} aria-hidden /> Nuevo paciente
+          <Plus size={13} aria-hidden /> {t("patients.toolbar.newPatient")}
         </button>
       </div>
 
       {selected.size > 0 && (
         <div className={styles.bulkBar}>
-          <span className={styles.bulkCount}>{selected.size} seleccionados</span>
-          <button type="button" className={styles.btn} onClick={() => toast("Asignar etiqueta — próximamente")}>
-            <Tag size={13} aria-hidden /> Asignar etiqueta
+          <span className={styles.bulkCount}>{t("patients.bulk.selectedCount", { count: selected.size })}</span>
+          <button type="button" className={styles.btn} onClick={() => toast(t("patients.bulk.assignTagSoon"))}>
+            <Tag size={13} aria-hidden /> {t("patients.bulk.assignTag")}
           </button>
-          <button type="button" className={styles.btn} onClick={() => toast("Asignar doctor — próximamente")}>
-            <User size={13} aria-hidden /> Asignar doctor
+          <button type="button" className={styles.btn} onClick={() => toast(t("patients.bulk.assignDoctorSoon"))}>
+            <User size={13} aria-hidden /> {t("patients.bulk.assignDoctor")}
           </button>
           <span className={styles.bulkDivider} aria-hidden />
-          <button type="button" className={styles.btn} onClick={() => toast("Campaña WhatsApp — próximamente")}>
-            <MessageCircle size={13} aria-hidden /> Campaña WhatsApp
+          <button type="button" className={styles.btn} onClick={() => toast(t("patients.bulk.whatsappCampaignSoon"))}>
+            <MessageCircle size={13} aria-hidden /> {t("patients.bulk.whatsappCampaign")}
           </button>
           <button type="button" className={styles.btn} onClick={bulkExportCsv}>
-            <Download size={13} aria-hidden /> Exportar CSV
+            <Download size={13} aria-hidden /> {t("patients.bulk.exportCsv")}
           </button>
           <span className={styles.bulkDivider} aria-hidden />
           <button type="button" className={`${styles.btn} ${styles.btnDanger}`} onClick={bulkArchive}>
-            <Trash2 size={13} aria-hidden /> Archivar
+            <Trash2 size={13} aria-hidden /> {t("patients.bulk.archive")}
           </button>
           <span className={styles.toolbarSpacer} />
           <button type="button" className={`${styles.btn} ${styles.btnGhost}`} onClick={() => setSelected(new Set())}>
-            Cancelar
+            {t("common.cancel")}
           </button>
         </div>
       )}
@@ -737,7 +750,7 @@ export function PatientsClient({ doctors }: Props) {
       {error ? (
         <div className={styles.empty}>
           <AlertCircle size={28} style={{ marginBottom: 8, color: "var(--red)" }} aria-hidden />
-          <div>Error: {error}</div>
+          <div>{t("patients.list.errorPrefix", { message: error })}</div>
         </div>
       ) : view === "list" ? (
         <PatientsTable
@@ -768,13 +781,13 @@ export function PatientsClient({ doctors }: Props) {
       {!error && total > 0 && (
         <div className={styles.pagination}>
           <span className={styles.pageInfo}>
-            Mostrando {pageStart.toLocaleString()}–{pageEnd.toLocaleString()} de {total.toLocaleString()}
+            {t("patients.pagination.showing", { from: pageStart.toLocaleString(), to: pageEnd.toLocaleString(), total: total.toLocaleString() })}
           </span>
           <div className={styles.pageControls}>
-            <button type="button" className={styles.pageBtn} disabled={page === 1} onClick={() => setPage(1)} title="Primera">
+            <button type="button" className={styles.pageBtn} disabled={page === 1} onClick={() => setPage(1)} title={t("patients.pagination.first")}>
               <ChevronsLeft size={13} aria-hidden />
             </button>
-            <button type="button" className={styles.pageBtn} disabled={page === 1} onClick={() => setPage((p) => p - 1)} title="Anterior">
+            <button type="button" className={styles.pageBtn} disabled={page === 1} onClick={() => setPage((p) => p - 1)} title={t("common.previous")}>
               <ChevronLeft size={13} aria-hidden />
             </button>
             {pagesToShow.map((p, i) =>
@@ -791,10 +804,10 @@ export function PatientsClient({ doctors }: Props) {
                 </button>
               ),
             )}
-            <button type="button" className={styles.pageBtn} disabled={page === totalPages} onClick={() => setPage((p) => p + 1)} title="Siguiente">
+            <button type="button" className={styles.pageBtn} disabled={page === totalPages} onClick={() => setPage((p) => p + 1)} title={t("common.next")}>
               <ChevronRight size={13} aria-hidden />
             </button>
-            <button type="button" className={styles.pageBtn} disabled={page === totalPages} onClick={() => setPage(totalPages)} title="Última">
+            <button type="button" className={styles.pageBtn} disabled={page === totalPages} onClick={() => setPage(totalPages)} title={t("patients.pagination.last")}>
               <ChevronsRight size={13} aria-hidden />
             </button>
           </div>
@@ -802,7 +815,7 @@ export function PatientsClient({ doctors }: Props) {
       )}
 
       <div className={styles.kbdHints}>
-        <kbd>/</kbd>buscar · <kbd>J</kbd>/<kbd>K</kbd>navegar · <kbd>↵</kbd>abrir · <kbd>Esc</kbd>limpiar · <kbd>Space</kbd>seleccionar · <kbd>N</kbd>nuevo · <kbd>G</kbd>vista · <kbd>F</kbd>filtros
+        <kbd>/</kbd>{t("patients.kbdHints.search")} · <kbd>J</kbd>/<kbd>K</kbd>{t("patients.kbdHints.navigate")} · <kbd>↵</kbd>{t("patients.kbdHints.open")} · <kbd>Esc</kbd>{t("patients.kbdHints.clear")} · <kbd>Space</kbd>{t("patients.kbdHints.select")} · <kbd>N</kbd>{t("patients.kbdHints.new")} · <kbd>G</kbd>{t("patients.kbdHints.view")} · <kbd>F</kbd>{t("patients.kbdHints.filters")}
       </div>
 
       {drawerOpen && (
@@ -840,45 +853,46 @@ function HeroStats({
   onClick: (kind: "total" | "newMonth" | "debt" | "nextAppt") => void;
   activeFilter: QuickFilter | null;
 }) {
+  const t = useT();
   const fmt = (n: number) => n.toLocaleString();
   return (
     <div className={styles.heroGrid}>
       <StatCard
-        label="Total pacientes"
+        label={t("patients.hero.totalPatients")}
         icon={Users}
         value={stats ? fmt(stats.total) : loading ? "…" : "0"}
-        deltaText={stats ? `+${stats.newThisMonth} este mes` : ""}
+        deltaText={stats ? t("patients.hero.newThisMonthDelta", { count: stats.newThisMonth }) : ""}
         deltaTone="up"
         onClick={() => onClick("total")}
       />
       <StatCard
-        label="Nuevos este mes"
+        label={t("patients.hero.newThisMonth")}
         icon={TrendingUp}
         value={stats ? fmt(stats.newThisMonth) : "0"}
         deltaText={
           stats && stats.newPctDelta !== 0
-            ? `${stats.newPctDelta > 0 ? "+" : ""}${stats.newPctDelta}% vs mes anterior`
-            : "sin cambio"
+            ? t("patients.hero.pctVsPrevMonth", { pct: `${stats.newPctDelta > 0 ? "+" : ""}${stats.newPctDelta}` })
+            : t("patients.hero.noChange")
         }
         deltaTone={stats && stats.newPctDelta < 0 ? "down" : "up"}
         variant="brand"
         onClick={() => onClick("newMonth")}
       />
       <StatCard
-        label="Con deuda"
+        label={t("patients.hero.withDebt")}
         icon={AlertCircle}
         value={stats ? formatMoney(stats.withDebtAmount) : "$0"}
-        deltaText={stats ? `${stats.withDebt} pacientes` : ""}
+        deltaText={stats ? t("patients.hero.patientsCount", { count: stats.withDebt }) : ""}
         deltaTone="down"
         variant="danger"
         active={activeFilter === "debt"}
         onClick={() => onClick("debt")}
       />
       <StatCard
-        label="Próximas citas"
+        label={t("patients.hero.nextAppointments")}
         icon={Calendar}
         value={stats ? `${stats.nextAppointmentsToday} / ${stats.nextAppointmentsWeek}` : "0 / 0"}
-        deltaText="Hoy / Esta semana"
+        deltaText={t("patients.hero.todayThisWeek")}
         deltaTone="up"
         active={activeFilter === "nextAppt"}
         onClick={() => onClick("nextAppt")}
@@ -946,6 +960,7 @@ function PatientsTable({
   onToggleOne: (id: string, idx: number, withShift: boolean) => void;
   onToggleVip: (id: string) => void;
 }) {
+  const t = useT();
   if (loading && patients.length === 0) {
     return (
       <div className={styles.tableWrap}>
@@ -958,7 +973,7 @@ function PatientsTable({
       <div className={styles.tableWrap}>
         <div className={styles.empty}>
           <Users size={28} style={{ opacity: 0.3, marginBottom: 8 }} aria-hidden />
-          <div>Sin pacientes que coincidan con los filtros.</div>
+          <div>{t("patients.list.emptyFiltered")}</div>
         </div>
       </div>
     );
@@ -977,17 +992,17 @@ function PatientsTable({
                 className={styles.bulkCheckbox}
                 checked={allSelected}
                 onChange={onToggleAll}
-                aria-label="Seleccionar todos los pacientes"
+                aria-label={t("patients.list.selectAll")}
               />
             </th>
-            {visibleCol("patient") && <SortHeader label="Paciente" col="name" sortCol={sortCol} sortDir={sortDir} onSort={onSort} />}
-            {visibleCol("contact") && <th>Contacto</th>}
-            {visibleCol("lastVisit") && <SortHeader label="Última visita" col="lastVisit" sortCol={sortCol} sortDir={sortDir} onSort={onSort} />}
-            {visibleCol("nextAppointment") && <SortHeader label="Próxima cita" col="nextAppointment" sortCol={sortCol} sortDir={sortDir} onSort={onSort} />}
-            {visibleCol("balance") && <SortHeader label="Saldo" col="balance" sortCol={sortCol} sortDir={sortDir} onSort={onSort} />}
-            {visibleCol("doctor") && <th>Doctor</th>}
-            {visibleCol("tags") && <th>Etiquetas</th>}
-            {visibleCol("status") && <th>Estado</th>}
+            {visibleCol("patient") && <SortHeader label={t("patients.list.colPatient")} col="name" sortCol={sortCol} sortDir={sortDir} onSort={onSort} />}
+            {visibleCol("contact") && <th>{t("patients.list.colContact")}</th>}
+            {visibleCol("lastVisit") && <SortHeader label={t("patients.list.colLastVisit")} col="lastVisit" sortCol={sortCol} sortDir={sortDir} onSort={onSort} />}
+            {visibleCol("nextAppointment") && <SortHeader label={t("patients.list.colNextAppointment")} col="nextAppointment" sortCol={sortCol} sortDir={sortDir} onSort={onSort} />}
+            {visibleCol("balance") && <SortHeader label={t("patients.list.colBalance")} col="balance" sortCol={sortCol} sortDir={sortDir} onSort={onSort} />}
+            {visibleCol("doctor") && <th>{t("patients.list.colDoctor")}</th>}
+            {visibleCol("tags") && <th>{t("patients.list.colTags")}</th>}
+            {visibleCol("status") && <th>{t("patients.list.colStatus")}</th>}
             <th className={styles.colActions}></th>
           </tr>
         </thead>
@@ -1048,10 +1063,11 @@ function PatientRowComp({
   onToggle: (id: string, idx: number, withShift: boolean) => void;
   onToggleVip: (id: string) => void;
 }) {
+  const t = useT();
   const router = useRouter();
   const visibleCol = (id: ColumnId) => columnsVisible.includes(id);
-  const lastVisit = formatRelative(p.lastVisit);
-  const nextApt = p.nextAppointment ? formatRelative(p.nextAppointment.startsAt) : null;
+  const lastVisit = formatRelative(p.lastVisit, t);
+  const nextApt = p.nextAppointment ? formatRelative(p.nextAppointment.startsAt, t) : null;
 
   const handleRowClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
@@ -1079,7 +1095,7 @@ function PatientRowComp({
             e.stopPropagation();
             onToggle(p.id, idx, e.shiftKey);
           }}
-          aria-label={`Seleccionar paciente ${p.firstName} ${p.lastName}`}
+          aria-label={t("patients.row.selectPatient", { name: `${p.firstName} ${p.lastName}` })}
         />
       </td>
       {visibleCol("patient") && (
@@ -1093,7 +1109,7 @@ function PatientRowComp({
               <span className={styles.patientName}>{highlightMatch(p.fullName, search)}</span>
               <span className={styles.patientMeta}>
                 {p.patientNumber}
-                {p.age != null && ` · ${p.age} años`}
+                {p.age != null && ` · ${t("patients.row.yearsOld", { age: p.age })}`}
                 {p.gender !== "OTHER" && ` · ${p.gender === "MALE" ? "M" : "F"}`}
               </span>
             </span>
@@ -1133,7 +1149,7 @@ function PatientRowComp({
               >
                 {p.assignedDoctor.firstName[0] ?? ""}
               </span>
-              <span className={styles.doctorName}>Dr/a. {p.assignedDoctor.lastName}</span>
+              <span className={styles.doctorName}>{t("patients.row.doctorPrefix")} {p.assignedDoctor.lastName}</span>
             </div>
           ) : (
             <span className={styles.visitNever}>—</span>
@@ -1156,7 +1172,7 @@ function PatientRowComp({
             p.status === "ACTIVE" ? styles.statusActive :
             p.status === "INACTIVE" ? styles.statusInactive : styles.statusArchived
           }`}>
-            {p.status === "ACTIVE" ? "Activo" : p.status === "INACTIVE" ? "Inactivo" : "Archivado"}
+            {p.status === "ACTIVE" ? t("patients.status.active") : p.status === "INACTIVE" ? t("patients.status.inactive") : t("patients.status.archived")}
           </span>
         </td>
       )}
@@ -1168,7 +1184,7 @@ function PatientRowComp({
               target="_blank"
               rel="noopener noreferrer"
               className={`${styles.actionBtn} ${styles.actionWa}`}
-              title="WhatsApp"
+              title={t("patients.row.whatsapp")}
               onClick={(e) => e.stopPropagation()}
             >
               <MessageCircle size={13} aria-hidden />
@@ -1178,7 +1194,7 @@ function PatientRowComp({
             <a
               href={`tel:${p.phone}`}
               className={`${styles.actionBtn} ${styles.actionCall}`}
-              title="Llamar"
+              title={t("patients.row.call")}
               onClick={(e) => e.stopPropagation()}
             >
               <Phone size={13} aria-hidden />
@@ -1187,7 +1203,7 @@ function PatientRowComp({
           <Link
             href={`/dashboard/agenda?newAppointment=1&patientId=${p.id}`}
             className={`${styles.actionBtn} ${styles.actionCal}`}
-            title="Agendar"
+            title={t("patients.row.schedule")}
             onClick={(e) => e.stopPropagation()}
           >
             <Calendar size={13} aria-hidden />
@@ -1195,7 +1211,7 @@ function PatientRowComp({
           <button
             type="button"
             className={`${styles.actionBtn} ${styles.actionVip} ${p.isVip ? styles.actionVipActive : ""}`}
-            title={p.isVip ? "Quitar VIP" : "Marcar VIP"}
+            title={p.isVip ? t("patients.row.removeVip") : t("patients.row.markVip")}
             onClick={(e) => {
               e.stopPropagation();
               onToggleVip(p.id);
@@ -1208,7 +1224,7 @@ function PatientRowComp({
             className={styles.actionView}
             onClick={(e) => e.stopPropagation()}
           >
-            Ver <ArrowRight size={11} aria-hidden />
+            {t("common.view")} <ArrowRight size={11} aria-hidden />
           </Link>
         </div>
       </td>
@@ -1225,6 +1241,7 @@ function PatientsGrid({
   selected: Set<string>;
   onToggleOne: (id: string, idx: number, withShift: boolean) => void;
 }) {
+  const t = useT();
   if (loading && patients.length === 0) {
     return (
       <div className={styles.grid}>
@@ -1238,15 +1255,15 @@ function PatientsGrid({
     return (
       <div className={styles.empty}>
         <Users size={28} style={{ opacity: 0.3, marginBottom: 8 }} aria-hidden />
-        <div>Sin pacientes que coincidan con los filtros.</div>
+        <div>{t("patients.list.emptyFiltered")}</div>
       </div>
     );
   }
   return (
     <div className={styles.grid}>
       {patients.map((p, idx) => {
-        const lastVisit = formatRelative(p.lastVisit);
-        const nextApt = p.nextAppointment ? formatRelative(p.nextAppointment.startsAt) : null;
+        const lastVisit = formatRelative(p.lastVisit, t);
+        const nextApt = p.nextAppointment ? formatRelative(p.nextAppointment.startsAt, t) : null;
         const isSelected = selected.has(p.id);
         return (
           <Link
@@ -1263,7 +1280,7 @@ function PatientsGrid({
                 <h3 className={styles.gridName}>{highlightMatch(p.fullName, search)}</h3>
                 <span className={styles.gridMeta}>
                   {p.patientNumber}
-                  {p.age != null && ` · ${p.age} años`}
+                  {p.age != null && ` · ${t("patients.row.yearsOld", { age: p.age })}`}
                   {p.gender !== "OTHER" && ` · ${p.gender === "MALE" ? "M" : "F"}`}
                 </span>
               </div>
@@ -1285,27 +1302,27 @@ function PatientsGrid({
             )}
             <div className={styles.gridInfo}>
               <div className={styles.gridInfoCell}>
-                <span className={styles.gridInfoLabel}>Próxima cita</span>
+                <span className={styles.gridInfoLabel}>{t("patients.list.colNextAppointment")}</span>
                 <span className={styles.gridInfoValue} style={nextApt ? { color: "var(--brand)", fontWeight: 700 } : { color: "var(--text-3)" }}>
                   {nextApt ? nextApt.text : "—"}
                 </span>
               </div>
               <div className={styles.gridInfoCell}>
-                <span className={styles.gridInfoLabel}>Última visita</span>
+                <span className={styles.gridInfoLabel}>{t("patients.list.colLastVisit")}</span>
                 <span className={styles.gridInfoValue} style={{ color: lastVisit.tone === "recent" ? "var(--green)" : "var(--text-2)" }}>
                   {lastVisit.text}
                 </span>
               </div>
               <div className={styles.gridInfoCell}>
-                <span className={styles.gridInfoLabel}>Saldo</span>
+                <span className={styles.gridInfoLabel}>{t("patients.list.colBalance")}</span>
                 <span className={`${styles.gridInfoValue} ${styles.mono}`} style={p.balance > 0 ? { color: "var(--red)", fontWeight: 700 } : { color: "var(--text-4)" }}>
                   {p.balance > 0 ? formatMoney(p.balance) : "—"}
                 </span>
               </div>
               <div className={styles.gridInfoCell}>
-                <span className={styles.gridInfoLabel}>Doctor</span>
+                <span className={styles.gridInfoLabel}>{t("patients.list.colDoctor")}</span>
                 <span className={styles.gridInfoValue}>
-                  {p.assignedDoctor ? `Dr/a. ${p.assignedDoctor.lastName}` : "—"}
+                  {p.assignedDoctor ? `${t("patients.row.doctorPrefix")} ${p.assignedDoctor.lastName}` : "—"}
                 </span>
               </div>
             </div>
@@ -1317,7 +1334,7 @@ function PatientsGrid({
                   rel="noopener noreferrer"
                   className={`${styles.actionBtn} ${styles.actionWa}`}
                   onClick={(e) => e.stopPropagation()}
-                  title="WhatsApp"
+                  title={t("patients.row.whatsapp")}
                 >
                   <MessageCircle size={13} aria-hidden />
                 </a>
@@ -1327,14 +1344,14 @@ function PatientsGrid({
                   href={`tel:${p.phone}`}
                   className={`${styles.actionBtn} ${styles.actionCall}`}
                   onClick={(e) => e.stopPropagation()}
-                  title="Llamar"
+                  title={t("patients.row.call")}
                 >
                   <Phone size={13} aria-hidden />
                 </a>
               )}
               <span style={{ flex: 1 }} />
               <span className={styles.actionView}>
-                Ver <ArrowRight size={11} aria-hidden />
+                {t("common.view")} <ArrowRight size={11} aria-hidden />
               </span>
             </div>
           </Link>
@@ -1365,8 +1382,21 @@ function FilterDrawer({
   onClear: () => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const toggleArray = (arr: string[], v: string) =>
     arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
+
+  // Las etiquetas clínicas son VALORES funcionales (se envían a la API y se
+  // comparan contra los tags almacenados en BD, en español): el value no cambia,
+  // solo se localiza la ETIQUETA visible vía labelKey.
+  const CLINICAL_TAGS: Array<{ value: string; labelKey: string }> = [
+    { value: "VIP", labelKey: "patients.drawer.tagVip" },
+    { value: "Alergia", labelKey: "patients.drawer.tagAllergy" },
+    { value: "Crónico", labelKey: "patients.drawer.tagChronic" },
+    { value: "Embarazo", labelKey: "patients.drawer.tagPregnancy" },
+    { value: "Pediátrico", labelKey: "patients.drawer.tagPediatric" },
+    { value: "Nuevo", labelKey: "patients.drawer.tagNew" },
+  ];
 
   return (
     <>
@@ -1378,19 +1408,19 @@ function FilterDrawer({
         aria-labelledby="filter-drawer-title"
       >
         <header className={styles.drawerHeader}>
-          <h3 id="filter-drawer-title" className={styles.drawerTitle}>Filtros avanzados</h3>
-          <button type="button" className={`${styles.btn} ${styles.btnIcon}`} onClick={onClose} aria-label="Cerrar">
+          <h3 id="filter-drawer-title" className={styles.drawerTitle}>{t("patients.drawer.title")}</h3>
+          <button type="button" className={`${styles.btn} ${styles.btnIcon}`} onClick={onClose} aria-label={t("common.close")}>
             <X size={14} aria-hidden />
           </button>
         </header>
         <div className={styles.drawerBody}>
           <div className={styles.drawerSection}>
-            <span className={styles.drawerLabel}>Edad</span>
+            <span className={styles.drawerLabel}>{t("patients.drawer.age")}</span>
             <div className={styles.rangeRow}>
               <input
                 type="number"
                 className={styles.drawerInput}
-                placeholder="Mín"
+                placeholder={t("patients.drawer.min")}
                 value={drafts.ageMin}
                 onChange={(e) => setDrafts({ ...drafts, ageMin: e.target.value })}
               />
@@ -1398,7 +1428,7 @@ function FilterDrawer({
               <input
                 type="number"
                 className={styles.drawerInput}
-                placeholder="Máx"
+                placeholder={t("patients.drawer.max")}
                 value={drafts.ageMax}
                 onChange={(e) => setDrafts({ ...drafts, ageMax: e.target.value })}
               />
@@ -1406,12 +1436,12 @@ function FilterDrawer({
           </div>
 
           <div className={styles.drawerSection}>
-            <span className={styles.drawerLabel}>Género</span>
+            <span className={styles.drawerLabel}>{t("patients.drawer.gender")}</span>
             <div className={styles.checkRow}>
               {[
-                { v: "MALE", l: "Masculino" },
-                { v: "FEMALE", l: "Femenino" },
-                { v: "OTHER", l: "Otro" },
+                { v: "MALE", l: t("patients.drawer.genderMale") },
+                { v: "FEMALE", l: t("patients.drawer.genderFemale") },
+                { v: "OTHER", l: t("patients.drawer.genderOther") },
               ].map((g) => (
                 <button
                   key={g.v}
@@ -1426,39 +1456,39 @@ function FilterDrawer({
           </div>
 
           <div className={styles.drawerSection}>
-            <span className={styles.drawerLabel}>Doctor asignado</span>
+            <span className={styles.drawerLabel}>{t("patients.drawer.assignedDoctor")}</span>
             <select
               className={styles.drawerInput}
               value={drafts.doctorId}
               onChange={(e) => setDrafts({ ...drafts, doctorId: e.target.value })}
             >
-              <option value="">Todos los doctores</option>
+              <option value="">{t("patients.drawer.allDoctors")}</option>
               {doctors.map((d) => (
                 <option key={d.id} value={d.id}>
-                  Dr/a. {d.firstName} {d.lastName}
+                  {t("patients.row.doctorPrefix")} {d.firstName} {d.lastName}
                 </option>
               ))}
             </select>
           </div>
 
           <div className={styles.drawerSection}>
-            <span className={styles.drawerLabel}>Etiquetas clínicas</span>
+            <span className={styles.drawerLabel}>{t("patients.drawer.clinicalTags")}</span>
             <div className={styles.checkRow}>
-              {["VIP", "Alergia", "Crónico", "Embarazo", "Pediátrico", "Nuevo"].map((t) => (
+              {CLINICAL_TAGS.map((tag) => (
                 <button
-                  key={t}
+                  key={tag.value}
                   type="button"
-                  className={`${styles.checkPill} ${drafts.tags.includes(t) ? styles.checkPillActive : ""}`}
-                  onClick={() => setDrafts({ ...drafts, tags: toggleArray(drafts.tags, t) })}
+                  className={`${styles.checkPill} ${drafts.tags.includes(tag.value) ? styles.checkPillActive : ""}`}
+                  onClick={() => setDrafts({ ...drafts, tags: toggleArray(drafts.tags, tag.value) })}
                 >
-                  {t}
+                  {t(tag.labelKey)}
                 </button>
               ))}
             </div>
           </div>
 
           <div className={styles.drawerSection}>
-            <span className={styles.drawerLabel}>Última visita — desde / hasta</span>
+            <span className={styles.drawerLabel}>{t("patients.drawer.lastVisitRange")}</span>
             <div className={styles.rangeRow}>
               <DateField
                 className={styles.drawerInput}
@@ -1475,24 +1505,24 @@ function FilterDrawer({
           </div>
 
           <div className={styles.drawerSection}>
-            <span className={styles.drawerLabel}>Saldo</span>
+            <span className={styles.drawerLabel}>{t("patients.list.colBalance")}</span>
             <select
               className={styles.drawerInput}
               value={drafts.hasDebt}
               onChange={(e) => setDrafts({ ...drafts, hasDebt: e.target.value as "any" | "yes" | "no" })}
             >
-              <option value="any">Cualquiera</option>
-              <option value="yes">Con deuda</option>
-              <option value="no">En cero</option>
+              <option value="any">{t("patients.drawer.debtAny")}</option>
+              <option value="yes">{t("patients.drawer.debtYes")}</option>
+              <option value="no">{t("patients.drawer.debtZero")}</option>
             </select>
           </div>
         </div>
         <div className={styles.drawerFooter}>
           <button type="button" className={`${styles.btn} ${styles.btnGhost}`} onClick={onClear} style={{ flex: 1 }}>
-            Limpiar
+            {t("common.clear")}
           </button>
           <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={onApply} style={{ flex: 2 }}>
-            Aplicar filtros
+            {t("patients.drawer.applyFilters")}
           </button>
         </div>
       </aside>

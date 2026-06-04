@@ -12,6 +12,7 @@ import {
   FileSearch,
   Loader2,
 } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 type TimelineEventType =
   | "soap"
@@ -51,42 +52,45 @@ interface Props {
   emptyState?: ReactNode;
 }
 
-const TYPE_META: Record<TimelineEventType, { label: string; icon: React.ElementType; bg: string; fg: string; border: string }> = {
-  soap:         { label: "Notas",        icon: Stethoscope,  bg: "rgba(124, 58, 237, 0.10)", fg: "#7c3aed", border: "rgba(124, 58, 237, 0.30)" },
-  prescription: { label: "Recetas",      icon: Pill,         bg: "rgba(217, 119, 6, 0.10)",  fg: "#b45309", border: "rgba(217, 119, 6, 0.30)" },
-  appointment:  { label: "Citas",        icon: CalendarCheck,bg: "rgba(37, 99, 235, 0.10)",  fg: "#1d4ed8", border: "rgba(37, 99, 235, 0.30)" },
-  xray:         { label: "Radiografías", icon: ImageIcon,    bg: "rgba(15, 118, 110, 0.10)", fg: "#0f766e", border: "rgba(15, 118, 110, 0.30)" },
-  treatment:    { label: "Tratamientos", icon: ListChecks,   bg: "rgba(16, 185, 129, 0.10)", fg: "#059669", border: "rgba(16, 185, 129, 0.30)" },
-  referral:     { label: "Referencias",  icon: ArrowUpRight, bg: "rgba(220, 38, 38, 0.08)",  fg: "#b91c1c", border: "rgba(220, 38, 38, 0.30)" },
-  diagnosis:    { label: "Diagnósticos", icon: FileSearch,   bg: "rgba(100, 116, 139, 0.10)", fg: "#475569", border: "rgba(100, 116, 139, 0.30)" },
+// `labelKey` resuelve a una clave i18n; el label visible se obtiene con t(meta.labelKey)
+// en el render (nunca t() a nivel de módulo).
+const TYPE_META: Record<TimelineEventType, { labelKey: string; icon: React.ElementType; bg: string; fg: string; border: string }> = {
+  soap:         { labelKey: "patients.historiaTimeline.typeSoap",         icon: Stethoscope,  bg: "rgba(124, 58, 237, 0.10)", fg: "#7c3aed", border: "rgba(124, 58, 237, 0.30)" },
+  prescription: { labelKey: "patients.historiaTimeline.typePrescription", icon: Pill,         bg: "rgba(217, 119, 6, 0.10)",  fg: "#b45309", border: "rgba(217, 119, 6, 0.30)" },
+  appointment:  { labelKey: "patients.historiaTimeline.typeAppointment",  icon: CalendarCheck,bg: "rgba(37, 99, 235, 0.10)",  fg: "#1d4ed8", border: "rgba(37, 99, 235, 0.30)" },
+  xray:         { labelKey: "patients.historiaTimeline.typeXray",         icon: ImageIcon,    bg: "rgba(15, 118, 110, 0.10)", fg: "#0f766e", border: "rgba(15, 118, 110, 0.30)" },
+  treatment:    { labelKey: "patients.historiaTimeline.typeTreatment",    icon: ListChecks,   bg: "rgba(16, 185, 129, 0.10)", fg: "#059669", border: "rgba(16, 185, 129, 0.30)" },
+  referral:     { labelKey: "patients.historiaTimeline.typeReferral",     icon: ArrowUpRight, bg: "rgba(220, 38, 38, 0.08)",  fg: "#b91c1c", border: "rgba(220, 38, 38, 0.30)" },
+  diagnosis:    { labelKey: "patients.historiaTimeline.typeDiagnosis",    icon: FileSearch,   bg: "rgba(100, 116, 139, 0.10)", fg: "#475569", border: "rgba(100, 116, 139, 0.30)" },
 };
 
 const TYPE_ORDER: TimelineEventType[] = ["soap", "prescription", "appointment", "diagnosis", "xray", "treatment", "referral"];
 
+// `labelKey` resuelve a una clave i18n; el label visible se obtiene con t(p.labelKey)
+// en el render (nunca t() a nivel de módulo).
 const RANGE_PRESETS = [
-  { id: "30",   label: "30 días",  days: 30 },
-  { id: "90",   label: "90 días",  days: 90 },
-  { id: "365",  label: "12 meses", days: 365 },
-  { id: "all",  label: "Todo",     days: 0 },
+  { id: "30",   labelKey: "patients.historiaTimeline.range30d",  days: 30 },
+  { id: "90",   labelKey: "patients.historiaTimeline.range90d",  days: 90 },
+  { id: "365",  labelKey: "patients.historiaTimeline.range12m",  days: 365 },
+  { id: "all",  labelKey: "patients.historiaTimeline.rangeAll",  days: 0 },
 ] as const;
 type RangePreset = typeof RANGE_PRESETS[number]["id"];
 
-function relativeDate(dateStr: string): string {
+function relativeDate(dateStr: string, t: ReturnType<typeof useT>): string {
   const d = new Date(dateStr).getTime();
   const diff = Date.now() - d;
   const days = Math.floor(diff / 86400000);
   if (days < 0) return new Date(dateStr).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" });
   if (days === 0) {
     const hours = Math.floor(diff / 3600000);
-    if (hours < 1) return "hace minutos";
-    if (hours === 1) return "hace 1 hora";
-    return `hace ${hours} horas`;
+    if (hours < 1) return t("patients.historiaTimeline.relMinutes");
+    return t("patients.historiaTimeline.relHours", { count: hours });
   }
-  if (days === 1) return "ayer";
-  if (days < 7) return `hace ${days} días`;
-  if (days < 30) return `hace ${Math.floor(days / 7)} sem`;
-  if (days < 365) return `hace ${Math.floor(days / 30)} meses`;
-  return `hace ${Math.floor(days / 365)} años`;
+  if (days === 1) return t("patients.historiaTimeline.relYesterday");
+  if (days < 7) return t("patients.historiaTimeline.relDays", { count: days });
+  if (days < 30) return t("patients.historiaTimeline.relWeeks", { count: Math.floor(days / 7) });
+  if (days < 365) return t("patients.historiaTimeline.relMonths", { count: Math.floor(days / 30) });
+  return t("patients.historiaTimeline.relYears", { count: Math.floor(days / 365) });
 }
 
 function exactDate(dateStr: string): string {
@@ -106,6 +110,7 @@ export function HistoriaTimeline({
   limit,
   emptyState,
 }: Props) {
+  const t = useT();
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -204,7 +209,7 @@ export function HistoriaTimeline({
         <>
           {/* Range picker */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Rango:</span>
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide">{t("patients.historiaTimeline.rangeLabel")}</span>
             {RANGE_PRESETS.map((p) => (
               <button
                 key={p.id}
@@ -214,23 +219,23 @@ export function HistoriaTimeline({
                   range === p.id ? "bg-brand-600 text-white border-brand-600" : "bg-card text-foreground border-border hover:bg-muted"
                 }`}
               >
-                {p.label}
+                {t(p.labelKey)}
               </button>
             ))}
           </div>
 
           {/* Type filter chips */}
           <div className="flex items-center gap-1.5 flex-wrap">
-            {TYPE_ORDER.map((t) => {
-              const meta = TYPE_META[t];
-              const enabled = enabledTypes.has(t);
-              const count = counts[t];
+            {TYPE_ORDER.map((ty) => {
+              const meta = TYPE_META[ty];
+              const enabled = enabledTypes.has(ty);
+              const count = counts[ty];
               const Icon = meta.icon;
               return (
                 <button
-                  key={t}
+                  key={ty}
                   type="button"
-                  onClick={() => toggleType(t)}
+                  onClick={() => toggleType(ty)}
                   aria-pressed={enabled}
                   className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full border transition-all"
                   style={{
@@ -241,7 +246,7 @@ export function HistoriaTimeline({
                   }}
                 >
                   <Icon size={12} aria-hidden />
-                  {meta.label}
+                  {t(meta.labelKey)}
                   {count > 0 && (
                     <span className="text-[10px] font-bold opacity-70">({count})</span>
                   )}
@@ -255,11 +260,11 @@ export function HistoriaTimeline({
       {/* Timeline */}
       {loading ? (
         <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
-          <Loader2 size={14} className="animate-spin" /> Cargando timeline…
+          <Loader2 size={14} className="animate-spin" /> {t("patients.historiaTimeline.loading")}
         </div>
       ) : error ? (
         <div className="p-4 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700">
-          Error al cargar timeline: {error}
+          {t("patients.historiaTimeline.loadError", { error })}
         </div>
       ) : filtered.length === 0 ? (
         events.length === 0 && emptyState ? (
@@ -267,8 +272,8 @@ export function HistoriaTimeline({
         ) : (
           <div className="p-6 bg-card border border-border rounded-xl text-center text-xs text-muted-foreground">
             {events.length === 0
-              ? "Sin eventos clínicos registrados en este rango."
-              : "Ningún evento coincide con los filtros seleccionados."}
+              ? t("patients.historiaTimeline.emptyNoEvents")
+              : t("patients.historiaTimeline.emptyNoMatch")}
           </div>
         )
       ) : (
@@ -319,7 +324,7 @@ export function HistoriaTimeline({
                       className="text-[11px] text-muted-foreground"
                       title={exactDate(e.date)}
                     >
-                      {relativeDate(e.date)}
+                      {relativeDate(e.date, t)}
                     </span>
                     {e.doctorName && (
                       <span className="text-[11px] text-muted-foreground ml-auto">{e.doctorName}</span>

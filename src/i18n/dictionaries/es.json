@@ -1090,5 +1090,821 @@
       "probabilityTitle": "Probabilidad de no-show: {pct}%",
       "ariaLabel": "{label} de no-show: {pct}%"
     }
+  },
+  "patients": {
+    "orthodonticsPage": {
+      "backToRecord": "Volver al expediente",
+      "title": "Ortodoncia"
+    },
+    "page": {
+      "loadError": "Error al cargar detalle del paciente"
+    },
+    "breadcrumb": {
+      "patients": "Pacientes"
+    },
+    "export": {
+      "cdaTitle": "Exportar expediente en formato HL7 CDA R2 (NOM-024)",
+      "cdaLabel": "Exportar CDA HL7",
+      "colId": "ID",
+      "colName": "Nombre",
+      "colPhone": "Teléfono",
+      "colEmail": "Email",
+      "colAge": "Edad",
+      "colStatus": "Status",
+      "colBalance": "Saldo",
+      "successToast": {
+        "one": "Exportado {count} paciente",
+        "other": "Exportados {count} pacientes"
+      }
+    },
+    "doctorPrefix": "Dr/a.",
+    "apptStatus": {
+      "pending": "Pendiente",
+      "confirmed": "Confirmada",
+      "completed": "Completada",
+      "cancelled": "Cancelada",
+      "noShow": "No asistió"
+    },
+    "invStatus": {
+      "pending": "Pendiente",
+      "partial": "Parcial",
+      "paid": "Pagado",
+      "overdue": "Vencido"
+    },
+    "tabs": {
+      "resumen": "Resumen",
+      "historia": "Historia clínica",
+      "odontograma": "Odontograma",
+      "expediente": "Nueva consulta",
+      "historialConsultas": "Historial de consultas",
+      "evolucion": "Notas SOAP",
+      "radiografias": "Radiografías",
+      "tratamiento": "Plan de tratamiento",
+      "referencias": "Referencias",
+      "agenda": "Citas",
+      "facturacion": "Facturación",
+      "pediatria": "Pediatría",
+      "periodoncia": "Periodoncia",
+      "endodoncia": "Endodoncia",
+      "implantes": "Implantes",
+      "ortodoncia": "Ortodoncia",
+      "sectionsAria": "Secciones del paciente"
+    },
+    "severity": {
+      "alta": "Prioridad alta",
+      "media": "Prioridad media",
+      "baja": "Prioridad baja",
+      "informativo": "Informativo"
+    },
+    "fileCat": {
+      "periapical": "Periapical",
+      "panoramic": "Panorámica",
+      "bitewing": "Bitewing",
+      "occlusal": "Oclusal",
+      "intraoral": "Foto intraoral",
+      "extraoral": "Foto extraoral",
+      "progress": "Progreso",
+      "consent": "Consentimiento",
+      "other": "Otro"
+    },
+    "pediatrics": {
+      "dentition": "Dentición"
+    },
+    "deleteRecord": {
+      "signedError": "Las notas firmadas no se pueden eliminar (NOM-024)",
+      "confirm": "¿Eliminar esta nota borrador? Esta accion no se puede deshacer.",
+      "failed": "No se pudo eliminar la nota",
+      "success": "Nota eliminada"
+    },
+    "toast": {
+      "deleteError": "Error al eliminar"
+    },
+    "cancelAppt": {
+      "confirm": "¿Cancelar esta cita del {date}? Quedara en estado CANCELLED y se libera el horario.",
+      "failed": "No se pudo cancelar la cita",
+      "success": "Cita cancelada",
+      "error": "Error al cancelar"
+    },
+    "deleteFile": {
+      "confirm": "¿Eliminar el archivo \"{name}\"? Se borra del storage y no se puede recuperar.",
+      "failed": "No se pudo eliminar el archivo",
+      "success": "Archivo eliminado"
+    },
+    "deleteTreatment": {
+      "confirm": "¿Eliminar el plan \"{name}\"? Se borran tambien sus sesiones. Accion irreversible.",
+      "failed": "No se pudo eliminar el plan",
+      "success": "Plan eliminado"
+    },
+    "createTreatment": {
+      "nameRequired": "Ingresa un nombre para el plan",
+      "doctorRequired": "Selecciona un doctor",
+      "failed": "No se pudo crear el plan",
+      "success": "Plan de tratamiento creado",
+      "error": "Error al crear el plan"
+    },
+    "uploadFile": {
+      "success": "Archivo subido",
+      "error": "Error al subir"
+    },
+    "analyze": {
+      "success": {
+        "one": "Análisis completado — {count} hallazgo",
+        "other": "Análisis completado — {count} hallazgos"
+      },
+      "error": "Error al analizar"
+    },
+    "portal": {
+      "copied": "🔗 Link del portal copiado al portapapeles",
+      "error": "Error al generar portal"
+    },
+    "chart": {
+      "weight": "Peso",
+      "phq9": "PHQ-9 · Depresión",
+      "systolicBp": "TA Sistólica"
+    },
+    "milestone": {
+      "session": "Sesión {num}"
+    },
+    "consult": {
+      "draftCreateFailed": "No se pudo crear borrador",
+      "completedSigned": "Consulta completada y firmada",
+      "completeFailed": "No se pudo completar"
+    },
+    "attach": {
+      "success": "Archivo adjunto",
+      "failed": "No se pudo adjuntar"
+    },
+    "record": {
+      "saved": "Expediente guardado"
+    },
+    "ortho": {
+      "noPlan": "Sin plan de tratamiento activo",
+      "financialPlanUpdated": {
+        "one": "Plan financiero actualizado · {count} mensualidad de {amount}",
+        "other": "Plan financiero actualizado · {count} mensualidades de {amount}"
+      },
+      "diagnosisUpdated": "Diagnóstico actualizado",
+      "appliancesUpdated": "Aparatología actualizada",
+      "referralLetterSent": "Carta de referencia enviada",
+      "retentionRegimenSaved": "Régimen de retención guardado",
+      "npsConfigSavedWhatsapp": "Configuración NPS guardada · WhatsApp template lista (envío real Twilio)",
+      "npsConfigSaved": "Configuración NPS guardada",
+      "g15Scheduled": "Foto-set mes 12 programado",
+      "scenarioUpdated": "Escenario actualizado",
+      "wireStepAdded": "Wire step agregado",
+      "tadBrandPrompt": "Marca TAD (DENTOS, SPIDER, IMTEC, OTHER):",
+      "tadSizePrompt": "Tamaño (ej. 1.4×6mm):",
+      "tadLocationPrompt": "Ubicación (ej. vestibular sup. der entre 14 y 15):",
+      "tadTorquePrompt": "Torque Ncm (opcional, vacío para omitir):",
+      "tadRegistered": "TAD registrado",
+      "appointmentSigned": "Cita firmada",
+      "draftSaved": "Borrador guardado",
+      "phaseAdvanced": "Fase avanzada a {phase}",
+      "scenarioSelected": "Escenario seleccionado",
+      "selectScenarioBeforeSign": "Selecciona un escenario antes de enviar Sign@Home",
+      "signAtHomeSent": "Link Sign@Home enviado por WhatsApp",
+      "collectRegistered": "Cobro registrado",
+      "cfdiStub": "CFDI 4.0 con Facturapi · contratar para activar timbrado real",
+      "labOrderCreated": "Orden de laboratorio creada",
+      "preSurveyEnabled": "Pre-encuesta activada",
+      "preSurveyDisabled": "Pre-encuesta desactivada",
+      "generatingBeforeAfterPdf": "Generando PDF antes/después…",
+      "noReferralCode": "Sin código de referidos asignado",
+      "codeCopied": "Código {code} copiado",
+      "clipboardFailed": "No se pudo copiar al portapapeles",
+      "slotOutsideAao": "Slot fuera del set AAO 8 vistas · sin columna en schema",
+      "photoUploadFailed": "Falló subida de foto",
+      "photoUploaded": "Foto {view} subida",
+      "photoUploadUnexpected": "Error inesperado subiendo la foto",
+      "generatingComparePdf": "Generando PDF comparativo…",
+      "guardianLabel": "{name} (tutor)",
+      "sinceLabel": "desde {date}",
+      "scheduleApptFirst": "Programa una cita primero",
+      "recordCeph": "Análisis cefalométrico",
+      "recordStl": "Escaneo digital STL"
+    },
+    "summary": {
+      "clinicalSummary": "Resumen clínico",
+      "startConsult": "Iniciar consulta",
+      "clinicalTrafficLight": "Semáforo clínico",
+      "hygiene": "Higiene",
+      "hygieneGood": "Buena",
+      "caries": "Caries",
+      "cariesModerate": "Moderado",
+      "perio": "Perio",
+      "noData": "Sin datos",
+      "medicalHistory": "Historia clínica",
+      "bloodType": "Tipo de sangre",
+      "notRegistered": "No registrado",
+      "insurance": "Seguro",
+      "noInsurance": "Sin seguro",
+      "nextAppointment": "Próxima cita",
+      "finance": "Finanzas",
+      "totalPlan": "Total plan",
+      "paid": "Pagado",
+      "pending": "Pendiente",
+      "pctCovered": "{pct}% cubierto"
+    },
+    "history": {
+      "title": "Historia clínica",
+      "subtitle": "Timeline cronológica de todos los eventos clínicos del paciente."
+    },
+    "newConsult": {
+      "titleDental": "🦷 Nueva consulta dental",
+      "titleNutrition": "🥗 Nueva consulta nutricional",
+      "titlePsychology": "🧠 Nueva sesión",
+      "titleMedicine": "🩺 Nueva consulta médica",
+      "typeLabel": "Tipo",
+      "optDental": "Dental / Ortodoncia",
+      "optNutrition": "Nutricion",
+      "optPsychology": "Psicologia",
+      "optMedicine": "Medicina general",
+      "resetTitle": "Volver al tipo default de la clinica",
+      "reset": "Reset"
+    },
+    "consultHistory": {
+      "title": "Historial de consultas — {count} total",
+      "newConsult": "+ Nueva consulta",
+      "empty": "Sin consultas registradas",
+      "registerFirst": "Registrar primera consulta →",
+      "consultLabel": "Consulta",
+      "editUnavailableTitle": "Edición no disponible para este tipo de consulta",
+      "editUnavailableBody": "Solo las consultas dentales se pueden editar inline por ahora. Otros tipos (nutrición, psicología, medicina general) tendrán este flujo en próximos PRs.",
+      "deleteDraft": "Eliminar borrador"
+    },
+    "note": {
+      "signed": "Firmada",
+      "draft": "Borrador",
+      "dx": "Dx:",
+      "plan": "Plan:",
+      "procedure": "Procedimiento",
+      "weight": "Peso:",
+      "bmi": "IMC:",
+      "deleteDraftAria": "Eliminar nota borrador"
+    },
+    "evolution": {
+      "needMore": "Agrega 2+ consultas para ver evolución de {metric}",
+      "title": {
+        "one": "Notas SOAP — {count} consulta",
+        "other": "Notas SOAP — {count} consultas"
+      },
+      "newNote": "+ Nueva nota SOAP",
+      "empty": "No hay notas clínicas aún",
+      "createFirst": "Crear primera consulta →",
+      "viewDetailAria": "Ver detalle de consulta del {date}"
+    },
+    "treatment": {
+      "title": "Tratamientos del paciente",
+      "newTreatment": "+ Nuevo tratamiento",
+      "pendingSessions": "Sesiones pendientes",
+      "active": "Activos",
+      "completed": "Completados",
+      "empty": "Sin tratamientos registrados",
+      "createFirst": "Crear primer tratamiento →",
+      "deletePlanAria": "Eliminar plan {name}",
+      "deletePlanTitle": "Eliminar plan",
+      "everyDays": "Cada {days} dias",
+      "pendingCount": {
+        "one": "{count} pendiente",
+        "other": "{count} pendientes"
+      },
+      "next": "Proxima: {date}",
+      "modalTitle": "Nuevo tratamiento para {name}",
+      "doctorLabel": "Doctor",
+      "nameLabel": "Nombre del tratamiento *",
+      "namePlaceholder": "Ej: Ortodoncia con brackets",
+      "descLabel": "Descripcion (opcional)",
+      "descPlaceholder": "Detalles del plan",
+      "totalSessions": "Total sesiones",
+      "daysBetween": "Dias entre sesiones",
+      "totalCost": "Costo total (MXN)",
+      "creating": "Creando...",
+      "createBtn": "Crear tratamiento"
+    },
+    "treatmentStatus": {
+      "active": "Activo",
+      "completed": "Completado",
+      "abandoned": "Abandonado",
+      "paused": "Pausado"
+    },
+    "commonTreatment": {
+      "bracesOrtho": "Ortodoncia con brackets",
+      "invisibleOrtho": "Ortodoncia invisible",
+      "dentalImplant": "Implante dental",
+      "perioRehab": "Rehabilitacion periodontal",
+      "whitening": "Blanqueamiento dental",
+      "rootCanal": "Tratamiento de conductos",
+      "nutritionPlan": "Plan nutricional",
+      "psychProgram": "Programa psicologico"
+    },
+    "agenda": {
+      "title": "Citas — {count} total",
+      "schedule": "+ Agendar",
+      "colTime": "Hora",
+      "colType": "Tipo",
+      "colDoctor": "Doctor",
+      "empty": "Sin citas registradas",
+      "cancelAppt": "Cancelar cita"
+    },
+    "xrays": {
+      "title": "Radiografías y archivos",
+      "fileCount": {
+        "one": "{count} archivo",
+        "other": "{count} archivos"
+      },
+      "uploading": "Subiendo…",
+      "uploadFile": "Subir archivo",
+      "empty": "Sin radiografías",
+      "emptyHint": "Sube la primera radiografía para poder analizarla con IA",
+      "openViewerAria": "Abrir {name} en visor con anotaciones",
+      "openViewer": "Abrir visor",
+      "tooth": "Pieza #{num}",
+      "openInViewer": "Abrir en visor",
+      "analyzing": "Analizando…",
+      "findingsView": {
+        "one": "{count} hallazgo — Ver",
+        "other": "{count} hallazgos — Ver"
+      },
+      "analyzeAI": "Analizar con IA",
+      "hideResults": "Ocultar resultados",
+      "showResults": "Mostrar resultados",
+      "deleteFileAria": "Eliminar {name}",
+      "deleteFileTitle": "Eliminar archivo",
+      "aiSummaryTitle": "Resumen del análisis IA",
+      "confidence": "Confianza: {pct}%",
+      "recommendations": "Recomendaciones",
+      "disclaimerLead": "Herramienta de apoyo diagnóstico.",
+      "disclaimerBody": "Este análisis es generado por IA y NO sustituye el juicio clínico del profesional.",
+      "tokens": "Tokens usados: {used} · Restantes: {remaining} / {limit}"
+    },
+    "billing": {
+      "title": "Facturación",
+      "colInvoice": "Factura",
+      "colAmount": "Monto",
+      "colPaid": "Pagado",
+      "colBalance": "Saldo",
+      "empty": "Sin facturas"
+    },
+    "edit": {
+      "title": "Editar paciente",
+      "firstName": "Nombre *",
+      "lastName": "Apellido *",
+      "email": "Email",
+      "phone": "Teléfono",
+      "dob": "Fecha de nacimiento",
+      "gender": "Género",
+      "genderMale": "Masculino",
+      "genderFemale": "Femenino",
+      "genderOther": "Otro",
+      "address": "Dirección",
+      "officialId": "Identificación oficial",
+      "haveCurp": "Tengo CURP",
+      "noCurp": "No la tengo",
+      "foreigner": "Extranjero",
+      "curpLabel": "CURP *",
+      "passportLabel": "Pasaporte *",
+      "allergiesLabel": "Alergias (separadas por comas)",
+      "familyHistory": "Antecedentes heredofamiliares",
+      "familyHistoryPlaceholder": "Madre con DM2, padre HTA, hermano cardiopatía isquémica…",
+      "personalHistory": "Antecedentes personales no patológicos",
+      "personalHistoryPlaceholder": "Alimentación, higiene, alcohol, tabaco, ejercicio, vivienda…",
+      "saved": "Paciente actualizado",
+      "saveError": "Error al guardar"
+    },
+    "consultBar": {
+      "activeWith": "Consulta activa con {patientName}",
+      "inConsultation": "En consulta",
+      "resume": "Reanudar",
+      "pauseTimer": "Pausar timer",
+      "pause": "Pausar",
+      "completeConsultation": "Completar consulta",
+      "closeConsultation": "Cerrar consulta",
+      "exitConsultationMode": "Salir de modo consulta"
+    },
+    "list": {
+      "colPatient": "Paciente",
+      "colContact": "Contacto",
+      "colLastVisit": "Última visita",
+      "colNextAppointment": "Próxima cita",
+      "colBalance": "Saldo",
+      "colDoctor": "Doctor",
+      "colTags": "Etiquetas",
+      "colStatus": "Estado",
+      "loadError": "Error al cargar pacientes",
+      "errorPrefix": "Error: {message}",
+      "emptyFiltered": "Sin pacientes que coincidan con los filtros.",
+      "selectAll": "Seleccionar todos los pacientes",
+      "markedVip": "Marcado VIP",
+      "vipRemoved": "VIP removido",
+      "vipError": "Error"
+    },
+    "statusFilter": {
+      "active": "Activos",
+      "inactive": "Inactivos",
+      "archived": "Archivados"
+    },
+    "quickFilter": {
+      "withDebt": "Con deuda",
+      "vip": "VIP",
+      "nextAppointment": "Próxima cita",
+      "birthdayWeek": "Cumple esta semana",
+      "noContact6m": "Sin contacto 6m"
+    },
+    "toolbar": {
+      "searchPlaceholder": "Buscar paciente, teléfono, email…",
+      "viewList": "Lista",
+      "viewListTitle": "Lista (G)",
+      "viewGrid": "Grid",
+      "viewGridTitle": "Grid (G)",
+      "columns": "Columnas",
+      "showColumns": "Mostrar columnas",
+      "columnFixed": "fija",
+      "moreFilters": "Más filtros",
+      "moreFiltersTitle": "Más filtros (F)",
+      "newPatient": "Nuevo paciente",
+      "newPatientTitle": "Nuevo paciente (N)"
+    },
+    "bulk": {
+      "selectedCount": {
+        "one": "{count} seleccionado",
+        "other": "{count} seleccionados"
+      },
+      "assignTag": "Asignar etiqueta",
+      "assignTagSoon": "Asignar etiqueta — próximamente",
+      "assignDoctor": "Asignar doctor",
+      "assignDoctorSoon": "Asignar doctor — próximamente",
+      "whatsappCampaign": "Campaña WhatsApp",
+      "whatsappCampaignSoon": "Campaña WhatsApp — próximamente",
+      "exportCsv": "Exportar CSV",
+      "archive": "Archivar",
+      "archiveConfirmTitle": {
+        "one": "¿Archivar {count} paciente?",
+        "other": "¿Archivar {count} pacientes?"
+      },
+      "archiveConfirmDescription": "Los pacientes archivados se ocultan de la lista activa pero conservan su historial clínico.",
+      "archiveConfirmText": "Archivar",
+      "archivedToast": {
+        "one": "{count} paciente archivado",
+        "other": "{count} pacientes archivados"
+      },
+      "archiveError": "Error al archivar"
+    },
+    "pagination": {
+      "showing": "Mostrando {from}–{to} de {total}",
+      "first": "Primera",
+      "last": "Última"
+    },
+    "kbdHints": {
+      "search": "buscar",
+      "navigate": "navegar",
+      "open": "abrir",
+      "clear": "limpiar",
+      "select": "seleccionar",
+      "new": "nuevo",
+      "view": "vista",
+      "filters": "filtros"
+    },
+    "hero": {
+      "totalPatients": "Total pacientes",
+      "newThisMonthDelta": "+{count} este mes",
+      "newThisMonth": "Nuevos este mes",
+      "pctVsPrevMonth": "{pct}% vs mes anterior",
+      "noChange": "sin cambio",
+      "withDebt": "Con deuda",
+      "patientsCount": {
+        "one": "{count} paciente",
+        "other": "{count} pacientes"
+      },
+      "nextAppointments": "Próximas citas",
+      "todayThisWeek": "Hoy / Esta semana"
+    },
+    "relative": {
+      "never": "Nunca",
+      "today": "Hoy",
+      "tomorrow": "Mañana",
+      "yesterday": "Ayer",
+      "inDays": "En {days}d",
+      "inWeeks": "En {weeks} sem.",
+      "daysAgo": "Hace {days}d",
+      "monthsAgo": "Hace {months} meses",
+      "yearsAgo": "Hace {years} años"
+    },
+    "row": {
+      "selectPatient": "Seleccionar paciente {name}",
+      "yearsOld": "{age} años",
+      "doctorPrefix": "Dr/a.",
+      "whatsapp": "WhatsApp",
+      "call": "Llamar",
+      "schedule": "Agendar",
+      "removeVip": "Quitar VIP",
+      "markVip": "Marcar VIP"
+    },
+    "status": {
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "archived": "Archivado"
+    },
+    "drawer": {
+      "title": "Filtros avanzados",
+      "age": "Edad",
+      "min": "Mín",
+      "max": "Máx",
+      "gender": "Género",
+      "genderMale": "Masculino",
+      "genderFemale": "Femenino",
+      "genderOther": "Otro",
+      "assignedDoctor": "Doctor asignado",
+      "allDoctors": "Todos los doctores",
+      "clinicalTags": "Etiquetas clínicas",
+      "tagVip": "VIP",
+      "tagAllergy": "Alergia",
+      "tagChronic": "Crónico",
+      "tagPregnancy": "Embarazo",
+      "tagPediatric": "Pediátrico",
+      "tagNew": "Nuevo",
+      "lastVisitRange": "Última visita — desde / hasta",
+      "debtAny": "Cualquiera",
+      "debtYes": "Con deuda",
+      "debtZero": "En cero",
+      "applyFilters": "Aplicar filtros"
+    },
+    "heroCard": {
+      "summaryAria": "Resumen del paciente",
+      "ageSuffix": "{age}a",
+      "nextAppointment": "Próxima cita",
+      "timeSuffix": "{time}h",
+      "noAppointment": "Sin cita",
+      "schedule": "Agendar",
+      "lastVisit": "Última visita",
+      "noVisits": "Sin visitas",
+      "totalVisits": "Visitas totales",
+      "consultationsLabel": {
+        "one": "consulta",
+        "other": "consultas"
+      },
+      "startConsult": "Iniciar consulta",
+      "startConsultTitle": "Iniciar consulta de la próxima cita",
+      "startConsultDisabledTitle": "Agenda primero una cita para iniciar consulta",
+      "rescheduleNext": "Reagendar próxima",
+      "scheduleNext": "Agendar próxima",
+      "rescheduleTitle": "Reagendar la próxima cita",
+      "scheduleNextTitle": "Agendar próxima cita",
+      "chargeAmount": "Cobrar {amount}",
+      "charge": "Cobrar",
+      "moreActions": "Más acciones",
+      "moreActionsAria": "Más acciones del paciente",
+      "editPatient": "Editar paciente",
+      "copyPortalLink": "Copiar link del portal",
+      "generatePatientPortal": "Generar portal paciente",
+      "printSummary": "Imprimir resumen",
+      "viewInAgenda": "Ver en agenda"
+    },
+    "historiaTimeline": {
+      "typeSoap": "Notas",
+      "typePrescription": "Recetas",
+      "typeAppointment": "Citas",
+      "typeXray": "Radiografías",
+      "typeTreatment": "Tratamientos",
+      "typeReferral": "Referencias",
+      "typeDiagnosis": "Diagnósticos",
+      "range30d": "30 días",
+      "range90d": "90 días",
+      "range12m": "12 meses",
+      "rangeAll": "Todo",
+      "rangeLabel": "Rango:",
+      "relMinutes": "hace minutos",
+      "relHours": {
+        "one": "hace {count} hora",
+        "other": "hace {count} horas"
+      },
+      "relYesterday": "ayer",
+      "relDays": {
+        "one": "hace {count} día",
+        "other": "hace {count} días"
+      },
+      "relWeeks": {
+        "one": "hace {count} sem",
+        "other": "hace {count} sem"
+      },
+      "relMonths": {
+        "one": "hace {count} mes",
+        "other": "hace {count} meses"
+      },
+      "relYears": {
+        "one": "hace {count} año",
+        "other": "hace {count} años"
+      },
+      "loading": "Cargando timeline…",
+      "loadError": "Error al cargar timeline: {error}",
+      "emptyNoEvents": "Sin eventos clínicos registrados en este rango.",
+      "emptyNoMatch": "Ningún evento coincide con los filtros seleccionados."
+    },
+    "noteDetailModal": {
+      "title": "Consulta",
+      "statusSigned": "Firmada",
+      "statusDraft": "Borrador",
+      "signedAt": "firmada {date}",
+      "doctorLabel": "Dr/a. {name}",
+      "doctorUnassigned": "Doctor no asignado",
+      "soapSubjective": "S — Subjetivo",
+      "soapObjective": "O — Objetivo",
+      "soapAssessment": "A — Diagnóstico (Assessment)",
+      "soapPlan": "P — Plan",
+      "noRecord": "Sin registro",
+      "fieldPlaceholder": "Describe {term}",
+      "attachments": {
+        "one": "Adjunto ({count})",
+        "other": "Adjuntos ({count})"
+      },
+      "cie10Title": "Diagnósticos CIE-10 (NOM-024)",
+      "noDiagnoses": "Sin diagnósticos.",
+      "legacyTag": "(legacy)",
+      "draftHint": "Una vez firmada, esta nota queda inalterable y formará parte del expediente clínico legal del paciente.",
+      "readOnlyFooter": "Read-only · expediente firmado",
+      "generating": "Generando…",
+      "downloadPdf": "Descargar PDF",
+      "saveDraft": "Guardar borrador",
+      "signing": "Firmando…",
+      "signNote": "Firmar nota",
+      "savedToast": "Cambios guardados",
+      "signedToast": "Nota firmada",
+      "saveError": "No se pudo guardar",
+      "signError": "No se pudo firmar",
+      "addDxError": "No se pudo agregar el diagnóstico",
+      "removeDxError": "No se pudo eliminar el diagnóstico",
+      "pdfGenerateError": "No se pudo generar el PDF",
+      "pdfDownloadError": "Error al descargar el PDF"
+    },
+    "quickNav": {
+      "summary": "Resumen",
+      "clinicalHistory": "Historia clínica",
+      "newConsultation": "Nueva consulta",
+      "consultationHistory": "Historial de consultas",
+      "pediatrics": "Pediatría",
+      "periodontics": "Periodoncia",
+      "endodontics": "Endodoncia",
+      "implants": "Implantes",
+      "orthodontics": "Ortodoncia",
+      "odontogram": "Odontograma",
+      "soapNotes": "Notas SOAP",
+      "xrays": "Radiografías",
+      "treatmentPlan": "Plan tratamiento",
+      "referrals": "Referencias",
+      "specialties": "ESPECIALIDADES",
+      "clinical": "Clínico",
+      "administrative": "Administrativo",
+      "appointments": "Citas",
+      "billing": "Facturación",
+      "ariaLabel": "Navegación rápida del paciente",
+      "noRecordsYet": "Sin registros aún en este módulo"
+    },
+    "sideCards": {
+      "panelAria": "Panel lateral",
+      "nextAppointment": "Próxima cita",
+      "reschedule": "Reagendar",
+      "noNextAppointment": "Sin próxima cita.",
+      "schedule": "Agendar",
+      "accountStatement": "Estado de cuenta",
+      "treatmentTotal": "Total tratamiento",
+      "paid": "Pagado",
+      "pendingBalance": "Saldo pendiente",
+      "pctCovered": "{pct}% cubierto",
+      "chargeNow": "Cobrar ahora",
+      "autoRules": "Reglas automáticas",
+      "reminderText": "{name} recibirá un recordatorio por WhatsApp 24h antes de su próxima cita (si la clínica tiene WhatsApp activado).",
+      "recentWhatsApp": "WhatsApp recientes",
+      "noRecentMessages": "Sin mensajes recientes con {name}.",
+      "noPhone": "Paciente sin teléfono registrado.",
+      "openChat": "Abrir chat"
+    },
+    "soapEditor": {
+      "editorAria": "Editor de notas de consulta",
+      "inProgress": "En curso",
+      "title": "Notas de consulta",
+      "consultation": "Consulta",
+      "attachments": "Adjuntos",
+      "uploading": "Subiendo…",
+      "dropFileHere": "Suelta el archivo aquí",
+      "dragOrClick": "Arrastra archivos o click para subir",
+      "removeAttachment": "Quitar {name}",
+      "quickTemplates": "Plantillas rápidas",
+      "insertInto": "Inserta en {field}",
+      "comingSoon": "Próximamente",
+      "aiSuggestPlan": "IA sugerir plan",
+      "notSavedYet": "Sin guardar todavía",
+      "draftSaved": "Borrador guardado",
+      "draftSavedSeconds": "Borrador guardado · hace {seconds}s",
+      "draftSavedMinutes": "Borrador guardado · hace {minutes}m",
+      "saveDraft": "Guardar borrador",
+      "signing": "Firmando…",
+      "signAndComplete": "Firmar y completar consulta",
+      "subjective": {
+        "label": "Subjetivo",
+        "hint": "Lo que el paciente reporta",
+        "placeholder": "Motivo de consulta, síntomas reportados…"
+      },
+      "objective": {
+        "label": "Objetivo",
+        "hint": "Hallazgos clínicos",
+        "placeholder": "Examen físico, signos vitales, observaciones clínicas…"
+      },
+      "assessment": {
+        "label": "Evaluación",
+        "hint": "Diagnóstico",
+        "placeholder": "Diagnóstico, diferencial, evaluación clínica…"
+      },
+      "plan": {
+        "label": "Plan",
+        "hint": "Tratamiento + siguiente paso",
+        "placeholder": "Tratamiento, prescripción, control, derivación…"
+      },
+      "tpl": {
+        "cleaning": {
+          "label": "Limpieza profilaxis",
+          "value": "Profilaxis con ultrasonido. Aplicación tópica de flúor. Reforzar técnica de cepillado y uso de hilo dental."
+        },
+        "noFindings": {
+          "label": "Sin hallazgos",
+          "value": "Tejidos blandos sin alteraciones. Higiene oral adecuada. Sin lesiones cariosas activas."
+        },
+        "control6mo": {
+          "label": "Control 6 meses",
+          "value": "Control en 6 meses. Reforzar higiene."
+        },
+        "anesthesia": {
+          "label": "Anestesia bloqueo",
+          "value": "Anestesia infiltrativa con lidocaína 2% sin epinefrina (paciente con contraindicación). Verificar bloqueo antes del procedimiento."
+        }
+      }
+    },
+    "treatmentsModal": {
+      "invoiceCreated": "Factura {number} creada",
+      "invoiceFailed": "No se pudo crear la factura",
+      "title": "Tratamientos detectados",
+      "noChanges": "No se detectaron cambios en el odontograma.",
+      "changesDetected": {
+        "one": "{count} cambio respecto al snapshot anterior. Edita o elimina antes de facturar.",
+        "other": "{count} cambios respecto al snapshot anterior. Edita o elimina antes de facturar."
+      },
+      "colTreatment": "Tratamiento",
+      "colTooth": "Pieza",
+      "colSurface": "Superficie",
+      "colQty": "Cant.",
+      "colPrice": "Precio",
+      "colSubtotal": "Subtotal",
+      "remove": "Quitar",
+      "subtotal": "Subtotal",
+      "discount": "Descuento",
+      "cancelInvoice": "Cancelar factura",
+      "creating": "Creando…",
+      "createInvoice": "Crear factura {total}"
+    },
+    "referralsTab": {
+      "statusSent": "Enviada",
+      "statusAccepted": "Aceptada",
+      "statusRejected": "Rechazada",
+      "statusResponded": "Respondida",
+      "statusCancelled": "Cancelada",
+      "heading": "Referencias y contrarreferencias",
+      "subtitle": "Documentos NOM-024 para envío a otra clínica/especialista o respuesta de regreso.",
+      "newReferral": "Nueva referencia",
+      "empty": "Sin referencias registradas para este paciente.",
+      "outgoingArrow": "Referencia →",
+      "incomingArrow": "Contrarreferencia ←",
+      "reasonLabel": "Motivo:",
+      "clinicalSummaryLabel": "Resumen clínico:",
+      "diagnosesLabel": "Diagnósticos:",
+      "responseLabel": "Respuesta:",
+      "markResponded": "Marcar respondida",
+      "responseNotesPlaceholder": "Notas de la respuesta…",
+      "markedResponded": "Marcada respondida",
+      "confirmCancel": "¿Cancelar esta referencia?",
+      "cancelledToast": "Cancelada",
+      "cie10NotFound": "Código CIE-10 no encontrado",
+      "addDiagnosisError": "Error al agregar diagnóstico",
+      "requiredFieldsError": "Clínica destino, motivo y resumen son obligatorios",
+      "createError": "Error al crear",
+      "createdToast": "Referencia creada",
+      "errorPrefix": "Error: {error}",
+      "modalTitle": "Nueva referencia / contrarreferencia",
+      "fieldType": "Tipo",
+      "typeOutgoing": "Referencia (envío)",
+      "typeIncoming": "Contrarreferencia (recibo)",
+      "fieldDestClinic": "Clínica destino *",
+      "destClinicPlaceholder": "Hospital General de México",
+      "fieldClues": "CLUES (opcional)",
+      "cluesPlaceholder": "11 chars",
+      "fieldReceivingDoctor": "Médico receptor",
+      "receivingDoctorPlaceholder": "Dr/a. nombre",
+      "fieldSpecialty": "Especialidad solicitada",
+      "specialtyPlaceholder": "Cardiología, Oncología…",
+      "fieldReason": "Motivo de la referencia *",
+      "reasonPlaceholder": "Ej: requiere evaluación cardiológica",
+      "fieldClinicalSummary": "Resumen clínico *",
+      "clinicalSummaryPlaceholder": "Antecedentes, evolución, estudios realizados, hallazgos relevantes…",
+      "fieldDiagnoses": "Diagnósticos relevantes (CIE-10)",
+      "sending": "Enviando…",
+      "createReferral": "Crear referencia"
+    }
   }
 }

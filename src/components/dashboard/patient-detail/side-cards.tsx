@@ -10,6 +10,7 @@ import {
   RefreshCcw,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { useT } from "@/i18n/i18n-provider";
 import styles from "./patient-detail.module.css";
 
 interface SideCardsProps {
@@ -66,13 +67,14 @@ export function SideCards({
   onCancelAppt,
   onCharge,
 }: SideCardsProps) {
+  const t = useT();
   return (
-    <aside className={styles.sidePanel} aria-label="Panel lateral">
+    <aside className={styles.sidePanel} aria-label={t("patients.sideCards.panelAria")}>
       {/* Próxima cita */}
       <section className={styles.sideCard}>
         <header className={styles.sideCardHead}>
           <h3 className={styles.sideCardTitle}>
-            <CalendarClock size={13} aria-hidden /> Próxima cita
+            <CalendarClock size={13} aria-hidden /> {t("patients.sideCards.nextAppointment")}
           </h3>
         </header>
         {nextAppointment ? (
@@ -95,22 +97,22 @@ export function SideCards({
             )}
             <div className={styles.sideCardActions}>
               <button type="button" className={styles.sideBtn} onClick={onReschedule}>
-                <RefreshCcw size={11} aria-hidden /> Reagendar
+                <RefreshCcw size={11} aria-hidden /> {t("patients.sideCards.reschedule")}
               </button>
               <button
                 type="button"
                 className={`${styles.sideBtn} ${styles.danger}`}
                 onClick={onCancelAppt}
               >
-                <X size={11} aria-hidden /> Cancelar
+                <X size={11} aria-hidden /> {t("common.cancel")}
               </button>
             </div>
           </>
         ) : (
           <div className={styles.sideCardEmpty}>
-            Sin próxima cita.{" "}
+            {t("patients.sideCards.noNextAppointment")}{" "}
             <button type="button" className={styles.sideCardLink} onClick={onReschedule}>
-              Agendar →
+              {t("patients.sideCards.schedule")} →
             </button>
           </div>
         )}
@@ -120,32 +122,32 @@ export function SideCards({
       <section className={styles.sideCard}>
         <header className={styles.sideCardHead}>
           <h3 className={styles.sideCardTitle}>
-            <Receipt size={13} aria-hidden /> Estado de cuenta
+            <Receipt size={13} aria-hidden /> {t("patients.sideCards.accountStatement")}
           </h3>
         </header>
         <div className={styles.financeRow}>
-          <span>Total tratamiento</span>
+          <span>{t("patients.sideCards.treatmentTotal")}</span>
           <strong>{formatCurrency(finance.total)}</strong>
         </div>
         <div className={`${styles.financeRow} ${styles.success}`}>
-          <span>Pagado</span>
+          <span>{t("patients.sideCards.paid")}</span>
           <strong>{formatCurrency(finance.paid)}</strong>
         </div>
         <div className={`${styles.financeRow} ${styles.danger}`}>
-          <span>Saldo pendiente</span>
+          <span>{t("patients.sideCards.pendingBalance")}</span>
           <strong>{formatCurrency(finance.balance)}</strong>
         </div>
         <div className={styles.financeBar}>
           <div className={styles.financeBarFill} style={{ width: `${finance.pct}%` }} />
         </div>
-        <div className={styles.financeBarLabel}>{finance.pct}% cubierto</div>
+        <div className={styles.financeBarLabel}>{t("patients.sideCards.pctCovered", { pct: finance.pct })}</div>
         {finance.balance > 0 && (
           <button
             type="button"
             className={`${styles.sideBtn} ${styles.primary} ${styles.fullWidth}`}
             onClick={onCharge}
           >
-            Cobrar ahora · {formatCurrency(finance.balance)}
+            {t("patients.sideCards.chargeNow")} · {formatCurrency(finance.balance)}
           </button>
         )}
       </section>
@@ -154,12 +156,11 @@ export function SideCards({
       <section className={`${styles.sideCard} ${styles.aiCard}`}>
         <header className={styles.sideCardHead}>
           <h3 className={styles.sideCardTitle}>
-            <Sparkles size={13} aria-hidden /> Reglas automáticas
+            <Sparkles size={13} aria-hidden /> {t("patients.sideCards.autoRules")}
           </h3>
         </header>
         <p className={styles.aiText}>
-          {patientName.split(" ")[0]} recibirá un recordatorio por WhatsApp 24h
-          antes de su próxima cita (si la clínica tiene WhatsApp activado).
+          {t("patients.sideCards.reminderText", { name: patientName.split(" ")[0] ?? "" })}
         </p>
       </section>
 
@@ -167,14 +168,14 @@ export function SideCards({
       <section className={styles.sideCard}>
         <header className={styles.sideCardHead}>
           <h3 className={styles.sideCardTitle}>
-            <MessageCircle size={13} aria-hidden /> WhatsApp recientes
+            <MessageCircle size={13} aria-hidden /> {t("patients.sideCards.recentWhatsApp")}
           </h3>
         </header>
         <div className={styles.waEmpty}>
           {patientPhone ? (
-            <>Sin mensajes recientes con {patientName.split(" ")[0]}.</>
+            <>{t("patients.sideCards.noRecentMessages", { name: patientName.split(" ")[0] ?? "" })}</>
           ) : (
-            <>Paciente sin teléfono registrado.</>
+            <>{t("patients.sideCards.noPhone")}</>
           )}
         </div>
         {patientPhone && (
@@ -183,7 +184,7 @@ export function SideCards({
             className={`${styles.sideBtn} ${styles.fullWidth}`}
             style={{ textDecoration: "none" }}
           >
-            Abrir chat
+            {t("patients.sideCards.openChat")}
           </Link>
         )}
       </section>

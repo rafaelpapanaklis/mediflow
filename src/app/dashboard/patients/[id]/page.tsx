@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { getCurrentUser } from "@/lib/auth";
+import { getServerT } from "@/i18n/server";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { PatientDetailClient } from "./patient-detail-client";
@@ -31,6 +32,7 @@ import {
 
 export default async function PatientDetailPage({ params }: { params: { id: string } }) {
   const user = await getCurrentUser();
+  const { t } = await getServerT();
   const tz = user.clinic.timezone;
 
   const [patient, doctors] = await Promise.all([
@@ -229,7 +231,7 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
         visitCount,
       }} />
 
-      <ErrorBoundary fallbackTitle="Error al cargar detalle del paciente">
+      <ErrorBoundary fallbackTitle={t("patients.page.loadError")}>
         <PatientDetailClient
           patient={patient as any}
           records={serializedRecords as any}

@@ -15,6 +15,7 @@ import {
 import toast from "react-hot-toast";
 import styles from "./patient-detail.module.css";
 import { Cie10Selector } from "@/components/dashboard/clinical/cie10-selector";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Cie10Code {
   code: string;
@@ -74,6 +75,7 @@ function isImageMime(m: string) {
 }
 
 export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailModalProps) {
+  const t = useT();
   const [draft, setDraft] = useState<{
     subjective: string;
     objective: string;
@@ -122,7 +124,7 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      toast.error(data.error ?? "No se pudo agregar el diagnóstico");
+      toast.error(data.error ?? t("patients.noteDetailModal.addDxError"));
       return;
     }
     await reloadDxs();
@@ -134,7 +136,7 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
       method: "DELETE",
     });
     if (!res.ok) {
-      toast.error("No se pudo eliminar el diagnóstico");
+      toast.error(t("patients.noteDetailModal.removeDxError"));
       return;
     }
     setDxs((prev) => prev.filter((d) => d.id !== dxId));
@@ -152,7 +154,6 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
 
   const handleSave = useCallback(async (signAfter = false) => {
     if (!note) return;
-    const action = signAfter ? "firmar" : "guardar";
     if (signAfter) setSigning(true);
     else setSaving(true);
     try {
@@ -166,7 +167,7 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
       });
       if (!res.ok) {
         const txt = await res.text().catch(() => "");
-        throw new Error(txt || `Error al ${action}`);
+        throw new Error(txt || (signAfter ? t("patients.noteDetailModal.signError") : t("patients.noteDetailModal.saveError")));
       }
       const data = await res.json().catch(() => null);
       const updated: ClinicalNote = {
@@ -179,10 +180,10 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
         },
       };
       onUpdated?.(updated);
-      toast.success(signAfter ? "Nota firmada" : "Cambios guardados");
+      toast.success(signAfter ? t("patients.noteDetailModal.signedToast") : t("patients.noteDetailModal.savedToast"));
       if (signAfter) onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : `No se pudo ${action}`);
+      toast.error(err instanceof Error ? err.message : (signAfter ? t("patients.noteDetailModal.signError") : t("patients.noteDetailModal.saveError")));
     } finally {
       setSaving(false);
       setSigning(false);
@@ -199,7 +200,7 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
     try {
       const res = await fetch(`/api/clinical-notes/${note.id}/pdf`);
       if (!res.ok) {
-        toast.error("No se pudo generar el PDF");
+        toast.error(t("patients.noteDetailModal.pdfGenerateError"));
         return;
       }
       const blob = await res.blob();
@@ -210,7 +211,7 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      toast.error("Error al descargar el PDF");
+      toast.error(t("patients.noteDetailModal.pdfDownloadError"));
     } finally {
       setDownloading(false);
     }
@@ -224,8 +225,8 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
   const icd10 = note.specialtyData?.icd10 ?? [];
   const signedAt = note.specialtyData?.signedAt;
   const doctorLabel = note.doctor
-    ? `Dr/a. ${note.doctor.firstName} ${note.doctor.lastName}`
-    : "Doctor no asignado";
+    ? t("patients.noteDetailModal.doctorLabel", { name: `${note.doctor.firstName} ${note.doctor.lastName}` })
+    : t("patients.noteDetailModal.doctorUnassigned");
 
   return (
     <div
@@ -242,7 +243,7 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
         <header className={styles.noteModalHeader}>
           <div className={styles.noteModalHeaderInfo}>
             <h2 id="note-detail-title" className={styles.noteModalTitle}>
-              Consulta · {formatDateLong(note.visitDate)}
+              {t("patients.noteDetailModal.title")} · {formatDateLong(note.visitDate)}
             </h2>
             <div className={styles.noteModalSubtitle}>
               <span>{doctorLabel}</span>
@@ -251,11 +252,11 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
                   isSigned ? styles.noteStatusSigned : styles.noteStatusDraft
                 }`}
               >
-                {isSigned ? "Firmada" : "Borrador"}
+                {isSigned ? t("patients.noteDetailModal.statusSigned") : t("patients.noteDetailModal.statusDraft")}
               </span>
               {isSigned && signedAt && (
                 <span className={styles.noteSignedAt}>
-                  · firmada {formatDateLong(signedAt)}
+                  · {t("patients.noteDetailModal.signedAt", { date: formatDateLong(signedAt) })}
                 </span>
               )}
             </div>
@@ -264,7 +265,7 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
             type="button"
             className={styles.noteModalClose}
             onClick={onClose}
-            aria-label="Cerrar"
+            aria-label={t("common.close")}
           >
             <X size={16} aria-hidden />
           </button>
@@ -274,31 +275,31 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
           {isSigned ? (
             // ─── Read-only S/O/A/P ───
             <div className={styles.noteSoapView}>
-              <SoapSection label="S — Subjetivo" value={note.subjective} />
-              <SoapSection label="O — Objetivo" value={note.objective} />
-              <SoapSection label="A — Diagnóstico (Assessment)" value={note.assessment} />
-              <SoapSection label="P — Plan" value={note.plan} />
+              <SoapSection label={t("patients.noteDetailModal.soapSubjective")} value={note.subjective} />
+              <SoapSection label={t("patients.noteDetailModal.soapObjective")} value={note.objective} />
+              <SoapSection label={t("patients.noteDetailModal.soapAssessment")} value={note.assessment} />
+              <SoapSection label={t("patients.noteDetailModal.soapPlan")} value={note.plan} />
             </div>
           ) : (
             // ─── Editor inline ───
             <div className={styles.noteSoapEdit}>
               <SoapField
-                label="S — Subjetivo"
+                label={t("patients.noteDetailModal.soapSubjective")}
                 value={draft.subjective}
                 onChange={(v) => setDraft((d) => ({ ...d, subjective: v }))}
               />
               <SoapField
-                label="O — Objetivo"
+                label={t("patients.noteDetailModal.soapObjective")}
                 value={draft.objective}
                 onChange={(v) => setDraft((d) => ({ ...d, objective: v }))}
               />
               <SoapField
-                label="A — Diagnóstico (Assessment)"
+                label={t("patients.noteDetailModal.soapAssessment")}
                 value={draft.assessment}
                 onChange={(v) => setDraft((d) => ({ ...d, assessment: v }))}
               />
               <SoapField
-                label="P — Plan"
+                label={t("patients.noteDetailModal.soapPlan")}
                 value={draft.plan}
                 onChange={(v) => setDraft((d) => ({ ...d, plan: v }))}
               />
@@ -309,7 +310,7 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
           {attachments.length > 0 && (
             <section className={styles.noteSection}>
               <h3 className={styles.noteSectionTitle}>
-                <Paperclip size={12} aria-hidden /> Adjuntos ({attachments.length})
+                <Paperclip size={12} aria-hidden /> {t("patients.noteDetailModal.attachments", { count: attachments.length })}
               </h3>
               <ul className={styles.noteAttachmentsList}>
                 {attachments.map((a) => (
@@ -341,7 +342,7 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
 
           {/* CIE-10 estructurados (NOM-024) */}
           <section className={styles.noteSection}>
-            <h3 className={styles.noteSectionTitle}>Diagnósticos CIE-10 (NOM-024)</h3>
+            <h3 className={styles.noteSectionTitle}>{t("patients.noteDetailModal.cie10Title")}</h3>
             {isSigned ? (
               dxs.length > 0 ? (
                 <ul className={styles.noteIcdList}>
@@ -358,12 +359,12 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
                   {icd10.map((c) => (
                     <li key={c.code}>
                       <code>{c.code}</code> — {c.label}
-                      <span style={{ marginLeft: 6, fontSize: 10, color: "var(--text-4)" }}>(legacy)</span>
+                      <span style={{ marginLeft: 6, fontSize: 10, color: "var(--text-4)" }}>{t("patients.noteDetailModal.legacyTag")}</span>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p style={{ fontSize: 12, color: "var(--text-3)" }}>Sin diagnósticos.</p>
+                <p style={{ fontSize: 12, color: "var(--text-3)" }}>{t("patients.noteDetailModal.noDiagnoses")}</p>
               )
             ) : (
               <Cie10Selector
@@ -377,8 +378,7 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
           {!isSigned && (
             <div className={styles.noteDraftHint}>
               <AlertCircle size={12} aria-hidden />
-              Una vez firmada, esta nota queda inalterable y formará parte
-              del expediente clínico legal del paciente.
+              {t("patients.noteDetailModal.draftHint")}
             </div>
           )}
         </div>
@@ -387,7 +387,7 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
           {isSigned ? (
             <>
               <span className={styles.noteFooterLeft}>
-                Read-only · expediente firmado
+                {t("patients.noteDetailModal.readOnlyFooter")}
               </span>
               <button
                 type="button"
@@ -396,7 +396,7 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
                 disabled={downloading}
               >
                 <Printer size={12} aria-hidden />
-                Imprimir
+                {t("common.print")}
               </button>
               <button
                 type="button"
@@ -405,7 +405,7 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
                 disabled={downloading}
               >
                 <Download size={12} aria-hidden />
-                {downloading ? "Generando…" : "Descargar PDF"}
+                {downloading ? t("patients.noteDetailModal.generating") : t("patients.noteDetailModal.downloadPdf")}
               </button>
             </>
           ) : (
@@ -415,7 +415,7 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
                 className={styles.noteBtnGhost}
                 onClick={onClose}
               >
-                Cancelar
+                {t("common.cancel")}
               </button>
               <button
                 type="button"
@@ -424,7 +424,7 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
                 disabled={saving || signing}
               >
                 <Save size={12} aria-hidden />
-                {saving ? "Guardando…" : "Guardar borrador"}
+                {saving ? t("common.saving") : t("patients.noteDetailModal.saveDraft")}
               </button>
               <button
                 type="button"
@@ -433,7 +433,7 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
                 disabled={saving || signing}
               >
                 <CheckCircle2 size={12} aria-hidden />
-                {signing ? "Firmando…" : "Firmar nota"}
+                {signing ? t("patients.noteDetailModal.signing") : t("patients.noteDetailModal.signNote")}
               </button>
             </>
           )}
@@ -444,13 +444,14 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
 }
 
 function SoapSection({ label, value }: { label: string; value: string | null }) {
+  const t = useT();
   return (
     <section className={styles.noteSoapBlock}>
       <h3 className={styles.noteSoapBlockLabel}>{label}</h3>
       {value && value.trim().length > 0 ? (
         <p className={styles.noteSoapBlockText}>{value}</p>
       ) : (
-        <p className={styles.noteSoapBlockEmpty}>Sin registro</p>
+        <p className={styles.noteSoapBlockEmpty}>{t("patients.noteDetailModal.noRecord")}</p>
       )}
     </section>
   );
@@ -465,6 +466,8 @@ function SoapField({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const t = useT();
+  const term = label.split(" — ")[1]?.toLowerCase();
   return (
     <label className={styles.noteSoapFieldWrap}>
       <span className={styles.noteSoapFieldLabel}>{label}</span>
@@ -473,7 +476,7 @@ function SoapField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         rows={3}
-        placeholder={`Describe ${label.split(" — ")[1]?.toLowerCase() ?? "..."}`}
+        placeholder={term ? t("patients.noteDetailModal.fieldPlaceholder", { term }) : "..."}
       />
     </label>
   );

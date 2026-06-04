@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import { Trash2, X, FileText } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
+import { useT } from "@/i18n/i18n-provider";
 import styles from "./patient-detail.module.css";
 
 export interface SuggestedTreatment {
@@ -46,6 +47,7 @@ function buildRows(treatments: SuggestedTreatment[]): Row[] {
 export function TreatmentsModal({
   open, appointmentId, initialTreatments, onClose, onInvoiced,
 }: TreatmentsModalProps) {
+  const t = useT();
   const [rows, setRows] = useState<Row[]>(() => buildRows(initialTreatments));
   const [discount, setDiscount] = useState(0);
   const [creating, setCreating] = useState(false);
@@ -94,11 +96,11 @@ export function TreatmentsModal({
         throw new Error(body.error ?? `HTTP ${res.status}`);
       }
       const data = await res.json();
-      toast.success(`Factura ${data.invoice.invoiceNumber} creada`);
+      toast.success(t("patients.treatmentsModal.invoiceCreated", { number: data.invoice.invoiceNumber }));
       onInvoiced?.(data.invoice);
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo crear la factura");
+      toast.error(err instanceof Error ? err.message : t("patients.treatmentsModal.invoiceFailed"));
     } finally {
       setCreating(false);
     }
@@ -110,12 +112,12 @@ export function TreatmentsModal({
         <div className={styles.treatmentsHead}>
           <div>
             <h2 className={styles.treatmentsTitle}>
-              <FileText size={14} aria-hidden /> Tratamientos detectados
+              <FileText size={14} aria-hidden /> {t("patients.treatmentsModal.title")}
             </h2>
             <p className={styles.treatmentsSub}>
               {rows.length === 0
-                ? "No se detectaron cambios en el odontograma."
-                : `${rows.length} cambio${rows.length === 1 ? "" : "s"} respecto al snapshot anterior. Edita o elimina antes de facturar.`}
+                ? t("patients.treatmentsModal.noChanges")
+                : t("patients.treatmentsModal.changesDetected", { count: rows.length })}
             </p>
           </div>
         </div>
@@ -125,12 +127,12 @@ export function TreatmentsModal({
             <table className={styles.treatmentsTable}>
               <thead>
                 <tr>
-                  <th>Tratamiento</th>
-                  <th style={{ width: 60 }}>Pieza</th>
-                  <th style={{ width: 90 }}>Superficie</th>
-                  <th style={{ width: 50 }}>Cant.</th>
-                  <th style={{ width: 110 }}>Precio</th>
-                  <th style={{ width: 110, textAlign: "right" }}>Subtotal</th>
+                  <th>{t("patients.treatmentsModal.colTreatment")}</th>
+                  <th style={{ width: 60 }}>{t("patients.treatmentsModal.colTooth")}</th>
+                  <th style={{ width: 90 }}>{t("patients.treatmentsModal.colSurface")}</th>
+                  <th style={{ width: 50 }}>{t("patients.treatmentsModal.colQty")}</th>
+                  <th style={{ width: 110 }}>{t("patients.treatmentsModal.colPrice")}</th>
+                  <th style={{ width: 110, textAlign: "right" }}>{t("patients.treatmentsModal.colSubtotal")}</th>
                   <th style={{ width: 36 }}></th>
                 </tr>
               </thead>
@@ -171,7 +173,7 @@ export function TreatmentsModal({
                         type="button"
                         className={styles.treatmentsRemove}
                         onClick={() => removeRow(idx)}
-                        aria-label="Quitar"
+                        aria-label={t("patients.treatmentsModal.remove")}
                       >
                         <Trash2 size={11} aria-hidden />
                       </button>
@@ -183,11 +185,11 @@ export function TreatmentsModal({
 
             <div className={styles.treatmentsTotals}>
               <div className={styles.treatmentsTotalsRow}>
-                <span>Subtotal</span>
+                <span>{t("patients.treatmentsModal.subtotal")}</span>
                 <strong className={styles.mono}>{formatCurrency(subtotal)}</strong>
               </div>
               <div className={styles.treatmentsTotalsRow}>
-                <span>Descuento</span>
+                <span>{t("patients.treatmentsModal.discount")}</span>
                 <input
                   type="number"
                   min={0}
@@ -199,7 +201,7 @@ export function TreatmentsModal({
                 />
               </div>
               <div className={`${styles.treatmentsTotalsRow} ${styles.treatmentsTotalRow}`}>
-                <span>Total</span>
+                <span>{t("common.total")}</span>
                 <strong className={styles.mono}>{formatCurrency(total)}</strong>
               </div>
             </div>
@@ -212,7 +214,7 @@ export function TreatmentsModal({
             className={styles.treatmentsCancel}
             onClick={onClose}
           >
-            <X size={12} aria-hidden /> Cancelar factura
+            <X size={12} aria-hidden /> {t("patients.treatmentsModal.cancelInvoice")}
           </button>
           <button
             type="button"
@@ -220,7 +222,7 @@ export function TreatmentsModal({
             onClick={() => void createInvoice()}
             disabled={rows.length === 0 || creating}
           >
-            {creating ? "Creando…" : `Crear factura ${formatCurrency(total)}`}
+            {creating ? t("patients.treatmentsModal.creating") : t("patients.treatmentsModal.createInvoice", { total: formatCurrency(total) })}
           </button>
         </footer>
       </DialogContent>

@@ -1090,5 +1090,821 @@
       "probabilityTitle": "No-show probability: {pct}%",
       "ariaLabel": "{label} of no-show: {pct}%"
     }
+  },
+  "patients": {
+    "orthodonticsPage": {
+      "backToRecord": "Back to record",
+      "title": "Orthodontics"
+    },
+    "page": {
+      "loadError": "Error loading patient details"
+    },
+    "breadcrumb": {
+      "patients": "Patients"
+    },
+    "export": {
+      "cdaTitle": "Export record in HL7 CDA R2 format (NOM-024)",
+      "cdaLabel": "Export HL7 CDA",
+      "colId": "ID",
+      "colName": "Name",
+      "colPhone": "Phone",
+      "colEmail": "Email",
+      "colAge": "Age",
+      "colStatus": "Status",
+      "colBalance": "Balance",
+      "successToast": {
+        "one": "Exported {count} patient",
+        "other": "Exported {count} patients"
+      }
+    },
+    "doctorPrefix": "Dr.",
+    "apptStatus": {
+      "pending": "Pending",
+      "confirmed": "Confirmed",
+      "completed": "Completed",
+      "cancelled": "Cancelled",
+      "noShow": "No-show"
+    },
+    "invStatus": {
+      "pending": "Pending",
+      "partial": "Partial",
+      "paid": "Paid",
+      "overdue": "Overdue"
+    },
+    "tabs": {
+      "resumen": "Summary",
+      "historia": "Medical history",
+      "odontograma": "Odontogram",
+      "expediente": "New consultation",
+      "historialConsultas": "Consultation history",
+      "evolucion": "SOAP notes",
+      "radiografias": "X-rays",
+      "tratamiento": "Treatment plan",
+      "referencias": "Referrals",
+      "agenda": "Appointments",
+      "facturacion": "Billing",
+      "pediatria": "Pediatrics",
+      "periodoncia": "Periodontics",
+      "endodoncia": "Endodontics",
+      "implantes": "Implants",
+      "ortodoncia": "Orthodontics",
+      "sectionsAria": "Patient sections"
+    },
+    "severity": {
+      "alta": "High priority",
+      "media": "Medium priority",
+      "baja": "Low priority",
+      "informativo": "Informational"
+    },
+    "fileCat": {
+      "periapical": "Periapical",
+      "panoramic": "Panoramic",
+      "bitewing": "Bitewing",
+      "occlusal": "Occlusal",
+      "intraoral": "Intraoral photo",
+      "extraoral": "Extraoral photo",
+      "progress": "Progress",
+      "consent": "Consent",
+      "other": "Other"
+    },
+    "pediatrics": {
+      "dentition": "Dentition"
+    },
+    "deleteRecord": {
+      "signedError": "Signed notes cannot be deleted (NOM-024)",
+      "confirm": "Delete this draft note? This action cannot be undone.",
+      "failed": "Could not delete the note",
+      "success": "Note deleted"
+    },
+    "toast": {
+      "deleteError": "Error deleting"
+    },
+    "cancelAppt": {
+      "confirm": "Cancel this appointment on {date}? It will be set to CANCELLED and the time slot will be freed.",
+      "failed": "Could not cancel the appointment",
+      "success": "Appointment cancelled",
+      "error": "Error cancelling"
+    },
+    "deleteFile": {
+      "confirm": "Delete the file \"{name}\"? It will be removed from storage and cannot be recovered.",
+      "failed": "Could not delete the file",
+      "success": "File deleted"
+    },
+    "deleteTreatment": {
+      "confirm": "Delete the plan \"{name}\"? Its sessions will also be deleted. This action is irreversible.",
+      "failed": "Could not delete the plan",
+      "success": "Plan deleted"
+    },
+    "createTreatment": {
+      "nameRequired": "Enter a name for the plan",
+      "doctorRequired": "Select a doctor",
+      "failed": "Could not create the plan",
+      "success": "Treatment plan created",
+      "error": "Error creating the plan"
+    },
+    "uploadFile": {
+      "success": "File uploaded",
+      "error": "Error uploading"
+    },
+    "analyze": {
+      "success": {
+        "one": "Analysis complete — {count} finding",
+        "other": "Analysis complete — {count} findings"
+      },
+      "error": "Error analyzing"
+    },
+    "portal": {
+      "copied": "🔗 Portal link copied to clipboard",
+      "error": "Error generating portal"
+    },
+    "chart": {
+      "weight": "Weight",
+      "phq9": "PHQ-9 · Depression",
+      "systolicBp": "Systolic BP"
+    },
+    "milestone": {
+      "session": "Session {num}"
+    },
+    "consult": {
+      "draftCreateFailed": "Could not create draft",
+      "completedSigned": "Consultation completed and signed",
+      "completeFailed": "Could not complete"
+    },
+    "attach": {
+      "success": "File attached",
+      "failed": "Could not attach"
+    },
+    "record": {
+      "saved": "Record saved"
+    },
+    "ortho": {
+      "noPlan": "No active treatment plan",
+      "financialPlanUpdated": {
+        "one": "Financial plan updated · {count} installment of {amount}",
+        "other": "Financial plan updated · {count} installments of {amount}"
+      },
+      "diagnosisUpdated": "Diagnosis updated",
+      "appliancesUpdated": "Appliances updated",
+      "referralLetterSent": "Referral letter sent",
+      "retentionRegimenSaved": "Retention regimen saved",
+      "npsConfigSavedWhatsapp": "NPS configuration saved · WhatsApp template ready (real sending via Twilio)",
+      "npsConfigSaved": "NPS configuration saved",
+      "g15Scheduled": "Month 12 photo set scheduled",
+      "scenarioUpdated": "Scenario updated",
+      "wireStepAdded": "Wire step added",
+      "tadBrandPrompt": "TAD brand (DENTOS, SPIDER, IMTEC, OTHER):",
+      "tadSizePrompt": "Size (e.g. 1.4×6mm):",
+      "tadLocationPrompt": "Location (e.g. upper right buccal between 14 and 15):",
+      "tadTorquePrompt": "Torque Ncm (optional, leave blank to skip):",
+      "tadRegistered": "TAD registered",
+      "appointmentSigned": "Appointment signed",
+      "draftSaved": "Draft saved",
+      "phaseAdvanced": "Phase advanced to {phase}",
+      "scenarioSelected": "Scenario selected",
+      "selectScenarioBeforeSign": "Select a scenario before sending Sign@Home",
+      "signAtHomeSent": "Sign@Home link sent via WhatsApp",
+      "collectRegistered": "Payment registered",
+      "cfdiStub": "CFDI 4.0 with Facturapi · subscribe to enable real stamping",
+      "labOrderCreated": "Lab order created",
+      "preSurveyEnabled": "Pre-survey enabled",
+      "preSurveyDisabled": "Pre-survey disabled",
+      "generatingBeforeAfterPdf": "Generating before/after PDF…",
+      "noReferralCode": "No referral code assigned",
+      "codeCopied": "Code {code} copied",
+      "clipboardFailed": "Could not copy to clipboard",
+      "slotOutsideAao": "Slot outside the 8-view AAO set · no column in schema",
+      "photoUploadFailed": "Photo upload failed",
+      "photoUploaded": "Photo {view} uploaded",
+      "photoUploadUnexpected": "Unexpected error uploading the photo",
+      "generatingComparePdf": "Generating comparison PDF…",
+      "guardianLabel": "{name} (guardian)",
+      "sinceLabel": "since {date}",
+      "scheduleApptFirst": "Schedule an appointment first",
+      "recordCeph": "Cephalometric analysis",
+      "recordStl": "Digital STL scan"
+    },
+    "summary": {
+      "clinicalSummary": "Clinical summary",
+      "startConsult": "Start consultation",
+      "clinicalTrafficLight": "Clinical traffic light",
+      "hygiene": "Hygiene",
+      "hygieneGood": "Good",
+      "caries": "Caries",
+      "cariesModerate": "Moderate",
+      "perio": "Perio",
+      "noData": "No data",
+      "medicalHistory": "Medical history",
+      "bloodType": "Blood type",
+      "notRegistered": "Not registered",
+      "insurance": "Insurance",
+      "noInsurance": "No insurance",
+      "nextAppointment": "Next appointment",
+      "finance": "Finances",
+      "totalPlan": "Plan total",
+      "paid": "Paid",
+      "pending": "Pending",
+      "pctCovered": "{pct}% covered"
+    },
+    "history": {
+      "title": "Medical history",
+      "subtitle": "Chronological timeline of all the patient's clinical events."
+    },
+    "newConsult": {
+      "titleDental": "🦷 New dental consultation",
+      "titleNutrition": "🥗 New nutrition consultation",
+      "titlePsychology": "🧠 New session",
+      "titleMedicine": "🩺 New medical consultation",
+      "typeLabel": "Type",
+      "optDental": "Dental / Orthodontics",
+      "optNutrition": "Nutrition",
+      "optPsychology": "Psychology",
+      "optMedicine": "General medicine",
+      "resetTitle": "Return to the clinic's default type",
+      "reset": "Reset"
+    },
+    "consultHistory": {
+      "title": "Consultation history — {count} total",
+      "newConsult": "+ New consultation",
+      "empty": "No consultations recorded",
+      "registerFirst": "Record first consultation →",
+      "consultLabel": "Consultation",
+      "editUnavailableTitle": "Editing not available for this consultation type",
+      "editUnavailableBody": "Only dental consultations can be edited inline for now. Other types (nutrition, psychology, general medicine) will get this flow in upcoming PRs.",
+      "deleteDraft": "Delete draft"
+    },
+    "note": {
+      "signed": "Signed",
+      "draft": "Draft",
+      "dx": "Dx:",
+      "plan": "Plan:",
+      "procedure": "Procedure",
+      "weight": "Weight:",
+      "bmi": "BMI:",
+      "deleteDraftAria": "Delete draft note"
+    },
+    "evolution": {
+      "needMore": "Add 2+ consultations to see the evolution of {metric}",
+      "title": {
+        "one": "SOAP notes — {count} consultation",
+        "other": "SOAP notes — {count} consultations"
+      },
+      "newNote": "+ New SOAP note",
+      "empty": "No clinical notes yet",
+      "createFirst": "Create first consultation →",
+      "viewDetailAria": "View consultation detail from {date}"
+    },
+    "treatment": {
+      "title": "Patient treatments",
+      "newTreatment": "+ New treatment",
+      "pendingSessions": "Pending sessions",
+      "active": "Active",
+      "completed": "Completed",
+      "empty": "No treatments recorded",
+      "createFirst": "Create first treatment →",
+      "deletePlanAria": "Delete plan {name}",
+      "deletePlanTitle": "Delete plan",
+      "everyDays": "Every {days} days",
+      "pendingCount": {
+        "one": "{count} pending",
+        "other": "{count} pending"
+      },
+      "next": "Next: {date}",
+      "modalTitle": "New treatment for {name}",
+      "doctorLabel": "Doctor",
+      "nameLabel": "Treatment name *",
+      "namePlaceholder": "e.g. Braces orthodontics",
+      "descLabel": "Description (optional)",
+      "descPlaceholder": "Plan details",
+      "totalSessions": "Total sessions",
+      "daysBetween": "Days between sessions",
+      "totalCost": "Total cost (MXN)",
+      "creating": "Creating...",
+      "createBtn": "Create treatment"
+    },
+    "treatmentStatus": {
+      "active": "Active",
+      "completed": "Completed",
+      "abandoned": "Abandoned",
+      "paused": "Paused"
+    },
+    "commonTreatment": {
+      "bracesOrtho": "Braces orthodontics",
+      "invisibleOrtho": "Invisible orthodontics",
+      "dentalImplant": "Dental implant",
+      "perioRehab": "Periodontal rehabilitation",
+      "whitening": "Teeth whitening",
+      "rootCanal": "Root canal treatment",
+      "nutritionPlan": "Nutrition plan",
+      "psychProgram": "Psychology program"
+    },
+    "agenda": {
+      "title": "Appointments — {count} total",
+      "schedule": "+ Schedule",
+      "colTime": "Time",
+      "colType": "Type",
+      "colDoctor": "Doctor",
+      "empty": "No appointments recorded",
+      "cancelAppt": "Cancel appointment"
+    },
+    "xrays": {
+      "title": "X-rays and files",
+      "fileCount": {
+        "one": "{count} file",
+        "other": "{count} files"
+      },
+      "uploading": "Uploading…",
+      "uploadFile": "Upload file",
+      "empty": "No X-rays",
+      "emptyHint": "Upload the first X-ray to analyze it with AI",
+      "openViewerAria": "Open {name} in annotated viewer",
+      "openViewer": "Open viewer",
+      "tooth": "Tooth #{num}",
+      "openInViewer": "Open in viewer",
+      "analyzing": "Analyzing…",
+      "findingsView": {
+        "one": "{count} finding — View",
+        "other": "{count} findings — View"
+      },
+      "analyzeAI": "Analyze with AI",
+      "hideResults": "Hide results",
+      "showResults": "Show results",
+      "deleteFileAria": "Delete {name}",
+      "deleteFileTitle": "Delete file",
+      "aiSummaryTitle": "AI analysis summary",
+      "confidence": "Confidence: {pct}%",
+      "recommendations": "Recommendations",
+      "disclaimerLead": "Diagnostic support tool.",
+      "disclaimerBody": "This analysis is AI-generated and does NOT replace the professional's clinical judgment.",
+      "tokens": "Tokens used: {used} · Remaining: {remaining} / {limit}"
+    },
+    "billing": {
+      "title": "Billing",
+      "colInvoice": "Invoice",
+      "colAmount": "Amount",
+      "colPaid": "Paid",
+      "colBalance": "Balance",
+      "empty": "No invoices"
+    },
+    "edit": {
+      "title": "Edit patient",
+      "firstName": "First name *",
+      "lastName": "Last name *",
+      "email": "Email",
+      "phone": "Phone",
+      "dob": "Date of birth",
+      "gender": "Gender",
+      "genderMale": "Male",
+      "genderFemale": "Female",
+      "genderOther": "Other",
+      "address": "Address",
+      "officialId": "Official ID",
+      "haveCurp": "I have a CURP",
+      "noCurp": "I don't have one",
+      "foreigner": "Foreigner",
+      "curpLabel": "CURP *",
+      "passportLabel": "Passport *",
+      "allergiesLabel": "Allergies (comma-separated)",
+      "familyHistory": "Family medical history",
+      "familyHistoryPlaceholder": "Mother with T2DM, father with hypertension, brother with ischemic heart disease…",
+      "personalHistory": "Personal non-pathological history",
+      "personalHistoryPlaceholder": "Diet, hygiene, alcohol, tobacco, exercise, housing…",
+      "saved": "Patient updated",
+      "saveError": "Error saving"
+    },
+    "consultBar": {
+      "activeWith": "Active consultation with {patientName}",
+      "inConsultation": "In consultation",
+      "resume": "Resume",
+      "pauseTimer": "Pause timer",
+      "pause": "Pause",
+      "completeConsultation": "Complete consultation",
+      "closeConsultation": "Close consultation",
+      "exitConsultationMode": "Exit consultation mode"
+    },
+    "list": {
+      "colPatient": "Patient",
+      "colContact": "Contact",
+      "colLastVisit": "Last visit",
+      "colNextAppointment": "Next appointment",
+      "colBalance": "Balance",
+      "colDoctor": "Doctor",
+      "colTags": "Tags",
+      "colStatus": "Status",
+      "loadError": "Failed to load patients",
+      "errorPrefix": "Error: {message}",
+      "emptyFiltered": "No patients match the filters.",
+      "selectAll": "Select all patients",
+      "markedVip": "Marked VIP",
+      "vipRemoved": "VIP removed",
+      "vipError": "Error"
+    },
+    "statusFilter": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "archived": "Archived"
+    },
+    "quickFilter": {
+      "withDebt": "With debt",
+      "vip": "VIP",
+      "nextAppointment": "Next appointment",
+      "birthdayWeek": "Birthday this week",
+      "noContact6m": "No contact 6m"
+    },
+    "toolbar": {
+      "searchPlaceholder": "Search patient, phone, email…",
+      "viewList": "List",
+      "viewListTitle": "List (G)",
+      "viewGrid": "Grid",
+      "viewGridTitle": "Grid (G)",
+      "columns": "Columns",
+      "showColumns": "Show columns",
+      "columnFixed": "fixed",
+      "moreFilters": "More filters",
+      "moreFiltersTitle": "More filters (F)",
+      "newPatient": "New patient",
+      "newPatientTitle": "New patient (N)"
+    },
+    "bulk": {
+      "selectedCount": {
+        "one": "{count} selected",
+        "other": "{count} selected"
+      },
+      "assignTag": "Assign tag",
+      "assignTagSoon": "Assign tag — coming soon",
+      "assignDoctor": "Assign doctor",
+      "assignDoctorSoon": "Assign doctor — coming soon",
+      "whatsappCampaign": "WhatsApp campaign",
+      "whatsappCampaignSoon": "WhatsApp campaign — coming soon",
+      "exportCsv": "Export CSV",
+      "archive": "Archive",
+      "archiveConfirmTitle": {
+        "one": "Archive {count} patient?",
+        "other": "Archive {count} patients?"
+      },
+      "archiveConfirmDescription": "Archived patients are hidden from the active list but keep their clinical history.",
+      "archiveConfirmText": "Archive",
+      "archivedToast": {
+        "one": "{count} patient archived",
+        "other": "{count} patients archived"
+      },
+      "archiveError": "Failed to archive"
+    },
+    "pagination": {
+      "showing": "Showing {from}–{to} of {total}",
+      "first": "First",
+      "last": "Last"
+    },
+    "kbdHints": {
+      "search": "search",
+      "navigate": "navigate",
+      "open": "open",
+      "clear": "clear",
+      "select": "select",
+      "new": "new",
+      "view": "view",
+      "filters": "filters"
+    },
+    "hero": {
+      "totalPatients": "Total patients",
+      "newThisMonthDelta": "+{count} this month",
+      "newThisMonth": "New this month",
+      "pctVsPrevMonth": "{pct}% vs previous month",
+      "noChange": "no change",
+      "withDebt": "With debt",
+      "patientsCount": {
+        "one": "{count} patient",
+        "other": "{count} patients"
+      },
+      "nextAppointments": "Upcoming appointments",
+      "todayThisWeek": "Today / This week"
+    },
+    "relative": {
+      "never": "Never",
+      "today": "Today",
+      "tomorrow": "Tomorrow",
+      "yesterday": "Yesterday",
+      "inDays": "In {days}d",
+      "inWeeks": "In {weeks} wk.",
+      "daysAgo": "{days}d ago",
+      "monthsAgo": "{months} months ago",
+      "yearsAgo": "{years} years ago"
+    },
+    "row": {
+      "selectPatient": "Select patient {name}",
+      "yearsOld": "{age} yrs",
+      "doctorPrefix": "Dr.",
+      "whatsapp": "WhatsApp",
+      "call": "Call",
+      "schedule": "Schedule",
+      "removeVip": "Remove VIP",
+      "markVip": "Mark VIP"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "archived": "Archived"
+    },
+    "drawer": {
+      "title": "Advanced filters",
+      "age": "Age",
+      "min": "Min",
+      "max": "Max",
+      "gender": "Gender",
+      "genderMale": "Male",
+      "genderFemale": "Female",
+      "genderOther": "Other",
+      "assignedDoctor": "Assigned doctor",
+      "allDoctors": "All doctors",
+      "clinicalTags": "Clinical tags",
+      "tagVip": "VIP",
+      "tagAllergy": "Allergy",
+      "tagChronic": "Chronic",
+      "tagPregnancy": "Pregnancy",
+      "tagPediatric": "Pediatric",
+      "tagNew": "New",
+      "lastVisitRange": "Last visit — from / to",
+      "debtAny": "Any",
+      "debtYes": "With debt",
+      "debtZero": "Zero balance",
+      "applyFilters": "Apply filters"
+    },
+    "heroCard": {
+      "summaryAria": "Patient summary",
+      "ageSuffix": "{age}y",
+      "nextAppointment": "Next appointment",
+      "timeSuffix": "{time}",
+      "noAppointment": "No appointment",
+      "schedule": "Schedule",
+      "lastVisit": "Last visit",
+      "noVisits": "No visits",
+      "totalVisits": "Total visits",
+      "consultationsLabel": {
+        "one": "consultation",
+        "other": "consultations"
+      },
+      "startConsult": "Start consultation",
+      "startConsultTitle": "Start the consultation for the next appointment",
+      "startConsultDisabledTitle": "Schedule an appointment first to start a consultation",
+      "rescheduleNext": "Reschedule next",
+      "scheduleNext": "Schedule next",
+      "rescheduleTitle": "Reschedule the next appointment",
+      "scheduleNextTitle": "Schedule next appointment",
+      "chargeAmount": "Charge {amount}",
+      "charge": "Charge",
+      "moreActions": "More actions",
+      "moreActionsAria": "More patient actions",
+      "editPatient": "Edit patient",
+      "copyPortalLink": "Copy portal link",
+      "generatePatientPortal": "Generate patient portal",
+      "printSummary": "Print summary",
+      "viewInAgenda": "View in agenda"
+    },
+    "historiaTimeline": {
+      "typeSoap": "Notes",
+      "typePrescription": "Prescriptions",
+      "typeAppointment": "Appointments",
+      "typeXray": "X-rays",
+      "typeTreatment": "Treatments",
+      "typeReferral": "Referrals",
+      "typeDiagnosis": "Diagnoses",
+      "range30d": "30 days",
+      "range90d": "90 days",
+      "range12m": "12 months",
+      "rangeAll": "All",
+      "rangeLabel": "Range:",
+      "relMinutes": "minutes ago",
+      "relHours": {
+        "one": "{count} hour ago",
+        "other": "{count} hours ago"
+      },
+      "relYesterday": "yesterday",
+      "relDays": {
+        "one": "{count} day ago",
+        "other": "{count} days ago"
+      },
+      "relWeeks": {
+        "one": "{count} wk ago",
+        "other": "{count} wk ago"
+      },
+      "relMonths": {
+        "one": "{count} month ago",
+        "other": "{count} months ago"
+      },
+      "relYears": {
+        "one": "{count} year ago",
+        "other": "{count} years ago"
+      },
+      "loading": "Loading timeline…",
+      "loadError": "Error loading timeline: {error}",
+      "emptyNoEvents": "No clinical events recorded in this range.",
+      "emptyNoMatch": "No events match the selected filters."
+    },
+    "noteDetailModal": {
+      "title": "Consultation",
+      "statusSigned": "Signed",
+      "statusDraft": "Draft",
+      "signedAt": "signed {date}",
+      "doctorLabel": "Dr. {name}",
+      "doctorUnassigned": "Doctor not assigned",
+      "soapSubjective": "S — Subjective",
+      "soapObjective": "O — Objective",
+      "soapAssessment": "A — Assessment",
+      "soapPlan": "P — Plan",
+      "noRecord": "No record",
+      "fieldPlaceholder": "Describe {term}",
+      "attachments": {
+        "one": "Attachment ({count})",
+        "other": "Attachments ({count})"
+      },
+      "cie10Title": "ICD-10 diagnoses (NOM-024)",
+      "noDiagnoses": "No diagnoses.",
+      "legacyTag": "(legacy)",
+      "draftHint": "Once signed, this note becomes unalterable and will form part of the patient's legal clinical record.",
+      "readOnlyFooter": "Read-only · signed record",
+      "generating": "Generating…",
+      "downloadPdf": "Download PDF",
+      "saveDraft": "Save draft",
+      "signing": "Signing…",
+      "signNote": "Sign note",
+      "savedToast": "Changes saved",
+      "signedToast": "Note signed",
+      "saveError": "Could not save",
+      "signError": "Could not sign",
+      "addDxError": "Could not add the diagnosis",
+      "removeDxError": "Could not remove the diagnosis",
+      "pdfGenerateError": "Could not generate the PDF",
+      "pdfDownloadError": "Error downloading the PDF"
+    },
+    "quickNav": {
+      "summary": "Summary",
+      "clinicalHistory": "Clinical history",
+      "newConsultation": "New consultation",
+      "consultationHistory": "Consultation history",
+      "pediatrics": "Pediatrics",
+      "periodontics": "Periodontics",
+      "endodontics": "Endodontics",
+      "implants": "Implants",
+      "orthodontics": "Orthodontics",
+      "odontogram": "Odontogram",
+      "soapNotes": "SOAP notes",
+      "xrays": "X-rays",
+      "treatmentPlan": "Treatment plan",
+      "referrals": "Referrals",
+      "specialties": "SPECIALTIES",
+      "clinical": "Clinical",
+      "administrative": "Administrative",
+      "appointments": "Appointments",
+      "billing": "Billing",
+      "ariaLabel": "Patient quick navigation",
+      "noRecordsYet": "No records yet in this module"
+    },
+    "sideCards": {
+      "panelAria": "Side panel",
+      "nextAppointment": "Next appointment",
+      "reschedule": "Reschedule",
+      "noNextAppointment": "No upcoming appointment.",
+      "schedule": "Schedule",
+      "accountStatement": "Account statement",
+      "treatmentTotal": "Treatment total",
+      "paid": "Paid",
+      "pendingBalance": "Pending balance",
+      "pctCovered": "{pct}% covered",
+      "chargeNow": "Charge now",
+      "autoRules": "Automatic rules",
+      "reminderText": "{name} will receive a WhatsApp reminder 24h before their next appointment (if the clinic has WhatsApp enabled).",
+      "recentWhatsApp": "Recent WhatsApp",
+      "noRecentMessages": "No recent messages with {name}.",
+      "noPhone": "Patient has no phone on file.",
+      "openChat": "Open chat"
+    },
+    "soapEditor": {
+      "editorAria": "Consultation notes editor",
+      "inProgress": "In progress",
+      "title": "Consultation notes",
+      "consultation": "Consultation",
+      "attachments": "Attachments",
+      "uploading": "Uploading…",
+      "dropFileHere": "Drop the file here",
+      "dragOrClick": "Drag files or click to upload",
+      "removeAttachment": "Remove {name}",
+      "quickTemplates": "Quick templates",
+      "insertInto": "Inserts into {field}",
+      "comingSoon": "Coming soon",
+      "aiSuggestPlan": "AI suggest plan",
+      "notSavedYet": "Not saved yet",
+      "draftSaved": "Draft saved",
+      "draftSavedSeconds": "Draft saved · {seconds}s ago",
+      "draftSavedMinutes": "Draft saved · {minutes}m ago",
+      "saveDraft": "Save draft",
+      "signing": "Signing…",
+      "signAndComplete": "Sign and complete consultation",
+      "subjective": {
+        "label": "Subjective",
+        "hint": "What the patient reports",
+        "placeholder": "Reason for visit, reported symptoms…"
+      },
+      "objective": {
+        "label": "Objective",
+        "hint": "Clinical findings",
+        "placeholder": "Physical exam, vital signs, clinical observations…"
+      },
+      "assessment": {
+        "label": "Assessment",
+        "hint": "Diagnosis",
+        "placeholder": "Diagnosis, differential, clinical assessment…"
+      },
+      "plan": {
+        "label": "Plan",
+        "hint": "Treatment + next step",
+        "placeholder": "Treatment, prescription, follow-up, referral…"
+      },
+      "tpl": {
+        "cleaning": {
+          "label": "Prophylaxis cleaning",
+          "value": "Ultrasonic prophylaxis. Topical fluoride application. Reinforce brushing technique and flossing."
+        },
+        "noFindings": {
+          "label": "No findings",
+          "value": "Soft tissues unremarkable. Adequate oral hygiene. No active carious lesions."
+        },
+        "control6mo": {
+          "label": "6-month follow-up",
+          "value": "Follow-up in 6 months. Reinforce hygiene."
+        },
+        "anesthesia": {
+          "label": "Block anesthesia",
+          "value": "Infiltrative anesthesia with 2% lidocaine without epinephrine (patient has a contraindication). Verify block before the procedure."
+        }
+      }
+    },
+    "treatmentsModal": {
+      "invoiceCreated": "Invoice {number} created",
+      "invoiceFailed": "The invoice could not be created",
+      "title": "Detected treatments",
+      "noChanges": "No changes were detected in the odontogram.",
+      "changesDetected": {
+        "one": "{count} change from the previous snapshot. Edit or remove before invoicing.",
+        "other": "{count} changes from the previous snapshot. Edit or remove before invoicing."
+      },
+      "colTreatment": "Treatment",
+      "colTooth": "Tooth",
+      "colSurface": "Surface",
+      "colQty": "Qty",
+      "colPrice": "Price",
+      "colSubtotal": "Subtotal",
+      "remove": "Remove",
+      "subtotal": "Subtotal",
+      "discount": "Discount",
+      "cancelInvoice": "Cancel invoice",
+      "creating": "Creating…",
+      "createInvoice": "Create invoice {total}"
+    },
+    "referralsTab": {
+      "statusSent": "Sent",
+      "statusAccepted": "Accepted",
+      "statusRejected": "Rejected",
+      "statusResponded": "Responded",
+      "statusCancelled": "Cancelled",
+      "heading": "Referrals and counter-referrals",
+      "subtitle": "NOM-024 documents for sending to another clinic/specialist or responding back.",
+      "newReferral": "New referral",
+      "empty": "No referrals recorded for this patient.",
+      "outgoingArrow": "Referral →",
+      "incomingArrow": "Counter-referral ←",
+      "reasonLabel": "Reason:",
+      "clinicalSummaryLabel": "Clinical summary:",
+      "diagnosesLabel": "Diagnoses:",
+      "responseLabel": "Response:",
+      "markResponded": "Mark as responded",
+      "responseNotesPlaceholder": "Response notes…",
+      "markedResponded": "Marked as responded",
+      "confirmCancel": "Cancel this referral?",
+      "cancelledToast": "Cancelled",
+      "cie10NotFound": "ICD-10 code not found",
+      "addDiagnosisError": "Error adding diagnosis",
+      "requiredFieldsError": "Destination clinic, reason and summary are required",
+      "createError": "Error creating",
+      "createdToast": "Referral created",
+      "errorPrefix": "Error: {error}",
+      "modalTitle": "New referral / counter-referral",
+      "fieldType": "Type",
+      "typeOutgoing": "Referral (outgoing)",
+      "typeIncoming": "Counter-referral (incoming)",
+      "fieldDestClinic": "Destination clinic *",
+      "destClinicPlaceholder": "Hospital General de México",
+      "fieldClues": "CLUES (optional)",
+      "cluesPlaceholder": "11 chars",
+      "fieldReceivingDoctor": "Receiving physician",
+      "receivingDoctorPlaceholder": "Dr. name",
+      "fieldSpecialty": "Requested specialty",
+      "specialtyPlaceholder": "Cardiology, Oncology…",
+      "fieldReason": "Reason for referral *",
+      "reasonPlaceholder": "E.g.: requires cardiology evaluation",
+      "fieldClinicalSummary": "Clinical summary *",
+      "clinicalSummaryPlaceholder": "History, evolution, tests performed, relevant findings…",
+      "fieldDiagnoses": "Relevant diagnoses (ICD-10)",
+      "sending": "Sending…",
+      "createReferral": "Create referral"
+    }
   }
 }

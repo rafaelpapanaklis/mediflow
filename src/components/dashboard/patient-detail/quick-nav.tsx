@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import type { PatientActivityCounts } from "@/lib/clinical-shared/get-patient-activity-counts";
 import styles from "./patient-detail.module.css";
+import { useT } from "@/i18n/i18n-provider";
 
 interface NavItem {
   id: string;
@@ -105,14 +106,15 @@ export function QuickNav({
   showOrthodontics,
   activityCounts,
 }: QuickNavProps) {
+  const t = useT();
   // Core clínico — siempre arriba. Resumen, Historia, Nueva consulta van
   // primero porque el caso de uso más frecuente no es entrar a un módulo
   // específico sino abrir el expediente.
   const coreClinicalItems: NavItem[] = [
-    { id: "resumen",    label: "Resumen",          icon: ClipboardList },
-    { id: "historia",   label: "Historia clínica", icon: History, count: counts.historia },
-    { id: "expediente", label: "Nueva consulta",   icon: Stethoscope },
-    { id: "historial-consultas", label: "Historial de consultas", icon: ClipboardList, count: counts.historialConsultas },
+    { id: "resumen",    label: t("patients.quickNav.summary"),          icon: ClipboardList },
+    { id: "historia",   label: t("patients.quickNav.clinicalHistory"), icon: History, count: counts.historia },
+    { id: "expediente", label: t("patients.quickNav.newConsultation"),   icon: Stethoscope },
+    { id: "historial-consultas", label: t("patients.quickNav.consultationHistory"), icon: ClipboardList, count: counts.historialConsultas },
   ];
 
   // Especialidades — visibles según gating por módulo activo en la clínica.
@@ -125,7 +127,7 @@ export function QuickNav({
     const count = activityCounts?.pediatria ?? counts.pediatria ?? 0;
     specialtyItems.push({
       id:             "pediatria",
-      label:          "Pediatría",
+      label:          t("patients.quickNav.pediatrics"),
       icon:           Baby,
       count:          count > 0 ? count : undefined,
       badgeTone:      "brand",
@@ -137,7 +139,7 @@ export function QuickNav({
   if (showPeriodontics) {
     specialtyItems.push({
       id: "periodoncia",
-      label: "Periodoncia",
+      label: t("patients.quickNav.periodontics"),
       icon: HeartPulse,
       count: counts.periodoncia,
       badgeTone: "brand",
@@ -147,7 +149,7 @@ export function QuickNav({
   if (showEndodontics) {
     specialtyItems.push({
       id: "endodoncia",
-      label: "Endodoncia",
+      label: t("patients.quickNav.endodontics"),
       icon: Zap,
       count: counts.endodoncia,
       badgeTone: "brand",
@@ -157,7 +159,7 @@ export function QuickNav({
   if (showImplants) {
     specialtyItems.push({
       id: "implantes",
-      label: "Implantes",
+      label: t("patients.quickNav.implants"),
       icon: Anchor,
       count: counts.implantes,
       badgeTone: "brand",
@@ -167,7 +169,7 @@ export function QuickNav({
   if (showOrthodontics) {
     specialtyItems.push({
       id: "ortodoncia",
-      label: "Ortodoncia",
+      label: t("patients.quickNav.orthodontics"),
       icon: Smile,
       count: counts.ortodoncia,
       badgeTone: "brand",
@@ -179,29 +181,29 @@ export function QuickNav({
   // cualquier módulo (odontograma, notas, radiografías, plan,
   // referencias).
   const otherClinicalItems: NavItem[] = [
-    { id: "odontograma",  label: "Odontograma",      icon: Bone,         count: counts.odontograma },
-    { id: "evolucion",    label: "Notas SOAP",       icon: Activity,     count: counts.evolucion },
-    { id: "radiografias", label: "Radiografías",     icon: FileImage,    count: counts.radiografias },
-    { id: "tratamiento",  label: "Plan tratamiento", icon: Pill,         count: counts.tratamiento },
-    { id: "referencias",  label: "Referencias",      icon: ArrowUpRight, count: counts.referencias },
+    { id: "odontograma",  label: t("patients.quickNav.odontogram"),      icon: Bone,         count: counts.odontograma },
+    { id: "evolucion",    label: t("patients.quickNav.soapNotes"),       icon: Activity,     count: counts.evolucion },
+    { id: "radiografias", label: t("patients.quickNav.xrays"),     icon: FileImage,    count: counts.radiografias },
+    { id: "tratamiento",  label: t("patients.quickNav.treatmentPlan"), icon: Pill,         count: counts.tratamiento },
+    { id: "referencias",  label: t("patients.quickNav.referrals"),      icon: ArrowUpRight, count: counts.referencias },
   ];
 
   const clinicalGroups: NavGroup[] = [{ items: coreClinicalItems }];
   if (specialtyItems.length > 0) {
-    clinicalGroups.push({ label: "ESPECIALIDADES", items: specialtyItems });
+    clinicalGroups.push({ label: t("patients.quickNav.specialties"), items: specialtyItems });
   }
   clinicalGroups.push({ items: otherClinicalItems });
 
   const sections: NavSection[] = [
-    { label: "Clínico", groups: clinicalGroups },
+    { label: t("patients.quickNav.clinical"), groups: clinicalGroups },
     {
-      label: "Administrativo",
+      label: t("patients.quickNav.administrative"),
       groups: [{
         items: [
-          { id: "agenda",      label: "Citas",       icon: Calendar,    count: counts.agenda },
+          { id: "agenda",      label: t("patients.quickNav.appointments"),       icon: Calendar,    count: counts.agenda },
           {
             id: "facturacion",
-            label: "Facturación",
+            label: t("patients.quickNav.billing"),
             icon: CreditCard,
             count: counts.facturacion,
             badgeTone: hasBalance ? "danger" : "neutral",
@@ -212,7 +214,7 @@ export function QuickNav({
   ];
 
   return (
-    <nav className={styles.quickNav} aria-label="Navegación rápida del paciente">
+    <nav className={styles.quickNav} aria-label={t("patients.quickNav.ariaLabel")}>
       {sections.map((section) => (
         <div key={section.label} className={styles.navSection}>
           <div className={styles.navSectionLabel}>{section.label}</div>
@@ -244,7 +246,7 @@ export function QuickNav({
                     aria-disabled={isDisabled || undefined}
                     title={
                       isDisabled ? item.disabledReason :
-                      isDimmed   ? "Sin registros aún en este módulo" :
+                      isDimmed   ? t("patients.quickNav.noRecordsYet") :
                       undefined
                     }
                     aria-current={isActive ? "page" : undefined}

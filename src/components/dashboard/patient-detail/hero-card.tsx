@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { ageFromDob } from "@/lib/format";
+import { useT } from "@/i18n/i18n-provider";
 import styles from "./patient-detail.module.css";
 
 export interface HeroCardProps {
@@ -71,6 +72,7 @@ export function HeroCard({
   onReschedule,
   onCharge,
 }: HeroCardProps) {
+  const t = useT();
   const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
   const age = ageFromDob(patient.dob);
@@ -82,7 +84,7 @@ export function HeroCard({
   const hasNextAppt = nextAppointment !== null;
 
   return (
-    <section className={styles.hero} aria-label="Resumen del paciente">
+    <section className={styles.hero} aria-label={t("patients.heroCard.summaryAria")}>
       <div className={styles.heroMain}>
         <div className={styles.heroAvatar} aria-hidden>
           {initials}
@@ -95,7 +97,7 @@ export function HeroCard({
             <span className={styles.heroMetaSep}>·</span>
             {age !== null && (
               <>
-                <span className={styles.mono}>{age}a</span>
+                <span className={styles.mono}>{t("patients.heroCard.ageSuffix", { age })}</span>
                 <span className={styles.heroMetaSep}>·</span>
               </>
             )}
@@ -127,7 +129,7 @@ export function HeroCard({
 
         <div className={styles.heroMetrics}>
           <div className={styles.metric}>
-            <div className={styles.metricLabel}>Próxima cita</div>
+            <div className={styles.metricLabel}>{t("patients.heroCard.nextAppointment")}</div>
             {hasNextAppt ? (
               <>
                 <div className={`${styles.metricValue} ${styles.brand}`}>
@@ -135,7 +137,7 @@ export function HeroCard({
                 </div>
                 {nextAppointment!.startTime && (
                   <div className={styles.metricSub}>
-                    {nextAppointment!.startTime}h{nextAppointment!.doctorName ? ` · ${nextAppointment!.doctorName}` : ""}
+                    {t("patients.heroCard.timeSuffix", { time: nextAppointment!.startTime })}{nextAppointment!.doctorName ? ` · ${nextAppointment!.doctorName}` : ""}
                   </div>
                 )}
               </>
@@ -150,7 +152,7 @@ export function HeroCard({
                       border: "1px solid var(--border)",
                     }}
                   >
-                    Sin cita
+                    {t("patients.heroCard.noAppointment")}
                   </span>
                 </div>
                 <div className={styles.metricSub}>
@@ -159,21 +161,21 @@ export function HeroCard({
                     onClick={onReschedule}
                     className={styles.sideCardLink}
                   >
-                    Agendar →
+                    {t("patients.heroCard.schedule")} →
                   </button>
                 </div>
               </>
             )}
           </div>
           <div className={styles.metric}>
-            <div className={styles.metricLabel}>Última visita</div>
+            <div className={styles.metricLabel}>{t("patients.heroCard.lastVisit")}</div>
             <div className={styles.metricValue}>{lastVisitDate ? fmtShortDate(lastVisitDate) : "—"}</div>
-            <div className={styles.metricSub}>{lastVisitDate ? "" : "Sin visitas"}</div>
+            <div className={styles.metricSub}>{lastVisitDate ? "" : t("patients.heroCard.noVisits")}</div>
           </div>
           <div className={styles.metric}>
-            <div className={styles.metricLabel}>Visitas totales</div>
+            <div className={styles.metricLabel}>{t("patients.heroCard.totalVisits")}</div>
             <div className={styles.metricValue}>{visitCount}</div>
-            <div className={styles.metricSub}>{visitCount === 1 ? "consulta" : "consultas"}</div>
+            <div className={styles.metricSub}>{t("patients.heroCard.consultationsLabel", { count: visitCount })}</div>
           </div>
         </div>
 
@@ -183,17 +185,17 @@ export function HeroCard({
             className={`${styles.btn} ${styles.btnPrimary}`}
             onClick={onStartConsult}
             disabled={!hasNextAppt}
-            title={hasNextAppt ? "Iniciar consulta de la próxima cita" : "Agenda primero una cita para iniciar consulta"}
+            title={hasNextAppt ? t("patients.heroCard.startConsultTitle") : t("patients.heroCard.startConsultDisabledTitle")}
           >
-            <Play size={13} aria-hidden /> Iniciar consulta
+            <Play size={13} aria-hidden /> {t("patients.heroCard.startConsult")}
           </button>
           <button
             type="button"
             className={styles.btn}
             onClick={onReschedule}
-            title={hasNextAppt ? "Reagendar la próxima cita" : "Agendar próxima cita"}
+            title={hasNextAppt ? t("patients.heroCard.rescheduleTitle") : t("patients.heroCard.scheduleNextTitle")}
           >
-            <CalendarClock size={13} aria-hidden /> {hasNextAppt ? "Reagendar próxima" : "Agendar próxima"}
+            <CalendarClock size={13} aria-hidden /> {hasNextAppt ? t("patients.heroCard.rescheduleNext") : t("patients.heroCard.scheduleNext")}
           </button>
           <button
             type="button"
@@ -201,7 +203,7 @@ export function HeroCard({
             onClick={onCharge}
             disabled={!hasBalance}
           >
-            <CreditCard size={13} aria-hidden /> {hasBalance ? `Cobrar ${formatCurrency(pendingBalance)}` : "Cobrar"}
+            <CreditCard size={13} aria-hidden /> {hasBalance ? t("patients.heroCard.chargeAmount", { amount: formatCurrency(pendingBalance) }) : t("patients.heroCard.charge")}
           </button>
 
           <Popover.Root open={moreOpen} onOpenChange={setMoreOpen}>
@@ -209,8 +211,8 @@ export function HeroCard({
               <button
                 type="button"
                 className={`${styles.btn} ${styles.btnIcon}`}
-                aria-label="Más acciones del paciente"
-                title="Más acciones"
+                aria-label={t("patients.heroCard.moreActionsAria")}
+                title={t("patients.heroCard.moreActions")}
               >
                 <MoreHorizontal size={14} aria-hidden />
               </button>
@@ -225,7 +227,7 @@ export function HeroCard({
                     onEdit();
                   }}
                 >
-                  <Edit size={12} aria-hidden /> Editar paciente
+                  <Edit size={12} aria-hidden /> {t("patients.heroCard.editPatient")}
                 </button>
                 {portalUrl ? (
                   <button
@@ -236,7 +238,7 @@ export function HeroCard({
                       navigator.clipboard.writeText(portalUrl);
                     }}
                   >
-                    <ExternalLink size={12} aria-hidden /> Copiar link del portal
+                    <ExternalLink size={12} aria-hidden /> {t("patients.heroCard.copyPortalLink")}
                   </button>
                 ) : (
                   <button
@@ -247,7 +249,7 @@ export function HeroCard({
                       onEdit();
                     }}
                   >
-                    <ExternalLink size={12} aria-hidden /> Generar portal paciente
+                    <ExternalLink size={12} aria-hidden /> {t("patients.heroCard.generatePatientPortal")}
                   </button>
                 )}
                 <button
@@ -258,7 +260,7 @@ export function HeroCard({
                     window.print();
                   }}
                 >
-                  <Printer size={12} aria-hidden /> Imprimir resumen
+                  <Printer size={12} aria-hidden /> {t("patients.heroCard.printSummary")}
                 </button>
                 <button
                   type="button"
@@ -272,7 +274,7 @@ export function HeroCard({
                     );
                   }}
                 >
-                  <Calendar size={12} aria-hidden /> Ver en agenda
+                  <Calendar size={12} aria-hidden /> {t("patients.heroCard.viewInAgenda")}
                 </button>
               </Popover.Content>
             </Popover.Portal>

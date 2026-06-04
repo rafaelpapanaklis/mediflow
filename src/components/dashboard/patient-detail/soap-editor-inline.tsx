@@ -10,6 +10,7 @@ import {
   FileText,
   Image as ImageIcon,
 } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 import styles from "./patient-detail.module.css";
 
 export interface SoapDraft {
@@ -33,11 +34,11 @@ export interface SoapEditorInlineProps {
   onAttach?: (file: File) => Promise<{ id: string; name: string; mime: string } | null>;
 }
 
-const QUICK_TEMPLATES: { label: string; field: keyof Omit<SoapDraft, "id" | "attachments">; value: string }[] = [
-  { label: "Limpieza profilaxis", field: "plan", value: "Profilaxis con ultrasonido. Aplicación tópica de flúor. Reforzar técnica de cepillado y uso de hilo dental." },
-  { label: "Sin hallazgos",       field: "objective", value: "Tejidos blandos sin alteraciones. Higiene oral adecuada. Sin lesiones cariosas activas." },
-  { label: "Control 6 meses",     field: "plan", value: "Control en 6 meses. Reforzar higiene." },
-  { label: "Anestesia bloqueo",   field: "plan", value: "Anestesia infiltrativa con lidocaína 2% sin epinefrina (paciente con contraindicación). Verificar bloqueo antes del procedimiento." },
+const QUICK_TEMPLATES: { id: string; field: keyof Omit<SoapDraft, "id" | "attachments"> }[] = [
+  { id: "cleaning",   field: "plan" },
+  { id: "noFindings", field: "objective" },
+  { id: "control6mo", field: "plan" },
+  { id: "anesthesia", field: "plan" },
 ];
 
 export function SoapEditorInline({
@@ -47,6 +48,7 @@ export function SoapEditorInline({
   onComplete,
   onAttach,
 }: SoapEditorInlineProps) {
+  const t = useT();
   const [draft, setDraft] = useState<SoapDraft>(initialDraft);
   const [saving, setSaving] = useState(false);
   const [completing, setCompleting] = useState(false);
@@ -117,9 +119,10 @@ export function SoapEditorInline({
   }
 
   function applyTemplate(tpl: typeof QUICK_TEMPLATES[number]) {
+    const value = t(`patients.soapEditor.tpl.${tpl.id}.value`);
     setDraft((d) => ({
       ...d,
-      [tpl.field]: d[tpl.field] ? `${d[tpl.field]}\n${tpl.value}` : tpl.value,
+      [tpl.field]: d[tpl.field] ? `${d[tpl.field]}\n${value}` : value,
     }));
   }
 
@@ -128,21 +131,21 @@ export function SoapEditorInline({
   }
 
   function fmtSavedAt(): string {
-    if (!savedAt) return "Sin guardar todavía";
+    if (!savedAt) return t("patients.soapEditor.notSavedYet");
     const diff = Math.floor((Date.now() - savedAt.getTime()) / 1000);
-    if (diff < 5) return "Borrador guardado";
-    if (diff < 60) return `Borrador guardado · hace ${diff}s`;
-    return `Borrador guardado · hace ${Math.floor(diff / 60)}m`;
+    if (diff < 5) return t("patients.soapEditor.draftSaved");
+    if (diff < 60) return t("patients.soapEditor.draftSavedSeconds", { seconds: diff });
+    return t("patients.soapEditor.draftSavedMinutes", { minutes: Math.floor(diff / 60) });
   }
 
   return (
-    <section className={styles.soapEditor} aria-label="Editor de notas de consulta">
+    <section className={styles.soapEditor} aria-label={t("patients.soapEditor.editorAria")}>
       <header className={styles.soapEditorHead}>
         <div className={styles.soapEditorTitleBlock}>
-          <span className={styles.soapEditorChip}>● En curso</span>
-          <h3 className={styles.soapEditorTitle}>Notas de consulta</h3>
+          <span className={styles.soapEditorChip}>● {t("patients.soapEditor.inProgress")}</span>
+          <h3 className={styles.soapEditorTitle}>{t("patients.soapEditor.title")}</h3>
           <span className={styles.soapEditorSub}>
-            {appointment.type ?? "Consulta"} · {appointment.patientName}
+            {appointment.type ?? t("patients.soapEditor.consultation")} · {appointment.patientName}
           </span>
         </div>
       </header>
@@ -156,13 +159,13 @@ export function SoapEditorInline({
               <div key={field} className={styles.soapBlock}>
                 <div className={styles.soapLabel}>
                   <span className={styles.soapLetter}>{letter}</span>
-                  <span>{meta.label}</span>
-                  <span className={styles.soapHint}>{meta.hint}</span>
+                  <span>{t(meta.labelKey)}</span>
+                  <span className={styles.soapHint}>{t(meta.hintKey)}</span>
                 </div>
                 <textarea
                   className={styles.soapInput}
                   value={draft[field]}
-                  placeholder={meta.placeholder}
+                  placeholder={t(meta.placeholderKey)}
                   onChange={(e) => updateField(field, e.target.value)}
                   rows={3}
                   onInput={(e) => {
@@ -191,7 +194,7 @@ export function SoapEditorInline({
           }}
         >
           <div className={styles.dockSection}>
-            <div className={styles.dockSectionLabel}>Adjuntos</div>
+            <div className={styles.dockSectionLabel}>{t("patients.soapEditor.attachments")}</div>
             <button
               type="button"
               className={styles.dockUploadBtn}
@@ -201,10 +204,10 @@ export function SoapEditorInline({
               <Paperclip size={13} aria-hidden />
               <span>
                 {attaching
-                  ? "Subiendo…"
+                  ? t("patients.soapEditor.uploading")
                   : dragActive
-                  ? "Suelta el archivo aquí"
-                  : "Arrastra archivos o click para subir"}
+                  ? t("patients.soapEditor.dropFileHere")
+                  : t("patients.soapEditor.dragOrClick")}
               </span>
             </button>
             <input
@@ -232,7 +235,7 @@ export function SoapEditorInline({
                       type="button"
                       className={styles.dockAttachRemove}
                       onClick={() => removeAttachment(a.id)}
-                      aria-label={`Quitar ${a.name}`}
+                      aria-label={t("patients.soapEditor.removeAttachment", { name: a.name })}
                     >
                       <Trash2 size={11} />
                     </button>
@@ -243,17 +246,17 @@ export function SoapEditorInline({
           </div>
 
           <div className={styles.dockSection}>
-            <div className={styles.dockSectionLabel}>Plantillas rápidas</div>
+            <div className={styles.dockSectionLabel}>{t("patients.soapEditor.quickTemplates")}</div>
             <div className={styles.dockTemplates}>
               {QUICK_TEMPLATES.map((tpl) => (
                 <button
-                  key={tpl.label}
+                  key={tpl.id}
                   type="button"
                   className={styles.dockTemplate}
                   onClick={() => applyTemplate(tpl)}
-                  title={`Inserta en ${SOAP_META[tpl.field].label}`}
+                  title={t("patients.soapEditor.insertInto", { field: t(SOAP_META[tpl.field].labelKey) })}
                 >
-                  {tpl.label}
+                  {t(`patients.soapEditor.tpl.${tpl.id}.label`)}
                 </button>
               ))}
             </div>
@@ -264,10 +267,10 @@ export function SoapEditorInline({
               type="button"
               className={styles.dockAiBtn}
               disabled
-              title="Próximamente"
+              title={t("patients.soapEditor.comingSoon")}
             >
               <Sparkles size={12} aria-hidden />
-              <span>IA sugerir plan</span>
+              <span>{t("patients.soapEditor.aiSuggestPlan")}</span>
             </button>
           </div>
         </aside>
@@ -275,7 +278,7 @@ export function SoapEditorInline({
 
       <footer className={styles.soapFoot}>
         <span className={styles.soapSavedLabel}>
-          {saving ? "Guardando…" : fmtSavedAt()}
+          {saving ? t("common.saving") : fmtSavedAt()}
         </span>
         <div className={styles.soapFootActions}>
           <button
@@ -284,7 +287,7 @@ export function SoapEditorInline({
             onClick={() => void manualSave()}
             disabled={saving}
           >
-            <Save size={12} aria-hidden /> Guardar borrador
+            <Save size={12} aria-hidden /> {t("patients.soapEditor.saveDraft")}
           </button>
           <button
             type="button"
@@ -293,7 +296,7 @@ export function SoapEditorInline({
             disabled={completing}
           >
             <CheckCircle2 size={12} aria-hidden />
-            {completing ? "Firmando…" : "Firmar y completar consulta"}
+            {completing ? t("patients.soapEditor.signing") : t("patients.soapEditor.signAndComplete")}
           </button>
         </div>
       </footer>
@@ -303,26 +306,26 @@ export function SoapEditorInline({
 
 const SOAP_META: Record<
   keyof Pick<SoapDraft, "subjective" | "objective" | "assessment" | "plan">,
-  { label: string; hint: string; placeholder: string }
+  { labelKey: string; hintKey: string; placeholderKey: string }
 > = {
   subjective: {
-    label: "Subjetivo",
-    hint: "Lo que el paciente reporta",
-    placeholder: "Motivo de consulta, síntomas reportados…",
+    labelKey: "patients.soapEditor.subjective.label",
+    hintKey: "patients.soapEditor.subjective.hint",
+    placeholderKey: "patients.soapEditor.subjective.placeholder",
   },
   objective: {
-    label: "Objetivo",
-    hint: "Hallazgos clínicos",
-    placeholder: "Examen físico, signos vitales, observaciones clínicas…",
+    labelKey: "patients.soapEditor.objective.label",
+    hintKey: "patients.soapEditor.objective.hint",
+    placeholderKey: "patients.soapEditor.objective.placeholder",
   },
   assessment: {
-    label: "Evaluación",
-    hint: "Diagnóstico",
-    placeholder: "Diagnóstico, diferencial, evaluación clínica…",
+    labelKey: "patients.soapEditor.assessment.label",
+    hintKey: "patients.soapEditor.assessment.hint",
+    placeholderKey: "patients.soapEditor.assessment.placeholder",
   },
   plan: {
-    label: "Plan",
-    hint: "Tratamiento + siguiente paso",
-    placeholder: "Tratamiento, prescripción, control, derivación…",
+    labelKey: "patients.soapEditor.plan.label",
+    hintKey: "patients.soapEditor.plan.hint",
+    placeholderKey: "patients.soapEditor.plan.placeholder",
   },
 };

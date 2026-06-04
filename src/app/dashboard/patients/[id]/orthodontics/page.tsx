@@ -11,12 +11,14 @@ import { canAccessModule } from "@/lib/marketplace/access-control";
 import { ORTHODONTICS_MODULE_KEY, PEDIATRICS_MODULE_KEY } from "@/lib/specialties/keys";
 import { loadOrthoData } from "@/lib/orthodontics/load-data";
 import { OrthodonticsClient } from "@/components/specialties/orthodontics/OrthodonticsClient";
+import { getServerT } from "@/i18n/server";
 
 export default async function PatientOrthodonticsPage({
   params,
 }: {
   params: { id: string };
 }) {
+  const { t } = await getServerT();
   const user = await getCurrentUser();
   if (user.clinic.category !== "DENTAL") redirect(`/dashboard/patients/${params.id}`);
   const access = await canAccessModule(user.clinicId, ORTHODONTICS_MODULE_KEY);
@@ -46,11 +48,11 @@ export default async function PatientOrthodonticsPage({
           textDecoration: "none",
         }}
       >
-        <ArrowLeft size={14} aria-hidden /> Volver al expediente
+        <ArrowLeft size={14} aria-hidden /> {t("patients.orthodonticsPage.backToRecord")}
       </Link>
 
       <h1 style={{ margin: 0, fontSize: 18, color: "var(--text-1)" }}>
-        Ortodoncia · {data.patientName}
+        {t("patients.orthodonticsPage.title")} · {data.patientName}
       </h1>
 
       <OrthodonticsClient

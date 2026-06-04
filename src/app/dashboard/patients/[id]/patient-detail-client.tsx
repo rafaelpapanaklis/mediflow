@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState, useEffect, useMemo } from "react";
+import { useT } from "@/i18n/i18n-provider";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Plus, Printer, Edit, Download, Pill, HeartPulse, Play, Trash2, XCircle } from "lucide-react";
@@ -192,38 +193,38 @@ function detectSpecialty(_raw: string) {
   return "dental";
 }
 
-const APPT_STATUS: Record<string, { label: string; cls: string }> = {
-  PENDING:   { label: "Pendiente",  cls: "bg-amber-50 text-amber-700 border border-amber-200"      },
-  CONFIRMED: { label: "Confirmada", cls: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
-  COMPLETED: { label: "Completada", cls: "bg-muted text-muted-foreground border border-border"      },
-  CANCELLED: { label: "Cancelada",  cls: "bg-rose-50 text-rose-700 border border-rose-200"          },
-  NO_SHOW:   { label: "No asistió", cls: "bg-muted text-muted-foreground border border-border"       },
+const APPT_STATUS: Record<string, { labelKey: string; cls: string }> = {
+  PENDING:   { labelKey: "patients.apptStatus.pending",   cls: "bg-amber-50 text-amber-700 border border-amber-200"      },
+  CONFIRMED: { labelKey: "patients.apptStatus.confirmed", cls: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
+  COMPLETED: { labelKey: "patients.apptStatus.completed", cls: "bg-muted text-muted-foreground border border-border"      },
+  CANCELLED: { labelKey: "patients.apptStatus.cancelled", cls: "bg-rose-50 text-rose-700 border border-rose-200"          },
+  NO_SHOW:   { labelKey: "patients.apptStatus.noShow",    cls: "bg-muted text-muted-foreground border border-border"       },
 };
 
-const INV_STATUS: Record<string, { label: string; cls: string }> = {
-  PENDING: { label: "Pendiente", cls: "bg-amber-50 text-amber-700 border border-amber-200" },
-  PARTIAL: { label: "Parcial",   cls: "bg-blue-50 text-blue-700 border border-blue-200"   },
-  PAID:    { label: "Pagado",    cls: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
-  OVERDUE: { label: "Vencido",   cls: "bg-rose-50 text-rose-700 border border-rose-200"   },
+const INV_STATUS: Record<string, { labelKey: string; cls: string }> = {
+  PENDING: { labelKey: "patients.invStatus.pending", cls: "bg-amber-50 text-amber-700 border border-amber-200" },
+  PARTIAL: { labelKey: "patients.invStatus.partial", cls: "bg-blue-50 text-blue-700 border border-blue-200"   },
+  PAID:    { labelKey: "patients.invStatus.paid",    cls: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
+  OVERDUE: { labelKey: "patients.invStatus.overdue", cls: "bg-rose-50 text-rose-700 border border-rose-200"   },
 };
 
 const TABS_BASE = [
-  { id: "resumen",       label: "Resumen"             },
-  { id: "historia",      label: "Historia clínica"     },
-  { id: "odontograma",   label: "Odontograma"          },
-  { id: "expediente",    label: "Nueva consulta"       },
-  { id: "historial-consultas", label: "Historial de consultas" },
-  { id: "evolucion",     label: "Notas SOAP"           },
-  { id: "radiografias",  label: "Radiografías"         },
-  { id: "tratamiento",   label: "Plan de tratamiento"  },
-  { id: "referencias",   label: "Referencias"          },
-  { id: "agenda",        label: "Citas"                },
-  { id: "facturacion",   label: "Facturación"          },
+  { id: "resumen",       labelKey: "patients.tabs.resumen"            },
+  { id: "historia",      labelKey: "patients.tabs.historia"           },
+  { id: "odontograma",   labelKey: "patients.tabs.odontograma"        },
+  { id: "expediente",    labelKey: "patients.tabs.expediente"         },
+  { id: "historial-consultas", labelKey: "patients.tabs.historialConsultas" },
+  { id: "evolucion",     labelKey: "patients.tabs.evolucion"          },
+  { id: "radiografias",  labelKey: "patients.tabs.radiografias"       },
+  { id: "tratamiento",   labelKey: "patients.tabs.tratamiento"        },
+  { id: "referencias",   labelKey: "patients.tabs.referencias"        },
+  { id: "agenda",        labelKey: "patients.tabs.agenda"             },
+  { id: "facturacion",   labelKey: "patients.tabs.facturacion"        },
 ];
 
 interface PatientTab {
   id: string;
-  label: string;
+  labelKey: string;
   /** Tab visible pero deshabilitado: no responde click, sirve de feedback. */
   disabled?: boolean;
   /** Tooltip mostrado en `title` cuando `disabled=true`. */
@@ -248,7 +249,7 @@ function buildTabs(opts: {
   if (opts.pediatrics.state !== "hidden") {
     out.splice(2, 0, {
       id:             "pediatria",
-      label:          "Pediatría",
+      labelKey:       "patients.tabs.pediatria",
       disabled:       opts.pediatrics.state === "disabled",
       disabledReason: opts.pediatrics.state === "disabled" ? opts.pediatrics.reason : undefined,
     });
@@ -260,24 +261,24 @@ function buildTabs(opts: {
     const odontoIdx = out.findIndex((t) => t.id === "odontograma");
     out.splice(odontoIdx >= 0 ? odontoIdx : 2, 0, tab);
   };
-  if (opts.showPeriodontics)  insertBeforeOdonto({ id: "periodoncia", label: "Periodoncia" });
-  if (opts.showEndodontics)   insertBeforeOdonto({ id: "endodoncia",  label: "Endodoncia"  });
-  if (opts.showImplants)      insertBeforeOdonto({ id: "implantes",   label: "Implantes"   });
-  if (opts.showOrthodontics)  insertBeforeOdonto({ id: "ortodoncia",  label: "Ortodoncia"  });
+  if (opts.showPeriodontics)  insertBeforeOdonto({ id: "periodoncia", labelKey: "patients.tabs.periodoncia" });
+  if (opts.showEndodontics)   insertBeforeOdonto({ id: "endodoncia",  labelKey: "patients.tabs.endodoncia"  });
+  if (opts.showImplants)      insertBeforeOdonto({ id: "implantes",   labelKey: "patients.tabs.implantes"   });
+  if (opts.showOrthodontics)  insertBeforeOdonto({ id: "ortodoncia",  labelKey: "patients.tabs.ortodoncia"  });
   return out;
 }
 
-const SEV_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  alta:        { bg: "bg-rose-50 border-rose-200",    text: "text-rose-700",    label: "Prioridad alta"  },
-  media:       { bg: "bg-amber-50 border-amber-200",  text: "text-amber-700",   label: "Prioridad media" },
-  baja:        { bg: "bg-blue-50 border-blue-200",    text: "text-blue-700",    label: "Prioridad baja"  },
-  informativo: { bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-700", label: "Informativo" },
+const SEV_STYLES: Record<string, { bg: string; text: string; labelKey: string }> = {
+  alta:        { bg: "bg-rose-50 border-rose-200",    text: "text-rose-700",    labelKey: "patients.severity.alta"        },
+  media:       { bg: "bg-amber-50 border-amber-200",  text: "text-amber-700",   labelKey: "patients.severity.media"       },
+  baja:        { bg: "bg-blue-50 border-blue-200",    text: "text-blue-700",    labelKey: "patients.severity.baja"        },
+  informativo: { bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-700", labelKey: "patients.severity.informativo" },
 };
 
 const FILE_CAT_LABELS: Record<string, string> = {
-  XRAY_PERIAPICAL: "Periapical", XRAY_PANORAMIC: "Panorámica", XRAY_BITEWING: "Bitewing",
-  XRAY_OCCLUSAL: "Oclusal", PHOTO_INTRAORAL: "Foto intraoral", PHOTO_EXTRAORAL: "Foto extraoral",
-  PHOTO_PROGRESS: "Progreso", CONSENT_FORM: "Consentimiento", OTHER: "Otro",
+  XRAY_PERIAPICAL: "patients.fileCat.periapical", XRAY_PANORAMIC: "patients.fileCat.panoramic", XRAY_BITEWING: "patients.fileCat.bitewing",
+  XRAY_OCCLUSAL: "patients.fileCat.occlusal", PHOTO_INTRAORAL: "patients.fileCat.intraoral", PHOTO_EXTRAORAL: "patients.fileCat.extraoral",
+  PHOTO_PROGRESS: "patients.fileCat.progress", CONSENT_FORM: "patients.fileCat.consent", OTHER: "patients.fileCat.other",
 };
 
 interface Props {
@@ -359,6 +360,7 @@ export function PatientDetailClient({
   orthoRedesignBundle,
   activityCounts,
 }: Props) {
+  const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { open: openNewAppointment } = useNewAppointmentDialog();
@@ -441,65 +443,65 @@ export function PatientDetailClient({
   async function handleDeleteRecord(record: { id: string; specialtyData?: any }) {
     const status = record.specialtyData?.status ?? "DRAFT";
     if (status === "SIGNED") {
-      toast.error("Las notas firmadas no se pueden eliminar (NOM-024)");
+      toast.error(t("patients.deleteRecord.signedError"));
       return;
     }
-    if (!window.confirm("¿Eliminar esta nota borrador? Esta accion no se puede deshacer.")) return;
+    if (!window.confirm(t("patients.deleteRecord.confirm"))) return;
     try {
       const res = await fetch(`/api/clinical-notes/${record.id}`, { method: "DELETE" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "No se pudo eliminar la nota");
+        throw new Error(data.error ?? t("patients.deleteRecord.failed"));
       }
-      toast.success("Nota eliminada");
+      toast.success(t("patients.deleteRecord.success"));
       setRecords((prev) => prev.filter((r) => r.id !== record.id));
     } catch (err: any) {
-      toast.error(err.message ?? "Error al eliminar");
+      toast.error(err.message ?? t("patients.toast.deleteError"));
     }
   }
 
   async function handleCancelAppointment(appt: { id: string; date: any }) {
-    if (!window.confirm(`¿Cancelar esta cita del ${formatDate(appt.date)}? Quedara en estado CANCELLED y se libera el horario.`)) return;
+    if (!window.confirm(t("patients.cancelAppt.confirm", { date: formatDate(appt.date) }))) return;
     try {
       const res = await fetch(`/api/appointments/${appt.id}`, { method: "DELETE" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "No se pudo cancelar la cita");
+        throw new Error(data.error ?? t("patients.cancelAppt.failed"));
       }
-      toast.success("Cita cancelada");
+      toast.success(t("patients.cancelAppt.success"));
       router.refresh();
     } catch (err: any) {
-      toast.error(err.message ?? "Error al cancelar");
+      toast.error(err.message ?? t("patients.cancelAppt.error"));
     }
   }
 
   async function handleDeleteFile(file: { id: string; name: string }) {
-    if (!window.confirm(`¿Eliminar el archivo "${file.name}"? Se borra del storage y no se puede recuperar.`)) return;
+    if (!window.confirm(t("patients.deleteFile.confirm", { name: file.name }))) return;
     try {
       const res = await fetch(`/api/xrays/${file.id}`, { method: "DELETE" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "No se pudo eliminar el archivo");
+        throw new Error(data.error ?? t("patients.deleteFile.failed"));
       }
-      toast.success("Archivo eliminado");
+      toast.success(t("patients.deleteFile.success"));
       setFiles((prev) => prev.filter((f) => f.id !== file.id));
     } catch (err: any) {
-      toast.error(err.message ?? "Error al eliminar");
+      toast.error(err.message ?? t("patients.toast.deleteError"));
     }
   }
 
-  async function handleDeleteTreatment(t: { id: string; name: string }) {
-    if (!window.confirm(`¿Eliminar el plan "${t.name}"? Se borran tambien sus sesiones. Accion irreversible.`)) return;
+  async function handleDeleteTreatment(plan: { id: string; name: string }) {
+    if (!window.confirm(t("patients.deleteTreatment.confirm", { name: plan.name }))) return;
     try {
-      const res = await fetch(`/api/treatments/${t.id}`, { method: "DELETE" });
+      const res = await fetch(`/api/treatments/${plan.id}`, { method: "DELETE" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "No se pudo eliminar el plan");
+        throw new Error(data.error ?? t("patients.deleteTreatment.failed"));
       }
-      toast.success("Plan eliminado");
+      toast.success(t("patients.deleteTreatment.success"));
       router.refresh();
     } catch (err: any) {
-      toast.error(err.message ?? "Error al eliminar");
+      toast.error(err.message ?? t("patients.toast.deleteError"));
     }
   }
 
@@ -528,11 +530,11 @@ export function PatientDetailClient({
 
   async function handleCreateTreatment() {
     if (!treatmentForm.name.trim()) {
-      toast.error("Ingresa un nombre para el plan");
+      toast.error(t("patients.createTreatment.nameRequired"));
       return;
     }
     if (!treatmentForm.doctorId) {
-      toast.error("Selecciona un doctor");
+      toast.error(t("patients.createTreatment.doctorRequired"));
       return;
     }
     setSavingTreatment(true);
@@ -551,12 +553,12 @@ export function PatientDetailClient({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "No se pudo crear el plan");
-      toast.success("Plan de tratamiento creado");
+      if (!res.ok) throw new Error(data.error ?? t("patients.createTreatment.failed"));
+      toast.success(t("patients.createTreatment.success"));
       setShowNewTreatment(false);
       router.refresh();
     } catch (err: any) {
-      toast.error(err.message ?? "Error al crear el plan");
+      toast.error(err.message ?? t("patients.createTreatment.error"));
     } finally {
       setSavingTreatment(false);
     }
@@ -625,9 +627,9 @@ export function PatientDetailClient({
       if (!res.ok) throw new Error((await res.json()).error);
       const newFile = await res.json();
       setFiles(prev => [newFile, ...prev]);
-      toast.success("Archivo subido");
+      toast.success(t("patients.uploadFile.success"));
     } catch (err: any) {
-      toast.error(err.message ?? "Error al subir");
+      toast.error(err.message ?? t("patients.uploadFile.error"));
     } finally {
       setUploadingFile(false);
       e.target.value = "";
@@ -642,9 +644,9 @@ export function PatientDetailClient({
       if (!res.ok) throw new Error(data.error);
       setAnalyses(prev => ({ ...prev, [fileId]: data }));
       setExpandedFile(fileId);
-      toast.success(`Análisis completado — ${data.analysis.findings?.length ?? 0} hallazgos`);
+      toast.success(t("patients.analyze.success", { count: data.analysis.findings?.length ?? 0 }));
     } catch (err: any) {
-      toast.error(err.message ?? "Error al analizar");
+      toast.error(err.message ?? t("patients.analyze.error"));
     } finally {
       setAnalyzing(null);
     }
@@ -662,9 +664,9 @@ export function PatientDetailClient({
       if (!res.ok) throw new Error(data.error);
       setPortalLink(data.portalUrl);
       await navigator.clipboard.writeText(data.portalUrl);
-      toast.success("🔗 Link del portal copiado al portapapeles");
+      toast.success(t("patients.portal.copied"));
     } catch (err: any) {
-      toast.error(err.message ?? "Error al generar portal");
+      toast.error(err.message ?? t("patients.portal.error"));
     } finally {
       setGeneratingPortal(false);
     }
@@ -692,7 +694,7 @@ export function PatientDetailClient({
           value: Number(r.specialtyData.anthropometrics.weight),
         }))
         .reverse();
-      return { data, metric: "Peso", color: "#fbbf24", unit: "kg" as string | undefined, normalRange: undefined as { min: number; max: number } | undefined };
+      return { data, metric: t("patients.chart.weight"), color: "#fbbf24", unit: "kg" as string | undefined, normalRange: undefined as { min: number; max: number } | undefined };
     }
     if (detectedSpecialty === "psychology") {
       const data = records
@@ -702,7 +704,7 @@ export function PatientDetailClient({
           value: Number(r.specialtyData.scales.phq9.score),
         }))
         .reverse();
-      return { data, metric: "PHQ-9 · Depresión", color: "#38bdf8", unit: undefined, normalRange: { min: 0, max: 4 } };
+      return { data, metric: t("patients.chart.phq9"), color: "#38bdf8", unit: undefined, normalRange: { min: 0, max: 4 } };
     }
     const data: { date: string; value: number }[] = [];
     for (const r of records) {
@@ -721,7 +723,7 @@ export function PatientDetailClient({
         });
       }
     }
-    return { data: data.reverse(), metric: "TA Sistólica", color: "#34d399", unit: "mmHg", normalRange: { min: 90, max: 120 } };
+    return { data: data.reverse(), metric: t("patients.chart.systolicBp"), color: "#34d399", unit: "mmHg", normalRange: { min: 90, max: 120 } };
   }, [records, detectedSpecialty]);
 
   const activePlanMilestones = useMemo(() => {
@@ -738,7 +740,7 @@ export function PatientDetailClient({
       const isCurrent = cursor.getFullYear() === now.getFullYear() && cursor.getMonth() === now.getMonth();
       months.push({
         date: cursor.toLocaleDateString("es-MX", { month: "short", year: "2-digit" }),
-        title: `Sesión ${i + 1}`,
+        title: t("patients.milestone.session", { num: i + 1 }),
         status: isCompleted ? "completed" : isCurrent ? "current" : "pending",
       });
       cursor.setMonth(cursor.getMonth() + 1);
@@ -772,7 +774,7 @@ export function PatientDetailClient({
       setInvoices(prev => [{ ...record.draftInvoice, payments: [] }, ...prev]);
       router.refresh();
     }
-    toast.success("Expediente guardado");
+    toast.success(t("patients.record.saved"));
     setTab("resumen");
   }
 
@@ -902,7 +904,7 @@ export function PatientDetailClient({
         }
       } catch (err) {
         toast.error(
-          err instanceof Error ? err.message : "No se pudo crear borrador",
+          err instanceof Error ? err.message : t("patients.consult.draftCreateFailed"),
         );
       }
     })();
@@ -955,14 +957,14 @@ export function PatientDetailClient({
           const body = await linkRes.json().catch(() => ({}));
           throw new Error(body.error ?? "attach_failed");
         }
-        toast.success("Archivo adjunto");
+        toast.success(t("patients.attach.success"));
         return {
           id: uploaded.id,
           name: uploaded.name ?? file.name,
           mime: uploaded.mimeType ?? file.type,
         };
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "No se pudo adjuntar");
+        toast.error(err instanceof Error ? err.message : t("patients.attach.failed"));
         return null;
       }
     },
@@ -1003,7 +1005,7 @@ export function PatientDetailClient({
         throw new Error(body.error ?? "complete_failed");
       }
       const data = await res.json().catch(() => ({}));
-      toast.success("Consulta completada y firmada");
+      toast.success(t("patients.consult.completedSigned"));
       // Si el server detectó tratamientos, abrir el modal de facturación.
       const suggested: SuggestedTreatment[] = data.suggestedTreatments ?? [];
       if (suggested.length > 0) {
@@ -1014,7 +1016,7 @@ export function PatientDetailClient({
         });
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo completar");
+      toast.error(err instanceof Error ? err.message : t("patients.consult.completeFailed"));
       return;
     }
     setConsultClosed(true);
@@ -1028,7 +1030,7 @@ export function PatientDetailClient({
 
   const consultDoctorName =
     activeAppointment?.doctor?.firstName
-      ? `Dr/a. ${activeAppointment.doctor.firstName} ${activeAppointment.doctor.lastName ?? ""}`.trim()
+      ? `${t("patients.doctorPrefix")} ${activeAppointment.doctor.firstName} ${activeAppointment.doctor.lastName ?? ""}`.trim()
       : null;
 
   // El módulo Ortodoncia rediseño usa max-width 1920px (mockup verbatim:
@@ -1041,7 +1043,7 @@ export function PatientDetailClient({
     <div style={{ padding: "20px 28px 28px", maxWidth: outerMaxWidth, margin: "0 auto" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-3)", marginBottom: 12 }}>
         <Link href="/dashboard/patients" style={{ color: "var(--text-3)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
-          <ArrowLeft size={12} /> Pacientes
+          <ArrowLeft size={12} /> {t("patients.breadcrumb.patients")}
         </Link>
         <span style={{ color: "var(--text-4)" }}>/</span>
         <span style={{ color: "var(--text-1)", fontWeight: 500 }}>{fullName}</span>
@@ -1052,9 +1054,9 @@ export function PatientDetailClient({
           type="button"
           onClick={() => { window.location.href = `/api/patients/${patient.id}/export-cda`; }}
           className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded-md border border-border bg-card hover:bg-muted text-foreground"
-          title="Exportar expediente en formato HL7 CDA R2 (NOM-024)"
+          title={t("patients.export.cdaTitle")}
         >
-          <Download size={11} aria-hidden /> Exportar CDA HL7
+          <Download size={11} aria-hidden /> {t("patients.export.cdaLabel")}
         </button>
       </div>
 
@@ -1080,7 +1082,7 @@ export function PatientDetailClient({
             date: nextAppt.date,
             startTime: nextAppt.startTime ?? "",
             type: nextAppt.type,
-            doctorName: nextAppt.doctor ? `Dr/a. ${nextAppt.doctor.firstName} ${nextAppt.doctor.lastName}` : undefined,
+            doctorName: nextAppt.doctor ? `${t("patients.doctorPrefix")} ${nextAppt.doctor.firstName} ${nextAppt.doctor.lastName}` : undefined,
           } : null}
           lastVisitDate={lastAppt?.date ?? null}
           visitCount={completedCount}
@@ -1105,7 +1107,7 @@ export function PatientDetailClient({
             <span className="font-mono">{pediatricsData.ageFormatted}</span>
           </span>
           <span className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold capitalize">
-            Dentición {pediatricsData.dentition}
+            {t("patients.pediatrics.dentition")} {pediatricsData.dentition}
           </span>
           {pediatricsData.latestCambra ? (
             <span className={`cambra-chip cambra-chip--${pediatricsData.latestCambra.category}`}>
@@ -1190,29 +1192,29 @@ export function PatientDetailClient({
           <div
             className={patientDetailStyles.mobileTabBar}
             role="tablist"
-            aria-label="Secciones del paciente"
+            aria-label={t("patients.tabs.sectionsAria")}
           >
-            {tabs.map((t) => {
-              const isActive = tab === t.id;
-              const count = tabCounts[t.id];
-              const isDisabled = t.disabled === true;
+            {tabs.map((tabItem) => {
+              const isActive = tab === tabItem.id;
+              const count = tabCounts[tabItem.id];
+              const isDisabled = tabItem.disabled === true;
               return (
                 <button
-                  key={t.id}
+                  key={tabItem.id}
                   type="button"
                   role="tab"
-                  id={`patient-tab-${t.id}`}
+                  id={`patient-tab-${tabItem.id}`}
                   aria-selected={isActive}
-                  aria-controls={`patient-panel-${t.id}`}
+                  aria-controls={`patient-panel-${tabItem.id}`}
                   aria-disabled={isDisabled || undefined}
                   disabled={isDisabled}
-                  title={isDisabled ? t.disabledReason : undefined}
+                  title={isDisabled ? tabItem.disabledReason : undefined}
                   className={`${patientDetailStyles.mobileTabBtn} ${
                     isActive ? patientDetailStyles.mobileTabBtnActive : ""
                   } ${isDisabled ? patientDetailStyles.mobileTabBtnDisabled : ""}`}
-                  onClick={() => { if (!isDisabled) setTab(t.id); }}
+                  onClick={() => { if (!isDisabled) setTab(tabItem.id); }}
                 >
-                  {t.label}
+                  {t(tabItem.labelKey)}
                   {count !== undefined && count > 0 && (
                     <span className={patientDetailStyles.mobileTabCount}>{count}</span>
                   )}
@@ -1229,7 +1231,7 @@ export function PatientDetailClient({
               <div className="bg-card border border-border rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-2 h-2 rounded-full bg-brand-500" />
-                  <span className="text-xs font-bold">Resumen clínico</span>
+                  <span className="text-xs font-bold">{t("patients.summary.clinicalSummary")}</span>
                 </div>
                 <HistoriaTimeline
                   patientId={patient.id}
@@ -1264,7 +1266,7 @@ export function PatientDetailClient({
                           onClick={() => setTab("expediente")}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-brand-600 text-white hover:bg-brand-700"
                         >
-                          <Play size={12} aria-hidden /> Iniciar consulta
+                          <Play size={12} aria-hidden /> {t("patients.summary.startConsult")}
                         </button>
                       </div>
                     );
@@ -1272,11 +1274,11 @@ export function PatientDetailClient({
                 />
                 {records[0]?.specialtyData?.periodontal && (
                   <div className="mt-3">
-                    <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2">Semáforo clínico</div>
+                    <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2">{t("patients.summary.clinicalTrafficLight")}</div>
                     <div className="grid grid-cols-3 gap-1.5 text-[10px] font-bold text-center">
-                      <div className="bg-emerald-50 text-emerald-700 rounded-lg py-1.5">✓ Higiene<br/>Buena</div>
-                      <div className="bg-amber-50 text-amber-700 rounded-lg py-1.5">⚠ Caries<br/>Moderado</div>
-                      <div className="bg-rose-50 text-rose-700 rounded-lg py-1.5">✕ Perio<br/>{records[0]?.specialtyData?.periodontal?.gingival ?? "Sin datos"}</div>
+                      <div className="bg-emerald-50 text-emerald-700 rounded-lg py-1.5">✓ {t("patients.summary.hygiene")}<br/>{t("patients.summary.hygieneGood")}</div>
+                      <div className="bg-amber-50 text-amber-700 rounded-lg py-1.5">⚠ {t("patients.summary.caries")}<br/>{t("patients.summary.cariesModerate")}</div>
+                      <div className="bg-rose-50 text-rose-700 rounded-lg py-1.5">✕ {t("patients.summary.perio")}<br/>{records[0]?.specialtyData?.periodontal?.gingival ?? t("patients.summary.noData")}</div>
                     </div>
                   </div>
                 )}
@@ -1285,7 +1287,7 @@ export function PatientDetailClient({
               <div className="bg-card border border-border rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <span className="text-xs font-bold">Historia clínica</span>
+                  <span className="text-xs font-bold">{t("patients.summary.medicalHistory")}</span>
                 </div>
                 {(patient.allergies?.length || patient.currentMedications?.length || patient.chronicConditions?.length) ? (
                   <div className="flex flex-wrap gap-1.5 mb-3">
@@ -1308,9 +1310,9 @@ export function PatientDetailClient({
                 ) : null}
                 <div className="space-y-1.5 text-xs">
                   {[
-                    { label: "Tipo de sangre", val: patient.bloodType || "No registrado" },
-                    { label: "Seguro",         val: patient.insuranceProvider || "Sin seguro" },
-                    { label: "Notas",          val: patient.notes?.slice(0, 60) || "—" },
+                    { label: t("patients.summary.bloodType"), val: patient.bloodType || t("patients.summary.notRegistered") },
+                    { label: t("patients.summary.insurance"),  val: patient.insuranceProvider || t("patients.summary.noInsurance") },
+                    { label: t("common.notes"),                val: patient.notes?.slice(0, 60) || "—" },
                   ].map(r => (
                     <div key={r.label} className="flex justify-between items-start py-1.5 border-b border-slate-50">
                       <span className="text-muted-foreground">{r.label}</span>
@@ -1325,12 +1327,12 @@ export function PatientDetailClient({
                 <div className="bg-card border border-border rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <div className="w-2 h-2 rounded-full bg-brand-500" />
-                    <span className="text-xs font-bold">Próxima cita</span>
+                    <span className="text-xs font-bold">{t("patients.summary.nextAppointment")}</span>
                   </div>
                   <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
                     <div className="text-sm font-extrabold text-brand-700">{formatDate(nextAppt.date)}</div>
                     <div className="text-xs text-foreground mt-1">{nextAppt.type}</div>
-                    <div className="text-[10px] text-muted-foreground">{nextAppt.startTime}h · Dr/a. {nextAppt.doctor?.firstName} {nextAppt.doctor?.lastName}</div>
+                    <div className="text-[10px] text-muted-foreground">{nextAppt.startTime}h · {t("patients.doctorPrefix")} {nextAppt.doctor?.firstName} {nextAppt.doctor?.lastName}</div>
                   </div>
                 </div>
               )}
@@ -1339,26 +1341,26 @@ export function PatientDetailClient({
               <div className="bg-card border border-border rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-2 h-2 rounded-full bg-amber-500" />
-                  <span className="text-xs font-bold">Finanzas</span>
+                  <span className="text-xs font-bold">{t("patients.summary.finance")}</span>
                 </div>
                 <div className="space-y-1.5 text-xs mb-3">
                   <div className="flex justify-between py-1.5 border-b border-slate-50">
-                    <span className="text-muted-foreground">Total plan</span>
+                    <span className="text-muted-foreground">{t("patients.summary.totalPlan")}</span>
                     <span className="font-bold">{formatCurrency(totalPlan)}</span>
                   </div>
                   <div className="flex justify-between py-1.5 border-b border-slate-50">
-                    <span className="text-muted-foreground">Pagado</span>
+                    <span className="text-muted-foreground">{t("patients.summary.paid")}</span>
                     <span className="font-bold text-emerald-600">{formatCurrency(totalPaid)}</span>
                   </div>
                   <div className="flex justify-between py-1.5">
-                    <span className="text-muted-foreground">Pendiente</span>
+                    <span className="text-muted-foreground">{t("patients.summary.pending")}</span>
                     <span className="font-bold text-rose-600">{formatCurrency(totalBalance)}</span>
                   </div>
                 </div>
                 <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                   <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pctPaid}%` }} />
                 </div>
-                <div className="text-[10px] text-muted-foreground text-right mt-1">{pctPaid}% cubierto</div>
+                <div className="text-[10px] text-muted-foreground text-right mt-1">{t("patients.summary.pctCovered", { pct: pctPaid })}</div>
               </div>
             </div>
           )}
@@ -1367,9 +1369,9 @@ export function PatientDetailClient({
           {tab === "historia" && (
             <div className="bg-card border border-border rounded-xl p-5">
               <div className="flex items-baseline justify-between mb-4">
-                <h2 className="text-sm font-bold">Historia clínica</h2>
+                <h2 className="text-sm font-bold">{t("patients.history.title")}</h2>
                 <p className="text-xs text-muted-foreground">
-                  Timeline cronológica de todos los eventos clínicos del paciente.
+                  {t("patients.history.subtitle")}
                 </p>
               </div>
               <HistoriaTimeline
@@ -1423,8 +1425,8 @@ export function PatientDetailClient({
               vm={orthoRedesignVM}
               digitalRecords={orthoData?.digitalRecords?.map((r: any) => {
                 const RECORD_LABEL: Record<string, string> = {
-                  CEPH_ANALYSIS_PDF: "Análisis cefalométrico",
-                  SCAN_STL: "Escaneo digital STL",
+                  CEPH_ANALYSIS_PDF: t("patients.ortho.recordCeph"),
+                  SCAN_STL: t("patients.ortho.recordStl"),
                 };
                 const RECORD_KIND: Record<string, "ceph" | "stl" | "other"> = {
                   CEPH_ANALYSIS_PDF: "ceph",
@@ -1454,7 +1456,7 @@ export function PatientDetailClient({
               financialPlan={orthoRedesignBundle?.financialPlan ?? null}
               onUpdateFinancialPlan={async (payload) => {
                 if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
+                  toast.error(t("patients.ortho.noPlan"));
                   return;
                 }
                 const res = await updateFinancialPlan({
@@ -1466,7 +1468,10 @@ export function PatientDetailClient({
                   return;
                 }
                 toast.success(
-                  `Plan financiero actualizado · ${res.data.installmentCount} mensualidades de ${res.data.installmentAmount.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 })}`,
+                  t("patients.ortho.financialPlanUpdated", {
+                    count: res.data.installmentCount,
+                    amount: res.data.installmentAmount.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }),
+                  }),
                 );
                 router.refresh();
               }}
@@ -1489,7 +1494,7 @@ export function PatientDetailClient({
                   email: patient.email ?? null,
                   bloodType: patient.bloodType ?? null,
                   guardianLabel: orthoData?.guardianName
-                    ? `${orthoData.guardianName} (tutor)`
+                    ? t("patients.ortho.guardianLabel", { name: orthoData.guardianName })
                     : null,
                   criticalAllergies:
                     Array.isArray(patient.allergies) && patient.allergies.length > 0
@@ -1523,12 +1528,12 @@ export function PatientDetailClient({
                       (c: any) => c.attendance === "ATTENDED" && c.performedAt,
                     ).length || completedCount,
                   sinceLabel: orthoRedesignVM.treatment.startDate
-                    ? `desde ${new Date(orthoRedesignVM.treatment.startDate).toLocaleDateString("es-MX", { month: "short", year: "numeric" })}`
+                    ? t("patients.ortho.sinceLabel", { date: new Date(orthoRedesignVM.treatment.startDate).toLocaleDateString("es-MX", { month: "short", year: "numeric" }) })
                     : null,
                 },
                 onStartVisit: () => {
                   if (nextAppt) router.push(`?appointment=${nextAppt.id}`);
-                  else toast("Programa una cita primero");
+                  else toast(t("patients.ortho.scheduleApptFirst"));
                 },
                 onScheduleNext: () => setTab("agenda"),
                 onCollect: () => setTab("facturacion"),
@@ -1553,7 +1558,7 @@ export function PatientDetailClient({
                   toast.error(res.error);
                   return;
                 }
-                toast.success("Diagnóstico actualizado");
+                toast.success(t("patients.ortho.diagnosisUpdated"));
                 router.refresh();
               }}
               onUpdateAppliances={async (payload) => {
@@ -1562,7 +1567,7 @@ export function PatientDetailClient({
                   toast.error(res.error);
                   return;
                 }
-                toast.success("Aparatología actualizada");
+                toast.success(t("patients.ortho.appliancesUpdated"));
                 router.refresh();
               }}
               onCreateReferralLetter={async (payload) => {
@@ -1574,12 +1579,12 @@ export function PatientDetailClient({
                   toast.error(res.error);
                   return;
                 }
-                toast.success("Carta de referencia enviada");
+                toast.success(t("patients.ortho.referralLetterSent"));
                 router.refresh();
               }}
               onUpdateRetentionRegimen={async (payload) => {
                 if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
+                  toast.error(t("patients.ortho.noPlan"));
                   return;
                 }
                 const res = await updateRetentionRegimenConfig({
@@ -1593,12 +1598,12 @@ export function PatientDetailClient({
                   toast.error(res.error);
                   return;
                 }
-                toast.success("Régimen de retención guardado");
+                toast.success(t("patients.ortho.retentionRegimenSaved"));
                 router.refresh();
               }}
               onUpdateNpsConfig={async (payload) => {
                 if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
+                  toast.error(t("patients.ortho.noPlan"));
                   return;
                 }
                 const res = await updateNpsConfig({
@@ -1611,14 +1616,14 @@ export function PatientDetailClient({
                 }
                 toast.success(
                   payload.customMessage
-                    ? "Configuración NPS guardada · WhatsApp template lista (envío real Twilio)"
-                    : "Configuración NPS guardada",
+                    ? t("patients.ortho.npsConfigSavedWhatsapp")
+                    : t("patients.ortho.npsConfigSaved"),
                 );
                 router.refresh();
               }}
               onScheduleG15Action={async () => {
                 if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
+                  toast.error(t("patients.ortho.noPlan"));
                   return;
                 }
                 const res = await scheduleG15Checkpoint({
@@ -1628,7 +1633,7 @@ export function PatientDetailClient({
                   toast.error(res.error);
                   return;
                 }
-                toast.success("Foto-set mes 12 programado");
+                toast.success(t("patients.ortho.g15Scheduled"));
                 router.refresh();
               }}
               onUpdateQuoteScenario={async (payload) => {
@@ -1637,13 +1642,13 @@ export function PatientDetailClient({
                   toast.error(res.error);
                   return;
                 }
-                toast.success("Escenario actualizado");
+                toast.success(t("patients.ortho.scenarioUpdated"));
                 router.refresh();
               }}
               onAddWireStep={undefined}
               onSubmitWireStep={async (payload) => {
                 if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
+                  toast.error(t("patients.ortho.noPlan"));
                   return;
                 }
                 const res = await addWireStep({
@@ -1663,28 +1668,28 @@ export function PatientDetailClient({
                   toast.error(res.error);
                   return;
                 }
-                toast.success("Wire step agregado");
+                toast.success(t("patients.ortho.wireStepAdded"));
                 router.refresh();
               }}
               onAddTad={async () => {
                 if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
+                  toast.error(t("patients.ortho.noPlan"));
                   return;
                 }
                 const brand = window.prompt(
-                  "Marca TAD (DENTOS, SPIDER, IMTEC, OTHER):",
+                  t("patients.ortho.tadBrandPrompt"),
                   "DENTOS",
                 );
                 if (!brand) return;
-                const size = window.prompt("Tamaño (ej. 1.4×6mm):", "");
+                const size = window.prompt(t("patients.ortho.tadSizePrompt"), "");
                 if (!size) return;
                 const location = window.prompt(
-                  "Ubicación (ej. vestibular sup. der entre 14 y 15):",
+                  t("patients.ortho.tadLocationPrompt"),
                   "",
                 );
                 if (!location) return;
                 const torqueStr = window.prompt(
-                  "Torque Ncm (opcional, vacío para omitir):",
+                  t("patients.ortho.tadTorquePrompt"),
                   "",
                 );
                 const torqueNcm = torqueStr ? parseInt(torqueStr, 10) : null;
@@ -1701,12 +1706,12 @@ export function PatientDetailClient({
                   toast.error(res.error);
                   return;
                 }
-                toast.success("TAD registrado");
+                toast.success(t("patients.ortho.tadRegistered"));
                 router.refresh();
               }}
               onCardSigned={async (payload) => {
                 if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
+                  toast.error(t("patients.ortho.noPlan"));
                   return;
                 }
                 const res = await signTreatmentCard({
@@ -1750,12 +1755,12 @@ export function PatientDetailClient({
                   toast.error(res.error);
                   return;
                 }
-                toast.success("Cita firmada");
+                toast.success(t("patients.ortho.appointmentSigned"));
                 router.refresh();
               }}
               onCardDraftSaved={async (payload) => {
                 if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
+                  toast.error(t("patients.ortho.noPlan"));
                   return;
                 }
                 const card = orthoRedesignVM.treatmentCards.find(
@@ -1790,12 +1795,12 @@ export function PatientDetailClient({
                   toast.error(res.error);
                   return;
                 }
-                toast.success("Borrador guardado");
+                toast.success(t("patients.ortho.draftSaved"));
                 router.refresh();
               }}
               onPhaseAdvanced={async (payload) => {
                 if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
+                  toast.error(t("patients.ortho.noPlan"));
                   return;
                 }
                 // El audit trail (criteriaChecked, isOverride) lo registra
@@ -1819,12 +1824,12 @@ export function PatientDetailClient({
                   toast.error(res.error);
                   return;
                 }
-                toast.success(`Fase avanzada a ${payload.toPhase}`);
+                toast.success(t("patients.ortho.phaseAdvanced", { phase: payload.toPhase }));
                 router.refresh();
               }}
               onSelectQuoteScenario={async (scenarioId) => {
                 if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
+                  toast.error(t("patients.ortho.noPlan"));
                   return;
                 }
                 const res = await selectQuoteScenario({
@@ -1835,19 +1840,19 @@ export function PatientDetailClient({
                   toast.error(res.error);
                   return;
                 }
-                toast.success("Escenario seleccionado");
+                toast.success(t("patients.ortho.scenarioSelected"));
                 router.refresh();
               }}
               onSendSignAtHome={async () => {
                 if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
+                  toast.error(t("patients.ortho.noPlan"));
                   return;
                 }
                 const accepted = orthoRedesignBundle?.quoteScenarios.find(
                   (s) => s.status === "ACCEPTED",
                 );
                 if (!accepted) {
-                  toast.error("Selecciona un escenario antes de enviar Sign@Home");
+                  toast.error(t("patients.ortho.selectScenarioBeforeSign"));
                   return;
                 }
                 const res = await sendSignAtHomeLink({
@@ -1858,12 +1863,12 @@ export function PatientDetailClient({
                   toast.error(res.error);
                   return;
                 }
-                toast.success("Link Sign@Home enviado por WhatsApp");
+                toast.success(t("patients.ortho.signAtHomeSent"));
                 router.refresh();
               }}
               onConfirmCollect={async (method) => {
                 if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
+                  toast.error(t("patients.ortho.noPlan"));
                   return;
                 }
                 const res = await confirmCollect({
@@ -1874,9 +1879,9 @@ export function PatientDetailClient({
                   toast.error(res.error);
                   return;
                 }
-                toast.success("Cobro registrado");
+                toast.success(t("patients.ortho.collectRegistered"));
                 if ((res.data as { cfdiTimbradoStub?: boolean }).cfdiTimbradoStub) {
-                  toast("CFDI 4.0 con Facturapi · contratar para activar timbrado real");
+                  toast(t("patients.ortho.cfdiStub"));
                 }
                 router.refresh();
               }}
@@ -1892,12 +1897,12 @@ export function PatientDetailClient({
                   toast.error(res.error);
                   return;
                 }
-                toast.success("Orden de laboratorio creada");
+                toast.success(t("patients.ortho.labOrderCreated"));
                 router.refresh();
               }}
               onTogglePreSurvey={async (enabled) => {
                 if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
+                  toast.error(t("patients.ortho.noPlan"));
                   return;
                 }
                 const res = await toggleRetentionPreSurvey({
@@ -1909,13 +1914,13 @@ export function PatientDetailClient({
                   return;
                 }
                 toast.success(
-                  enabled ? "Pre-encuesta activada" : "Pre-encuesta desactivada",
+                  enabled ? t("patients.ortho.preSurveyEnabled") : t("patients.ortho.preSurveyDisabled"),
                 );
                 router.refresh();
               }}
               onGeneratePdfBeforeAfter={async () => {
                 if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
+                  toast.error(t("patients.ortho.noPlan"));
                   return;
                 }
                 // Genera PDF comparativo T0 vs Tn vía endpoint existente.
@@ -1923,18 +1928,18 @@ export function PatientDetailClient({
                 // puppeteer + las URLs firmadas de Supabase Storage.
                 const url = `/api/orthodontics/treatment-plans/${orthoRedesignVM.treatment.treatmentPlanId}/comparison-pdf`;
                 window.open(url, "_blank");
-                toast.success("Generando PDF antes/después…");
+                toast.success(t("patients.ortho.generatingBeforeAfterPdf"));
               }}
               onCopyReferralCode={() => {
                 const code = orthoRedesignBundle?.referralCode?.code;
                 if (!code) {
-                  toast("Sin código de referidos asignado");
+                  toast(t("patients.ortho.noReferralCode"));
                   return;
                 }
                 navigator.clipboard
                   .writeText(code)
-                  .then(() => toast.success(`Código ${code} copiado`))
-                  .catch(() => toast.error("No se pudo copiar al portapapeles"));
+                  .then(() => toast.success(t("patients.ortho.codeCopied", { code })))
+                  .catch(() => toast.error(t("patients.ortho.clipboardFailed")));
               }}
               onUploadPhoto={async (stage, slotId, file) => {
                 // Persistencia real: createPhotoSet (si no existe set para
@@ -1946,13 +1951,11 @@ export function PatientDetailClient({
                   // Slot extra-AAO (sobremordida / resalte): no tienen
                   // columna en OrthoPhotoSet schema actual. Subir requiere
                   // ALTER TABLE (no servicio externo · backlog interno).
-                  toast.error(
-                    "Slot fuera del set AAO 8 vistas · sin columna en schema",
-                  );
+                  toast.error(t("patients.ortho.slotOutsideAao"));
                   return;
                 }
                 if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
+                  toast.error(t("patients.ortho.noPlan"));
                   return;
                 }
                 try {
@@ -1990,7 +1993,7 @@ export function PatientDetailClient({
                   );
                   if (!res.ok) {
                     const errBody = await res.json().catch(() => null);
-                    toast.error(errBody?.error ?? "Falló subida de foto");
+                    toast.error(errBody?.error ?? t("patients.ortho.photoUploadFailed"));
                     return;
                   }
                   const { fileId } = (await res.json()) as { fileId: string };
@@ -2006,23 +2009,23 @@ export function PatientDetailClient({
                     return;
                   }
 
-                  toast.success(`Foto ${view.replace(/_/g, " ").toLowerCase()} subida`);
+                  toast.success(t("patients.ortho.photoUploaded", { view: view.replace(/_/g, " ").toLowerCase() }));
                   // 4. Re-pinta con URLs firmadas frescas del loader.
                   router.refresh();
                 } catch (e) {
                   console.error("[ortho upload] failed:", e);
-                  toast.error("Error inesperado subiendo la foto");
+                  toast.error(t("patients.ortho.photoUploadUnexpected"));
                 }
               }}
               onComparePhotos={undefined}
               onGenerateComparePdf={async () => {
                 if (!orthoRedesignVM.treatment.treatmentPlanId) {
-                  toast.error("Sin plan de tratamiento activo");
+                  toast.error(t("patients.ortho.noPlan"));
                   return;
                 }
                 const url = `/api/orthodontics/treatment-plans/${orthoRedesignVM.treatment.treatmentPlanId}/comparison-pdf`;
                 window.open(url, "_blank");
-                toast.success("Generando PDF comparativo…");
+                toast.success(t("patients.ortho.generatingComparePdf"));
               }}
               onCollectNow={undefined}
             />
@@ -2064,31 +2067,31 @@ export function PatientDetailClient({
             <div className="bg-card border border-border rounded-xl p-5">
               <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
                 <h2 className="text-sm font-bold">
-                  {currentSpecialty === "dental"     ? "🦷 Nueva consulta dental" :
-                   currentSpecialty === "nutrition"  ? "🥗 Nueva consulta nutricional" :
-                   currentSpecialty === "psychology" ? "🧠 Nueva sesión" :
-                   "🩺 Nueva consulta médica"}
+                  {currentSpecialty === "dental"     ? t("patients.newConsult.titleDental") :
+                   currentSpecialty === "nutrition"  ? t("patients.newConsult.titleNutrition") :
+                   currentSpecialty === "psychology" ? t("patients.newConsult.titlePsychology") :
+                   t("patients.newConsult.titleMedicine")}
                 </h2>
                 <div className="flex items-center gap-2">
-                  <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Tipo</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("patients.newConsult.typeLabel")}</label>
                   <select
                     value={currentSpecialty}
                     onChange={(e) => setOverrideSpecialty(e.target.value)}
                     className="flex h-8 rounded-lg border border-border bg-card px-3 text-xs"
                   >
-                    <option value="dental">Dental / Ortodoncia</option>
-                    <option value="nutrition">Nutricion</option>
-                    <option value="psychology">Psicologia</option>
-                    <option value="medicine">Medicina general</option>
+                    <option value="dental">{t("patients.newConsult.optDental")}</option>
+                    <option value="nutrition">{t("patients.newConsult.optNutrition")}</option>
+                    <option value="psychology">{t("patients.newConsult.optPsychology")}</option>
+                    <option value="medicine">{t("patients.newConsult.optMedicine")}</option>
                   </select>
                   {overrideSpecialty && overrideSpecialty !== detectedSpecialty && (
                     <button
                       type="button"
                       onClick={() => setOverrideSpecialty(null)}
                       className="text-[10px] text-muted-foreground hover:text-foreground underline"
-                      title="Volver al tipo default de la clinica"
+                      title={t("patients.newConsult.resetTitle")}
                     >
-                      Reset
+                      {t("patients.newConsult.reset")}
                     </button>
                   )}
                 </div>
@@ -2104,24 +2107,24 @@ export function PatientDetailClient({
           {tab === "historial-consultas" && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-bold">Historial de consultas — {records.length} total</h2>
+                <h2 className="text-sm font-bold">{t("patients.consultHistory.title", { count: records.length })}</h2>
                 <button
                   onClick={() => setTab("expediente")}
                   className="text-xs font-semibold text-brand-600 hover:underline"
                 >
-                  + Nueva consulta
+                  {t("patients.consultHistory.newConsult")}
                 </button>
               </div>
 
               {records.length === 0 ? (
                 <div className="bg-card border border-border rounded-xl px-5 py-10 text-center text-muted-foreground">
                   <div className="text-3xl mb-2">📋</div>
-                  <div className="text-sm font-semibold">Sin consultas registradas</div>
+                  <div className="text-sm font-semibold">{t("patients.consultHistory.empty")}</div>
                   <button
                     onClick={() => setTab("expediente")}
                     className="text-xs text-brand-600 hover:underline mt-2 inline-block"
                   >
-                    Registrar primera consulta →
+                    {t("patients.consultHistory.registerFirst")}
                   </button>
                 </div>
               ) : records.map((record: any, idx: number) => {
@@ -2149,9 +2152,9 @@ export function PatientDetailClient({
                           {records.length - idx}
                         </div>
                         <div>
-                          <div className="text-sm font-bold">Consulta · {visitDateLong}</div>
+                          <div className="text-sm font-bold">{t("patients.consultHistory.consultLabel")} · {visitDateLong}</div>
                           <div className="text-[11px] text-muted-foreground">
-                            Dr/a. {record.doctor?.firstName} {record.doctor?.lastName}
+                            {t("patients.doctorPrefix")} {record.doctor?.firstName} {record.doctor?.lastName}
                           </div>
                         </div>
                       </div>
@@ -2161,7 +2164,7 @@ export function PatientDetailClient({
                             ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800"
                             : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800"
                         }`}>
-                          {isSigned ? "Firmada" : "Borrador"}
+                          {isSigned ? t("patients.note.signed") : t("patients.note.draft")}
                         </span>
                         <span className={`text-muted-foreground text-lg transition-transform ${isExpanded ? "rotate-180" : ""}`}>
                           ⌄
@@ -2189,10 +2192,10 @@ export function PatientDetailClient({
                         ) : (
                           <div className="bg-amber-50 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800 rounded-lg p-4 text-sm">
                             <div className="font-semibold text-amber-800 dark:text-amber-300 mb-1">
-                              Edición no disponible para este tipo de consulta
+                              {t("patients.consultHistory.editUnavailableTitle")}
                             </div>
                             <div className="text-xs text-amber-700 dark:text-amber-400">
-                              Solo las consultas dentales se pueden editar inline por ahora. Otros tipos (nutrición, psicología, medicina general) tendrán este flujo en próximos PRs.
+                              {t("patients.consultHistory.editUnavailableBody")}
                             </div>
                           </div>
                         )}
@@ -2207,7 +2210,7 @@ export function PatientDetailClient({
                           onClick={() => handleDeleteRecord(record)}
                           className="text-xs font-semibold text-rose-600 hover:underline"
                         >
-                          Eliminar borrador
+                          {t("patients.consultHistory.deleteDraft")}
                         </button>
                       </div>
                     )}
@@ -2226,7 +2229,7 @@ export function PatientDetailClient({
                     mainChart.data.length < 2 ? (
                       <div className="card" style={{ padding: 16, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200 }}>
                         <div style={{ fontSize: 12, color: "var(--text-2)" }}>
-                          Agrega 2+ consultas para ver evolución de {mainChart.metric}
+                          {t("patients.evolution.needMore", { metric: mainChart.metric })}
                         </div>
                       </div>
                     ) : (
@@ -2251,14 +2254,14 @@ export function PatientDetailClient({
               )}
               <div className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                <h2 className="text-sm font-bold">Notas SOAP — {records.length} consulta{records.length !== 1 ? "s" : ""}</h2>
-                <button onClick={() => setTab("expediente")} className="text-xs font-semibold text-brand-600 hover:underline">+ Nueva nota SOAP</button>
+                <h2 className="text-sm font-bold">{t("patients.evolution.title", { count: records.length })}</h2>
+                <button onClick={() => setTab("expediente")} className="text-xs font-semibold text-brand-600 hover:underline">{t("patients.evolution.newNote")}</button>
               </div>
               <div className="p-5">
                 {records.length === 0 ? (
                   <div className="text-center py-8">
-                    <p className="text-sm text-muted-foreground mb-3">No hay notas clínicas aún</p>
-                    <button onClick={() => setTab("expediente")} className="text-xs font-semibold text-brand-600 hover:underline">Crear primera consulta →</button>
+                    <p className="text-sm text-muted-foreground mb-3">{t("patients.evolution.empty")}</p>
+                    <button onClick={() => setTab("expediente")} className="text-xs font-semibold text-brand-600 hover:underline">{t("patients.evolution.createFirst")}</button>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -2278,7 +2281,7 @@ export function PatientDetailClient({
                           type="button"
                           onClick={() => setNoteDetailOpen(record as ClinicalNote)}
                           className={`${patientDetailStyles.noteRow} flex-1 bg-muted rounded-xl border border-border p-3 mb-1 text-left w-full`}
-                          aria-label={`Ver detalle de consulta del ${formatDate(record.visitDate)}`}
+                          aria-label={t("patients.evolution.viewDetailAria", { date: formatDate(record.visitDate) })}
                         >
                           <div className="flex items-center justify-between gap-2 mb-2">
                             <div className="flex items-center gap-2">
@@ -2288,11 +2291,11 @@ export function PatientDetailClient({
                                   isSigned ? patientDetailStyles.signed : patientDetailStyles.draft
                                 }`}
                               >
-                                {isSigned ? "Firmada" : "Borrador"}
+                                {isSigned ? t("patients.note.signed") : t("patients.note.draft")}
                               </span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-bold text-brand-600">Dr/a. {record.doctor?.firstName} {record.doctor?.lastName}</span>
+                              <span className="text-[10px] font-bold text-brand-600">{t("patients.doctorPrefix")} {record.doctor?.firstName} {record.doctor?.lastName}</span>
                               <span className={patientDetailStyles.noteRowChevron} aria-hidden>›</span>
                             </div>
                           </div>
@@ -2300,16 +2303,16 @@ export function PatientDetailClient({
                             <p className="text-xs text-foreground mb-1.5 leading-relaxed">{record.subjective}</p>
                           )}
                           {record.assessment && (
-                            <div className="text-xs"><span className="font-bold text-muted-foreground">Dx:</span> {record.assessment}</div>
+                            <div className="text-xs"><span className="font-bold text-muted-foreground">{t("patients.note.dx")}</span> {record.assessment}</div>
                           )}
                           {record.plan && (
-                            <div className="text-xs mt-1"><span className="font-bold text-muted-foreground">Plan:</span> {record.plan}</div>
+                            <div className="text-xs mt-1"><span className="font-bold text-muted-foreground">{t("patients.note.plan")}</span> {record.plan}</div>
                           )}
                           {/* Specialty badges */}
                           {record.specialtyData?.procedures?.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-2">
                               {record.specialtyData.procedures.map((p: any) => {
-                                const label = typeof p === "string" ? p : (p?.name ?? "Procedimiento");
+                                const label = typeof p === "string" ? p : (p?.name ?? t("patients.note.procedure"));
                                 const key = typeof p === "string" ? p : (p?.id ?? label);
                                 return <span key={key} className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">{label}</span>;
                               })}
@@ -2323,8 +2326,8 @@ export function PatientDetailClient({
                           )}
                           {record.specialtyData?.anthropometrics && (
                             <div className="flex gap-3 mt-2 text-[10px] text-muted-foreground">
-                              {record.specialtyData.anthropometrics.weight && <span>Peso: <strong>{record.specialtyData.anthropometrics.weight}kg</strong></span>}
-                              {record.specialtyData.anthropometrics.bmi    && <span>IMC: <strong>{record.specialtyData.anthropometrics.bmi}</strong></span>}
+                              {record.specialtyData.anthropometrics.weight && <span>{t("patients.note.weight")} <strong>{record.specialtyData.anthropometrics.weight}kg</strong></span>}
+                              {record.specialtyData.anthropometrics.bmi    && <span>{t("patients.note.bmi")} <strong>{record.specialtyData.anthropometrics.bmi}</strong></span>}
                             </div>
                           )}
                           {record.specialtyData?.medications?.length > 0 && (
@@ -2343,8 +2346,8 @@ export function PatientDetailClient({
                               handleDeleteRecord(record);
                             }}
                             className="self-start p-2 rounded-lg text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                            aria-label="Eliminar nota borrador"
-                            title="Eliminar nota borrador"
+                            aria-label={t("patients.note.deleteDraftAria")}
+                            title={t("patients.note.deleteDraftAria")}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -2368,21 +2371,26 @@ export function PatientDetailClient({
             const completedCount = treatments.filter((t: any) => t.status === "COMPLETED").length;
 
             const COMMON_TREATMENTS = [
-              "Ortodoncia con brackets","Ortodoncia invisible","Implante dental",
-              "Rehabilitacion periodontal","Blanqueamiento dental","Tratamiento de conductos",
-              "Plan nutricional","Programa psicologico",
+              t("patients.commonTreatment.bracesOrtho"),
+              t("patients.commonTreatment.invisibleOrtho"),
+              t("patients.commonTreatment.dentalImplant"),
+              t("patients.commonTreatment.perioRehab"),
+              t("patients.commonTreatment.whitening"),
+              t("patients.commonTreatment.rootCanal"),
+              t("patients.commonTreatment.nutritionPlan"),
+              t("patients.commonTreatment.psychProgram"),
             ];
 
             return (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-sm font-bold">Tratamientos del paciente</h2>
+                  <h2 className="text-sm font-bold">{t("patients.treatment.title")}</h2>
                   <button
                     type="button"
                     onClick={() => setShowNewTreatment(true)}
                     className="text-xs font-semibold bg-brand-600 text-white px-3 py-1.5 rounded-lg hover:bg-brand-700"
                   >
-                    + Nuevo tratamiento
+                    {t("patients.treatment.newTreatment")}
                   </button>
                 </div>
 
@@ -2390,15 +2398,15 @@ export function PatientDetailClient({
                   <div className="grid grid-cols-3 gap-2">
                     <div className="bg-brand-50 dark:bg-brand-950/30 border border-brand-200 dark:border-brand-800 rounded-xl p-3 text-center">
                       <div className="text-xl font-bold text-brand-700 dark:text-brand-300">{pendingSessionsTotal}</div>
-                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground mt-0.5">Sesiones pendientes</div>
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground mt-0.5">{t("patients.treatment.pendingSessions")}</div>
                     </div>
                     <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-center">
                       <div className="text-xl font-bold text-emerald-700 dark:text-emerald-300">{activeCount}</div>
-                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground mt-0.5">Activos</div>
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground mt-0.5">{t("patients.treatment.active")}</div>
                     </div>
                     <div className="bg-muted border border-border rounded-xl p-3 text-center">
                       <div className="text-xl font-bold text-muted-foreground">{completedCount}</div>
-                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground mt-0.5">Completados</div>
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground mt-0.5">{t("patients.treatment.completed")}</div>
                     </div>
                   </div>
                 )}
@@ -2406,48 +2414,48 @@ export function PatientDetailClient({
                 {treatments.length === 0 ? (
                   <div className="bg-card border border-border rounded-xl px-5 py-10 text-center text-muted-foreground">
                     <div className="text-3xl mb-2">💊</div>
-                    <div className="text-sm font-semibold">Sin tratamientos registrados</div>
+                    <div className="text-sm font-semibold">{t("patients.treatment.empty")}</div>
                     <button
                       type="button"
                       onClick={() => setShowNewTreatment(true)}
                       className="text-xs text-brand-600 hover:underline mt-2 inline-block"
                     >
-                      Crear primer tratamiento →
+                      {t("patients.treatment.createFirst")}
                     </button>
                   </div>
-                ) : treatments.map((t: any) => {
-                  const completed = t.sessions?.length ?? 0;
-                  const pct = t.totalSessions > 0 ? Math.round((completed / t.totalSessions) * 100) : 0;
-                  const pendingThis = Math.max(0, (t.totalSessions || 0) - completed);
-                  const STATUS_CFG: Record<string,{label:string;cls:string}> = {
-                    ACTIVE:    { label:"Activo",     cls:"bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800" },
-                    COMPLETED: { label:"Completado", cls:"bg-muted text-muted-foreground border-border" },
-                    ABANDONED: { label:"Abandonado", cls:"bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800" },
-                    PAUSED:    { label:"Pausado",    cls:"bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800" },
+                ) : treatments.map((plan: any) => {
+                  const completed = plan.sessions?.length ?? 0;
+                  const pct = plan.totalSessions > 0 ? Math.round((completed / plan.totalSessions) * 100) : 0;
+                  const pendingThis = Math.max(0, (plan.totalSessions || 0) - completed);
+                  const STATUS_CFG: Record<string,{labelKey:string;cls:string}> = {
+                    ACTIVE:    { labelKey:"patients.treatmentStatus.active",    cls:"bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800" },
+                    COMPLETED: { labelKey:"patients.treatmentStatus.completed", cls:"bg-muted text-muted-foreground border-border" },
+                    ABANDONED: { labelKey:"patients.treatmentStatus.abandoned", cls:"bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800" },
+                    PAUSED:    { labelKey:"patients.treatmentStatus.paused",    cls:"bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800" },
                   };
-                  const cfg = STATUS_CFG[t.status] ?? STATUS_CFG.ACTIVE;
+                  const cfg = STATUS_CFG[plan.status] ?? STATUS_CFG.ACTIVE;
                   return (
-                    <div key={t.id} className="bg-card border border-border rounded-xl p-4">
+                    <div key={plan.id} className="bg-card border border-border rounded-xl p-4">
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div>
-                          <div className="font-bold text-sm">{t.name}</div>
+                          <div className="font-bold text-sm">{plan.name}</div>
                           <div className="text-xs text-muted-foreground mt-0.5">
-                            Dr/a. {t.doctor?.firstName} {t.doctor?.lastName}
+                            {t("patients.doctorPrefix")} {plan.doctor?.firstName} {plan.doctor?.lastName}
                           </div>
-                          {t.description && (
-                            <div className="text-xs text-muted-foreground mt-1">{t.description}</div>
+                          {plan.description && (
+                            <div className="text-xs text-muted-foreground mt-1">{plan.description}</div>
                           )}
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${cfg.cls}`}>
-                            {cfg.label}
+                            {t(cfg.labelKey)}
                           </span>
                           <button
                             type="button"
-                            onClick={() => handleDeleteTreatment(t)}
+                            onClick={() => handleDeleteTreatment(plan)}
                             className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                            aria-label={`Eliminar plan ${t.name}`}
-                            title="Eliminar plan"
+                            aria-label={t("patients.treatment.deletePlanAria", { name: plan.name })}
+                            title={t("patients.treatment.deletePlanTitle")}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -2458,17 +2466,17 @@ export function PatientDetailClient({
                           <div className="h-full bg-brand-500 rounded-full" style={{ width: `${pct}%` }} />
                         </div>
                         <span className="text-xs font-bold text-muted-foreground">
-                          {completed}/{t.totalSessions}
+                          {completed}/{plan.totalSessions}
                         </span>
                       </div>
                       <div className="flex gap-4 text-xs text-muted-foreground flex-wrap">
-                        <span>💰 {formatCurrency(t.totalCost)}</span>
-                        <span>📅 Cada {t.sessionIntervalDays} dias</span>
-                        {pendingThis > 0 && t.status === "ACTIVE" && (
-                          <span className="text-brand-600 dark:text-brand-400 font-semibold">⏳ {pendingThis} pendiente{pendingThis !== 1 ? "s" : ""}</span>
+                        <span>💰 {formatCurrency(plan.totalCost)}</span>
+                        <span>📅 {t("patients.treatment.everyDays", { days: plan.sessionIntervalDays })}</span>
+                        {pendingThis > 0 && plan.status === "ACTIVE" && (
+                          <span className="text-brand-600 dark:text-brand-400 font-semibold">⏳ {t("patients.treatment.pendingCount", { count: pendingThis })}</span>
                         )}
-                        {t.nextExpectedDate && (
-                          <span>⏰ Proxima: {new Date(t.nextExpectedDate).toLocaleDateString("es-MX",{day:"numeric",month:"short"})}</span>
+                        {plan.nextExpectedDate && (
+                          <span>⏰ {t("patients.treatment.next", { date: new Date(plan.nextExpectedDate).toLocaleDateString("es-MX",{day:"numeric",month:"short"}) })}</span>
                         )}
                       </div>
                     </div>
@@ -2485,64 +2493,64 @@ export function PatientDetailClient({
                       className="bg-card border border-border rounded-2xl w-[min(92vw,560px)] max-h-[90vh] overflow-auto"
                     >
                       <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                        <h3 className="text-sm font-bold">Nuevo tratamiento para {patient.firstName} {patient.lastName}</h3>
+                        <h3 className="text-sm font-bold">{t("patients.treatment.modalTitle", { name: `${patient.firstName} ${patient.lastName}` })}</h3>
                         <button
                           type="button"
                           onClick={() => !savingTreatment && setShowNewTreatment(false)}
                           className="text-muted-foreground hover:text-foreground p-1"
-                          aria-label="Cerrar"
+                          aria-label={t("common.close")}
                         >
                           ×
                         </button>
                       </div>
                       <div className="p-5 space-y-3">
                         <div className="space-y-1.5">
-                          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Doctor</label>
+                          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("patients.treatment.doctorLabel")}</label>
                           <select
                             className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm"
                             value={treatmentForm.doctorId}
                             onChange={(e) => setTreatmentForm(f => ({ ...f, doctorId: e.target.value }))}
                           >
                             {(doctors ?? []).map((d: any) => (
-                              <option key={d.id} value={d.id}>Dr/a. {d.firstName} {d.lastName}</option>
+                              <option key={d.id} value={d.id}>{t("patients.doctorPrefix")} {d.firstName} {d.lastName}</option>
                             ))}
                           </select>
                         </div>
                         <div className="space-y-1.5">
-                          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Nombre del tratamiento *</label>
+                          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("patients.treatment.nameLabel")}</label>
                           <input
                             type="text"
                             className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm"
-                            placeholder="Ej: Ortodoncia con brackets"
+                            placeholder={t("patients.treatment.namePlaceholder")}
                             value={treatmentForm.name}
                             onChange={(e) => setTreatmentForm(f => ({ ...f, name: e.target.value }))}
                           />
                           <div className="flex flex-wrap gap-1.5 pt-1">
-                            {COMMON_TREATMENTS.slice(0, 5).map(t => (
+                            {COMMON_TREATMENTS.slice(0, 5).map(suggestion => (
                               <button
-                                key={t}
+                                key={suggestion}
                                 type="button"
-                                onClick={() => setTreatmentForm(f => ({ ...f, name: t }))}
+                                onClick={() => setTreatmentForm(f => ({ ...f, name: suggestion }))}
                                 className="text-[10px] px-2 py-1 rounded-full border border-border bg-muted hover:bg-brand-50 hover:border-brand-300"
                               >
-                                {t}
+                                {suggestion}
                               </button>
                             ))}
                           </div>
                         </div>
                         <div className="space-y-1.5">
-                          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Descripcion (opcional)</label>
+                          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("patients.treatment.descLabel")}</label>
                           <textarea
                             className="flex w-full rounded-lg border border-border bg-card px-3 py-2 text-sm resize-none"
                             rows={2}
-                            placeholder="Detalles del plan"
+                            placeholder={t("patients.treatment.descPlaceholder")}
                             value={treatmentForm.description}
                             onChange={(e) => setTreatmentForm(f => ({ ...f, description: e.target.value }))}
                           />
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1.5">
-                            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Total sesiones</label>
+                            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("patients.treatment.totalSessions")}</label>
                             <input
                               type="number"
                               min={1}
@@ -2553,7 +2561,7 @@ export function PatientDetailClient({
                             />
                           </div>
                           <div className="space-y-1.5">
-                            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Dias entre sesiones</label>
+                            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("patients.treatment.daysBetween")}</label>
                             <input
                               type="number"
                               min={1}
@@ -2565,7 +2573,7 @@ export function PatientDetailClient({
                           </div>
                         </div>
                         <div className="space-y-1.5">
-                          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Costo total (MXN)</label>
+                          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("patients.treatment.totalCost")}</label>
                           <input
                             type="number"
                             min={0}
@@ -2584,7 +2592,7 @@ export function PatientDetailClient({
                           disabled={savingTreatment}
                           className="text-xs font-semibold border border-border px-4 py-2 rounded-lg hover:bg-muted disabled:opacity-50"
                         >
-                          Cancelar
+                          {t("common.cancel")}
                         </button>
                         <button
                           type="button"
@@ -2592,7 +2600,7 @@ export function PatientDetailClient({
                           disabled={savingTreatment}
                           className="text-xs font-semibold bg-brand-600 text-white px-4 py-2 rounded-lg hover:bg-brand-700 disabled:opacity-50"
                         >
-                          {savingTreatment ? "Creando..." : "Crear tratamiento"}
+                          {savingTreatment ? t("patients.treatment.creating") : t("patients.treatment.createBtn")}
                         </button>
                       </div>
                     </div>
@@ -2611,21 +2619,28 @@ export function PatientDetailClient({
           {tab === "agenda" && (
             <div className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                <h2 className="text-sm font-bold">Citas — {appointments.length} total</h2>
-                <button onClick={openNewAppointmentForPatient} className="text-xs font-semibold text-brand-600 hover:underline">+ Agendar</button>
+                <h2 className="text-sm font-bold">{t("patients.agenda.title", { count: appointments.length })}</h2>
+                <button onClick={openNewAppointmentForPatient} className="text-xs font-semibold text-brand-600 hover:underline">{t("patients.agenda.schedule")}</button>
               </div>
 
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-muted/30 border-b border-border">
-                    {["Fecha","Hora","Tipo","Doctor","Estado",""].map(h => (
-                      <th key={h} className="text-left px-4 py-2.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wide">{h}</th>
+                    {[
+                      { id: "date", label: t("common.date") },
+                      { id: "time", label: t("patients.agenda.colTime") },
+                      { id: "type", label: t("patients.agenda.colType") },
+                      { id: "doctor", label: t("patients.agenda.colDoctor") },
+                      { id: "status", label: t("common.status") },
+                      { id: "actions", label: "" },
+                    ].map(h => (
+                      <th key={h.id} className="text-left px-4 py-2.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wide">{h.label}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {appointments.length === 0 ? (
-                    <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Sin citas registradas</td></tr>
+                    <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">{t("patients.agenda.empty")}</td></tr>
                   ) : appointments.map(a => {
                     const s = APPT_STATUS[a.status] ?? APPT_STATUS.PENDING;
                     return (
@@ -2634,15 +2649,15 @@ export function PatientDetailClient({
                         <td className="px-4 py-2 text-muted-foreground font-mono">{a.startTime}</td>
                         <td className="px-4 py-2">{a.type}</td>
                         <td className="px-4 py-2 text-muted-foreground">{a.doctor?.firstName} {a.doctor?.lastName}</td>
-                        <td className="px-4 py-2"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.cls}`}>{s.label}</span></td>
+                        <td className="px-4 py-2"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.cls}`}>{t(s.labelKey)}</span></td>
                         <td className="px-4 py-2 text-right">
                           {a.status !== "CANCELLED" && a.status !== "COMPLETED" && (
                             <button
                               type="button"
                               onClick={() => handleCancelAppointment(a)}
                               className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                              aria-label="Cancelar cita"
-                              title="Cancelar cita"
+                              aria-label={t("patients.agenda.cancelAppt")}
+                              title={t("patients.agenda.cancelAppt")}
                             >
                               <XCircle className="w-3.5 h-3.5" />
                             </button>
@@ -2665,12 +2680,12 @@ export function PatientDetailClient({
                 {/* Upload bar */}
                 <div className="bg-card border border-border rounded-xl p-4 flex items-center justify-between">
                   <div>
-                    <h2 className="text-sm font-bold">Radiografías y archivos</h2>
-                    <p className="text-xs text-muted-foreground">{files.length} archivo{files.length !== 1 ? "s" : ""}</p>
+                    <h2 className="text-sm font-bold">{t("patients.xrays.title")}</h2>
+                    <p className="text-xs text-muted-foreground">{t("patients.xrays.fileCount", { count: files.length })}</p>
                   </div>
                   <label className="flex items-center gap-1.5 text-xs font-semibold bg-brand-600 text-white px-3 py-2 rounded-lg cursor-pointer hover:bg-brand-700 transition-colors">
                     <Plus className="w-3.5 h-3.5" />
-                    {uploadingFile ? "Subiendo…" : "Subir archivo"}
+                    {uploadingFile ? t("patients.xrays.uploading") : t("patients.xrays.uploadFile")}
                     <input type="file" className="hidden" accept="image/*,application/pdf" onChange={uploadFile} disabled={uploadingFile} />
                   </label>
                 </div>
@@ -2678,8 +2693,8 @@ export function PatientDetailClient({
                 {files.length === 0 && filesLoaded && (
                   <div className="bg-card border border-border rounded-xl p-10 text-center">
                     <div className="text-3xl mb-2">🩻</div>
-                    <p className="text-sm font-semibold text-muted-foreground">Sin radiografías</p>
-                    <p className="text-xs text-muted-foreground mt-1">Sube la primera radiografía para poder analizarla con IA</p>
+                    <p className="text-sm font-semibold text-muted-foreground">{t("patients.xrays.empty")}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{t("patients.xrays.emptyHint")}</p>
                   </div>
                 )}
 
@@ -2700,12 +2715,12 @@ export function PatientDetailClient({
                             type="button"
                             onClick={openInViewer}
                             className="w-32 h-24 bg-black rounded-lg overflow-hidden flex-shrink-0 relative cursor-pointer hover:opacity-90 transition-opacity group"
-                            aria-label={`Abrir ${f.name} en visor con anotaciones`}
+                            aria-label={t("patients.xrays.openViewerAria", { name: f.name })}
                           >
                             <img src={f.url} alt={f.name} className="w-full h-full object-cover opacity-90" />
                             <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/40 transition-colors">
                               <span className="text-white text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity">
-                                Abrir visor
+                                {t("patients.xrays.openViewer")}
                               </span>
                             </div>
                           </button>
@@ -2721,11 +2736,11 @@ export function PatientDetailClient({
                               {f.name}
                             </button>
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
-                              {FILE_CAT_LABELS[f.category] ?? f.category}
+                              {FILE_CAT_LABELS[f.category] ? t(FILE_CAT_LABELS[f.category]) : f.category}
                             </span>
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            {f.toothNumber && <span>Pieza #{f.toothNumber} · </span>}
+                            {f.toothNumber && <span>{t("patients.xrays.tooth", { num: f.toothNumber })} · </span>}
                             {f.size ? `${(f.size / 1024).toFixed(0)} KB · ` : ""}
                             {new Date(f.createdAt).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" })}
                           </div>
@@ -2739,7 +2754,7 @@ export function PatientDetailClient({
                                 onClick={openInViewer}
                                 className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-card text-foreground border border-border hover:bg-muted/50 transition-colors"
                               >
-                                <span>🔍</span> Abrir en visor
+                                <span>🔍</span> {t("patients.xrays.openInViewer")}
                               </button>
                             )}
                             {isImage && (
@@ -2754,11 +2769,11 @@ export function PatientDetailClient({
                                 } disabled:opacity-60`}
                               >
                                 {analyzing === f.id ? (
-                                  <><span className="inline-block w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Analizando…</>
+                                  <><span className="inline-block w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> {t("patients.xrays.analyzing")}</>
                                 ) : result ? (
-                                  <><span>✓</span> {result.analysis.findings?.length ?? 0} hallazgos — Ver</>
+                                  <><span>✓</span> {t("patients.xrays.findingsView", { count: result.analysis.findings?.length ?? 0 })}</>
                                 ) : (
-                                  <><span>🔬</span> Analizar con IA</>
+                                  <><span>🔬</span> {t("patients.xrays.analyzeAI")}</>
                                 )}
                               </button>
                             )}
@@ -2768,18 +2783,18 @@ export function PatientDetailClient({
                                 onClick={() => setExpandedFile(isExp ? null : f.id)}
                                 className="text-xs font-semibold text-muted-foreground border border-border px-3 py-1.5 rounded-lg hover:bg-muted/50"
                               >
-                                {isExp ? "Ocultar" : "Mostrar"} resultados
+                                {isExp ? t("patients.xrays.hideResults") : t("patients.xrays.showResults")}
                               </button>
                             )}
                             <button
                               type="button"
                               onClick={() => handleDeleteFile(f)}
                               className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg text-rose-600 border border-rose-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                              aria-label={`Eliminar ${f.name}`}
-                              title="Eliminar archivo"
+                              aria-label={t("patients.xrays.deleteFileAria", { name: f.name })}
+                              title={t("patients.xrays.deleteFileTitle")}
                             >
                               <Trash2 className="w-3 h-3" />
-                              Eliminar
+                              {t("common.delete")}
                             </button>
                           </div>
                         </div>
@@ -2790,7 +2805,7 @@ export function PatientDetailClient({
                         <div className="border-t border-border bg-muted p-4 space-y-3">
                           {/* Summary */}
                           <div className="bg-violet-50 border border-violet-200 rounded-xl p-3">
-                            <h4 className="text-xs font-bold text-violet-700 mb-1">Resumen del análisis IA</h4>
+                            <h4 className="text-xs font-bold text-violet-700 mb-1">{t("patients.xrays.aiSummaryTitle")}</h4>
                             <p className="text-xs text-violet-900 leading-relaxed">{result.analysis.summary}</p>
                           </div>
 
@@ -2805,7 +2820,7 @@ export function PatientDetailClient({
                                   </span>
                                   <span className={`text-xs font-bold ${sev.text}`}>{finding.title}</span>
                                   <span className={`ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full border ${sev.bg} ${sev.text}`}>
-                                    {sev.label}
+                                    {t(sev.labelKey)}
                                   </span>
                                 </div>
                                 <p className="text-xs text-muted-foreground ml-7 leading-relaxed">{finding.description}</p>
@@ -2819,7 +2834,7 @@ export function PatientDetailClient({
                                       backgroundColor: finding.confidence > 80 ? "#22c55e" : finding.confidence > 60 ? "#eab308" : "#ef4444",
                                     }} />
                                   </div>
-                                  <span className="text-[10px] text-muted-foreground">Confianza: {finding.confidence}%</span>
+                                  <span className="text-[10px] text-muted-foreground">{t("patients.xrays.confidence", { pct: finding.confidence })}</span>
                                 </div>
                               </div>
                             );
@@ -2828,7 +2843,7 @@ export function PatientDetailClient({
                           {/* Recommendations */}
                           {result.analysis.recommendations && (
                             <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
-                              <h4 className="text-xs font-bold text-blue-700 mb-1">Recomendaciones</h4>
+                              <h4 className="text-xs font-bold text-blue-700 mb-1">{t("patients.xrays.recommendations")}</h4>
                               <p className="text-xs text-blue-900">{result.analysis.recommendations}</p>
                             </div>
                           )}
@@ -2838,10 +2853,14 @@ export function PatientDetailClient({
                             <AlertTriangle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
                             <div>
                               <p className="text-[10px] text-amber-700 leading-relaxed">
-                                <strong>Herramienta de apoyo diagnóstico.</strong> Este análisis es generado por IA y NO sustituye el juicio clínico del profesional.
+                                <strong>{t("patients.xrays.disclaimerLead")}</strong> {t("patients.xrays.disclaimerBody")}
                               </p>
                               <p className="text-[10px] text-amber-600 mt-1">
-                                Tokens usados: {result.tokensUsed?.toLocaleString()} · Restantes: {result.tokensRemaining?.toLocaleString()} / {result.tokensLimit?.toLocaleString()}
+                                {t("patients.xrays.tokens", {
+                                  used: result.tokensUsed?.toLocaleString(),
+                                  remaining: result.tokensRemaining?.toLocaleString(),
+                                  limit: result.tokensLimit?.toLocaleString(),
+                                })}
                               </p>
                             </div>
                           </div>
@@ -2857,19 +2876,26 @@ export function PatientDetailClient({
           {tab === "facturacion" && (
             <div className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="px-5 py-4 border-b border-border">
-                <h2 className="text-sm font-bold">Facturación</h2>
+                <h2 className="text-sm font-bold">{t("patients.billing.title")}</h2>
               </div>
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-muted/30 border-b border-border">
-                    {["Factura","Fecha","Monto","Pagado","Saldo","Estado"].map(h => (
-                      <th key={h} className="text-left px-4 py-2.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wide">{h}</th>
+                    {[
+                      { id: "invoice", label: t("patients.billing.colInvoice") },
+                      { id: "date", label: t("common.date") },
+                      { id: "amount", label: t("patients.billing.colAmount") },
+                      { id: "paid", label: t("patients.billing.colPaid") },
+                      { id: "balance", label: t("patients.billing.colBalance") },
+                      { id: "status", label: t("common.status") },
+                    ].map(h => (
+                      <th key={h.id} className="text-left px-4 py-2.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wide">{h.label}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {invoices.length === 0 ? (
-                    <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Sin facturas</td></tr>
+                    <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">{t("patients.billing.empty")}</td></tr>
                   ) : invoices.map(inv => {
                     const s = INV_STATUS[inv.status] ?? INV_STATUS.PENDING;
                     return (
@@ -2883,7 +2909,7 @@ export function PatientDetailClient({
                         <td className="px-4 py-2 font-bold">{formatCurrency(inv.total)}</td>
                         <td className="px-4 py-2 text-emerald-600 font-bold">{formatCurrency(inv.paid)}</td>
                         <td className="px-4 py-2 text-rose-600 font-bold">{formatCurrency(inv.balance)}</td>
-                        <td className="px-4 py-2"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.cls}`}>{s.label}</span></td>
+                        <td className="px-4 py-2"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.cls}`}>{t(s.labelKey)}</span></td>
                       </tr>
                     );
                   })}
@@ -2900,7 +2926,7 @@ export function PatientDetailClient({
             date: nextAppt.date,
             startTime: nextAppt.startTime ?? "",
             type: nextAppt.type,
-            doctorName: nextAppt.doctor ? `Dr/a. ${nextAppt.doctor.firstName} ${nextAppt.doctor.lastName}` : undefined,
+            doctorName: nextAppt.doctor ? `${t("patients.doctorPrefix")} ${nextAppt.doctor.firstName} ${nextAppt.doctor.lastName}` : undefined,
           } : null}
           finance={{
             total: totalPlan,
@@ -2932,29 +2958,29 @@ export function PatientDetailClient({
       {/* Edit patient modal */}
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle className="text-foreground font-bold">Editar paciente</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-foreground font-bold">{t("patients.edit.title")}</DialogTitle></DialogHeader>
           <div className="px-6 py-4 space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5"><Label>Nombre *</Label><Input value={editForm.firstName} onChange={e => setEditForm(f => ({ ...f, firstName: e.target.value }))} /></div>
-              <div className="space-y-1.5"><Label>Apellido *</Label><Input value={editForm.lastName} onChange={e => setEditForm(f => ({ ...f, lastName: e.target.value }))} /></div>
+              <div className="space-y-1.5"><Label>{t("patients.edit.firstName")}</Label><Input value={editForm.firstName} onChange={e => setEditForm(f => ({ ...f, firstName: e.target.value }))} /></div>
+              <div className="space-y-1.5"><Label>{t("patients.edit.lastName")}</Label><Input value={editForm.lastName} onChange={e => setEditForm(f => ({ ...f, lastName: e.target.value }))} /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5"><Label>Email</Label><Input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} /></div>
-              <div className="space-y-1.5"><Label>Teléfono</Label><Input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} /></div>
+              <div className="space-y-1.5"><Label>{t("patients.edit.email")}</Label><Input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} /></div>
+              <div className="space-y-1.5"><Label>{t("patients.edit.phone")}</Label><Input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5"><Label>Fecha de nacimiento</Label><DateField className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 disabled:opacity-50 transition-colors" value={editForm.dob} onChange={e => setEditForm(f => ({ ...f, dob: e.target.value }))} /></div>
-              <div className="space-y-1.5"><Label>Género</Label>
+              <div className="space-y-1.5"><Label>{t("patients.edit.dob")}</Label><DateField className="flex h-10 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-600 disabled:opacity-50 transition-colors" value={editForm.dob} onChange={e => setEditForm(f => ({ ...f, dob: e.target.value }))} /></div>
+              <div className="space-y-1.5"><Label>{t("patients.edit.gender")}</Label>
                 <select className="flex h-10 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm" value={editForm.gender} onChange={e => setEditForm(f => ({ ...f, gender: e.target.value }))}>
-                  <option value="M">Masculino</option><option value="F">Femenino</option><option value="OTHER">Otro</option>
+                  <option value="M">{t("patients.edit.genderMale")}</option><option value="F">{t("patients.edit.genderFemale")}</option><option value="OTHER">{t("patients.edit.genderOther")}</option>
                 </select>
               </div>
             </div>
-            <div className="space-y-1.5"><Label>Dirección</Label><Input value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} /></div>
+            <div className="space-y-1.5"><Label>{t("patients.edit.address")}</Label><Input value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} /></div>
 
             {/* NOM-024 — Identificación oficial */}
             <div className="space-y-1.5">
-              <Label>Identificación oficial</Label>
+              <Label>{t("patients.edit.officialId")}</Label>
               <div className="flex gap-2">
                 {(["COMPLETE","PENDING","FOREIGN"] as const).map((s) => (
                   <button
@@ -2963,14 +2989,14 @@ export function PatientDetailClient({
                     onClick={() => setEditForm(f => ({ ...f, curpStatus: s }))}
                     className={`flex-1 px-3 py-1.5 text-xs rounded-lg border ${editForm.curpStatus === s ? "bg-brand-600 text-white border-brand-600" : "bg-card text-foreground border-border"}`}
                   >
-                    {s === "COMPLETE" ? "Tengo CURP" : s === "PENDING" ? "No la tengo" : "Extranjero"}
+                    {s === "COMPLETE" ? t("patients.edit.haveCurp") : s === "PENDING" ? t("patients.edit.noCurp") : t("patients.edit.foreigner")}
                   </button>
                 ))}
               </div>
             </div>
             {editForm.curpStatus === "COMPLETE" && (
               <div className="space-y-1.5">
-                <Label>CURP *</Label>
+                <Label>{t("patients.edit.curpLabel")}</Label>
                 <Input
                   className="font-mono uppercase tracking-wide"
                   maxLength={18}
@@ -2982,7 +3008,7 @@ export function PatientDetailClient({
             )}
             {editForm.curpStatus === "FOREIGN" && (
               <div className="space-y-1.5">
-                <Label>Pasaporte *</Label>
+                <Label>{t("patients.edit.passportLabel")}</Label>
                 <Input
                   maxLength={20}
                   value={editForm.passportNo}
@@ -2992,34 +3018,34 @@ export function PatientDetailClient({
               </div>
             )}
 
-            <div className="space-y-1.5"><Label>Alergias (separadas por comas)</Label><Input value={editForm.allergies} onChange={e => setEditForm(f => ({ ...f, allergies: e.target.value }))} /></div>
-            <div className="space-y-1.5"><Label>Notas</Label>
+            <div className="space-y-1.5"><Label>{t("patients.edit.allergiesLabel")}</Label><Input value={editForm.allergies} onChange={e => setEditForm(f => ({ ...f, allergies: e.target.value }))} /></div>
+            <div className="space-y-1.5"><Label>{t("common.notes")}</Label>
               <textarea className="flex min-h-[60px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground resize-none"
                 value={editForm.notes} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} />
             </div>
 
             {/* NOM-004 — Antecedentes */}
             <div className="space-y-1.5">
-              <Label>Antecedentes heredofamiliares</Label>
+              <Label>{t("patients.edit.familyHistory")}</Label>
               <textarea
                 className="flex min-h-[64px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground resize-y"
-                placeholder="Madre con DM2, padre HTA, hermano cardiopatía isquémica…"
+                placeholder={t("patients.edit.familyHistoryPlaceholder")}
                 value={editForm.familyHistory}
                 onChange={e => setEditForm(f => ({ ...f, familyHistory: e.target.value }))}
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Antecedentes personales no patológicos</Label>
+              <Label>{t("patients.edit.personalHistory")}</Label>
               <textarea
                 className="flex min-h-[64px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground resize-y"
-                placeholder="Alimentación, higiene, alcohol, tabaco, ejercicio, vivienda…"
+                placeholder={t("patients.edit.personalHistoryPlaceholder")}
                 value={editForm.personalNonPathologicalHistory}
                 onChange={e => setEditForm(f => ({ ...f, personalNonPathologicalHistory: e.target.value }))}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEdit(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => setShowEdit(false)}>{t("common.cancel")}</Button>
             <Button disabled={editSaving || !editForm.firstName || !editForm.lastName} onClick={async () => {
               setEditSaving(true);
               try {
@@ -3034,12 +3060,12 @@ export function PatientDetailClient({
                   }),
                 });
                 if (!res.ok) throw new Error((await res.json()).error);
-                toast.success("Paciente actualizado");
+                toast.success(t("patients.edit.saved"));
                 setShowEdit(false);
                 router.refresh();
-              } catch (err: any) { toast.error(err.message ?? "Error al guardar"); }
+              } catch (err: any) { toast.error(err.message ?? t("patients.edit.saveError")); }
               finally { setEditSaving(false); }
-            }}>{editSaving ? "Guardando…" : "Guardar cambios"}</Button>
+            }}>{editSaving ? t("common.saving") : t("common.saveChanges")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

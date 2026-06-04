@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Pause, CheckCircle2, X } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 import styles from "./patient-detail.module.css";
 
 export interface ConsultBarProps {
@@ -39,6 +40,7 @@ export function ConsultBar({
   onComplete,
   onClose,
 }: ConsultBarProps) {
+  const t = useT();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (paused) return;
@@ -53,10 +55,10 @@ export function ConsultBar({
     <div
       className={styles.consultBar}
       role="region"
-      aria-label={`Consulta activa con ${patientName}`}
+      aria-label={t("patients.consultBar.activeWith", { patientName })}
     >
       <span className={styles.consultPulse} aria-hidden />
-      <span className={styles.consultStatus}>En consulta</span>
+      <span className={styles.consultStatus}>{t("patients.consultBar.inConsultation")}</span>
       <span className={styles.consultDivider} aria-hidden />
       <span className={styles.consultName}>{patientName}</span>
       {resourceName && (
@@ -74,7 +76,7 @@ export function ConsultBar({
       <span className={styles.consultSpacer} />
       {saveLabel && (
         <span className={styles.consultSaveStatus}>
-          {saving ? "Guardando…" : saveLabel}
+          {saving ? t("common.saving") : saveLabel}
         </span>
       )}
       <span className={`${styles.consultTimer} ${paused ? styles.paused : ""}`}>
@@ -84,10 +86,10 @@ export function ConsultBar({
         type="button"
         className={styles.consultBtn}
         onClick={onPause}
-        title={paused ? "Reanudar" : "Pausar timer"}
+        title={paused ? t("patients.consultBar.resume") : t("patients.consultBar.pauseTimer")}
       >
         <Pause size={12} aria-hidden />
-        <span>{paused ? "Reanudar" : "Pausar"}</span>
+        <span>{paused ? t("patients.consultBar.resume") : t("patients.consultBar.pause")}</span>
       </button>
       <button
         type="button"
@@ -95,15 +97,15 @@ export function ConsultBar({
         onClick={onComplete}
       >
         <CheckCircle2 size={12} aria-hidden />
-        <span>Completar consulta</span>
+        <span>{t("patients.consultBar.completeConsultation")}</span>
       </button>
       {onClose && (
         <button
           type="button"
           className={styles.consultClose}
           onClick={onClose}
-          aria-label="Cerrar consulta"
-          title="Salir de modo consulta"
+          aria-label={t("patients.consultBar.closeConsultation")}
+          title={t("patients.consultBar.exitConsultationMode")}
         >
           <X size={12} aria-hidden />
         </button>

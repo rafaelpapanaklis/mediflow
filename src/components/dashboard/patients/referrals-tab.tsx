@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Plus, X, Send, Save, ArrowDownLeft, ArrowUpRight, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Cie10Selector } from "@/components/dashboard/clinical/cie10-selector";
+import { useT } from "@/i18n/i18n-provider";
 
 interface ReferralRow {
   id: string;
@@ -35,12 +36,12 @@ interface Props {
   patientId: string;
 }
 
-const STATUS_LABEL: Record<ReferralRow["status"], string> = {
-  SENT: "Enviada",
-  ACCEPTED: "Aceptada",
-  REJECTED: "Rechazada",
-  RESPONDED: "Respondida",
-  CANCELLED: "Cancelada",
+const STATUS_LABEL_KEY: Record<ReferralRow["status"], string> = {
+  SENT: "patients.referralsTab.statusSent",
+  ACCEPTED: "patients.referralsTab.statusAccepted",
+  REJECTED: "patients.referralsTab.statusRejected",
+  RESPONDED: "patients.referralsTab.statusResponded",
+  CANCELLED: "patients.referralsTab.statusCancelled",
 };
 const STATUS_COLOR: Record<ReferralRow["status"], string> = {
   SENT: "#2563eb",
@@ -51,6 +52,7 @@ const STATUS_COLOR: Record<ReferralRow["status"], string> = {
 };
 
 export function ReferralsTab({ patientId }: Props) {
+  const t = useT();
   const [list, setList] = useState<ReferralRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -77,9 +79,9 @@ export function ReferralsTab({ patientId }: Props) {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-bold text-foreground">Referencias y contrarreferencias</h3>
+          <h3 className="text-sm font-bold text-foreground">{t("patients.referralsTab.heading")}</h3>
           <p className="text-xs text-muted-foreground">
-            Documentos NOM-024 para envío a otra clínica/especialista o respuesta de regreso.
+            {t("patients.referralsTab.subtitle")}
           </p>
         </div>
         <button
@@ -87,15 +89,15 @@ export function ReferralsTab({ patientId }: Props) {
           onClick={() => setShowForm(true)}
           className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700"
         >
-          <Plus size={13} /> Nueva referencia
+          <Plus size={13} /> {t("patients.referralsTab.newReferral")}
         </button>
       </div>
 
       {loading ? (
-        <div className="text-xs text-muted-foreground p-4">Cargando…</div>
+        <div className="text-xs text-muted-foreground p-4">{t("common.loading")}</div>
       ) : list.length === 0 ? (
         <div className="text-xs text-muted-foreground p-4 bg-card border border-border rounded-xl">
-          Sin referencias registradas para este paciente.
+          {t("patients.referralsTab.empty")}
         </div>
       ) : (
         <div className="space-y-2">
@@ -115,6 +117,7 @@ export function ReferralsTab({ patientId }: Props) {
 }
 
 function ReferralCard({ ref: r, onChanged }: { ref: ReferralRow; onChanged: () => void }) {
+  const t = useT();
   const [responding, setResponding] = useState(false);
   const [response, setResponse] = useState("");
   const isOutgoing = r.type === "OUTGOING";
@@ -124,11 +127,11 @@ function ReferralCard({ ref: r, onChanged }: { ref: ReferralRow; onChanged: () =
         <div className="flex items-center gap-2">
           {isOutgoing ? <ArrowUpRight size={14} className="text-blue-600" /> : <ArrowDownLeft size={14} className="text-violet-600" />}
           <span className="text-xs font-bold">
-            {isOutgoing ? "Referencia →" : "Contrarreferencia ←"} {r.toClinicName}
+            {isOutgoing ? t("patients.referralsTab.outgoingArrow") : t("patients.referralsTab.incomingArrow")} {r.toClinicName}
           </span>
         </div>
         <span style={{ padding: "2px 8px", fontSize: 10, fontWeight: 700, borderRadius: 99, color: "#fff", background: STATUS_COLOR[r.status] }}>
-          {STATUS_LABEL[r.status]}
+          {t(STATUS_LABEL_KEY[r.status])}
         </span>
       </div>
       <div className="text-xs text-muted-foreground mb-2">
@@ -138,11 +141,11 @@ function ReferralCard({ ref: r, onChanged }: { ref: ReferralRow; onChanged: () =
         {r.toDoctorName && <> · {r.toDoctorName}</>}
       </div>
       <div className="text-xs space-y-1.5 mb-2">
-        <div><strong>Motivo:</strong> {r.reason}</div>
-        <div><strong>Resumen clínico:</strong> {r.clinicalSummary}</div>
+        <div><strong>{t("patients.referralsTab.reasonLabel")}</strong> {r.reason}</div>
+        <div><strong>{t("patients.referralsTab.clinicalSummaryLabel")}</strong> {r.clinicalSummary}</div>
         {r.relevantDiagnoses && r.relevantDiagnoses.length > 0 && (
           <div>
-            <strong>Diagnósticos:</strong>{" "}
+            <strong>{t("patients.referralsTab.diagnosesLabel")}</strong>{" "}
             {r.relevantDiagnoses.map((d) => (
               <span key={d.code} className="inline-block px-1.5 py-0.5 mr-1 mt-0.5 bg-muted text-xs rounded font-mono">{d.code}</span>
             ))}
@@ -150,7 +153,7 @@ function ReferralCard({ ref: r, onChanged }: { ref: ReferralRow; onChanged: () =
         )}
         {r.response && (
           <div className="pt-2 border-t border-border mt-2">
-            <strong>Respuesta:</strong> {r.response}
+            <strong>{t("patients.referralsTab.responseLabel")}</strong> {r.response}
             {r.respondedAt && <span className="text-muted-foreground"> · {new Date(r.respondedAt).toLocaleDateString("es-MX")}</span>}
           </div>
         )}
@@ -159,7 +162,7 @@ function ReferralCard({ ref: r, onChanged }: { ref: ReferralRow; onChanged: () =
         <div className="flex gap-2 pt-2 border-t border-border">
           {!responding ? (
             <button type="button" onClick={() => setResponding(true)} className="text-xs px-2 py-1 rounded border border-border hover:bg-muted">
-              Marcar respondida
+              {t("patients.referralsTab.markResponded")}
             </button>
           ) : (
             <div className="flex-1 flex flex-col gap-2">
@@ -167,7 +170,7 @@ function ReferralCard({ ref: r, onChanged }: { ref: ReferralRow; onChanged: () =
                 value={response}
                 onChange={(e) => setResponse(e.target.value)}
                 rows={2}
-                placeholder="Notas de la respuesta…"
+                placeholder={t("patients.referralsTab.responseNotesPlaceholder")}
                 className="w-full px-2 py-1.5 text-xs border border-border rounded resize-y"
               />
               <div className="flex gap-2">
@@ -179,29 +182,29 @@ function ReferralCard({ ref: r, onChanged }: { ref: ReferralRow; onChanged: () =
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({ status: "RESPONDED", response }),
                     });
-                    if (res.ok) { toast.success("Marcada respondida"); setResponding(false); setResponse(""); onChanged(); }
-                    else toast.error("Error");
+                    if (res.ok) { toast.success(t("patients.referralsTab.markedResponded")); setResponding(false); setResponse(""); onChanged(); }
+                    else toast.error(t("common.genericError"));
                   }}
                   className="px-3 py-1 text-xs rounded bg-brand-600 text-white"
-                >Guardar</button>
-                <button type="button" onClick={() => setResponding(false)} className="px-3 py-1 text-xs rounded border border-border">Cancelar</button>
+                >{t("common.save")}</button>
+                <button type="button" onClick={() => setResponding(false)} className="px-3 py-1 text-xs rounded border border-border">{t("common.cancel")}</button>
               </div>
             </div>
           )}
           <button
             type="button"
             onClick={async () => {
-              if (!confirm("¿Cancelar esta referencia?")) return;
+              if (!confirm(t("patients.referralsTab.confirmCancel"))) return;
               const res = await fetch(`/api/referrals/${r.id}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ status: "CANCELLED" }),
               });
-              if (res.ok) { toast.success("Cancelada"); onChanged(); }
-              else toast.error("Error");
+              if (res.ok) { toast.success(t("patients.referralsTab.cancelledToast")); onChanged(); }
+              else toast.error(t("common.genericError"));
             }}
             className="text-xs px-2 py-1 rounded border border-border hover:bg-rose-50 text-rose-600 ml-auto"
-          >Cancelar</button>
+          >{t("common.cancel")}</button>
         </div>
       )}
     </div>
@@ -209,6 +212,7 @@ function ReferralCard({ ref: r, onChanged }: { ref: ReferralRow; onChanged: () =
 }
 
 function NewReferralModal({ patientId, onClose, onCreated }: { patientId: string; onClose: () => void; onCreated: () => void }) {
+  const t = useT();
   const [form, setForm] = useState({
     type: "OUTGOING" as "OUTGOING" | "INCOMING",
     toClinicName: "",
@@ -229,7 +233,7 @@ function NewReferralModal({ patientId, onClose, onCreated }: { patientId: string
       const data = await res.json();
       const code = data.codes?.[0];
       if (!code) {
-        toast.error("Código CIE-10 no encontrado");
+        toast.error(t("patients.referralsTab.cie10NotFound"));
         return;
       }
       setDxs((prev) => {
@@ -243,7 +247,7 @@ function NewReferralModal({ patientId, onClose, onCreated }: { patientId: string
         }];
       });
     } catch {
-      toast.error("Error al agregar diagnóstico");
+      toast.error(t("patients.referralsTab.addDiagnosisError"));
     }
   }
 
@@ -253,7 +257,7 @@ function NewReferralModal({ patientId, onClose, onCreated }: { patientId: string
 
   async function submit() {
     if (!form.toClinicName.trim() || !form.reason.trim() || !form.clinicalSummary.trim()) {
-      toast.error("Clínica destino, motivo y resumen son obligatorios");
+      toast.error(t("patients.referralsTab.requiredFieldsError"));
       return;
     }
     setSubmitting(true);
@@ -277,12 +281,12 @@ function NewReferralModal({ patientId, onClose, onCreated }: { patientId: string
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? "Error al crear");
+        throw new Error(err.error ?? t("patients.referralsTab.createError"));
       }
-      toast.success("Referencia creada");
+      toast.success(t("patients.referralsTab.createdToast"));
       onCreated();
     } catch (err) {
-      toast.error(`Error: ${String(err)}`);
+      toast.error(t("patients.referralsTab.errorPrefix", { error: String(err) }));
     } finally {
       setSubmitting(false);
     }
@@ -293,62 +297,62 @@ function NewReferralModal({ patientId, onClose, onCreated }: { patientId: string
       style={{ position: "fixed", inset: 0, background: "rgba(15, 10, 30, 0.55)", backdropFilter: "blur(4px)", display: "grid", placeItems: "center", zIndex: 100, padding: 20 }}>
       <div style={{ background: "var(--bg-elev)", border: "1px solid var(--border-strong)", borderRadius: 14, width: "100%", maxWidth: 640, maxHeight: "90vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <header style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-soft)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>Nueva referencia / contrarreferencia</h3>
-          <button type="button" onClick={onClose} aria-label="Cerrar" style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--text-3)" }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>{t("patients.referralsTab.modalTitle")}</h3>
+          <button type="button" onClick={onClose} aria-label={t("common.close")} style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--text-3)" }}>
             <X size={14} />
           </button>
         </header>
         <div style={{ padding: 20, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
-          <Field label="Tipo">
+          <Field label={t("patients.referralsTab.fieldType")}>
             <div style={{ display: "flex", gap: 6 }}>
-              {(["OUTGOING", "INCOMING"] as const).map((t) => (
+              {(["OUTGOING", "INCOMING"] as const).map((opt) => (
                 <button
-                  key={t}
+                  key={opt}
                   type="button"
-                  onClick={() => setForm({ ...form, type: t })}
+                  onClick={() => setForm({ ...form, type: opt })}
                   style={{
                     flex: 1, padding: "8px 10px", fontSize: 12, fontWeight: 600,
                     borderRadius: 8, cursor: "pointer", fontFamily: "inherit",
-                    background: form.type === t ? "var(--brand)" : "var(--bg-elev-2)",
-                    color: form.type === t ? "#fff" : "var(--text-2)",
-                    border: `1px solid ${form.type === t ? "var(--brand)" : "var(--border-soft)"}`,
+                    background: form.type === opt ? "var(--brand)" : "var(--bg-elev-2)",
+                    color: form.type === opt ? "#fff" : "var(--text-2)",
+                    border: `1px solid ${form.type === opt ? "var(--brand)" : "var(--border-soft)"}`,
                   }}
                 >
-                  {t === "OUTGOING" ? "Referencia (envío)" : "Contrarreferencia (recibo)"}
+                  {opt === "OUTGOING" ? t("patients.referralsTab.typeOutgoing") : t("patients.referralsTab.typeIncoming")}
                 </button>
               ))}
             </div>
           </Field>
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
-            <Field label="Clínica destino *">
-              <input className="input-new" value={form.toClinicName} onChange={(e) => setForm({ ...form, toClinicName: e.target.value })} placeholder="Hospital General de México" />
+            <Field label={t("patients.referralsTab.fieldDestClinic")}>
+              <input className="input-new" value={form.toClinicName} onChange={(e) => setForm({ ...form, toClinicName: e.target.value })} placeholder={t("patients.referralsTab.destClinicPlaceholder")} />
             </Field>
-            <Field label="CLUES (opcional)">
-              <input className="input-new" maxLength={11} value={form.toClinicClues} onChange={(e) => setForm({ ...form, toClinicClues: e.target.value.toUpperCase().trim() })} placeholder="11 chars" />
+            <Field label={t("patients.referralsTab.fieldClues")}>
+              <input className="input-new" maxLength={11} value={form.toClinicClues} onChange={(e) => setForm({ ...form, toClinicClues: e.target.value.toUpperCase().trim() })} placeholder={t("patients.referralsTab.cluesPlaceholder")} />
             </Field>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <Field label="Médico receptor">
-              <input className="input-new" value={form.toDoctorName} onChange={(e) => setForm({ ...form, toDoctorName: e.target.value })} placeholder="Dr/a. nombre" />
+            <Field label={t("patients.referralsTab.fieldReceivingDoctor")}>
+              <input className="input-new" value={form.toDoctorName} onChange={(e) => setForm({ ...form, toDoctorName: e.target.value })} placeholder={t("patients.referralsTab.receivingDoctorPlaceholder")} />
             </Field>
-            <Field label="Especialidad solicitada">
-              <input className="input-new" value={form.toSpecialty} onChange={(e) => setForm({ ...form, toSpecialty: e.target.value })} placeholder="Cardiología, Oncología…" />
+            <Field label={t("patients.referralsTab.fieldSpecialty")}>
+              <input className="input-new" value={form.toSpecialty} onChange={(e) => setForm({ ...form, toSpecialty: e.target.value })} placeholder={t("patients.referralsTab.specialtyPlaceholder")} />
             </Field>
           </div>
-          <Field label="Motivo de la referencia *">
-            <textarea className="input-new" rows={2} value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder="Ej: requiere evaluación cardiológica" style={{ resize: "vertical" }} />
+          <Field label={t("patients.referralsTab.fieldReason")}>
+            <textarea className="input-new" rows={2} value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder={t("patients.referralsTab.reasonPlaceholder")} style={{ resize: "vertical" }} />
           </Field>
-          <Field label="Resumen clínico *">
-            <textarea className="input-new" rows={5} value={form.clinicalSummary} onChange={(e) => setForm({ ...form, clinicalSummary: e.target.value })} placeholder="Antecedentes, evolución, estudios realizados, hallazgos relevantes…" style={{ resize: "vertical" }} />
+          <Field label={t("patients.referralsTab.fieldClinicalSummary")}>
+            <textarea className="input-new" rows={5} value={form.clinicalSummary} onChange={(e) => setForm({ ...form, clinicalSummary: e.target.value })} placeholder={t("patients.referralsTab.clinicalSummaryPlaceholder")} style={{ resize: "vertical" }} />
           </Field>
-          <Field label="Diagnósticos relevantes (CIE-10)">
+          <Field label={t("patients.referralsTab.fieldDiagnoses")}>
             <Cie10Selector diagnoses={dxs} onAdd={addDx} onRemove={removeDx} />
           </Field>
         </div>
         <footer style={{ padding: "14px 20px", borderTop: "1px solid var(--border-soft)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button type="button" onClick={onClose} disabled={submitting} style={btnGhost}>Cancelar</button>
+          <button type="button" onClick={onClose} disabled={submitting} style={btnGhost}>{t("common.cancel")}</button>
           <button type="button" onClick={submit} disabled={submitting} style={btnPrimary}>
-            {submitting ? <><Loader2 size={13} className="animate-spin" /> Enviando…</> : <><Send size={13} /> Crear referencia</>}
+            {submitting ? <><Loader2 size={13} className="animate-spin" /> {t("patients.referralsTab.sending")}</> : <><Send size={13} /> {t("patients.referralsTab.createReferral")}</>}
           </button>
         </footer>
       </div>
