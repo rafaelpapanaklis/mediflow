@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 interface CommandPaletteHintProps {
   onClick: () => void;
@@ -8,6 +9,7 @@ interface CommandPaletteHintProps {
 }
 
 export function CommandPaletteHint({ onClick, compact }: CommandPaletteHintProps) {
+  const t = useT();
   const [isMac, setIsMac] = useState(false);
   const [hovered, setHovered] = useState(false);
 
@@ -21,7 +23,7 @@ export function CommandPaletteHint({ onClick, compact }: CommandPaletteHintProps
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      aria-label={`Abrir búsqueda y comandos (${isMac ? "⌘" : "Ctrl"}+K)`}
+      aria-label={t("shell.cmdHint.ariaOpen", { key: isMac ? "⌘" : "Ctrl" })}
       aria-keyshortcuts="Control+K Meta+K"
       style={{
         display: "inline-flex",
@@ -44,7 +46,7 @@ export function CommandPaletteHint({ onClick, compact }: CommandPaletteHintProps
       {!compact && (
         <>
           <span style={{ flex: 1, textAlign: "left", color: "var(--text-2)" }}>
-            Buscar o ejecutar…
+            {t("shell.cmdHint.searchOrRun")}
           </span>
           <kbd
             style={{

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Sparkles, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
+import { useT } from "@/i18n/i18n-provider";
 
 interface InsightItem {
   id: string;
@@ -37,6 +38,7 @@ const TONE_COLORS: Record<string, { bg: string; border: string; fg: string }> = 
  * Pensado para ir junto a NotificationsPopover en el topbar (reusable).
  */
 export function InsightsPopover() {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<ApiResponse | null>(null);
   const [selected, setSelected] = useState<InsightItem | null>(null);
@@ -123,8 +125,8 @@ export function InsightsPopover() {
         type="button"
         onClick={handleToggleOpen}
         className="icon-btn-new"
-        title="Insights semanales"
-        aria-label={`Insights semanales${unreadCount > 0 ? ` (${unreadCount} sin leer)` : ""}`}
+        title={t("shell.insights.title")}
+        aria-label={unreadCount > 0 ? t("shell.insights.ariaUnread", { count: unreadCount }) : t("shell.insights.title")}
         style={{ position: "relative" }}
       >
         <Sparkles size={14} />
@@ -186,7 +188,7 @@ export function InsightsPopover() {
             }}
           >
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <Sparkles size={13} style={{ color: "var(--brand)" }} aria-hidden /> Insights semanales
+              <Sparkles size={13} style={{ color: "var(--brand)" }} aria-hidden /> {t("shell.insights.title")}
             </span>
             {insights.length > 0 && (
               <Link
@@ -194,14 +196,14 @@ export function InsightsPopover() {
                 onClick={() => setOpen(false)}
                 style={{ fontSize: 11, color: "var(--brand)", textDecoration: "none", fontWeight: 600 }}
               >
-                Ver Analytics →
+                {t("shell.insights.viewAnalytics")} →
               </Link>
             )}
           </div>
           <div style={{ overflowY: "auto", flex: 1 }}>
             {insights.length === 0 ? (
               <div style={{ padding: 32, textAlign: "center", fontSize: 12, color: "var(--text-3)" }}>
-                Aún no hay insights. Los recibirás cada domingo a las 22:00.
+                {t("shell.insights.empty")}
               </div>
             ) : (
               insights.map((ins) => (
@@ -226,7 +228,7 @@ export function InsightsPopover() {
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <strong style={{ fontSize: 12, color: "var(--text-1)", fontWeight: 600 }}>
-                      Semana del {new Date(ins.weekStart).toLocaleDateString("es-MX", { day: "numeric", month: "short" })}
+                      {t("shell.insights.weekOf", { date: new Date(ins.weekStart).toLocaleDateString("es-MX", { day: "numeric", month: "short" }) })}
                     </strong>
                     {!ins.read && (
                       <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--brand)" }} aria-hidden />
@@ -236,7 +238,7 @@ export function InsightsPopover() {
                     {ins.summary}
                   </div>
                   <div style={{ fontSize: 10, color: "var(--text-3)" }}>
-                    {formatDistanceToNow(new Date(ins.createdAt), { addSuffix: true, locale: es })} · {ins.insights.length} bullets
+                    {formatDistanceToNow(new Date(ins.createdAt), { addSuffix: true, locale: es })} · {t("shell.insights.bullets", { count: ins.insights.length })}
                   </div>
                 </button>
               ))
@@ -254,6 +256,7 @@ export function InsightsPopover() {
 }
 
 function InsightDetailModal({ insight, onClose }: { insight: InsightItem; onClose: () => void }) {
+  const t = useT();
   return (
     <div
       role="dialog"
@@ -298,7 +301,7 @@ function InsightDetailModal({ insight, onClose }: { insight: InsightItem; onClos
           <div>
             <h3 id="insight-modal-title" style={{ fontSize: 15, fontWeight: 700, color: "var(--text-1)", margin: 0 }}>
               <Sparkles size={14} style={{ color: "var(--brand)", display: "inline", marginRight: 6 }} aria-hidden />
-              Insight semanal
+              {t("shell.insights.modalTitle")}
             </h3>
             <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4 }}>
               {new Date(insight.weekStart).toLocaleDateString("es-MX", { day: "numeric", month: "long" })}
@@ -309,7 +312,7 @@ function InsightDetailModal({ insight, onClose }: { insight: InsightItem; onClos
           <button
             type="button"
             onClick={onClose}
-            aria-label="Cerrar"
+            aria-label={t("common.close")}
             style={{
               width: 28, height: 28, display: "grid", placeItems: "center",
               background: "transparent", border: "1px solid var(--border-soft)",

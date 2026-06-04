@@ -7,6 +7,7 @@ import {
   trialPillDismissKey,
   type TrialUrgency,
 } from "@/lib/trial";
+import { useT } from "@/i18n/i18n-provider";
 import type { ClinicPlan } from "@/components/dashboard/sidebar";
 
 export interface TrialPillProps {
@@ -73,6 +74,7 @@ export function TrialPill({
   plan,
   onUpgradeClick,
 }: TrialPillProps) {
+  const t = useT();
   const trial = useTrialDaysLeft(trialEndsAt);
 
   const [dismissed, setDismissed] = useState(false);
@@ -106,9 +108,11 @@ export function TrialPill({
   const s = getUrgencyStyle(trial.urgency);
   const isCritical = trial.urgency === "critical";
 
-  const triggerAriaLabel = `Prueba gratis. ${
-    isCritical ? "Vence hoy o pronto" : `Quedan ${trial.days} días.`
-  } Click para ver detalles.`;
+  const triggerAriaLabel = `${t("shell.trialPill.ariaIntro")} ${
+    isCritical
+      ? t("shell.trialPill.ariaExpiresSoon")
+      : t("shell.trialPill.ariaDaysLeft", { count: trial.days })
+  } ${t("shell.trialPill.ariaClickDetails")}`;
 
   return (
     <div
@@ -159,10 +163,10 @@ export function TrialPill({
 
             <span className="mf-trial-pill__label-full">
               {isCritical && trial.hours <= 24 ? (
-                <>Hoy vence</>
+                <>{t("shell.trialPill.expiresToday")}</>
               ) : (
                 <>
-                  Prueba:{" "}
+                  {t("shell.trialPill.trialLabel")}{" "}
                   <strong
                     style={{
                       fontFamily: "var(--font-mono, monospace)",
@@ -173,7 +177,7 @@ export function TrialPill({
                   >
                     {trial.days}
                   </strong>{" "}
-                  día{trial.days === 1 ? "" : "s"}
+                  {t("shell.trialPill.dayUnit", { count: trial.days })}
                 </>
               )}
             </span>
@@ -192,7 +196,7 @@ export function TrialPill({
               >
                 {trial.days}
               </strong>{" "}
-              día{trial.days === 1 ? "" : "s"}
+              {t("shell.trialPill.dayUnit", { count: trial.days })}
             </span>
 
             <span
@@ -260,7 +264,7 @@ export function TrialPill({
                     letterSpacing: "-0.01em",
                   }}
                 >
-                  Prueba gratis · Plan{" "}
+                  {t("shell.trialPill.popoverPlan")}{" "}
                   <span
                     style={{
                       fontFamily: "var(--font-mono, monospace)",
@@ -290,8 +294,8 @@ export function TrialPill({
                   <Clock3 size={11} style={{ color: s.icon }} aria-hidden />
                   <span>
                     {isCritical && trial.hours <= 24
-                      ? `Vence en menos de ${trial.hours} h`
-                      : `Quedan ${trial.days} día${trial.days === 1 ? "" : "s"}`}
+                      ? t("shell.trialPill.expiresInHours", { hours: trial.hours })
+                      : t("shell.trialPill.daysLeftFull", { count: trial.days })}
                   </span>
                 </div>
               </div>
@@ -310,10 +314,10 @@ export function TrialPill({
               }}
             >
               {isCritical
-                ? "Activa tu plan antes de que termine la prueba para no perder acceso a tus datos."
+                ? t("shell.trialPill.bodyCritical")
                 : trial.urgency === "urgent"
-                  ? "Quedan pocos días. Activa tu plan para seguir usando MediFlow sin interrupciones."
-                  : "Activa tu plan cuando quieras. Al terminar la prueba se pausa el acceso."}
+                  ? t("shell.trialPill.bodyUrgent")
+                  : t("shell.trialPill.bodyCalm")}
             </p>
 
             <div
@@ -348,7 +352,7 @@ export function TrialPill({
                 onMouseLeave={(e) => (e.currentTarget.style.background = "var(--brand)")}
               >
                 <ArrowUpRight size={14} />
-                Activar plan ahora
+                {t("shell.trialPill.activateNow")}
               </button>
 
               <Popover.Close asChild>
@@ -380,7 +384,7 @@ export function TrialPill({
                   }}
                 >
                   <BellOff size={13} />
-                  Recordarme mañana
+                  {t("shell.trialPill.remindTomorrow")}
                 </button>
               </Popover.Close>
             </div>
@@ -412,7 +416,7 @@ export function TrialPill({
           }}
           aria-hidden
         >
-          Urgente
+          {t("shell.trialPill.urgentBadge")}
         </span>
       )}
 
@@ -432,7 +436,7 @@ export function TrialPill({
       <button
         type="button"
         onClick={onUpgradeClick}
-        aria-label="Activar plan ahora"
+        aria-label={t("shell.trialPill.activateNow")}
         className="mf-trial-pill__cta"
         style={{
           display: "inline-flex",
@@ -457,7 +461,7 @@ export function TrialPill({
           e.currentTarget.style.background = "transparent";
         }}
       >
-        <span className="mf-trial-pill__cta-label">Activar plan</span>
+        <span className="mf-trial-pill__cta-label">{t("shell.trialPill.activatePlan")}</span>
         <ArrowUpRight size={12} aria-hidden style={{ flexShrink: 0 }} />
       </button>
     </div>

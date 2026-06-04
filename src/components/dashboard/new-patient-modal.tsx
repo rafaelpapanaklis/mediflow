@@ -5,6 +5,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { DateField } from "@/components/ui/date-field";
 import toast from "react-hot-toast";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Props {
   open: boolean;
@@ -35,6 +36,7 @@ function splitName(full: string): { firstName: string; lastName: string } {
 }
 
 export function NewPatientModal({ open, onClose, onCreated, initialName, initialPhone, initialEmail }: Props) {
+  const t = useT();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState<Record<string, boolean>>({});
@@ -70,15 +72,15 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
     if (!form.gender) newErrors.gender = true;
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
-      toast.error("Completa los campos obligatorios marcados en rojo");
+      toast.error(t("shell.newPatient.errRequiredFields"));
       return;
     }
     if (form.curpStatus === "COMPLETE") {
-      if (!form.curp) { toast.error("CURP requerido (o marca 'no la tengo' / 'extranjero')"); return; }
-      if (!CURP_RE.test(form.curp.toUpperCase())) { toast.error("CURP con formato inválido"); return; }
+      if (!form.curp) { toast.error(t("shell.newPatient.errCurpRequired")); return; }
+      if (!CURP_RE.test(form.curp.toUpperCase())) { toast.error(t("shell.newPatient.errCurpFormat")); return; }
     }
     if (form.curpStatus === "FOREIGN" && !form.passportNo) {
-      toast.error("Pasaporte requerido para pacientes extranjeros");
+      toast.error(t("shell.newPatient.errPassportRequired"));
       return;
     }
     setLoading(true);
@@ -87,7 +89,7 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
       if (dupeCheck.ok) {
         const existing = await dupeCheck.json();
         if (Array.isArray(existing) && existing.length > 0) {
-          const confirmed = window.confirm(`Ya existe un paciente con nombre "${form.firstName} ${form.lastName}". ¿Deseas crear otro de todos modos?`);
+          const confirmed = window.confirm(t("shell.newPatient.confirmDuplicate", { name: `${form.firstName} ${form.lastName}` }));
           if (!confirmed) { setLoading(false); return; }
         }
       }
@@ -107,9 +109,9 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
       const patient = await res.json();
       onCreated(patient);
       setForm(emptyForm);
-      toast.success(`Paciente ${patient.firstName} creado`);
+      toast.success(t("shell.newPatient.created", { name: patient.firstName }));
     } catch (err: any) {
-      toast.error(err.message ?? "Error al crear paciente");
+      toast.error(err.message ?? t("shell.newPatient.errCreate"));
     } finally { setLoading(false); }
   }
 
@@ -141,11 +143,11 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
             overflow: "hidden",
           }}
         >
-          <Dialog.Title className="modal__title" style={{ display: "none" }}>Nuevo paciente</Dialog.Title>
+          <Dialog.Title className="modal__title" style={{ display: "none" }}>{t("shell.newPatient.title")}</Dialog.Title>
           <div className="modal__header" style={{ flexShrink: 0 }}>
-            <div className="modal__title">Nuevo paciente</div>
+            <div className="modal__title">{t("shell.newPatient.title")}</div>
             <Dialog.Close asChild>
-              <button type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label="Cerrar">
+              <button type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label={t("common.close")}>
                 <X size={14} />
               </button>
             </Dialog.Close>
@@ -156,29 +158,29 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
             {/* Sección: Identidad */}
             <div style={{ marginBottom: 22 }}>
               <div className="form-section__title">
-                Identidad
+                {t("shell.newPatient.sectionIdentity")}
                 <span className="form-section__rule" />
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
                 <div className="field-new">
-                  <label className="field-new__label">Nombre <span className="req">*</span></label>
+                  <label className="field-new__label">{t("shell.newPatient.firstName")} <span className="req">*</span></label>
                   <input className="input-new" placeholder="Ana" value={form.firstName} onChange={e => set("firstName", e.target.value)} style={{ borderColor: errors.firstName ? '#ef4444' : undefined }} />
                 </div>
                 <div className="field-new">
-                  <label className="field-new__label">Apellido <span className="req">*</span></label>
+                  <label className="field-new__label">{t("shell.newPatient.lastName")} <span className="req">*</span></label>
                   <input className="input-new" placeholder="García" value={form.lastName} onChange={e => set("lastName", e.target.value)} style={{ borderColor: errors.lastName ? '#ef4444' : undefined }} />
                 </div>
                 <div className="field-new">
-                  <label className="field-new__label">Fecha de nacimiento <span className="req">*</span></label>
+                  <label className="field-new__label">{t("shell.newPatient.dob")} <span className="req">*</span></label>
                   <DateField className="input-new" value={form.dob} onChange={e => set("dob", e.target.value)} style={{ borderColor: errors.dob ? '#ef4444' : undefined }} />
                 </div>
                 <div className="field-new">
-                  <label className="field-new__label">Género <span className="req">*</span></label>
+                  <label className="field-new__label">{t("shell.newPatient.gender")} <span className="req">*</span></label>
                   <select className="input-new" value={form.gender} onChange={e => set("gender", e.target.value)} style={{ borderColor: errors.gender ? '#ef4444' : undefined }}>
-                    <option value="">Seleccionar…</option>
-                    <option value="M">Masculino</option>
-                    <option value="F">Femenino</option>
-                    <option value="OTHER">Otro</option>
+                    <option value="">{t("shell.newPatient.selectOption")}</option>
+                    <option value="M">{t("shell.newPatient.genderMale")}</option>
+                    <option value="F">{t("shell.newPatient.genderFemale")}</option>
+                    <option value="OTHER">{t("shell.newPatient.genderOther")}</option>
                   </select>
                 </div>
               </div>
@@ -187,14 +189,14 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
             {/* Sección: Identificación oficial — NOM-024 */}
             <div style={{ marginBottom: 22 }}>
               <div className="form-section__title">
-                Identificación oficial
+                {t("shell.newPatient.sectionOfficialId")}
                 <span className="form-section__rule" />
               </div>
               <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
                 {([
-                  { id: "COMPLETE", label: "Tengo CURP" },
-                  { id: "PENDING",  label: "No la tengo ahora" },
-                  { id: "FOREIGN",  label: "Extranjero" },
+                  { id: "COMPLETE", label: t("shell.newPatient.curpHave") },
+                  { id: "PENDING",  label: t("shell.newPatient.curpNotNow") },
+                  { id: "FOREIGN",  label: t("shell.newPatient.curpForeign") },
                 ] as const).map((opt) => (
                   <button
                     key={opt.id}
@@ -224,7 +226,7 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
               )}
               {form.curpStatus === "FOREIGN" && (
                 <div className="field-new">
-                  <label className="field-new__label">Pasaporte <span className="req">*</span></label>
+                  <label className="field-new__label">{t("shell.newPatient.passport")} <span className="req">*</span></label>
                   <input
                     className="input-new"
                     placeholder="A12345678"
@@ -236,7 +238,7 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
               )}
               {form.curpStatus === "PENDING" && (
                 <div style={{ fontSize: 11, color: "var(--text-3)", padding: "6px 4px" }}>
-                  Marca como pendiente. Recordá pedirle el CURP al paciente en la primera visita.
+                  {t("shell.newPatient.curpPendingHint")}
                 </div>
               )}
             </div>
@@ -244,21 +246,21 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
             {/* Sección: Contacto */}
             <div style={{ marginBottom: 22 }}>
               <div className="form-section__title">
-                Contacto
+                {t("shell.newPatient.sectionContact")}
                 <span className="form-section__rule" />
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
                 <div className="field-new">
-                  <label className="field-new__label">Email</label>
+                  <label className="field-new__label">{t("shell.newPatient.email")}</label>
                   <input className="input-new" type="email" placeholder="ana@email.com" value={form.email} onChange={e => set("email", e.target.value)} />
                 </div>
                 <div className="field-new">
-                  <label className="field-new__label">Teléfono <span className="req">*</span></label>
+                  <label className="field-new__label">{t("shell.newPatient.phone")} <span className="req">*</span></label>
                   <input className="input-new" placeholder="+52 55…" value={form.phone} onChange={e => set("phone", e.target.value)} style={{ borderColor: errors.phone ? '#ef4444' : undefined }} />
                 </div>
                 <div className="field-new" style={{ gridColumn: "1 / -1" }}>
-                  <label className="field-new__label">Dirección</label>
-                  <input className="input-new" placeholder="Calle, colonia, ciudad" value={form.address} onChange={e => set("address", e.target.value)} />
+                  <label className="field-new__label">{t("shell.newPatient.address")}</label>
+                  <input className="input-new" placeholder={t("shell.newPatient.addressPlaceholder")} value={form.address} onChange={e => set("address", e.target.value)} />
                 </div>
               </div>
             </div>
@@ -266,11 +268,11 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
             {/* Sección: Tipo + Clínico */}
             <div style={{ marginBottom: 6 }}>
               <div className="form-section__title">
-                Perfil clínico
+                {t("shell.newPatient.sectionClinical")}
                 <span className="form-section__rule" />
               </div>
               <div className="field-new" style={{ marginBottom: 12 }}>
-                <label className="field-new__label">Tipo de paciente</label>
+                <label className="field-new__label">{t("shell.newPatient.patientType")}</label>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button
                     type="button"
@@ -278,7 +280,7 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
                     className={`btn-new ${!form.isChild ? "btn-new--primary" : "btn-new--secondary"}`}
                     style={{ flex: 1, justifyContent: "center" }}
                   >
-                    Adulto
+                    {t("shell.newPatient.typeAdult")}
                   </button>
                   <button
                     type="button"
@@ -286,12 +288,12 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
                     className={`btn-new ${form.isChild ? "btn-new--primary" : "btn-new--secondary"}`}
                     style={{ flex: 1, justifyContent: "center" }}
                   >
-                    Niño (dentición temporal)
+                    {t("shell.newPatient.typeChild")}
                   </button>
                 </div>
               </div>
               <div className="field-new" style={{ marginBottom: 12 }}>
-                <label className="field-new__label">Alergias (separadas por coma) <span className="req">*</span></label>
+                <label className="field-new__label">{t("shell.newPatient.allergiesLabel")} <span className="req">*</span></label>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
                   <input
                     type="checkbox"
@@ -305,12 +307,12 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
                     }}
                   />
                   <label htmlFor="no-allergies" style={{ fontSize: 12, color: "var(--text-2)", cursor: "pointer" }}>
-                    N/A (no presenta alergias)
+                    {t("shell.newPatient.noAllergies")}
                   </label>
                 </div>
                 <input
                   className="input-new"
-                  placeholder="Penicilina, Látex…"
+                  placeholder={t("shell.newPatient.allergiesPlaceholder")}
                   value={form.allergies}
                   onChange={e => set("allergies", e.target.value)}
                   disabled={noAllergies}
@@ -318,11 +320,11 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
                 />
               </div>
               <div className="field-new">
-                <label className="field-new__label">Notas</label>
+                <label className="field-new__label">{t("common.notes")}</label>
                 <textarea
                   className="input-new"
                   style={{ height: 64, paddingTop: 8, resize: "vertical" }}
-                  placeholder="Motivo de consulta, antecedentes…"
+                  placeholder={t("shell.newPatient.notesPlaceholder")}
                   value={form.notes}
                   onChange={e => set("notes", e.target.value)}
                 />
@@ -331,9 +333,9 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
           </div>
 
           <div className="modal__footer" style={{ flexShrink: 0 }}>
-            <ButtonNew variant="ghost" onClick={onClose} type="button">Cancelar</ButtonNew>
+            <ButtonNew variant="ghost" onClick={onClose} type="button">{t("common.cancel")}</ButtonNew>
             <ButtonNew variant="primary" type="submit" disabled={loading}>
-              {loading ? "Guardando…" : "Crear paciente"}
+              {loading ? t("common.saving") : t("shell.newPatient.createPatient")}
             </ButtonNew>
           </div>
         </form>

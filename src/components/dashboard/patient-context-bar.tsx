@@ -16,9 +16,12 @@ import {
 import { useActiveConsult } from "@/hooks/use-active-consult";
 import { AlergiesPopover } from "./alergies-popover";
 import { PatientContextEndModal } from "./patient-context-end-modal";
+import { useT } from "@/i18n/i18n-provider";
+import type { TFunction } from "@/i18n/t";
 
 export function PatientContextBar() {
   const router = useRouter();
+  const t = useT();
   const { consult, elapsedSeconds, loading } = useActiveConsult();
   const [endModalOpen, setEndModalOpen] = useState(false);
 
@@ -39,13 +42,13 @@ export function PatientContextBar() {
     (consult.patientAlerts.medications?.length ?? 0) +
     (consult.patientAlerts.conditions?.length ?? 0);
 
-  const actions = buildActions(router, consult.patientId, () => setEndModalOpen(true));
+  const actions = buildActions(t, router, consult.patientId, () => setEndModalOpen(true));
 
   return (
     <>
       <div
         role="region"
-        aria-label={`Consulta activa con ${consult.patientName}`}
+        aria-label={t("shell.patientContextBar.regionLabel", { name: consult.patientName })}
         className="mf-context-bar"
         style={{
           position: "sticky",
@@ -90,7 +93,7 @@ export function PatientContextBar() {
               flexShrink: 0,
             }}
           >
-            En consulta
+            {t("shell.patientContextBar.inConsult")}
           </span>
           <span
             aria-hidden
@@ -105,7 +108,7 @@ export function PatientContextBar() {
             <button
               type="button"
               onClick={() => router.push(`/dashboard/patients/${consult.patientId}`)}
-              aria-label={`Ver expediente de ${consult.patientName}`}
+              aria-label={t("shell.patientContextBar.viewRecord", { name: consult.patientName })}
               style={{
                 background: "transparent", border: "none", padding: 0,
                 cursor: "pointer",
@@ -141,7 +144,7 @@ export function PatientContextBar() {
                 trigger={
                   <button
                     type="button"
-                    aria-label={`${totalAlerts} alerta${totalAlerts === 1 ? "" : "s"} médica${totalAlerts === 1 ? "" : "s"}. Abrir detalles.`}
+                    aria-label={t("shell.patientContextBar.alertsAria", { count: totalAlerts })}
                     style={{
                       display: "inline-flex", alignItems: "center", gap: 4,
                       height: 24, padding: "0 8px", borderRadius: 20,
@@ -158,7 +161,7 @@ export function PatientContextBar() {
                   >
                     <AlertTriangle size={11} style={{ flexShrink: 0 }} aria-hidden />
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      Alergia: {firstAllergy}
+                      {t("shell.patientContextBar.allergyPrefix")} {firstAllergy}
                       {totalAlerts > 1 ? ` +${totalAlerts - 1}` : ""}
                     </span>
                   </button>
@@ -172,7 +175,7 @@ export function PatientContextBar() {
         <div
           className="mf-ctx-bar__timer"
           aria-live="off"
-          aria-label={`Tiempo de consulta: ${timerText}`}
+          aria-label={t("shell.patientContextBar.timerAria", { time: timerText })}
           style={{
             fontFamily: "var(--font-mono, monospace)",
             fontSize: 13, fontWeight: 500,
@@ -214,7 +217,7 @@ export function PatientContextBar() {
             <DropdownMenu.Trigger asChild>
               <button
                 type="button"
-                aria-label="Más acciones"
+                aria-label={t("shell.patientContextBar.moreActions")}
                 style={{
                   width: 32, height: 32,
                   display: "grid", placeItems: "center",
@@ -293,29 +296,30 @@ interface ActionDef {
 }
 
 function buildActions(
+  t: TFunction,
   router: ReturnType<typeof useRouter>,
   patientId: string,
   openEndModal: () => void,
 ): { main: ActionDef[]; end: ActionDef } {
   const main: ActionDef[] = [
-    { id: "soap", label: "Nota SOAP", ariaLabel: "Iniciar nueva nota SOAP",
+    { id: "soap", label: t("shell.patientContextBar.soapLabel"), ariaLabel: t("shell.patientContextBar.soapAria"),
       Icon: Stethoscope,
       run: () => router.push(`/dashboard/patients/${patientId}?tab=soap&new=1`) },
-    { id: "prescribe", label: "Receta", ariaLabel: "Generar receta",
+    { id: "prescribe", label: t("shell.patientContextBar.prescribeLabel"), ariaLabel: t("shell.patientContextBar.prescribeAria"),
       Icon: FlaskConical,
       run: () => router.push(`/dashboard/patients/${patientId}?prescribe=1`) },
-    { id: "xray", label: "Radiografía", ariaLabel: "Subir o ver radiografías",
+    { id: "xray", label: t("shell.patientContextBar.xrayLabel"), ariaLabel: t("shell.patientContextBar.xrayAria"),
       Icon: Camera,
       run: () => router.push(`/dashboard/xrays?patient=${patientId}`) },
-    { id: "charge", label: "Cobrar", ariaLabel: "Registrar cobro",
+    { id: "charge", label: t("shell.patientContextBar.chargeLabel"), ariaLabel: t("shell.patientContextBar.chargeAria"),
       Icon: CreditCard,
       run: () => router.push(`/dashboard/patients/${patientId}?charge=1`) },
-    { id: "ai", label: "IA asistente", ariaLabel: "Consultar IA con contexto",
+    { id: "ai", label: t("shell.patientContextBar.aiLabel"), ariaLabel: t("shell.patientContextBar.aiAria"),
       Icon: Sparkles, tone: "brand",
       run: () => router.push(`/dashboard/ai-assistant?patient=${patientId}`) },
   ];
   const end: ActionDef = {
-    id: "end", label: "Terminar consulta", ariaLabel: "Terminar consulta",
+    id: "end", label: t("shell.patientContextBar.endLabel"), ariaLabel: t("shell.patientContextBar.endAria"),
     Icon: XCircle, tone: "danger", run: openEndModal,
   };
   return { main, end };

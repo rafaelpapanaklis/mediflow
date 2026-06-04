@@ -1,6 +1,7 @@
 "use client";
 import * as Popover from "@radix-ui/react-popover";
 import { AlertTriangle, Pill, Heart, type LucideIcon } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 interface AlergiesPopoverProps {
   trigger: React.ReactNode;
@@ -12,6 +13,7 @@ interface AlergiesPopoverProps {
 }
 
 export function AlergiesPopover({ trigger, alerts }: AlergiesPopoverProps) {
+  const t = useT();
   const hasAllergies = (alerts.allergies?.length ?? 0) > 0;
   const hasMeds = (alerts.medications?.length ?? 0) > 0;
   const hasConditions = (alerts.conditions?.length ?? 0) > 0;
@@ -50,12 +52,12 @@ export function AlergiesPopover({ trigger, alerts }: AlergiesPopoverProps) {
               marginBottom: 10,
             }}
           >
-            Alertas médicas
+            {t("shell.alergiesPopover.title")}
           </div>
 
           {!hasAny && (
             <div style={{ fontSize: 12, color: "var(--text-2)", padding: "4px 0" }}>
-              Sin alertas registradas.
+              {t("shell.alergiesPopover.empty")}
             </div>
           )}
 
@@ -63,7 +65,7 @@ export function AlergiesPopover({ trigger, alerts }: AlergiesPopoverProps) {
             <AlertsSection
               Icon={AlertTriangle}
               color="var(--danger)"
-              title="Alergias"
+              title={t("shell.alergiesPopover.allergies")}
               items={alerts.allergies!}
             />
           )}
@@ -71,7 +73,7 @@ export function AlergiesPopover({ trigger, alerts }: AlergiesPopoverProps) {
             <AlertsSection
               Icon={Pill}
               color="var(--warning)"
-              title="Medicamentos activos"
+              title={t("shell.alergiesPopover.activeMeds")}
               items={alerts.medications!}
             />
           )}
@@ -79,7 +81,7 @@ export function AlergiesPopover({ trigger, alerts }: AlergiesPopoverProps) {
             <AlertsSection
               Icon={Heart}
               color="var(--info)"
-              title="Condiciones"
+              title={t("shell.alergiesPopover.conditions")}
               items={alerts.conditions!}
             />
           )}
@@ -94,7 +96,7 @@ export function AlergiesPopover({ trigger, alerts }: AlergiesPopoverProps) {
               lineHeight: 1.5,
             }}
           >
-            Fuente: expediente del paciente. Verifica antes de cualquier prescripción.
+            {t("shell.alergiesPopover.source")}
           </div>
 
           <Popover.Arrow width={10} height={5} style={{ fill: "var(--bg-elev)" }} />

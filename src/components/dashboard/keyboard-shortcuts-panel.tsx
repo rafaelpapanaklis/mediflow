@@ -2,52 +2,55 @@
 import { useEffect } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 interface ShortcutRow {
   keys: string[];
-  label: string;
+  /** Translation key resolved via t() at render time. */
+  labelKey: string;
 }
 
 interface ShortcutSection {
-  title: string;
+  /** Translation key resolved via t() at render time. */
+  titleKey: string;
   rows: ShortcutRow[];
 }
 
 const SECTIONS: ShortcutSection[] = [
   {
-    title: "General",
+    titleKey: "shell.shortcuts.secGeneral",
     rows: [
-      { keys: ["⌘", "K"], label: "Abrir búsqueda / comandos" },
-      { keys: ["?"], label: "Abrir esta ventana de atajos" },
-      { keys: ["esc"], label: "Cerrar modal / panel" },
+      { keys: ["⌘", "K"], labelKey: "shell.shortcuts.openSearch" },
+      { keys: ["?"], labelKey: "shell.shortcuts.openThisPanel" },
+      { keys: ["esc"], labelKey: "shell.shortcuts.closeModal" },
     ],
   },
   {
-    title: "Ir a…",
+    titleKey: "shell.shortcuts.secGoTo",
     rows: [
-      { keys: ["G", "H"], label: "Hoy (home)" },
-      { keys: ["G", "A"], label: "Agenda" },
-      { keys: ["G", "P"], label: "Pacientes" },
-      { keys: ["G", "M"], label: "Mensajes" },
-      { keys: ["G", "F"], label: "Facturación" },
-      { keys: ["G", "R"], label: "Radiografías" },
-      { keys: ["G", "I"], label: "IA asistente" },
-      { keys: ["G", "S"], label: "Configuración" },
+      { keys: ["G", "H"], labelKey: "shell.shortcuts.goHome" },
+      { keys: ["G", "A"], labelKey: "shell.shortcuts.goAgenda" },
+      { keys: ["G", "P"], labelKey: "shell.shortcuts.goPatients" },
+      { keys: ["G", "M"], labelKey: "shell.shortcuts.goMessages" },
+      { keys: ["G", "F"], labelKey: "shell.shortcuts.goBilling" },
+      { keys: ["G", "R"], labelKey: "shell.shortcuts.goXrays" },
+      { keys: ["G", "I"], labelKey: "shell.shortcuts.goAiAssistant" },
+      { keys: ["G", "S"], labelKey: "shell.shortcuts.goSettings" },
     ],
   },
   {
-    title: "Crear",
+    titleKey: "shell.shortcuts.secCreate",
     rows: [
-      { keys: ["C"], label: "Nueva cita" },
-      { keys: ["N"], label: "Nuevo paciente" },
-      { keys: ["I"], label: "Nueva factura" },
-      { keys: ["S"], label: "Nota SOAP del paciente activo" },
+      { keys: ["C"], labelKey: "shell.shortcuts.newAppointment" },
+      { keys: ["N"], labelKey: "shell.shortcuts.newPatient" },
+      { keys: ["I"], labelKey: "shell.shortcuts.newInvoice" },
+      { keys: ["S"], labelKey: "shell.shortcuts.soapNote" },
     ],
   },
   {
-    title: "Sistema",
+    titleKey: "shell.shortcuts.secSystem",
     rows: [
-      { keys: ["T"], label: "Alternar tema claro / oscuro" },
+      { keys: ["T"], labelKey: "shell.shortcuts.toggleTheme" },
     ],
   },
 ];
@@ -58,6 +61,7 @@ interface KeyboardShortcutsPanelProps {
 }
 
 export function KeyboardShortcutsPanel({ open, onOpenChange }: KeyboardShortcutsPanelProps) {
+  const t = useT();
   useEffect(() => {
     const isTypingContext = () => {
       const el = document.activeElement as HTMLElement | null;
@@ -135,16 +139,16 @@ export function KeyboardShortcutsPanel({ open, onOpenChange }: KeyboardShortcuts
                   margin: 0,
                 }}
               >
-                Atajos de teclado
+                {t("shell.shortcuts.title")}
               </Dialog.Title>
               <Dialog.Description
                 style={{ fontSize: 11, color: "var(--text-2)", marginTop: 4 }}
               >
-                Acelera tu trabajo sin tocar el mouse.
+                {t("shell.shortcuts.subtitle")}
               </Dialog.Description>
             </div>
             <Dialog.Close
-              aria-label="Cerrar"
+              aria-label={t("common.close")}
               style={{
                 width: 28,
                 height: 28,
@@ -166,7 +170,7 @@ export function KeyboardShortcutsPanel({ open, onOpenChange }: KeyboardShortcuts
             className="scrollbar-thin"
           >
             {SECTIONS.map((sec) => (
-              <section key={sec.title} style={{ marginTop: 16 }}>
+              <section key={sec.titleKey} style={{ marginTop: 16 }}>
                 <h3
                   style={{
                     fontSize: 10,
@@ -178,7 +182,7 @@ export function KeyboardShortcutsPanel({ open, onOpenChange }: KeyboardShortcuts
                     fontFamily: "var(--font-sans, system-ui, sans-serif)",
                   }}
                 >
-                  {sec.title}
+                  {t(sec.titleKey)}
                 </h3>
                 <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
                   {sec.rows.map((row, i) => (
@@ -193,7 +197,7 @@ export function KeyboardShortcutsPanel({ open, onOpenChange }: KeyboardShortcuts
                           i < sec.rows.length - 1 ? "1px solid var(--border-soft)" : "none",
                       }}
                     >
-                      <span style={{ fontSize: 13, color: "var(--text-1)" }}>{row.label}</span>
+                      <span style={{ fontSize: 13, color: "var(--text-1)" }}>{t(row.labelKey)}</span>
                       <span style={{ display: "inline-flex", gap: 4, flexShrink: 0, marginLeft: 12 }}>
                         {row.keys.map((k, j) => (
                           <kbd
@@ -232,9 +236,9 @@ export function KeyboardShortcutsPanel({ open, onOpenChange }: KeyboardShortcuts
                 lineHeight: 1.6,
               }}
             >
-              Los atajos de una sola letra (C, N, I, T, S) solo funcionan cuando no
-              estás escribiendo en un campo. <InlineKbd>⌘</InlineKbd> equivale a{" "}
-              <InlineKbd>Ctrl</InlineKbd> en Windows.
+              {t("shell.shortcuts.footnoteLead")} <InlineKbd>⌘</InlineKbd>{" "}
+              {t("shell.shortcuts.footnoteEquals")} <InlineKbd>Ctrl</InlineKbd>{" "}
+              {t("shell.shortcuts.footnoteOnWindows")}
             </p>
           </div>
         </Dialog.Content>

@@ -16,40 +16,43 @@ import { useActiveConsult } from "@/hooks/use-active-consult";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { useNewPatientDialog } from "@/components/dashboard/new-patient/new-patient-provider";
 import { useGoToShortcuts, useCreateShortcuts } from "@/lib/command-palette/shortcuts";
+import { useT } from "@/i18n/i18n-provider";
 import type { ClinicPlan } from "./sidebar";
 
+// Mapa ruta -> clave de traducción. El valor visible se resuelve con t() en
+// tiempo de render (resolveCurrentLabel recibe la t del componente).
 const ROUTE_LABELS: Record<string, string> = {
-  "/dashboard":               "Hoy",
-  "/dashboard/agenda":        "Agenda",
-  "/dashboard/appointments":  "Agenda",
-  "/dashboard/patients":      "Pacientes",
-  "/dashboard/whatsapp":      "Mensajes",
-  "/dashboard/ai-assistant":  "IA asistente",
-  "/dashboard/xrays":         "Radiografías",
-  "/dashboard/before-after":  "Antes/Después",
-  "/dashboard/formulas":      "Fórmulas",
-  "/dashboard/exercises":     "Ejercicios",
-  "/dashboard/orthotics":     "Ortesis",
-  "/dashboard/packages":      "Paquetes",
-  "/dashboard/resources":         "Recursos",
-  "/dashboard/resource-bookings": "Reservas legacy",
-  "/dashboard/inventory":     "Inventario",
-  "/dashboard/billing":       "Facturación",
-  "/dashboard/reports":       "Reportes",
-  "/dashboard/team":          "Equipo",
-  "/dashboard/landing":       "Página web",
-  "/dashboard/procedures":    "Procedimientos",
-  "/dashboard/settings":      "Configuración",
+  "/dashboard":               "shell.topbar.routeHoy",
+  "/dashboard/agenda":        "shell.topbar.routeAgenda",
+  "/dashboard/appointments":  "shell.topbar.routeAgenda",
+  "/dashboard/patients":      "shell.topbar.routePacientes",
+  "/dashboard/whatsapp":      "shell.topbar.routeMensajes",
+  "/dashboard/ai-assistant":  "shell.topbar.routeIaAsistente",
+  "/dashboard/xrays":         "shell.topbar.routeRadiografias",
+  "/dashboard/before-after":  "shell.topbar.routeAntesDespues",
+  "/dashboard/formulas":      "shell.topbar.routeFormulas",
+  "/dashboard/exercises":     "shell.topbar.routeEjercicios",
+  "/dashboard/orthotics":     "shell.topbar.routeOrtesis",
+  "/dashboard/packages":      "shell.topbar.routePaquetes",
+  "/dashboard/resources":         "shell.topbar.routeRecursos",
+  "/dashboard/resource-bookings": "shell.topbar.routeReservasLegacy",
+  "/dashboard/inventory":     "shell.topbar.routeInventario",
+  "/dashboard/billing":       "shell.topbar.routeFacturacion",
+  "/dashboard/reports":       "shell.topbar.routeReportes",
+  "/dashboard/team":          "shell.topbar.routeEquipo",
+  "/dashboard/landing":       "shell.topbar.routePaginaWeb",
+  "/dashboard/procedures":    "shell.topbar.routeProcedimientos",
+  "/dashboard/settings":      "shell.topbar.routeConfiguracion",
 };
 
-function resolveCurrentLabel(pathname: string | null): string {
-  if (!pathname) return "Hoy";
+function resolveCurrentLabelKey(pathname: string | null): string {
+  if (!pathname) return "shell.topbar.routeHoy";
   if (ROUTE_LABELS[pathname]) return ROUTE_LABELS[pathname];
   const match = Object.keys(ROUTE_LABELS)
     .filter((k) => k !== "/dashboard" && pathname.startsWith(`${k}/`))
     .sort((a, b) => b.length - a.length)[0];
   if (match) return ROUTE_LABELS[match];
-  return "Hoy";
+  return "shell.topbar.routeHoy";
 }
 
 type UserRole = "SUPER_ADMIN" | "ADMIN" | "DOCTOR" | "RECEPTIONIST" | "READONLY" | "ACCOUNTANT";
@@ -69,11 +72,12 @@ export function Topbar({
   plan,
   userRole,
 }: TopbarProps) {
+  const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const crumbs = useMemo(
-    () => [clinicName, resolveCurrentLabel(pathname)],
-    [clinicName, pathname],
+    () => [clinicName, t(resolveCurrentLabelKey(pathname))],
+    [clinicName, pathname, t],
   );
   const { open: paletteOpen, setOpen: setPaletteOpen } = useCommandPalette();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -92,7 +96,7 @@ export function Topbar({
       if (consult) {
         router.push(`/dashboard/patients/${consult.patientId}?tab=soap&new=1`);
       } else {
-        toast("Inicia una consulta primero", { icon: "ℹ️" });
+        toast(t("shell.topbar.startConsultFirst"), { icon: "ℹ️" });
       }
     },
     onToggleTheme: () => {
@@ -108,7 +112,7 @@ export function Topbar({
       <div className="topbar-new">
         <button
           type="button"
-          aria-label="Abrir navegación"
+          aria-label={t("shell.topbar.openNav")}
           onClick={() => window.dispatchEvent(new CustomEvent("mf:open-mobile-sidebar"))}
           className="lg:hidden"
           style={{

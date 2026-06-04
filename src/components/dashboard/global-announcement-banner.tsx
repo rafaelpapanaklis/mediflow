@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Announcement {
   id: string;
@@ -32,6 +33,7 @@ function saveDismissed(ids: string[]) {
 }
 
 export function GlobalAnnouncementBanner() {
+  const t = useT();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [dismissed, setDismissed] = useState<string[]>([]);
 
@@ -62,7 +64,7 @@ export function GlobalAnnouncementBanner() {
             <button
               onClick={() => dismiss(a.id)}
               className="flex-shrink-0 p-1 rounded hover:bg-black/20 transition-colors"
-              aria-label="Descartar anuncio"
+              aria-label={t("shell.announcementBanner.dismiss")}
             >
               <X className="w-4 h-4" />
             </button>

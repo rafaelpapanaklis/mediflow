@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 const SUSPENDED_PATH = "/dashboard/suspended";
 
@@ -38,6 +39,7 @@ interface Props {
  * component.
  */
 export function ExpiredPlanModal({ isExpired, currentPathname }: Props) {
+  const t = useT();
   const livePathname = usePathname();
   const pathname = livePathname ?? currentPathname;
   const [mounted, setMounted] = useState(false);
@@ -92,15 +94,14 @@ export function ExpiredPlanModal({ isExpired, currentPathname }: Props) {
           id="expired-plan-title"
           className="mb-3 text-center text-2xl font-extrabold tracking-tight md:text-3xl"
         >
-          Tu plan expiró
+          {t("shell.expiredPlanModal.title")}
         </h2>
         <p
           id="expired-plan-desc"
           className="mb-6 text-center text-base"
           style={{ color: "hsl(var(--muted-foreground))" }}
         >
-          Tu acceso al panel está bloqueado. Para seguir usando MediFlow
-          renueva tu plan.
+          {t("shell.expiredPlanModal.desc")}
         </p>
         <Link
           href={SUSPENDED_PATH}
@@ -110,7 +111,7 @@ export function ExpiredPlanModal({ isExpired, currentPathname }: Props) {
             boxShadow: "0 10px 30px -8px rgba(124, 58, 237, 0.4)",
           }}
         >
-          Renovar plan →
+          {t("shell.expiredPlanModal.renew")}
         </Link>
       </div>
     </div>

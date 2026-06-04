@@ -13,6 +13,7 @@
 import Link from "next/link";
 import { Clock, Lock } from "lucide-react";
 import { useTrialDaysLeft } from "@/lib/trial";
+import { useT } from "@/i18n/i18n-provider";
 
 interface TrialSidebarStatusProps {
   trialEndsAt: Date | string | null;
@@ -27,6 +28,7 @@ export function TrialSidebarStatus({
   isInTrial,
   collapsed = false,
 }: TrialSidebarStatusProps) {
+  const t = useT();
   const trial = useTrialDaysLeft(trialEndsAt);
 
   if (trial.absent) return null;
@@ -77,7 +79,7 @@ export function TrialSidebarStatus({
     return (
       <Link
         href="/dashboard/marketplace"
-        aria-label={expired ? "Prueba expirada — ir al marketplace" : `Prueba: ${days} días restantes — ir al marketplace`}
+        aria-label={expired ? t("shell.trialSidebar.ariaExpired") : t("shell.trialSidebar.ariaDaysLeft", { count: days })}
         className={`mx-auto mt-2 mb-2 flex h-8 w-8 items-center justify-center rounded-lg ${palette.bg} ${palette.border} border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]`}
       >
         {expired ? (
@@ -102,12 +104,12 @@ export function TrialSidebarStatus({
         )}
         <div className={`text-xs font-semibold ${palette.title}`}>
           {expired
-            ? "Prueba expirada"
-            : `Trial · ${days}d ${days === 1 ? "restante" : "restantes"}`}
+            ? t("shell.trialSidebar.expiredTitle")
+            : t("shell.trialSidebar.daysLeftTitle", { count: days })}
         </div>
       </div>
       <div className={`text-xs ${palette.body}`}>
-        {expired ? "Compra módulos para continuar" : "Acceso completo a todo"}
+        {expired ? t("shell.trialSidebar.bodyExpired") : t("shell.trialSidebar.bodyActive")}
       </div>
     </Link>
   );

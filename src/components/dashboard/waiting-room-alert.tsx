@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 /**
  * WaitingRoomAlert — pill que el dashboard layout/topbar puede renderizar
@@ -16,6 +17,7 @@ import { AlertTriangle } from "lucide-react";
  * Renderizado condicional: si longWaits.length === 0, devuelve null.
  */
 export function WaitingRoomAlert() {
+  const t = useT();
   const [count, setCount] = useState(0);
   const [threshold, setThreshold] = useState(20);
 
@@ -75,10 +77,10 @@ export function WaitingRoomAlert() {
         textDecoration: "none",
         animation: "wrPulse 1.6s ease-in-out infinite",
       }}
-      title={`${count} paciente${count === 1 ? "" : "s"} esperando más de ${threshold} min — click para ver detalle`}
+      title={t("shell.waitingRoomAlert.tooltip", { count, threshold })}
     >
       <AlertTriangle size={13} aria-hidden />
-      {count} esperando &gt;{threshold}m
+      {t("shell.waitingRoomAlert.pill", { count, threshold })}
       <style>{`
         @keyframes wrPulse {
           0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.20); }

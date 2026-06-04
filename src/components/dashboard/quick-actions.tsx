@@ -7,6 +7,7 @@ import {
   X, Clock, User, ChevronRight,
 } from "lucide-react";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Patient { id: string; firstName: string; lastName: string; patientNumber: string; phone?: string | null }
 interface QuickActionsProps {
@@ -17,6 +18,7 @@ interface QuickActionsProps {
 
 // ── Global command palette (Cmd+K) ──────────────────────────────────────────
 function CommandPalette({ onClose, clinicId }: { onClose: () => void; clinicId: string }) {
+  const t = useT();
   const [query,    setQuery]    = useState("");
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading,  setLoading]  = useState(false);
@@ -43,11 +45,11 @@ function CommandPalette({ onClose, clinicId }: { onClose: () => void; clinicId: 
   function go(path: string) { router.push(path); onClose(); }
 
   const QUICK_LINKS = [
-    { icon:"📅", label:"Agenda de hoy",      path:"/dashboard/appointments" },
-    { icon:"👥", label:"Pacientes",           path:"/dashboard/patients"     },
-    { icon:"🤖", label:"Asistente IA",        path:"/dashboard/ai-assistant" },
-    { icon:"📊", label:"Reportes",            path:"/dashboard/reports"      },
-    { icon:"⚙️", label:"Configuración",       path:"/dashboard/settings"     },
+    { icon:"📅", label:t("shell.quickActions.todayAgenda"),  path:"/dashboard/appointments" },
+    { icon:"👥", label:t("shell.quickActions.patients"),     path:"/dashboard/patients"     },
+    { icon:"🤖", label:t("shell.quickActions.aiAssistant"),  path:"/dashboard/ai-assistant" },
+    { icon:"📊", label:t("shell.quickActions.reports"),      path:"/dashboard/reports"      },
+    { icon:"⚙️", label:t("shell.quickActions.settings"),     path:"/dashboard/settings"     },
   ];
 
   return (
@@ -62,7 +64,7 @@ function CommandPalette({ onClose, clinicId }: { onClose: () => void; clinicId: 
           <Search className="w-5 h-5 text-muted-foreground flex-shrink-0" />
           <input ref={inputRef}
             className="flex-1 text-base bg-transparent focus:outline-none placeholder:text-muted-foreground"
-            placeholder="Buscar paciente, ir a página…"
+            placeholder={t("shell.quickActions.searchPlaceholder")}
             value={query} onChange={e => setQuery(e.target.value)} />
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-muted text-muted-foreground">
             <X className="w-4 h-4" />
@@ -73,11 +75,11 @@ function CommandPalette({ onClose, clinicId }: { onClose: () => void; clinicId: 
           {/* Patient results */}
           {query.trim() && (
             <div className="p-2">
-              <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide px-2 py-1.5">Pacientes</div>
+              <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide px-2 py-1.5">{t("shell.quickActions.patients")}</div>
               {loading ? (
-                <div className="text-sm text-muted-foreground px-2 py-3">Buscando…</div>
+                <div className="text-sm text-muted-foreground px-2 py-3">{t("shell.quickActions.searching")}</div>
               ) : patients.length === 0 ? (
-                <div className="text-sm text-muted-foreground px-2 py-3">Sin resultados para "{query}"</div>
+                <div className="text-sm text-muted-foreground px-2 py-3">{t("shell.quickActions.noResultsFor", { query })}</div>
               ) : patients.map(p => (
                 <div key={p.id} className="flex items-center gap-3 px-2 py-2.5 rounded-xl hover:bg-muted/40 cursor-pointer group">
                   <div className="w-9 h-9 rounded-xl bg-brand-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
@@ -89,8 +91,8 @@ function CommandPalette({ onClose, clinicId }: { onClose: () => void; clinicId: 
                   </div>
                   <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                     {[
-                      { label:"Expediente", onClick: () => go(`/dashboard/patients/${p.id}`) },
-                      { label:"Cita",       onClick: () => { openAppt({ initialPatient: { id: p.id, name: `${p.firstName} ${p.lastName}`.trim() }, openAgendaAfter: true }); onClose(); } },
+                      { label:t("shell.quickActions.record"), onClick: () => go(`/dashboard/patients/${p.id}`) },
+                      { label:t("shell.quickActions.appointment"), onClick: () => { openAppt({ initialPatient: { id: p.id, name: `${p.firstName} ${p.lastName}`.trim() }, openAgendaAfter: true }); onClose(); } },
                     ].map(a => (
                       <button key={a.label} onClick={a.onClick}
                         className="text-xs font-semibold px-2.5 py-1.5 bg-card border border-border rounded-lg hover:border-brand-400 hover:text-brand-600 transition-colors">
@@ -106,7 +108,7 @@ function CommandPalette({ onClose, clinicId }: { onClose: () => void; clinicId: 
           {/* Quick links */}
           {!query.trim() && (
             <div className="p-2">
-              <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide px-2 py-1.5">Navegación rápida</div>
+              <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide px-2 py-1.5">{t("shell.quickActions.quickNav")}</div>
               {QUICK_LINKS.map(l => (
                 <button key={l.path} onClick={() => go(l.path)}
                   className="w-full flex items-center gap-3 px-2 py-2.5 rounded-xl hover:bg-muted/40 transition-colors text-left">
@@ -121,13 +123,13 @@ function CommandPalette({ onClose, clinicId }: { onClose: () => void; clinicId: 
 
         <div className="px-4 py-2.5 border-t border-border flex items-center gap-4">
           <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-            <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded font-mono">↵</kbd> Abrir
+            <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded font-mono">↵</kbd> {t("shell.quickActions.kbdOpen")}
           </span>
           <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-            <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded font-mono">Esc</kbd> Cerrar
+            <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded font-mono">Esc</kbd> {t("shell.quickActions.kbdClose")}
           </span>
           <span className="text-xs text-muted-foreground ml-auto flex items-center gap-1.5">
-            <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded font-mono">⌘K</kbd> Abrir buscador
+            <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded font-mono">⌘K</kbd> {t("shell.quickActions.kbdOpenSearch")}
           </span>
         </div>
       </div>
@@ -137,6 +139,7 @@ function CommandPalette({ onClose, clinicId }: { onClose: () => void; clinicId: 
 
 // ── Quick Actions Bar ────────────────────────────────────────────────────────
 export function QuickActionsBar({ currentUserId, clinicId, isAdmin }: QuickActionsProps) {
+  const t = useT();
   const [showPalette, setShowPalette] = useState(false);
   const router = useRouter();
   const { open: openAppt } = useNewAppointmentDialog();
@@ -157,33 +160,33 @@ export function QuickActionsBar({ currentUserId, clinicId, isAdmin }: QuickActio
   const ACTIONS = [
     {
       icon: <Plus className="w-5 h-5" />,
-      label: "Nueva cita",
+      label: t("shell.quickActions.newAppointment"),
       onClick: () => openAppt({ openAgendaAfter: true }),
       primary: true,
       // primary is always highlighted regardless of path
     },
     {
       icon: <Search className="w-5 h-5" />,
-      label: "Buscar paciente",
+      label: t("shell.quickActions.searchPatient"),
       onClick: () => setShowPalette(true),
       shortcut: "⌘K",
     },
     {
       icon: <Calendar className="w-5 h-5" />,
-      label: "Mi agenda",
+      label: t("shell.quickActions.myAgenda"),
       path: "/dashboard/appointments",
       onClick: () => router.push("/dashboard/appointments"),
     },
     {
       icon: <Bot className="w-5 h-5" />,
-      label: "Asistente IA",
+      label: t("shell.quickActions.aiAssistant"),
       path: "/dashboard/ai-assistant",
       onClick: () => router.push("/dashboard/ai-assistant"),
       ai: true,
     },
     ...(isAdmin ? [{
       icon: <Pill className="w-5 h-5" />,
-      label: "Facturación",
+      label: t("shell.quickActions.billing"),
       path: "/dashboard/billing",
       onClick: () => router.push("/dashboard/billing"),
     }] : []),

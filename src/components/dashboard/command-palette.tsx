@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useT } from "@/i18n/i18n-provider";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   Search, CornerDownLeft, User as UserIcon,
@@ -21,13 +22,14 @@ interface CommandPaletteProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const GROUP_LABELS: Record<CommandGroup, string> = {
-  "paciente-activo": "EN PACIENTE ACTUAL",
-  pacientes: "PACIENTES",
-  citas: "CITAS",
-  facturas: "FACTURAS",
-  acciones: "ACCIONES",
-  "ir-a": "IR A",
+// Map group id -> translation-key; the visible label is resolved via t() at render time.
+const GROUP_LABEL_KEYS: Record<CommandGroup, string> = {
+  "paciente-activo": "shell.commandPalette.groupActivePatient",
+  pacientes: "shell.commandPalette.groupPatients",
+  citas: "shell.commandPalette.groupAppointments",
+  facturas: "shell.commandPalette.groupInvoices",
+  acciones: "shell.commandPalette.groupActions",
+  "ir-a": "shell.commandPalette.groupGoTo",
 };
 
 const GROUP_ORDER: CommandGroup[] = [
@@ -40,6 +42,7 @@ const GROUP_ORDER: CommandGroup[] = [
 ];
 
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
+  const t = useT();
   const router = useRouter();
   const { consult: activeConsult } = useActiveConsult();
   const { open: openAppt } = useNewAppointmentDialog();
@@ -275,7 +278,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         />
         <Dialog.Content
           onKeyDown={handleKeyDown}
-          aria-label="Buscar o ejecutar comando"
+          aria-label={t("shell.commandPalette.dialogLabel")}
           className="fixed z-50"
           data-cmd-palette-content
           style={{
@@ -295,9 +298,9 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             animation: "cmdPanelIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
           }}
         >
-          <Dialog.Title className="sr-only">Buscar o ejecutar comando</Dialog.Title>
+          <Dialog.Title className="sr-only">{t("shell.commandPalette.dialogLabel")}</Dialog.Title>
           <Dialog.Description className="sr-only">
-            Escribe para buscar pacientes, citas o facturas. Navega con flechas, presiona Enter para abrir.
+            {t("shell.commandPalette.dialogDesc")}
           </Dialog.Description>
 
           <div
@@ -316,11 +319,11 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar pacientes, citas, acciones…"
+              placeholder={t("shell.commandPalette.searchPlaceholder")}
               autoComplete="off"
               spellCheck={false}
               role="combobox"
-              aria-label="Buscar"
+              aria-label={t("common.search")}
               aria-controls="cmd-list"
               aria-expanded={true}
               aria-autocomplete="list"
@@ -338,7 +341,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             />
             <button
               onClick={() => onOpenChange(false)}
-              aria-label="Cerrar"
+              aria-label={t("common.close")}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -362,19 +365,19 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             ref={listRef}
             id="cmd-list"
             role="listbox"
-            aria-label="Resultados"
+            aria-label={t("shell.commandPalette.resultsLabel")}
             style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}
             className="scrollbar-thin"
           >
-            {loading && total === 0 && <EmptyMessage>Buscando…</EmptyMessage>}
+            {loading && total === 0 && <EmptyMessage>{t("shell.commandPalette.searching")}</EmptyMessage>}
             {!loading && total === 0 && (
               <EmptyMessage>
-                {query ? `Sin resultados para "${query}".` : "Empieza a escribir o selecciona una acción."}
+                {query ? t("shell.commandPalette.noResultsFor", { query }) : t("shell.commandPalette.emptyHint")}
               </EmptyMessage>
             )}
 
             {grouped.ordered.map(({ group, entries }) => (
-              <div key={group} role="group" aria-label={GROUP_LABELS[group]}>
+              <div key={group} role="group" aria-label={t(GROUP_LABEL_KEYS[group])}>
                 <div
                   style={{
                     padding: "10px 16px 6px",
@@ -385,7 +388,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                     fontFamily: "var(--font-sans, system-ui, sans-serif)",
                   }}
                 >
-                  {GROUP_LABELS[group]}
+                  {t(GROUP_LABEL_KEYS[group])}
                 </div>
                 {entries.map(({ item, idx }) => (
                   <CommandRow
@@ -417,16 +420,16 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-              <FooterHint keys={["↑", "↓"]} label="navegar" />
-              <FooterHint keys={["↵"]} label="abrir" />
-              <FooterHint keys={["esc"]} label="cerrar" />
+              <FooterHint keys={["↑", "↓"]} label={t("shell.commandPalette.hintNavigate")} />
+              <FooterHint keys={["↵"]} label={t("shell.commandPalette.hintOpen")} />
+              <FooterHint keys={["esc"]} label={t("shell.commandPalette.hintClose")} />
               {query.trim() === "" && (
                 <span style={{
                   color: "var(--text-3)",
                   fontSize: 10,
                   fontStyle: "italic",
                 }}>
-                  o presiona C/N/I/T
+                  {t("shell.commandPalette.pressShortcuts")}
                 </span>
               )}
             </div>
@@ -447,7 +450,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                 textUnderlineOffset: 2,
               }}
             >
-              ¿Qué es esto?
+              {t("shell.commandPalette.whatIsThis")}
             </button>
           </div>
         </Dialog.Content>

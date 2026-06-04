@@ -25,13 +25,14 @@
  */
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, Clock, PartyPopper } from "lucide-react";
+import { getServerT } from "@/i18n/server";
 
 interface TrialBannerProps {
   trialEndsAt: Date | string | null | undefined;
   isInTrial: boolean;
 }
 
-export function TrialBanner({ trialEndsAt, isInTrial }: TrialBannerProps) {
+export async function TrialBanner({ trialEndsAt, isInTrial }: TrialBannerProps) {
   if (!isInTrial || !trialEndsAt) return null;
 
   const end = trialEndsAt instanceof Date ? trialEndsAt : new Date(trialEndsAt);
@@ -42,6 +43,8 @@ export function TrialBanner({ trialEndsAt, isInTrial }: TrialBannerProps) {
   if (msLeft <= 0) return null; // expirado — sprint 4
 
   const daysLeft = Math.max(1, Math.ceil(msLeft / 86_400_000));
+
+  const { t } = await getServerT();
 
   const isUrgent  = daysLeft <= 3;
   const isWarning = daysLeft > 3 && daysLeft <= 7;
@@ -58,10 +61,10 @@ export function TrialBanner({ trialEndsAt, isInTrial }: TrialBannerProps) {
           </div>
           <div>
             <div className="text-sm font-semibold">
-              ¡Tu prueba termina en {daysLeft} día{daysLeft !== 1 ? "s" : ""}!
+              {t("shell.trialBanner.urgentTitle", { count: daysLeft })}
             </div>
             <div className="text-xs text-white/85">
-              Compra los módulos que necesitas antes de perder el acceso · Tus datos se mantendrán
+              {t("shell.trialBanner.urgentSubtitle")}
             </div>
           </div>
         </div>
@@ -69,7 +72,7 @@ export function TrialBanner({ trialEndsAt, isInTrial }: TrialBannerProps) {
           href="/dashboard/marketplace"
           className="bg-white text-red-700 hover:bg-red-50 font-semibold px-4 py-2 rounded-lg text-sm transition-colors flex items-center gap-1.5 flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-red-600"
         >
-          Elegir módulos ahora
+          {t("shell.trialBanner.ctaChooseNow")}
           <ArrowRight className="w-4 h-4" aria-hidden />
         </Link>
       </div>
@@ -87,14 +90,14 @@ export function TrialBanner({ trialEndsAt, isInTrial }: TrialBannerProps) {
             <Clock className="w-4 h-4" strokeWidth={2.5} aria-hidden />
           </div>
           <div className="text-sm font-medium">
-            <strong>{daysLeft} días</strong> restantes en tu prueba gratuita · No olvides activar los módulos que más uses
+            <strong>{t("shell.trialBanner.warningDaysLeft", { count: daysLeft })}</strong> {t("shell.trialBanner.warningSuffix")}
           </div>
         </div>
         <Link
           href="/dashboard/marketplace"
           className="bg-white/15 backdrop-blur hover:bg-white/25 font-medium px-3 py-1.5 rounded-md text-sm transition-colors flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
         >
-          Elegir mis módulos
+          {t("shell.trialBanner.ctaChooseMine")}
         </Link>
       </div>
     );
@@ -108,9 +111,9 @@ export function TrialBanner({ trialEndsAt, isInTrial }: TrialBannerProps) {
           <PartyPopper className="w-4 h-4 text-amber-200" strokeWidth={2.5} aria-hidden />
         </div>
         <div>
-          <div className="text-sm font-semibold">Prueba gratis · Acceso completo a todos los módulos</div>
+          <div className="text-sm font-semibold">{t("shell.trialBanner.promoTitle")}</div>
           <div className="text-xs text-white/85">
-            Te quedan <strong className="text-white">{daysLeft} días</strong> · Sin tarjeta · Sin compromiso
+            {t("shell.trialBanner.promoYouHave")} <strong className="text-white">{t("shell.trialBanner.warningDaysLeft", { count: daysLeft })}</strong> {t("shell.trialBanner.promoSuffix")}
           </div>
         </div>
       </div>
@@ -118,7 +121,7 @@ export function TrialBanner({ trialEndsAt, isInTrial }: TrialBannerProps) {
         href="/dashboard/marketplace"
         className="bg-white/15 backdrop-blur hover:bg-white/25 font-medium px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-1.5 flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
       >
-        Elegir mis módulos
+        {t("shell.trialBanner.ctaChooseMine")}
         <ArrowRight className="w-3.5 h-3.5" aria-hidden />
       </Link>
     </div>

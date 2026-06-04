@@ -11,6 +11,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import type { PlanId } from "@/lib/billing/plans";
+import { useT } from "@/i18n/i18n-provider";
 
 const BANK_INFO = {
   nombre: "Efthymios Rafail Papanaklis",
@@ -36,6 +37,7 @@ export function PaymentMethodModal({
   hasStripeCustomer,
   paypalUrl,
 }: Props) {
+  const t = useT();
   const [pending, setPending] = useState<"stripe" | null>(null);
   const [showSpei, setShowSpei] = useState(false);
 
@@ -76,11 +78,11 @@ export function PaymentMethodModal({
       });
       const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string; message?: string };
       if (!res.ok || !data.url) {
-        throw new Error(data.message ?? data.error ?? "No se pudo abrir Stripe");
+        throw new Error(data.message ?? data.error ?? t("shell.paymentMethodModal.errOpenStripe"));
       }
       window.location.href = data.url;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error con Stripe");
+      toast.error(err instanceof Error ? err.message : t("shell.paymentMethodModal.errStripe"));
       setPending(null);
     }
   }
@@ -129,12 +131,12 @@ export function PaymentMethodModal({
           }}
         >
           <h2 id="payment-method-title" style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
-            Cambiar método de pago
+            {t("shell.paymentMethodModal.title")}
           </h2>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Cerrar"
+            aria-label={t("common.close")}
             style={{
               width: 32,
               height: 32,
@@ -158,9 +160,9 @@ export function PaymentMethodModal({
             icon={<CreditCard size={20} aria-hidden />}
             iconBg="rgba(124,58,237,0.15)"
             iconColor="var(--brand)"
-            title="Tarjeta crédito/débito"
-            subtitle="Pago automático mensual con tarjeta"
-            actionLabel={pending === "stripe" ? "Abriendo…" : hasStripeCustomer ? "Gestionar" : "Configurar"}
+            title={t("shell.paymentMethodModal.cardTitle")}
+            subtitle={t("shell.paymentMethodModal.cardSubtitle")}
+            actionLabel={pending === "stripe" ? t("shell.paymentMethodModal.opening") : hasStripeCustomer ? t("shell.paymentMethodModal.manage") : t("shell.paymentMethodModal.configure")}
             actionIcon={pending === "stripe" ? <Loader2 size={14} className="animate-spin" /> : null}
             onAction={handleStripe}
             disabled={pending !== null}
@@ -183,8 +185,8 @@ export function PaymentMethodModal({
             iconBg="#FFC439"
             iconColor="#003087"
             title="PayPal"
-            subtitle={paypalUrl ? "Pago automático mensual con PayPal" : "Próximamente — contacta a soporte"}
-            actionLabel={paypalUrl ? "Activar" : "No disponible"}
+            subtitle={paypalUrl ? t("shell.paymentMethodModal.paypalSubtitle") : t("shell.paymentMethodModal.paypalSoon")}
+            actionLabel={paypalUrl ? t("shell.paymentMethodModal.activate") : t("shell.paymentMethodModal.unavailable")}
             onAction={handlePaypal}
             disabled={!paypalUrl}
           />
@@ -215,8 +217,8 @@ export function PaymentMethodModal({
                 <Building2 size={20} aria-hidden />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 700 }}>Transferencia bancaria / SPEI</div>
-                <div style={{ fontSize: 12, color: "var(--text-3)" }}>Pago manual con confirmación 24h</div>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>{t("shell.paymentMethodModal.speiTitle")}</div>
+                <div style={{ fontSize: 12, color: "var(--text-3)" }}>{t("shell.paymentMethodModal.speiSubtitle")}</div>
               </div>
               <button
                 type="button"
@@ -236,7 +238,7 @@ export function PaymentMethodModal({
                   cursor: "pointer",
                 }}
               >
-                {showSpei ? "Ocultar" : "Ver datos bancarios"}
+                {showSpei ? t("shell.paymentMethodModal.hide") : t("shell.paymentMethodModal.showBankDetails")}
                 {showSpei ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
               </button>
             </div>
@@ -251,13 +253,11 @@ export function PaymentMethodModal({
                   gap: 10,
                 }}
               >
-                <Field label="Beneficiario" value={BANK_INFO.nombre} />
+                <Field label={t("shell.paymentMethodModal.beneficiary")} value={BANK_INFO.nombre} />
                 <Field label="CLABE" value={BANK_INFO.clabe} mono />
-                <Field label="Banco" value={BANK_INFO.banco} />
+                <Field label={t("shell.paymentMethodModal.bank")} value={BANK_INFO.banco} />
                 <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4 }}>
-                  En el concepto de tu transferencia escribe el nombre de tu
-                  clínica. Tras confirmar el pago tu acceso se reactiva en
-                  máximo 24 horas hábiles.
+                  {t("shell.paymentMethodModal.speiHelp")}
                 </div>
               </div>
             )}

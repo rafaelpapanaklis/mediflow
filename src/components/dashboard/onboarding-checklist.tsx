@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { CheckCircle, Circle, ChevronDown, ChevronUp, X } from "lucide-react";
 import Link from "next/link";
 import { STEPS } from "./onboarding-steps";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Props {
   completed: string[]; // IDs of completed steps from server
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export function OnboardingChecklist({ completed: initial, clinicId }: Props) {
+  const t = useT();
   const [completed, setCompleted] = useState<Set<string>>(new Set(initial));
   const [collapsed, setCollapsed]  = useState(false);
   const [dismissed, setDismissed]  = useState(false);
@@ -37,8 +39,8 @@ export function OnboardingChecklist({ completed: initial, clinicId }: Props) {
         <div className="flex items-center gap-2">
           <span className="text-base">🚀</span>
           <div>
-            <div className="text-xs font-bold">Primeros pasos</div>
-            <div className="text-xs text-muted-foreground">{completed.size}/{STEPS.length} completados</div>
+            <div className="text-xs font-bold">{t("shell.onboardingChecklist.title")}</div>
+            <div className="text-xs text-muted-foreground">{t("shell.onboardingChecklist.completedCount", { done: completed.size, total: STEPS.length })}</div>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -72,8 +74,8 @@ export function OnboardingChecklist({ completed: initial, clinicId }: Props) {
                 }
                 <span className="text-sm shrink-0">{step.emoji}</span>
                 <div className="min-w-0">
-                  <div className={`text-xs font-semibold truncate ${isDone ? "line-through text-muted-foreground" : ""}`}>{step.label}</div>
-                  {!isDone && <div className="text-xs text-muted-foreground truncate">{step.desc}</div>}
+                  <div className={`text-xs font-semibold truncate ${isDone ? "line-through text-muted-foreground" : ""}`}>{t(`shell.onboarding.${step.id}Label`)}</div>
+                  {!isDone && <div className="text-xs text-muted-foreground truncate">{t(`shell.onboarding.${step.id}Desc`)}</div>}
                 </div>
               </Link>
             );

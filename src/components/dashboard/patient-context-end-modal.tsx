@@ -4,6 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { X, CreditCard, CalendarPlus, LogOut, type LucideIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import { useActiveConsult } from "@/hooks/use-active-consult";
+import { useT } from "@/i18n/i18n-provider";
 
 interface PatientContextEndModalProps {
   open: boolean;
@@ -14,13 +15,14 @@ export function PatientContextEndModal({
   open, onOpenChange,
 }: PatientContextEndModalProps) {
   const router = useRouter();
+  const t = useT();
   const { consult, elapsedSeconds, endConsult } = useActiveConsult();
 
   if (!consult) return null;
 
   const mm = Math.floor(elapsedSeconds / 60);
   const ss = elapsedSeconds % 60;
-  const duration = `${mm} min ${ss}s`;
+  const duration = t("shell.patientContextEndModal.duration", { mm, ss });
 
   const handleCharge = async () => {
     const patientId = consult.patientId;
@@ -40,7 +42,7 @@ export function PatientContextEndModal({
     await endConsult();
     router.refresh();
     onOpenChange(false);
-    toast.success("Consulta cerrada");
+    toast.success(t("shell.patientContextEndModal.consultClosed"));
   };
 
   return (
@@ -81,7 +83,7 @@ export function PatientContextEndModal({
                 id="end-consult-title"
                 style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)", margin: 0 }}
               >
-                Terminar consulta
+                {t("shell.patientContextEndModal.title")}
               </Dialog.Title>
               <Dialog.Description
                 style={{ fontSize: 12, color: "var(--text-2)", marginTop: 4 }}
@@ -96,7 +98,7 @@ export function PatientContextEndModal({
               </Dialog.Description>
             </div>
             <Dialog.Close
-              aria-label="Cerrar"
+              aria-label={t("common.close")}
               style={{
                 width: 28, height: 28, borderRadius: 8,
                 background: "var(--bg-elev-2)",
@@ -115,18 +117,18 @@ export function PatientContextEndModal({
               fontSize: 13, color: "var(--text-2)",
               margin: 0, marginBottom: 14, lineHeight: 1.55,
             }}>
-              ¿Qué sigue después de esta consulta?
+              {t("shell.patientContextEndModal.whatsNext")}
             </p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <EndAction Icon={CreditCard} title="Cobrar ahora"
-                sub="Abre factura o pago en efectivo"
+              <EndAction Icon={CreditCard} title={t("shell.patientContextEndModal.chargeNowTitle")}
+                sub={t("shell.patientContextEndModal.chargeNowSub")}
                 variant="primary" onClick={handleCharge} />
-              <EndAction Icon={CalendarPlus} title="Agendar siguiente cita"
-                sub="Crea nueva cita con el paciente"
+              <EndAction Icon={CalendarPlus} title={t("shell.patientContextEndModal.scheduleNextTitle")}
+                sub={t("shell.patientContextEndModal.scheduleNextSub")}
                 variant="secondary" onClick={handleScheduleNext} />
-              <EndAction Icon={LogOut} title="Solo cerrar consulta"
-                sub="Sin acciones adicionales"
+              <EndAction Icon={LogOut} title={t("shell.patientContextEndModal.justCloseTitle")}
+                sub={t("shell.patientContextEndModal.justCloseSub")}
                 variant="ghost" onClick={handleJustClose} />
             </div>
           </div>

@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { Check, CreditCard, Download, ExternalLink, Loader2, Receipt, Sparkles } from "lucide-react";
 import { PLANS, type PlanId, isPlanId } from "@/lib/billing/plans";
 import { PaymentMethodModal } from "./payment-method-modal";
+import { useT } from "@/i18n/i18n-provider";
 
 interface ClinicData {
   id: string;
@@ -67,6 +68,7 @@ function paypalLinkFor(plan: PlanId): string | null {
 }
 
 export function SubscriptionTab({ clinic }: Props) {
+  const t = useT();
   const router = useRouter();
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -125,9 +127,9 @@ export function SubscriptionTab({ clinic }: Props) {
       if (!res.ok) throw new Error();
       setLocalCancelRequested(true);
       setCancelOpen(false);
-      toast.success("Solicitud de cancelación registrada");
+      toast.success(t("shell.subscriptionTab.cancelRequestedToast"));
     } catch {
-      toast.error("Error al registrar cancelación");
+      toast.error(t("shell.subscriptionTab.cancelRequestError"));
     } finally {
       setCancelling(false);
     }
@@ -150,28 +152,28 @@ export function SubscriptionTab({ clinic }: Props) {
         error?: string;
       };
       if (!res.ok) {
-        throw new Error(data.error ?? "No se pudo cambiar el plan");
+        throw new Error(data.error ?? t("shell.subscriptionTab.errChangePlan"));
       }
       if (data.mode === "checkout" && data.redirectUrl) {
         window.location.href = data.redirectUrl;
         return;
       }
-      toast.success(`Plan actualizado a ${targetPlan}`);
+      toast.success(t("shell.subscriptionTab.planUpdatedToast", { plan: targetPlan }));
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error al cambiar plan");
+      toast.error(err instanceof Error ? err.message : t("shell.subscriptionTab.errChangePlanGeneric"));
     } finally {
       setChangingPlan(null);
     }
   }
 
   const statusLabel = subscriptionActive
-    ? "Suscripción activa"
+    ? t("shell.subscriptionTab.statusActive")
     : isInTrial
-      ? "Prueba gratis"
+      ? t("shell.subscriptionTab.statusTrial")
       : trialExpired
-        ? "Prueba expirada"
-        : "Sin suscripción";
+        ? t("shell.subscriptionTab.statusTrialExpired")
+        : t("shell.subscriptionTab.statusNone");
 
   const statusTone = subscriptionActive
     ? { bg: "rgba(52,211,153,0.12)", border: "rgba(52,211,153,0.3)", fg: "#34d399" }
@@ -192,7 +194,7 @@ export function SubscriptionTab({ clinic }: Props) {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
           <div>
             <div style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-3)", fontWeight: 600, marginBottom: 6 }}>
-              Tu plan
+              {t("shell.subscriptionTab.yourPlan")}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <div
@@ -209,7 +211,7 @@ export function SubscriptionTab({ clinic }: Props) {
                 {statusLabel}
               </div>
               <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)" }}>
-                Plan {currentPlan.name} — ${currentPlan.priceMxn} MXN/mes
+                {t("shell.subscriptionTab.planLine", { name: currentPlan.name, price: currentPlan.priceMxn })}
               </div>
             </div>
           </div>
@@ -220,13 +222,13 @@ export function SubscriptionTab({ clinic }: Props) {
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 12 }}>
               <span style={{ color: "var(--text-2)" }}>
                 {daysLeft === 0
-                  ? "Termina hoy"
+                  ? t("shell.subscriptionTab.endsToday")
                   : daysLeft === 1
-                    ? "1 día restante"
-                    : `${daysLeft} días restantes de ${TRIAL_DAYS_TOTAL}`}
+                    ? t("shell.subscriptionTab.oneDayLeft")
+                    : t("shell.subscriptionTab.daysLeftOfTotal", { days: daysLeft, total: TRIAL_DAYS_TOTAL })}
               </span>
               <span className="font-mono" style={{ color: "var(--text-3)" }}>
-                Termina el {formatFecha(trialEndsAt)}
+                {t("shell.subscriptionTab.endsOn", { date: formatFecha(trialEndsAt) })}
               </span>
             </div>
             <div style={{ height: 8, borderRadius: 4, background: "rgba(255,255,255,0.05)", overflow: "hidden" }}>
@@ -246,7 +248,7 @@ export function SubscriptionTab({ clinic }: Props) {
 
         {trialExpired && (
           <div style={{ padding: "12px 14px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, fontSize: 13, color: "#fca5a5" }}>
-            Tu prueba gratis expiró el {trialEndsAt && formatFecha(trialEndsAt)}. Activa tu suscripción para recuperar acceso.
+            {t("shell.subscriptionTab.trialExpiredNotice", { date: trialEndsAt ? formatFecha(trialEndsAt) : "" })}
           </div>
         )}
       </section>
@@ -256,13 +258,13 @@ export function SubscriptionTab({ clinic }: Props) {
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Sparkles size={14} aria-hidden style={{ color: "var(--brand)" }} />
           <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)", margin: 0 }}>
-            Cambiar plan
+            {t("shell.subscriptionTab.changePlanTitle")}
           </h2>
         </div>
         <p style={{ fontSize: 12, color: "var(--text-3)", margin: 0 }}>
           {hasStripeSubscription
-            ? "El cambio se aplica de inmediato con prorrateo automático del periodo en curso."
-            : "Al elegir un plan se abrirá el checkout para configurar el método de pago."}
+            ? t("shell.subscriptionTab.changePlanDescSub")
+            : t("shell.subscriptionTab.changePlanDescCheckout")}
         </p>
         <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
           {PLANS.map((plan) => {
@@ -287,18 +289,18 @@ export function SubscriptionTab({ clinic }: Props) {
                   <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-1)" }}>{plan.name}</div>
                   {isCurrent && (
                     <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 100, background: "var(--brand)", color: "#fff", textTransform: "uppercase", letterSpacing: 0.4 }}>
-                      Plan actual
+                      {t("shell.subscriptionTab.currentPlanBadge")}
                     </span>
                   )}
                   {!isCurrent && isPopular && (
                     <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 100, background: "rgba(124,58,237,0.15)", color: "var(--brand)", textTransform: "uppercase", letterSpacing: 0.4 }}>
-                      ★ Popular
+                      {t("shell.subscriptionTab.popularBadge")}
                     </span>
                   )}
                 </div>
                 <div style={{ fontSize: 22, fontWeight: 800, color: "var(--brand)" }}>
                   ${plan.priceMxn}
-                  <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-3)", marginLeft: 4 }}>MXN/mes</span>
+                  <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-3)", marginLeft: 4 }}>{t("shell.subscriptionTab.mxnPerMonth")}</span>
                 </div>
                 <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
                   {plan.features.map((f) => (
@@ -326,10 +328,10 @@ export function SubscriptionTab({ clinic }: Props) {
                   }}
                 >
                   {isCurrent
-                    ? "Plan actual"
+                    ? t("shell.subscriptionTab.currentPlanBadge")
                     : isPending
-                      ? "Aplicando…"
-                      : "Cambiar a este plan"}
+                      ? t("shell.subscriptionTab.applying")
+                      : t("shell.subscriptionTab.changeToThisPlan")}
                 </button>
               </div>
             );
@@ -340,7 +342,7 @@ export function SubscriptionTab({ clinic }: Props) {
       {/* ── Método de pago ───────────────────────────────────────── */}
       <section className="bg-card border border-border rounded-2xl p-6" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)", margin: 0 }}>
-          Método de pago
+          {t("shell.subscriptionTab.paymentMethodTitle")}
         </h2>
 
         {clinic.paymentMethodCollected ? (
@@ -352,10 +354,10 @@ export function SubscriptionTab({ clinic }: Props) {
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, color: "var(--text-1)", fontWeight: 500 }}>
-                    Tarjeta terminada en •••• {clinic.paymentMethodLast4 ?? "••••"}
+                    {t("shell.subscriptionTab.cardEndingIn", { last4: clinic.paymentMethodLast4 ?? "••••" })}
                   </div>
                   <div style={{ fontSize: 11, color: "var(--text-3)" }}>
-                    Cobro automático mensual
+                    {t("shell.subscriptionTab.autoMonthlyCharge")}
                   </div>
                 </div>
               </>
@@ -366,7 +368,7 @@ export function SubscriptionTab({ clinic }: Props) {
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, color: "var(--text-1)", fontWeight: 500 }}>PayPal</div>
-                  <div style={{ fontSize: 11, color: "var(--text-3)" }}>Suscripción recurrente</div>
+                  <div style={{ fontSize: 11, color: "var(--text-3)" }}>{t("shell.subscriptionTab.recurringSubscription")}</div>
                 </div>
               </>
             ) : (
@@ -376,16 +378,16 @@ export function SubscriptionTab({ clinic }: Props) {
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, color: "var(--text-1)", fontWeight: 500 }}>
-                    Transferencia bancaria
+                    {t("shell.subscriptionTab.bankTransfer")}
                   </div>
-                  <div style={{ fontSize: 11, color: "var(--text-3)" }}>Pago manual con confirmación</div>
+                  <div style={{ fontSize: 11, color: "var(--text-3)" }}>{t("shell.subscriptionTab.manualPaymentConfirmation")}</div>
                 </div>
               </>
             )}
           </div>
         ) : (
           <div style={{ padding: 14, background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.25)", borderRadius: 10, fontSize: 13, color: "#fcd34d" }}>
-            No tienes un método de pago guardado. Configura uno antes de que termine tu prueba.
+            {t("shell.subscriptionTab.noPaymentMethod")}
           </div>
         )}
 
@@ -397,7 +399,7 @@ export function SubscriptionTab({ clinic }: Props) {
             style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
           >
             <CreditCard size={12} aria-hidden />
-            Cambiar método de pago
+            {t("shell.subscriptionTab.changePaymentMethod")}
           </button>
           {!localCancelRequested ? (
             <button
@@ -406,11 +408,11 @@ export function SubscriptionTab({ clinic }: Props) {
               className="btn-new btn-new--ghost btn-new--sm"
               style={{ color: "var(--danger, #ef4444)" }}
             >
-              Cancelar suscripción
+              {t("shell.subscriptionTab.cancelSubscription")}
             </button>
           ) : (
             <div style={{ padding: "6px 12px", borderRadius: 8, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)", fontSize: 12, color: "#fca5a5", fontWeight: 500 }}>
-              ⚠ Cancelación solicitada — sin cargos al terminar el periodo
+              {t("shell.subscriptionTab.cancellationRequestedBadge")}
             </div>
           )}
         </div>
@@ -422,7 +424,7 @@ export function SubscriptionTab({ clinic }: Props) {
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Receipt size={14} aria-hidden style={{ color: "var(--brand)" }} />
             <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)", margin: 0 }}>
-              Historial de facturas
+              {t("shell.subscriptionTab.invoiceHistory")}
             </h2>
           </div>
           {hasStripeCustomer && (
@@ -432,7 +434,7 @@ export function SubscriptionTab({ clinic }: Props) {
               className="btn-new btn-new--ghost btn-new--sm"
               style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
             >
-              Portal Stripe <ExternalLink size={11} aria-hidden />
+              {t("shell.subscriptionTab.stripePortal")} <ExternalLink size={11} aria-hidden />
             </button>
           )}
         </div>
@@ -440,14 +442,14 @@ export function SubscriptionTab({ clinic }: Props) {
         {invoices === null ? (
           <div style={{ padding: 24, textAlign: "center", color: "var(--text-3)", fontSize: 12 }}>
             <Loader2 size={16} className="animate-spin" aria-hidden style={{ margin: "0 auto 6px", display: "block" }} />
-            Cargando facturas…
+            {t("shell.subscriptionTab.loadingInvoices")}
           </div>
         ) : invoices.length === 0 ? (
           <div style={{ padding: 22, background: "rgba(255,255,255,0.02)", border: "1px dashed var(--border-soft, hsl(var(--border)))", borderRadius: 10, fontSize: 13, color: "var(--text-3)", textAlign: "center" }}>
-            Aún no tienes facturas. Tu primera factura se generará tras tu primer pago.
+            {t("shell.subscriptionTab.noInvoices")}
             {stripeUnavailable && (
               <div style={{ marginTop: 6, fontSize: 11 }}>
-                (Stripe no está configurado — solo se muestran facturas locales.)
+                {t("shell.subscriptionTab.stripeNotConfigured")}
               </div>
             )}
           </div>
@@ -456,11 +458,11 @@ export function SubscriptionTab({ clinic }: Props) {
             <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, fontSize: 12 }}>
               <thead>
                 <tr style={{ textAlign: "left" }}>
-                  <th style={thStyle}>Fecha</th>
-                  <th style={thStyle}>Concepto</th>
-                  <th style={{ ...thStyle, textAlign: "right" }}>Monto</th>
-                  <th style={thStyle}>Estado</th>
-                  <th style={{ ...thStyle, textAlign: "right" }}>Acciones</th>
+                  <th style={thStyle}>{t("common.date")}</th>
+                  <th style={thStyle}>{t("shell.subscriptionTab.colConcept")}</th>
+                  <th style={{ ...thStyle, textAlign: "right" }}>{t("shell.subscriptionTab.colAmount")}</th>
+                  <th style={thStyle}>{t("common.status")}</th>
+                  <th style={{ ...thStyle, textAlign: "right" }}>{t("common.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -483,7 +485,7 @@ export function SubscriptionTab({ clinic }: Props) {
                             rel="noopener noreferrer"
                             className="btn-new btn-new--ghost btn-new--sm"
                             style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 8px", fontSize: 11 }}
-                            title="Descargar factura"
+                            title={t("shell.subscriptionTab.downloadInvoice")}
                           >
                             <Download size={11} aria-hidden />
                             PDF
@@ -496,9 +498,9 @@ export function SubscriptionTab({ clinic }: Props) {
                             rel="noopener noreferrer"
                             className="btn-new btn-new--secondary btn-new--sm"
                             style={{ padding: "4px 10px", fontSize: 11 }}
-                            title="Pagar factura"
+                            title={t("shell.subscriptionTab.payInvoice")}
                           >
-                            Pagar
+                            {t("shell.subscriptionTab.pay")}
                           </a>
                         )}
                       </div>
@@ -533,19 +535,18 @@ export function SubscriptionTab({ clinic }: Props) {
             }}
           >
             <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: "var(--text-1)", marginBottom: 10 }}>
-              ¿Cancelar tu suscripción?
+              {t("shell.subscriptionTab.cancelModalTitle")}
             </h3>
             <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-2)", lineHeight: 1.55, marginBottom: 18 }}>
-              No se cobrará tu método de pago al terminar el periodo en curso.
-              Seguirás teniendo acceso hasta el{" "}
-              <strong>{trialEndsAt && formatFecha(trialEndsAt)}</strong>. Puedes reactivar en cualquier momento.
+              {t("shell.subscriptionTab.cancelModalBodyStart")}{" "}
+              <strong>{trialEndsAt && formatFecha(trialEndsAt)}</strong>{t("shell.subscriptionTab.cancelModalBodyEnd")}
             </p>
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button type="button" onClick={() => setCancelOpen(false)} className="btn-new btn-new--ghost">
-                No, mantener
+                {t("shell.subscriptionTab.noKeep")}
               </button>
               <button type="button" onClick={handleRequestCancel} disabled={cancelling} className="btn-new btn-new--danger">
-                {cancelling ? "Procesando…" : "Sí, cancelar"}
+                {cancelling ? t("shell.subscriptionTab.processing") : t("shell.subscriptionTab.yesCancel")}
               </button>
             </div>
           </div>
@@ -568,16 +569,16 @@ export function SubscriptionTab({ clinic }: Props) {
             style={{ maxWidth: 460, width: "100%", padding: 26 }}
           >
             <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "var(--text-1)", marginBottom: 10 }}>
-              Cambiar a plan {PLANS.find((p) => p.id === confirmPlan)?.name}
+              {t("shell.subscriptionTab.confirmChangeTitle", { name: PLANS.find((p) => p.id === confirmPlan)?.name ?? "" })}
             </h3>
             <p style={{ margin: 0, fontSize: 13, color: "var(--text-2)", lineHeight: 1.55, marginBottom: 18 }}>
               {hasStripeSubscription
-                ? `El cambio se aplica de inmediato. Stripe calculará el prorrateo del periodo en curso y lo reflejará en tu próxima factura.`
-                : `Vamos a abrir el checkout para configurar tu suscripción. El cobro empieza después de confirmar.`}
+                ? t("shell.subscriptionTab.confirmChangeBodySub")
+                : t("shell.subscriptionTab.confirmChangeBodyCheckout")}
             </p>
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button type="button" onClick={() => setConfirmPlan(null)} className="btn-new btn-new--ghost">
-                Cancelar
+                {t("common.cancel")}
               </button>
               <button
                 type="button"
@@ -585,7 +586,7 @@ export function SubscriptionTab({ clinic }: Props) {
                 disabled={changingPlan !== null}
                 className="btn-new btn-new--primary"
               >
-                {changingPlan ? "Aplicando…" : "Continuar"}
+                {changingPlan ? t("shell.subscriptionTab.applying") : t("shell.subscriptionTab.continue")}
               </button>
             </div>
           </div>
@@ -622,14 +623,15 @@ const tdStyle: React.CSSProperties = {
 };
 
 function StatusBadge({ status }: { status: BillingInvoiceRow["status"] }) {
-  const tones: Record<BillingInvoiceRow["status"], { bg: string; fg: string; label: string }> = {
-    paid:    { bg: "rgba(52,211,153,0.15)", fg: "#34d399", label: "Pagada" },
-    pending: { bg: "rgba(124,58,237,0.15)", fg: "#a78bfa", label: "Pendiente" },
-    overdue: { bg: "rgba(245,158,11,0.15)", fg: "#fbbf24", label: "Vencida" },
-    failed:  { bg: "rgba(239,68,68,0.15)",  fg: "#f87171", label: "Fallida" },
-    void:    { bg: "rgba(148,163,184,0.15)", fg: "#94a3b8", label: "Anulada" },
+  const t = useT();
+  const tones: Record<BillingInvoiceRow["status"], { bg: string; fg: string; labelKey: string }> = {
+    paid:    { bg: "rgba(52,211,153,0.15)", fg: "#34d399", labelKey: "shell.subscriptionTab.statusPaid" },
+    pending: { bg: "rgba(124,58,237,0.15)", fg: "#a78bfa", labelKey: "shell.subscriptionTab.statusPending" },
+    overdue: { bg: "rgba(245,158,11,0.15)", fg: "#fbbf24", labelKey: "shell.subscriptionTab.statusOverdue" },
+    failed:  { bg: "rgba(239,68,68,0.15)",  fg: "#f87171", labelKey: "shell.subscriptionTab.statusFailed" },
+    void:    { bg: "rgba(148,163,184,0.15)", fg: "#94a3b8", labelKey: "shell.subscriptionTab.statusVoid" },
   };
-  const t = tones[status];
+  const tone = tones[status];
   return (
     <span
       style={{
@@ -637,13 +639,13 @@ function StatusBadge({ status }: { status: BillingInvoiceRow["status"] }) {
         alignItems: "center",
         padding: "3px 9px",
         borderRadius: 100,
-        background: t.bg,
-        color: t.fg,
+        background: tone.bg,
+        color: tone.fg,
         fontSize: 11,
         fontWeight: 600,
       }}
     >
-      {t.label}
+      {t(tone.labelKey)}
     </span>
   );
 }

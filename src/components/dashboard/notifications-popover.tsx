@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Bell, Banknote, UserPlus, CheckCircle2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
+import { useT } from "@/i18n/i18n-provider";
 
 interface ActivityEvent {
   id: string;
@@ -23,6 +24,7 @@ const TYPE_ICON = {
 };
 
 export function NotificationsPopover() {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -90,8 +92,8 @@ export function NotificationsPopover() {
         type="button"
         onClick={handleToggle}
         className="icon-btn-new"
-        title="Notificaciones"
-        aria-label={`Notificaciones${unreadCount > 0 ? ` (${unreadCount} sin leer)` : ""}`}
+        title={t("shell.notif.title")}
+        aria-label={unreadCount > 0 ? t("shell.notif.ariaUnread", { count: unreadCount }) : t("shell.notif.title")}
       >
         <Bell size={14} />
         {unreadCount > 0 && <span className="icon-btn-new__dot" />}
@@ -110,13 +112,13 @@ export function NotificationsPopover() {
           }}
         >
           <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--border)", fontSize: 12, fontWeight: 600, color: "var(--text-1)", letterSpacing: "-0.01em" }}>
-            Actividad reciente
+            {t("shell.notif.recentActivity")}
           </div>
           <div style={{ overflowY: "auto", flex: 1 }}>
             {loading ? (
-              <div style={{ padding: 24, textAlign: "center", fontSize: 12, color: "var(--text-3)" }}>Cargando…</div>
+              <div style={{ padding: 24, textAlign: "center", fontSize: 12, color: "var(--text-3)" }}>{t("common.loading")}</div>
             ) : events.length === 0 ? (
-              <div style={{ padding: 24, textAlign: "center", fontSize: 12, color: "var(--text-3)" }}>Sin actividad reciente</div>
+              <div style={{ padding: 24, textAlign: "center", fontSize: 12, color: "var(--text-3)" }}>{t("shell.notif.empty")}</div>
             ) : (
               events.map(ev => {
                 const conf = TYPE_ICON[ev.type];

@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { Sun, Moon } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 export function ThemeToggle() {
+  const t = useT();
   const [dark, setDark] = useState(false);
 
   useEffect(() => {
@@ -25,14 +27,14 @@ export function ThemeToggle() {
     <button
       onClick={toggle}
       className="w-full flex items-center justify-between px-2 py-2 rounded-lg hover:bg-white/10 transition-colors mb-1"
-      title={dark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+      title={dark ? t("shell.themeToggle.switchToLight") : t("shell.themeToggle.switchToDark")}
     >
       <div className="flex items-center gap-2.5">
         <div className="w-7 h-7 rounded-full flex items-center justify-center bg-white/10">
           {dark ? <Moon className="w-3.5 h-3.5 text-slate-300" /> : <Sun className="w-3.5 h-3.5 text-amber-300" />}
         </div>
         <span className="text-xs font-semibold text-slate-400">
-          {dark ? "Modo oscuro" : "Modo claro"}
+          {dark ? t("shell.themeToggle.darkMode") : t("shell.themeToggle.lightMode")}
         </span>
       </div>
       {/* Toggle pill */}

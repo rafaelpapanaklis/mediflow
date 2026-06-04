@@ -5,12 +5,14 @@ import Link from "next/link";
 import { X } from "lucide-react";
 import { STEPS } from "./onboarding-steps";
 import { Progress } from "@/components/ui/progress";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Props {
   completed: string[];
 }
 
 export function OnboardingMini({ completed }: Props) {
+  const t = useT();
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
@@ -40,13 +42,13 @@ export function OnboardingMini({ completed }: Props) {
       className="block rounded-xl border border-sidebar-border bg-sidebar-accent/30 p-3 transition-colors hover:bg-sidebar-accent/60"
     >
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs font-semibold text-foreground">Onboarding</span>
+        <span className="text-xs font-semibold text-foreground">{t("shell.onboardingMini.title")}</span>
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">{doneCount}/{total}</span>
           <button
             onClick={dismiss}
             className="rounded p-0.5 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors"
-            aria-label="Cerrar onboarding"
+            aria-label={t("shell.onboardingMini.dismissAria")}
           >
             <X className="h-3 w-3" />
           </button>
@@ -55,7 +57,7 @@ export function OnboardingMini({ completed }: Props) {
       <Progress value={pct} className="h-1.5" />
       {firstPending && (
         <div className="mt-2 truncate text-[11px] text-muted-foreground">
-          Siguiente: {firstPending.label}
+          {t("shell.onboardingMini.nextLabel", { label: t(`shell.onboarding.${firstPending.id}Label`) })}
         </div>
       )}
     </Link>

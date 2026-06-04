@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { Upload, X, FileSpreadsheet, Download, Loader2, Check, AlertCircle } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 interface PreviewRow {
   row: number;
@@ -36,6 +37,7 @@ interface Props {
 }
 
 export function ImportPatientsModal({ open, onClose, onImported }: Props) {
+  const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<Step>("upload");
   const [file, setFile] = useState<File | null>(null);
@@ -62,11 +64,11 @@ export function ImportPatientsModal({ open, onClose, onImported }: Props) {
 
   async function handleFile(f: File) {
     if (!/\.(xlsx|xls|csv)$/i.test(f.name)) {
-      toast.error("Solo archivos .xlsx, .xls o .csv");
+      toast.error(t("shell.importPatients.errFileType"));
       return;
     }
     if (f.size > 10 * 1024 * 1024) {
-      toast.error("Archivo supera 10MB");
+      toast.error(t("shell.importPatients.errFileSize"));
       return;
     }
     setFile(f);
@@ -78,10 +80,10 @@ export function ImportPatientsModal({ open, onClose, onImported }: Props) {
       fd.append("dryRun", "true");
       const res = await fetch("/api/patients/import", { method: "POST", body: fd });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Error al procesar");
+      if (!res.ok) throw new Error(data.error ?? t("shell.importPatients.errProcess"));
       setPreview(data);
     } catch (err: any) {
-      toast.error(err.message ?? "Error al procesar archivo");
+      toast.error(err.message ?? t("shell.importPatients.errProcessFile"));
       setStep("upload");
       setFile(null);
     } finally {
@@ -100,13 +102,13 @@ export function ImportPatientsModal({ open, onClose, onImported }: Props) {
       fd.append("skipDuplicates", String(skipDuplicates));
       const res = await fetch("/api/patients/import", { method: "POST", body: fd });
       const data: CommitResponse = await res.json();
-      if (!res.ok) throw new Error((data as any).error ?? "Error al importar");
-      toast.success(`${data.created} pacientes importados`);
-      if (data.errors?.length) toast(`${data.errors.length} filas con errores omitidas`, { icon: "⚠️" });
+      if (!res.ok) throw new Error((data as any).error ?? t("shell.importPatients.errImport"));
+      toast.success(t("shell.importPatients.importedCount", { count: data.created }));
+      if (data.errors?.length) toast(t("shell.importPatients.errorRowsSkipped", { count: data.errors.length }), { icon: "⚠️" });
       onImported();
       reset();
     } catch (err: any) {
-      toast.error(err.message ?? "Error al importar");
+      toast.error(err.message ?? t("shell.importPatients.errImport"));
       setStep("preview");
     } finally {
       setLoading(false);
@@ -117,8 +119,8 @@ export function ImportPatientsModal({ open, onClose, onImported }: Props) {
     <div className="modal-overlay" onClick={handleClose}>
       <div className="modal modal--wide" onClick={e => e.stopPropagation()} style={{ maxWidth: 760 }}>
         <div className="modal__header">
-          <div className="modal__title">Importar pacientes desde Excel/CSV</div>
-          <button onClick={handleClose} className="icon-btn-new" aria-label="Cerrar"><X size={14} /></button>
+          <div className="modal__title">{t("shell.importPatients.title")}</div>
+          <button onClick={handleClose} className="icon-btn-new" aria-label={t("common.close")}><X size={14} /></button>
         </div>
 
         <div style={{ padding: 22, display: "flex", flexDirection: "column", gap: 18 }}>
@@ -139,10 +141,10 @@ export function ImportPatientsModal({ open, onClose, onImported }: Props) {
               >
                 <Upload size={28} style={{ color: "var(--text-3)", marginBottom: 10 }} />
                 <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text-1)" }}>
-                  Arrastra tu archivo aquí o haz clic para seleccionar
+                  {t("shell.importPatients.dropzone")}
                 </div>
                 <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 6 }}>
-                  .xlsx, .xls o .csv · Máximo 10MB · hasta 5,000 filas
+                  {t("shell.importPatients.dropzoneHint")}
                 </div>
                 <input
                   ref={inputRef}
@@ -160,7 +162,7 @@ export function ImportPatientsModal({ open, onClose, onImported }: Props) {
                   fontSize: 13, color: "var(--brand)", textDecoration: "none", alignSelf: "center",
                 }}
               >
-                <Download size={13} /> Descargar plantilla
+                <Download size={13} /> {t("shell.importPatients.downloadTemplate")}
               </a>
             </>
           )}
@@ -168,7 +170,7 @@ export function ImportPatientsModal({ open, onClose, onImported }: Props) {
           {step === "preview" && loading && (
             <div style={{ padding: 50, textAlign: "center" }}>
               <Loader2 className="animate-spin" size={28} style={{ color: "var(--brand)", marginBottom: 12 }} />
-              <div style={{ fontSize: 13, color: "var(--text-2)" }}>Procesando {file?.name}…</div>
+              <div style={{ fontSize: 13, color: "var(--text-2)" }}>{t("shell.importPatients.processing", { name: file?.name ?? "" })}</div>
             </div>
           )}
 
@@ -183,9 +185,9 @@ export function ImportPatientsModal({ open, onClose, onImported }: Props) {
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-                <StatCard label="Válidos" value={preview.validos} color="#34d399" />
-                <StatCard label="Errores" value={preview.invalidos} color="#ef4444" />
-                <StatCard label="Duplicados" value={preview.duplicados} color="#fbbf24" />
+                <StatCard label={t("shell.importPatients.statValid")} value={preview.validos} color="#34d399" />
+                <StatCard label={t("shell.importPatients.statErrors")} value={preview.invalidos} color="#ef4444" />
+                <StatCard label={t("shell.importPatients.statDuplicates")} value={preview.duplicados} color="#fbbf24" />
               </div>
 
               <div style={{ maxHeight: 280, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 8 }}>
@@ -193,10 +195,10 @@ export function ImportPatientsModal({ open, onClose, onImported }: Props) {
                   <thead>
                     <tr>
                       <th style={{ width: 40 }}>#</th>
-                      <th>Nombre</th>
-                      <th>Email</th>
-                      <th>Teléfono</th>
-                      <th style={{ width: 90 }}>Estado</th>
+                      <th>{t("shell.importPatients.colName")}</th>
+                      <th>{t("shell.importPatients.colEmail")}</th>
+                      <th>{t("shell.importPatients.colPhone")}</th>
+                      <th style={{ width: 90 }}>{t("common.status")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -208,8 +210,8 @@ export function ImportPatientsModal({ open, onClose, onImported }: Props) {
                         <td className="mono" style={{ color: "var(--text-2)" }}>{r.data.phone ?? "—"}</td>
                         <td>
                           {r.status === "ok" && <span className="badge-new" style={{ background: "rgba(52,211,153,0.12)", color: "#34d399", borderColor: "rgba(52,211,153,0.3)" }}>OK</span>}
-                          {r.status === "error" && <span className="badge-new" style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", borderColor: "rgba(239,68,68,0.3)" }} title={r.errors.join(", ")}>Error</span>}
-                          {r.status === "duplicate" && <span className="badge-new" style={{ background: "rgba(251,191,36,0.12)", color: "#fbbf24", borderColor: "rgba(251,191,36,0.3)" }}>Duplicado</span>}
+                          {r.status === "error" && <span className="badge-new" style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", borderColor: "rgba(239,68,68,0.3)" }} title={r.errors.join(", ")}>{t("shell.importPatients.badgeError")}</span>}
+                          {r.status === "duplicate" && <span className="badge-new" style={{ background: "rgba(251,191,36,0.12)", color: "#fbbf24", borderColor: "rgba(251,191,36,0.3)" }}>{t("shell.importPatients.badgeDuplicate")}</span>}
                         </td>
                       </tr>
                     ))}
@@ -217,7 +219,7 @@ export function ImportPatientsModal({ open, onClose, onImported }: Props) {
                 </table>
                 {preview.total > 200 && (
                   <div style={{ padding: 10, textAlign: "center", fontSize: 11, color: "var(--text-3)" }}>
-                    … y {preview.total - 200} fila(s) más
+                    {t("shell.importPatients.moreRows", { count: preview.total - 200 })}
                   </div>
                 )}
               </div>
@@ -229,19 +231,19 @@ export function ImportPatientsModal({ open, onClose, onImported }: Props) {
                     checked={skipDuplicates}
                     onChange={e => setSkipDuplicates(e.target.checked)}
                   />
-                  Omitir {preview.duplicados} duplicado(s)
+                  {t("shell.importPatients.skipDuplicates", { count: preview.duplicados })}
                 </label>
               )}
 
               <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-                <button className="btn-new" onClick={handleClose}>Cancelar</button>
+                <button className="btn-new" onClick={handleClose}>{t("common.cancel")}</button>
                 <button
                   className="btn-new"
                   style={{ background: "#7c3aed", color: "#fff", borderColor: "#7c3aed" }}
                   onClick={handleCommit}
                   disabled={preview.validos === 0 && (skipDuplicates || preview.duplicados === 0)}
                 >
-                  Importar {skipDuplicates ? preview.validos : preview.validos + preview.duplicados} paciente(s)
+                  {t("shell.importPatients.importBtn", { count: skipDuplicates ? preview.validos : preview.validos + preview.duplicados })}
                 </button>
               </div>
             </>
@@ -250,7 +252,7 @@ export function ImportPatientsModal({ open, onClose, onImported }: Props) {
           {step === "committing" && (
             <div style={{ padding: 50, textAlign: "center" }}>
               <Loader2 className="animate-spin" size={28} style={{ color: "var(--brand)", marginBottom: 12 }} />
-              <div style={{ fontSize: 13, color: "var(--text-2)" }}>Importando pacientes… esto puede tardar unos segundos.</div>
+              <div style={{ fontSize: 13, color: "var(--text-2)" }}>{t("shell.importPatients.committing")}</div>
             </div>
           )}
         </div>
