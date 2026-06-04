@@ -15,6 +15,7 @@ import {
 } from "@/components/dashboard/empty-states";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { ChevronRight, Clock } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 import type { HomeReceptionistData } from "@/lib/home/types";
 
 interface Props {
@@ -24,6 +25,7 @@ interface Props {
 }
 
 export function HomeReceptionist({ user, data }: Props) {
+  const t = useT();
   const router = useRouter();
   const waiting = data.checkedInPatients.length;
 
@@ -33,10 +35,10 @@ export function HomeReceptionist({ user, data }: Props) {
         method: "POST",
         credentials: "include",
       });
-      toast.success("Paciente registrado en sala");
+      toast.success(t("home.recep.checkInOk"));
       router.refresh();
     } catch {
-      toast.error("No se pudo registrar el check-in");
+      toast.error(t("home.recep.checkInError"));
     }
   };
 
@@ -62,7 +64,7 @@ export function HomeReceptionist({ user, data }: Props) {
           userFullName={user.displayName}
           trailing={
             waiting > 0
-              ? `${waiting} paciente${waiting === 1 ? "" : "s"} en sala`
+              ? t("home.recep.patientsWaiting", { count: waiting })
               : undefined
           }
         />
@@ -79,13 +81,11 @@ export function HomeReceptionist({ user, data }: Props) {
         className="mf-home-receptionist-grid"
       >
         <HomeSection
-          title="Agenda de hoy"
+          title={t("home.recep.todayTitle")}
           subtitle={
             data.todayAppointments.length === 0
-              ? "Sin citas programadas"
-              : `${data.todayAppointments.length} cita${
-                  data.todayAppointments.length === 1 ? "" : "s"
-                }`
+              ? t("home.recep.todayEmpty")
+              : t("home.recep.todayCount", { count: data.todayAppointments.length })
           }
           action={
             <ButtonNew
@@ -93,7 +93,7 @@ export function HomeReceptionist({ user, data }: Props) {
               size="sm"
               onClick={() => router.push("/dashboard/appointments")}
             >
-              Ver agenda completa
+              {t("home.recep.viewFullAgenda")}
               <ChevronRight size={12} />
             </ButtonNew>
           }
@@ -126,13 +126,11 @@ export function HomeReceptionist({ user, data }: Props) {
         </HomeSection>
 
         <HomeSection
-          title="Acción inmediata"
+          title={t("home.recep.actionTitle")}
           subtitle={
             data.actionItems.length === 0
-              ? "Todo al día"
-              : `${data.actionItems.length} pendiente${
-                  data.actionItems.length === 1 ? "" : "s"
-                }`
+              ? t("home.recep.actionEmpty")
+              : t("home.recep.actionCount", { count: data.actionItems.length })
           }
           noPad
         >
@@ -176,7 +174,7 @@ export function HomeReceptionist({ user, data }: Props) {
                 }}
               >
                 <Clock size={11} aria-hidden />
-                En sala de espera
+                {t("home.recep.waitingRoom")}
               </div>
               {data.checkedInPatients.map((p) => (
                 <div

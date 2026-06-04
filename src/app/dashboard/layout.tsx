@@ -14,6 +14,10 @@ import { ExpiredPlanModal } from "@/components/dashboard/expired-plan-modal";
 import { ChatLauncher } from "@/components/dashboard/chat/chat-launcher";
 import { prisma } from "@/lib/prisma";
 import { getActiveClinicModuleKeys } from "@/lib/clinical-shared/get-active-clinic-modules";
+import { I18nProvider } from "@/i18n/i18n-provider";
+import { getDict } from "@/i18n/dictionaries";
+import { makeT } from "@/i18n/t";
+import { localeFromClinic } from "@/i18n/server";
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "paid"]);
 
@@ -21,6 +25,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const user = await getCurrentUser();
   const clinic = user.clinic;
   const pathname = headers().get("x-pathname") ?? "";
+
+  // i18n — idioma del panel resuelto desde la clínica de la sesión. El layout ya
+  // tiene la clínica en mano (getCurrentUser arriba), así que resuelve locale +
+  // dict inline y los baja al provider cliente; solo se serializa el idioma
+  // activo, no ambos. El cast defensivo vive centralizado en localeFromClinic.
+  // Server components / route handlers SIN la clínica a mano: getServerT().
+  const locale = localeFromClinic(clinic);
+  const dict = getDict(locale);
+  const t = makeT(dict);
 
   // ── Bloqueo cuando el plan/trial expira ──────────────────────────
   // Una clínica está expirada cuando trialEndsAt < now Y la suscripción
@@ -81,6 +94,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (clinic.waConnected) onboardingCompleted.push("whatsapp");
 
   return (
+    <I18nProvider locale={locale} dict={dict}>
     <ActiveConsultProvider>
     <NewPatientProvider>
     <NewAppointmentProvider>
@@ -88,7 +102,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         al recibir focus por teclado para que usuarios de teclado/lectores
         salten la sidebar y la topbar. */}
     <a href="#main-content" className="mf-skip-link">
-      Saltar al contenido principal
+      {t("common.skipToContent")}
     </a>
     <div className="dashboard-shell flex min-h-screen font-sans">
       <Sidebar
@@ -141,5 +155,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
     </NewAppointmentProvider>
     </NewPatientProvider>
     </ActiveConsultProvider>
+    </I18nProvider>
   );
 }

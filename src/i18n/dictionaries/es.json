@@ -1,0 +1,34 @@
+{
+  "common": {
+    "skipToContent": "Saltar al contenido principal"
+  },
+  "home": {
+    "switch": {
+      "admin": "Admin",
+      "doctor": "Doctor",
+      "ariaLabel": "Cambiar vista del home"
+    },
+    "recep": {
+      "patientsWaiting": {
+        "one": "{count} paciente en sala",
+        "other": "{count} pacientes en sala"
+      },
+      "checkInOk": "Paciente registrado en sala",
+      "checkInError": "No se pudo registrar el check-in",
+      "todayTitle": "Agenda de hoy",
+      "todayEmpty": "Sin citas programadas",
+      "todayCount": {
+        "one": "{count} cita",
+        "other": "{count} citas"
+      },
+      "viewFullAgenda": "Ver agenda completa",
+      "actionTitle": "Acción inmediata",
+      "actionEmpty": "Todo al día",
+      "actionCount": {
+        "one": "{count} pendiente",
+        "other": "{count} pendientes"
+      },
+      "waitingRoom": "En sala de espera"
+    }
+  }
+}

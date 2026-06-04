@@ -1,0 +1,34 @@
+{
+  "common": {
+    "skipToContent": "Skip to main content"
+  },
+  "home": {
+    "switch": {
+      "admin": "Admin",
+      "doctor": "Doctor",
+      "ariaLabel": "Switch home view"
+    },
+    "recep": {
+      "patientsWaiting": {
+        "one": "{count} patient waiting",
+        "other": "{count} patients waiting"
+      },
+      "checkInOk": "Patient checked in",
+      "checkInError": "Couldn't check the patient in",
+      "todayTitle": "Today's schedule",
+      "todayEmpty": "No appointments scheduled",
+      "todayCount": {
+        "one": "{count} appointment",
+        "other": "{count} appointments"
+      },
+      "viewFullAgenda": "View full schedule",
+      "actionTitle": "Needs attention",
+      "actionEmpty": "All caught up",
+      "actionCount": {
+        "one": "{count} pending",
+        "other": "{count} pending"
+      },
+      "waitingRoom": "In waiting room"
+    }
+  }
+}

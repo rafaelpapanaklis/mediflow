@@ -15,6 +15,7 @@ model Clinic {
   specialty       String // @deprecated — usar category en su lugar
   category        ClinicCategory @default(OTHER)
   country         String         @default("MX")
+  locale          String         @default("es") // idioma del panel: "es" | "en"
   state           String? // MX state (e.g., "Ciudad de México", "Jalisco")
   city            String?
   address         String?

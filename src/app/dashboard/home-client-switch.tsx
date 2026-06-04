@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Shield, Stethoscope } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 type HomeMode = "admin" | "doctor";
 
@@ -21,6 +22,7 @@ export function HomeClientSwitch({
   canBeDoctor,
   initialMode,
 }: Props) {
+  const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -65,7 +67,7 @@ export function HomeClientSwitch({
       {showToggle && (
         <div
           role="tablist"
-          aria-label="Cambiar vista del home"
+          aria-label={t("home.switch.ariaLabel")}
           style={{
             display: "inline-flex",
             marginBottom: 14,
@@ -80,13 +82,13 @@ export function HomeClientSwitch({
             active={mode === "admin"}
             onClick={() => switchMode("admin")}
             Icon={Shield}
-            label="Admin"
+            label={t("home.switch.admin")}
           />
           <SwitchButton
             active={mode === "doctor"}
             onClick={() => switchMode("doctor")}
             Icon={Stethoscope}
-            label="Doctor"
+            label={t("home.switch.doctor")}
           />
         </div>
       )}
