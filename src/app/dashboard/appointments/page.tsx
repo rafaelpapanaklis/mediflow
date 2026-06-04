@@ -6,10 +6,12 @@ import { prisma } from "@/lib/prisma";
 import { AppointmentsClient } from "./appointments-client";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-helpers";
+import { getServerT } from "@/i18n/server";
 
 export const metadata: Metadata = { title: "Agenda — MediFlow" };
 
 export default async function AppointmentsPage() {
+  const { t } = await getServerT();
   const user = await getCurrentUser();
   const tz = user.clinic.timezone;
 
@@ -51,7 +53,7 @@ export default async function AppointmentsPage() {
   }));
 
   return (
-    <ErrorBoundary fallbackTitle="Error al cargar la agenda">
+    <ErrorBoundary fallbackTitle={t("appointments.page.loadError")}>
       <AppointmentsClient
         appointments={serializedAppts as any}
         patients={patients}

@@ -22,13 +22,22 @@ import type {
   ResourceDTO,
 } from "@/lib/agenda/types";
 import { describeOverlapConflict, describeResourceUnavailable } from "@/lib/agenda/conflict-copy";
+import { useT } from "@/i18n/i18n-provider";
+import type { TFunction } from "@/i18n/t";
 import { getResourceSchedule } from "@/lib/agenda/mutations";
 import type { WeekScheduleDTO } from "@/lib/agenda/types";
 import type {
   OpenNewAppointmentParams,
 } from "@/lib/new-appointment/types";
 
-const REASON_PRESETS = ["Consulta General", "Primera Consulta", "Limpieza", "Resina", "Dolor", "Urgencia"];
+const REASON_PRESET_KEYS = [
+  "appointments.newApptDialog.presetGeneralConsult",
+  "appointments.newApptDialog.presetFirstConsult",
+  "appointments.newApptDialog.presetCleaning",
+  "appointments.newApptDialog.presetResin",
+  "appointments.newApptDialog.presetPain",
+  "appointments.newApptDialog.presetUrgency",
+];
 
 interface Props {
   isOpen: boolean;
@@ -47,7 +56,9 @@ interface BootData {
 }
 
 export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
+  const t = useT();
   const router = useRouter();
+  const reasonPresets = REASON_PRESET_KEYS.map((key) => t(key));
 
   const [boot, setBoot] = useState<BootData | null>(null);
   const [bootLoading, setBootLoading] = useState(false);
@@ -117,7 +128,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
       .then((r) => (r.ok ? r.json() : null))
       .then(async (body) => {
         if (!body) {
-          toast.error("No se pudo cargar la configuración de la clínica");
+          toast.error(t("appointments.newApptDialog.toastConfigLoadFailed"));
           onClose();
           return;
         }
@@ -213,7 +224,11 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
         setDuration(body.recentFranklLow ? 60 : body.suggestedDurationMin);
         if (body.primaryGuardianName) {
           setReason((current) =>
-            current.trim().length === 0 ? `Tutor: ${body.primaryGuardianName}` : current,
+            current.trim().length === 0
+              ? t("appointments.newApptDialog.reasonGuardianPrefill", {
+                  name: body.primaryGuardianName,
+                })
+              : current,
           );
         }
       })
@@ -232,7 +247,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
     if (!slotIso) newErrors.slot = true;
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
-      toast.error("Completa los campos obligatorios marcados en rojo");
+      toast.error(t("appointments.newApptDialog.toastFillRequired"));
       return;
     }
     if (!boot) return;
@@ -289,13 +304,13 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
       }
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
-        toast.error(errBody.error ?? "No se pudo crear la cita");
+        toast.error(errBody.error ?? t("appointments.newApptDialog.toastCreateFailed"));
         setSubmitting(false);
         return;
       }
 
       const body = (await res.json()) as { appointment: { id: string; startsAt: string } };
-      toast.success("Cita creada");
+      toast.success(t("appointments.newApptDialog.toastCreated"));
       params?.onCreated?.({ id: body.appointment.id, startsAt: body.appointment.startsAt });
 
       if (params?.redirectAfter) {
@@ -308,7 +323,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
       onClose();
     } catch (err) {
       console.error(err);
-      toast.error("Error de red. Intenta de nuevo.");
+      toast.error(t("appointments.newApptDialog.toastNetworkError"));
       setSubmitting(false);
     }
   };
@@ -332,9 +347,9 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
           aria-describedby={undefined}
         >
           <header style={headerStyle}>
-            <Dialog.Title style={titleStyle}>Nueva cita</Dialog.Title>
+            <Dialog.Title style={titleStyle}>{t("appointments.newApptDialog.title")}</Dialog.Title>
             <Dialog.Close asChild>
-              <button type="button" aria-label="Cerrar" style={closeBtnStyle}>
+              <button type="button" aria-label={t("common.close")} style={closeBtnStyle}>
                 <X size={18} />
               </button>
             </Dialog.Close>
@@ -347,7 +362,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
               </div>
             ) : (
               <>
-                <Field label="Paciente*">
+                <Field label={t("appointments.newApptDialog.fieldPatient")}>
                   <PatientSearchField
                     value={patient}
                     onChange={(p) => { setPatient(p); if (errors.patient) setErrors((er) => ({ ...er, patient: undefined })); }}
@@ -356,14 +371,14 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                 </Field>
 
                 <div style={gridTwo}>
-                  <Field label="Profesional*">
+                  <Field label={t("appointments.newApptDialog.fieldProfessional")}>
                     <select
                       className="input-new"
                       value={doctorId}
                       onChange={(e) => { setDoctorId(e.target.value); if (errors.doctorId) setErrors((er) => ({ ...er, doctorId: undefined })); }}
                       style={{ borderColor: errors.doctorId ? "var(--danger)" : undefined }}
                     >
-                      {boot.doctors.length === 0 && <option value="">Sin profesionales activos</option>}
+                      {boot.doctors.length === 0 && <option value="">{t("appointments.newApptDialog.optionNoActiveProfessionals")}</option>}
                       {boot.doctors.map((d) => (
                         <option key={d.id} value={d.id}>
                           {d.shortName}
@@ -372,7 +387,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                     </select>
                   </Field>
                   {boot.resources.length > 0 && (
-                    <Field label="Consultorio*">
+                    <Field label={t("appointments.newApptDialog.fieldRoom")}>
                       <select
                         className="input-new"
                         value={resourceId}
@@ -391,42 +406,46 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                 </div>
 
                 {pediatricContext ? (
-                  <div style={pediatricBannerStyle} role="note" aria-label="Información pediátrica">
+                  <div style={pediatricBannerStyle} role="note" aria-label={t("appointments.newApptDialog.pediatricAriaLabel")}>
                     <span style={pediatricChipStyle}>
-                      <Baby size={12} aria-hidden /> Paciente pediátrico
+                      <Baby size={12} aria-hidden /> {t("appointments.newApptDialog.pediatricPatient")}
                       {pediatricContext.ageFormatted ? ` · ${pediatricContext.ageFormatted}` : ""}
                     </span>
                     <span style={pediatricHintStyle}>
-                      Duración sugerida: {pediatricContext.suggestedDurationMin}–
-                      {pediatricContext.suggestedDurationMaxMin} min
+                      {t("appointments.newApptDialog.pediatricSuggestedDuration", {
+                        min: pediatricContext.suggestedDurationMin,
+                        max: pediatricContext.suggestedDurationMaxMin,
+                      })}
                     </span>
                     {pediatricContext.recentFranklLow && pediatricContext.longerBlockSuggestion ? (
                       <span style={pediatricWarningStyle}>
-                        <AlertTriangle size={12} aria-hidden /> Frankl ≤2 reciente — considera bloque más largo
-                        ({pediatricContext.longerBlockSuggestion.minMin}–{pediatricContext.longerBlockSuggestion.maxMin} min)
+                        <AlertTriangle size={12} aria-hidden /> {t("appointments.newApptDialog.pediatricFranklWarning", {
+                          min: pediatricContext.longerBlockSuggestion.minMin,
+                          max: pediatricContext.longerBlockSuggestion.maxMin,
+                        })}
                       </span>
                     ) : null}
                   </div>
                 ) : null}
 
-                <Field label="Motivo*">
+                <Field label={t("appointments.newApptDialog.fieldReason")}>
                   <MotivoField
                     value={reason}
                     onChange={(v) => { setReason(v); if (errors.reason) setErrors((er) => ({ ...er, reason: undefined })); }}
-                    presets={REASON_PRESETS}
+                    presets={reasonPresets}
                     error={errors.reason}
                   />
                 </Field>
 
                 <div style={gridDateDur}>
-                  <Field label="Fecha">
+                  <Field label={t("common.date")}>
                     <DateDropdown
                       value={dateISO}
                       onChange={(iso) => { setDateISO(iso); setSlotIso(null); }}
                       todayISO={todayInTz(boot.timezone)}
                     />
                   </Field>
-                  <Field label="Duración">
+                  <Field label={t("appointments.newApptDialog.fieldDuration")}>
                     <DurationPicker
                       presets={DURATION_PRESETS_MIN}
                       duration={duration}
@@ -445,7 +464,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                 </div>
 
                 {config && doctorId && (
-                  <Field label="Horario disponible">
+                  <Field label={t("appointments.newApptDialog.fieldAvailableTime")}>
                     <SlotGridPicker
                       dateISO={dateISO}
                       doctorId={doctorId}
@@ -460,7 +479,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                     />
                     {errors.slot && (
                       <div style={{ fontSize: 11, color: "var(--danger)", marginTop: 4 }}>
-                        Selecciona un horario
+                        {t("appointments.newApptDialog.errorSelectTime")}
                       </div>
                     )}
                   </Field>
@@ -471,7 +490,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
                     <ToggleChip
                       active={notifyPatient}
                       icon={<MessageCircle size={12} />}
-                      label="Enviar WhatsApp"
+                      label={t("appointments.newApptDialog.toggleSendWhatsApp")}
                       onClick={() => setNotifyPatient((v) => !v)}
                     />
                   </div>
@@ -487,6 +506,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params }: Props) {
               patientName: patient?.name ?? null,
               doctorName: boot?.doctors.find((d) => d.id === doctorId)?.shortName ?? null,
               timezone: boot?.timezone ?? null,
+              t,
             })}
             submitting={submitting}
             disabled={submitting || !boot}
@@ -524,15 +544,17 @@ function summaryNode({
   patientName,
   doctorName,
   timezone,
+  t,
 }: {
   slotIso: string | null;
   duration: number;
   patientName: string | null;
   doctorName: string | null;
   timezone: string | null;
+  t: TFunction;
 }): React.ReactNode {
   if (!slotIso || !timezone) {
-    return <span style={{ color: "var(--text-3)" }}>Selecciona fecha y horario para crear la cita</span>;
+    return <span style={{ color: "var(--text-3)" }}>{t("appointments.newApptDialog.summaryPrompt")}</span>;
   }
   const time = formatSlotTime(slotIso, timezone);
   const firstName = patientName ? patientName.split(" ")[0] : null;
@@ -540,7 +562,7 @@ function summaryNode({
   return (
     <>
       <b style={bold}>{time}</b>
-      {` · ${duration} min`}
+      {` · ${t("appointments.newApptDialog.summaryMinutes", { count: duration })}`}
       {firstName ? (
         <>
           {" · "}
@@ -549,7 +571,7 @@ function summaryNode({
       ) : null}
       {doctorName ? (
         <>
-          {" con "}
+          {` ${t("appointments.newApptDialog.summaryWith")} `}
           <b style={bold}>{doctorName}</b>
         </>
       ) : null}

@@ -1906,5 +1906,332 @@
       "sending": "Sending…",
       "createReferral": "Create referral"
     }
+  },
+  "billing": {
+    "billingClient": {
+      "statusPending": "Pending",
+      "statusPartial": "Partial",
+      "statusPaid": "Paid",
+      "statusOverdue": "Overdue",
+      "statusDraft": "Draft",
+      "statusCancelled": "Cancelled",
+      "filterAll": "All",
+      "filterPending": "Pending",
+      "filterPaid": "Paid",
+      "filterOverdue": "Overdue",
+      "filterDraft": "Drafts",
+      "title": "Billing",
+      "subtitle": {
+        "one": "Invoice and payment management · {count} invoice · click a row to view details",
+        "other": "Invoice and payment management · {count} invoices · click a row to view details"
+      },
+      "newInvoice": "New invoice",
+      "kpiTotalCollected": "Total collected",
+      "kpiToCollect": "To collect",
+      "kpiOverdue": "Overdue",
+      "kpiThisMonth": "This month",
+      "searchPlaceholder": "Search by patient or invoice number…",
+      "emptyNoInvoices": "No invoices yet",
+      "emptyNoResults": "No results for the applied filters",
+      "thFolio": "Folio",
+      "thPatient": "Patient",
+      "thPaid": "Paid",
+      "thBalance": "Balance",
+      "thCfdi": "CFDI",
+      "cfdiStamped": "Stamped",
+      "cfdiStamp": "Stamp",
+      "satNotConfigured": "SAT not configured",
+      "registerPayment": "Register payment",
+      "sectionPatientDetail": "Patient and detail",
+      "labelPatient": "Patient",
+      "optionSelect": "Select…",
+      "labelDescription": "Description",
+      "placeholderDescription": "Dental consultation…",
+      "sectionItemsTotals": "Items and totals",
+      "labelQuantity": "Quantity",
+      "labelUnitPrice": "Unit price",
+      "labelNotes": "Notes",
+      "placeholderOptional": "Optional",
+      "savingEllipsis": "Saving…",
+      "createInvoice": "Create invoice",
+      "cfdiModalTitle": "Stamp CFDI — {number}",
+      "cfdiInvoiceFor": "Invoice for",
+      "cfdiIssuer": "Issuer: {rfc}.",
+      "cfdiReceptorData": "Recipient details",
+      "labelNameLegal": "Name / Legal name",
+      "labelZip": "ZIP",
+      "stampingEllipsis": "Stamping…",
+      "stampAtSat": "Stamp with SAT",
+      "toastRequiredFields": "Complete the required fields",
+      "toastInvoiceCreated": "Invoice {number} created",
+      "toastInvoiceCreateError": "Error creating invoice",
+      "toastCfdiReceptorRequired": "Patient RFC, name and ZIP code are required",
+      "toastCfdiStamped": "CFDI stamped successfully with SAT",
+      "toastCfdiStampError": "Error stamping"
+    }
+  },
+  "appointments": {
+    "page": {
+      "loadError": "Error loading the schedule"
+    },
+    "patientSearch": {
+      "placeholder": "Search patient…",
+      "inputPlaceholder": "Name or number…"
+    },
+    "form": {
+      "patientAndType": "Patient and type",
+      "patient": "Patient",
+      "doctor": "Doctor",
+      "appointmentType": "Appointment type",
+      "mode": "Mode",
+      "inPerson": "In person",
+      "teleconsultation": "Teleconsultation",
+      "dateAndTime": "Date and time",
+      "startTime": "Start time",
+      "duration": "Duration",
+      "endTime": "End time",
+      "minutesShort": "{count} min",
+      "notesPlaceholder": "Reason for visit, special instructions…"
+    },
+    "toast": {
+      "selectPatient": "Select a patient",
+      "created": "✅ Appointment scheduled",
+      "saveError": "Error saving",
+      "updated": "Appointment updated",
+      "statusUpdated": "Status updated",
+      "updateError": "Error updating",
+      "whatsappSent": "WhatsApp sent",
+      "cancelError": "Error cancelling",
+      "cancelled": "Appointment cancelled"
+    },
+    "cancelConfirm": {
+      "title": "Cancel this appointment?",
+      "description": "The patient will receive a notification if they have a contact on file.",
+      "confirm": "Cancel appointment",
+      "cancel": "No, keep it"
+    },
+    "status": {
+      "pending": "Pending",
+      "confirmed": "Confirmed",
+      "inProgress": "In progress",
+      "completed": "Completed",
+      "cancelled": "Cancelled",
+      "noShow": "No-show"
+    },
+    "calendar": {
+      "day": {
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed",
+        "thu": "Thu",
+        "fri": "Fri",
+        "sat": "Sat",
+        "sun": "Sun"
+      },
+      "month": {
+        "jan": "January",
+        "feb": "February",
+        "mar": "March",
+        "apr": "April",
+        "may": "May",
+        "jun": "June",
+        "jul": "July",
+        "aug": "August",
+        "sep": "September",
+        "oct": "October",
+        "nov": "November",
+        "dec": "December"
+      }
+    },
+    "month": {
+      "moreCount": "+{count} more"
+    },
+    "period": {
+      "month": "{month} {year}",
+      "week": "Week of {month} {day}",
+      "day": "{month} {day}, {year}"
+    },
+    "header": {
+      "title": "Schedule",
+      "prevPeriod": "Previous period",
+      "nextPeriod": "Next period",
+      "today": "Today",
+      "newAppointment": "New appointment"
+    },
+    "doctorPrefix": "Dr.",
+    "filter": {
+      "allDoctors": "All doctors"
+    },
+    "view": {
+      "month": "Month",
+      "week": "Wk",
+      "day": "Day"
+    },
+    "kpi": {
+      "today": "Appointments today",
+      "thisMonth": "This month",
+      "pending": "Pending",
+      "completed": "Completed"
+    },
+    "sidePanel": {
+      "apptCount": {
+        "one": "{count} appointment",
+        "other": "{count} appointments"
+      },
+      "empty": "No appointments",
+      "add": "+ Add"
+    },
+    "minLabel": "min",
+    "badge": {
+      "googleCal": "Google Cal",
+      "waSent": "WA sent"
+    },
+    "modal": {
+      "scheduleSubmit": "✅ Schedule appointment",
+      "editTitle": "Edit appointment",
+      "saveChanges": "💾 Save changes"
+    },
+    "detail": {
+      "googleSynced": "Synced with Google Calendar",
+      "reminderSent": "Reminder sent",
+      "whatsappReminderSent": "WhatsApp reminder sent",
+      "schedule": "Schedule",
+      "minutesLong": "{count} minutes",
+      "changeStatus": "Change status",
+      "waSentCheck": "WA sent ✓",
+      "sendWhatsapp": "Send WhatsApp",
+      "cancelAppointment": "Cancel appointment"
+    },
+    "teleconsult": {
+      "join": "Join video call",
+      "paymentPending": "Payment pending",
+      "copyPaymentLink": "Copy payment link",
+      "paymentLinkCopied": "Payment link copied",
+      "sendLinkWhatsapp": "Send link via WhatsApp"
+    },
+    "dateDropdown": {
+      "daySunday": "Sunday",
+      "dayMonday": "Monday",
+      "dayTuesday": "Tuesday",
+      "dayWednesday": "Wednesday",
+      "dayThursday": "Thursday",
+      "dayFriday": "Friday",
+      "daySaturday": "Saturday",
+      "monthAbbrJan": "Jan",
+      "monthAbbrFeb": "Feb",
+      "monthAbbrMar": "Mar",
+      "monthAbbrApr": "Apr",
+      "monthAbbrMay": "May",
+      "monthAbbrJun": "Jun",
+      "monthAbbrJul": "Jul",
+      "monthAbbrAug": "Aug",
+      "monthAbbrSep": "Sep",
+      "monthAbbrOct": "Oct",
+      "monthAbbrNov": "Nov",
+      "monthAbbrDec": "Dec",
+      "monthLongJan": "January",
+      "monthLongFeb": "February",
+      "monthLongMar": "March",
+      "monthLongApr": "April",
+      "monthLongMay": "May",
+      "monthLongJun": "June",
+      "monthLongJul": "July",
+      "monthLongAug": "August",
+      "monthLongSep": "September",
+      "monthLongOct": "October",
+      "monthLongNov": "November",
+      "monthLongDec": "December",
+      "weekdayMon": "Mon",
+      "weekdayTue": "Tue",
+      "weekdayWed": "Wed",
+      "weekdayThu": "Thu",
+      "weekdayFri": "Fri",
+      "weekdaySat": "Sat",
+      "weekdaySun": "Sun",
+      "relToday": "Today",
+      "relTomorrow": "Tomorrow",
+      "relYesterday": "Yesterday",
+      "relInDays": {
+        "one": "In {count} day",
+        "other": "In {count} days"
+      },
+      "relInWeeks": {
+        "one": "In {count} wk.",
+        "other": "In {count} wks."
+      },
+      "relDaysAgo": {
+        "one": "{count} day ago",
+        "other": "{count} days ago"
+      },
+      "prevMonth": "Previous month",
+      "nextMonth": "Next month",
+      "today": "Today"
+    },
+    "durationPicker": {
+      "customPlaceholder": "other",
+      "customAriaLabel": "Custom duration in minutes"
+    },
+    "motivoField": {
+      "placeholder": "General consultation, follow-up, urgent care..."
+    },
+    "newApptDialog": {
+      "presetGeneralConsult": "General Consultation",
+      "presetFirstConsult": "First Consultation",
+      "presetCleaning": "Cleaning",
+      "presetResin": "Resin",
+      "presetPain": "Pain",
+      "presetUrgency": "Urgent Care",
+      "toastConfigLoadFailed": "Could not load the clinic configuration",
+      "reasonGuardianPrefill": "Guardian: {name}",
+      "toastFillRequired": "Fill in the required fields marked in red",
+      "toastCreateFailed": "Could not create the appointment",
+      "toastCreated": "Appointment created",
+      "toastNetworkError": "Network error. Please try again.",
+      "title": "New appointment",
+      "fieldPatient": "Patient*",
+      "fieldProfessional": "Professional*",
+      "optionNoActiveProfessionals": "No active professionals",
+      "fieldRoom": "Room*",
+      "pediatricAriaLabel": "Pediatric information",
+      "pediatricPatient": "Pediatric patient",
+      "pediatricSuggestedDuration": "Suggested duration: {min}–{max} min",
+      "pediatricFranklWarning": "Recent Frankl ≤2 — consider a longer block ({min}–{max} min)",
+      "fieldReason": "Reason*",
+      "fieldDuration": "Duration",
+      "fieldAvailableTime": "Available time",
+      "errorSelectTime": "Select a time",
+      "toggleSendWhatsApp": "Send WhatsApp",
+      "summaryPrompt": "Select a date and time to create the appointment",
+      "summaryMinutes": {
+        "one": "{count} min",
+        "other": "{count} min"
+      },
+      "summaryWith": "with"
+    },
+    "patientCombobox": {
+      "change": "Change",
+      "searchPlaceholder": "Search by name, phone, or email...",
+      "createNewPatient": "Create new patient",
+      "noPatientFound": "No patient found matching \"{query}\".",
+      "createNewPatientWithQuery": "Create new patient: \"{query}\""
+    },
+    "slotGrid": {
+      "selectProfessional": "Select a professional to see the available time slots.",
+      "durationInfo": "{slot} min · {duration} min duration",
+      "firstFreeSlot": "First free slot: {time}",
+      "morning": "Morning",
+      "afternoon": "Afternoon",
+      "evening": "Evening",
+      "freeCount": {
+        "one": "{count} free",
+        "other": "{count} free"
+      },
+      "slotsGroupAria": "{group} slots",
+      "slotsAvailableAria": "Available slots"
+    },
+    "summaryFooter": {
+      "creating": "Creating...",
+      "createAppointment": "Create appointment"
+    }
   }
 }

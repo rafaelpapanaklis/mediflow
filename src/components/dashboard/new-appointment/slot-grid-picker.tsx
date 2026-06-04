@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Zap, Sun, Sunset, Moon } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 import {
   buildOccupiedSlotSet,
 } from "@/lib/agenda/overlap-client";
@@ -52,6 +53,7 @@ export function SlotGridPicker({
   resourceSchedule,
   grouped = false,
 }: Props) {
+  const t = useT();
   const [day, setDay] = useState<FetchedDay>({ appointments: [], loaded: false });
   const [loading, setLoading] = useState(false);
   const selectedRef = useRef<HTMLButtonElement | null>(null);
@@ -159,7 +161,7 @@ export function SlotGridPicker({
   if (!doctorId) {
     return (
       <div style={emptyHintStyle}>
-        Selecciona un profesional para ver los horarios disponibles.
+        {t("appointments.slotGrid.selectProfessional")}
       </div>
     );
   }
@@ -226,16 +228,21 @@ export function SlotGridPicker({
         {loading ? (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
             <Loader2 size={11} className="animate-spin" />
-            Cargando...
+            {t("common.loading")}
           </span>
         ) : (
-          `${config.slotMinutes} min · ${durationMin} min de duración`
+          t("appointments.slotGrid.durationInfo", {
+            slot: config.slotMinutes,
+            duration: durationMin,
+          })
         )}
       </div>
       {firstFreeIdx >= 0 && firstFreeIdx !== valueIdx && (
         <button type="button" onClick={jumpToFirstFree} style={quickJumpStyle}>
           <Zap size={11} aria-hidden />
-          Primer slot libre: {formatSlotTime(slotIndexToUtc(firstFreeIdx, dateISO, config).toISOString(), config.timezone)}
+          {t("appointments.slotGrid.firstFreeSlot", {
+            time: formatSlotTime(slotIndexToUtc(firstFreeIdx, dateISO, config).toISOString(), config.timezone),
+          })}
         </button>
       )}
     </div>
@@ -251,10 +258,10 @@ export function SlotGridPicker({
       else if (h < 18) tarde.push(idx);
       else noche.push(idx);
     }
-    const groups: { key: string; label: string; Icon: typeof Sun; idxs: number[] }[] = [
-      { key: "manana", label: "Mañana", Icon: Sun, idxs: manana },
-      { key: "tarde", label: "Tarde", Icon: Sunset, idxs: tarde },
-      { key: "noche", label: "Noche", Icon: Moon, idxs: noche },
+    const groups: { key: string; labelKey: string; Icon: typeof Sun; idxs: number[] }[] = [
+      { key: "manana", labelKey: "appointments.slotGrid.morning", Icon: Sun, idxs: manana },
+      { key: "tarde", labelKey: "appointments.slotGrid.afternoon", Icon: Sunset, idxs: tarde },
+      { key: "noche", labelKey: "appointments.slotGrid.evening", Icon: Moon, idxs: noche },
     ];
     return (
       <div>
@@ -265,12 +272,14 @@ export function SlotGridPicker({
               <div key={g.key} style={{ marginBottom: 10 }}>
                 <div style={groupHeaderStyle}>
                   <g.Icon size={11} aria-hidden />
-                  {g.label}
+                  {t(g.labelKey)}
                   <span style={groupCountStyle}>
-                    {g.idxs.filter((i) => isSlotFree(i)).length} libres
+                    {t("appointments.slotGrid.freeCount", {
+                      count: g.idxs.filter((i) => isSlotFree(i)).length,
+                    })}
                   </span>
                 </div>
-                <div style={groupGridStyle} role="grid" aria-label={`Slots ${g.label}`}>
+                <div style={groupGridStyle} role="grid" aria-label={t("appointments.slotGrid.slotsGroupAria", { group: t(g.labelKey) })}>
                   {g.idxs.map(renderSlot)}
                 </div>
               </div>
@@ -284,7 +293,7 @@ export function SlotGridPicker({
   return (
     <div>
       {header}
-      <div style={gridStyle} role="grid" aria-label="Slots disponibles">
+      <div style={gridStyle} role="grid" aria-label={t("appointments.slotGrid.slotsAvailableAria")}>
         {Array.from({ length: total }, (_, idx) => renderSlot(idx))}
       </div>
     </div>

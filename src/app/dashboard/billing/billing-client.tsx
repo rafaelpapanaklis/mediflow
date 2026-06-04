@@ -13,23 +13,24 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { fmtMXN, fmtMXNdec, formatRelativeDate } from "@/lib/format";
 import { PaymentModal, type PaymentInvoice } from "@/components/dashboard/billing/payment-modal";
 import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
+import { useT } from "@/i18n/i18n-provider";
 
 type Tone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
-const STATUS_BADGE: Record<string, { tone: Tone; label: string }> = {
-  PENDING:   { tone: "warning", label: "Pendiente" },
-  PARTIAL:   { tone: "info",    label: "Parcial"   },
-  PAID:      { tone: "success", label: "Pagado"    },
-  OVERDUE:   { tone: "danger",  label: "Vencido"   },
-  DRAFT:     { tone: "brand",   label: "Borrador"  },
-  CANCELLED: { tone: "neutral", label: "Cancelado" },
+const STATUS_BADGE: Record<string, { tone: Tone; labelKey: string }> = {
+  PENDING:   { tone: "warning", labelKey: "billing.billingClient.statusPending"   },
+  PARTIAL:   { tone: "info",    labelKey: "billing.billingClient.statusPartial"   },
+  PAID:      { tone: "success", labelKey: "billing.billingClient.statusPaid"      },
+  OVERDUE:   { tone: "danger",  labelKey: "billing.billingClient.statusOverdue"   },
+  DRAFT:     { tone: "brand",   labelKey: "billing.billingClient.statusDraft"     },
+  CANCELLED: { tone: "neutral", labelKey: "billing.billingClient.statusCancelled" },
 };
 
 const STATUS_FILTERS = [
-  { value: "all",      label: "Todas" },
-  { value: "pending",  label: "Pendientes" },
-  { value: "paid",     label: "Pagadas" },
-  { value: "overdue",  label: "Vencidas" },
-  { value: "draft",    label: "Borradores" },
+  { value: "all",      labelKey: "billing.billingClient.filterAll" },
+  { value: "pending",  labelKey: "billing.billingClient.filterPending" },
+  { value: "paid",     labelKey: "billing.billingClient.filterPaid" },
+  { value: "overdue",  labelKey: "billing.billingClient.filterOverdue" },
+  { value: "draft",    labelKey: "billing.billingClient.filterDraft" },
 ];
 
 interface Props {
@@ -47,6 +48,7 @@ function patientNameOf(inv: any): string {
 }
 
 export function BillingClient({ invoices: initial, patients, totalPaid, totalPending, totalOverdue, monthInvoices, clinic }: Props) {
+  const t = useT();
   const router = useRouter();
   const [invoices, setInvoices] = useState(initial);
   const [search, setSearch]     = useState("");
@@ -101,7 +103,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
 
   async function createInvoice() {
     if (!form.patientId || !form.description || !form.unitPrice) {
-      toast.error("Completa los campos requeridos");
+      toast.error(t("billing.billingClient.toastRequiredFields"));
       return;
     }
     setLoadingNew(true);
@@ -121,12 +123,12 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
       if (!res.ok) throw new Error((await res.json()).error);
       const inv = await res.json();
       setInvoices(prev => [inv, ...prev]);
-      toast.success(`Factura ${inv.invoiceNumber} creada`);
+      toast.success(t("billing.billingClient.toastInvoiceCreated", { number: inv.invoiceNumber }));
       setShowNew(false);
       setForm({ patientId: "", description: "", quantity: "1", unitPrice: "", notes: "" });
       refresh();
     } catch (err: any) {
-      toast.error(err.message ?? "Error al crear factura");
+      toast.error(err.message ?? t("billing.billingClient.toastInvoiceCreateError"));
     } finally {
       setLoadingNew(false);
     }
@@ -135,7 +137,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
   async function timbraCfdi() {
     if (!cfdiFor) return;
     if (!cfdiForm.rfc.trim() || !cfdiForm.nombre.trim() || !cfdiForm.cp.trim()) {
-      toast.error("RFC, nombre y CP del paciente son requeridos");
+      toast.error(t("billing.billingClient.toastCfdiReceptorRequired"));
       return;
     }
     setCfdiLoading(true);
@@ -161,10 +163,10 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
         inv.id === cfdiFor.id ? { ...inv, cfdiUuid: data.uuid } : inv,
       ));
       setCfdiFor(null);
-      toast.success("CFDI timbrado correctamente ante el SAT");
+      toast.success(t("billing.billingClient.toastCfdiStamped"));
       if (data.pdfUrl) window.open(data.pdfUrl, "_blank");
     } catch (err: any) {
-      toast.error(err.message ?? "Error al timbrar");
+      toast.error(err.message ?? t("billing.billingClient.toastCfdiStampError"));
     } finally {
       setCfdiLoading(false);
     }
@@ -186,22 +188,22 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ fontSize: "clamp(16px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>Facturación</h1>
+          <h1 style={{ fontSize: "clamp(16px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>{t("billing.billingClient.title")}</h1>
           <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4 }}>
-            Gestión de facturas y pagos · {invoices.length} facturas · click en una fila para ver detalle
+            {t("billing.billingClient.subtitle", { count: invoices.length })}
           </p>
         </div>
         <ButtonNew variant="primary" icon={<Plus size={14} />} onClick={() => setShowNew(true)}>
-          Nueva factura
+          {t("billing.billingClient.newInvoice")}
         </ButtonNew>
       </div>
 
       {/* KPIs */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginBottom: 20 }}>
-        <KpiCard label="Total cobrado" value={fmtMXN(totalPaid)}       icon={CheckCircle2} />
-        <KpiCard label="Por cobrar"    value={fmtMXN(totalPending)}    icon={Clock} />
-        <KpiCard label="Vencido"       value={fmtMXN(totalOverdue)}    icon={AlertCircle} />
-        <KpiCard label="Este mes"      value={String(monthInvoices)}   icon={FileText} />
+        <KpiCard label={t("billing.billingClient.kpiTotalCollected")} value={fmtMXN(totalPaid)}       icon={CheckCircle2} />
+        <KpiCard label={t("billing.billingClient.kpiToCollect")}      value={fmtMXN(totalPending)}    icon={Clock} />
+        <KpiCard label={t("billing.billingClient.kpiOverdue")}        value={fmtMXN(totalOverdue)}    icon={AlertCircle} />
+        <KpiCard label={t("billing.billingClient.kpiThisMonth")}      value={String(monthInvoices)}   icon={FileText} />
       </div>
 
       {/* Filters */}
@@ -211,7 +213,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar por paciente o folio…"
+            placeholder={t("billing.billingClient.searchPlaceholder")}
           />
         </div>
         <div className="segment-new">
@@ -222,7 +224,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
               onClick={() => setStatus(f.value)}
               className={`segment-new__btn ${status === f.value ? "segment-new__btn--active" : ""}`}
             >
-              {f.label}
+              {t(f.labelKey)}
             </button>
           ))}
         </div>
@@ -232,20 +234,20 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
       <CardNew noPad>
         {filtered.length === 0 ? (
           <div style={{ padding: "48px 24px", textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
-            {invoices.length === 0 ? "No hay facturas todavía" : "Sin resultados para los filtros aplicados"}
+            {invoices.length === 0 ? t("billing.billingClient.emptyNoInvoices") : t("billing.billingClient.emptyNoResults")}
           </div>
         ) : (
           <table className="table-new">
             <thead>
               <tr>
-                <th>Folio</th>
-                <th>Paciente</th>
-                <th>Fecha</th>
-                <th style={{ textAlign: "right" }}>Total</th>
-                <th style={{ textAlign: "right" }}>Pagado</th>
-                <th style={{ textAlign: "right" }}>Saldo</th>
-                <th>Estado</th>
-                <th>CFDI</th>
+                <th>{t("billing.billingClient.thFolio")}</th>
+                <th>{t("billing.billingClient.thPatient")}</th>
+                <th>{t("common.date")}</th>
+                <th style={{ textAlign: "right" }}>{t("common.total")}</th>
+                <th style={{ textAlign: "right" }}>{t("billing.billingClient.thPaid")}</th>
+                <th style={{ textAlign: "right" }}>{t("billing.billingClient.thBalance")}</th>
+                <th>{t("common.status")}</th>
+                <th>{t("billing.billingClient.thCfdi")}</th>
                 <th></th>
               </tr>
             </thead>
@@ -283,21 +285,21 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                       {fmtMXNdec(inv.balance)}
                     </td>
                     <td>
-                      <BadgeNew tone={badge.tone} dot>{badge.label}</BadgeNew>
+                      <BadgeNew tone={badge.tone} dot>{t(badge.labelKey)}</BadgeNew>
                     </td>
                     <td onClick={(e) => e.stopPropagation()}>
                       {inv.cfdiUuid ? (
-                        <BadgeNew tone="success">Timbrado</BadgeNew>
+                        <BadgeNew tone="success">{t("billing.billingClient.cfdiStamped")}</BadgeNew>
                       ) : clinic.facturApiEnabled ? (
                         <button
                           type="button"
                           onClick={() => { setCfdiFor(inv); setCfdiForm(f => ({ ...f, rfc: "", nombre: "", cp: "" })); }}
                           className="btn-new btn-new--ghost btn-new--sm"
                         >
-                          Timbrar
+                          {t("billing.billingClient.cfdiStamp")}
                         </button>
                       ) : (
-                        <span style={{ fontSize: 10, color: "var(--text-4)" }}>SAT no configurado</span>
+                        <span style={{ fontSize: 10, color: "var(--text-4)" }}>{t("billing.billingClient.satNotConfigured")}</span>
                       )}
                     </td>
                     <td
@@ -310,7 +312,7 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                           onClick={(e) => openPaymentForRow(e, inv)}
                           className="btn-new btn-new--ghost btn-new--sm"
                         >
-                          Registrar pago
+                          {t("billing.billingClient.registerPayment")}
                         </button>
                       ) : null}
                     </td>
@@ -328,45 +330,45 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
         <div className="modal-overlay" onClick={() => setShowNew(false)}>
           <div className="modal modal--wide" onClick={e => e.stopPropagation()}>
             <div className="modal__header">
-              <div className="modal__title">Nueva factura</div>
-              <button onClick={() => setShowNew(false)} type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label="Cerrar">
+              <div className="modal__title">{t("billing.billingClient.newInvoice")}</div>
+              <button onClick={() => setShowNew(false)} type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label={t("common.close")}>
                 <X size={14} />
               </button>
             </div>
             <form onSubmit={e => { e.preventDefault(); createInvoice(); }}>
               <div className="modal__body">
                 <div style={{ marginBottom: 22 }}>
-                  <div className="form-section__title">Paciente y detalle<span className="form-section__rule" /></div>
+                  <div className="form-section__title">{t("billing.billingClient.sectionPatientDetail")}<span className="form-section__rule" /></div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
                     <div className="field-new" style={{ gridColumn: "1 / -1" }}>
-                      <label className="field-new__label">Paciente <span className="req">*</span></label>
+                      <label className="field-new__label">{t("billing.billingClient.labelPatient")} <span className="req">*</span></label>
                       <select className="input-new" value={form.patientId} onChange={e => setF("patientId", e.target.value)}>
-                        <option value="">Seleccionar…</option>
+                        <option value="">{t("billing.billingClient.optionSelect")}</option>
                         {patients.map(p => (
                           <option key={p.id} value={p.id}>#{p.patientNumber} — {p.firstName} {p.lastName}</option>
                         ))}
                       </select>
                     </div>
                     <div className="field-new" style={{ gridColumn: "1 / -1" }}>
-                      <label className="field-new__label">Descripción <span className="req">*</span></label>
-                      <input className="input-new" placeholder="Consulta dental…" value={form.description} onChange={e => setF("description", e.target.value)} />
+                      <label className="field-new__label">{t("billing.billingClient.labelDescription")} <span className="req">*</span></label>
+                      <input className="input-new" placeholder={t("billing.billingClient.placeholderDescription")} value={form.description} onChange={e => setF("description", e.target.value)} />
                     </div>
                   </div>
                 </div>
 
                 <div style={{ marginBottom: 22 }}>
-                  <div className="form-section__title">Conceptos y totales<span className="form-section__rule" /></div>
+                  <div className="form-section__title">{t("billing.billingClient.sectionItemsTotals")}<span className="form-section__rule" /></div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px 14px" }}>
                     <div className="field-new">
-                      <label className="field-new__label">Cantidad</label>
+                      <label className="field-new__label">{t("billing.billingClient.labelQuantity")}</label>
                       <input type="number" min={1} className="input-new" value={form.quantity} onChange={e => setF("quantity", e.target.value)} />
                     </div>
                     <div className="field-new">
-                      <label className="field-new__label">Precio unitario <span className="req">*</span></label>
+                      <label className="field-new__label">{t("billing.billingClient.labelUnitPrice")} <span className="req">*</span></label>
                       <input type="number" min={0} className="input-new" placeholder="500" value={form.unitPrice} onChange={e => setF("unitPrice", e.target.value)} />
                     </div>
                     <div className="field-new">
-                      <label className="field-new__label">Total</label>
+                      <label className="field-new__label">{t("common.total")}</label>
                       <div className="input-new mono" style={{ display: "flex", alignItems: "center", color: "var(--text-1)", fontWeight: 600 }}>
                         {fmtMXNdec(newFormTotal)}
                       </div>
@@ -375,14 +377,14 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                 </div>
 
                 <div className="field-new">
-                  <label className="field-new__label">Notas</label>
-                  <input className="input-new" placeholder="Opcional" value={form.notes} onChange={e => setF("notes", e.target.value)} />
+                  <label className="field-new__label">{t("billing.billingClient.labelNotes")}</label>
+                  <input className="input-new" placeholder={t("billing.billingClient.placeholderOptional")} value={form.notes} onChange={e => setF("notes", e.target.value)} />
                 </div>
               </div>
               <div className="modal__footer">
-                <ButtonNew variant="ghost" type="button" onClick={() => setShowNew(false)}>Cancelar</ButtonNew>
+                <ButtonNew variant="ghost" type="button" onClick={() => setShowNew(false)}>{t("common.cancel")}</ButtonNew>
                 <ButtonNew variant="primary" type="submit" disabled={loadingNew}>
-                  {loadingNew ? "Guardando…" : "Crear factura"}
+                  {loadingNew ? t("billing.billingClient.savingEllipsis") : t("billing.billingClient.createInvoice")}
                 </ButtonNew>
               </div>
             </form>
@@ -417,19 +419,19 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
         <div className="modal-overlay" onClick={() => setCfdiFor(null)}>
           <div className="modal modal--wide" onClick={e => e.stopPropagation()}>
             <div className="modal__header">
-              <div className="modal__title">Timbrar CFDI — {cfdiFor.invoiceNumber}</div>
-              <button onClick={() => setCfdiFor(null)} type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label="Cerrar">
+              <div className="modal__title">{t("billing.billingClient.cfdiModalTitle", { number: cfdiFor.invoiceNumber })}</div>
+              <button onClick={() => setCfdiFor(null)} type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label={t("common.close")}>
                 <X size={14} />
               </button>
             </div>
             <div className="modal__body">
               <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 18 }}>
-                Factura por <strong className="mono" style={{ color: "var(--text-1)" }}>{fmtMXNdec(cfdiFor.total)}</strong>.
-                Emisor: {clinic.rfcEmisor ?? "—"}.
+                {t("billing.billingClient.cfdiInvoiceFor")} <strong className="mono" style={{ color: "var(--text-1)" }}>{fmtMXNdec(cfdiFor.total)}</strong>.
+                {" "}{t("billing.billingClient.cfdiIssuer", { rfc: clinic.rfcEmisor ?? "—" })}
               </div>
 
               <div style={{ marginBottom: 22 }}>
-                <div className="form-section__title">Datos del receptor<span className="form-section__rule" /></div>
+                <div className="form-section__title">{t("billing.billingClient.cfdiReceptorData")}<span className="form-section__rule" /></div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr 1fr", gap: "12px 14px" }}>
                   <div className="field-new">
                     <label className="field-new__label">RFC <span className="req">*</span></label>
@@ -438,13 +440,13 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
                       onChange={e => setCfdiF("rfc", e.target.value.toUpperCase())} />
                   </div>
                   <div className="field-new">
-                    <label className="field-new__label">Nombre / Razón social <span className="req">*</span></label>
+                    <label className="field-new__label">{t("billing.billingClient.labelNameLegal")} <span className="req">*</span></label>
                     <input className="input-new" style={{ textTransform: "uppercase" }}
                       placeholder="JUAN PÉREZ GARCÍA" value={cfdiForm.nombre}
                       onChange={e => setCfdiF("nombre", e.target.value)} />
                   </div>
                   <div className="field-new">
-                    <label className="field-new__label">CP <span className="req">*</span></label>
+                    <label className="field-new__label">{t("billing.billingClient.labelZip")} <span className="req">*</span></label>
                     <input className="input-new mono" maxLength={5} placeholder="97000"
                       value={cfdiForm.cp} onChange={e => setCfdiF("cp", e.target.value)} />
                   </div>
@@ -486,9 +488,9 @@ export function BillingClient({ invoices: initial, patients, totalPaid, totalPen
               </div>
             </div>
             <div className="modal__footer">
-              <ButtonNew variant="ghost" type="button" onClick={() => setCfdiFor(null)}>Cancelar</ButtonNew>
+              <ButtonNew variant="ghost" type="button" onClick={() => setCfdiFor(null)}>{t("common.cancel")}</ButtonNew>
               <ButtonNew variant="primary" onClick={timbraCfdi} disabled={cfdiLoading}>
-                {cfdiLoading ? "Timbrando…" : "Timbrar ante SAT"}
+                {cfdiLoading ? t("billing.billingClient.stampingEllipsis") : t("billing.billingClient.stampAtSat")}
               </ButtonNew>
             </div>
           </div>

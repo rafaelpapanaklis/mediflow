@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { Calendar, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Props {
   value: string; // YYYY-MM-DD
@@ -10,11 +11,56 @@ interface Props {
   todayISO: string; // YYYY-MM-DD en la zona horaria de la clínica
 }
 
-const DAY_NAMES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
-const MONTH_ABBR = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
-const MONTHS_LONG = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+// Translation keys for date/calendar labels, resolved via t() at render time.
+const DAY_NAME_KEYS = [
+  "appointments.dateDropdown.daySunday",
+  "appointments.dateDropdown.dayMonday",
+  "appointments.dateDropdown.dayTuesday",
+  "appointments.dateDropdown.dayWednesday",
+  "appointments.dateDropdown.dayThursday",
+  "appointments.dateDropdown.dayFriday",
+  "appointments.dateDropdown.daySaturday",
+];
+const MONTH_ABBR_KEYS = [
+  "appointments.dateDropdown.monthAbbrJan",
+  "appointments.dateDropdown.monthAbbrFeb",
+  "appointments.dateDropdown.monthAbbrMar",
+  "appointments.dateDropdown.monthAbbrApr",
+  "appointments.dateDropdown.monthAbbrMay",
+  "appointments.dateDropdown.monthAbbrJun",
+  "appointments.dateDropdown.monthAbbrJul",
+  "appointments.dateDropdown.monthAbbrAug",
+  "appointments.dateDropdown.monthAbbrSep",
+  "appointments.dateDropdown.monthAbbrOct",
+  "appointments.dateDropdown.monthAbbrNov",
+  "appointments.dateDropdown.monthAbbrDec",
+];
+const MONTHS_LONG_KEYS = [
+  "appointments.dateDropdown.monthLongJan",
+  "appointments.dateDropdown.monthLongFeb",
+  "appointments.dateDropdown.monthLongMar",
+  "appointments.dateDropdown.monthLongApr",
+  "appointments.dateDropdown.monthLongMay",
+  "appointments.dateDropdown.monthLongJun",
+  "appointments.dateDropdown.monthLongJul",
+  "appointments.dateDropdown.monthLongAug",
+  "appointments.dateDropdown.monthLongSep",
+  "appointments.dateDropdown.monthLongOct",
+  "appointments.dateDropdown.monthLongNov",
+  "appointments.dateDropdown.monthLongDec",
+];
 // Encabezado de columnas, lunes-primero.
-const WEEKDAYS = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"];
+const WEEKDAY_KEYS = [
+  "appointments.dateDropdown.weekdayMon",
+  "appointments.dateDropdown.weekdayTue",
+  "appointments.dateDropdown.weekdayWed",
+  "appointments.dateDropdown.weekdayThu",
+  "appointments.dateDropdown.weekdayFri",
+  "appointments.dateDropdown.weekdaySat",
+  "appointments.dateDropdown.weekdaySun",
+];
+
+type TFn = (key: string, vars?: Record<string, unknown>) => string;
 
 // El value/onChange viaja como string YYYY-MM-DD (día de calendario en la
 // zona de la clínica). Para la grilla construimos Dates LOCALES desde las
@@ -39,19 +85,19 @@ function diffDays(aISO: string, bISO: string): number {
   const [by, bm, bd] = parts(bISO);
   return Math.round((Date.UTC(ay, am - 1, ad) - Date.UTC(by, bm - 1, bd)) / 86_400_000);
 }
-function formatLong(iso: string): string {
+function formatLong(iso: string, t: TFn): string {
   const [y, m, d] = parts(iso);
-  const dow = DAY_NAMES[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
-  return `${dow} ${d} ${MONTH_ABBR[m - 1]} ${y}`;
+  const dow = t(DAY_NAME_KEYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]);
+  return `${dow} ${d} ${t(MONTH_ABBR_KEYS[m - 1])} ${y}`;
 }
-function relativeLabel(iso: string, todayISO: string): string {
+function relativeLabel(iso: string, todayISO: string, t: TFn): string {
   const dd = diffDays(iso, todayISO);
-  if (dd === 0) return "Hoy";
-  if (dd === 1) return "Mañana";
-  if (dd === -1) return "Ayer";
-  if (dd > 0 && dd < 7) return `En ${dd} días`;
-  if (dd > 0) return `En ${Math.round(dd / 7)} sem.`;
-  return `Hace ${Math.abs(dd)} días`;
+  if (dd === 0) return t("appointments.dateDropdown.relToday");
+  if (dd === 1) return t("appointments.dateDropdown.relTomorrow");
+  if (dd === -1) return t("appointments.dateDropdown.relYesterday");
+  if (dd > 0 && dd < 7) return t("appointments.dateDropdown.relInDays", { count: dd });
+  if (dd > 0) return t("appointments.dateDropdown.relInWeeks", { count: Math.round(dd / 7) });
+  return t("appointments.dateDropdown.relDaysAgo", { count: Math.abs(dd) });
 }
 
 /**
@@ -61,6 +107,7 @@ function relativeLabel(iso: string, todayISO: string): string {
  * vista de selector de año, bloqueo de fechas pasadas).
  */
 export function DateDropdown({ value, onChange, todayISO }: Props) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const safeValue = value || todayISO;
 
@@ -75,8 +122,8 @@ export function DateDropdown({ value, onChange, todayISO }: Props) {
         <button type="button" style={triggerStyle(open)}>
           <Calendar size={15} aria-hidden style={{ color: "var(--brand)", flexShrink: 0 }} />
           <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", lineHeight: 1.3, flex: 1, minWidth: 0 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{formatLong(safeValue)}</span>
-            <span style={{ fontSize: 11, color: "var(--text-3)" }}>{relativeLabel(safeValue, todayISO)}</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{formatLong(safeValue, t)}</span>
+            <span style={{ fontSize: 11, color: "var(--text-3)" }}>{relativeLabel(safeValue, todayISO, t)}</span>
           </span>
           <ChevronDown
             size={14}
@@ -103,6 +150,7 @@ function CalendarPopover({
   todayISO: string;
   onSelect: (iso: string) => void;
 }) {
+  const t = useT();
   const today = parseLocal(todayISO);
   // view = primer día del mes mostrado. Arranca en el mes del value.
   const [view, setView] = useState<Date>(() => {
@@ -139,7 +187,7 @@ function CalendarPopover({
     <div>
       {/* Header: ← [Mes Año] → */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, marginBottom: 10 }}>
-        <button type="button" onClick={prevMonth} aria-label="Mes anterior" style={navBtnStyle} onMouseEnter={hoverBg} onMouseLeave={clearBg}>
+        <button type="button" onClick={prevMonth} aria-label={t("appointments.dateDropdown.prevMonth")} style={navBtnStyle} onMouseEnter={hoverBg} onMouseLeave={clearBg}>
           <ChevronLeft size={16} aria-hidden />
         </button>
         <button
@@ -149,10 +197,10 @@ function CalendarPopover({
           onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
         >
-          {MONTHS_LONG[view.getMonth()]} {view.getFullYear()}
+          {t(MONTHS_LONG_KEYS[view.getMonth()])} {view.getFullYear()}
           <ChevronDown size={13} aria-hidden style={{ transition: "transform 0.12s", transform: yearOpen ? "rotate(180deg)" : "none" }} />
         </button>
-        <button type="button" onClick={nextMonth} aria-label="Mes siguiente" style={navBtnStyle} onMouseEnter={hoverBg} onMouseLeave={clearBg}>
+        <button type="button" onClick={nextMonth} aria-label={t("appointments.dateDropdown.nextMonth")} style={navBtnStyle} onMouseEnter={hoverBg} onMouseLeave={clearBg}>
           <ChevronRight size={16} aria-hidden />
         </button>
       </div>
@@ -190,12 +238,12 @@ function CalendarPopover({
         <>
           {/* Encabezado de días (lunes-primero) */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4 }}>
-            {WEEKDAYS.map((w, i) => (
+            {WEEKDAY_KEYS.map((wKey, i) => (
               <div
-                key={w + i}
+                key={wKey + i}
                 style={{ textAlign: "center", fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", color: i >= 5 ? "var(--text-4)" : "var(--text-3)", padding: "4px 0" }}
               >
-                {w}
+                {t(wKey)}
               </div>
             ))}
           </div>
@@ -265,9 +313,9 @@ function CalendarPopover({
           onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = "var(--bg-elev)"; }}
         >
-          Hoy
+          {t("appointments.dateDropdown.today")}
         </button>
-        <div style={{ fontSize: 11.5, color: "var(--text-3)" }}>{formatLong(value)}</div>
+        <div style={{ fontSize: 11.5, color: "var(--text-3)" }}>{formatLong(value, t)}</div>
       </div>
     </div>
   );

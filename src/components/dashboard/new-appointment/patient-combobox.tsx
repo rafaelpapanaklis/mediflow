@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Search, UserPlus, Check, Loader2 } from "lucide-react";
 import { useNewPatientDialog } from "@/components/dashboard/new-patient/new-patient-provider";
 import type { PatientSearchHit } from "@/lib/new-appointment/types";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Props {
   value: { id: string; name: string } | null;
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export function PatientCombobox({ value, onChange }: Props) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<PatientSearchHit[]>([]);
   const [loading, setLoading] = useState(false);
@@ -100,7 +102,7 @@ export function PatientCombobox({ value, onChange }: Props) {
           }}
           style={changeBtnStyle}
         >
-          Cambiar
+          {t("appointments.patientCombobox.change")}
         </button>
       </div>
     );
@@ -113,7 +115,7 @@ export function PatientCombobox({ value, onChange }: Props) {
         <input
           ref={inputRef}
           type="text"
-          placeholder="Buscar por nombre, teléfono o email..."
+          placeholder={t("appointments.patientCombobox.searchPlaceholder")}
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -147,7 +149,7 @@ export function PatientCombobox({ value, onChange }: Props) {
         style={inlineCreateBtnStyle}
       >
         <UserPlus size={12} aria-hidden />
-        <span>Crear paciente nuevo</span>
+        <span>{t("appointments.patientCombobox.createNewPatient")}</span>
       </button>
 
       {open && (query.trim().length >= 2 || hits.length > 0) && (
@@ -158,7 +160,7 @@ export function PatientCombobox({ value, onChange }: Props) {
         >
           {hits.length === 0 && !loading && (
             <div style={{ padding: "12px 14px", fontSize: 12, color: "var(--text-3)" }}>
-              No se encontró ningún paciente con &quot;{query}&quot;.
+              {t("appointments.patientCombobox.noPatientFound", { query })}
             </div>
           )}
           {hits.map((hit, i) => (
@@ -213,7 +215,9 @@ export function PatientCombobox({ value, onChange }: Props) {
           >
             <UserPlus size={14} aria-hidden />
             <span style={{ flex: 1, textAlign: "left", fontSize: 13 }}>
-              Crear paciente nuevo{query ? `: "${query}"` : ""}
+              {query
+                ? t("appointments.patientCombobox.createNewPatientWithQuery", { query })
+                : t("appointments.patientCombobox.createNewPatient")}
             </span>
           </button>
         </div>

@@ -2,6 +2,7 @@
 
 import { Info, Loader2 } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Props {
   summary: React.ReactNode;
@@ -17,6 +18,7 @@ interface Props {
  * Mantiene ButtonNew y la lógica de disabled/submitting del padre.
  */
 export function SummaryFooter({ summary, submitting, disabled, onCancel, onSubmit }: Props) {
+  const t = useT();
   return (
     <footer style={footerStyle}>
       <div style={summaryWrapStyle}>
@@ -24,16 +26,16 @@ export function SummaryFooter({ summary, submitting, disabled, onCancel, onSubmi
         <span style={summaryTextStyle}>{summary}</span>
       </div>
       <ButtonNew variant="ghost" onClick={onCancel} disabled={submitting}>
-        Cancelar
+        {t("common.cancel")}
       </ButtonNew>
       <ButtonNew variant="primary" onClick={onSubmit} disabled={disabled}>
         {submitting ? (
           <>
             <Loader2 size={14} className="animate-spin" />
-            Creando...
+            {t("appointments.summaryFooter.creating")}
           </>
         ) : (
-          "Crear cita"
+          t("appointments.summaryFooter.createAppointment")
         )}
       </ButtonNew>
     </footer>

@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/i18n/i18n-provider";
+
 interface Props {
   presets: readonly number[];
   duration: number;
@@ -14,6 +16,7 @@ interface Props {
  * input custom al elegir un preset (lógica intacta vía callbacks).
  */
 export function DurationPicker({ presets, duration, customInput, onSelectPreset, onCustomChange }: Props) {
+  const t = useT();
   const hasCustom = customInput.length > 0;
   return (
     <div style={{ display: "flex", gap: 6 }}>
@@ -64,8 +67,8 @@ export function DurationPicker({ presets, duration, customInput, onSelectPreset,
           step={5}
           value={customInput}
           onChange={(e) => onCustomChange(e.target.value)}
-          placeholder="otro"
-          aria-label="Duración personalizada en minutos"
+          placeholder={t("appointments.durationPicker.customPlaceholder")}
+          aria-label={t("appointments.durationPicker.customAriaLabel")}
           style={{
             width: "100%",
             border: "none",

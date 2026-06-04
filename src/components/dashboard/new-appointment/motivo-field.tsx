@@ -1,6 +1,7 @@
 "use client";
 
 import { Pen } from "lucide-react";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Props {
   value: string;
@@ -15,6 +16,7 @@ interface Props {
  * conserva la lógica de limpiar el error de validación.
  */
 export function MotivoField({ value, onChange, presets, error }: Props) {
+  const t = useT();
   return (
     <div>
       <div
@@ -34,7 +36,7 @@ export function MotivoField({ value, onChange, presets, error }: Props) {
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Consulta general, control, urgencia..."
+          placeholder={t("appointments.motivoField.placeholder")}
           style={{
             flex: 1,
             border: "none",

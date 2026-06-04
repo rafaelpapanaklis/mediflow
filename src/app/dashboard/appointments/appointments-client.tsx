@@ -17,6 +17,7 @@ import { getApptColors } from "@/lib/appointment-colors";
 import toast from "react-hot-toast";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { DateField } from "@/components/ui/date-field";
+import { useT } from "@/i18n/i18n-provider";
 
 interface Patient { id: string; firstName: string; lastName: string; patientNumber: string; phone?: string | null }
 interface Doctor  { id: string; firstName: string; lastName: string; role: string }
@@ -35,19 +36,21 @@ interface Props {
   currentUserId: string; clinicId: string; waConnected: boolean;
 }
 
-const DAYS_ES   = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
-const MONTHS_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+// Día/mes: ids de traducción resueltos vía t() en tiempo de render (nunca t() a nivel módulo).
+const DAY_KEYS   = ["mon","tue","wed","thu","fri","sat","sun"].map(d => `appointments.calendar.day.${d}`);
+const MONTH_KEYS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"].map(m => `appointments.calendar.month.${m}`);
 const HOURS     = Array.from({ length: 14 }, (_, i) => `${(i + 7).toString().padStart(2,"0")}:00`);
 const DURATIONS = [15, 20, 30, 45, 60, 90, 120];
 const APPT_TYPES = ["Consulta general","Primera vez","Revisión / Control","Limpieza dental","Extracción","Endodoncia","Ortodoncia","Implante","Cirugía","Nutrición","Psicología","Seguimiento","Otro"];
 
+// label = id de traducción (resuelto con t() al renderizar), no el texto visible.
 const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; dot: string; border: string }> = {
-  PENDING:     { label:"Pendiente",  bg:"bg-amber-100 dark:bg-amber-900/30",    text:"text-amber-700 dark:text-amber-300",    dot:"bg-amber-500",   border:"border-amber-300"   },
-  CONFIRMED:   { label:"Confirmada", bg:"bg-emerald-100 dark:bg-emerald-900/30",text:"text-emerald-700 dark:text-emerald-300",dot:"bg-emerald-500", border:"border-emerald-300" },
-  IN_PROGRESS: { label:"En curso",   bg:"bg-blue-100 dark:bg-blue-900/30",      text:"text-blue-700 dark:text-blue-300",      dot:"bg-blue-500",    border:"border-blue-300"    },
-  COMPLETED:   { label:"Completada", bg:"bg-muted",       text:"text-muted-foreground",    dot:"bg-muted",   border:"border-border"   },
-  CANCELLED:   { label:"Cancelada",  bg:"bg-rose-100 dark:bg-rose-900/30",      text:"text-rose-700 dark:text-rose-300",      dot:"bg-rose-500",    border:"border-rose-300"    },
-  NO_SHOW:     { label:"No asistió", bg:"bg-orange-100 dark:bg-orange-900/30",  text:"text-orange-700 dark:text-orange-300",  dot:"bg-orange-500",  border:"border-orange-300"  },
+  PENDING:     { label:"appointments.status.pending",    bg:"bg-amber-100 dark:bg-amber-900/30",    text:"text-amber-700 dark:text-amber-300",    dot:"bg-amber-500",   border:"border-amber-300"   },
+  CONFIRMED:   { label:"appointments.status.confirmed",  bg:"bg-emerald-100 dark:bg-emerald-900/30",text:"text-emerald-700 dark:text-emerald-300",dot:"bg-emerald-500", border:"border-emerald-300" },
+  IN_PROGRESS: { label:"appointments.status.inProgress", bg:"bg-blue-100 dark:bg-blue-900/30",      text:"text-blue-700 dark:text-blue-300",      dot:"bg-blue-500",    border:"border-blue-300"    },
+  COMPLETED:   { label:"appointments.status.completed",  bg:"bg-muted",       text:"text-muted-foreground",    dot:"bg-muted",   border:"border-border"   },
+  CANCELLED:   { label:"appointments.status.cancelled",  bg:"bg-rose-100 dark:bg-rose-900/30",      text:"text-rose-700 dark:text-rose-300",      dot:"bg-rose-500",    border:"border-rose-300"    },
+  NO_SHOW:     { label:"appointments.status.noShow",     bg:"bg-orange-100 dark:bg-orange-900/30",  text:"text-orange-700 dark:text-orange-300",  dot:"bg-orange-500",  border:"border-orange-300"  },
 };
 
 const DOC_COLORS = [
@@ -81,6 +84,7 @@ function serializeAppt(a: any): Appt {
 
 // ── Improvement 1: Patient search with autocomplete ───────────────────────────
 function PatientSearch({ patients, value, onChange }: { patients: Patient[]; value: string; onChange: (id: string) => void }) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const [open,  setOpen]  = useState(false);
   const filtered = useMemo(() => {
@@ -96,7 +100,7 @@ function PatientSearch({ patients, value, onChange }: { patients: Patient[]; val
         <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />
         {selected
           ? <span className="text-base font-semibold">{selected.firstName} {selected.lastName}</span>
-          : <span className="text-base text-muted-foreground">Buscar paciente…</span>}
+          : <span className="text-base text-muted-foreground">{t("appointments.patientSearch.placeholder")}</span>}
         {selected && (
           <button onClick={e => { e.stopPropagation(); onChange(""); setQuery(""); }} className="ml-auto text-muted-foreground hover:text-foreground">
             <X className="w-4 h-4" />
@@ -109,11 +113,11 @@ function PatientSearch({ patients, value, onChange }: { patients: Patient[]; val
           <div className="absolute z-20 top-12 left-0 right-0 bg-card border border-border rounded-xl shadow-lg overflow-hidden">
             <div className="p-2 border-b border-border">
               <input autoFocus className="w-full px-3 py-2 text-base bg-transparent focus:outline-none placeholder:text-muted-foreground"
-                placeholder="Nombre o número…" value={query} onChange={e => setQuery(e.target.value)} />
+                placeholder={t("appointments.patientSearch.inputPlaceholder")} value={query} onChange={e => setQuery(e.target.value)} />
             </div>
             <div className="max-h-52 overflow-y-auto">
               {filtered.length === 0
-                ? <div className="px-4 py-3 text-base text-muted-foreground">Sin resultados</div>
+                ? <div className="px-4 py-3 text-base text-muted-foreground">{t("common.noResults")}</div>
                 : filtered.map(p => (
                   <button key={p.id} onClick={() => { onChange(p.id); setOpen(false); setQuery(""); }}
                     className="w-full text-left px-4 py-3 hover:bg-muted/40 transition-colors flex items-center gap-3">
@@ -147,6 +151,7 @@ interface ApptFormProps {
 }
 
 function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCancel, label }: ApptFormProps) {
+  const t = useT();
   function setF(k: string, v: any) { setForm((f: any) => ({ ...f, [k]: v })); }
   return (
     <>
@@ -154,30 +159,30 @@ function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCance
         {/* Paciente y cita */}
         <div style={{ marginBottom: 22 }}>
           <div className="form-section__title">
-            Paciente y tipo
+            {t("appointments.form.patientAndType")}
             <span className="form-section__rule" />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "12px 14px" }}>
             <div className="field-new">
-              <label className="field-new__label">Paciente <span className="req">*</span></label>
+              <label className="field-new__label">{t("appointments.form.patient")} <span className="req">*</span></label>
               <PatientSearch patients={patients} value={form.patientId} onChange={id => setF("patientId", id)} />
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
               <div className="field-new">
-                <label className="field-new__label">Doctor <span className="req">*</span></label>
+                <label className="field-new__label">{t("appointments.form.doctor")} <span className="req">*</span></label>
                 <select className="input-new" value={form.doctorId} onChange={e => setF("doctorId", e.target.value)}>
-                  {doctors.map(d => <option key={d.id} value={d.id}>Dr/a. {d.firstName} {d.lastName}</option>)}
+                  {doctors.map(d => <option key={d.id} value={d.id}>{t("appointments.doctorPrefix")} {d.firstName} {d.lastName}</option>)}
                 </select>
               </div>
               <div className="field-new">
-                <label className="field-new__label">Tipo de cita</label>
+                <label className="field-new__label">{t("appointments.form.appointmentType")}</label>
                 <select className="input-new" value={form.type} onChange={e => setF("type", e.target.value)}>
-                  {APPT_TYPES.map(t => <option key={t}>{t}</option>)}
+                  {APPT_TYPES.map(ty => <option key={ty}>{ty}</option>)}
                 </select>
               </div>
             </div>
             <div className="field-new">
-              <label className="field-new__label">Modo</label>
+              <label className="field-new__label">{t("appointments.form.mode")}</label>
               <div style={{ display: "flex", gap: 8 }}>
                 <button
                   type="button"
@@ -185,7 +190,7 @@ function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCance
                   className={`btn-new ${form.mode !== "TELECONSULTATION" ? "btn-new--primary" : "btn-new--secondary"}`}
                   style={{ flex: 1, justifyContent: "center" }}
                 >
-                  Presencial
+                  {t("appointments.form.inPerson")}
                 </button>
                 <button
                   type="button"
@@ -193,7 +198,7 @@ function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCance
                   className={`btn-new ${form.mode === "TELECONSULTATION" ? "btn-new--primary" : "btn-new--secondary"}`}
                   style={{ flex: 1, justifyContent: "center" }}
                 >
-                  Teleconsulta
+                  {t("appointments.form.teleconsultation")}
                 </button>
               </div>
             </div>
@@ -203,26 +208,26 @@ function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCance
         {/* Fecha y hora */}
         <div style={{ marginBottom: 22 }}>
           <div className="form-section__title">
-            Fecha y hora
+            {t("appointments.form.dateAndTime")}
             <span className="form-section__rule" />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px" }}>
             <div className="field-new" style={{ gridColumn: "1 / -1" }}>
-              <label className="field-new__label">Fecha <span className="req">*</span></label>
+              <label className="field-new__label">{t("common.date")} <span className="req">*</span></label>
               <DateField className="input-new" value={form.date} onChange={e => setF("date", e.target.value)} />
             </div>
             <div className="field-new">
-              <label className="field-new__label">Hora inicio</label>
+              <label className="field-new__label">{t("appointments.form.startTime")}</label>
               <input type="time" className="input-new mono" value={form.startTime} onChange={e => setF("startTime", e.target.value)} />
             </div>
             <div className="field-new">
-              <label className="field-new__label">Duración</label>
+              <label className="field-new__label">{t("appointments.form.duration")}</label>
               <select className="input-new mono" value={form.durationMins} onChange={e => setF("durationMins", parseInt(e.target.value))}>
-                {DURATIONS.map(d => <option key={d} value={d}>{d} min</option>)}
+                {DURATIONS.map(d => <option key={d} value={d}>{t("appointments.form.minutesShort", { count: d })}</option>)}
               </select>
             </div>
             <div className="field-new" style={{ gridColumn: "1 / -1" }}>
-              <label className="field-new__label">Hora fin</label>
+              <label className="field-new__label">{t("appointments.form.endTime")}</label>
               <input
                 readOnly
                 className="input-new mono"
@@ -234,11 +239,11 @@ function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCance
         </div>
 
         <div className="field-new">
-          <label className="field-new__label">Notas</label>
+          <label className="field-new__label">{t("common.notes")}</label>
           <textarea
             className="input-new"
             style={{ height: 70, paddingTop: 8, resize: "vertical" }}
-            placeholder="Motivo de consulta, indicaciones especiales…"
+            placeholder={t("appointments.form.notesPlaceholder")}
             value={form.notes}
             onChange={e => setF("notes", e.target.value)}
           />
@@ -246,9 +251,9 @@ function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCance
       </div>
 
       <div className="modal__footer">
-        <ButtonNew variant="ghost" onClick={onCancel} type="button">Cancelar</ButtonNew>
+        <ButtonNew variant="ghost" onClick={onCancel} type="button">{t("common.cancel")}</ButtonNew>
         <ButtonNew variant="primary" onClick={onSubmit} disabled={loading} type="button">
-          {loading ? "Guardando…" : label}
+          {loading ? t("common.saving") : label}
         </ButtonNew>
       </div>
     </>
@@ -256,6 +261,7 @@ function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCance
 }
 
 export function AppointmentsClient({ appointments: initialAppts, patients, doctors, currentUserId, clinicId, waConnected }: Props) {
+  const t = useT();
   const askConfirm = useConfirm();
   const today = new Date();
   const [appts,       setAppts]       = useState<Appt[]>(initialAppts);
@@ -367,7 +373,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
   }
 
   async function createAppt() {
-    if (!form.patientId) { toast.error("Selecciona un paciente"); return; }
+    if (!form.patientId) { toast.error(t("appointments.toast.selectPatient")); return; }
     setLoading(true);
     try {
       const endTime = addTime(form.startTime, form.durationMins);
@@ -375,14 +381,14 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, endTime, clinicId }),
       });
-      if (!res.ok) throw new Error((await res.json()).error ?? "Error");
+      if (!res.ok) throw new Error((await res.json()).error ?? t("common.genericError"));
       const created = await res.json();
       // FIX: serialize date from API before adding to state
       setAppts(prev => [...prev, serializeAppt(created)]);
       setSelectedDay(form.date);
       setShowNew(false);
       setForm(emptyForm);
-      toast.success("✅ Cita agendada");
+      toast.success(t("appointments.toast.created"));
     } catch (err: any) { toast.error(err.message); } finally { setLoading(false); }
   }
 
@@ -396,13 +402,13 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, endTime }),
       });
-      if (!res.ok) throw new Error("Error al guardar");
+      if (!res.ok) throw new Error(t("appointments.toast.saveError"));
       setAppts(prev => prev.map(a => a.id === showDetail.id
         ? serializeAppt({ ...a, ...form, endTime, patient: a.patient, doctor: a.doctor })
         : a));
       setShowEdit(false);
       setShowDetail(null);
-      toast.success("Cita actualizada");
+      toast.success(t("appointments.toast.updated"));
     } catch (err: any) { toast.error(err.message); } finally { setLoading(false); }
   }
 
@@ -412,11 +418,11 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      if (!res.ok) throw new Error("Error");
+      if (!res.ok) throw new Error(t("common.genericError"));
       setAppts(prev => prev.map(a => a.id === id ? { ...a, status } : a));
       setShowDetail(prev => prev?.id === id ? { ...prev, status } : prev);
-      toast.success("Estado actualizado");
-    } catch { toast.error("Error al actualizar"); }
+      toast.success(t("appointments.toast.statusUpdated"));
+    } catch { toast.error(t("appointments.toast.updateError")); }
   }
 
   async function sendWA(apptId: string) {
@@ -429,25 +435,25 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
       if (!res.ok) throw new Error(data.error);
       setAppts(prev => prev.map(a => a.id === apptId ? { ...a, reminderSent: true } : a));
       setShowDetail(prev => prev?.id === apptId ? { ...prev, reminderSent: true } : prev);
-      toast.success("WhatsApp enviado");
+      toast.success(t("appointments.toast.whatsappSent"));
     } catch (err: any) { toast.error(err.message); }
   }
 
   // FIX: Verify API response before removing from state
   async function deleteAppt(id: string) {
     if (!(await askConfirm({
-      title: "¿Cancelar esta cita?",
-      description: "El paciente recibirá una notificación si tiene contacto registrado.",
+      title: t("appointments.cancelConfirm.title"),
+      description: t("appointments.cancelConfirm.description"),
       variant: "warning",
-      confirmText: "Cancelar cita",
-      cancelText: "No, mantener",
+      confirmText: t("appointments.cancelConfirm.confirm"),
+      cancelText: t("appointments.cancelConfirm.cancel"),
     }))) return;
     try {
       const res = await fetch(`/api/appointments/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Error al cancelar");
+      if (!res.ok) throw new Error(t("appointments.toast.cancelError"));
       setAppts(prev => prev.filter(a => a.id !== id));
       setShowDetail(null);
-      toast.success("Cita cancelada");
+      toast.success(t("appointments.toast.cancelled"));
     } catch (err: any) { toast.error(err.message); }
   }
 
@@ -485,7 +491,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
           <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {appt.patient.firstName}
           </span>
-          {appt.mode === "TELECONSULTATION" && <span style={{ fontSize: 9, flexShrink: 0 }} title="Teleconsulta">📹</span>}
+          {appt.mode === "TELECONSULTATION" && <span style={{ fontSize: 9, flexShrink: 0 }} title={t("appointments.form.teleconsultation")}>📹</span>}
         </div>
         {!compact && appt.notes && (
           <div style={{ fontSize: 9, color: "var(--text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -505,9 +511,9 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
         background: "rgba(255,255,255,0.015)",
         borderBottom: "1px solid var(--border-soft)",
       }}>
-        {DAYS_ES.map(d => (
+        {DAY_KEYS.map(dayKey => (
           <div
-            key={d}
+            key={dayKey}
             style={{
               padding: "12px 14px",
               textAlign: "center",
@@ -518,7 +524,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
               fontWeight: 600,
             }}
           >
-            {d}
+            {t(dayKey)}
           </div>
         ))}
       </div>
@@ -587,7 +593,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
               {dayAppts.slice(0, 3).map(a => <ApptPill key={a.id} appt={a} compact />)}
               {dayAppts.length > 3 && (
                 <div style={{ fontSize: 10, color: "var(--text-3)", marginTop: 2 }}>
-                  +{dayAppts.length - 3} más
+                  {t("appointments.month.moreCount", { count: dayAppts.length - 3 })}
                 </div>
               )}
             </div>
@@ -635,7 +641,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                   fontSize: 10, color: "var(--text-3)",
                   textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600,
                 }}>
-                  {DAYS_ES[i]}
+                  {t(DAY_KEYS[i])}
                 </div>
                 <div style={{
                   fontSize: 16, fontWeight: 500, marginTop: 2,
@@ -771,14 +777,14 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                           a.status === "IN_PROGRESS" ? "brand" :
                           a.status === "COMPLETED"   ? "info" :
                           a.status === "CANCELLED" || a.status === "NO_SHOW" ? "danger" : "warning"
-                        }>{c.label}</BadgeNew>
-                        {a.mode === "TELECONSULTATION" && <BadgeNew tone="brand">Teleconsulta</BadgeNew>}
+                        }>{t((STATUS_CONFIG[a.status] ?? STATUS_CONFIG.PENDING).label)}</BadgeNew>
+                        {a.mode === "TELECONSULTATION" && <BadgeNew tone="brand">{t("appointments.form.teleconsultation")}</BadgeNew>}
                         <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
                           {a.googleCalendarEventId && (
-                            <span title="Sincronizado con Google Calendar"><CalendarCheck size={14} style={{ color: "var(--brand)" }} /></span>
+                            <span title={t("appointments.detail.googleSynced")}><CalendarCheck size={14} style={{ color: "var(--brand)" }} /></span>
                           )}
                           {a.reminderSent && (
-                            <span title="Recordatorio enviado"><MessageCircle size={14} style={{ color: "var(--success)" }} /></span>
+                            <span title={t("appointments.detail.reminderSent")}><MessageCircle size={14} style={{ color: "var(--success)" }} /></span>
                           )}
                         </span>
                       </div>
@@ -786,7 +792,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                         {a.patient.firstName} {a.patient.lastName}
                       </div>
                       <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
-                        {a.type} · Dr/a. {a.doctor.firstName} {a.doctor.lastName} · {a.durationMins} min
+                        {a.type} · {t("appointments.doctorPrefix")} {a.doctor.firstName} {a.doctor.lastName} · {t("appointments.form.minutesShort", { count: a.durationMins })}
                       </div>
                       {a.notes && (
                         <div style={{ fontSize: 11, color: "var(--text-3)", fontStyle: "italic", marginTop: 4 }}>
@@ -812,21 +818,21 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
 
   const completedCount = appts.filter(a => a.status === "COMPLETED").length;
   const periodTitle =
-    view === "month" ? `${MONTHS_ES[currentDate.getMonth()]} ${currentDate.getFullYear()}` :
-    view === "week"  ? `Semana del ${currentDate.getDate()} de ${MONTHS_ES[currentDate.getMonth()]}` :
-                       `${currentDate.getDate()} de ${MONTHS_ES[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
+    view === "month" ? t("appointments.period.month", { month: t(MONTH_KEYS[currentDate.getMonth()]), year: currentDate.getFullYear() }) :
+    view === "week"  ? t("appointments.period.week", { day: currentDate.getDate(), month: t(MONTH_KEYS[currentDate.getMonth()]) }) :
+                       t("appointments.period.day", { day: currentDate.getDate(), month: t(MONTH_KEYS[currentDate.getMonth()]), year: currentDate.getFullYear() });
 
   return (
     <div style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
       {/* Header: title + period nav + actions */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ fontSize: "clamp(16px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>Agenda</h1>
+          <h1 style={{ fontSize: "clamp(16px, 1.4vw, 22px)", letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>{t("appointments.header.title")}</h1>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
-            <button onClick={prevPeriod} className="icon-btn-new" type="button" aria-label="Periodo anterior">
+            <button onClick={prevPeriod} className="icon-btn-new" type="button" aria-label={t("appointments.header.prevPeriod")}>
               <ChevronLeft size={14} />
             </button>
-            <button onClick={nextPeriod} className="icon-btn-new" type="button" aria-label="Siguiente periodo">
+            <button onClick={nextPeriod} className="icon-btn-new" type="button" aria-label={t("appointments.header.nextPeriod")}>
               <ChevronRight size={14} />
             </button>
             <p style={{ color: "var(--text-3)", fontSize: 13, margin: 0, textTransform: "capitalize" }}>{periodTitle}</p>
@@ -835,7 +841,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
               className="btn-new btn-new--ghost btn-new--sm"
               type="button"
             >
-              Hoy
+              {t("appointments.header.today")}
             </button>
           </div>
         </div>
@@ -846,11 +852,11 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
             className="input-new"
             style={{ width: "auto", minWidth: 180 }}
           >
-            <option value="all">Todos los doctores</option>
-            {doctors.map(d => <option key={d.id} value={d.id}>Dr/a. {d.firstName} {d.lastName}</option>)}
+            <option value="all">{t("appointments.filter.allDoctors")}</option>
+            {doctors.map(d => <option key={d.id} value={d.id}>{t("appointments.doctorPrefix")} {d.firstName} {d.lastName}</option>)}
           </select>
           <div className="segment-new">
-            {([["month", "Mes", Calendar], ["week", "Sem", CalendarDays], ["day", "Día", List]] as const).map(([v, lbl, Icon]) => (
+            {([["month", "appointments.view.month", Calendar], ["week", "appointments.view.week", CalendarDays], ["day", "appointments.view.day", List]] as const).map(([v, lblKey, Icon]) => (
               <button
                 key={v}
                 onClick={() => { setView(v as ViewMode); if (v !== "month") setCurrentDate(today); }}
@@ -858,22 +864,22 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                 className={`segment-new__btn ${view === v ? "segment-new__btn--active" : ""}`}
               >
                 <Icon size={11} style={{ marginRight: 4, display: "inline", verticalAlign: -2 }} />
-                {lbl}
+                {t(lblKey)}
               </button>
             ))}
           </div>
           <ButtonNew variant="primary" icon={<Plus size={14} />} onClick={() => openNew(selectedDay)}>
-            Nueva cita
+            {t("appointments.header.newAppointment")}
           </ButtonNew>
         </div>
       </div>
 
       {/* Stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginBottom: 20 }}>
-        <KpiCard label="Citas hoy"   value={String(todayAppts.length)} icon={Calendar} />
-        <KpiCard label="Este mes"    value={String(monthAppts.length)} icon={CalendarDays} />
-        <KpiCard label="Pendientes"  value={String(pendingCount)} icon={List} />
-        <KpiCard label="Completadas" value={String(completedCount)} icon={CalendarCheck} />
+        <KpiCard label={t("appointments.kpi.today")}     value={String(todayAppts.length)} icon={Calendar} />
+        <KpiCard label={t("appointments.kpi.thisMonth")} value={String(monthAppts.length)} icon={CalendarDays} />
+        <KpiCard label={t("appointments.kpi.pending")}   value={String(pendingCount)} icon={List} />
+        <KpiCard label={t("appointments.kpi.completed")} value={String(completedCount)} icon={CalendarCheck} />
       </div>
 
       {/* Main layout — calendar + side panel */}
@@ -891,14 +897,14 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
         <div className="card" style={{ overflow: "hidden" }}>
           <div className="card__header">
             <div>
-              <div className="card__title">{DAYS_ES[(selDate.getDay()+6)%7]} {selDate.getDate()} {MONTHS_ES[selDate.getMonth()]}</div>
-              <div className="card__sub">{selAppts.length} cita{selAppts.length!==1?"s":""}</div>
+              <div className="card__title">{t(DAY_KEYS[(selDate.getDay()+6)%7])} {selDate.getDate()} {t(MONTH_KEYS[selDate.getMonth()])}</div>
+              <div className="card__sub">{t("appointments.sidePanel.apptCount", { count: selAppts.length })}</div>
             </div>
             <button
               onClick={() => openNew(selectedDay)}
               type="button"
               className="icon-btn-new"
-              aria-label="Nueva cita"
+              aria-label={t("appointments.header.newAppointment")}
             >
               <Plus size={14} />
             </button>
@@ -907,8 +913,8 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
             {selAppts.length === 0 ? (
               <div className="px-4 py-10 text-center text-muted-foreground">
                 <Calendar className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                <div className="text-base font-semibold">Sin citas</div>
-                <button onClick={() => openNew(selectedDay)} className="mt-2 text-base text-brand-600 hover:underline font-semibold">+ Agregar</button>
+                <div className="text-base font-semibold">{t("appointments.sidePanel.empty")}</div>
+                <button onClick={() => openNew(selectedDay)} className="mt-2 text-base text-brand-600 hover:underline font-semibold">{t("appointments.sidePanel.add")}</button>
               </div>
             ) : selAppts.map(appt => {
               const cfg   = STATUS_CONFIG[appt.status]??STATUS_CONFIG.PENDING;
@@ -918,14 +924,14 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                   <div className="flex items-center gap-2 mb-1">
                     <div className={`w-2 h-2 rounded-full ${cfg.dot}`} />
                     <span className="mono text-base font-bold">{appt.startTime}</span>
-                    <span className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.text}`}>{cfg.label}</span>
+                    <span className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.text}`}>{t(cfg.label)}</span>
                   </div>
                   <div className="text-base font-bold truncate">{appt.patient.firstName} {appt.patient.lastName}</div>
-                  <div className="text-sm text-muted-foreground">{appt.type} · <span className="mono">{appt.durationMins}</span> min</div>
+                  <div className="text-sm text-muted-foreground">{appt.type} · <span className="mono">{appt.durationMins}</span> {t("appointments.minLabel")}</div>
                   {appt.notes && <div className="text-sm text-muted-foreground/70 truncate italic mt-0.5">📝 {appt.notes}</div>}
                   <div className="flex gap-2 mt-1 flex-wrap">
-                    {appt.googleCalendarEventId && <span className="text-xs text-brand-600 font-semibold flex items-center gap-1"><CalendarCheck className="w-3 h-3"/>Google Cal</span>}
-                    {appt.reminderSent && <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1"><MessageCircle className="w-3 h-3"/>WA enviado</span>}
+                    {appt.googleCalendarEventId && <span className="text-xs text-brand-600 font-semibold flex items-center gap-1"><CalendarCheck className="w-3 h-3"/>{t("appointments.badge.googleCal")}</span>}
+                    {appt.reminderSent && <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1"><MessageCircle className="w-3 h-3"/>{t("appointments.badge.waSent")}</span>}
                   </div>
                 </button>
               );
@@ -939,12 +945,12 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
         <div className="modal-overlay" onClick={() => setShowNew(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal__header">
-              <div className="modal__title">Nueva cita</div>
-              <button onClick={() => setShowNew(false)} type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label="Cerrar">
+              <div className="modal__title">{t("appointments.header.newAppointment")}</div>
+              <button onClick={() => setShowNew(false)} type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label={t("common.close")}>
                 <X size={14} />
               </button>
             </div>
-            <ApptForm form={form} setForm={setForm} doctors={doctors} patients={patients} loading={loading} onSubmit={createAppt} onCancel={() => { setShowNew(false); setShowEdit(false); }} label="✅ Agendar cita" />
+            <ApptForm form={form} setForm={setForm} doctors={doctors} patients={patients} loading={loading} onSubmit={createAppt} onCancel={() => { setShowNew(false); setShowEdit(false); }} label={t("appointments.modal.scheduleSubmit")} />
           </div>
         </div>
       )}
@@ -954,12 +960,12 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
         <div className="modal-overlay" onClick={() => setShowEdit(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal__header">
-              <div className="modal__title">Editar cita</div>
-              <button onClick={() => setShowEdit(false)} type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label="Cerrar">
+              <div className="modal__title">{t("appointments.modal.editTitle")}</div>
+              <button onClick={() => setShowEdit(false)} type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label={t("common.close")}>
                 <X size={14} />
               </button>
             </div>
-            <ApptForm form={form} setForm={setForm} doctors={doctors} patients={patients} loading={loading} onSubmit={saveEdit} onCancel={() => { setShowNew(false); setShowEdit(false); }} label="💾 Guardar cambios" />
+            <ApptForm form={form} setForm={setForm} doctors={doctors} patients={patients} loading={loading} onSubmit={saveEdit} onCancel={() => { setShowNew(false); setShowEdit(false); }} label={t("appointments.modal.saveChanges")} />
           </div>
         </div>
       )}
@@ -983,10 +989,10 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                       date:appt.date.split("T")[0], startTime:appt.startTime, durationMins:appt.durationMins, notes:appt.notes??"", mode:appt.mode??"IN_PERSON"
                     });
                     setShowEdit(true);
-                  }} type="button" className="btn-new btn-new--ghost btn-new--sm" title="Editar cita">
+                  }} type="button" className="btn-new btn-new--ghost btn-new--sm" title={t("appointments.modal.editTitle")}>
                     <Edit size={14} />
                   </button>
-                  <button onClick={() => setShowDetail(null)} type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label="Cerrar">
+                  <button onClick={() => setShowDetail(null)} type="button" className="btn-new btn-new--ghost btn-new--sm" aria-label={t("common.close")}>
                     <X size={14} />
                   </button>
                 </div>
@@ -1003,10 +1009,10 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { label:"Fecha",    val:parseDate(appt.date).toLocaleDateString("es-MX",{weekday:"long",day:"numeric",month:"long"}) },
-                    { label:"Horario",  val:`${appt.startTime} – ${appt.endTime}` },
-                    { label:"Doctor",   val:`Dr/a. ${appt.doctor.firstName} ${appt.doctor.lastName}` },
-                    { label:"Duración", val:`${appt.durationMins} minutos` },
+                    { label:t("common.date"),                  val:parseDate(appt.date).toLocaleDateString("es-MX",{weekday:"long",day:"numeric",month:"long"}) },
+                    { label:t("appointments.detail.schedule"), val:`${appt.startTime} – ${appt.endTime}` },
+                    { label:t("appointments.form.doctor"),     val:`${t("appointments.doctorPrefix")} ${appt.doctor.firstName} ${appt.doctor.lastName}` },
+                    { label:t("appointments.form.duration"),   val:t("appointments.detail.minutesLong", { count: appt.durationMins }) },
                   ].map(r => (
                     <div key={r.label} className="bg-muted/20 rounded-xl p-3">
                       <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">{r.label}</div>
@@ -1018,17 +1024,17 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                 <div className="flex gap-2 flex-wrap">
                   {appt.googleCalendarEventId && (
                     <div className="flex items-center gap-1.5 text-sm font-semibold text-brand-600 bg-brand-600/15 border border-brand-200 px-3 py-1.5 rounded-full">
-                      <CalendarCheck className="w-4 h-4"/> Sincronizado con Google Calendar
+                      <CalendarCheck className="w-4 h-4"/> {t("appointments.detail.googleSynced")}
                     </div>
                   )}
                   {appt.reminderSent && (
                     <div className="flex items-center gap-1.5 text-sm font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 px-3 py-1.5 rounded-full">
-                      <MessageCircle className="w-4 h-4"/> Recordatorio WhatsApp enviado
+                      <MessageCircle className="w-4 h-4"/> {t("appointments.detail.whatsappReminderSent")}
                     </div>
                   )}
                   {appt.mode === "TELECONSULTATION" && (
                     <div className="flex items-center gap-1.5 text-sm font-semibold text-violet-600 bg-violet-50 dark:bg-violet-950/30 border border-violet-200 px-3 py-1.5 rounded-full">
-                      📹 Teleconsulta
+                      📹 {t("appointments.form.teleconsultation")}
                     </div>
                   )}
                 </div>
@@ -1037,40 +1043,40 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                     {appt.paymentStatus === "paid" ? (
                       <a href={`/teleconsulta/${appt.id}?role=doctor`} target="_blank" rel="noopener noreferrer"
                         className="flex items-center justify-center gap-2 w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition-colors">
-                        📹 Unirse a videollamada
+                        📹 {t("appointments.teleconsult.join")}
                       </a>
                     ) : (
                       <div className="space-y-2">
                         <div className="flex items-center gap-1.5 text-sm font-semibold text-amber-600 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 px-3 py-1.5 rounded-full w-fit">
-                          ⏳ Pago pendiente
+                          ⏳ {t("appointments.teleconsult.paymentPending")}
                         </div>
-                        <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/pago/${appt.id}`); toast.success("Link de pago copiado"); }}
+                        <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/pago/${appt.id}`); toast.success(t("appointments.teleconsult.paymentLinkCopied")); }}
                           className="flex items-center justify-center gap-2 w-full h-11 rounded-xl border border-border hover:bg-muted text-sm font-bold transition-colors">
-                          📋 Copiar link de pago
+                          📋 {t("appointments.teleconsult.copyPaymentLink")}
                         </button>
                       </div>
                     )}
                     {waConnected && (
                       <button onClick={() => sendWA(appt.id)}
                         className="flex items-center justify-center gap-2 w-full h-11 rounded-xl border border-emerald-300 hover:bg-emerald-50 text-emerald-700 text-sm font-bold transition-colors">
-                        <MessageCircle className="w-4 h-4"/> Enviar link por WhatsApp
+                        <MessageCircle className="w-4 h-4"/> {t("appointments.teleconsult.sendLinkWhatsapp")}
                       </button>
                     )}
                   </div>
                 )}
                 {appt.notes && (
                   <div className="bg-muted/20 rounded-xl p-4">
-                    <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">📝 Notas</div>
+                    <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">📝 {t("common.notes")}</div>
                     <div className="text-base">{appt.notes}</div>
                   </div>
                 )}
                 <div>
-                  <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-2">Cambiar estado</div>
+                  <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-2">{t("appointments.detail.changeStatus")}</div>
                   <div className="flex flex-wrap gap-2">
                     {Object.entries(STATUS_CONFIG).map(([s,c]) => (
                       <button key={s} onClick={() => updateStatus(appt.id,s)}
                         className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold border-2 transition-all ${appt.status===s?`${c.bg} ${c.text} ${c.border}`:"border-border hover:bg-muted"}`}>
-                        <div className={`w-2 h-2 rounded-full ${c.dot}`}/>{c.label}
+                        <div className={`w-2 h-2 rounded-full ${c.dot}`}/>{t(c.label)}
                       </button>
                     ))}
                   </div>
@@ -1080,12 +1086,12 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                 {waConnected && (
                   <Button variant="outline" onClick={() => sendWA(appt.id)} disabled={appt.reminderSent}
                     className="flex-1 h-11 gap-2 text-sm border-emerald-300 text-emerald-700 hover:bg-emerald-50">
-                    <MessageCircle className="w-4 h-4"/>{appt.reminderSent?"WA enviado ✓":"Enviar WhatsApp"}
+                    <MessageCircle className="w-4 h-4"/>{appt.reminderSent?t("appointments.detail.waSentCheck"):t("appointments.detail.sendWhatsapp")}
                   </Button>
                 )}
                 <Button variant="outline" onClick={() => deleteAppt(appt.id)}
                   className="flex-1 h-11 gap-2 text-sm border-rose-300 text-rose-700 hover:bg-rose-50">
-                  <Ban className="w-4 h-4"/> Cancelar cita
+                  <Ban className="w-4 h-4"/> {t("appointments.detail.cancelAppointment")}
                 </Button>
               </div>
             </div>
