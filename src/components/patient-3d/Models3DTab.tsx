@@ -21,6 +21,16 @@ const Model3DViewer = dynamic(() => import("./Model3DViewer"), {
   ),
 });
 
+// Visor DICOM 2D (cortes). Dinámico + client-only (usa dicom-parser).
+const DicomViewer2D = dynamic(() => import("./DicomViewer2D"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center text-xs text-white/70" style={{ height: 480 }}>
+      <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+    </div>
+  ),
+});
+
 // Miniatura por tarjeta. Dinámica para que three.js solo se descargue cuando se
 // abre la pestaña de modelos, no en el bundle del expediente.
 const Model3DThumbnail = dynamic(() => import("./Model3DThumbnail"), {
@@ -316,14 +326,24 @@ export function Models3DTab({ patientId }: { patientId: string }) {
               </button>
             </div>
             <div className="p-3 max-h-[80vh] overflow-y-auto">
-              <Model3DViewer
-                url={viewer.url}
-                format={formatFromName(viewer.name)}
-                patientId={patientId}
-                fileId={viewer.id}
-                initialNotes={viewer.doctorNotes ?? ""}
-                initialAnnotations={viewer.annotations}
-              />
+              {formatFromName(viewer.name) === "dicom" ? (
+                <DicomViewer2D
+                  url={viewer.url}
+                  name={viewer.name}
+                  patientId={patientId}
+                  fileId={viewer.id}
+                  initialNotes={viewer.doctorNotes ?? ""}
+                />
+              ) : (
+                <Model3DViewer
+                  url={viewer.url}
+                  format={formatFromName(viewer.name)}
+                  patientId={patientId}
+                  fileId={viewer.id}
+                  initialNotes={viewer.doctorNotes ?? ""}
+                  initialAnnotations={viewer.annotations}
+                />
+              )}
             </div>
           </div>
         </div>
