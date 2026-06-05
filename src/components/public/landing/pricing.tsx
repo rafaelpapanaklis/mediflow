@@ -11,8 +11,10 @@ interface Plan {
   desc: string;
   /** Precios en MXN, ya formateados (es-MX) para render determinista. */
   monthly: string;
-  // TODO: confirmar precio anual real con Rafael (placeholder = ~2 meses de descuento).
+  /** Anual con promo: redondear(mensual × 12 × 0.70), formateado es-MX. // promo 30% */
   annual: string;
+  /** Mensual primeros 3 meses: redondear(mensual × 0.85), formateado es-MX. // -15% x3 meses */
+  promo3m: string;
   planParam: string;
   features: string[];
   popular: boolean;
@@ -23,7 +25,8 @@ const PLANS: Plan[] = [
     name: "Basic",
     desc: "Para empezar tu práctica.",
     monthly: "499",
-    annual: "4,990",
+    annual: "4,192", // promo 30% (499 × 12 × 0.70)
+    promo3m: "424", // -15% primeros 3 meses (499 × 0.85)
     planParam: "basic",
     features: [
       "1 profesional · 1 sucursal",
@@ -39,7 +42,8 @@ const PLANS: Plan[] = [
     name: "Pro",
     desc: "La elección de clínicas en crecimiento.",
     monthly: "999",
-    annual: "9,990",
+    annual: "8,392", // promo 30% (999 × 12 × 0.70)
+    promo3m: "849", // -15% primeros 3 meses (999 × 0.85)
     planParam: "pro",
     features: [
       "Hasta 3 profesionales",
@@ -56,7 +60,8 @@ const PLANS: Plan[] = [
     name: "Clinic",
     desc: "Para grupos y multi-sede.",
     monthly: "1,999",
-    annual: "19,990",
+    annual: "16,792", // promo 30% (1,999 × 12 × 0.70)
+    promo3m: "1,699", // -15% primeros 3 meses (1,999 × 0.85)
     planParam: "clinic",
     features: [
       "Profesionales ilimitados",
@@ -104,9 +109,16 @@ export function Pricing() {
             onClick={() => setBilling("anual")}
           >
             Anual
-            <span className="lp-bill-save">Ahorra 2 meses</span>
+            <span className="lp-bill-save">Promoción 30% de descuento</span>
           </button>
         </div>
+
+        {/* Aviso de promoción según el periodo elegido (se anuncia al togglear) */}
+        <p className="lp-price-notice" role="status" aria-live="polite">
+          {isAnnual
+            ? "⏳ Promoción válida por las próximas 72 horas"
+            : "−15% en tus primeros 3 meses · luego precio normal"}
+        </p>
 
         <div className="lp-grid lp-grid-3" style={{ alignItems: "start" }}>
           {PLANS.map((plan) => (
@@ -116,7 +128,7 @@ export function Pricing() {
             >
               {plan.popular && (
                 <span className="lp-mono lp-price-badge" aria-hidden="true">
-                  El más elegido
+                  Recomendado
                 </span>
               )}
 
@@ -130,6 +142,22 @@ export function Pricing() {
               </p>
               <p className="lp-price-subnote">
                 {isAnnual ? "Facturado una vez al año" : "Por mes, sin permanencia"}
+              </p>
+
+              {/* Promo mensual: −15% los primeros 3 meses, luego precio normal */}
+              {!isAnnual && (
+                <p className="lp-price-promo">
+                  <span className="lp-price-promo__badge">−15% primeros 3 meses</span>
+                  <span className="lp-price-promo__val">${plan.promo3m}/mes</span>
+                  <span className="lp-price-promo__ref">luego ${plan.monthly}/mes (precio normal al 4.º mes)</span>
+                </p>
+              )}
+
+              {/* Costo de instalación: tachado e incluido gratis */}
+              <p className="lp-price-install">
+                Costo de instalación:{" "}
+                <span className="lp-price-install__old">$500 pago único</span>{" "}
+                <span className="lp-price-install__free">✓ Incluido GRATIS</span>
               </p>
 
               <Link
@@ -163,7 +191,7 @@ export function Pricing() {
           display: inline-flex;
           gap: 4px;
           padding: 5px;
-          margin: 0 auto clamp(28px, 4vw, 40px);
+          margin: 0 auto clamp(20px, 3vw, 28px);
           border-radius: 999px;
           background: var(--ld-surface);
           border: 1px solid var(--ld-border);
@@ -198,10 +226,45 @@ export function Pricing() {
           border-radius: 999px;
           background: #fff;
           color: var(--ld-brand-strong);
+          white-space: nowrap;
         }
 
-        .lp-price-card { position: relative; display: flex; flex-direction: column; height: 100%; }
+        /* Aviso de promoción (cambia al togglear, aria-live) */
+        .lp-price-notice {
+          margin: 0 auto clamp(22px, 3.5vw, 32px);
+          max-width: 540px;
+          text-align: center;
+          font-size: 13.5px;
+          font-weight: 600;
+          color: var(--ld-brand-strong);
+          background: var(--ld-brand-weak);
+          border: 1px solid var(--ld-brand-weak-border);
+          border-radius: 12px;
+          padding: 9px 16px;
+        }
+
+        .lp-price-card {
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+        /* Hover premium: anillo morado + sombra suave + leve elevación */
+        .lp-price-card:hover {
+          transform: translateY(-4px);
+          border-color: var(--ld-brand-light);
+          box-shadow: 0 0 0 2px var(--ld-brand-light), 0 22px 44px -16px rgba(124,58,237,0.35);
+        }
         .lp-price-popular { border-color: var(--ld-brand-weak-border); box-shadow: var(--ld-shadow-lg); }
+        .lp-price-popular:hover {
+          box-shadow: 0 0 0 2px var(--ld-brand), 0 26px 50px -16px rgba(124,58,237,0.45);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .lp-price-card { transition: box-shadow 0.2s ease, border-color 0.2s ease; }
+          .lp-price-card:hover { transform: none; }
+        }
+
         .lp-price-badge {
           position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
           padding: 5px 14px; border-radius: 999px; background: var(--ld-grad-brand); color: #fff;
@@ -215,6 +278,32 @@ export function Pricing() {
         .lp-price-value { font-size: 46px; font-weight: 700; color: var(--ld-fg); line-height: 1; letter-spacing: -0.02em; }
         .lp-price-period { font-size: 14px; color: var(--ld-fg-muted); }
         .lp-price-subnote { margin: 6px 0 0; font-size: 12px; color: var(--ld-fg-subtle); }
+
+        /* Promo mensual de primeros 3 meses */
+        .lp-price-promo {
+          margin: 12px 0 0;
+          display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 8px;
+          font-size: 12.5px;
+        }
+        .lp-price-promo__badge {
+          font-weight: 700; color: #fff; background: var(--ld-grad-brand);
+          border-radius: 999px; padding: 2px 9px; font-size: 11px; white-space: nowrap;
+        }
+        .lp-price-promo__val { font-weight: 700; font-size: 15px; color: var(--ld-brand-strong); }
+        .lp-price-promo__ref { color: var(--ld-fg-subtle); }
+
+        /* Costo de instalación incluido gratis */
+        .lp-price-install {
+          margin: 12px 0 0;
+          display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px;
+          font-size: 12.5px; color: var(--ld-fg-subtle);
+        }
+        .lp-price-install__old { text-decoration: line-through; color: var(--ld-fg-subtle); opacity: 0.85; }
+        .lp-price-install__free {
+          font-weight: 700; color: #047857; background: #d1fae5;
+          border-radius: 999px; padding: 2px 9px; font-size: 11.5px; white-space: nowrap;
+        }
+
         .lp-price-card :global(.lp-btn--block) { margin-top: 22px; }
         .lp-price-divider { margin: 22px 0; }
         .lp-price-features { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 13px; }
