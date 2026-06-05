@@ -7,9 +7,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Plus, Trash2, Box, X } from "lucide-react";
+import { Plus, Trash2, Box, X, Layers } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
+import { createClient } from "@/lib/supabase/client";
 import type { Model3DFormat } from "./Model3DViewer";
 
 const Model3DViewer = dynamic(() => import("./Model3DViewer"), {
@@ -23,6 +24,16 @@ const Model3DViewer = dynamic(() => import("./Model3DViewer"), {
 
 // Visor DICOM 2D (cortes). Dinámico + client-only (usa dicom-parser).
 const DicomViewer2D = dynamic(() => import("./DicomViewer2D"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center text-xs text-white/70" style={{ height: 480 }}>
+      <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+    </div>
+  ),
+});
+
+// Visor de SET CBCT (.zip de cortes). Dinámico + client-only (jszip + dicom-parser).
+const DicomSetViewer = dynamic(() => import("./DicomSetViewer"), {
   ssr: false,
   loading: () => (
     <div className="flex items-center justify-center text-xs text-white/70" style={{ height: 480 }}>
@@ -53,8 +64,12 @@ interface Model3DFile {
   annotations?: unknown;
 }
 
-const ACCEPT = ".stl,.ply,.obj,.dcm,.dicom";
+const ACCEPT = ".stl,.ply,.obj,.dcm,.dicom,.zip";
 const MAX_MB = 100;
+
+function isZip(name: string): boolean {
+  return /\.zip$/i.test(name);
+}
 
 function formatFromName(name: string): Model3DFormat | undefined {
   const ext = name.split(".").pop()?.toLowerCase();
@@ -92,10 +107,58 @@ export function Models3DTab({ patientId }: { patientId: string }) {
     };
   }, [patientId]);
 
+  // Subida DIRECTA a Storage de un set CBCT (.zip): los CBCT pesan cientos de MB
+  // y no caben en el route handler. Pedimos signed upload URL, subimos directo
+  // y registramos el PatientFile.
+  const uploadZip = useCallback(
+    async (file: File) => {
+      setUploading(true);
+      setProgress(0);
+      try {
+        const signRes = await fetch(`/api/patients/${patientId}/dicom-set/sign`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: file.name }),
+        });
+        if (!signRes.ok) throw new Error((await signRes.json().catch(() => ({})))?.error || "No se pudo preparar la subida");
+        const { path, token } = await signRes.json();
+
+        const supabase = createClient();
+        const { error: upErr } = await supabase.storage
+          .from("patient-files")
+          .uploadToSignedUrl(path, token, file);
+        if (upErr) throw upErr;
+
+        const regRes = await fetch(`/api/patients/${patientId}/dicom-set/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path, name: file.name, size: file.size }),
+        });
+        if (!regRes.ok) throw new Error((await regRes.json().catch(() => ({})))?.error || "No se pudo registrar el set");
+        const created: Model3DFile = await regRes.json();
+        setFiles((prev) => [created, ...prev]);
+        toast.success("CBCT subido");
+      } catch (e: any) {
+        toast.error(e?.message ? `Error: ${e.message}` : "No se pudo subir el CBCT");
+      } finally {
+        setUploading(false);
+        setProgress(0);
+        if (inputRef.current) inputRef.current.value = "";
+      }
+    },
+    [patientId],
+  );
+
   const onPick = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
+      // CBCT (.zip): subida directa a Storage (archivos grandes).
+      if (isZip(file.name)) {
+        void uploadZip(file);
+        e.target.value = "";
+        return;
+      }
       // Doble candado: el servidor también valida, pero rechazamos aquí antes de
       // gastar la subida si la extensión no está permitida.
       if (!/\.(stl|ply|obj|dcm|dicom)$/i.test(file.name)) {
@@ -151,7 +214,7 @@ export function Models3DTab({ patientId }: { patientId: string }) {
       };
       xhr.send(form);
     },
-    [patientId, t],
+    [patientId, t, uploadZip],
   );
 
   // Re-firma la signed URL (TTL 5 min) antes de abrir, por si expiró desde la
@@ -259,13 +322,28 @@ export function Models3DTab({ patientId }: { patientId: string }) {
       {/* Tarjetas de modelos */}
       {files.map((f) => (
         <div key={f.id} className="bg-card border border-border rounded-xl p-4 flex items-center gap-4">
-          <Model3DThumbnail
-            url={f.url}
-            format={formatFromName(f.name)}
-            sizeBytes={f.size}
-            name={f.name}
-            onOpen={() => openViewer(f)}
-          />
+          {isZip(f.name) ? (
+            <button
+              type="button"
+              onClick={() => openViewer(f)}
+              className="w-16 h-16 rounded-lg flex flex-col items-center justify-center flex-shrink-0 gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+              style={{ background: "rgba(124,58,237,.14)" }}
+              aria-label={t("patients.models3d.view")}
+            >
+              <Layers className="w-5 h-5" style={{ color: "#a78bfa" }} aria-hidden />
+              <span className="text-[9px] font-bold uppercase tracking-wide" style={{ color: "#a78bfa" }}>
+                CBCT
+              </span>
+            </button>
+          ) : (
+            <Model3DThumbnail
+              url={f.url}
+              format={formatFromName(f.name)}
+              sizeBytes={f.size}
+              name={f.name}
+              onOpen={() => openViewer(f)}
+            />
+          )}
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold truncate">{f.name}</p>
             <p className="text-xs text-muted-foreground">
@@ -326,7 +404,15 @@ export function Models3DTab({ patientId }: { patientId: string }) {
               </button>
             </div>
             <div className="p-3 max-h-[80vh] overflow-y-auto">
-              {formatFromName(viewer.name) === "dicom" ? (
+              {isZip(viewer.name) ? (
+                <DicomSetViewer
+                  url={viewer.url}
+                  name={viewer.name}
+                  patientId={patientId}
+                  fileId={viewer.id}
+                  initialNotes={viewer.doctorNotes ?? ""}
+                />
+              ) : formatFromName(viewer.name) === "dicom" ? (
                 <DicomViewer2D
                   url={viewer.url}
                   name={viewer.name}
