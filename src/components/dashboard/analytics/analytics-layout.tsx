@@ -11,6 +11,7 @@ import {
   Clock,
   DollarSign,
   Route,
+  Gem,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -32,6 +33,10 @@ const TABS: TabDef[] = [
   { id: "waiting",      labelKey: "analytics.layout.tabWaiting",      href: "/dashboard/analytics/waiting-room",icon: Clock },
   { id: "costs",        labelKey: "analytics.layout.tabCosts",        href:"/dashboard/analytics/costs",       icon: DollarSign },
   { id: "journey",      labelKey: "analytics.layout.tabJourney",      href:"/dashboard/analytics/journey",     icon: Route },
+  // CRM — labelKey "CRM" no existe en el diccionario a propósito: el motor
+  // i18n devuelve la propia llave como fallback (ver src/i18n/t.ts), y "CRM"
+  // es idéntico en es/en, así no hace falta tocar los diccionarios.
+  { id: "crm",          labelKey: "CRM",                              href:"/dashboard/analytics/crm",         icon: Gem },
 ];
 
 interface Props {
