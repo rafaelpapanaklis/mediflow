@@ -16,6 +16,7 @@ import {
   Anchor,
   Smile,
   ArrowUpRight,
+  Box,
   Plus,
   type LucideIcon,
 } from "lucide-react";
@@ -184,6 +185,7 @@ export function QuickNav({
     { id: "odontograma",  label: t("patients.quickNav.odontogram"),      icon: Bone,         count: counts.odontograma },
     { id: "evolucion",    label: t("patients.quickNav.soapNotes"),       icon: Activity,     count: counts.evolucion },
     { id: "radiografias", label: t("patients.quickNav.xrays"),     icon: FileImage,    count: counts.radiografias },
+    { id: "modelos-3d",   label: t("patients.tabs.modelos3d"),     icon: Box },
     { id: "tratamiento",  label: t("patients.quickNav.treatmentPlan"), icon: Pill,         count: counts.tratamiento },
     { id: "referencias",  label: t("patients.quickNav.referrals"),      icon: ArrowUpRight, count: counts.referencias },
   ];
