@@ -6,6 +6,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { sendWelcomeEmail } from "@/lib/email";
 import { SITE_URL } from "@/lib/seo";
 import { logError } from "@/lib/safe-log";
+import { resolveApprovedAffiliateByCode } from "@/lib/affiliates";
 
 const CATEGORY_MAP: Record<string, string> = {
   dental: "DENTAL", odontologia: "DENTAL",
@@ -31,6 +32,7 @@ const schema = z.object({
     .default("transfer"),
   paymentMethodLast4: z.string().regex(/^\d{4}$/).optional(), // solo para card
   billing: z.enum(["monthly", "annual"]).default("monthly"),
+  ref: z.string().optional(), // referralCode de afiliado (atribución en el alta)
 });
 
 async function generateSlug(name: string) {
@@ -88,9 +90,16 @@ export async function POST(req: NextRequest) {
         : paymentMethodType === "paypal" || paymentMethodType === "transfer";
     // "none" cae al else implícito → false (correcto, no hay método capturado)
 
+    // Atribución de afiliado (best-effort): ?ref=<referralCode> del body o del
+    // query string. Solo se aplica si es un Affiliate APPROVED. Nunca rompe el
+    // registro si el ref es inválido (resolveApprovedAffiliateByCode → null).
+    const refCode = data.ref ?? req.nextUrl.searchParams.get("ref") ?? undefined;
+    const referringAffiliate = await resolveApprovedAffiliateByCode(refCode);
+
     await prisma.clinic.create({
       data: {
         name: data.clinicName, slug, specialty: specialtyLabel,
+        affiliateId: referringAffiliate?.id,
         category: resolvedCategory as any,
         country: data.country,
         state: data.state,

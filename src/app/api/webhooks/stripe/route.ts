@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
 import { logAudit } from "@/lib/audit";
 import type Stripe from "stripe";
+import { calcCommissionMxn } from "@/lib/affiliates";
 
 // Next.js App Router: no hace body-parsing automático aquí porque leemos el
 // raw body para verificar la firma de Stripe.
@@ -182,10 +183,52 @@ export async function POST(req: NextRequest) {
       }
 
       case "invoice.paid":
-        // No-op por ahora: customer.subscription.updated ya refresca el
-        // status. Si en el futuro se quiere persistir SubscriptionInvoice
-        // (montos por período), va aquí.
+      case "invoice.payment_succeeded": {
+        // Comisión recurrente de afiliado: por cada factura pagada de una
+        // clínica referida, registramos una AffiliateCommission. Idempotente
+        // por stripeInvoiceId (@unique) — si Stripe reintenta el webhook o
+        // dispara ambos eventos, no se duplica.
+        const invoice = event.data.object as Stripe.Invoice;
+        const customerId =
+          typeof invoice.customer === "string"
+            ? invoice.customer
+            : invoice.customer?.id ?? null;
+        const invoiceId = invoice.id;
+        if (!customerId || !invoiceId) break;
+
+        const clinic = await prisma.clinic.findFirst({
+          where: { stripeCustomerId: customerId },
+          select: {
+            id: true,
+            affiliateId: true,
+            affiliate: { select: { commissionPct: true } },
+          },
+        });
+        if (!clinic?.affiliateId || !clinic.affiliate) break; // sin afiliado referente
+
+        // amount_paid viene en centavos de la moneda de la suscripción (MXN).
+        const amountMxn = (invoice.amount_paid ?? 0) / 100;
+        if (amountMxn <= 0) break;
+
+        const commissionMxn = calcCommissionMxn(amountMxn, clinic.affiliate.commissionPct);
+
+        try {
+          await prisma.affiliateCommission.create({
+            data: {
+              affiliateId: clinic.affiliateId,
+              clinicId: clinic.id,
+              stripeInvoiceId: invoiceId,
+              amountMxn,
+              commissionMxn,
+              status: "pending",
+            },
+          });
+        } catch (err: any) {
+          // P2002 = unique violation → la comisión ya existía, no-op.
+          if (err?.code !== "P2002") throw err;
+        }
         break;
+      }
 
       default:
         break;

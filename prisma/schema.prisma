@@ -262,6 +262,11 @@ model Clinic {
   dentalLabOrders DentalLabOrder[]
   dentalLabChats  DentalLabChatThread[]
 
+  // Afiliados / Referidos — la clínica fue referida por un afiliado (opcional).
+  // Se setea SOLO en el alta vía ?ref validado; nunca desde el cliente después.
+  affiliateId String?
+  affiliate   Affiliate? @relation(fields: [affiliateId], references: [id])
+
   @@map("clinics")
 }
 
@@ -2865,6 +2870,59 @@ model Cart {
   clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
   @@map("carts")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Afiliados / Referidos — actor externo (espejo del patrón DentalLab).
+// Modelo afiliado-referido con comisión RECURRENTE: el afiliado refiere
+// clínicas vía ?ref=<referralCode> y gana un % de cada factura pagada
+// (invoice.paid de Stripe) mientras la suscripción siga activa. Tablas
+// GLOBALES (sin clinicId) — un afiliado refiere a muchas clínicas.
+// Solo fundación: sin panel de afiliado todavía.
+// ═══════════════════════════════════════════════════════════════════
+enum AffiliateStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+model Affiliate {
+  id            String          @id @default(cuid())
+  name          String
+  slug          String          @unique
+  email         String          @unique
+  status        AffiliateStatus @default(PENDING)
+  approvedAt    DateTime?
+  referralCode  String          @unique
+  commissionPct Float           @default(20)
+  payoutMethod  String?
+  payoutDetails String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  clinics     Clinic[]
+  commissions AffiliateCommission[]
+
+  @@index([status])
+  @@map("affiliates")
+}
+
+model AffiliateCommission {
+  id              String    @id @default(cuid())
+  affiliateId     String
+  clinicId        String
+  stripeInvoiceId String    @unique
+  amountMxn       Float
+  commissionMxn   Float
+  status          String    @default("pending")
+  createdAt       DateTime  @default(now())
+  paidAt          DateTime?
+
+  affiliate Affiliate @relation(fields: [affiliateId], references: [id])
+
+  @@index([affiliateId, status])
+  @@map("affiliate_commissions")
 }
 
 // ─────────────────────────────────────────────────────────────────────────
