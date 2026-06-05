@@ -127,6 +127,23 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
     } catch { toast.error("Error al guardar idioma"); }
   }
 
+  // CRM — toggles de automatización (gated). Guardado inmediato al flip;
+  // si falla, revierte el estado local.
+  async function saveAutomation(patch: Record<string, boolean>) {
+    setClinic((c: any) => ({ ...c, ...patch }));
+    try {
+      const res = await fetch("/api/clinic", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("Automatización actualizada");
+    } catch {
+      setClinic((c: any) => ({ ...c, ...Object.fromEntries(Object.keys(patch).map(k => [k, !patch[k]])) }));
+      toast.error("Error al guardar");
+    }
+  }
+
   async function saveUser() {
     setSaving(true);
     try {
@@ -646,6 +663,43 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               <a href="/dashboard/whatsapp" className="text-sm font-semibold text-brand-600 hover:underline">
                 {t("settings.client.whatsappLink")}
               </a>
+            </div>
+          )}
+
+          {/* Automatizaciones CRM (admin only) — gated, default OFF */}
+          {(initUser.role === "ADMIN" || initUser.role === "SUPER_ADMIN") && (
+            <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-11 h-11 rounded-2xl bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center text-2xl">🤖</div>
+                <div>
+                  <h2 className="text-base font-bold">Automatizaciones (CRM)</h2>
+                  <p className="text-sm text-muted-foreground">Mensajes y tareas automáticas para retener pacientes.</p>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4">
+                Los mensajes por WhatsApp solo se envían si tu clínica tiene WhatsApp conectado. Todo está apagado por defecto.
+              </p>
+              <div className="space-y-3">
+                {([
+                  { key: "birthdayMsgActive",      label: "Mensaje de cumpleaños",        desc: "Felicita por WhatsApp a tus pacientes el día de su cumpleaños." },
+                  { key: "postApptFollowupActive", label: "Seguimiento post-cita",        desc: "Pregunta cómo estuvo la visita ~24 h después de una cita completada." },
+                  { key: "noShowTaskActive",       label: "Tarea por riesgo de no-show",  desc: "Crea una tarea al equipo para confirmar citas próximas de alto riesgo." },
+                ] as const).map((row) => {
+                  const active = Boolean(clinic[row.key]);
+                  return (
+                    <div key={row.key} className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-colors ${active ? "border-violet-500 bg-violet-600/10" : "border-border bg-transparent"}`}>
+                      <div className="pr-4">
+                        <div className={`text-sm font-bold ${active ? "text-violet-700 dark:text-violet-300" : "text-foreground"}`}>{row.label}</div>
+                        <div className="text-xs mt-0.5 text-muted-foreground">{row.desc}</div>
+                      </div>
+                      <button type="button" onClick={() => saveAutomation({ [row.key]: !active })}
+                        className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors ${active ? "bg-violet-600" : "bg-muted-foreground/30"}`}>
+                        <div className="absolute top-0.5 w-5 h-5 rounded-full bg-card shadow-sm transition-all" style={{ left: active ? "22px" : "2px" }} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

@@ -73,6 +73,10 @@ export async function PATCH(req: NextRequest) {
   if (body.locale !== undefined) {
     data.locale = body.locale === "en" ? "en" : "es";
   }
+  // CRM — toggles de automatización (gated, default OFF).
+  if (body.birthdayMsgActive      !== undefined) data.birthdayMsgActive      = Boolean(body.birthdayMsgActive);
+  if (body.postApptFollowupActive !== undefined) data.postApptFollowupActive = Boolean(body.postApptFollowupActive);
+  if (body.noShowTaskActive       !== undefined) data.noShowTaskActive       = Boolean(body.noShowTaskActive);
 
   const updated = await prisma.clinic.update({
     where: { id: dbUser.clinicId },
