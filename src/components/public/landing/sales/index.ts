@@ -1,0 +1,11 @@
+export { SalesNav } from "./nav";
+export { SalesHero } from "./hero";
+export { SocialProof } from "./social-proof";
+export { FeaturesGrid } from "./features-grid";
+export { Spotlights } from "./spotlights";
+export { Comparison } from "./comparison";
+export { Testimonials } from "./testimonials";
+export { Pricing } from "./pricing";
+export { TrustFaq } from "./trust-faq";
+export { FinalCta } from "./final-cta";
+export { SalesFooter } from "./footer";
