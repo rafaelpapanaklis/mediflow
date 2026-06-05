@@ -14,7 +14,7 @@ import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { PLYLoader } from "three/examples/jsm/loaders/PLYLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
-import { Box, Loader2 } from "lucide-react";
+import { Box, Loader2, Layers } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
 import type { Model3DFormat } from "./Model3DViewer";
 
@@ -27,6 +27,7 @@ const FORMAT_STYLE: Record<Model3DFormat, { bg: string; fg: string }> = {
   stl: { bg: "rgba(37,99,235,.14)", fg: "#60a5fa" },
   ply: { bg: "rgba(139,92,246,.14)", fg: "#a78bfa" },
   obj: { bg: "rgba(16,185,129,.14)", fg: "#34d399" },
+  dicom: { bg: "rgba(244,114,182,.14)", fg: "#f472b6" },
 };
 
 // Semáforo de concurrencia: como mucho 2 renders simultáneos en toda la lista.
@@ -165,6 +166,7 @@ interface Props {
 export default function Model3DThumbnail({ url, format, sizeBytes, name, onOpen }: Props) {
   const t = useT();
   const fmt: Model3DFormat = format ?? "stl";
+  const isDicom = fmt === "dicom"; // DICOM no se renderiza como malla: placeholder.
   const [phase, setPhase] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [img, setImg] = useState<string | null>(null);
   const [requested, setRequested] = useState(false); // disparo manual (pesados).
@@ -199,6 +201,7 @@ export default function Model3DThumbnail({ url, format, sizeBytes, name, onOpen 
   // Dispara el render cuando procede (auto para ligeros, manual para pesados).
   useEffect(() => {
     if (phase !== "idle" || !visible) return;
+    if (isDicom) return; // no se intenta render 3D de una tomografía DICOM.
     if (!auto && !requested) return;
     const controller = new AbortController();
     setPhase("loading");
@@ -213,7 +216,7 @@ export default function Model3DThumbnail({ url, format, sizeBytes, name, onOpen 
         if (!controller.signal.aborted) setPhase("error");
       });
     return () => controller.abort();
-  }, [visible, auto, requested, phase, url, fmt]);
+  }, [visible, auto, requested, phase, url, fmt, isDicom]);
 
   const style = FORMAT_STYLE[fmt] ?? FORMAT_STYLE.stl;
 
@@ -243,6 +246,8 @@ export default function Model3DThumbnail({ url, format, sizeBytes, name, onOpen 
         >
           {phase === "loading" ? (
             <Loader2 className="w-5 h-5 animate-spin" style={{ color: style.fg }} aria-hidden />
+          ) : isDicom ? (
+            <Layers className="w-5 h-5" style={{ color: style.fg }} aria-hidden />
           ) : (
             <Box className="w-5 h-5" style={{ color: style.fg }} aria-hidden />
           )}

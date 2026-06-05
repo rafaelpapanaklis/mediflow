@@ -9,7 +9,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const ALLOWED_EXT = ["stl", "ply", "obj"] as const;
+// Mallas (stl/ply/obj) + tomografías DICOM (dcm/dicom). DICOM no se renderiza
+// como malla todavía: se almacena, valida y permite descargar.
+const ALLOWED_EXT = ["stl", "ply", "obj", "dcm", "dicom"] as const;
 const MAX_SIZE = 100 * 1024 * 1024; // 100 MB
 
 function extOf(name: string): string {
@@ -22,6 +24,9 @@ function mimeForExt(ext: string, fallback: string): string {
       return "model/stl";
     case "obj":
       return "model/obj";
+    case "dcm":
+    case "dicom":
+      return "application/dicom";
     case "ply":
     default:
       return fallback || "application/octet-stream";
@@ -57,6 +62,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
         { name: { endsWith: ".stl" } },
         { name: { endsWith: ".ply" } },
         { name: { endsWith: ".obj" } },
+        { name: { endsWith: ".dcm" } },
+        { name: { endsWith: ".dicom" } },
       ],
     },
     orderBy: { createdAt: "desc" },
@@ -78,8 +85,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   return NextResponse.json(signed);
 }
 
-// POST /api/patients/[id]/models-3d — sube un modelo 3D (STL/PLY/OBJ) tal cual
-// (sin sharp). Crea un PatientFile con category SCAN_STL.
+// POST /api/patients/[id]/models-3d — sube un modelo 3D (STL/PLY/OBJ) o una
+// tomografía DICOM (.dcm/.dicom) tal cual (sin sharp). Valida extensión y
+// tamaño. Crea un PatientFile con category SCAN_STL.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -102,7 +110,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const originalName = ((file as File).name || "modelo").trim();
   const ext = extOf(originalName);
   if (!ALLOWED_EXT.includes(ext as (typeof ALLOWED_EXT)[number])) {
-    return NextResponse.json({ error: "Formato no válido. Usa STL, PLY u OBJ." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Formato no permitido. Solo STL, PLY, OBJ o DICOM (.dcm)." },
+      { status: 400 },
+    );
   }
   if (file.size > MAX_SIZE) {
     return NextResponse.json({ error: "Archivo demasiado grande (máx 100 MB)." }, { status: 413 });

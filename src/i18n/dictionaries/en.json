@@ -1153,16 +1153,16 @@
     },
     "models3d": {
       "title": "Intraoral 3D models",
-      "formats": "STL, PLY or OBJ",
+      "formats": "STL, PLY, OBJ or DICOM",
       "fileCount": "{count} model(s)",
       "upload": "Upload model",
       "uploading": "Uploading…",
       "uploadSuccess": "3D model uploaded",
       "uploadError": "Could not upload the model",
-      "invalidType": "Invalid format. Use STL, PLY or OBJ.",
+      "invalidType": "Format not allowed. Only STL, PLY, OBJ or DICOM (.dcm).",
       "tooLarge": "File too large (max {mb} MB).",
       "empty": "No 3D models",
-      "emptyHint": "Upload an STL, PLY or OBJ intraoral scan to view it in 3D.",
+      "emptyHint": "Upload an intraoral scan (STL, PLY or OBJ) or a DICOM (.dcm) tomography to view it here.",
       "view": "View in 3D",
       "viewerTitle": "3D model: {name}",
       "viewerHint": "Drag to rotate · scroll to zoom",
@@ -1209,7 +1209,11 @@
       "save": "Save",
       "saving": "Saving…",
       "saved": "Saved",
-      "saveError": "Could not save"
+      "saveError": "Could not save",
+      "formatNotAllowed": "Format not allowed. Only STL, PLY, OBJ or DICOM (.dcm).",
+      "dicomTitle": "DICOM tomography",
+      "dicomSoon": "Volumetric 3D view is coming soon. For now you can download the file and open it in your DICOM viewer.",
+      "download": "Download file"
     },
     "severity": {
       "alta": "High priority",

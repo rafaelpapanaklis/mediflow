@@ -39,11 +39,14 @@ import {
   StickyNote,
   Save,
   Trash2,
+  Download,
+  Layers,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 
-export type Model3DFormat = "stl" | "ply" | "obj";
+// "dicom" cubre tomografías .dcm/.dicom: no son mallas, no se cargan con three.
+export type Model3DFormat = "stl" | "ply" | "obj" | "dicom";
 export type MeasureUnit = "mm" | "cm";
 type ToolMode = "rotate" | "measure" | "mark";
 type ColorKey = "bone" | "gray" | "violet";
@@ -77,6 +80,7 @@ function formatFromUrl(url: string): Model3DFormat | null {
   if (clean.endsWith(".stl")) return "stl";
   if (clean.endsWith(".ply")) return "ply";
   if (clean.endsWith(".obj")) return "obj";
+  if (clean.endsWith(".dcm") || clean.endsWith(".dicom")) return "dicom";
   return null;
 }
 
@@ -177,6 +181,10 @@ export default function Model3DViewer({
   initialAnnotations,
 }: Model3DViewerProps) {
   const t = useT();
+  // DICOM se trata aparte: no es una malla, no se inicializa three.js. El panel
+  // de notas sigue disponible (depende del estado, no del render 3D).
+  const resolvedFormat = format ?? formatFromUrl(url);
+  const isDicom = resolvedFormat === "dicom";
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [mode, setMode] = useState<ToolMode>("rotate");
@@ -215,10 +223,14 @@ export default function Model3DViewer({
   const apiRef = useRef<ViewerApi | null>(null);
 
   useEffect(() => {
+    // DICOM no es malla: el panel de tomografía se renderiza aparte y aquí no se
+    // inicializa three.js (cargarlo con STL/PLY/OBJLoader fallaría).
+    const fmt = format ?? formatFromUrl(url);
+    if (fmt === "dicom") return;
+
     const container = containerRef.current;
     if (!container) return;
 
-    const fmt = format ?? formatFromUrl(url);
     if (!fmt) {
       setStatus("error");
       return;
@@ -721,7 +733,9 @@ export default function Model3DViewer({
         </header>
       )}
 
-      {/* Barra de herramientas */}
+      {/* Barra de herramientas (oculta para DICOM: no hay malla que rotar/medir) */}
+      {!isDicom && (
+        <>
       <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label={t("patients.models3d.tools")}>
         {/* Modo: rotar | medir | marcar */}
         <div
@@ -874,10 +888,33 @@ export default function Model3DViewer({
           {t("patients.models3d.markHint")}
         </p>
       )}
+        </>
+      )}
 
-      {/* Visor + panel de notas (colapsable en móvil) */}
+      {/* Visor (o panel DICOM) + panel de notas (colapsable en móvil) */}
       <div className="flex flex-col lg:flex-row gap-3">
         <div className="flex-1 min-w-0">
+          {isDicom ? (
+            <div
+              className="relative w-full flex flex-col items-center justify-center text-center gap-3 px-6"
+              style={{ minHeight: 520, background: "#0b0d11", borderRadius: 8, border: "1px solid var(--border)" }}
+            >
+              <Layers className="w-10 h-10 text-white/40" aria-hidden />
+              <div>
+                <p className="text-sm font-bold text-white">{t("patients.models3d.dicomTitle")}</p>
+                <p className="text-xs text-white/60 mt-1 max-w-xs">{t("patients.models3d.dicomSoon")}</p>
+              </div>
+              <a
+                href={url}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-brand-600 text-white hover:bg-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+              >
+                <Download className="w-3.5 h-3.5" aria-hidden /> {t("patients.models3d.download")}
+              </a>
+            </div>
+          ) : (
           <div
             ref={containerRef}
             tabIndex={0}
@@ -900,6 +937,7 @@ export default function Model3DViewer({
               </div>
             )}
           </div>
+          )}
         </div>
 
         {canPersist && (

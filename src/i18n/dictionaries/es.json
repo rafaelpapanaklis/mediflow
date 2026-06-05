@@ -1153,16 +1153,16 @@
     },
     "models3d": {
       "title": "Modelos 3D intraorales",
-      "formats": "STL, PLY u OBJ",
+      "formats": "STL, PLY, OBJ o DICOM",
       "fileCount": "{count} modelo(s)",
       "upload": "Subir modelo",
       "uploading": "Subiendo…",
       "uploadSuccess": "Modelo 3D subido",
       "uploadError": "No se pudo subir el modelo",
-      "invalidType": "Formato no válido. Usa STL, PLY u OBJ.",
+      "invalidType": "Formato no permitido. Solo STL, PLY, OBJ o DICOM (.dcm).",
       "tooLarge": "Archivo demasiado grande (máx {mb} MB).",
       "empty": "Sin modelos 3D",
-      "emptyHint": "Sube un escaneo intraoral STL, PLY u OBJ para visualizarlo en 3D.",
+      "emptyHint": "Sube un escaneo intraoral (STL, PLY u OBJ) o una tomografía DICOM (.dcm) para verlo aquí.",
       "view": "Ver en 3D",
       "viewerTitle": "Modelo 3D: {name}",
       "viewerHint": "Arrastra para rotar · scroll para zoom",
@@ -1209,7 +1209,11 @@
       "save": "Guardar",
       "saving": "Guardando…",
       "saved": "Guardado",
-      "saveError": "No se pudo guardar"
+      "saveError": "No se pudo guardar",
+      "formatNotAllowed": "Formato no permitido. Solo STL, PLY, OBJ o DICOM (.dcm).",
+      "dicomTitle": "Tomografía DICOM",
+      "dicomSoon": "La vista volumétrica 3D llega pronto. Por ahora puedes descargar el archivo y abrirlo en tu visor DICOM.",
+      "download": "Descargar archivo"
     },
     "severity": {
       "alta": "Prioridad alta",

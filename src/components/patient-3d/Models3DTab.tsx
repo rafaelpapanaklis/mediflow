@@ -43,12 +43,13 @@ interface Model3DFile {
   annotations?: unknown;
 }
 
-const ACCEPT = ".stl,.ply,.obj";
+const ACCEPT = ".stl,.ply,.obj,.dcm,.dicom";
 const MAX_MB = 100;
 
 function formatFromName(name: string): Model3DFormat | undefined {
   const ext = name.split(".").pop()?.toLowerCase();
   if (ext === "stl" || ext === "ply" || ext === "obj") return ext;
+  if (ext === "dcm" || ext === "dicom") return "dicom";
   return undefined;
 }
 
@@ -85,8 +86,10 @@ export function Models3DTab({ patientId }: { patientId: string }) {
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
-      if (!/\.(stl|ply|obj)$/i.test(file.name)) {
-        toast.error(t("patients.models3d.invalidType"));
+      // Doble candado: el servidor también valida, pero rechazamos aquí antes de
+      // gastar la subida si la extensión no está permitida.
+      if (!/\.(stl|ply|obj|dcm|dicom)$/i.test(file.name)) {
+        toast.error(t("patients.models3d.formatNotAllowed"));
         e.target.value = "";
         return;
       }
