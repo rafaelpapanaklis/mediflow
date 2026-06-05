@@ -1170,7 +1170,18 @@
       "deleteSuccess": "Modelo eliminado",
       "deleteError": "No se pudo eliminar el modelo",
       "deleteAria": "Eliminar modelo {name}",
-      "close": "Cerrar"
+      "close": "Cerrar",
+      "tools": "Herramientas del visor",
+      "mode": "Modo",
+      "rotate": "Rotar",
+      "measure": "Medir",
+      "measureHint": "Haz clic en dos puntos del modelo para medir la distancia entre ellos.",
+      "clear": "Limpiar",
+      "clearMeasurements": "Limpiar mediciones",
+      "unit": "Unidad",
+      "loading": "Cargando modelo 3D…",
+      "loadError": "No se pudo cargar el modelo 3D. Verifica que sea un STL, PLY u OBJ válido.",
+      "openAria": "Abrir el modelo {name} en 3D"
     },
     "severity": {
       "alta": "Prioridad alta",

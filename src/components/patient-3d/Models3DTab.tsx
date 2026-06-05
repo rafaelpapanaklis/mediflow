@@ -21,6 +21,17 @@ const Model3DViewer = dynamic(() => import("./Model3DViewer"), {
   ),
 });
 
+// Miniatura por tarjeta. Dinámica para que three.js solo se descargue cuando se
+// abre la pestaña de modelos, no en el bundle del expediente.
+const Model3DThumbnail = dynamic(() => import("./Model3DThumbnail"), {
+  ssr: false,
+  loading: () => (
+    <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+      <Box className="w-6 h-6 text-brand-600" aria-hidden />
+    </div>
+  ),
+});
+
 interface Model3DFile {
   id: string;
   name: string;
@@ -233,9 +244,13 @@ export function Models3DTab({ patientId }: { patientId: string }) {
       {/* Tarjetas de modelos */}
       {files.map((f) => (
         <div key={f.id} className="bg-card border border-border rounded-xl p-4 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-            <Box className="w-6 h-6 text-brand-600" />
-          </div>
+          <Model3DThumbnail
+            url={f.url}
+            format={formatFromName(f.name)}
+            sizeBytes={f.size}
+            name={f.name}
+            onOpen={() => openViewer(f)}
+          />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold truncate">{f.name}</p>
             <p className="text-xs text-muted-foreground">

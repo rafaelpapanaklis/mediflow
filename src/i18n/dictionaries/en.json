@@ -1170,7 +1170,18 @@
       "deleteSuccess": "Model deleted",
       "deleteError": "Could not delete the model",
       "deleteAria": "Delete model {name}",
-      "close": "Close"
+      "close": "Close",
+      "tools": "Viewer tools",
+      "mode": "Mode",
+      "rotate": "Rotate",
+      "measure": "Measure",
+      "measureHint": "Click two points on the model to measure the distance between them.",
+      "clear": "Clear",
+      "clearMeasurements": "Clear measurements",
+      "unit": "Unit",
+      "loading": "Loading 3D model…",
+      "loadError": "Could not load the 3D model. Make sure it's a valid STL, PLY or OBJ.",
+      "openAria": "Open model {name} in 3D"
     },
     "severity": {
       "alta": "High priority",
