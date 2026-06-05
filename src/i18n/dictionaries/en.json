@@ -1379,7 +1379,22 @@
       "daysBetween": "Days between sessions",
       "totalCost": "Total cost (MXN)",
       "creating": "Creating...",
-      "createBtn": "Create treatment"
+      "createBtn": "Create treatment",
+      "viewTitle": "Treatment plan",
+      "editTitle": "Edit plan",
+      "editBtn": "Edit",
+      "editAria": "Edit plan {name}",
+      "statusLabel": "Status",
+      "progressLabel": "Progress",
+      "sessionsTitle": "Sessions",
+      "noSessions": "No sessions recorded",
+      "sessionN": "Session {n}",
+      "startLabel": "Start",
+      "nextLabel": "Next",
+      "saving": "Saving...",
+      "saveBtn": "Save changes",
+      "updateSuccess": "Plan updated",
+      "updateFailed": "Could not update the plan"
     },
     "treatmentStatus": {
       "active": "Active",

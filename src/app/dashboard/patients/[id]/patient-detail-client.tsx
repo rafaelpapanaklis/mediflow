@@ -536,6 +536,21 @@ export function PatientDetailClient({
     }
   }, [showNewTreatment, doctors]);
 
+  const [viewPlan, setViewPlan] = useState<any | null>(null);
+  const [editPlan, setEditPlan] = useState<any | null>(null);
+  const [editPlanForm, setEditPlanForm] = useState({ name:"", description:"", totalSessions:"6", sessionIntervalDays:"30", totalCost:"", status:"ACTIVE" });
+  const [savingEditPlan, setSavingEditPlan] = useState(false);
+  useEffect(() => {
+    if (editPlan) setEditPlanForm({
+      name: editPlan.name ?? "",
+      description: editPlan.description ?? "",
+      totalSessions: String(editPlan.totalSessions ?? 6),
+      sessionIntervalDays: String(editPlan.sessionIntervalDays ?? 30),
+      totalCost: String(editPlan.totalCost ?? 0),
+      status: editPlan.status ?? "ACTIVE",
+    });
+  }, [editPlan]);
+
   async function handleCreateTreatment() {
     if (!treatmentForm.name.trim()) {
       toast.error(t("patients.createTreatment.nameRequired"));
@@ -569,6 +584,34 @@ export function PatientDetailClient({
       toast.error(err.message ?? t("patients.createTreatment.error"));
     } finally {
       setSavingTreatment(false);
+    }
+  }
+
+  async function handleUpdatePlan() {
+    if (!editPlan) return;
+    if (!editPlanForm.name.trim()) { toast.error(t("patients.createTreatment.nameRequired")); return; }
+    setSavingEditPlan(true);
+    try {
+      if (editPlanForm.status !== editPlan.status) {
+        const r1 = await fetch(`/api/treatments/${editPlan.id}`, { method:"PATCH", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ status: editPlanForm.status }) });
+        if (!r1.ok) { const e = await r1.json().catch(()=>({})); throw new Error(e.error ?? t("patients.treatment.updateFailed")); }
+      }
+      const res = await fetch(`/api/treatments/${editPlan.id}`, { method:"PATCH", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({
+        name: editPlanForm.name.trim(),
+        description: editPlanForm.description.trim() || null,
+        totalCost: Math.max(0, Number(editPlanForm.totalCost) || 0),
+        totalSessions: Math.max(1, Number(editPlanForm.totalSessions) || 1),
+        sessionIntervalDays: Math.max(1, Number(editPlanForm.sessionIntervalDays) || 30),
+      }) });
+      const data = await res.json().catch(()=>({}));
+      if (!res.ok) throw new Error(data.error ?? t("patients.treatment.updateFailed"));
+      toast.success(t("patients.treatment.updateSuccess"));
+      setEditPlan(null);
+      router.refresh();
+    } catch (err: any) {
+      toast.error(err.message ?? t("patients.treatment.updateFailed"));
+    } finally {
+      setSavingEditPlan(false);
     }
   }
 
@@ -2443,7 +2486,14 @@ export function PatientDetailClient({
                   };
                   const cfg = STATUS_CFG[plan.status] ?? STATUS_CFG.ACTIVE;
                   return (
-                    <div key={plan.id} className="bg-card border border-border rounded-xl p-4">
+                    <div
+                      key={plan.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setViewPlan(plan)}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setViewPlan(plan); } }}
+                      className="bg-card border border-border rounded-xl p-4 cursor-pointer hover:border-brand-300 hover:shadow-sm transition-colors w-full text-left"
+                    >
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div>
                           <div className="font-bold text-sm">{plan.name}</div>
@@ -2458,9 +2508,12 @@ export function PatientDetailClient({
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${cfg.cls}`}>
                             {t(cfg.labelKey)}
                           </span>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setEditPlan(plan); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950/40 transition-colors" aria-label={t("patients.treatment.editAria", { name: plan.name })} title={t("patients.treatment.editBtn")}>
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
                           <button
                             type="button"
-                            onClick={() => handleDeleteTreatment(plan)}
+                            onClick={(e) => { e.stopPropagation(); handleDeleteTreatment(plan); }}
                             className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
                             aria-label={t("patients.treatment.deletePlanAria", { name: plan.name })}
                             title={t("patients.treatment.deletePlanTitle")}
@@ -2610,6 +2663,119 @@ export function PatientDetailClient({
                         >
                           {savingTreatment ? t("patients.treatment.creating") : t("patients.treatment.createBtn")}
                         </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {viewPlan && (() => {
+                  const vp = viewPlan;
+                  const vCompleted = vp.sessions?.length ?? 0;
+                  const vPct = vp.totalSessions > 0 ? Math.round((vCompleted / vp.totalSessions) * 100) : 0;
+                  const vCls: Record<string,string> = {
+                    ACTIVE:"bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800",
+                    COMPLETED:"bg-muted text-muted-foreground border-border",
+                    ABANDONED:"bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800",
+                    PAUSED:"bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800",
+                  };
+                  const vKey: Record<string,string> = { ACTIVE:"patients.treatmentStatus.active", COMPLETED:"patients.treatmentStatus.completed", ABANDONED:"patients.treatmentStatus.abandoned", PAUSED:"patients.treatmentStatus.paused" };
+                  return (
+                    <div style={{ position:"fixed", inset:0, background:"rgba(15,10,30,0.55)", backdropFilter:"blur(4px)", zIndex:80, display:"grid", placeItems:"center" }} onClick={() => setViewPlan(null)}>
+                      <div onClick={(e)=>e.stopPropagation()} className="bg-card border border-border rounded-2xl w-[min(92vw,560px)] max-h-[90vh] overflow-auto">
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+                          <h3 className="text-sm font-bold">{t("patients.treatment.viewTitle")}</h3>
+                          <button type="button" onClick={() => setViewPlan(null)} className="text-muted-foreground hover:text-foreground p-1" aria-label={t("common.close")}>×</button>
+                        </div>
+                        <div className="p-5 space-y-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="font-bold text-base">{vp.name}</div>
+                              <div className="text-xs text-muted-foreground mt-0.5">{t("patients.doctorPrefix")} {vp.doctor?.firstName} {vp.doctor?.lastName}</div>
+                            </div>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${vCls[vp.status] ?? vCls.ACTIVE}`}>{t(vKey[vp.status] ?? vKey.ACTIVE)}</span>
+                          </div>
+                          {vp.description && <div className="text-sm text-muted-foreground">{vp.description}</div>}
+                          <div>
+                            <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                              <span>{t("patients.treatment.progressLabel")}</span>
+                              <span className="font-bold">{vCompleted}/{vp.totalSessions} ({vPct}%)</span>
+                            </div>
+                            <div className="h-2 bg-muted rounded-full overflow-hidden"><div className="h-full bg-brand-500 rounded-full" style={{ width: `${vPct}%` }} /></div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div><div className="text-[11px] uppercase tracking-wide text-muted-foreground">{t("patients.treatment.totalCost")}</div><div className="font-semibold">{formatCurrency(vp.totalCost)}</div></div>
+                            <div><div className="text-[11px] uppercase tracking-wide text-muted-foreground">{t("patients.treatment.daysBetween")}</div><div className="font-semibold">{vp.sessionIntervalDays}</div></div>
+                            <div><div className="text-[11px] uppercase tracking-wide text-muted-foreground">{t("patients.treatment.startLabel")}</div><div className="font-semibold">{new Date(vp.startDate).toLocaleDateString("es-MX",{day:"numeric",month:"short",year:"numeric"})}</div></div>
+                            {vp.nextExpectedDate && <div><div className="text-[11px] uppercase tracking-wide text-muted-foreground">{t("patients.treatment.nextLabel")}</div><div className="font-semibold">{new Date(vp.nextExpectedDate).toLocaleDateString("es-MX",{day:"numeric",month:"short"})}</div></div>}
+                          </div>
+                          <div>
+                            <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1.5">{t("patients.treatment.sessionsTitle")}</div>
+                            {(vp.sessions?.length ?? 0) === 0 ? (
+                              <div className="text-sm text-muted-foreground">{t("patients.treatment.noSessions")}</div>
+                            ) : (
+                              <ul className="space-y-1">
+                                {vp.sessions.map((s:any)=>(
+                                  <li key={s.id} className="flex items-center justify-between text-sm border border-border rounded-lg px-3 py-1.5">
+                                    <span>{t("patients.treatment.sessionN",{n:s.sessionNumber})}</span>
+                                    <span className="text-xs text-muted-foreground">{s.completedAt ? new Date(s.completedAt).toLocaleDateString("es-MX",{day:"numeric",month:"short",year:"numeric"}) : "—"}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border">
+                          <button type="button" onClick={() => setViewPlan(null)} className="px-3 h-9 rounded-lg border border-border text-sm font-semibold hover:bg-muted">{t("common.close")}</button>
+                          <button type="button" onClick={() => { const p = viewPlan; setViewPlan(null); setEditPlan(p); }} className="px-3 h-9 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 inline-flex items-center gap-1.5"><Edit className="w-3.5 h-3.5" />{t("patients.treatment.editBtn")}</button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {editPlan && (
+                  <div style={{ position:"fixed", inset:0, background:"rgba(15,10,30,0.55)", backdropFilter:"blur(4px)", zIndex:80, display:"grid", placeItems:"center" }} onClick={() => !savingEditPlan && setEditPlan(null)}>
+                    <div onClick={(e)=>e.stopPropagation()} className="bg-card border border-border rounded-2xl w-[min(92vw,560px)] max-h-[90vh] overflow-auto">
+                      <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+                        <h3 className="text-sm font-bold">{t("patients.treatment.editTitle")}</h3>
+                        <button type="button" onClick={() => !savingEditPlan && setEditPlan(null)} className="text-muted-foreground hover:text-foreground p-1" aria-label={t("common.close")}>×</button>
+                      </div>
+                      <div className="p-5 space-y-3">
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("patients.treatment.nameLabel")}</label>
+                          <input type="text" className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm" placeholder={t("patients.treatment.namePlaceholder")} value={editPlanForm.name} onChange={(e)=>setEditPlanForm(f=>({...f,name:e.target.value}))} />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("patients.treatment.descLabel")}</label>
+                          <textarea className="flex w-full rounded-lg border border-border bg-card px-3 py-2 text-sm resize-none" rows={2} placeholder={t("patients.treatment.descPlaceholder")} value={editPlanForm.description} onChange={(e)=>setEditPlanForm(f=>({...f,description:e.target.value}))} />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("patients.treatment.statusLabel")}</label>
+                          <select className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm" value={editPlanForm.status} onChange={(e)=>setEditPlanForm(f=>({...f,status:e.target.value}))}>
+                            <option value="ACTIVE">{t("patients.treatmentStatus.active")}</option>
+                            <option value="PAUSED">{t("patients.treatmentStatus.paused")}</option>
+                            <option value="COMPLETED">{t("patients.treatmentStatus.completed")}</option>
+                            <option value="ABANDONED">{t("patients.treatmentStatus.abandoned")}</option>
+                          </select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("patients.treatment.totalSessions")}</label>
+                            <input type="number" min={1} className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm" value={editPlanForm.totalSessions} onChange={(e)=>setEditPlanForm(f=>({...f,totalSessions:e.target.value}))} />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("patients.treatment.daysBetween")}</label>
+                            <input type="number" min={1} className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm" value={editPlanForm.sessionIntervalDays} onChange={(e)=>setEditPlanForm(f=>({...f,sessionIntervalDays:e.target.value}))} />
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("patients.treatment.totalCost")}</label>
+                          <input type="number" min={0} className="flex h-10 w-full rounded-lg border border-border bg-card px-3 text-sm" value={editPlanForm.totalCost} onChange={(e)=>setEditPlanForm(f=>({...f,totalCost:e.target.value}))} />
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border">
+                        <button type="button" disabled={savingEditPlan} onClick={() => setEditPlan(null)} className="px-3 h-9 rounded-lg border border-border text-sm font-semibold hover:bg-muted disabled:opacity-50">{t("common.cancel")}</button>
+                        <button type="button" disabled={savingEditPlan} onClick={handleUpdatePlan} className="px-3 h-9 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 disabled:opacity-50">{savingEditPlan ? t("patients.treatment.saving") : t("patients.treatment.saveBtn")}</button>
                       </div>
                     </div>
                   </div>
