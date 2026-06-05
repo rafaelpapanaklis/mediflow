@@ -22,7 +22,20 @@ const emptyForm = {
   dob: "", address: "", allergies: "", notes: "", isChild: false,
   // NOM-024
   curp: "", curpStatus: "PENDING" as "COMPLETE" | "PENDING" | "FOREIGN", passportNo: "",
+  // CRM — adquisición + ciclo de vida (se envían vía spread en el POST).
+  source: "", lifecycleStage: "patient",
 };
+
+// Fuentes de adquisición ("¿Cómo nos conoció?"). Valores en español neutro:
+// se guardan tal cual y el dashboard CRM los agrupa por este string.
+const SOURCE_OPTIONS = [
+  "Recomendación",
+  "Google",
+  "Instagram/Facebook",
+  "Pasó por la clínica",
+  "Sitio web",
+  "Otro",
+];
 
 const CURP_RE = /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/;
 
@@ -270,6 +283,23 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
               <div className="form-section__title">
                 {t("shell.newPatient.sectionClinical")}
                 <span className="form-section__rule" />
+              </div>
+              {/* CRM — fuente de adquisición + etapa de ciclo de vida */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 14px", marginBottom: 12 }}>
+                <div className="field-new">
+                  <label className="field-new__label">¿Cómo nos conoció?</label>
+                  <select className="input-new" value={form.source} onChange={e => set("source", e.target.value)}>
+                    <option value="">Selecciona…</option>
+                    {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div className="field-new">
+                  <label className="field-new__label">Tipo de contacto</label>
+                  <select className="input-new" value={form.lifecycleStage} onChange={e => set("lifecycleStage", e.target.value)}>
+                    <option value="patient">Paciente</option>
+                    <option value="prospect">Prospecto</option>
+                  </select>
+                </div>
               </div>
               <div className="field-new" style={{ marginBottom: 12 }}>
                 <label className="field-new__label">{t("shell.newPatient.patientType")}</label>

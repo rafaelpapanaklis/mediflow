@@ -62,6 +62,7 @@ async function v2Handler(
   const gendersParam = sp.get("gender") ?? "";
   const genders = gendersParam ? gendersParam.split(",").filter(Boolean) : [];
   const doctorId = sp.get("doctorId");
+  const source = sp.get("source") ?? "";
   const tagsParam = sp.get("tags") ?? "";
   const tags = tagsParam ? tagsParam.split(",").filter(Boolean) : [];
   const hasDebt = sp.get("hasDebt");
@@ -96,6 +97,9 @@ async function v2Handler(
   }
   if (doctorId) {
     where.primaryDoctorId = doctorId;
+  }
+  if (source) {
+    where.source = source;
   }
   if (quickFilter === "vip") {
     where.tags = { hasSome: ["VIP", ...tags] };
@@ -313,6 +317,8 @@ async function v2Handler(
       tags: p.tags,
       isVip: p.tags.includes("VIP"),
       status: p.status,
+      source: p.source,
+      lifecycleStage: p.lifecycleStage,
       lastVisit,
       nextAppointment,
       balance,
@@ -501,6 +507,9 @@ export async function POST(req: NextRequest) {
       passportNo:  body.passportNo ? String(body.passportNo).trim() : null,
       familyHistory:                  body.familyHistory ?? null,
       personalNonPathologicalHistory: body.personalNonPathologicalHistory ?? null,
+      // CRM — fuente de adquisición + etapa de ciclo de vida.
+      source:         body.source ? String(body.source).trim() : null,
+      lifecycleStage: body.lifecycleStage === "prospect" ? "prospect" : "patient",
     },
   });
 

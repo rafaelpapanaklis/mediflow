@@ -96,6 +96,12 @@ model Clinic {
   recallActive           Boolean   @default(false)
   googlePlaceId          String? // Google Maps Place ID for fetching reviews
 
+  // CRM — automatizaciones (mejoras CRM jun 2026). Default OFF: ningún cron
+  // envía nada hasta que la clínica active el toggle desde Configuración.
+  birthdayMsgActive      Boolean   @default(false) // mensaje de cumpleaños por WhatsApp
+  postApptFollowupActive Boolean   @default(false) // seguimiento post-cita por WhatsApp
+  noShowTaskActive       Boolean   @default(false) // tarea de staff por riesgo de no-show
+
   // Landing page
   landingActive       Boolean  @default(false)
   landingThemeColor   String?  @default("#2563eb")
@@ -1094,6 +1100,15 @@ model Patient {
   diabeticRisk      String?
   doshaType         String?
   preferredPressure Int?
+
+  // CRM — adquisición y ciclo de vida (mejoras CRM jun 2026).
+  // source: cómo nos conoció el paciente (Recomendación, Google, etc.).
+  // lifecycleStage: "patient" (ya atendido) | "prospect" (aún no convierte).
+  // lastBirthdayMsgAt: última vez que el cron de cumpleaños le escribió,
+  // para no repetir el mismo año.
+  source            String?
+  lifecycleStage    String?   @default("patient")
+  lastBirthdayMsgAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

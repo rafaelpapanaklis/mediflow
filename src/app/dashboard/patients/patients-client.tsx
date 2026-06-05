@@ -66,6 +66,8 @@ interface PatientRow {
   nextAppointment: { id: string; startsAt: string; status: string; type: string } | null;
   balance: number;
   assignedDoctor: { id: string; firstName: string; lastName: string; color: string | null } | null;
+  source: string | null;
+  lifecycleStage: string | null;
   createdAt: string;
 }
 interface Stats {
@@ -119,6 +121,17 @@ interface Props {
 const VIEW_STORAGE_KEY = "mf:patients:view";
 const COLUMNS_STORAGE_KEY = "mf:patients:cols";
 const PAGE_SIZE = 30;
+
+// Fuentes de adquisición — mismos valores que el modal de nuevo paciente.
+// Son valores funcionales (se envían a la API como filtro), en español.
+const SOURCE_OPTIONS = [
+  "Recomendación",
+  "Google",
+  "Instagram/Facebook",
+  "Pasó por la clínica",
+  "Sitio web",
+  "Otro",
+];
 
 // `labelKey` resuelve vía t(labelKey) en tiempo de render (nunca t() en módulo).
 const ALL_COLUMNS: Array<{ id: ColumnId; labelKey: string; required?: boolean }> = [
@@ -241,6 +254,7 @@ export function PatientsClient({ doctors }: Props) {
   const [advHasDebt, setAdvHasDebt] = useState<"any" | "yes" | "no">("any");
   const [advVisitFrom, setAdvVisitFrom] = useState("");
   const [advVisitTo, setAdvVisitTo] = useState("");
+  const [advSource, setAdvSource] = useState("");
 
   // Drafts del drawer
   const [drDrafts, setDrDrafts] = useState({
@@ -252,6 +266,7 @@ export function PatientsClient({ doctors }: Props) {
     hasDebt: "any" as "any" | "yes" | "no",
     visitFrom: "",
     visitTo: "",
+    source: "",
   });
 
   // Bulk
@@ -310,9 +325,10 @@ export function PatientsClient({ doctors }: Props) {
     if (advHasDebt === "no") sp.set("hasDebt", "false");
     if (advVisitFrom) sp.set("visitFrom", advVisitFrom);
     if (advVisitTo) sp.set("visitTo", advVisitTo);
+    if (advSource) sp.set("source", advSource);
     sp.set("sort", `${sortCol}:${sortDir}`);
     return sp.toString();
-  }, [search, statusFilter, quickFilter, advAgeMin, advAgeMax, advGenders, advDoctorId, advTags, advHasDebt, advVisitFrom, advVisitTo, sortCol, sortDir]);
+  }, [search, statusFilter, quickFilter, advAgeMin, advAgeMax, advGenders, advDoctorId, advTags, advHasDebt, advVisitFrom, advVisitTo, advSource, sortCol, sortDir]);
 
   useEffect(() => {
     let cancelled = false;
@@ -474,13 +490,13 @@ export function PatientsClient({ doctors }: Props) {
         setDrDrafts({
           ageMin: advAgeMin, ageMax: advAgeMax, genders: advGenders,
           doctorId: advDoctorId, tags: advTags, hasDebt: advHasDebt,
-          visitFrom: advVisitFrom, visitTo: advVisitTo,
+          visitFrom: advVisitFrom, visitTo: advVisitTo, source: advSource,
         });
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [drawerOpen, colsDropdownOpen, selected.size, search, data, focusedIdx, router, toggleView, toggleOne, advAgeMin, advAgeMax, advGenders, advDoctorId, advTags, advHasDebt, advVisitFrom, advVisitTo]);
+  }, [drawerOpen, colsDropdownOpen, selected.size, search, data, focusedIdx, router, toggleView, toggleOne, advAgeMin, advAgeMax, advGenders, advDoctorId, advTags, advHasDebt, advVisitFrom, advVisitTo, advSource]);
 
   const stats = data?.stats;
   const total = data?.total ?? 0;
@@ -569,11 +585,12 @@ export function PatientsClient({ doctors }: Props) {
     setAdvHasDebt(drDrafts.hasDebt);
     setAdvVisitFrom(drDrafts.visitFrom);
     setAdvVisitTo(drDrafts.visitTo);
+    setAdvSource(drDrafts.source);
     setPage(1);
     setDrawerOpen(false);
   };
   const clearDrawer = () => {
-    setDrDrafts({ ageMin: "", ageMax: "", genders: [], doctorId: "", tags: [], hasDebt: "any", visitFrom: "", visitTo: "" });
+    setDrDrafts({ ageMin: "", ageMax: "", genders: [], doctorId: "", tags: [], hasDebt: "any", visitFrom: "", visitTo: "", source: "" });
   };
 
   return (
@@ -700,7 +717,7 @@ export function PatientsClient({ doctors }: Props) {
             setDrDrafts({
               ageMin: advAgeMin, ageMax: advAgeMax, genders: advGenders,
               doctorId: advDoctorId, tags: advTags, hasDebt: advHasDebt,
-              visitFrom: advVisitFrom, visitTo: advVisitTo,
+              visitFrom: advVisitFrom, visitTo: advVisitTo, source: advSource,
             });
           }}
           title={t("patients.toolbar.moreFiltersTitle")}
@@ -1277,11 +1294,19 @@ function PatientsGrid({
                 {p.isVip && <span className={styles.vipBadge}><Star size={9} fill="currentColor" /></span>}
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <h3 className={styles.gridName}>{highlightMatch(p.fullName, search)}</h3>
+                <h3 className={styles.gridName}>
+                  {highlightMatch(p.fullName, search)}
+                  {p.lifecycleStage === "prospect" && (
+                    <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: "var(--brand)", background: "var(--brand-softer)", border: "1px solid var(--brand-soft)", borderRadius: 6, padding: "1px 6px", verticalAlign: "middle" }}>
+                      Prospecto
+                    </span>
+                  )}
+                </h3>
                 <span className={styles.gridMeta}>
                   {p.patientNumber}
                   {p.age != null && ` · ${t("patients.row.yearsOld", { age: p.age })}`}
                   {p.gender !== "OTHER" && ` · ${p.gender === "MALE" ? "M" : "F"}`}
+                  {p.source && ` · ${p.source}`}
                 </span>
               </div>
               <span
@@ -1370,6 +1395,7 @@ interface DrawerDrafts {
   hasDebt: "any" | "yes" | "no";
   visitFrom: string;
   visitTo: string;
+  source: string;
 }
 
 function FilterDrawer({
@@ -1467,6 +1493,20 @@ function FilterDrawer({
                 <option key={d.id} value={d.id}>
                   {t("patients.row.doctorPrefix")} {d.firstName} {d.lastName}
                 </option>
+              ))}
+            </select>
+          </div>
+
+          <div className={styles.drawerSection}>
+            <span className={styles.drawerLabel}>Fuente</span>
+            <select
+              className={styles.drawerInput}
+              value={drafts.source}
+              onChange={(e) => setDrafts({ ...drafts, source: e.target.value })}
+            >
+              <option value="">Todas las fuentes</option>
+              {SOURCE_OPTIONS.map((s) => (
+                <option key={s} value={s}>{s}</option>
               ))}
             </select>
           </div>
