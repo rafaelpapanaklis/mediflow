@@ -39,6 +39,8 @@ interface Model3DFile {
   size: number | null;
   mimeType: string | null;
   createdAt: string;
+  doctorNotes?: string | null;
+  annotations?: unknown;
 }
 
 const ACCEPT = ".stl,.ply,.obj";
@@ -293,7 +295,7 @@ export function Models3DTab({ patientId }: { patientId: string }) {
           onClick={() => setViewer(null)}
         >
           <div
-            className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden"
+            className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-6xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-border gap-3">
@@ -310,8 +312,15 @@ export function Models3DTab({ patientId }: { patientId: string }) {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="p-3">
-              <Model3DViewer url={viewer.url} format={formatFromName(viewer.name)} />
+            <div className="p-3 max-h-[80vh] overflow-y-auto">
+              <Model3DViewer
+                url={viewer.url}
+                format={formatFromName(viewer.name)}
+                patientId={patientId}
+                fileId={viewer.id}
+                initialNotes={viewer.doctorNotes ?? ""}
+                initialAnnotations={viewer.annotations}
+              />
             </div>
           </div>
         </div>

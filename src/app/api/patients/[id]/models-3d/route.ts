@@ -60,7 +60,16 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       ],
     },
     orderBy: { createdAt: "desc" },
-    select: { id: true, name: true, url: true, size: true, mimeType: true, createdAt: true },
+    select: {
+      id: true,
+      name: true,
+      url: true,
+      size: true,
+      mimeType: true,
+      createdAt: true,
+      doctorNotes: true,
+      annotations: true,
+    },
   });
 
   const signed = await Promise.all(
