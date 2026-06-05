@@ -13,27 +13,16 @@ const COLUMNS: FooterColumn[] = [
     title: "Producto",
     links: [
       { label: "Funciones", href: "#features" },
-      { label: "Especialidades", href: "#specialties" },
       { label: "Comparativa", href: "#comparison" },
       { label: "Precios", href: "#pricing" },
       { label: "Preguntas frecuentes", href: "#faq" },
     ],
   },
   {
-    title: "Especialidades",
-    links: [
-      { label: "Odontología general", href: "/odontologia-general" },
-      { label: "Medicina general", href: "/medicina-general" },
-      { label: "Psicología", href: "/psicologia" },
-      { label: "Nutrición", href: "/nutricion" },
-      { label: "Ver las 17", href: "#specialties" },
-    ],
-  },
-  {
     title: "Empezar",
     links: [
       { label: "Crear cuenta", href: "/signup" },
-      { label: "Ver demo", href: "/clinicas" },
+      { label: "Ver planes", href: "#pricing" },
       { label: "Iniciar sesión", href: "/login" },
       { label: "Roadmap", href: "/roadmap" },
     ],
@@ -64,7 +53,7 @@ export function Footer() {
               <Logo size={24} color="var(--ld-brand-strong)" />
             </Link>
             <p style={{ marginTop: 16, fontSize: 14, lineHeight: 1.55, color: "var(--ld-fg-muted)", maxWidth: 280 }}>
-              El sistema todo-en-uno para clínicas mexicanas: agenda, WhatsApp,
+              El software todo-en-uno para clínicas dentales en México: agenda, WhatsApp,
               expediente, CFDI 4.0 e IA en una sola plataforma.
             </p>
             <div style={{ marginTop: 18, display: "flex", gap: 16, flexWrap: "wrap" }}>
@@ -116,7 +105,7 @@ export function Footer() {
       <style>{`
         .lp-footer-grid {
           display: grid;
-          grid-template-columns: 1.6fr repeat(4, 1fr);
+          grid-template-columns: 1.6fr repeat(3, 1fr);
           gap: 40px;
         }
         .lp-footer-link { transition: color 0.15s; }

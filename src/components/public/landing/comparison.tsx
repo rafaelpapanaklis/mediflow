@@ -36,7 +36,7 @@ const KEY_ROWS: CompareRow[] = [
 
 const EXTRA_ROWS: CompareRow[] = [
   { feature: "Mi Clínica Visual (editor 2.5D del consultorio)", mediflow: yes, others: no, manual: no },
-  { feature: "Especialidades: orto, endo, perio, implantes, odontopediatría", mediflow: yes, others: partial, manual: no },
+  { feature: "Planes de tratamiento por pieza dental", mediflow: yes, others: partial, manual: no },
   { feature: "Inventario de insumos", mediflow: yes, others: partial, manual: partial },
   { feature: "Recetas digitales con firma", mediflow: yes, others: partial, manual: no },
   { feature: "Consentimientos digitales", mediflow: yes, others: partial, manual: no },

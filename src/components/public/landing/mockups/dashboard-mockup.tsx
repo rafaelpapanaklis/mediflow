@@ -19,9 +19,9 @@ export function DashboardMockup({ scale = 1, animate = true }: { scale?: number;
     { day: 0, hour: 0, dur: 1,   label: "Consulta · M. Ramírez", type: "consult" },
     { day: 1, hour: 2, dur: 1.5, label: "Limpieza · J. López",   type: "dental"  },
     { day: 2, hour: 1, dur: 1,   label: "Control · A. Pérez",    type: "consult" },
-    { day: 3, hour: 3, dur: 2,   label: "Endodoncia · C. Silva", type: "dental"  },
+    { day: 3, hour: 3, dur: 2,   label: "Corona · C. Silva",     type: "dental"  },
     { day: 4, hour: 0, dur: 1,   label: "Revisión",              type: "consult" },
-    { day: 2, hour: 4, dur: 1,   label: "Nutrición · E. Díaz",   type: "nutri"   },
+    { day: 2, hour: 4, dur: 1,   label: "Blanqueamiento · Díaz", type: "nutri"   },
   ];
   const eventColor: Record<string, string> = {
     consult: "124,58,237",

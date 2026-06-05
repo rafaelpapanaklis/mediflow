@@ -4,7 +4,6 @@ import { Hero } from "@/components/public/landing/hero";
 import { SocialProof } from "@/components/public/landing/social-proof";
 import { Features } from "@/components/public/landing/features";
 import { Steps } from "@/components/public/landing/steps";
-import { Specialties } from "@/components/public/landing/specialties";
 import { Comparison } from "@/components/public/landing/comparison";
 import { Testimonials } from "@/components/public/landing/testimonials";
 import { Pricing } from "@/components/public/landing/pricing";
@@ -20,9 +19,9 @@ import { getSession } from "@/lib/auth";
 // es idéntico para SEO (los bots sin cookies ven el flujo no-logueado).
 export const dynamic = "force-dynamic";
 
-const HOME_TITLE = "MediFlow — El sistema todo-en-uno para clínicas en México";
+const HOME_TITLE = "MediFlow — El software todo-en-uno para clínicas dentales en México";
 const HOME_DESC =
-  "Deja de hacer malabares con Dentrix, WhatsApp, Excel y un facturador aparte. MediFlow reúne agenda, expediente, facturación CFDI 4.0, WhatsApp e IA en una sola plataforma para clínicas mexicanas.";
+  "Deja de hacer malabares con WhatsApp, Excel y un facturador aparte. MediFlow reúne agenda, expediente con odontograma, facturación CFDI 4.0, WhatsApp e IA en una sola plataforma para clínicas dentales en México.";
 
 // Metadata específico de la home. No usa openGraph.images para que la imagen
 // la provea la convención de archivo (src/app/opengraph-image.tsx). No afecta
@@ -64,7 +63,7 @@ function jsonLd() {
         name: SITE_NAME,
         url: SITE_URL + "/",
         description: HOME_DESC,
-        slogan: "El sistema todo-en-uno para clínicas mexicanas",
+        slogan: "El software todo-en-uno para clínicas dentales mexicanas",
         areaServed: { "@type": "Country", name: "México" },
       },
       {
@@ -129,7 +128,6 @@ export default async function HomePage() {
         <SocialProof />
         <Features />
         <Steps />
-        <Specialties />
         <Comparison />
         <Testimonials />
         <Pricing />

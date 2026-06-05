@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Menu, X } from "lucide-react";
 import { Logo } from "./primitives/logo";
-import { SpecialtiesDropdown } from "./specialties-dropdown";
 
 interface HeaderProps {
   // Cuando el visitante ya tiene sesión Supabase activa, el header muestra
@@ -17,7 +16,6 @@ interface HeaderProps {
 // Enlaces de navegación. Definidos fuera del JSX porque son estáticos.
 const NAV_LINKS: { label: string; href: string }[] = [
   { label: "Funciones", href: "#features" },
-  { label: "Especialidades", href: "#specialties" },
   { label: "Comparativa", href: "#comparison" },
   { label: "Precios", href: "#pricing" },
 ];
@@ -51,7 +49,6 @@ export function Header({ isLoggedIn = false }: HeaderProps) {
         {/* Navegación principal — el CSS global la oculta <860px */}
         <nav className="lp-nav-links" aria-label="Principal">
           <Link href="#features">Funciones</Link>
-          <SpecialtiesDropdown />
           <Link href="#comparison">Comparativa</Link>
           <Link href="#pricing">Precios</Link>
         </nav>

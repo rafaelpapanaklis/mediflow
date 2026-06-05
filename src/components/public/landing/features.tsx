@@ -75,7 +75,7 @@ export function Features() {
             Nueve módulos. Cero herramientas sueltas.
           </h2>
           <p className="lp-lead">
-            Reemplaza Dentrix, WhatsApp, Excel y tu facturador con un solo
+            Reemplaza WhatsApp, Excel y tu facturador con un solo
             sistema conectado.
           </p>
         </div>

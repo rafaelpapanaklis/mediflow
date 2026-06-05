@@ -22,7 +22,7 @@ export function CTAButtons() {
         Crear cuenta <span aria-hidden="true">→</span>
       </Link>
       <Link
-        href="/clinicas"
+        href="#pricing"
         style={{
           display: "inline-flex",
           alignItems: "center",
@@ -37,7 +37,7 @@ export function CTAButtons() {
           textDecoration: "none",
         }}
       >
-        Ver demo interactivo
+        Ver planes
       </Link>
     </div>
   );

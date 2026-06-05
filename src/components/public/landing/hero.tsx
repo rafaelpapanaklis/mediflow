@@ -2,7 +2,7 @@
 
 import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import Link from "next/link";
-import { PlayCircle, Check } from "lucide-react";
+import { Check } from "lucide-react";
 
 const TABS = [
   { id: "agenda", label: "Agenda" },
@@ -15,7 +15,7 @@ const AGENDA = [
   { time: "09:00", name: "María Ramírez", type: "Consulta", active: false },
   { time: "10:30", name: "Jorge López", type: "Limpieza", active: true },
   { time: "12:00", name: "Ana Pérez", type: "Control", active: false },
-  { time: "14:00", name: "Carlos Silva", type: "Endodoncia", active: false },
+  { time: "14:00", name: "Carlos Silva", type: "Revisión", active: false },
 ] as const;
 
 const KPIS = [
@@ -25,7 +25,7 @@ const KPIS = [
 ] as const;
 
 const PATIENTS = [
-  { initials: "MR", name: "María Ramírez", detail: "Ortodoncia · mes 6", next: "Hoy 10:30" },
+  { initials: "MR", name: "María Ramírez", detail: "Tratamiento · mes 6", next: "Hoy 10:30" },
   { initials: "JL", name: "Jorge López", detail: "Limpieza · control", next: "Mar 18 jun" },
   { initials: "AP", name: "Ana Pérez", detail: "Implante · cicatrización", next: "Jue 27 jun" },
 ] as const;
@@ -69,8 +69,8 @@ export function Hero() {
             </h1>
 
             <p className="lp-lead lp-animate lp-d3">
-              Deja de hacer malabares con Dentrix, WhatsApp, Excel y un facturador
-              aparte. MediFlow es el sistema todo-en-uno para clínicas mexicanas.
+              Deja de hacer malabares con WhatsApp, Excel y un facturador
+              aparte. MediFlow es el software todo-en-uno para clínicas dentales en México.
             </p>
 
             <div className="lp-hero-cta lp-animate lp-d4">
@@ -78,9 +78,8 @@ export function Hero() {
                 <Link href="/signup" className="lp-btn lp-btn--primary lp-btn--lg">
                   Crear cuenta
                 </Link>
-                <Link href="/clinicas" className="lp-btn lp-btn--secondary lp-btn--lg">
-                  <PlayCircle size={20} strokeWidth={1.75} aria-hidden="true" />
-                  Ver demo
+                <Link href="#pricing" className="lp-btn lp-btn--secondary lp-btn--lg">
+                  Ver planes
                 </Link>
               </div>
               <span className="lp-mono" style={{ color: "var(--ld-fg-subtle)", fontSize: 12 }}>
@@ -98,7 +97,7 @@ export function Hero() {
             </ul>
           </div>
 
-          {/* Columna derecha: demo interactivo del panel */}
+          {/* Columna derecha: vista interactiva del panel */}
           <div className="lp-hero-figure lp-animate lp-d3">
             <div className="lp-mockup lp-hero-mockup">
               <div className="lp-mockup__bar" aria-hidden="true">

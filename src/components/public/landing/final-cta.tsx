@@ -18,8 +18,8 @@ export function FinalCTA() {
           <Link href="/signup" className="lp-btn lp-btn--lg lp-btn--on-violet">
             Crear cuenta
           </Link>
-          <Link href="/clinicas" className="lp-btn lp-btn--lg lp-btn--ghost-on-violet">
-            Ver demo
+          <Link href="#pricing" className="lp-btn lp-btn--lg lp-btn--ghost-on-violet">
+            Ver planes
           </Link>
         </div>
 
