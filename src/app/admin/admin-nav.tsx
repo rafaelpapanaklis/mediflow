@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   LayoutDashboard, Building2, CreditCard, TrendingDown, CheckSquare,
-  BarChart3, Megaphone, Ticket, Settings, LogOut, Menu, X, Bug, Truck,
+  BarChart3, Megaphone, Ticket, Settings, LogOut, Menu, X, Bug, Truck, Handshake,
 } from "lucide-react";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
@@ -22,6 +22,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin",              label: "Dashboard",    icon: LayoutDashboard, section: "main"   },
   { href: "/admin/clinics",      label: "Clínicas",     icon: Building2,       section: "main"   },
   { href: "/admin/suppliers",    label: "Proveedores",  icon: Truck,           section: "main"   },
+  { href: "/admin/affiliates",   label: "Afiliados",    icon: Handshake,       section: "main"   },
   { href: "/admin/payments",     label: "Pagos",        icon: CreditCard,      section: "main"   },
   { href: "/admin/churn",        label: "Retención",    icon: TrendingDown,    section: "main"   },
   { href: "/admin/onboarding",   label: "Onboarding",   icon: CheckSquare,     section: "main"   },

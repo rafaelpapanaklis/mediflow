@@ -2903,6 +2903,7 @@ model Affiliate {
 
   clinics     Clinic[]
   commissions AffiliateCommission[]
+  users       AffiliateUser[]
 
   @@index([status])
   @@map("affiliates")
@@ -6405,4 +6406,24 @@ model ClinicalReminder {
   @@index([status, dueDate])
   @@index([reminderType, status])
   @@map("clinical_reminders")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// AFFILIATE USERS (Fase 2)
+// Usuario de un Afiliado/Referido. El afiliado es un actor EXTERNO global
+// (sin clinicId) que autentica vía Supabase Auth, igual que DentalLabUser.
+// affiliateId SIEMPRE sale de la sesión (getAffiliateContext), nunca del body.
+// Ubicado al final del schema a propósito, para no chocar con ramas paralelas.
+// ─────────────────────────────────────────────────────────────────────────
+model AffiliateUser {
+  id          String   @id @default(cuid())
+  supabaseId  String   @unique
+  affiliateId String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  affiliate Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+
+  @@index([affiliateId])
+  @@map("affiliate_users")
 }

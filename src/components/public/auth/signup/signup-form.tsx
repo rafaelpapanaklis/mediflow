@@ -87,6 +87,10 @@ export function SignupForm() {
   // OAuth flow detection
   const isOAuthFlow = searchParams.get("source") === "oauth";
   const initialEmail = searchParams.get("email") ?? "";
+  // Atribución de afiliado: ?ref=<referralCode> (p. ej. desde /socio/<slug>).
+  // Se reenvía al backend, que lo resuelve best-effort (ata la clínica al
+  // afiliado APPROVED). Si es inválido, el registro sigue sin atribución.
+  const ref = searchParams.get("ref") ?? undefined;
   const initialStepParam = searchParams.get("step");
   const initialStep: 1 | 2 | 3 =
     initialStepParam === "2" ? 2 :
@@ -164,6 +168,7 @@ export function SignupForm() {
             lastName,
             email: form.email,
             password: form.password,
+            ref,
             ...basePayload,
           }),
         });

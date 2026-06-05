@@ -49,6 +49,7 @@ const NON_SPECIALTY_RESERVED = [
   "dashboard","admin","api","auth","login","register",
   "pricing","features","contact","consentimiento","portal",
   "reservar","pago","consent","clinicas","teleconsulta","roadmap",
+  "socio","afiliados","laboratorios","proveedores","signup",
 ];
 
 interface Props { params: { slug: string }; searchParams?: { preview?: string } }
