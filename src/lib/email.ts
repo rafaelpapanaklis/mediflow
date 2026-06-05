@@ -16,7 +16,13 @@ type EmailPayload = {
   text?: string;
 };
 
-export async function sendEmail(payload: EmailPayload): Promise<void> {
+/**
+ * Devuelve `{ delivered }` para que quien llame pueda distinguir un envío
+ * real de un stub/error sin romperse: `delivered` es `false` cuando no hay
+ * transporte configurado o el provider falla, `true` solo si Resend aceptó
+ * el correo. Los llamadores que ignoran el retorno siguen funcionando igual.
+ */
+export async function sendEmail(payload: EmailPayload): Promise<{ delivered: boolean }> {
   const key = process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM ?? "MediFlow <no-reply@mediflow.mx>";
 
@@ -27,7 +33,7 @@ export async function sendEmail(payload: EmailPayload): Promise<void> {
       `[email stub] would send to ${payload.to}: "${payload.subject}"\n` +
         `  (configure RESEND_API_KEY para enviar de verdad)`,
     );
-    return;
+    return { delivered: false };
   }
 
   try {
@@ -48,9 +54,12 @@ export async function sendEmail(payload: EmailPayload): Promise<void> {
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       console.error("[email] Resend API error:", res.status, body);
+      return { delivered: false };
     }
+    return { delivered: true };
   } catch (err) {
     console.error("[email] transport error:", err);
+    return { delivered: false };
   }
 }
 

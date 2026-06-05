@@ -4,9 +4,20 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { sendWhatsappMessage } from "@/lib/integrations/twilio-conversations";
+import { sendEmail } from "@/lib/email";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
 export const dynamic = "force-dynamic";
+
+/** Escapa el cuerpo del usuario antes de meterlo en el HTML del correo. */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 const PostSchema = z.object({
   body: z.string().min(1).max(10_000),
@@ -111,31 +122,59 @@ export async function POST(req: NextRequest, { params }: Params) {
     let externalId: string | null = null;
     let sendError: string | null = null;
 
-    // Si es WHATSAPP y NO es nota interna, intenta enviar via Twilio.
-    if (thread.channel === "WHATSAPP" && !parsed.data.isInternal) {
-      const phone = thread.patient?.phone;
-      if (!phone) {
-        return NextResponse.json(
-          { error: "missing_patient_phone" },
-          { status: 400 },
+    // Las notas internas nunca salen al canal externo: solo se guardan.
+    // Para respuestas reales, entregamos según el canal del hilo.
+    if (!parsed.data.isInternal) {
+      if (thread.channel === "WHATSAPP") {
+        // WhatsApp → Twilio (infra existente).
+        const phone = thread.patient?.phone;
+        if (!phone) {
+          return NextResponse.json(
+            { error: "missing_patient_phone" },
+            { status: 400 },
+          );
+        }
+        const result = await sendWhatsappMessage(
+          {
+            accountSid: thread.clinic.twilioAccountSid ?? "",
+            authToken: thread.clinic.twilioAuthToken ?? "",
+            whatsappNumber: thread.clinic.twilioWhatsappNumber ?? "",
+          },
+          {
+            to: phone,
+            body: parsed.data.body,
+            mediaUrls: parsed.data.attachments?.map((a) => a.url),
+          },
         );
-      }
-      const result = await sendWhatsappMessage(
-        {
-          accountSid: thread.clinic.twilioAccountSid ?? "",
-          authToken: thread.clinic.twilioAuthToken ?? "",
-          whatsappNumber: thread.clinic.twilioWhatsappNumber ?? "",
-        },
-        {
-          to: phone,
-          body: parsed.data.body,
-          mediaUrls: parsed.data.attachments?.map((a) => a.url),
-        },
-      );
-      if (!result.success) {
-        sendError = result.error ?? "send_failed";
+        if (!result.success) {
+          sendError = result.error ?? "send_failed";
+        } else {
+          externalId = result.messageSid ?? null;
+        }
+      } else if (thread.channel === "EMAIL") {
+        // Email → Resend (infra existente en lib/email).
+        const email = thread.patient?.email;
+        if (!email) {
+          return NextResponse.json(
+            { error: "missing_patient_email" },
+            { status: 400 },
+          );
+        }
+        const baseSubject = thread.subject?.trim() || "Respuesta de tu clínica";
+        const subject = /^re:/i.test(baseSubject) ? baseSubject : `Re: ${baseSubject}`;
+        const { delivered } = await sendEmail({
+          to: email,
+          subject,
+          html: `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:15px;line-height:1.55;color:#1a1a1a;white-space:pre-wrap;">${escapeHtml(parsed.data.body)}</div>`,
+          text: parsed.data.body,
+        });
+        // sendEmail nunca tira: si no hay transporte (o falla), el mensaje
+        // queda guardado pero marcado como no entregado.
+        if (!delivered) sendError = "email_not_delivered";
       } else {
-        externalId = result.messageSid ?? null;
+        // PORTAL_FORM, VALIDATION, REMINDER: sin ruta de entrega saliente.
+        // Guardamos el mensaje y lo marcamos (no rompemos el flujo).
+        sendError = "channel_no_delivery";
       }
     }
 
