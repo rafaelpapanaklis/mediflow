@@ -25,6 +25,7 @@ import { PsychologyForm }      from "@/components/clinical/psychology-form";
 import { GeneralMedicineForm } from "@/components/clinical/medicine-form";
 import { EvolutionChart, TreatmentTimeline } from "@/components/clinical/shared";
 import { ReferralsTab } from "@/components/dashboard/patients/referrals-tab";
+import { Models3DTab } from "@/components/patient-3d/Models3DTab";
 import toast from "react-hot-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -224,6 +225,7 @@ const TABS_BASE = [
   { id: "historial-consultas", labelKey: "patients.tabs.historialConsultas" },
   { id: "evolucion",     labelKey: "patients.tabs.evolucion"          },
   { id: "radiografias",  labelKey: "patients.tabs.radiografias"       },
+  { id: "modelos-3d",    labelKey: "patients.tabs.modelos3d"          },
   { id: "tratamiento",   labelKey: "patients.tabs.tratamiento"        },
   { id: "referencias",   labelKey: "patients.tabs.referencias"        },
   { id: "agenda",        labelKey: "patients.tabs.agenda"             },
@@ -3046,6 +3048,10 @@ export function PatientDetailClient({
               </div>
             );
           })()}
+
+          {tab === "modelos-3d" && (
+            <Models3DTab patientId={patient.id} />
+          )}
 
           {tab === "facturacion" && (
             <div className="bg-card border border-border rounded-xl overflow-hidden">
