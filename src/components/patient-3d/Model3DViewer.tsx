@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
+import { fetchWithCache } from "@/lib/dicom-cache";
 
 // "dicom" cubre tomografías .dcm/.dicom: no son mallas, no se cargan con three.
 export type Model3DFormat = "stl" | "ply" | "obj" | "dicom";
@@ -432,38 +433,47 @@ export default function Model3DViewer({
       return new THREE.Mesh(geometry, material);
     };
 
-    try {
-      if (fmt === "stl") {
-        new STLLoader().load(url, (geo) => addObject(meshFromGeometry(geo)), undefined, onLoadError);
-      } else if (fmt === "ply") {
-        new PLYLoader().load(url, (geo) => addObject(meshFromGeometry(geo)), undefined, onLoadError);
-      } else {
-        // OBJ → Group; aplicamos material uniforme a cada mesh para uniformar
-        // escaneos sin .mtl.
-        new OBJLoader().load(
-          url,
-          (group) => {
-            group.traverse((child) => {
-              const mesh = child as THREE.Mesh;
-              if (mesh.isMesh) {
-                mesh.geometry?.computeVertexNormals?.();
-                mesh.material = new THREE.MeshPhongMaterial({
-                  color: COLOR_PRESETS[DEFAULT_COLOR],
-                  specular: 0x222222,
-                  shininess: 70,
-                  side: THREE.DoubleSide,
-                });
-              }
-            });
-            addObject(group);
-          },
-          undefined,
-          onLoadError,
-        );
+    // Carga el modelo a través de la cache de archivos (IndexedDB por fileId):
+    // reabrir el mismo escaneo no vuelve a descargarlo de Supabase. Si no hay
+    // fileId, cae a un fetch directo. Usamos .parse() con el blob (no .load(url))
+    // para reutilizar el archivo ya descargado/cacheado.
+    const blobPromise = fileId
+      ? fetchWithCache(fileId, url)
+      : fetch(url).then((r) => {
+          if (!r.ok) throw new Error("fetch");
+          return r.blob();
+        });
+
+    void (async () => {
+      try {
+        const blob = await blobPromise;
+        if (disposed) return;
+        if (fmt === "stl") {
+          addObject(meshFromGeometry(new STLLoader().parse(await blob.arrayBuffer())));
+        } else if (fmt === "ply") {
+          addObject(meshFromGeometry(new PLYLoader().parse(await blob.arrayBuffer())));
+        } else {
+          // OBJ → Group; aplicamos material uniforme a cada mesh para uniformar
+          // escaneos sin .mtl.
+          const group = new OBJLoader().parse(await blob.text());
+          group.traverse((child) => {
+            const mesh = child as THREE.Mesh;
+            if (mesh.isMesh) {
+              mesh.geometry?.computeVertexNormals?.();
+              mesh.material = new THREE.MeshPhongMaterial({
+                color: COLOR_PRESETS[DEFAULT_COLOR],
+                specular: 0x222222,
+                shininess: 70,
+                side: THREE.DoubleSide,
+              });
+            }
+          });
+          addObject(group);
+        }
+      } catch (err) {
+        onLoadError(err);
       }
-    } catch (err) {
-      onLoadError(err);
-    }
+    })();
 
     // ---- Medición de distancias (raycasting sobre la superficie) ----
     const measurements: Measurement[] = [];

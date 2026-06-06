@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import dicomParser from "dicom-parser";
 import { Download, Loader2, RotateCcw, Save, Sun, Contrast as ContrastIcon, Layers } from "lucide-react";
 import toast from "react-hot-toast";
+import { fetchWithCache } from "@/lib/dicom-cache";
 
 interface Props {
   url: string;
@@ -135,9 +136,9 @@ export default function DicomViewer2D({ url, name, fileId, patientId, initialNot
     setStatus("loading");
     (async () => {
       try {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error("fetch");
-        const buf = await res.arrayBuffer();
+        // Cache por fileId (IndexedDB): reabrir el mismo .dcm no lo re-descarga.
+        const blob = await fetchWithCache(fileId, url);
+        const buf = await blob.arrayBuffer();
         const decoded = decodeDicom(buf);
         if (cancelled) return;
         setImg(decoded);

@@ -26,6 +26,7 @@ import {
   Move,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { fetchWithCache } from "@/lib/dicom-cache";
 
 // Render volumétrico 3D (three.js). Dinámico para no cargar el shader hasta que
 // el usuario abre la vista 3D.
@@ -180,9 +181,9 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
     setStatus("loading");
     (async () => {
       try {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error("fetch");
-        const blob = await res.blob();
+        // Sirve el .zip del CBCT desde la cache (IndexedDB por fileId) cuando ya
+        // se descargó antes: evita re-pegarle a Supabase y ahorra egress.
+        const blob = await fetchWithCache(fileId, url);
         const zip = await JSZip.loadAsync(blob);
         const entries = Object.values(zip.files).filter(
           (f: any) => !f.dir && (/\.(dcm|dicom)$/i.test(f.name) || !/\.[a-z0-9]+$/i.test(f.name)),
