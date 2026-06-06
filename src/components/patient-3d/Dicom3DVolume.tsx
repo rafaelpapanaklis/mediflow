@@ -1,10 +1,17 @@
 "use client";
 // Render 3D VOLUMÉTRICO del CBCT: construye una textura 3D (Data3DTexture) a
 // partir de los cortes ya decodificados y la renderiza con ray casting usando
-// el shader de volumen oficial de three.js (VolumeRenderShader1). Modo MIP
-// (proyección de máxima intensidad — resalta hueso/dientes) y modo Superficie
-// (iso-umbral). Rotación con OrbitControls. Submuestrea el volumen para que
-// quepa en GPU.
+// el shader de volumen oficial de three.js (VolumeRenderShader1).
+//
+// Por DEFECTO usa el modo SÓLIDO (iso-superficie con sombreado Phong) + un
+// colormap ÓSEO (marrón oscuro → marfil) para que el hueso/diente se vea como
+// "tejido duro" estilo software dental (Planmeca Romexis). El modo MIP
+// (proyección de máxima intensidad, look radiográfico) queda como secundario.
+//
+// Orientación anatómica: el eje Z del volumen es superior↔inferior; lo
+// invertimos al construir la textura para que el cráneo quede DERECHO (frente
+// arriba, mandíbula abajo) con camera.up = +Z. Rotación con OrbitControls.
+// Submuestrea el volumen para que quepa en GPU.
 
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
@@ -17,15 +24,36 @@ export interface VolSlice {
   pixels: Float32Array;
 }
 
-const MAX_DIM = 220; // tope por eje para no agotar VRAM (CBCT son enormes)
+const MAX_DIM = 256; // tope por eje para no agotar VRAM (CBCT son enormes)
 
-function grayColormap(): THREE.DataTexture {
+// Colormap ÓSEO/MARFIL: interpola de marrón oscuro → marfil/crema (R y G altos,
+// B medio) para que el hueso se vea natural y con relieve. El alfa sube rápido
+// con la densidad: aire/tejido blando transparente, hueso opaco. Sirve igual
+// para MIP (descarta el aire) que para Superficie/ISO (hueso sólido).
+function boneColormap(): THREE.DataTexture {
+  const stops: Array<[number, number, number, number, number]> = [
+    // t,    R,    G,    B,    A
+    [0.0, 50, 35, 22, 0],
+    [0.1, 135, 100, 65, 200],
+    [0.25, 200, 165, 120, 255],
+    [0.45, 230, 205, 165, 255],
+    [0.7, 245, 230, 200, 255],
+    [1.0, 255, 250, 235, 255],
+  ];
   const data = new Uint8Array(256 * 4);
   for (let i = 0; i < 256; i++) {
-    data[i * 4] = i;
-    data[i * 4 + 1] = i;
-    data[i * 4 + 2] = i;
-    data[i * 4 + 3] = 255;
+    const t = i / 255;
+    let k = 0;
+    while (k < stops.length - 2 && t > stops[k + 1][0]) k++;
+    const a = stops[k];
+    const b = stops[k + 1];
+    const span = b[0] - a[0] || 1;
+    let f = (t - a[0]) / span;
+    f = f < 0 ? 0 : f > 1 ? 1 : f;
+    data[i * 4] = Math.round(a[1] + (b[1] - a[1]) * f);
+    data[i * 4 + 1] = Math.round(a[2] + (b[2] - a[2]) * f);
+    data[i * 4 + 2] = Math.round(a[3] + (b[3] - a[3]) * f);
+    data[i * 4 + 3] = Math.round(a[4] + (b[4] - a[4]) * f);
   }
   const tex = new THREE.DataTexture(data, 256, 1, THREE.RGBAFormat);
   tex.needsUpdate = true;
@@ -34,8 +62,8 @@ function grayColormap(): THREE.DataTexture {
 
 export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
   const mountRef = useRef<HTMLDivElement | null>(null);
-  const [renderstyle, setRenderstyle] = useState<0 | 1>(0); // 0 = MIP, 1 = ISO
-  const [iso, setIso] = useState(0.28);
+  const [renderstyle, setRenderstyle] = useState<0 | 1>(1); // 1 = Sólido/ISO (defecto), 0 = MIP
+  const [iso, setIso] = useState(0.36); // umbral que aísla hueso/diente
   const styleRef = useRef(renderstyle);
   styleRef.current = renderstyle;
   const isoRef = useRef(iso);
@@ -57,13 +85,18 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
     const H = Math.max(1, Math.floor(rows / sy));
     const D = Math.max(1, Math.floor(depth / sz));
 
+    // Mapeo plano-de-textura → corte del estudio con el eje Z INVERTIDO: el
+    // cráneo venía boca abajo, así que el corte más alto del set se coloca al
+    // tope del volumen para que, con camera.up = +Z, quede derecho.
+    const srcZ = (z: number) => slices[Math.min(depth - 1, (D - 1 - z) * sz)].pixels;
+
     // Construye el volumen normalizado a 0-255. min/max en el mismo paso.
     const vol = new Uint8Array(W * H * D);
     let minV = Infinity;
     let maxV = -Infinity;
     // 1ª pasada: min/max del volumen submuestreado.
     for (let z = 0; z < D; z++) {
-      const px = slices[Math.min(depth - 1, z * sz)].pixels;
+      const px = srcZ(z);
       for (let y = 0; y < H; y++) {
         const row = y * sy * cols;
         for (let x = 0; x < W; x++) {
@@ -81,7 +114,7 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
     // 2ª pasada: normaliza.
     let p = 0;
     for (let z = 0; z < D; z++) {
-      const px = slices[Math.min(depth - 1, z * sz)].pixels;
+      const px = srcZ(z);
       for (let y = 0; y < H; y++) {
         const row = y * sy * cols;
         for (let x = 0; x < W; x++) {
@@ -119,8 +152,12 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
       0.01,
       frustum * 12,
     );
-    camera.position.set(W * 0.7, -H, D * 1.8);
+    // Vista frontal anatómica: cámara delante de la cara (Y anterior), un poco a
+    // un lado y arriba para dar volumen. "Arriba" en pantalla = eje Z = superior
+    // del cráneo (con la inversión de Z de arriba → frente arriba, mandíbula
+    // abajo, mirando al frente).
     camera.up.set(0, 0, 1);
+    camera.position.set(W * 0.6, -H * 1.5, D * 0.62);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.set(W / 2, H / 2, D / 2);
@@ -128,11 +165,11 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
     controls.dampingFactor = 0.1;
     controls.update();
 
-    const cmtex = grayColormap();
+    const cmtex = boneColormap();
     const uniforms = THREE.UniformsUtils.clone(VolumeRenderShader1.uniforms);
     uniforms.u_data.value = texture;
     uniforms.u_size.value.set(W, H, D);
-    uniforms.u_clim.value.set(0.12, 0.85);
+    uniforms.u_clim.value.set(0.12, 0.9);
     uniforms.u_renderstyle.value = styleRef.current;
     uniforms.u_renderthreshold.value = isoRef.current;
     uniforms.u_cmdata.value = cmtex;
@@ -195,17 +232,19 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
         <div className="flex gap-1">
           <button
             type="button"
-            onClick={() => setRenderstyle(0)}
-            className={`text-[11px] px-2.5 py-1 rounded ${renderstyle === 0 ? "bg-brand-600 text-white" : "bg-muted text-foreground border border-border"}`}
+            onClick={() => setRenderstyle(1)}
+            title="Superficie ósea sombreada (ISO) — estilo tejido duro"
+            className={`text-[11px] px-2.5 py-1 rounded ${renderstyle === 1 ? "bg-brand-600 text-white" : "bg-muted text-foreground border border-border"}`}
           >
-            MIP
+            Sólido
           </button>
           <button
             type="button"
-            onClick={() => setRenderstyle(1)}
-            className={`text-[11px] px-2.5 py-1 rounded ${renderstyle === 1 ? "bg-brand-600 text-white" : "bg-muted text-foreground border border-border"}`}
+            onClick={() => setRenderstyle(0)}
+            title="Proyección de máxima intensidad (look radiográfico)"
+            className={`text-[11px] px-2.5 py-1 rounded ${renderstyle === 0 ? "bg-brand-600 text-white" : "bg-muted text-foreground border border-border"}`}
           >
-            Superficie
+            MIP
           </button>
         </div>
         {renderstyle === 1 && (
@@ -213,12 +252,13 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
             Umbral
             <input
               type="range"
-              min={0.03}
+              min={0.12}
               max={0.6}
               step={0.01}
               value={iso}
               onChange={(e) => setIso(Number(e.target.value))}
               className="flex-1 accent-brand-500"
+              aria-label="Umbral de hueso (talla más o menos tejido)"
             />
           </label>
         )}

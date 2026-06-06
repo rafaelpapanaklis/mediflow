@@ -161,7 +161,7 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
   const [slices, setSlices] = useState<Slice[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error" | "empty">("loading");
   const [progress, setProgress] = useState({ done: 0, total: 0 });
-  const [view, setView] = useState<ViewMode>("axial");
+  const [view, setView] = useState<ViewMode>("volume"); // abre en 3D por defecto
   const [idx, setIdx] = useState(0); // Z para axial
   const [coronalY, setCoronalY] = useState(0); // Y para coronal
   const [sagittalX, setSagittalX] = useState(0); // X para sagital
@@ -219,7 +219,7 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
         setIdx(mid);
         setCoronalY(Math.floor(out[0].rows / 2));
         setSagittalX(Math.floor(out[0].cols / 2));
-        setView("axial");
+        setView("volume"); // muestra el volumen 3D primero al abrir el estudio
         setCenter(out[mid].center);
         setWidth(out[mid].width);
         setZoom(1);
