@@ -49,5 +49,5 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     );
   }
 
-  return NextResponse.json({ path, token: data.token });
+  return NextResponse.json({ path, token: data.token, signedUrl: data.signedUrl });
 }

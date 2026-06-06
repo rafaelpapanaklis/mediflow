@@ -7,10 +7,22 @@
 // posteriores; este visor ya da el set completo navegable en 2D.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import JSZip from "jszip";
 import dicomParser from "dicom-parser";
-import { Loader2, RotateCcw, Save, Sun, Contrast as ContrastIcon, Layers } from "lucide-react";
+import { Loader2, RotateCcw, Save, Sun, Contrast as ContrastIcon, Layers, Box } from "lucide-react";
 import toast from "react-hot-toast";
+
+// Render volumétrico 3D (three.js). Dinámico para no cargar el shader hasta que
+// el usuario abre el modo 3D.
+const Dicom3DVolume = dynamic(() => import("./Dicom3DVolume"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center text-white/60" style={{ height: 460 }}>
+      <Loader2 className="w-5 h-5 animate-spin mr-2" /> Preparando volumen 3D…
+    </div>
+  ),
+});
 
 interface Props {
   url: string;
@@ -126,6 +138,7 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [notes, setNotes] = useState(initialNotes);
   const [savingNotes, setSavingNotes] = useState(false);
+  const [view3d, setView3d] = useState(false);
   const dragRef = useRef<{ x: number; y: number } | null>(null);
   const defaultWin = useRef({ c: 0, w: 1 });
 
@@ -333,6 +346,25 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
   return (
     <div className="flex flex-col lg:flex-row gap-4">
       <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1 mb-2">
+          <button
+            type="button"
+            onClick={() => setView3d(false)}
+            className={`text-[11px] font-semibold px-2.5 py-1 rounded inline-flex items-center gap-1 ${!view3d ? "bg-brand-600 text-white" : "bg-white/10 text-white/70"}`}
+          >
+            <Layers className="w-3 h-3" /> Cortes 2D
+          </button>
+          <button
+            type="button"
+            onClick={() => setView3d(true)}
+            className={`text-[11px] font-semibold px-2.5 py-1 rounded inline-flex items-center gap-1 ${view3d ? "bg-brand-600 text-white" : "bg-white/10 text-white/70"}`}
+          >
+            <Box className="w-3 h-3" /> Volumen 3D
+          </button>
+        </div>
+        {view3d && <Dicom3DVolume slices={slices} />}
+        {!view3d && (
+        <>
         <div
           className="relative w-full overflow-hidden rounded-lg select-none"
           style={{ height: 480, background: "#000", cursor: dragRef.current ? "grabbing" : "grab" }}
@@ -404,6 +436,8 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
             </button>
           </div>
         </div>
+        </>
+        )}
       </div>
 
       {notesPanel}

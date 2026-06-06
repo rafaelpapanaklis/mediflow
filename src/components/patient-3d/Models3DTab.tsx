@@ -10,7 +10,6 @@ import dynamic from "next/dynamic";
 import { Plus, Trash2, Box, X, Layers } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
-import { createClient } from "@/lib/supabase/client";
 import type { Model3DFormat } from "./Model3DViewer";
 
 const Model3DViewer = dynamic(() => import("./Model3DViewer"), {
@@ -121,13 +120,25 @@ export function Models3DTab({ patientId }: { patientId: string }) {
           body: JSON.stringify({ name: file.name }),
         });
         if (!signRes.ok) throw new Error((await signRes.json().catch(() => ({})))?.error || "No se pudo preparar la subida");
-        const { path, token } = await signRes.json();
+        const { path, signedUrl } = await signRes.json();
 
-        const supabase = createClient();
-        const { error: upErr } = await supabase.storage
-          .from("patient-files")
-          .uploadToSignedUrl(path, token, file);
-        if (upErr) throw upErr;
+        // Subida con PROGRESO real: XHR PUT directo al signed URL (uploadToSignedUrl
+        // del SDK no expone onprogress, por eso la barra quedaba en 0%).
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("PUT", signedUrl);
+          xhr.setRequestHeader("Content-Type", file.type || "application/zip");
+          xhr.setRequestHeader("x-upsert", "false");
+          xhr.upload.onprogress = (ev) => {
+            if (ev.lengthComputable) setProgress(Math.round((ev.loaded / ev.total) * 100));
+          };
+          xhr.onload = () =>
+            xhr.status >= 200 && xhr.status < 300
+              ? resolve()
+              : reject(new Error(`La subida falló (${xhr.status})`));
+          xhr.onerror = () => reject(new Error("Error de red durante la subida"));
+          xhr.send(file);
+        });
 
         const regRes = await fetch(`/api/patients/${patientId}/dicom-set/register`, {
           method: "POST",
