@@ -350,14 +350,14 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
           <button
             type="button"
             onClick={() => setView3d(false)}
-            className={`text-[11px] font-semibold px-2.5 py-1 rounded inline-flex items-center gap-1 ${!view3d ? "bg-brand-600 text-white" : "bg-white/10 text-white/70"}`}
+            className={`text-[11px] font-semibold px-2.5 py-1 rounded inline-flex items-center gap-1 ${!view3d ? "bg-brand-600 text-white" : "bg-muted text-foreground border border-border"}`}
           >
             <Layers className="w-3 h-3" /> Cortes 2D
           </button>
           <button
             type="button"
             onClick={() => setView3d(true)}
-            className={`text-[11px] font-semibold px-2.5 py-1 rounded inline-flex items-center gap-1 ${view3d ? "bg-brand-600 text-white" : "bg-white/10 text-white/70"}`}
+            className={`text-[11px] font-semibold px-2.5 py-1 rounded inline-flex items-center gap-1 ${view3d ? "bg-brand-600 text-white" : "bg-muted text-foreground border border-border"}`}
           >
             <Box className="w-3 h-3" /> Volumen 3D
           </button>

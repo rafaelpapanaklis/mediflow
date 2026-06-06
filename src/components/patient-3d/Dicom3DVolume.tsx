@@ -191,25 +191,25 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
         ref={mountRef}
         style={{ width: "100%", height: 460, background: "#000", borderRadius: 8, overflow: "hidden" }}
       />
-      <div className="mt-3 flex items-center gap-3 flex-wrap bg-white/5 rounded-lg p-3 border border-white/10">
+      <div className="mt-3 flex items-center gap-3 flex-wrap bg-muted/40 rounded-lg p-3 border border-border">
         <div className="flex gap-1">
           <button
             type="button"
             onClick={() => setRenderstyle(0)}
-            className={`text-[11px] px-2.5 py-1 rounded ${renderstyle === 0 ? "bg-brand-600 text-white" : "bg-white/10 text-white/70"}`}
+            className={`text-[11px] px-2.5 py-1 rounded ${renderstyle === 0 ? "bg-brand-600 text-white" : "bg-muted text-foreground border border-border"}`}
           >
             MIP
           </button>
           <button
             type="button"
             onClick={() => setRenderstyle(1)}
-            className={`text-[11px] px-2.5 py-1 rounded ${renderstyle === 1 ? "bg-brand-600 text-white" : "bg-white/10 text-white/70"}`}
+            className={`text-[11px] px-2.5 py-1 rounded ${renderstyle === 1 ? "bg-brand-600 text-white" : "bg-muted text-foreground border border-border"}`}
           >
             Superficie
           </button>
         </div>
         {renderstyle === 1 && (
-          <label className="flex items-center gap-2 text-[11px] text-white/70 flex-1 min-w-[160px]">
+          <label className="flex items-center gap-2 text-[11px] text-muted-foreground flex-1 min-w-[160px]">
             Umbral
             <input
               type="range"
