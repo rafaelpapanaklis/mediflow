@@ -1,24 +1,38 @@
 "use client";
-// Visor de SET CBCT: descarga el .zip del estudio, lo descomprime (jszip),
-// decodifica cada corte DICOM (dicom-parser) y permite navegar TODOS los cortes
-// (axial) con window/level, zoom y notas. Solo cortes sin comprimir.
-//
-// La reconstrucción MPR (coronal/sagital) y el render 3D volumétrico son fases
-// posteriores; este visor ya da el set completo navegable en 2D.
+// Visor de SET CBCT estilo software dental: descarga el .zip del estudio, lo
+// descomprime (jszip), decodifica cada corte DICOM (dicom-parser) y ofrece 4
+// vistas (una a la vez):
+//   - Axial    : plano (X,Y) en Z fijo  -> slices[z].pixels (corte nativo)
+//   - Coronal  : plano (X,Z) en Y fijo  -> MPR reconstruido del volumen
+//   - Sagital  : plano (Y,Z) en X fijo  -> MPR reconstruido del volumen
+//   - Volumen 3D: render volumétrico (three.js) — componente aparte.
+// Todas las vistas 2D comparten el mismo window/level (brillo/contraste), zoom
+// y desplazamiento. Solo cortes sin comprimir.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import JSZip from "jszip";
 import dicomParser from "dicom-parser";
-import { Loader2, RotateCcw, Save, Sun, Contrast as ContrastIcon, Layers, Box } from "lucide-react";
+import {
+  Loader2,
+  RotateCcw,
+  Save,
+  Sun,
+  Contrast as ContrastIcon,
+  Layers,
+  Box,
+  RectangleHorizontal,
+  RectangleVertical,
+  Move,
+} from "lucide-react";
 import toast from "react-hot-toast";
 
 // Render volumétrico 3D (three.js). Dinámico para no cargar el shader hasta que
-// el usuario abre el modo 3D.
+// el usuario abre la vista 3D.
 const Dicom3DVolume = dynamic(() => import("./Dicom3DVolume"), {
   ssr: false,
   loading: () => (
-    <div className="flex items-center justify-center text-white/60" style={{ height: 460 }}>
+    <div className="flex items-center justify-center text-muted-foreground" style={{ height: 460 }}>
       <Loader2 className="w-5 h-5 animate-spin mr-2" /> Preparando volumen 3D…
     </div>
   ),
@@ -40,6 +54,22 @@ interface Slice {
   width: number;
   invert: boolean;
   order: number;
+}
+
+type ViewMode = "axial" | "coronal" | "sagittal" | "volume";
+
+const VIEWS: { key: ViewMode; label: string }[] = [
+  { key: "axial", label: "Axial" },
+  { key: "coronal", label: "Coronal" },
+  { key: "sagittal", label: "Sagital" },
+  { key: "volume", label: "Volumen 3D" },
+];
+
+function viewIcon(key: ViewMode) {
+  if (key === "axial") return <Layers className="w-3.5 h-3.5" aria-hidden />;
+  if (key === "coronal") return <RectangleHorizontal className="w-3.5 h-3.5" aria-hidden />;
+  if (key === "sagittal") return <RectangleVertical className="w-3.5 h-3.5" aria-hidden />;
+  return <Box className="w-3.5 h-3.5" aria-hidden />;
 }
 
 const UNCOMPRESSED = new Set([
@@ -131,14 +161,16 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
   const [slices, setSlices] = useState<Slice[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error" | "empty">("loading");
   const [progress, setProgress] = useState({ done: 0, total: 0 });
-  const [idx, setIdx] = useState(0);
+  const [view, setView] = useState<ViewMode>("axial");
+  const [idx, setIdx] = useState(0); // Z para axial
+  const [coronalY, setCoronalY] = useState(0); // Y para coronal
+  const [sagittalX, setSagittalX] = useState(0); // X para sagital
   const [center, setCenter] = useState(0);
   const [width, setWidth] = useState(1);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [notes, setNotes] = useState(initialNotes);
   const [savingNotes, setSavingNotes] = useState(false);
-  const [view3d, setView3d] = useState(false);
   const dragRef = useRef<{ x: number; y: number } | null>(null);
   const defaultWin = useRef({ c: 0, w: 1 });
 
@@ -185,6 +217,9 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
         defaultWin.current = { c: out[mid].center, w: out[mid].width };
         setSlices(out);
         setIdx(mid);
+        setCoronalY(Math.floor(out[0].rows / 2));
+        setSagittalX(Math.floor(out[0].cols / 2));
+        setView("axial");
         setCenter(out[mid].center);
         setWidth(out[mid].width);
         setZoom(1);
@@ -199,32 +234,87 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
     };
   }, [url]);
 
-  // Pinta el corte actual.
+  // Pinta la vista 2D activa (axial / coronal / sagital) con el mismo
+  // window/level. Cada plano MPR es un re-muestreo 2D del volumen, de tamaño
+  // comparable a un corte axial, así que se pinta de forma síncrona.
   useEffect(() => {
-    if (status !== "ready" || slices.length === 0) return;
-    const s = slices[idx];
-    if (!s) return;
+    if (status !== "ready" || slices.length === 0 || view === "volume") return;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    canvas.width = s.cols;
-    canvas.height = s.rows;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const out = ctx.createImageData(s.cols, s.rows);
-    const data = out.data;
+
+    const cols = slices[0].cols;
+    const rows = slices[0].rows;
+    const depth = slices.length;
     const lo = center - width / 2;
     const span = width <= 0 ? 1 : width;
-    const len = s.rows * s.cols;
-    for (let i = 0; i < len; i++) {
-      let g = ((s.pixels[i] - lo) / span) * 255;
-      g = g < 0 ? 0 : g > 255 ? 255 : g;
-      if (s.invert) g = 255 - g;
-      const j = i * 4;
-      data[j] = data[j + 1] = data[j + 2] = g;
-      data[j + 3] = 255;
+    // MONOCHROME1/2 es propiedad de la serie: el corte medio la representa.
+    const inv = slices[Math.floor(depth / 2)].invert;
+
+    if (view === "axial") {
+      // Plano (X,Y) en Z fijo: el corte nativo.
+      const s = slices[Math.min(idx, depth - 1)];
+      if (!s) return;
+      canvas.width = s.cols;
+      canvas.height = s.rows;
+      const img = ctx.createImageData(s.cols, s.rows);
+      const data = img.data;
+      const len = s.cols * s.rows;
+      for (let i = 0; i < len; i++) {
+        let g = ((s.pixels[i] - lo) / span) * 255;
+        g = g < 0 ? 0 : g > 255 ? 255 : g;
+        if (s.invert) g = 255 - g;
+        const j = i * 4;
+        data[j] = data[j + 1] = data[j + 2] = g;
+        data[j + 3] = 255;
+      }
+      ctx.putImageData(img, 0, 0);
+    } else if (view === "coronal") {
+      // Plano (X,Z) en Y fijo: ancho = cols, alto = depth.
+      // pixel(x,z) = slices[z].pixels[Yfijo*cols + x]
+      const y = Math.min(coronalY, rows - 1);
+      canvas.width = cols;
+      canvas.height = depth;
+      const img = ctx.createImageData(cols, depth);
+      const data = img.data;
+      const yBase = y * cols;
+      for (let z = 0; z < depth; z++) {
+        const px = slices[z].pixels;
+        const rowOff = z * cols;
+        for (let x = 0; x < cols; x++) {
+          let g = ((px[yBase + x] - lo) / span) * 255;
+          g = g < 0 ? 0 : g > 255 ? 255 : g;
+          if (inv) g = 255 - g;
+          const j = (rowOff + x) * 4;
+          data[j] = data[j + 1] = data[j + 2] = g;
+          data[j + 3] = 255;
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+    } else if (view === "sagittal") {
+      // Plano (Y,Z) en X fijo: ancho = rows, alto = depth.
+      // pixel(y,z) = slices[z].pixels[y*cols + Xfijo]
+      const x = Math.min(sagittalX, cols - 1);
+      canvas.width = rows;
+      canvas.height = depth;
+      const img = ctx.createImageData(rows, depth);
+      const data = img.data;
+      for (let z = 0; z < depth; z++) {
+        const px = slices[z].pixels;
+        const rowOff = z * rows;
+        for (let y = 0; y < rows; y++) {
+          let g = ((px[y * cols + x] - lo) / span) * 255;
+          g = g < 0 ? 0 : g > 255 ? 255 : g;
+          if (inv) g = 255 - g;
+          const j = (rowOff + y) * 4;
+          data[j] = data[j + 1] = data[j + 2] = g;
+          data[j + 3] = 255;
+        }
+      }
+      ctx.putImageData(img, 0, 0);
     }
-    ctx.putImageData(out, 0, 0);
-  }, [status, slices, idx, center, width]);
+  }, [status, slices, view, idx, coronalY, sagittalX, center, width]);
 
   const saveNotes = useCallback(async () => {
     setSavingNotes(true);
@@ -250,6 +340,13 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
     setPan({ x: 0, y: 0 });
   };
 
+  // Cambiar de vista centra de nuevo el plano (cada vista tiene su proporción).
+  const selectView = (v: ViewMode) => {
+    setView(v);
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  };
+
   const onWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     setZoom((z) => Math.min(8, Math.max(0.25, z * (e.deltaY < 0 ? 1.1 : 0.9))));
@@ -265,15 +362,44 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
     dragRef.current = null;
   };
 
+  // Barra de vistas (Axial · Coronal · Sagital · Volumen 3D). Una a la vez.
+  const viewBar = (
+    <div
+      className="inline-flex flex-wrap items-center gap-1 p-1 rounded-lg bg-muted/40 border border-border"
+      role="tablist"
+      aria-label="Vista del estudio CBCT"
+    >
+      {VIEWS.map((v) => {
+        const active = view === v.key;
+        return (
+          <button
+            key={v.key}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => selectView(v.key)}
+            className={`text-xs font-semibold px-3 py-1.5 rounded-md inline-flex items-center gap-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+              active ? "bg-brand-600 text-white shadow-sm" : "text-foreground hover:bg-muted"
+            }`}
+          >
+            {viewIcon(v.key)}
+            {v.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   const notesPanel = (
-    <div className="w-full lg:w-72 flex-shrink-0 border-t lg:border-t-0 lg:border-l border-white/10 lg:pl-4 pt-4 lg:pt-0">
-      <h4 className="text-xs font-bold text-white/80 mb-2">Notas del estudio</h4>
+    <div className="w-full lg:w-72 flex-shrink-0 border-t lg:border-t-0 lg:border-l border-border lg:pl-4 pt-4 lg:pt-0">
+      <h4 className="text-xs font-bold text-foreground mb-2">Notas del estudio</h4>
       <textarea
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
         placeholder="Notas clínicas sobre este CBCT…"
         rows={5}
-        className="w-full text-sm rounded-lg bg-white/5 border border-white/15 text-white p-2 resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+        aria-label="Notas clínicas del estudio CBCT"
+        className="w-full text-sm rounded-lg bg-muted/40 border border-border text-foreground p-2 resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
       />
       <div className="flex justify-end mt-2">
         <button
@@ -286,8 +412,8 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
         </button>
       </div>
       {status === "ready" && (
-        <p className="text-[10px] text-white/40 mt-3">
-          {slices.length} cortes cargados. MPR (coronal/sagital) y 3D: próximamente.
+        <p className="text-[10px] text-muted-foreground mt-3">
+          {slices.length} cortes cargados. Vistas: axial, coronal, sagital y volumen 3D.
         </p>
       )}
     </div>
@@ -295,7 +421,7 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
 
   if (status === "loading") {
     return (
-      <div className="flex flex-col items-center justify-center text-white/70" style={{ height: 480 }}>
+      <div className="flex flex-col items-center justify-center text-muted-foreground" style={{ height: 480 }}>
         <Loader2 className="w-6 h-6 animate-spin mb-3" />
         <p className="text-sm">Descomprimiendo y leyendo el CBCT…</p>
         {progress.total > 0 && (
@@ -303,7 +429,7 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
             <p className="text-xs mt-1">
               {progress.done} / {progress.total} cortes
             </p>
-            <div className="w-48 h-1.5 bg-white/10 rounded-full overflow-hidden mt-2">
+            <div className="w-48 h-1.5 bg-muted rounded-full overflow-hidden mt-2">
               <div
                 className="h-full bg-brand-500 rounded-full transition-all"
                 style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }}
@@ -318,9 +444,9 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
   if (status === "error" || status === "empty") {
     return (
       <div className="flex flex-col lg:flex-row gap-4">
-        <div className="flex-1 flex flex-col items-center justify-center text-center text-white/70 p-8" style={{ minHeight: 360 }}>
-          <Layers className="w-10 h-10 mb-3 text-white/40" />
-          <p className="text-sm font-bold text-white/90">
+        <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground p-8" style={{ minHeight: 360 }}>
+          <Layers className="w-10 h-10 mb-3 text-muted-foreground" />
+          <p className="text-sm font-bold text-foreground">
             {status === "empty" ? "No se encontraron cortes legibles" : "No se pudo leer el set"}
           </p>
           <p className="text-xs mt-1 max-w-sm">
@@ -341,102 +467,117 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
     );
   }
 
-  const s = slices[idx];
+  // status === "ready"
+  const cols = slices[0].cols;
+  const rows = slices[0].rows;
+  const depth = slices.length;
+
+  // Configuración del slider de posición según la vista activa.
+  const pos =
+    view === "coronal"
+      ? { value: coronalY, set: setCoronalY, max: rows - 1, label: "Posición (Y)", current: coronalY + 1, total: rows }
+      : view === "sagittal"
+        ? { value: sagittalX, set: setSagittalX, max: cols - 1, label: "Posición (X)", current: sagittalX + 1, total: cols }
+        : { value: idx, set: setIdx, max: depth - 1, label: "Corte (Z)", current: idx + 1, total: depth };
+
+  const viewLabel = view === "coronal" ? "Coronal" : view === "sagittal" ? "Sagital" : "Axial";
 
   return (
     <div className="flex flex-col lg:flex-row gap-4">
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1 mb-2">
-          <button
-            type="button"
-            onClick={() => setView3d(false)}
-            className={`text-[11px] font-semibold px-2.5 py-1 rounded inline-flex items-center gap-1 ${!view3d ? "bg-brand-600 text-white" : "bg-muted text-foreground border border-border"}`}
-          >
-            <Layers className="w-3 h-3" /> Cortes 2D
-          </button>
-          <button
-            type="button"
-            onClick={() => setView3d(true)}
-            className={`text-[11px] font-semibold px-2.5 py-1 rounded inline-flex items-center gap-1 ${view3d ? "bg-brand-600 text-white" : "bg-muted text-foreground border border-border"}`}
-          >
-            <Box className="w-3 h-3" /> Volumen 3D
-          </button>
-        </div>
-        {view3d && <Dicom3DVolume slices={slices} />}
-        {!view3d && (
-        <>
-        <div
-          className="relative w-full overflow-hidden rounded-lg select-none"
-          style={{ height: 480, background: "#000", cursor: dragRef.current ? "grabbing" : "grab" }}
-          onWheel={onWheel}
-          onMouseDown={onDown}
-          onMouseMove={onMove}
-          onMouseUp={onUp}
-          onMouseLeave={onUp}
-        >
-          <div
-            className="absolute inset-0 flex items-center justify-center"
-            style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
-          >
-            <canvas ref={canvasRef} className="max-w-full max-h-full" style={{ imageRendering: "pixelated", maxHeight: 480 }} />
-          </div>
-          <div className="absolute top-2 left-2 text-[11px] font-mono text-white/70 bg-black/40 rounded px-2 py-0.5">
-            Corte {idx + 1}/{slices.length}
-          </div>
-        </div>
+        <div className="mb-3">{viewBar}</div>
 
-        <div className="mt-3 space-y-3 bg-white/5 rounded-lg p-3 border border-white/10">
-          <div className="flex items-center gap-2">
-            <Layers className="w-4 h-4 text-white/60 flex-shrink-0" aria-hidden />
-            <label className="text-[11px] text-white/70 w-16 flex-shrink-0">Corte</label>
-            <input
-              type="range"
-              min={0}
-              max={slices.length - 1}
-              value={idx}
-              onChange={(e) => setIdx(Number(e.target.value))}
-              className="flex-1 accent-brand-500"
-              aria-label="Navegar cortes del CBCT"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Sun className="w-4 h-4 text-white/60 flex-shrink-0" aria-hidden />
-            <label className="text-[11px] text-white/70 w-16 flex-shrink-0">Brillo</label>
-            <input
-              type="range"
-              min={defaultWin.current.c - defaultWin.current.w * 2}
-              max={defaultWin.current.c + defaultWin.current.w * 2}
-              value={center}
-              onChange={(e) => setCenter(Number(e.target.value))}
-              className="flex-1 accent-brand-500"
-              aria-label="Brillo"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <ContrastIcon className="w-4 h-4 text-white/60 flex-shrink-0" aria-hidden />
-            <label className="text-[11px] text-white/70 w-16 flex-shrink-0">Contraste</label>
-            <input
-              type="range"
-              min={1}
-              max={Math.max(2, defaultWin.current.w * 4)}
-              value={width}
-              onChange={(e) => setWidth(Number(e.target.value))}
-              className="flex-1 accent-brand-500"
-              aria-label="Contraste"
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-white/40">Scroll = zoom · arrastrar = mover · slider = cortes</span>
-            <button
-              type="button"
-              onClick={reset}
-              className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-md bg-white/10 text-white/80 hover:bg-white/20"
+        {view === "volume" ? (
+          <Dicom3DVolume slices={slices} />
+        ) : (
+          <>
+            <div
+              className="relative w-full overflow-hidden rounded-lg select-none"
+              style={{ height: 480, background: "#000", cursor: dragRef.current ? "grabbing" : "grab" }}
+              onWheel={onWheel}
+              onMouseDown={onDown}
+              onMouseMove={onMove}
+              onMouseUp={onUp}
+              onMouseLeave={onUp}
             >
-              <RotateCcw className="w-3 h-3" /> Reiniciar
-            </button>
-          </div>
-        </div>
-        </>
+              <div
+                className="absolute inset-0 flex items-center justify-center"
+                style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
+              >
+                <canvas
+                  ref={canvasRef}
+                  className="max-w-full max-h-full"
+                  style={{ imageRendering: "pixelated", maxHeight: 480 }}
+                />
+              </div>
+              <div className="absolute top-2 left-2 text-[11px] font-mono text-white/80 bg-black/50 rounded px-2 py-0.5">
+                {viewLabel} · {pos.current}/{pos.total}
+              </div>
+            </div>
+
+            <div className="mt-3 space-y-3 bg-muted/40 rounded-lg p-3 border border-border">
+              <div className="flex items-center gap-2">
+                <Move className="w-4 h-4 text-muted-foreground flex-shrink-0" aria-hidden />
+                <label htmlFor="cbct-pos" className="text-[11px] text-muted-foreground w-20 flex-shrink-0">
+                  {pos.label}
+                </label>
+                <input
+                  id="cbct-pos"
+                  type="range"
+                  min={0}
+                  max={Math.max(0, pos.max)}
+                  value={Math.min(pos.value, pos.max)}
+                  onChange={(e) => pos.set(Number(e.target.value))}
+                  className="flex-1 accent-brand-500"
+                  aria-label={`${pos.label} del plano ${viewLabel}`}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Sun className="w-4 h-4 text-muted-foreground flex-shrink-0" aria-hidden />
+                <label htmlFor="cbct-brightness" className="text-[11px] text-muted-foreground w-20 flex-shrink-0">
+                  Brillo
+                </label>
+                <input
+                  id="cbct-brightness"
+                  type="range"
+                  min={defaultWin.current.c - defaultWin.current.w * 2}
+                  max={defaultWin.current.c + defaultWin.current.w * 2}
+                  value={center}
+                  onChange={(e) => setCenter(Number(e.target.value))}
+                  className="flex-1 accent-brand-500"
+                  aria-label="Brillo (centro de ventana)"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <ContrastIcon className="w-4 h-4 text-muted-foreground flex-shrink-0" aria-hidden />
+                <label htmlFor="cbct-contrast" className="text-[11px] text-muted-foreground w-20 flex-shrink-0">
+                  Contraste
+                </label>
+                <input
+                  id="cbct-contrast"
+                  type="range"
+                  min={1}
+                  max={Math.max(2, defaultWin.current.w * 4)}
+                  value={width}
+                  onChange={(e) => setWidth(Number(e.target.value))}
+                  className="flex-1 accent-brand-500"
+                  aria-label="Contraste (ancho de ventana)"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] text-muted-foreground">
+                  Scroll = zoom · arrastrar = mover · slider = plano
+                </span>
+                <button
+                  type="button"
+                  onClick={reset}
+                  className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-md bg-muted text-foreground border border-border hover:bg-muted/70"
+                >
+                  <RotateCcw className="w-3 h-3" /> Reiniciar
+                </button>
+              </div>
+            </div>
+          </>
         )}
       </div>
 

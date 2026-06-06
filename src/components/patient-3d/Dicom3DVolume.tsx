@@ -222,7 +222,7 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
             />
           </label>
         )}
-        <span className="text-[10px] text-white/40">Arrastra para rotar · scroll para zoom</span>
+        <span className="text-[10px] text-muted-foreground">Arrastra para rotar · scroll para zoom</span>
       </div>
     </div>
   );
