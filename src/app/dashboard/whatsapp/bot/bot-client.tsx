@@ -8,6 +8,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import type { BotConfigDTO, BotFaqDTO, BotBusinessHours } from "@/lib/whatsapp/bot/types";
+import { PERSONA_TEMPLATES } from "./persona-templates";
 
 // Índice 0 = Lunes … 6 = Domingo (igual que ClinicSchedule / settings horarios).
 const DAY_LABELS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
@@ -62,7 +63,10 @@ function editableFromConfig(c: BotConfigDTO): EditableConfig {
   };
 }
 
-// Switch de Convención B.
+// Switch con estilos propios (inline) para que el estado OFF sea SIEMPRE
+// claramente visible (track gris + perilla a la izquierda) sin depender del
+// color de fondo de la tarjeta. La clase global .switch dejaba el OFF en
+// rgba(255,255,255,0.1), invisible sobre tarjetas claras.
 function Switch({
   on,
   onClick,
@@ -77,13 +81,44 @@ function Switch({
   return (
     <button
       type="button"
+      role="switch"
       aria-label={label}
-      aria-pressed={on}
+      aria-checked={on}
       disabled={disabled}
       onClick={onClick}
-      className={`switch ${on ? "switch--on" : ""}`}
+      style={{
+        position: "relative",
+        flexShrink: 0,
+        width: 36,
+        height: 20,
+        padding: 0,
+        border: "none",
+        borderRadius: 10,
+        // OFF: gris sólido visible en tema claro y oscuro. ON: morado de marca.
+        background: on ? "var(--brand)" : "#94a3b8",
+        boxShadow: on
+          ? "0 0 12px rgba(124,58,237,0.35)"
+          : "inset 0 0 0 1px rgba(15,10,30,0.18)",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.45 : 1,
+        transition: "background .15s, box-shadow .15s",
+      }}
     >
-      <span className="switch__thumb" />
+      <span
+        style={{
+          position: "absolute",
+          top: 2,
+          left: 2,
+          width: 16,
+          height: 16,
+          borderRadius: "50%",
+          background: "#fff",
+          boxShadow: "0 1px 2px rgba(0,0,0,0.25)",
+          // OFF: perilla a la izquierda. ON: perilla a la derecha.
+          transform: on ? "translateX(16px)" : "translateX(0)",
+          transition: "transform .2s",
+        }}
+      />
     </button>
   );
 }
@@ -396,6 +431,46 @@ export function BotClient() {
 
             <div className="field-new">
               <label className="field-new__label">Persona / instrucciones</label>
+
+              {/* Estilos sugeridos: al elegir uno se rellena el textarea de
+                  persona (editable después). No hay ninguno por defecto. */}
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 6 }}>
+                  Estilos sugeridos
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {PERSONA_TEMPLATES.map((tpl) => {
+                    const selected = form.persona.trim() === tpl.text.trim();
+                    return (
+                      <button
+                        key={tpl.id}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => setForm((f) => ({ ...f, persona: tpl.text }))}
+                        style={{
+                          flex: "1 1 180px",
+                          minWidth: 160,
+                          textAlign: "left",
+                          padding: "10px 12px",
+                          borderRadius: 10,
+                          cursor: "pointer",
+                          border: `1px solid ${selected ? "var(--brand)" : "var(--border-soft)"}`,
+                          background: selected ? "var(--brand-soft)" : "var(--bg-elev-2)",
+                          transition: "all .15s",
+                        }}
+                      >
+                        <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-1)" }}>
+                          {tpl.label}
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 3 }}>
+                          {tpl.hint}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <textarea
                 className="input-new"
                 style={{ height: 90, resize: "vertical" }}
