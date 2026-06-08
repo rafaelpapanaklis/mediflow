@@ -7,6 +7,11 @@ import { signMaybeUrl } from "@/lib/storage";
 // upload URL. Guarda SOLO el path interno; la signed URL se firma bajo demanda.
 //
 // POST /api/patients/[id]/dicom-set/register  body: { path, name, size }
+//
+// SEGURIDAD (magic number): solo recibe el path + tamaño de un .zip ya subido
+// directo al bucket; los bytes nunca pasan por el servidor, así que no hay firma
+// de contenido que validar aquí. La defensa es el límite de tamaño del bucket en
+// Supabase. El path sí se valida (debe pertenecer a esta clínica + paciente).
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await getAuthContext();

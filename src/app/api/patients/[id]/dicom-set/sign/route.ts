@@ -10,6 +10,11 @@ import { randomUUID } from "crypto";
 //
 // POST /api/patients/[id]/dicom-set/sign  body: { name }
 // → { path, token }   (el cliente: supabase.storage.from(...).uploadToSignedUrl(path, token, file))
+//
+// SEGURIDAD (magic number): el .zip viaja del cliente DIRECTO al bucket y nunca
+// pasa por el servidor, así que aquí NO se puede validar la firma del contenido
+// (no tenemos los bytes). La defensa contra un archivo enorme o disfrazado es el
+// LÍMITE DE TAMAÑO del bucket en Supabase Storage. No se bloquea aquí a propósito.
 
 function getAdminSupabase() {
   return createAdmin(

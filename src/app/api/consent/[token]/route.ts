@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { rateLimit } from "@/lib/rate-limit";
 import { BUCKETS, signMaybeUrl } from "@/lib/storage";
+import { validateMagicNumber } from "@/lib/validate-upload";
 
 // GET /api/consent/[token] — public, get form content for patient to read
 export async function GET(req: NextRequest, { params }: { params: { token: string } }) {
@@ -43,6 +44,28 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
   const { signatureDataUrl } = await req.json();
   if (!signatureDataUrl) return NextResponse.json({ error: "Firma requerida" }, { status: 400 });
 
+  // La firma llega como data URL (canvas → PNG). Validamos forma, tamaño y, sobre
+  // todo, la FIRMA real de los bytes: que sea de verdad una imagen y no un
+  // archivo disfrazado (ej. un ejecutable codificado en base64).
+  if (typeof signatureDataUrl !== "string" || !signatureDataUrl.startsWith("data:image/")) {
+    return NextResponse.json({ error: "Firma inválida" }, { status: 400 });
+  }
+  const signatureBuffer = Buffer.from(signatureDataUrl.split(",")[1] ?? "", "base64");
+  const MAX_SIGNATURE_BYTES = 5 * 1024 * 1024; // una firma son unos KB; 5 MB frena abusos.
+  if (signatureBuffer.length === 0) {
+    return NextResponse.json({ error: "Firma vacía" }, { status: 400 });
+  }
+  if (signatureBuffer.length > MAX_SIGNATURE_BYTES) {
+    return NextResponse.json({ error: "La firma excede el tamaño permitido (máx 5 MB)." }, { status: 413 });
+  }
+  const magicError = await validateMagicNumber(signatureBuffer, ["image/png", "image/jpeg", "image/webp"]);
+  if (magicError) {
+    return NextResponse.json(
+      { error: "Archivo no válido: el contenido no coincide con la extensión", detalle: magicError },
+      { status: 400 },
+    );
+  }
+
   // Upload signature to Supabase Storage. Persistimos sólo el path interno;
   // la signed URL se genera on-demand cuando alguien lee el form.
   let storedPath: string | null = null;
@@ -52,10 +75,8 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
       { auth: { persistSession: false } }
     );
-    const base64 = signatureDataUrl.split(",")[1];
-    const buffer = Buffer.from(base64, "base64");
     const path   = `signatures/${form.clinicId}/${form.id}.png`;
-    await supabase.storage.from(BUCKETS.PATIENT_FILES).upload(path, buffer, { contentType: "image/png", upsert: true });
+    await supabase.storage.from(BUCKETS.PATIENT_FILES).upload(path, signatureBuffer, { contentType: "image/png", upsert: true });
     storedPath = path;
   } catch (e) {
     console.error("Signature upload error:", e);

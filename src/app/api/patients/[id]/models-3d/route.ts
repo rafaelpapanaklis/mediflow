@@ -4,6 +4,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { BUCKETS, signMaybeUrl } from "@/lib/storage";
+import { validateModel3D } from "@/lib/validate-upload";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -127,6 +128,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const contentType = mimeForExt(ext, (file as File).type);
 
   const bytes = await file.arrayBuffer();
+
+  // Blindaje: valida la FIRMA real del contenido, no solo la extensión. Frena
+  // un ejecutable/imagen/zip renombrado a .stl/.obj/.dcm. STL/PLY/OBJ no tienen
+  // firma estándar, así que el helper solo rechaza lo que positivamente NO es
+  // una malla (no rompe modelos legítimos).
+  const magicError = await validateModel3D(bytes, ext);
+  if (magicError) {
+    return NextResponse.json(
+      { error: "Archivo no válido: el contenido no coincide con la extensión", detalle: magicError },
+      { status: 400 },
+    );
+  }
+
   const supabase = getAdminSupabase();
   const { error: uploadError } = await supabase.storage
     .from(BUCKETS.PATIENT_FILES)

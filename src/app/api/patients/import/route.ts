@@ -4,6 +4,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { rateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
+import { validateSpreadsheet } from "@/lib/validate-upload";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -126,9 +127,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Archivo supera 10MB" }, { status: 413 });
   }
 
+  // Blindaje: valida la FIRMA real del contenido (no la extensión). .xlsx debe
+  // ser un contenedor ZIP/OOXML, .xls un OLE2 y .csv texto. Frena un ejecutable
+  // o binario renombrado a .xlsx antes de pasarlo al parser.
+  const ext = (file.name.split(".").pop() ?? "").toLowerCase();
+  let fileBytes: ArrayBuffer;
+  try {
+    fileBytes = await file.arrayBuffer();
+  } catch {
+    return NextResponse.json({ error: "No se pudo leer el archivo" }, { status: 400 });
+  }
+  const magicError = await validateSpreadsheet(fileBytes, ext);
+  if (magicError) {
+    return NextResponse.json(
+      { error: "Archivo no válido: el contenido no coincide con la extensión", detalle: magicError },
+      { status: 400 },
+    );
+  }
+
   let rawRows: Record<string, any>[];
   try {
-    const buf = Buffer.from(await file.arrayBuffer());
+    const buf = Buffer.from(fileBytes);
     const wb  = XLSX.read(buf, { type: "buffer", cellDates: true, raw: false });
     const sheet = wb.Sheets[wb.SheetNames[0]];
     if (!sheet) return NextResponse.json({ error: "Archivo vacío" }, { status: 400 });

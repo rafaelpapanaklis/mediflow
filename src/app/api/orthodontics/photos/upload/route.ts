@@ -6,6 +6,7 @@ import sharp from "sharp";
 import { createClient } from "@supabase/supabase-js";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
+import { validateMagicNumber } from "@/lib/validate-upload";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { ORTHODONTICS_MODULE_KEY } from "@/lib/specialties/keys";
 import type { OrthoPhotoSetType } from "@prisma/client";
@@ -15,6 +16,17 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const BUCKET = "patient-files";
+const MAX_IMAGE_SIZE = 25 * 1024 * 1024; // 25 MB — holgado para una foto de cámara/celular.
+const IMAGE_MIMES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "image/tiff",
+  "image/avif",
+  "image/heic",
+  "image/heif",
+];
 
 function fileCategoryFromSetType(setType: OrthoPhotoSetType) {
   switch (setType) {
@@ -61,6 +73,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Tope de tamaño ANTES de cargar bytes en memoria / pasar a sharp.
+  if (file.size > MAX_IMAGE_SIZE) {
+    return NextResponse.json({ error: "Imagen demasiado grande (máx 25 MB)." }, { status: 413 });
+  }
+
   // Seguridad: `view` viene del cliente y se interpola en el path del bucket. Sin
   // sanitizar, un valor como "../<otra-clinica>/..." escaparía la carpeta de la
   // clínica (path traversal cross-tenant). Lo restringimos a un slug seguro; los
@@ -80,6 +97,18 @@ export async function POST(req: NextRequest) {
 
   // Lee buffer + procesa con sharp.
   const arrayBuffer = await file.arrayBuffer();
+
+  // Blindaje: valida la FIRMA real del contenido (no la extensión) ANTES de
+  // pasar a sharp. Frena un ejecutable/zip renombrado a .jpg y evita que sharp
+  // truene con un 500 al recibir basura.
+  const magicError = await validateMagicNumber(arrayBuffer, IMAGE_MIMES);
+  if (magicError) {
+    return NextResponse.json(
+      { error: "Archivo no válido: el contenido no coincide con la extensión", detalle: magicError },
+      { status: 400 },
+    );
+  }
+
   const inputBuffer = Buffer.from(arrayBuffer);
 
   const original = await sharp(inputBuffer)
