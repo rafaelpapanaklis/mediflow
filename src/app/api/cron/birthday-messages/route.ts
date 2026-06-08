@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 /**
  * Cron — mensaje de cumpleaños por WhatsApp.
  *
  * Solo a clínicas con birthdayMsgActive=true Y WhatsApp conectado. A cada
- * paciente ACTIVE con teléfono cuyo dob (mes/día UTC) sea hoy y al que no le
- * hayamos escrito este año (lastBirthdayMsgAt), le manda una felicitación y
- * marca lastBirthdayMsgAt. Default OFF: no envía nada sin el toggle.
+ * paciente ACTIVE con teléfono cuyo dob (mes/día) sea hoy y al que no le
+ * hayamos escrito este año (lastBirthdayMsgAt), le ENCOLA una felicitación en
+ * WhatsAppReminder (PENDING) y marca lastBirthdayMsgAt en la misma transacción.
+ * El envío real lo hace /api/cron/whatsapp-queue en batches. El match mes/día
+ * se hace en SQL (no se traen miles de pacientes a JS). Default OFF.
  */
 export async function GET(req: NextRequest) {
   if (!process.env.CRON_SECRET) {
@@ -23,10 +27,10 @@ export async function GET(req: NextRequest) {
   }
 
   const now = new Date();
-  const todayMonth = now.getUTCMonth();
+  const todayMonth = now.getUTCMonth() + 1; // EXTRACT(MONTH) es 1-indexado
   const todayDate = now.getUTCDate();
   const yearStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
-  let sent = 0, skipped = 0, errors = 0;
+  let queued = 0;
 
   const clinics = await prisma.clinic.findMany({
     where: { birthdayMsgActive: true, waConnected: true },
@@ -36,38 +40,45 @@ export async function GET(req: NextRequest) {
   for (const clinic of clinics) {
     if (!clinic.waPhoneNumberId || !clinic.waAccessToken) continue;
 
-    // Candidatos: dob no nulo y aún no felicitados este año. El match exacto
-    // de mes/día se hace en JS (Prisma no filtra por EXTRACT fácilmente).
-    const candidates = await prisma.patient.findMany({
-      where: {
-        clinicId: clinic.id,
-        status: "ACTIVE",
-        deletedAt: null,
-        phone: { not: null },
-        dob: { not: null },
-        OR: [{ lastBirthdayMsgAt: null }, { lastBirthdayMsgAt: { lt: yearStart } }],
-      },
-      select: { id: true, firstName: true, phone: true, dob: true },
-      take: 5000,
-    });
+    // Match exacto de mes/día en SQL (EXTRACT) para no traer miles de
+    // pacientes a JS. dob es timestamp sin tz, así que EXTRACT devuelve los
+    // componentes UTC almacenados (igual que getUTCMonth/getUTCDate).
+    const candidates = await prisma.$queryRaw<
+      Array<{ id: string; firstName: string; phone: string }>
+    >`
+      SELECT id, "firstName", phone
+      FROM patients
+      WHERE "clinicId" = ${clinic.id}
+        AND status = 'ACTIVE'
+        AND "deletedAt" IS NULL
+        AND phone IS NOT NULL
+        AND dob IS NOT NULL
+        AND EXTRACT(MONTH FROM dob)::int = ${todayMonth}
+        AND EXTRACT(DAY FROM dob)::int = ${todayDate}
+        AND ("lastBirthdayMsgAt" IS NULL OR "lastBirthdayMsgAt" < ${yearStart})
+    `;
+    if (candidates.length === 0) continue;
 
-    for (const p of candidates) {
-      if (!p.phone || !p.dob) { skipped++; continue; }
-      const dob = new Date(p.dob);
-      if (dob.getUTCMonth() !== todayMonth || dob.getUTCDate() !== todayDate) continue;
+    const rows: Prisma.WhatsAppReminderCreateManyInput[] = candidates.map((p) => ({
+      clinicId:     clinic.id,
+      patientPhone: p.phone,
+      type:         "BIRTHDAY",
+      message:      `¡Feliz cumpleaños, ${p.firstName}! 🎉\n\nTodo el equipo de *${clinic.name}* te desea un excelente día. Gracias por tu confianza. 💙`,
+      status:       "PENDING",
+      scheduledFor: now,
+    }));
 
-      const msg = `¡Feliz cumpleaños, ${p.firstName}! 🎉\n\nTodo el equipo de *${clinic.name}* te desea un excelente día. Gracias por tu confianza. 💙`;
-      try {
-        await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, p.phone, msg);
-        await prisma.patient.update({ where: { id: p.id }, data: { lastBirthdayMsgAt: now } });
-        sent++;
-      } catch (e) {
-        console.error(`[cron/birthday-messages] error patient ${p.id}:`, e);
-        errors++;
-      }
-      await new Promise((r) => setTimeout(r, 200));
-    }
+    // Encola + marca lastBirthdayMsgAt atómicamente: o ambas o ninguna, para no
+    // encolar sin marcar (doble felicitación) ni marcar sin encolar.
+    await prisma.$transaction([
+      prisma.whatsAppReminder.createMany({ data: rows }),
+      prisma.patient.updateMany({
+        where: { id: { in: candidates.map((p) => p.id) } },
+        data: { lastBirthdayMsgAt: now },
+      }),
+    ]);
+    queued += rows.length;
   }
 
-  return NextResponse.json({ sent, skipped, errors, clinics: clinics.length });
+  return NextResponse.json({ queued, clinics: clinics.length });
 }

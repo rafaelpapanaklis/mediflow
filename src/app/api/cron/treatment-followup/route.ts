@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 // GET /api/cron/treatment-followup
-// Called daily at 10am MX by Vercel Cron (configured in vercel.json)
-// Sends WhatsApp reminders to patients who are overdue for their next treatment session
+// Called daily by Vercel Cron (configured in vercel.json).
+// Encola recordatorios para pacientes con su próxima sesión de tratamiento
+// vencida y deja que /api/cron/whatsapp-queue los envíe en batches. Marca
+// lastFollowUpSent en la MISMA transacción que el encolado (dedupe 7 días),
+// sin sleep serial ni techo por corrida.
 export async function GET(req: NextRequest) {
   if (!process.env.CRON_SECRET) {
     console.error("[cron/treatment-followup] CRON_SECRET no configurado");
@@ -45,7 +52,9 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  let sent = 0, skipped = 0, errors = 0;
+  let skipped = 0;
+  const rows: Prisma.WhatsAppReminderCreateManyInput[] = [];
+  const claimedPlanIds: string[] = [];
 
   for (const plan of overduePlans) {
     // Skip if no WhatsApp
@@ -55,8 +64,8 @@ export async function GET(req: NextRequest) {
     // Skip if no patient phone
     if (!plan.patient.phone) { skipped++; continue; }
 
-    // FIX: null check — nextExpectedDate is confirmed non-null by the where clause,
-    // but TypeScript doesn't know that after the include, so check explicitly
+    // nextExpectedDate is confirmed non-null by the where clause, but TS can't
+    // narrow it after the include, so check explicitly.
     if (!plan.nextExpectedDate) { skipped++; continue; }
 
     const completedSessions = plan.sessions.length;
@@ -77,29 +86,34 @@ export async function GET(req: NextRequest) {
       daysOverdue,
     });
 
-    try {
-      await sendWhatsAppMessage(
-        plan.clinic.waPhoneNumberId,
-        plan.clinic.waAccessToken,
-        plan.patient.phone,
-        message
-      );
+    rows.push({
+      clinicId:     plan.clinicId,
+      patientPhone: plan.patient.phone,
+      type:         "TREATMENT_FOLLOWUP",
+      message,
+      status:       "PENDING",
+      scheduledFor: now,
+    });
+    claimedPlanIds.push(plan.id);
+  }
 
-      await prisma.treatmentPlan.update({
-        where: { id: plan.id },
-        data:  { lastFollowUpSent: now },
-      });
-      sent++;
-    } catch (err) {
-      console.error(`Follow-up failed for plan ${plan.id}:`, err);
-      errors++;
-    }
+  if (rows.length > 0) {
+    // Encola + marca lastFollowUpSent atómicamente (dedupe 7 días): así un re-run
+    // no reencola los mismos planes aunque el queue aún no los haya enviado.
+    await prisma.$transaction([
+      prisma.whatsAppReminder.createMany({ data: rows }),
+      prisma.treatmentPlan.updateMany({
+        where: { id: { in: claimedPlanIds } },
+        data: { lastFollowUpSent: now },
+      }),
+    ]);
   }
 
   return NextResponse.json({
     ok:        true,
     processed: overduePlans.length,
-    sent, skipped, errors,
+    queued:    rows.length,
+    skipped,
     timestamp: now.toISOString(),
   });
 }

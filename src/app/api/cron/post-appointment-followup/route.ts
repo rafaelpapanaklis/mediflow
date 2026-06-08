@@ -1,17 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 /**
  * Cron — seguimiento post-cita por WhatsApp.
  *
  * Solo a clínicas con postApptFollowupActive=true Y WhatsApp conectado. Para
  * cada cita COMPLETED/CHECKED_OUT cuyo startsAt cae en la ventana de 24-48h
- * atrás (≈ "un día después") y que aún no tiene seguimiento, envía "¿Cómo
- * estuvo tu visita?" y registra un WhatsAppReminder type FOLLOWUP (dedupe).
- * Default OFF: no envía nada sin el toggle.
+ * atrás y que aún no tiene seguimiento, ENCOLA "¿Cómo estuvo tu visita?" en
+ * WhatsAppReminder (PENDING, type FOLLOWUP). El envío real lo hace
+ * /api/cron/whatsapp-queue en batches. Dedupe por appointmentId con UNA sola
+ * query por clínica (sin N+1). Default OFF.
  */
 export async function GET(req: NextRequest) {
   if (!process.env.CRON_SECRET) {
@@ -26,7 +29,7 @@ export async function GET(req: NextRequest) {
   const now = new Date();
   const windowStart = new Date(now.getTime() - 48 * 60 * 60 * 1000);
   const windowEnd = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  let sent = 0, skipped = 0, errors = 0;
+  let queued = 0, skipped = 0;
 
   const clinics = await prisma.clinic.findMany({
     where: { postApptFollowupActive: true, waConnected: true },
@@ -43,35 +46,45 @@ export async function GET(req: NextRequest) {
         startsAt: { gte: windowStart, lte: windowEnd },
       },
       select: { id: true, patient: { select: { firstName: true, phone: true } } },
-      take: 500,
     });
+    if (appts.length === 0) continue;
 
+    // Dedupe en UNA sola query: citas que ya tienen seguimiento -> Set.
+    // Reemplaza el findFirst por cita (N+1).
+    const existing = await prisma.whatsAppReminder.findMany({
+      where: {
+        clinicId: clinic.id,
+        type: "FOLLOWUP",
+        appointmentId: { in: appts.map((a) => a.id) },
+      },
+      select: { appointmentId: true },
+    });
+    const done = new Set(
+      existing.map((e) => e.appointmentId).filter(Boolean) as string[],
+    );
+
+    const rows: Prisma.WhatsAppReminderCreateManyInput[] = [];
     for (const appt of appts) {
       if (!appt.patient?.phone) { skipped++; continue; }
+      if (done.has(appt.id)) { skipped++; continue; }
 
-      // Dedupe: no reenviar si ya hay un seguimiento para esta cita.
-      const dupe = await prisma.whatsAppReminder.findFirst({
-        where: { clinicId: clinic.id, appointmentId: appt.id, type: "FOLLOWUP" },
-        select: { id: true },
+      rows.push({
+        clinicId:      clinic.id,
+        appointmentId: appt.id,
+        patientPhone:  appt.patient.phone,
+        type:          "FOLLOWUP",
+        message:       `Hola ${appt.patient.firstName} 👋\n\nGracias por tu visita a *${clinic.name}*. ¿Cómo te sentiste con tu atención? Tu opinión nos ayuda a mejorar. 🙏\n\nResponde a este mensaje y con gusto te leemos.`,
+        status:        "PENDING",
+        scheduledFor:  now,
       });
-      if (dupe) { skipped++; continue; }
+      done.add(appt.id); // evita duplicar dentro de la misma corrida
+    }
 
-      const msg = `Hola ${appt.patient.firstName} 👋\n\nGracias por tu visita a *${clinic.name}*. ¿Cómo te sentiste con tu atención? Tu opinión nos ayuda a mejorar. 🙏\n\nResponde a este mensaje y con gusto te leemos.`;
-      try {
-        await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, appt.patient.phone, msg);
-        await prisma.whatsAppReminder.create({
-          data: { clinicId: clinic.id, appointmentId: appt.id, type: "FOLLOWUP", status: "SENT", message: msg, sentAt: now, scheduledFor: now },
-        });
-        sent++;
-      } catch (e: any) {
-        await prisma.whatsAppReminder.create({
-          data: { clinicId: clinic.id, appointmentId: appt.id, type: "FOLLOWUP", status: "FAILED", errorMsg: e?.message ?? "error", scheduledFor: now },
-        });
-        errors++;
-      }
-      await new Promise((r) => setTimeout(r, 200));
+    if (rows.length > 0) {
+      await prisma.whatsAppReminder.createMany({ data: rows });
+      queued += rows.length;
     }
   }
 
-  return NextResponse.json({ sent, skipped, errors, clinics: clinics.length });
+  return NextResponse.json({ queued, skipped, clinics: clinics.length });
 }
