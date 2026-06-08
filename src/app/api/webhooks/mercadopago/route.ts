@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getPayment } from "@/lib/mercadopago";
+import { verifyAndCreditMpTopup } from "@/lib/ai-wallet/mercadopago";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,6 +33,17 @@ export async function POST(req: NextRequest) {
       url.searchParams.get("data.id") ??
       url.searchParams.get("id");
     const paymentId = rawPaymentId == null ? "" : String(rawPaymentId);
+
+    // ── Recarga del monedero de IA (T4) ──────────────────────────────────────
+    // Rama propia: MediFlow cobra ESTA recarga con su token de PLATAFORMA (no el
+    // del vendedor). Se distingue por el ref "aitopup:<topupId>". Verifica el pago
+    // y acredita de forma atómica/idempotente. Deja intacto el flujo B2B de abajo.
+    if (kind === "aitopup") {
+      if (orderId && paymentId) {
+        await verifyAndCreditMpTopup(orderId, paymentId);
+      }
+      return NextResponse.json({ received: true });
+    }
 
     if (!orderId || !paymentId || (kind !== "lab" && kind !== "sup")) {
       return NextResponse.json({ received: true });
