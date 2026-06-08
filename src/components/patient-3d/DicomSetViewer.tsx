@@ -140,8 +140,9 @@ async function decodeOnMain(
     if (isCancelled()) return out;
     try {
       const buf = await entry.async("arraybuffer");
+      // decodeSlice devuelve un array de cortes (1 normal, >1 multi-frame).
       const s = decodeSlice(buf, done);
-      if (s) out.push(s);
+      if (s) out.push(...s);
     } catch {
       /* corte inválido: se salta */
     }
@@ -256,8 +257,11 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
   }, [fileId]);
 
   // Pinta la vista 2D activa (axial / coronal / sagital) con el mismo
-  // window/level. Cada plano MPR es un re-muestreo 2D del volumen, de tamaño
-  // comparable a un corte axial, así que se pinta de forma síncrona.
+  // window/level, RESPETANDO el espaciado físico (mm) del estudio: cada plano se
+  // rasteriza con proporciones reales (PixelSpacing × zSpacing) y se MUESTREA con
+  // interpolación BILINEAL, así el CBCT/CT no sale deformado ni con bordes
+  // escalonados entre cortes. Con espaciado isotrópico el resultado coincide con
+  // muestrear por índice entero (la interpolación cae justo en píxeles nativos).
   useEffect(() => {
     if (status !== "ready" || slices.length === 0 || view === "volume") return;
     const canvas = canvasRef.current;
@@ -273,67 +277,126 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
     // MONOCHROME1/2 es propiedad de la serie: el corte medio la representa.
     const inv = slices[Math.floor(depth / 2)].invert;
 
+    // Espaciado físico (mm). Guard para cache vieja sin estos campos → isotrópico
+    // (se comporta como antes, sin corrección, en vez de romper).
+    const sp = slices[0].pixelSpacing;
+    const sx = sp && sp[0] > 0 ? sp[0] : 1; // mm por columna (eje X)
+    const sy = sp && sp[1] > 0 ? sp[1] : 1; // mm por fila (eje Y)
+    const zRaw = slices[0].zSpacing;
+    const sz = zRaw && zRaw > 0 ? zRaw : sy; // mm entre cortes (eje Z)
+
+    // HU → gris [0,255] con window/level + invert MONOCHROME1.
+    const toGray = (hu: number) => {
+      let g = ((hu - lo) / span) * 255;
+      g = g < 0 ? 0 : g > 255 ? 255 : g;
+      return inv ? 255 - g : g;
+    };
+
+    // Tamaño del raster de salida: 1 px = el espaciado más fino del plano, para
+    // no perder resolución nativa y dar proporciones físicas reales. Acotado a
+    // MAXDIM por lado (rendimiento; el lienzo se reescala al contenedor igual).
+    const MAXDIM = 1024;
+    const raster = (nA: number, sA: number, nB: number, sB: number) => {
+      const pmm = Math.min(sA, sB) || 1;
+      let W = Math.max(1, Math.round((nA * sA) / pmm));
+      let H = Math.max(1, Math.round((nB * sB) / pmm));
+      const m = Math.max(W, H);
+      if (m > MAXDIM) {
+        const k = MAXDIM / m;
+        W = Math.max(1, Math.round(W * k));
+        H = Math.max(1, Math.round(H * k));
+      }
+      return { W, H };
+    };
+
+    // Pinta un raster W×H: sample(colSalida, filaSalida) → HU interpolado.
+    const paint = (W: number, H: number, sample: (a: number, b: number) => number) => {
+      canvas.width = W;
+      canvas.height = H;
+      const img = ctx.createImageData(W, H);
+      const data = img.data;
+      let j = 0;
+      for (let b = 0; b < H; b++) {
+        for (let a = 0; a < W; a++) {
+          const g = toGray(sample(a, b));
+          data[j] = data[j + 1] = data[j + 2] = g;
+          data[j + 3] = 255;
+          j += 4;
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+    };
+
     if (view === "axial") {
-      // Plano (X,Y) en Z fijo: el corte nativo.
+      // Plano (X,Y) en Z fijo: el corte nativo, reescalado a proporción física y
+      // muestreado bilineal (corrige píxeles no cuadrados, sx != sy).
       const s = slices[Math.min(idx, depth - 1)];
       if (!s) return;
-      canvas.width = s.cols;
-      canvas.height = s.rows;
-      const img = ctx.createImageData(s.cols, s.rows);
-      const data = img.data;
-      const len = s.cols * s.rows;
-      for (let i = 0; i < len; i++) {
-        let g = ((s.pixels[i] - lo) / span) * 255;
-        g = g < 0 ? 0 : g > 255 ? 255 : g;
-        if (s.invert) g = 255 - g;
-        const j = i * 4;
-        data[j] = data[j + 1] = data[j + 2] = g;
-        data[j + 3] = 255;
-      }
-      ctx.putImageData(img, 0, 0);
+      const px = s.pixels;
+      const { W, H } = raster(cols, sx, rows, sy);
+      paint(W, H, (a, b) => {
+        const fx = ((a + 0.5) * cols) / W - 0.5;
+        const fy = ((b + 0.5) * rows) / H - 0.5;
+        const x = fx < 0 ? 0 : fx > cols - 1 ? cols - 1 : fx;
+        const y = fy < 0 ? 0 : fy > rows - 1 ? rows - 1 : fy;
+        const x0 = Math.floor(x);
+        const y0 = Math.floor(y);
+        const x1 = x0 + 1 < cols ? x0 + 1 : x0;
+        const y1 = y0 + 1 < rows ? y0 + 1 : y0;
+        const tx = x - x0;
+        const ty = y - y0;
+        const r0 = y0 * cols;
+        const r1 = y1 * cols;
+        const top = px[r0 + x0] + (px[r0 + x1] - px[r0 + x0]) * tx;
+        const bot = px[r1 + x0] + (px[r1 + x1] - px[r1 + x0]) * tx;
+        return top + (bot - top) * ty;
+      });
     } else if (view === "coronal") {
-      // Plano (X,Z) en Y fijo: ancho = cols, alto = depth.
-      // pixel(x,z) = slices[z].pixels[Yfijo*cols + x]
-      const y = Math.min(coronalY, rows - 1);
-      canvas.width = cols;
-      canvas.height = depth;
-      const img = ctx.createImageData(cols, depth);
-      const data = img.data;
-      const yBase = y * cols;
-      for (let z = 0; z < depth; z++) {
-        const px = slices[z].pixels;
-        const rowOff = z * cols;
-        for (let x = 0; x < cols; x++) {
-          let g = ((px[yBase + x] - lo) / span) * 255;
-          g = g < 0 ? 0 : g > 255 ? 255 : g;
-          if (inv) g = 255 - g;
-          const j = (rowOff + x) * 4;
-          data[j] = data[j + 1] = data[j + 2] = g;
-          data[j + 3] = 255;
-        }
-      }
-      ctx.putImageData(img, 0, 0);
+      // Plano (X,Z) en Y fijo: ancho = X (cols·sx), alto = Z (depth·sz).
+      // Interpola en X y en Z (entre cortes adyacentes) → sin escalones.
+      const yb = Math.min(coronalY, rows - 1) * cols;
+      const { W, H } = raster(cols, sx, depth, sz);
+      paint(W, H, (a, b) => {
+        const fx = ((a + 0.5) * cols) / W - 0.5;
+        const fz = ((b + 0.5) * depth) / H - 0.5;
+        const x = fx < 0 ? 0 : fx > cols - 1 ? cols - 1 : fx;
+        const z = fz < 0 ? 0 : fz > depth - 1 ? depth - 1 : fz;
+        const x0 = Math.floor(x);
+        const x1 = x0 + 1 < cols ? x0 + 1 : x0;
+        const z0 = Math.floor(z);
+        const z1 = z0 + 1 < depth ? z0 + 1 : z0;
+        const tx = x - x0;
+        const tz = z - z0;
+        const p0 = slices[z0].pixels;
+        const p1 = slices[z1].pixels;
+        const top = p0[yb + x0] + (p0[yb + x1] - p0[yb + x0]) * tx;
+        const bot = p1[yb + x0] + (p1[yb + x1] - p1[yb + x0]) * tx;
+        return top + (bot - top) * tz;
+      });
     } else if (view === "sagittal") {
-      // Plano (Y,Z) en X fijo: ancho = rows, alto = depth.
-      // pixel(y,z) = slices[z].pixels[y*cols + Xfijo]
-      const x = Math.min(sagittalX, cols - 1);
-      canvas.width = rows;
-      canvas.height = depth;
-      const img = ctx.createImageData(rows, depth);
-      const data = img.data;
-      for (let z = 0; z < depth; z++) {
-        const px = slices[z].pixels;
-        const rowOff = z * rows;
-        for (let y = 0; y < rows; y++) {
-          let g = ((px[y * cols + x] - lo) / span) * 255;
-          g = g < 0 ? 0 : g > 255 ? 255 : g;
-          if (inv) g = 255 - g;
-          const j = (rowOff + y) * 4;
-          data[j] = data[j + 1] = data[j + 2] = g;
-          data[j + 3] = 255;
-        }
-      }
-      ctx.putImageData(img, 0, 0);
+      // Plano (Y,Z) en X fijo: ancho = Y (rows·sy), alto = Z (depth·sz).
+      // Interpola en Y y en Z (entre cortes adyacentes) → sin escalones.
+      const xf = Math.min(sagittalX, cols - 1);
+      const { W, H } = raster(rows, sy, depth, sz);
+      paint(W, H, (a, b) => {
+        const fy = ((a + 0.5) * rows) / W - 0.5;
+        const fz = ((b + 0.5) * depth) / H - 0.5;
+        const y = fy < 0 ? 0 : fy > rows - 1 ? rows - 1 : fy;
+        const z = fz < 0 ? 0 : fz > depth - 1 ? depth - 1 : fz;
+        const y0 = Math.floor(y);
+        const y1 = y0 + 1 < rows ? y0 + 1 : y0;
+        const z0 = Math.floor(z);
+        const z1 = z0 + 1 < depth ? z0 + 1 : z0;
+        const ty = y - y0;
+        const tz = z - z0;
+        const p0 = slices[z0].pixels;
+        const p1 = slices[z1].pixels;
+        const c0 = y0 * cols + xf;
+        const c1 = y1 * cols + xf;
+        const left = p0[c0] + (p0[c1] - p0[c0]) * ty;
+        const right = p1[c0] + (p1[c1] - p1[c0]) * ty;
+        return left + (right - left) * tz;
+      });
     }
   }, [status, slices, view, idx, coronalY, sagittalX, center, width]);
 

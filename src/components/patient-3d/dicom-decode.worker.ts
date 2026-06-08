@@ -35,8 +35,9 @@ ctx.onmessage = async (e: MessageEvent) => {
     for (const entry of entries) {
       try {
         const buf: ArrayBuffer = await entry.async("arraybuffer");
+        // decodeSlice devuelve un array de cortes (1 normal, >1 multi-frame).
         const s = decodeSlice(buf, done);
-        if (s) slices.push(s);
+        if (s) slices.push(...s);
       } catch {
         /* corte inválido: se salta sin romper el set */
       }
