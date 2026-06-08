@@ -1,10 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { chat } from "@/lib/integrations/claude";
+import { chat, type ChatInput, type ChatResult } from "@/lib/integrations/claude";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 300; // 5 minutos — suficiente para iterar
-                                // 100s de clínicas con 1-2s cada una.
+export const maxDuration = 300; // 5 min (límite duro de Vercel).
+
+// Cuántas clínicas (= llamadas a la IA) procesamos en paralelo por lote.
+// Modesto a propósito para no saturar el rate limit de Claude.
+const CONCURRENCY = 5;
+// Presupuesto blando: cortamos limpio antes del límite duro y dejamos margen
+// para responder. Lo que falte se reanuda en la próxima corrida (idempotencia).
+const SOFT_DEADLINE_MS = 270_000; // 4.5 de 5 min
 
 /**
  * GET /api/cron/weekly-insights
@@ -22,7 +28,10 @@ export const maxDuration = 300; // 5 minutos — suficiente para iterar
  * - Idempotente: si ya existe (clinicId, weekStart) → skip silencioso.
  * - Errores de IA por clínica NO matan el cron — se loguean y sigue.
  *
- * Response: { processed, skipped, failed, weekStart, weekEnd }
+ * Concurrencia: procesa las clínicas en lotes (CONCURRENCY en paralelo) con
+ * corte blando antes de maxDuration; lo pendiente se reanuda por idempotencia.
+ *
+ * Response: { processed, skipped, failed, stoppedEarly, remaining, weekStart, weekEnd }
  */
 export async function GET(req: NextRequest) {
   // Auth check — Vercel inyecta Authorization: Bearer <CRON_SECRET>.
@@ -55,6 +64,7 @@ export async function GET(req: NextRequest) {
   prevWeekStart.setDate(prevWeekStart.getDate() - 6);
   prevWeekStart.setHours(0, 0, 0, 0);
 
+  const startedAt = Date.now();
   const clinics = await prisma.clinic.findMany({
     select: { id: true, name: true },
   });
@@ -62,20 +72,25 @@ export async function GET(req: NextRequest) {
   let processed = 0;
   let skipped = 0;
   let failed = 0;
+  let stoppedEarly = false;
+  let remaining = 0;
   const errors: Array<{ clinicId: string; error: string }> = [];
 
-  // Iteramos secuencial para no saturar el rate limit de Claude.
-  for (const clinic of clinics) {
+  // Procesa UNA clínica de punta a punta. Captura sus propios errores y NUNCA
+  // lanza, para que un fallo de IA no aborte el resto del lote.
+  async function processClinic(
+    clinic: { id: string; name: string },
+  ): Promise<"processed" | "skipped" | "failed"> {
     try {
-      // Idempotency: si ya existe insight para (clinicId, weekStart), skip.
+      // Idempotencia = progreso reanudable: si ya existe insight para
+      // (clinicId, weekStart) lo saltamos. Ese row ES la marca por clínica de
+      // la última semana procesada; si una corrida se corta, la siguiente
+      // continúa con las que faltan en vez de empezar de cero.
       const existing = await prisma.weeklyInsight.findFirst({
         where: { clinicId: clinic.id, weekStart },
         select: { id: true },
       });
-      if (existing) {
-        skipped += 1;
-        continue;
-      }
+      if (existing) return "skipped";
 
       // Recolecta datos de la semana de ESTA clínica (clinicId scoped).
       const [weekAppts, prevWeekAppts, weekTimelines] = await Promise.all([
@@ -96,15 +111,12 @@ export async function GET(req: NextRequest) {
       ]);
 
       // Si no hubo actividad la semana → skip silencioso (no insight vacío).
-      if (weekAppts.length === 0) {
-        skipped += 1;
-        continue;
-      }
+      if (weekAppts.length === 0) return "skipped";
 
       const weekStats = summarize(weekAppts, weekTimelines);
       const prevStats = summarize(prevWeekAppts, []);
 
-      const aiResult = await chat({
+      const aiResult = await chatWithRetry({
         system: WEEKLY_SYSTEM_PROMPT,
         messages: [
           {
@@ -143,12 +155,32 @@ export async function GET(req: NextRequest) {
           insights: insightsArr,
         },
       });
-      processed += 1;
+      return "processed";
     } catch (err) {
-      failed += 1;
       const msg = err instanceof Error ? err.message : "unknown";
       errors.push({ clinicId: clinic.id, error: msg.slice(0, 200) });
       console.error(`[weekly-insights] clinic=${clinic.id} error=${msg}`);
+      return "failed";
+    }
+  }
+
+  // Lotes con concurrencia limitada: CONCURRENCY llamadas a la IA en paralelo
+  // por vez. Esto multiplica el throughput (antes era 1 a la vez en serie y se
+  // cortaba a ~120 clínicas) respetando el rate limit de Claude.
+  for (let i = 0; i < clinics.length; i += CONCURRENCY) {
+    // Corte controlado antes del límite duro de maxDuration. Lo pendiente se
+    // reanuda en la próxima corrida por la idempotencia de arriba.
+    if (Date.now() - startedAt > SOFT_DEADLINE_MS) {
+      stoppedEarly = true;
+      remaining = clinics.length - i;
+      break;
+    }
+    const batch = clinics.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(batch.map((c) => processClinic(c)));
+    for (const r of results) {
+      if (r === "processed") processed += 1;
+      else if (r === "skipped") skipped += 1;
+      else failed += 1;
     }
   }
 
@@ -159,8 +191,45 @@ export async function GET(req: NextRequest) {
     processed,
     skipped,
     failed,
+    stoppedEarly,
+    remaining,
     errors: errors.slice(0, 20),
   });
+}
+
+/** Pausa para el backoff entre reintentos. */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * ¿El error de chat() es transitorio? Solo reintentamos en rate limit (429),
+ * overload (529) y 5xx/red — reintentar aquí ES respetar el rate limit. Un 400
+ * (request mal formado) no se reintenta.
+ */
+function isRetryableError(error: string): boolean {
+  return (
+    /claude_(429|500|502|503|529)/.test(error) ||
+    /fetch failed|network|ECONNRESET|ETIMEDOUT|EAI_AGAIN/i.test(error)
+  );
+}
+
+/**
+ * chat() con reintentos acotados (backoff exponencial + jitter) SOLO ante
+ * errores transitorios. No cambia el contenido del insight: misma llamada,
+ * solo más resiliente. chat() no lanza — devuelve { error } — así que
+ * inspeccionamos ese campo en vez de un try/catch.
+ */
+async function chatWithRetry(input: ChatInput, maxRetries = 2): Promise<ChatResult> {
+  let result = await chat(input);
+  let attempt = 0;
+  while (result.error && isRetryableError(result.error) && attempt < maxRetries) {
+    attempt += 1;
+    const backoff = Math.min(1000 * 2 ** (attempt - 1), 8000) + Math.floor(Math.random() * 250);
+    await sleep(backoff);
+    result = await chat(input);
+  }
+  return result;
 }
 
 interface WeekSummary {
