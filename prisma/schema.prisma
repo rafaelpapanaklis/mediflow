@@ -178,6 +178,7 @@ model Clinic {
   resources            Resource[]
   waitlistEntries      WaitlistEntry[]
   inboxThreads         InboxThread[]
+  whatsAppBotConfig    WhatsAppBotConfig?
   remindersList        Reminder[]
   clinicLayout         ClinicLayout?
   // Analytics (Push 1)
@@ -2526,6 +2527,10 @@ model InboxThread {
   snoozedUntil  DateTime?
   lastMessageAt DateTime
   tags          String[]     @default([])
+  /// Bot de WhatsApp: false = el staff tomó el control del hilo (el bot calla).
+  botActive     Boolean      @default(true)
+  /// Estado multi-turno del bot (p. ej. agendado en progreso). Null = sin estado.
+  botState      Json?
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
@@ -2559,6 +2564,51 @@ model InboxMessage {
 
   @@index([threadId, sentAt])
   @@map("inbox_messages")
+}
+
+/// Configuración del bot de WhatsApp por clínica (multi-tenant: 1:1 con Clinic).
+/// Cerebro híbrido: reglas/FAQ (motor en src/lib/whatsapp/bot/engine.ts) +
+/// Claude (ai.ts, T3) + agenda (booking.ts, T4).
+model WhatsAppBotConfig {
+  id                  String   @id @default(cuid())
+  clinicId            String   @unique
+  enabled             Boolean  @default(false)
+  botName             String   @default("Asistente")
+  persona             String?  @db.Text
+  greeting            String?  @db.Text
+  /// Horario de atención del bot. Shape: { "0": { enabled, open, close }, … }
+  /// con día 0=Lunes … 6=Domingo (igual que ClinicSchedule); open/close "HH:MM".
+  businessHours       Json?
+  afterHoursMsg       String?  @db.Text
+  canAnswerFaq        Boolean  @default(true)
+  canBookAppointments Boolean  @default(false)
+  fallbackToHuman     Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  clinic Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  faqs   WhatsAppBotFaq[]
+
+  @@map("whatsapp_bot_configs")
+}
+
+/// Pregunta/respuesta frecuente que el bot responde por reglas (match de texto).
+model WhatsAppBotFaq {
+  id        String   @id @default(cuid())
+  clinicId  String
+  configId  String
+  question  String   @db.Text
+  answer    String   @db.Text
+  enabled   Boolean  @default(true)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  config WhatsAppBotConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId])
+  @@index([configId, enabled, order])
+  @@map("whatsapp_bot_faqs")
 }
 
 enum ReminderStatus {

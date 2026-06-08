@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { createHmac } from "crypto";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
+import { runBotTurn } from "@/lib/whatsapp/bot/engine";
+import { Prisma } from "@prisma/client";
 
 // GET — webhook verification by Meta
 export async function GET(req: NextRequest) {
@@ -47,81 +49,155 @@ export async function POST(req: NextRequest) {
 
     if (!messages?.length) return NextResponse.json({ ok: true });
 
-    const msg      = messages[0];
-    const from     = msg.from;           // patient's phone number (international format)
-    const text     = msg.text?.body?.trim().toLowerCase() ?? "";
+    const msg     = messages[0];
+    const from    = msg.from;                       // teléfono del paciente (formato internacional)
+    const rawText = msg.text?.body?.trim() ?? "";   // texto original (Inbox + bot)
+    const text    = rawText.toLowerCase();          // para detectar confirmar/cancelar
 
-    if (!from || !text) return NextResponse.json({ ok: true });
+    if (!from || !rawText) return NextResponse.json({ ok: true });
 
-    // Find clinic by WhatsApp phone number ID
+    // Resuelve la clínica por el phone_number_id de WhatsApp.
     const phoneNumberId = value?.metadata?.phone_number_id;
     const clinic = await prisma.clinic.findFirst({
       where: { waPhoneNumberId: phoneNumberId },
     });
     if (!clinic) return NextResponse.json({ ok: true });
 
-    // Find patient by phone number
-    // Normalize: Meta sends "521234567890", strip country code to get last 10 digits
+    // Empareja al paciente por teléfono (Meta manda "521234567890" → últimos 10).
     const fromNormalized = from.replace(/^52/, "").slice(-10);
     const patient = await prisma.patient.findFirst({
       where: { clinicId: clinic.id, phone: { contains: fromNormalized } },
-    });
-    if (!patient) return NextResponse.json({ ok: true });
-
-    // Find the most recent pending reminder for this patient
-    const reminder = await prisma.whatsAppReminder.findFirst({
-      where: {
-        clinicId:    clinic.id,
-        appointment: { patientId: patient.id },
-        status:      "SENT",
-        repliedAt:   null,
-      },
-      include: { appointment: true },
-      orderBy: { sentAt: "desc" },
+      select: { id: true },
     });
 
-    if (!reminder) return NextResponse.json({ ok: true });
+    // ── Ingest al Inbox unificado (generalizado para Meta, igual que Twilio) ──
+    const profileName = value?.contacts?.[0]?.profile?.name as string | undefined;
+    const now = new Date();
+    const externalThreadKey = from; // teléfono del remitente: estable por contacto
 
-    // Parse patient reply
-    const isConfirm = ["si","sí","confirmar","confirmo","yes","1"].some(k => text.includes(k));
-    const isCancel  = ["no","cancelar","cancelo","cancel","2"].some(k => text.includes(k));
-
-    if (isConfirm) {
-      await prisma.appointment.update({
-        where: { id: reminder.appointmentId },
-        data:  { status: "CONFIRMED", confirmedAt: new Date() },
+    let thread = await prisma.inboxThread.findFirst({
+      where: { clinicId: clinic.id, channel: "WHATSAPP", externalId: externalThreadKey },
+      select: { id: true, botActive: true, botState: true, patientId: true },
+    });
+    if (!thread) {
+      thread = await prisma.inboxThread.create({
+        data: {
+          clinicId: clinic.id,
+          channel: "WHATSAPP",
+          externalId: externalThreadKey,
+          patientId: patient?.id ?? null,
+          subject: profileName ? `WhatsApp · ${profileName}` : `WhatsApp · ${from}`,
+          status: "UNREAD",
+          lastMessageAt: now,
+        },
+        select: { id: true, botActive: true, botState: true, patientId: true },
       });
-      await prisma.$executeRaw`UPDATE whatsapp_reminders SET "patientReply"=${text}, "repliedAt"=NOW() WHERE id=${reminder.id}`;
-
-      if (clinic.waAccessToken && clinic.waPhoneNumberId) {
-        const appt = reminder.appointment;
-        const dateStr = new Intl.DateTimeFormat("es-MX", {
-          timeZone: clinic.timezone, weekday: "long", day: "numeric", month: "long",
-        }).format(appt.startsAt);
-        await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, from,
-          `✅ ¡Perfecto! Tu cita del ${dateStr} a las ${timeHHMMInTz(appt.startsAt, clinic.timezone)} está *confirmada*. Te esperamos. 😊`
-        );
-      }
-    } else if (isCancel) {
-      await prisma.appointment.update({
-        where: { id: reminder.appointmentId },
-        data:  { status: "CANCELLED", cancelledAt: new Date(), cancelReason: "Cancelado por paciente vía WhatsApp" },
-      });
-      await prisma.$executeRaw`UPDATE whatsapp_reminders SET "patientReply"=${text}, "repliedAt"=NOW() WHERE id=${reminder.id}`;
-
-      if (clinic.waAccessToken && clinic.waPhoneNumberId) {
-        await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, from,
-          `❌ Tu cita ha sido *cancelada*. Si deseas reagendar, comunícate con nosotros. ¡Hasta pronto!`
-        );
-      }
     } else {
-      // Save reply but don't change appointment status
-      await prisma.$executeRaw`UPDATE whatsapp_reminders SET "patientReply"=${text}, "repliedAt"=NOW() WHERE id=${reminder.id}`;
+      await prisma.inboxThread.update({
+        where: { id: thread.id },
+        data: {
+          status: "UNREAD",
+          lastMessageAt: now,
+          // si identificamos al paciente y el hilo no lo tenía, lo vinculamos.
+          ...(patient && !thread.patientId ? { patientId: patient.id } : {}),
+        },
+      });
     }
+
+    await prisma.inboxMessage.create({
+      data: {
+        threadId: thread.id,
+        direction: "IN",
+        body: rawText,
+        externalId: msg.id,
+        sentAt: now,
+      },
+    });
+
+    // ── CONSERVA el flujo de confirmar/cancelar recordatorios (igual que hoy) ──
+    // Solo aplica si hay un WhatsAppReminder SENT pendiente para este paciente.
+    const reminder = patient
+      ? await prisma.whatsAppReminder.findFirst({
+          where: {
+            clinicId:    clinic.id,
+            appointment: { patientId: patient.id },
+            status:      "SENT",
+            repliedAt:   null,
+          },
+          include: { appointment: true },
+          orderBy: { sentAt: "desc" },
+        })
+      : null;
+
+    if (reminder) {
+      const isConfirm = ["si", "sí", "confirmar", "confirmo", "yes", "1"].some((k) => text.includes(k));
+      const isCancel  = ["no", "cancelar", "cancelo", "cancel", "2"].some((k) => text.includes(k));
+
+      if (isConfirm) {
+        await prisma.appointment.update({
+          where: { id: reminder.appointmentId },
+          data:  { status: "CONFIRMED", confirmedAt: new Date() },
+        });
+        await prisma.$executeRaw`UPDATE whatsapp_reminders SET "patientReply"=${text}, "repliedAt"=NOW() WHERE id=${reminder.id}`;
+
+        if (clinic.waAccessToken && clinic.waPhoneNumberId) {
+          const appt = reminder.appointment;
+          const dateStr = new Intl.DateTimeFormat("es-MX", {
+            timeZone: clinic.timezone, weekday: "long", day: "numeric", month: "long",
+          }).format(appt.startsAt);
+          await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, from,
+            `✅ ¡Perfecto! Tu cita del ${dateStr} a las ${timeHHMMInTz(appt.startsAt, clinic.timezone)} está *confirmada*. Te esperamos. 😊`
+          );
+        }
+      } else if (isCancel) {
+        await prisma.appointment.update({
+          where: { id: reminder.appointmentId },
+          data:  { status: "CANCELLED", cancelledAt: new Date(), cancelReason: "Cancelado por paciente vía WhatsApp" },
+        });
+        await prisma.$executeRaw`UPDATE whatsapp_reminders SET "patientReply"=${text}, "repliedAt"=NOW() WHERE id=${reminder.id}`;
+
+        if (clinic.waAccessToken && clinic.waPhoneNumberId) {
+          await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, from,
+            `❌ Tu cita ha sido *cancelada*. Si deseas reagendar, comunícate con nosotros. ¡Hasta pronto!`
+          );
+        }
+      } else {
+        // Guarda la respuesta sin cambiar el estado de la cita.
+        await prisma.$executeRaw`UPDATE whatsapp_reminders SET "patientReply"=${text}, "repliedAt"=NOW() WHERE id=${reminder.id}`;
+      }
+
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── Sin recordatorio pendiente → bot híbrido configurable (FAQ + Claude + agenda) ──
+    const result = await runBotTurn({
+      clinicId: clinic.id,
+      threadId: thread.id,
+      patient: patient ? { id: patient.id, phone: from } : undefined,
+      incomingText: rawText,
+      history: [],
+      botState: (thread.botState ?? null) as Prisma.JsonValue | null,
+    });
+
+    if (result.reply && clinic.waAccessToken && clinic.waPhoneNumberId) {
+      await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, from, result.reply);
+      await prisma.inboxMessage.create({
+        data: { threadId: thread.id, direction: "OUT", body: result.reply, sentAt: new Date() },
+      });
+    }
+
+    // Persiste el estado multi-turno del bot (undefined ⇒ no cambiar).
+    if (result.newBotState !== undefined) {
+      await prisma.inboxThread.update({
+        where: { id: thread.id },
+        data: { botState: result.newBotState === null ? Prisma.DbNull : (result.newBotState as Prisma.InputJsonValue) },
+      });
+    }
+    // handoff: no se responde; el mensaje ya quedó en el Inbox para el staff.
 
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("WhatsApp webhook error:", err);
-    return NextResponse.json({ ok: true }); // always 200 to avoid Meta retries
+    return NextResponse.json({ ok: true }); // siempre 200 para evitar reintentos de Meta
   }
 }
