@@ -12,7 +12,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import JSZip from "jszip";
-import dicomParser from "dicom-parser";
 import {
   Loader2,
   RotateCcw,
@@ -26,7 +25,9 @@ import {
   Move,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { fetchWithCache } from "@/lib/dicom-cache";
+import { fetchWithCache, getDecodedSlices, putDecodedSlices } from "@/lib/dicom-cache";
+import { decodeSlice, isDicomEntryName, type DecodedSlice } from "./dicom-decode-core";
+import type { VolSlice } from "./Dicom3DVolume";
 
 // Render volumétrico 3D (three.js). Dinámico para no cargar el shader hasta que
 // el usuario abre la vista 3D.
@@ -47,15 +48,9 @@ interface Props {
   initialNotes?: string;
 }
 
-interface Slice {
-  rows: number;
-  cols: number;
-  pixels: Float32Array;
-  center: number;
-  width: number;
-  invert: boolean;
-  order: number;
-}
+// Cortes ya decodificados (HU en Int16) del worker o del fallback: reusamos el
+// tipo del núcleo de decodificación compartido.
+type Slice = DecodedSlice;
 
 type ViewMode = "axial" | "coronal" | "sagittal" | "volume";
 
@@ -73,88 +68,90 @@ function viewIcon(key: ViewMode) {
   return <Box className="w-3.5 h-3.5" aria-hidden />;
 }
 
-const UNCOMPRESSED = new Set([
-  "1.2.840.10008.1.2",
-  "1.2.840.10008.1.2.1",
-  "1.2.840.10008.1.2.2",
-]);
+type DecodeProgress = (done: number, total: number) => void;
 
-function firstNum(s: string | undefined, fallback: number): number {
-  if (!s) return fallback;
-  const v = parseFloat(s.split("\\")[0]);
-  return Number.isFinite(v) ? v : fallback;
-}
-
-// Decodifica un corte. Devuelve null si está comprimido, a color o es inválido
-// (lo saltamos sin romper el set).
-function decodeSlice(buf: ArrayBuffer, fallbackOrder: number): Slice | null {
+// Crea el worker de decodificación. El bundler de Next (webpack 5) emite el
+// worker como un chunk aparte gracias a new URL(..., import.meta.url). Devuelve
+// null si el entorno no soporta workers (entonces se decodifica en el hilo
+// principal).
+function createDecodeWorker(): Worker | null {
   try {
-    const byteArray = new Uint8Array(buf);
-    const ds = dicomParser.parseDicom(byteArray);
-    const transfer = (ds.string("x00020010") || "1.2.840.10008.1.2.1").trim();
-    if (!UNCOMPRESSED.has(transfer)) return null;
-
-    const rows = ds.uint16("x00280010") || 0;
-    const cols = ds.uint16("x00280011") || 0;
-    if (!rows || !cols) return null;
-    if ((ds.uint16("x00280002") || 1) !== 1) return null; // solo grises
-
-    const bitsAllocated = ds.uint16("x00280100") || 16;
-    const signed = (ds.uint16("x00280103") || 0) === 1;
-    const invert = (ds.string("x00280004") || "MONOCHROME2").trim() === "MONOCHROME1";
-    const slope = firstNum(ds.string("x00281053"), 1) || 1;
-    const intercept = firstNum(ds.string("x00281052"), 0);
-
-    const el = ds.elements.x7fe00010;
-    if (!el) return null;
-    const frameLen = rows * cols;
-    const out = new Float32Array(frameLen);
-    let minV = Infinity;
-    let maxV = -Infinity;
-
-    if (bitsAllocated === 16) {
-      const slice = byteArray.buffer.slice(el.dataOffset, el.dataOffset + el.length);
-      const raw = signed ? new Int16Array(slice) : new Uint16Array(slice);
-      const n = Math.min(frameLen, raw.length);
-      for (let i = 0; i < n; i++) {
-        const v = raw[i] * slope + intercept;
-        out[i] = v;
-        if (v < minV) minV = v;
-        if (v > maxV) maxV = v;
-      }
-    } else {
-      const raw = byteArray.subarray(el.dataOffset, el.dataOffset + el.length);
-      const n = Math.min(frameLen, raw.length);
-      for (let i = 0; i < n; i++) {
-        const v = raw[i] * slope + intercept;
-        out[i] = v;
-        if (v < minV) minV = v;
-        if (v > maxV) maxV = v;
-      }
-    }
-    if (!Number.isFinite(minV)) {
-      minV = 0;
-      maxV = 255;
-    }
-
-    let dc = firstNum(ds.string("x00281050"), NaN);
-    let dw = firstNum(ds.string("x00281051"), NaN);
-    if (!Number.isFinite(dc) || !Number.isFinite(dw) || dw <= 0) {
-      dc = (minV + maxV) / 2;
-      dw = Math.max(1, maxV - minV);
-    }
-
-    // Orden: InstanceNumber (x00200013) o, si no, posición Z (x00200032 z).
-    let order = parseInt(ds.string("x00200013") || "", 10);
-    if (!Number.isFinite(order)) {
-      const pos = ds.string("x00200032");
-      order = pos ? firstNum(pos.split("\\")[2], fallbackOrder) : fallbackOrder;
-    }
-
-    return { rows, cols, pixels: out, center: dc, width: dw, invert, order };
+    if (typeof window === "undefined" || typeof Worker === "undefined") return null;
+    return new Worker(new URL("./dicom-decode.worker.ts", import.meta.url));
   } catch {
     return null;
   }
+}
+
+// Decodifica el set en un Web Worker (jszip + dicom-parser fuera del hilo
+// principal). Rechaza si el worker no se puede crear o falla, para que el
+// llamador caiga al fallback en hilo principal. onWorker expone el worker para
+// poder terminarlo si el componente se desmonta a media decodificación.
+function decodeWithWorker(
+  blob: Blob,
+  onProgress: DecodeProgress,
+  onWorker?: (w: Worker) => void,
+): Promise<Slice[]> {
+  return new Promise((resolve, reject) => {
+    const worker = createDecodeWorker();
+    if (!worker) {
+      reject(new Error("worker unavailable"));
+      return;
+    }
+    onWorker?.(worker);
+    worker.onmessage = (e: MessageEvent) => {
+      const msg = e.data || {};
+      if (msg.type === "progress") {
+        onProgress(msg.done, msg.total);
+      } else if (msg.type === "done") {
+        worker.terminate();
+        resolve(msg.slices as Slice[]);
+      } else if (msg.type === "error") {
+        worker.terminate();
+        reject(new Error(msg.message || "worker error"));
+      }
+    };
+    worker.onerror = () => {
+      worker.terminate();
+      reject(new Error("worker error"));
+    };
+    // El Blob se clona por referencia (no copia los bytes pesados al worker).
+    worker.postMessage({ type: "decode", blob });
+  });
+}
+
+// Fallback en hilo principal: el mismo trabajo, pero cediendo el hilo cada 2
+// cortes para no congelar la UI (peor que el worker, pero siempre disponible).
+// Se usa si el worker no bundlea/instancia o falla en runtime.
+async function decodeOnMain(
+  blob: Blob,
+  onProgress: DecodeProgress,
+  isCancelled: () => boolean,
+): Promise<Slice[]> {
+  const zip = await JSZip.loadAsync(blob);
+  const entries = (Object.values(zip.files) as any[]).filter(
+    (f) => !f.dir && isDicomEntryName(f.name),
+  );
+  const total = entries.length;
+  onProgress(0, total);
+  const out: Slice[] = [];
+  let done = 0;
+  for (const entry of entries) {
+    if (isCancelled()) return out;
+    try {
+      const buf = await entry.async("arraybuffer");
+      const s = decodeSlice(buf, done);
+      if (s) out.push(s);
+    } catch {
+      /* corte inválido: se salta */
+    }
+    done++;
+    if (done % 2 === 0 || done === total) {
+      onProgress(done, total);
+      await new Promise((r) => setTimeout(r, 0)); // cede el hilo
+    }
+  }
+  return out;
 }
 
 export default function DicomSetViewer({ url, name, fileId, patientId, initialNotes = "" }: Props) {
@@ -175,65 +172,88 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
   const dragRef = useRef<{ x: number; y: number } | null>(null);
   const defaultWin = useRef({ c: 0, w: 1 });
 
-  // Descarga + descomprime + decodifica el set.
+  // La signed URL cambia en cada apertura (TTL corto); el fileId es estable. El
+  // efecto se re-ejecuta por fileId, NO por url, para no re-decodificar al
+  // reabrir el mismo estudio. urlRef da la última url para un miss de cache.
+  const urlRef = useRef(url);
+  urlRef.current = url;
+
+  // Carga el set: 1) cache de cortes decodificados → 2) descarga del .zip (cache
+  // de blobs) → 3) decode en Web Worker (con fallback al hilo principal) → 4)
+  // cachea el decodificado. Salvo el fallback, nada de esto corre en el main thread.
   useEffect(() => {
     let cancelled = false;
+    let activeWorker: Worker | null = null;
+    const isCancelled = () => cancelled;
+
+    const finalize = (arr: Slice[]) => {
+      arr.sort((a, b) => a.order - b.order);
+      const mid = Math.floor(arr.length / 2);
+      defaultWin.current = { c: arr[mid].center, w: arr[mid].width };
+      setSlices(arr);
+      setIdx(mid);
+      setCoronalY(Math.floor(arr[0].rows / 2));
+      setSagittalX(Math.floor(arr[0].cols / 2));
+      setView("volume"); // muestra el volumen 3D primero al abrir el estudio
+      setCenter(arr[mid].center);
+      setWidth(arr[mid].width);
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+      setStatus("ready");
+    };
+
     setStatus("loading");
+    setProgress({ done: 0, total: 0 });
     (async () => {
       try {
-        // Sirve el .zip del CBCT desde la cache (IndexedDB por fileId) cuando ya
-        // se descargó antes: evita re-pegarle a Supabase y ahorra egress.
-        const blob = await fetchWithCache(fileId, url);
-        const zip = await JSZip.loadAsync(blob);
-        const entries = Object.values(zip.files).filter(
-          (f: any) => !f.dir && (/\.(dcm|dicom)$/i.test(f.name) || !/\.[a-z0-9]+$/i.test(f.name)),
-        );
+        // 1) ¿Cortes ya decodificados en cache (IndexedDB por fileId)? Salta
+        //    descarga + descompresión + decodificación por completo.
+        const cachedSlices = await getDecodedSlices(fileId);
         if (cancelled) return;
-        setProgress({ done: 0, total: entries.length });
+        if (cachedSlices && cachedSlices.length > 0) {
+          finalize(cachedSlices as Slice[]);
+          return;
+        }
 
-        const out: Slice[] = [];
-        let done = 0;
-        for (const entry of entries as any[]) {
+        // 2) Descarga el .zip (cache de blobs por fileId; evita re-pegarle a
+        //    Supabase y ahorra egress).
+        const blob = await fetchWithCache(fileId, urlRef.current);
+        if (cancelled) return;
+
+        // 3) Decodifica en Web Worker (fuera del hilo principal). Si el worker no
+        //    está disponible o falla, cae al hilo principal con cesión fina.
+        const onProgress: DecodeProgress = (done, total) => {
+          if (!cancelled) setProgress({ done, total });
+        };
+        let decoded: Slice[];
+        try {
+          decoded = await decodeWithWorker(blob, onProgress, (w) => {
+            activeWorker = w;
+          });
+        } catch {
           if (cancelled) return;
-          try {
-            const buf = await entry.async("arraybuffer");
-            const s = decodeSlice(buf, done);
-            if (s) out.push(s);
-          } catch {
-            /* corte inválido: se salta */
-          }
-          done++;
-          if (done % 8 === 0) {
-            setProgress({ done, total: entries.length });
-            await new Promise((r) => setTimeout(r, 0)); // cede el hilo (no congela la UI)
-          }
+          decoded = await decodeOnMain(blob, onProgress, isCancelled);
         }
         if (cancelled) return;
-        if (out.length === 0) {
+        if (decoded.length === 0) {
           setStatus("empty");
           return;
         }
-        out.sort((a, b) => a.order - b.order);
-        const mid = Math.floor(out.length / 2);
-        defaultWin.current = { c: out[mid].center, w: out[mid].width };
-        setSlices(out);
-        setIdx(mid);
-        setCoronalY(Math.floor(out[0].rows / 2));
-        setSagittalX(Math.floor(out[0].cols / 2));
-        setView("volume"); // muestra el volumen 3D primero al abrir el estudio
-        setCenter(out[mid].center);
-        setWidth(out[mid].width);
-        setZoom(1);
-        setPan({ x: 0, y: 0 });
-        setStatus("ready");
+
+        finalize(decoded);
+        // 4) Cachea el decodificado (best-effort) para próximas aperturas.
+        void putDecodedSlices(fileId, decoded);
       } catch {
         if (!cancelled) setStatus("error");
       }
     })();
     return () => {
       cancelled = true;
+      activeWorker?.terminate();
     };
-  }, [url]);
+    // Depende de fileId (estable), no de url: ver urlRef arriba.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileId]);
 
   // Pinta la vista 2D activa (axial / coronal / sagital) con el mismo
   // window/level. Cada plano MPR es un re-muestreo 2D del volumen, de tamaño
@@ -489,7 +509,10 @@ export default function DicomSetViewer({ url, name, fileId, patientId, initialNo
         <div className="mb-3">{viewBar}</div>
 
         {view === "volume" ? (
-          <Dicom3DVolume slices={slices} />
+          // Dicom3DVolume (A1) lee pixels por índice (HU), compatible con
+          // Int16Array; su VolSlice aún tipa Float32Array, así que adaptamos el
+          // tipo aquí sin tocar ese archivo.
+          <Dicom3DVolume slices={slices as unknown as VolSlice[]} />
         ) : (
           <>
             <div

@@ -3,17 +3,26 @@
 // el visor: las signed URLs cambian en cada apertura (TTL corto), pero cada
 // archivo tiene un fileId ESTABLE (PatientFile.id) — cacheamos por fileId.
 //
-// Objetivo: reducir el egress/bandwidth de Supabase. Reabrir el mismo estudio
-// (incluso tras recargar la página) sirve el blob desde disco, sin red.
+// Dos stores:
+//   - "blobs":   el archivo crudo (.zip / .dcm / modelo). Ahorra egress de red.
+//   - "decoded": los cortes CBCT YA decodificados (Int16 HU) por fileId. Ahorra
+//                CPU/jank: reabrir un estudio salta descompresión + decode.
 //
-// Todo es de degradación elegante: si IndexedDB no existe o falla, getCachedBlob
-// devuelve null y fetchWithCache cae a un fetch normal. Nada de esto lanza.
+// Todo es de degradación elegante: si IndexedDB no existe o falla, los lectores
+// devuelven null y los escritores se ignoran en silencio. Nada de esto lanza.
 
 const DB_NAME = "mediflow-files";
+// v2: agrega el store "decoded" junto al "blobs" de v1 (migración no destructiva).
+const DB_VERSION = 2;
 const STORE = "blobs";
-// Tope total de la cache. Por encima, se eliminan las entradas más antiguas
-// (LRU por savedAt) hasta bajar del límite. 1.5 GB cubre varios CBCT.
+const DECODED_STORE = "decoded";
+// Tope total de la cache de blobs (.zip crudos). Por encima, se eliminan las
+// entradas más antiguas (LRU por savedAt) hasta bajar del límite. 1.5 GB cubre
+// varios CBCT.
 const MAX_TOTAL_BYTES = 1.5 * 1024 * 1024 * 1024;
+// Tope propio del store de decodificados (los cortes Int16 suelen pesar más que
+// el .zip comprimido). 1.2 GB.
+const MAX_DECODED_BYTES = 1.2 * 1024 * 1024 * 1024;
 
 interface CacheRecord {
   blob: Blob;
@@ -27,6 +36,10 @@ interface MetaEntry {
   savedAt: number;
 }
 
+// Valor que cabe en cualquier store: el registro de blobs o el de cortes
+// decodificados (ambos traen size + savedAt para la contabilidad LRU).
+type StoredRecord = CacheRecord | DecodedRecord;
+
 // Promesa de apertura memoizada. Si la apertura falla, se limpia para reintentar
 // en una llamada posterior.
 let dbPromise: Promise<IDBDatabase | null> | null = null;
@@ -36,14 +49,14 @@ function openDB(): Promise<IDBDatabase | null> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise<IDBDatabase | null>((resolve) => {
     try {
-      const req = indexedDB.open(DB_NAME, 1);
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
       req.onupgradeneeded = () => {
         const db = req.result;
-        if (!db.objectStoreNames.contains(STORE)) {
-          // Claves fuera de línea: la clave es el fileId, pasado explícitamente
-          // en cada put. El valor solo guarda { blob, size, savedAt }.
-          db.createObjectStore(STORE);
-        }
+        // Claves fuera de línea: la clave es el fileId, pasado explícitamente en
+        // cada put. IndexedDB preserva los stores existentes al subir de versión,
+        // así que crear "decoded" no borra "blobs".
+        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+        if (!db.objectStoreNames.contains(DECODED_STORE)) db.createObjectStore(DECODED_STORE);
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => resolve(null);
@@ -58,13 +71,13 @@ function openDB(): Promise<IDBDatabase | null> {
   return dbPromise;
 }
 
-// Recorre el store y junta metadatos (sin materializar los bytes del blob: el
+// Recorre un store y junta metadatos (sin materializar los bytes del blob: el
 // Blob de IndexedDB es una referencia perezosa a disco, leer .size no lo carga).
-function listMeta(db: IDBDatabase): Promise<MetaEntry[]> {
+function listMeta(db: IDBDatabase, storeName: string = STORE): Promise<MetaEntry[]> {
   return new Promise((resolve) => {
     const out: MetaEntry[] = [];
     try {
-      const store = db.transaction(STORE, "readonly").objectStore(STORE);
+      const store = db.transaction(storeName, "readonly").objectStore(storeName);
       const req = store.openCursor();
       req.onsuccess = () => {
         const cur = req.result;
@@ -87,10 +100,10 @@ function listMeta(db: IDBDatabase): Promise<MetaEntry[]> {
   });
 }
 
-function del(db: IDBDatabase, key: IDBValidKey): Promise<void> {
+function del(db: IDBDatabase, key: IDBValidKey, storeName: string = STORE): Promise<void> {
   return new Promise((resolve) => {
     try {
-      const store = db.transaction(STORE, "readwrite").objectStore(STORE);
+      const store = db.transaction(storeName, "readwrite").objectStore(storeName);
       const req = store.delete(key);
       req.onsuccess = () => resolve();
       req.onerror = () => resolve();
@@ -103,11 +116,16 @@ function del(db: IDBDatabase, key: IDBValidKey): Promise<void> {
 // Escribe un registro. Resuelve cuando la transacción confirma; rechaza si se
 // aborta (p. ej. QuotaExceededError) para que el llamador pueda liberar y
 // reintentar.
-function putRecord(db: IDBDatabase, fileId: string, value: CacheRecord): Promise<void> {
+function putRecord(
+  db: IDBDatabase,
+  fileId: string,
+  value: StoredRecord,
+  storeName: string = STORE,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     try {
-      const t = db.transaction(STORE, "readwrite");
-      t.objectStore(STORE).put(value, fileId);
+      const t = db.transaction(storeName, "readwrite");
+      t.objectStore(storeName).put(value, fileId);
       t.oncomplete = () => resolve();
       t.onabort = () => reject(t.error || new Error("abort"));
       t.onerror = () => reject(t.error || new Error("error"));
@@ -118,15 +136,20 @@ function putRecord(db: IDBDatabase, fileId: string, value: CacheRecord): Promise
 }
 
 // Elimina entradas más antiguas (savedAt asc) hasta que el total + el entrante
-// quepa bajo el tope.
-async function enforceCap(db: IDBDatabase, incoming: number): Promise<void> {
+// quepa bajo el tope del store indicado.
+async function enforceCap(
+  db: IDBDatabase,
+  incoming: number,
+  storeName: string = STORE,
+  cap: number = MAX_TOTAL_BYTES,
+): Promise<void> {
   try {
-    const entries = await listMeta(db);
+    const entries = await listMeta(db, storeName);
     entries.sort((a, b) => a.savedAt - b.savedAt);
     let total = entries.reduce((s, e) => s + e.size, 0) + incoming;
     for (const e of entries) {
-      if (total <= MAX_TOTAL_BYTES) break;
-      await del(db, e.key);
+      if (total <= cap) break;
+      await del(db, e.key, storeName);
       total -= e.size;
     }
   } catch {
@@ -136,13 +159,13 @@ async function enforceCap(db: IDBDatabase, incoming: number): Promise<void> {
 
 // Borra las más antiguas hasta liberar al menos `needed` bytes (para reintentar
 // tras un error de cuota).
-async function evictOldest(db: IDBDatabase, needed: number): Promise<void> {
+async function evictOldest(db: IDBDatabase, needed: number, storeName: string = STORE): Promise<void> {
   try {
-    const entries = await listMeta(db);
+    const entries = await listMeta(db, storeName);
     entries.sort((a, b) => a.savedAt - b.savedAt);
     let freed = 0;
     for (const e of entries) {
-      await del(db, e.key);
+      await del(db, e.key, storeName);
       freed += e.size;
       if (freed >= needed) break;
     }
@@ -232,4 +255,83 @@ export async function fetchWithCache(fileId: string, url: string): Promise<Blob>
   // Guarda en segundo plano: no esperamos a IndexedDB para devolver el blob.
   void putCachedBlob(fileId, blob);
   return blob;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Cache de CORTES DECODIFICADOS (Int16 HU) por fileId.                        */
+/* Reabrir un estudio CBCT salta descompresión + decodificación por completo.  */
+/* -------------------------------------------------------------------------- */
+
+export interface DecodedSliceRecord {
+  rows: number;
+  cols: number;
+  pixels: Int16Array;
+  center: number;
+  width: number;
+  invert: boolean;
+  order: number;
+}
+
+interface DecodedRecord {
+  slices: DecodedSliceRecord[];
+  size: number;
+  savedAt: number;
+}
+
+/**
+ * Devuelve los cortes decodificados cacheados para un fileId, o null si no están
+ * o IndexedDB no está disponible. Valida defensivamente la forma del registro
+ * (los Int16Array se restauran solos vía structured clone). NUNCA lanza.
+ */
+export async function getDecodedSlices(fileId: string): Promise<DecodedSliceRecord[] | null> {
+  if (!fileId) return null;
+  try {
+    const db = await openDB();
+    if (!db) return null;
+    const store = db.transaction(DECODED_STORE, "readonly").objectStore(DECODED_STORE);
+    const rec = await new Promise<DecodedRecord | undefined>((resolve, reject) => {
+      const req = store.get(fileId);
+      req.onsuccess = () => resolve(req.result as DecodedRecord | undefined);
+      req.onerror = () => reject(req.error);
+    });
+    const slices = rec?.slices;
+    if (Array.isArray(slices) && slices.length > 0 && slices[0]?.pixels instanceof Int16Array) {
+      return slices;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Guarda los cortes decodificados por fileId (best-effort). Aplica un tope LRU
+ * propio antes de guardar; ante QuotaExceededError libera las entradas más
+ * antiguas y reintenta una vez; si aún falla, se ignora. NUNCA lanza.
+ */
+export async function putDecodedSlices(fileId: string, slices: DecodedSliceRecord[]): Promise<void> {
+  if (!fileId || !Array.isArray(slices) || slices.length === 0) return;
+  try {
+    const db = await openDB();
+    if (!db) return;
+    let size = 0;
+    for (const s of slices) size += s.pixels?.byteLength || 0;
+    await enforceCap(db, size, DECODED_STORE, MAX_DECODED_BYTES);
+    const value: DecodedRecord = { slices, size, savedAt: Date.now() };
+    try {
+      await putRecord(db, fileId, value, DECODED_STORE);
+    } catch (e) {
+      if (isQuotaError(e)) {
+        await evictOldest(db, size, DECODED_STORE);
+        try {
+          await putRecord(db, fileId, { slices, size, savedAt: Date.now() }, DECODED_STORE);
+        } catch {
+          /* sigue sin caber: se ignora */
+        }
+      }
+      /* otros errores: se ignoran (degradación) */
+    }
+  } catch {
+    /* IndexedDB no disponible o transacción fallida: se ignora */
+  }
 }

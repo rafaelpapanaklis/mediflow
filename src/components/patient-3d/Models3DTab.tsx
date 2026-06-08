@@ -352,6 +352,7 @@ export function Models3DTab({ patientId }: { patientId: string }) {
               format={formatFromName(f.name)}
               sizeBytes={f.size}
               name={f.name}
+              fileId={f.id}
               onOpen={() => openViewer(f)}
             />
           )}

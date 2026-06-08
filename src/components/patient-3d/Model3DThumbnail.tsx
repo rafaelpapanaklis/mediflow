@@ -16,6 +16,8 @@ import { PLYLoader } from "three/examples/jsm/loaders/PLYLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { Box, Loader2, Layers } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
+import { fetchWithCache } from "@/lib/dicom-cache";
+import { getCachedThumb, putCachedThumb } from "@/lib/thumb-cache";
 import type { Model3DFormat } from "./Model3DViewer";
 
 const AUTO_MAX_BYTES = 8 * 1024 * 1024; // ≤8 MB: miniatura automática.
@@ -66,54 +68,71 @@ function disposeObject(obj: THREE.Object3D) {
 }
 
 // Carga el modelo y le aplica el mismo material que el visor para coherencia.
-function loadObject(url: string, fmt: Model3DFormat): Promise<THREE.Object3D> {
-  return new Promise((resolve, reject) => {
-    const onErr = (err: unknown) => reject(err);
-    if (fmt === "obj") {
-      new OBJLoader().load(
-        url,
-        (group) => {
-          group.traverse((child) => {
-            const mesh = child as THREE.Mesh;
-            if (mesh.isMesh) {
-              mesh.geometry?.computeVertexNormals?.();
-              mesh.material = new THREE.MeshPhongMaterial({
-                color: TOOTH_COLOR,
-                specular: 0x222222,
-                shininess: 70,
-                side: THREE.DoubleSide,
-              });
-            }
-          });
-          resolve(group);
-        },
-        undefined,
-        onErr,
-      );
-      return;
-    }
-    const onGeo = (geo: THREE.BufferGeometry) => {
-      geo.computeVertexNormals();
-      const hasColor = geo.hasAttribute("color");
-      const material = new THREE.MeshPhongMaterial({
-        color: hasColor ? 0xffffff : TOOTH_COLOR,
-        vertexColors: hasColor,
-        specular: 0x222222,
-        shininess: 70,
-        side: THREE.DoubleSide,
-      });
-      resolve(new THREE.Mesh(geo, material));
-    };
-    if (fmt === "ply") new PLYLoader().load(url, onGeo, undefined, onErr);
-    else new STLLoader().load(url, onGeo, undefined, onErr);
+// La descarga se rutea por la cache IndexedDB (fetchWithCache por fileId) cuando
+// hay fileId, evitando re-descargar de Supabase; si no, cae a un fetch normal.
+// El buffer se obtiene UNA sola vez y se parsea en memoria (STL/PLY/OBJ .parse),
+// sin que el loader vuelva a pegarle a la red.
+async function loadObject(
+  url: string,
+  fmt: Model3DFormat,
+  fileId?: string,
+): Promise<THREE.Object3D> {
+  const blob = fileId ? await fetchWithCache(fileId, url) : await (await fetch(url)).blob();
+  const buf = await blob.arrayBuffer();
+
+  if (fmt === "obj") {
+    const group = new OBJLoader().parse(new TextDecoder().decode(new Uint8Array(buf)));
+    group.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (mesh.isMesh) {
+        mesh.geometry?.computeVertexNormals?.();
+        mesh.material = new THREE.MeshPhongMaterial({
+          color: TOOTH_COLOR,
+          specular: 0x222222,
+          shininess: 70,
+          side: THREE.DoubleSide,
+        });
+      }
+    });
+    return group;
+  }
+
+  const geo =
+    fmt === "ply" ? new PLYLoader().parse(buf) : new STLLoader().parse(buf);
+  geo.computeVertexNormals();
+  const hasColor = geo.hasAttribute("color");
+  const material = new THREE.MeshPhongMaterial({
+    color: hasColor ? 0xffffff : TOOTH_COLOR,
+    vertexColors: hasColor,
+    specular: 0x222222,
+    shininess: 70,
+    side: THREE.DoubleSide,
   });
+  return new THREE.Mesh(geo, material);
 }
 
 // Renderiza un frame a un dataURL PNG y libera el contexto WebGL al terminar.
 // Tope de seguridad: si la carga del modelo o el render no terminan en
 // RENDER_TIMEOUT_MS, la promesa se rechaza (Promise.race) y el `finally` libera
 // SIEMPRE el slot del semáforo; así un modelo colgado nunca bloquea la lista.
-async function renderToDataUrl(url: string, fmt: Model3DFormat, signal: AbortSignal): Promise<string> {
+//
+// Si hay fileId: primero se consulta la cache de miniaturas (IndexedDB). Un
+// cache-hit devuelve el PNG SIN adquirir el slot del semáforo ni crear el
+// WebGLRenderer (ahorro real de hardware). Tras generar un PNG nuevo, se persiste
+// best-effort por fileId.
+async function renderToDataUrl(
+  url: string,
+  fmt: Model3DFormat,
+  signal: AbortSignal,
+  fileId?: string,
+): Promise<string> {
+  // Cache-hit: salta por completo el semáforo y el contexto WebGL.
+  if (fileId) {
+    const hit = await getCachedThumb(fileId);
+    if (hit) return hit;
+  }
+  if (signal.aborted) throw new Error("aborted");
+
   await acquireSlot();
   let renderer: THREE.WebGLRenderer | null = null;
   let object: THREE.Object3D | null = null;
@@ -122,7 +141,7 @@ async function renderToDataUrl(url: string, fmt: Model3DFormat, signal: AbortSig
   try {
     const work = (async (): Promise<string> => {
       if (signal.aborted) throw new Error("aborted");
-      const obj = await loadObject(url, fmt);
+      const obj = await loadObject(url, fmt, fileId);
       // Si ya venció el timeout (o se abortó), no crear el contexto WebGL.
       if (settled) throw new Error("timeout");
       if (signal.aborted) throw new Error("aborted");
@@ -149,11 +168,14 @@ async function renderToDataUrl(url: string, fmt: Model3DFormat, signal: AbortSig
       camera.updateProjectionMatrix();
 
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
-      renderer.setPixelRatio(2);
+      renderer.setPixelRatio(1.5);
       renderer.setSize(THUMB_PX, THUMB_PX, false);
       renderer.setClearColor(0x000000, 0);
       renderer.render(scene, camera);
-      return renderer.domElement.toDataURL("image/png");
+      const dataUrl = renderer.domElement.toDataURL("image/png");
+      // Persiste la miniatura por fileId (best-effort, no bloquea el retorno).
+      if (fileId) void putCachedThumb(fileId, dataUrl);
+      return dataUrl;
     })();
     const timeout = new Promise<string>((_, reject) => {
       timer = setTimeout(() => reject(new Error("timeout")), RENDER_TIMEOUT_MS);
@@ -176,10 +198,11 @@ interface Props {
   format?: Model3DFormat;
   sizeBytes?: number | null;
   name: string;
+  fileId?: string;
   onOpen?: () => void;
 }
 
-export default function Model3DThumbnail({ url, format, sizeBytes, name, onOpen }: Props) {
+export default function Model3DThumbnail({ url, format, sizeBytes, name, fileId, onOpen }: Props) {
   const t = useT();
   const fmt: Model3DFormat = format ?? "stl";
   const isDicom = fmt === "dicom"; // DICOM no se renderiza como malla: placeholder.
@@ -225,12 +248,12 @@ export default function Model3DThumbnail({ url, format, sizeBytes, name, onOpen 
   useEffect(() => {
     if (!visible || isDicom) return; // DICOM: placeholder, sin render 3D.
     if (!auto && !requested) return; // pesados: solo bajo demanda (hover/foco).
-    const key = `${url}|${fmt}|${retry}`;
+    const key = `${fileId ?? url}|${fmt}|${retry}`;
     if (startedKeyRef.current === key) return; // ya iniciado para este modelo/intento.
     startedKeyRef.current = key;
     const controller = new AbortController();
     setPhase("loading");
-    renderToDataUrl(url, fmt, controller.signal)
+    renderToDataUrl(url, fmt, controller.signal, fileId)
       .then((dataUrl) => {
         if (!controller.signal.aborted) {
           setImg(dataUrl);
@@ -240,9 +263,9 @@ export default function Model3DThumbnail({ url, format, sizeBytes, name, onOpen 
       .catch(() => {
         if (!controller.signal.aborted) setPhase("error");
       });
-    // El cleanup solo corre en desmontaje real o si cambia url/fmt/retry.
+    // El cleanup solo corre en desmontaje real o si cambia url/fmt/retry/fileId.
     return () => controller.abort();
-  }, [visible, auto, requested, url, fmt, isDicom, retry]);
+  }, [visible, auto, requested, url, fmt, isDicom, retry, fileId]);
 
   // Reintenta una sola vez un render fallido (al pasar/enfocar el ícono de error).
   const retryRender = () => {
