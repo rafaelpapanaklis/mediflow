@@ -58,10 +58,12 @@ Para evitar que se mezclen datos nuevos con datos restaurados:
 #### Opción C — Dump cifrado semanal (último recurso)
 
 Si Supabase backups fallan por completo:
-1. Storage → `patient-files` → carpeta `db-backups`.
-2. Descargar el `.json.enc` más reciente.
-3. Descifrar con la receta de `docs/BACKUPS.md` (sección "Cómo restaurar").
-4. Importar el JSON con un script ad-hoc (TODO: `docs/restore-from-dump.mjs`).
+1. Storage → `patient-files` → carpeta `db-backups/{YYYY-MM-DD}` más reciente
+   **que contenga `__manifest.json`** (sentinela de corrida completa).
+2. Descargar los `{clinicId}.ndjson.enc` (uno por clínica) + `__global.ndjson.enc`.
+3. Descifrar cada archivo con la receta de `docs/BACKUPS.md` (mismo sobre que v1;
+   la salida es NDJSON, una línea por fila `{"t":"<tabla>","d":{<fila>}}`).
+4. Importar agrupando por `t` con un script ad-hoc (TODO: `docs/restore-from-dump.mjs`).
    Esto sólo cubre las tablas críticas — el resto se pierde si no hay PITR.
 
 ### Paso 3 — Validación post-restore (queries SQL)

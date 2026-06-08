@@ -49,15 +49,32 @@ domingo 04:00 CDMX).
 - Vuelca tablas críticas: `patients`, `medical_records`, `prescriptions`,
   `invoices`, `audit_logs` (últimos 7 días — el resto vive en PITR),
   `doctor_signature_certs` (sólo metadata), `arco_requests`.
-- Cifra con AES-256-GCM usando `DATA_ENCRYPTION_KEY`.
-- Sube a `patient-files/db-backups/{YYYY-MM-DD}_{ts}.json.enc`.
-- Retention: 90 días, sweep automático en la misma corrida.
+- **Escala por clínica (v2):** en vez de cargar toda la base en memoria y cifrar
+  un único archivo gigante (OOM al crecer), exporta **una clínica a la vez** con
+  cursor/paginado y escribe **un archivo por clínica**:
+  - `patient-files/db-backups/{YYYY-MM-DD}/{clinicId}.ndjson.enc`
+  - `…/__global.ndjson.enc` — filas sin clínica (ARCO públicas, `clinicId` null).
+  - `…/__manifest.json` — resumen + **sentinela de "corrida completa"**.
+- Cada `.ndjson.enc` usa el **mismo sobre** que v1 (línea header JSON
+  `{v,alg,iv,tag}` + ciphertext **AES-256-GCM** con `DATA_ENCRYPTION_KEY`), así
+  que la receta de descifrado de abajo funciona **por archivo**. El texto plano
+  ya **no** es un JSON único: es **NDJSON** (una línea por fila),
+  `{"t":"<tabla>","d":{<fila>}}`.
+- **Reanudable:** si una corrida no termina dentro del presupuesto de tiempo
+  (~240s de los 300s de `maxDuration`), deja los archivos ya subidos y responde
+  `complete:false`; la siguiente corrida lista la carpeta del día y omite las
+  clínicas ya hechas. El `__manifest.json` sólo aparece cuando terminó completa.
+- Retention: 90 días, sweep automático en la misma corrida (borra carpetas de
+  fecha viejas y dumps planos `*.json.enc` legacy de v1).
 
 ### Cómo restaurar manualmente
 
 ```bash
-# 1. Descargar el dump desde Supabase Dashboard → Storage → patient-files → db-backups
-# 2. Descifrar (script en docs/restore.mjs — TBD; receta abajo)
+# 1. Descargar UN archivo de clínica: Supabase Dashboard → Storage →
+#    patient-files → db-backups/{YYYY-MM-DD}/{clinicId}.ndjson.enc
+#    (repite por cada clínica; __global.ndjson.enc para las filas sin clínica).
+# 2. Descifrar (MISMO sobre que v1). La salida es NDJSON: una línea por fila,
+#    {"t":"<tabla>","d":{<fila>}}. Agrupa luego por "t" para importar cada tabla.
 node -e "
   const fs = require('fs');
   const { createDecipheriv } = require('crypto');
@@ -71,7 +88,7 @@ node -e "
   const d = createDecipheriv('aes-256-gcm', key, iv);
   d.setAuthTag(tag);
   console.log(Buffer.concat([d.update(ct), d.final()]).toString('utf8'));
-" path/to/dump.json.enc > restored.json
+" path/to/{clinicId}.ndjson.enc > restored.ndjson
 ```
 
 ### Quién es el on-call
@@ -81,10 +98,10 @@ node -e "
 
 ## Verificación de integridad
 
-Mensual (manual): descargar el dump más reciente y correr la receta de
-descifrado para confirmar que `DATA_ENCRYPTION_KEY` es correcta y el
-contenido es JSON válido. Sin esta verificación, un cambio accidental
-de la clave deja todos los dumps inservibles.
+Mensual (manual): descargar un archivo de clínica de la carpeta más reciente
+(que tenga `__manifest.json`) y correr la receta de descifrado para confirmar
+que `DATA_ENCRYPTION_KEY` es correcta y el contenido es NDJSON válido. Sin esta
+verificación, un cambio accidental de la clave deja todos los dumps inservibles.
 
 ## Pendientes
 
