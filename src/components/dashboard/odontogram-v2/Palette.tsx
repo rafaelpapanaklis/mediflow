@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import { GROUPS, CONDITIONS, GROUP_COLOR, I18N, classify } from "./data";
-import type { PaletteProps, ConditionSwatchProps } from "./types";
+import type { PaletteProps, ConditionSwatchProps, ToothRecord } from "./types";
 import { Surface2D } from "./Surface2D";
 
 /**
- * Palette — specialty tabs + finding chips + eraser. Wires onPick/onEraser.
- * WS3-T5/T6 refine the chip visuals; the swatch preview uses the Surface2D stub.
+ * Palette — specialty tabs + finding chips + eraser. 1:1 port of design
+ * jsx/odontogram.jsx (Palette + ConditionSwatch). Swatches render via Surface2D.
  */
 export function Palette({ lang, brush, eraser, onPick, onEraser }: PaletteProps) {
   const t = I18N[lang];
@@ -16,7 +16,7 @@ export function Palette({ lang, brush, eraser, onPick, onEraser }: PaletteProps)
   const gc = GROUP_COLOR[active];
 
   return (
-    <div className="odo-palette" data-odo-stub="palette">
+    <div className="odo-palette">
       <div className="odo-pal-tabs">
         {GROUPS.map((g) => (
           <button
@@ -56,13 +56,16 @@ export function Palette({ lang, brush, eraser, onPick, onEraser }: PaletteProps)
   );
 }
 
-/** ConditionSwatch — mini preview of how a finding renders (uses Surface2D stub). */
+/** ConditionSwatch — mini preview of how a finding renders (fake record on molar 16). */
 export function ConditionSwatch({ cond }: ConditionSwatchProps) {
+  // Mirror the design: surface findings preview on O (fills also tint M); whole-tooth on the glyph.
   const meta = classify(16);
-  const record =
-    cond.target === "surface"
-      ? { surfaces: { [meta.center]: [cond.id] }, tooth: [] as string[] }
-      : { surfaces: {}, tooth: [cond.id] };
+  const record: ToothRecord =
+    cond.target !== "surface"
+      ? { surfaces: {}, tooth: [cond.id] }
+      : cond.render === "fill"
+        ? { surfaces: { O: [cond.id], M: [cond.id] }, tooth: [] }
+        : { surfaces: { O: [cond.id] }, tooth: [] };
   return (
     <span style={{ display: "inline-flex" }}>
       <Surface2D meta={meta} record={record} size={30} onSurface={() => {}} />
