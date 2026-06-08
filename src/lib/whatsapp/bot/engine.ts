@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { generateAiReply } from "./ai";
-import { handleBookingTurn } from "./booking";
+import { handleBookingTurn, isBookingInProgress } from "./booking";
 import { BotIntent } from "./types";
 import type {
   BotBusinessHours,
@@ -158,6 +158,14 @@ export async function runBotTurn(input: BotTurnInput): Promise<BotTurnResult> {
     select: { botActive: true },
   });
   if (thread && thread.botActive === false) return { intent: BotIntent.UNKNOWN };
+
+  // 0) Flujo de agenda en progreso (multi-turno): continúa antes que after-hours,
+  //    FAQ e IA, aunque el texto del paso no dispare detectBookingIntent. Un
+  //    agendado a medias debe poder terminarse aunque el cliente escriba tarde.
+  if (config.canBookAppointments && isBookingInProgress(input.botState)) {
+    const booking = await handleBookingTurn(input, config);
+    if (booking) return booking;
+  }
 
   // Fuera de horario → mensaje de after-hours (si está configurado).
   if (config.afterHoursMsg && !isWithinBusinessHours(config.businessHours, timezone, new Date())) {
