@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Phone, Mail, Calendar, AlertTriangle, Plus, Printer, Edit, Download, Pill, HeartPulse, Play, Trash2, XCircle } from "lucide-react";
 import { formatCurrency, formatDate, getInitials, avatarColor } from "@/lib/utils";
 import { ageFromDob, fmtMXN } from "@/lib/format";
-import { Odontogram } from "@/components/dashboard/odontogram/Odontogram";
+import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
 import { HeroCard } from "@/components/dashboard/patient-detail/hero-card";
 import { TreatmentsModal, type SuggestedTreatment } from "@/components/dashboard/patient-detail/treatments-modal";
 import { QuickNav } from "@/components/dashboard/patient-detail/quick-nav";
@@ -2112,7 +2112,7 @@ export function PatientDetailClient({
 
           {/* ===== TAB: ODONTOGRAMA ===== */}
           {tab === "odontograma" && (
-            <Odontogram patientId={patient.id} />
+            <OdontogramV2 patientId={patient.id} />
           )}
 
           {/* ===== TAB: NUEVA CONSULTA (specialty form) ===== */}

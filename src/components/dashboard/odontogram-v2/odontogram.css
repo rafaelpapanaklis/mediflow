@@ -1,0 +1,195 @@
+/* ============================================================
+   Odontograma v2 — styles (ported from design css/style.css)
+   Style "clinical" ONLY. Tweaks panel + warm/dark variants NOT ported.
+   EVERYTHING is scoped under .odo-app so it can't leak into the app.
+   ============================================================ */
+
+.odo-app {
+  --bg: #f4f6fa;
+  --card: #ffffff;
+  --ink: #1a2230;
+  --ink-2: #5a6577;
+  --ink-3: #8a93a6;
+  --line: #e4e9f1;
+  --line-2: #eef1f6;
+  --accent: #2a6fdb;
+  --accent-soft: #eaf1fc;
+  --radius: 14px;
+  --shadow: 0 1px 2px rgba(20, 30, 50, .04), 0 6px 24px rgba(20, 30, 50, .06);
+  --font: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-odo), var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+.odo-app * { box-sizing: border-box; }
+.odo-app button { font-family: inherit; cursor: pointer; }
+
+/* ============ TOP BAR ============ */
+.odo-app .odo-top {
+  display: flex; align-items: center; gap: 24px;
+  padding: 14px 26px;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 30;
+  flex-wrap: wrap;
+}
+.odo-app .odo-brand { display: flex; align-items: center; gap: 12px; }
+.odo-app .odo-brand-mark {
+  width: 42px; height: 42px; border-radius: 12px;
+  background: linear-gradient(150deg, #3a82f0, #2a6fdb);
+  display: grid; place-items: center;
+  box-shadow: 0 4px 12px rgba(42, 111, 219, .3);
+}
+.odo-app .odo-title { font-size: 19px; font-weight: 800; letter-spacing: -.02em; }
+.odo-app .odo-sub { font-size: 12px; color: var(--ink-3); font-weight: 500; margin-top: 1px; }
+
+.odo-app .odo-patient { display: flex; align-items: center; gap: 11px; padding-left: 24px; border-left: 1px solid var(--line); }
+.odo-app .odo-pat-avatar { width: 38px; height: 38px; border-radius: 50%; background: var(--accent-soft); display: grid; place-items: center; font-size: 19px; }
+.odo-app .odo-pat-name { font-size: 14px; font-weight: 700; }
+.odo-app .odo-pat-meta { font-size: 11.5px; color: var(--ink-3); font-weight: 500; }
+
+.odo-app .odo-top-controls { margin-left: auto; display: flex; gap: 18px; align-items: flex-end; flex-wrap: wrap; }
+.odo-app .ctl { display: flex; flex-direction: column; gap: 5px; }
+.odo-app .ctl > label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); font-weight: 700; padding-left: 2px; }
+
+.odo-app .seg { display: inline-flex; background: #eef1f6; border-radius: 9px; padding: 3px; gap: 2px; }
+.odo-app .seg-btn {
+  border: 0; background: transparent; color: var(--ink-2);
+  font-size: 12.5px; font-weight: 600; padding: 6px 12px; border-radius: 7px;
+  transition: all .14s;
+}
+.odo-app .seg-btn:hover { color: var(--ink); }
+.odo-app .seg-btn.on { background: var(--card); color: var(--accent); box-shadow: 0 1px 3px rgba(20, 30, 50, .12); }
+
+/* ============ MAIN ============ */
+.odo-app .odo-main { flex: 1; display: flex; flex-direction: column; gap: 18px; padding: 22px 26px 40px; }
+
+.odo-app .odo-chart-card {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 18px 20px 14px;
+}
+.odo-app .odo-chart-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; gap: 16px; flex-wrap: wrap; }
+.odo-app .odo-hint { font-size: 13px; color: var(--ink-2); font-weight: 500; }
+.odo-app .odo-summary { display: flex; align-items: center; gap: 16px; font-size: 12.5px; color: var(--ink-2); }
+.odo-app .odo-summary b { color: var(--ink); font-weight: 800; }
+.odo-app .odo-clearall { border: 1px solid var(--line); background: var(--card); color: var(--ink-2); font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; }
+.odo-app .odo-clearall:hover { border-color: #f0b4b4; color: #d8504f; background: #fdf3f3; }
+
+.odo-app .odo-chart-scroll { overflow-x: auto; padding: 8px 0 4px; }
+
+/* ============ CHART ============ */
+.odo-app .odo-chart { min-width: 1060px; position: relative; padding: 4px 8px; }
+.odo-app .odo-arch-label { text-align: center; font-size: 11px; text-transform: uppercase; letter-spacing: .14em; color: var(--ink-3); font-weight: 700; }
+.odo-app .odo-arch-label.top { margin-bottom: 2px; }
+.odo-app .odo-arch-label.bottom { margin-top: 2px; }
+.odo-app .odo-divider { height: 1px; background: linear-gradient(90deg, transparent, var(--line), transparent); margin: 4px 0; }
+
+.odo-app .odo-arch-row { display: flex; justify-content: center; align-items: stretch; gap: 2px; }
+.odo-app .odo-midline { width: 1px; align-self: stretch; background: var(--line); margin: 0 9px; }
+
+.odo-app .odo-cell {
+  display: flex; flex-direction: column; align-items: center;
+  border-radius: 10px; padding: 3px 1px; cursor: pointer;
+  transition: background .12s;
+}
+.odo-app .odo-cell:hover { background: #f7f9fc; }
+.odo-app .odo-cell.sel { background: var(--accent-soft); outline: 2px solid var(--accent); }
+.odo-app .odo-cell-inner { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.odo-app .odo-glyph-wrap, .odo-app .odo-circle-wrap, .odo-app .odo-label-wrap { display: grid; place-items: center; }
+.odo-app .odo-glyph-wrap { min-height: 50px; align-items: flex-end; }
+
+.odo-app .odo-num {
+  border: 0; background: transparent; color: var(--ink-2);
+  font-size: 12.5px; font-weight: 700; padding: 2px 6px; border-radius: 6px; min-width: 26px;
+}
+.odo-app .odo-num:hover { background: #eef2f8; color: var(--accent); }
+.odo-app .palmer { font-size: 12px; line-height: 1; display: inline-block; }
+
+/* ============ LEGEND ============ */
+.odo-app .odo-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 12px 4px 2px; border-top: 1px solid var(--line-2); margin-top: 10px; }
+.odo-app .odo-leg-item { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ink-2); font-weight: 600; }
+.odo-app .odo-leg-dot { width: 11px; height: 11px; border-radius: 4px; }
+
+/* ============ PALETTE ============ */
+.odo-app .odo-palette { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.odo-app .odo-pal-tabs { display: flex; gap: 2px; padding: 8px 10px 0; border-bottom: 1px solid var(--line-2); flex-wrap: wrap; }
+.odo-app .odo-tab {
+  border: 0; border-bottom: 2.5px solid transparent; background: transparent;
+  color: var(--ink-2); font-size: 13px; font-weight: 600; padding: 9px 13px 11px;
+  display: inline-flex; align-items: center; gap: 7px; transition: color .12s;
+}
+.odo-app .odo-tab:hover { color: var(--ink); }
+.odo-app .odo-tab.on { font-weight: 800; }
+.odo-app .odo-tab-dot { width: 9px; height: 9px; border-radius: 3px; }
+
+.odo-app .odo-pal-items { display: flex; gap: 8px; padding: 14px 14px 16px; flex-wrap: wrap; }
+.odo-app .odo-chip {
+  border: 1.5px solid var(--line); background: var(--card); border-radius: 12px;
+  padding: 8px 10px 7px; min-width: 92px; display: flex; flex-direction: column; align-items: center; gap: 5px;
+  transition: all .12s;
+}
+.odo-app .odo-chip:hover { border-color: #cdd6e4; background: #fafbfd; transform: translateY(-1px); }
+.odo-app .odo-chip.on { background: #fafbfd; }
+.odo-app .odo-chip.eraser { min-width: 72px; }
+.odo-app .odo-chip-ic { height: 32px; display: grid; place-items: center; }
+.odo-app .odo-chip-lb { font-size: 11px; font-weight: 600; color: var(--ink-2); text-align: center; line-height: 1.2; max-width: 96px; }
+
+/* ============ DETAIL PANEL ============ */
+.odo-app .odo-detail-backdrop { position: fixed; inset: 0; background: rgba(18, 24, 38, .34); backdrop-filter: blur(2px); z-index: 50; display: flex; justify-content: flex-end; }
+.odo-app .odo-detail {
+  width: 440px; max-width: 92vw; height: 100%; background: var(--card);
+  box-shadow: -8px 0 40px rgba(20, 30, 50, .18); display: flex; flex-direction: column;
+  animation: odo-slideIn .22s cubic-bezier(.2, .7, .2, 1);
+}
+@keyframes odo-slideIn { from { transform: translateX(30px); opacity: .6; } to { transform: none; opacity: 1; } }
+.odo-app .odo-dt-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 14px; border-bottom: 1px solid var(--line); }
+.odo-app .odo-dt-tooth { display: flex; align-items: center; gap: 12px; }
+.odo-app .odo-dt-num { font-size: 24px; font-weight: 800; letter-spacing: -.02em; }
+.odo-app .odo-dt-type { font-size: 12.5px; color: var(--ink-3); font-weight: 600; }
+.odo-app .odo-dt-close { border: 0; background: #eef1f6; width: 32px; height: 32px; border-radius: 9px; color: var(--ink-2); font-size: 18px; display: grid; place-items: center; }
+.odo-app .odo-dt-close:hover { background: #e2e7f0; }
+.odo-app .odo-dt-body { flex: 1; overflow-y: auto; padding: 18px 20px 26px; }
+
+.odo-app .odo-viewtabs { display: inline-flex; background: #eef1f6; border-radius: 10px; padding: 3px; margin-bottom: 14px; }
+.odo-app .odo-viewtab { border: 0; background: transparent; font-size: 12.5px; font-weight: 700; color: var(--ink-2); padding: 7px 16px; border-radius: 8px; }
+.odo-app .odo-viewtab.on { background: var(--card); color: var(--accent); box-shadow: 0 1px 3px rgba(20, 30, 50, .12); }
+
+.odo-app .odo-3d-stage { width: 100%; height: 280px; border-radius: 12px; background: radial-gradient(120% 120% at 50% 20%, #f3f6fb, #e6ecf5); border: 1px solid var(--line); position: relative; overflow: hidden; }
+.odo-app .odo-3d-stage canvas { display: block; width: 100% !important; height: 100% !important; }
+.odo-app .odo-3d-hint { position: absolute; bottom: 8px; left: 0; right: 0; text-align: center; font-size: 11px; color: var(--ink-3); font-weight: 600; pointer-events: none; }
+.odo-app .odo-3d-reset { position: absolute; top: 8px; right: 8px; border: 1px solid var(--line); background: rgba(255, 255, 255, .8); font-size: 11px; font-weight: 600; color: var(--ink-2); padding: 5px 9px; border-radius: 8px; z-index: 2; }
+
+.odo-app .odo-2d-stage { display: grid; place-items: center; padding: 14px; background: radial-gradient(120% 120% at 50% 20%, #f6f8fc, #eef2f8); border-radius: 12px; border: 1px solid var(--line); }
+
+.odo-app .odo-section-t { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); font-weight: 800; margin: 18px 0 9px; }
+.odo-app .odo-surf-grid { display: flex; gap: 7px; flex-wrap: wrap; }
+.odo-app .odo-surf-btn { border: 1.5px solid var(--line); background: var(--card); border-radius: 9px; padding: 8px 11px; font-size: 12px; font-weight: 700; color: var(--ink-2); display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 58px; }
+.odo-app .odo-surf-btn small { font-size: 9.5px; font-weight: 600; color: var(--ink-3); }
+.odo-app .odo-surf-btn.has { color: #fff; border-color: transparent; }
+
+.odo-app .odo-find-list { display: flex; flex-direction: column; gap: 7px; }
+.odo-app .odo-find { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; }
+.odo-app .odo-find-dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.odo-app .odo-find-lb { font-size: 13px; font-weight: 600; flex: 1; }
+.odo-app .odo-find-loc { font-size: 11px; color: var(--ink-3); font-weight: 600; }
+.odo-app .odo-find-rm { border: 0; background: transparent; color: var(--ink-3); font-size: 16px; padding: 2px 6px; border-radius: 6px; }
+.odo-app .odo-find-rm:hover { background: #fdeded; color: #d8504f; }
+.odo-app .odo-empty { font-size: 12.5px; color: var(--ink-3); text-align: center; padding: 18px; font-weight: 500; }
+
+.odo-app .odo-note { width: 100%; min-height: 74px; border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px; font-family: inherit; font-size: 13px; resize: vertical; color: var(--ink); }
+.odo-app .odo-note:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+.odo-app .odo-dt-actions { display: flex; gap: 8px; margin-top: 16px; }
+.odo-app .odo-btn { flex: 1; border: 1.5px solid var(--line); background: var(--card); color: var(--ink-2); font-size: 13px; font-weight: 700; padding: 10px; border-radius: 10px; }
+.odo-app .odo-btn.danger:hover { border-color: #f0b4b4; color: #d8504f; background: #fdf3f3; }
+
+/* mini palette inside detail */
+.odo-app .odo-dt-pal { display: flex; gap: 6px; flex-wrap: wrap; }
+.odo-app .odo-dt-pal .odo-chip { min-width: 0; padding: 6px; }
