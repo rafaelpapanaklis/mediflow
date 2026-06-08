@@ -4,6 +4,14 @@ import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
 import { logAudit } from "@/lib/audit";
 import type Stripe from "stripe";
 import { calcCommissionMxn } from "@/lib/affiliates";
+import {
+  creditWalletFromStripe,
+  setWalletCardIfEmpty,
+  recordFailedTopup,
+  saveCardFromSetupIntent,
+  AI_TOPUP_KIND,
+  AI_SETUP_KIND,
+} from "@/lib/ai-billing/recharge";
 
 // Next.js App Router: no hace body-parsing automático aquí porque leemos el
 // raw body para verificar la firma de Stripe.
@@ -227,6 +235,46 @@ export async function POST(req: NextRequest) {
           // P2002 = unique violation → la comisión ya existía, no-op.
           if (err?.code !== "P2002") throw err;
         }
+        break;
+      }
+
+      // ── Recargas del monedero de IA (T3). Se identifican por metadata.kind
+      //    para NO interferir con suscripciones / teleconsulta / OXXO. La
+      //    acreditación es idempotente por PaymentIntent id (mismo crédito si
+      //    llega inline desde chargeOffSession y por este webhook).
+      case "payment_intent.succeeded": {
+        const pi = event.data.object as Stripe.PaymentIntent;
+        if (pi.metadata?.kind !== AI_TOPUP_KIND) break;
+        const clinicId = pi.metadata?.clinicId;
+        if (!clinicId) break;
+
+        const amountCents = pi.amount_received || Number(pi.metadata?.amountCents) || pi.amount;
+        await creditWalletFromStripe({ clinicId, amountCents, paymentIntentId: pi.id });
+
+        // Si la recarga guardó tarjeta (setup_future_usage) y el monedero no
+        // tenía una, la dejamos lista para auto-recarga off-session.
+        const pmId = typeof pi.payment_method === "string" ? pi.payment_method : pi.payment_method?.id;
+        if (pmId && pi.setup_future_usage) await setWalletCardIfEmpty(clinicId, pmId);
+        break;
+      }
+
+      case "payment_intent.payment_failed": {
+        const pi = event.data.object as Stripe.PaymentIntent;
+        if (pi.metadata?.kind !== AI_TOPUP_KIND) break;
+        const clinicId = pi.metadata?.clinicId;
+        if (!clinicId) break;
+        await recordFailedTopup(clinicId, Number(pi.metadata?.amountCents) || pi.amount, pi.id);
+        break;
+      }
+
+      // Guardado de tarjeta vía SetupIntent (red de seguridad por si el cliente
+      // confirma pero no llega a llamar a /confirm). Idempotente.
+      case "setup_intent.succeeded": {
+        const si = event.data.object as Stripe.SetupIntent;
+        if (si.metadata?.kind !== AI_SETUP_KIND) break;
+        const clinicId = si.metadata?.clinicId;
+        if (!clinicId) break;
+        await saveCardFromSetupIntent(clinicId, si.id);
         break;
       }
 
