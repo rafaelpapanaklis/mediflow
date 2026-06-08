@@ -29,6 +29,8 @@ export interface ChatResult {
   text: string;
   inputTokens?: number;
   outputTokens?: number;
+  cacheCreation?: number;
+  cacheRead?: number;
   mock?: boolean;
   error?: string;
 }
@@ -67,6 +69,8 @@ export async function chat(input: ChatInput): Promise<ChatResult> {
       text: textBlocks.filter((b) => b.type === "text").map((b) => b.text ?? "").join("\n"),
       inputTokens: data.usage?.input_tokens,
       outputTokens: data.usage?.output_tokens,
+      cacheCreation: data.usage?.cache_creation_input_tokens,
+      cacheRead: data.usage?.cache_read_input_tokens,
     };
   } catch (err) {
     return { text: "", error: err instanceof Error ? err.message : "chat_failed" };

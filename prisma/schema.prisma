@@ -6477,3 +6477,145 @@ model AffiliateUser {
   @@index([affiliateId])
   @@map("affiliate_users")
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// AI TOKEN BILLING (Fase 1 — fundación, T1)
+// Cobro a cada clínica del consumo de IA del BOT DE WHATSAPP. MediFlow paga
+// Anthropic central (USD) y cobra a la clínica en MXN con un fee OCULTO (+8%).
+// Dinero SIEMPRE en centavos enteros (Int), NUNCA Float. Multi-tenant por
+// clinicId, SIN relación Prisma a Clinic (como AffiliateCommission); la FK vive
+// en sql/ai-billing.sql. NO confundir con el cupo Clinic.aiTokensUsed/Limit
+// (otro concepto: asistente / rayos X).
+// ─────────────────────────────────────────────────────────────────────────
+
+enum AiWalletStatus {
+  ACTIVE
+  PAUSED
+}
+
+enum AiWalletTxType {
+  TOPUP
+  CHARGE
+  REFUND
+  ADJUSTMENT
+}
+
+enum AiWalletTxSource {
+  STRIPE
+  MERCADOPAGO
+  SPEI
+  USAGE
+  ADMIN
+}
+
+enum AiTopupMethod {
+  STRIPE
+  MERCADOPAGO
+  SPEI
+}
+
+enum AiTopupStatus {
+  PENDING
+  PAID
+  FAILED
+  REJECTED
+}
+
+/// Monedero de IA por clínica (1:1 con Clinic). Saldo prepago en MXN (centavos).
+model AiWallet {
+  id                         String         @id @default(cuid())
+  clinicId                   String         @unique
+  balanceCents               Int            @default(0)
+  autoRecharge               Boolean        @default(false)
+  autoRechargeThresholdCents Int            @default(0)
+  autoRechargeAmountCents    Int            @default(0)
+  stripePaymentMethodId      String?
+  status                     AiWalletStatus @default(ACTIVE)
+  lowBalanceNotifiedAt       DateTime?
+  createdAt                  DateTime       @default(now())
+  updatedAt                  DateTime       @updatedAt
+
+  @@map("ai_wallets")
+}
+
+/// Evento de consumo de IA (1 por llamada facturable a Claude). Guarda el costo
+/// real de Anthropic en micro-USD y el cobro final en MXN (billedCents ya
+/// incluye fx + fee oculto).
+model AiUsageEvent {
+  id            String   @id @default(cuid())
+  clinicId      String
+  feature       String   @default("whatsapp_bot")
+  model         String
+  inputTokens   Int
+  outputTokens  Int
+  cacheTokens   Int      @default(0)
+  costUsdMicros Int
+  fxRate        Float
+  feePct        Float
+  billedCents   Int
+  threadId      String?
+  createdAt     DateTime @default(now())
+
+  @@index([clinicId, createdAt])
+  @@map("ai_usage_events")
+}
+
+/// Libro mayor del monedero: cada movimiento (+/-) con el saldo resultante.
+model AiWalletTransaction {
+  id                String           @id @default(cuid())
+  clinicId          String
+  type              AiWalletTxType
+  amountCents       Int
+  balanceAfterCents Int
+  source            AiWalletTxSource
+  reference         String?
+  note              String?
+  createdAt         DateTime         @default(now())
+
+  @@index([clinicId, createdAt])
+  @@map("ai_wallet_transactions")
+}
+
+/// Recarga de saldo de una clínica. El cobro real (Stripe/MP/SPEI) lo
+/// implementan T3/T4/T5; aquí solo el registro + estado.
+model AiTopup {
+  id          String        @id @default(cuid())
+  clinicId    String
+  amountCents Int
+  method      AiTopupMethod
+  status      AiTopupStatus @default(PENDING)
+  gatewayRef  String?
+  proofUrl    String?
+  confirmedBy String?
+  createdAt   DateTime      @default(now())
+  paidAt      DateTime?
+
+  @@index([clinicId])
+  @@map("ai_topups")
+}
+
+/// Configuración GLOBAL de precios (una sola fila id="default"). Precios de
+/// Anthropic en USD/Mtok, tipo de cambio y fee OCULTO. La clínica nunca lo ve.
+model AiPricingConfig {
+  id                   String   @id @default("default")
+  inputUsdPerMtok      Float    @default(3)
+  outputUsdPerMtok     Float    @default(15)
+  cacheWriteUsdPerMtok Float    @default(3.75)
+  cacheReadUsdPerMtok  Float    @default(0.3)
+  usdToMxnRate         Float    @default(19.5)
+  feePct               Float    @default(8)
+  updatedAt            DateTime @updatedAt
+
+  @@map("ai_pricing_configs")
+}
+
+/// Saldo central que Rafael carga en Anthropic (USD, centavos). El dashboard de
+/// tesorería calcula consumido (sum costUsdMicros) vs cargado.
+model AnthropicRecharge {
+  id             String   @id @default(cuid())
+  amountUsdCents Int
+  note           String?
+  createdAt      DateTime @default(now())
+
+  @@map("anthropic_recharges")
+}

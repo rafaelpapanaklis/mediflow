@@ -1,4 +1,6 @@
-import { chat, type ChatMessage } from "@/lib/integrations/claude";
+import { type ChatMessage } from "@/lib/integrations/claude";
+import { chatMetered } from "@/lib/ai-billing/meter";
+import { canSpend } from "@/lib/ai-billing/wallet";
 import { BotIntent } from "./types";
 import type {
   BotConfigDTO,
@@ -50,8 +52,17 @@ export const generateAiReply: GenerateAiReply = async (input, config, faqs) => {
     const system = buildSystemPrompt(input, config, faqs);
     const messages = buildMessages(input.history, incoming);
 
+    // Cobro de IA: si la clínica no tiene saldo (ni auto-recarga con tarjeta), no
+    // llamamos a Claude — el motor cae a handoff y la FAQ por reglas sigue gratis.
+    if (!(await canSpend(input.clinicId))) return null;
+
     const result = await withTimeout(
-      chat({ system, messages, model: CHAT_MODEL, maxTokens: MAX_TOKENS }),
+      chatMetered(
+        input.clinicId,
+        "whatsapp_bot",
+        { system, messages, model: CHAT_MODEL, maxTokens: MAX_TOKENS },
+        input.threadId,
+      ),
       AI_TIMEOUT_MS,
     );
 
