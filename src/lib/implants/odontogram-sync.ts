@@ -1,13 +1,12 @@
 // Implants — sincronización con el odontograma compartido. Spec §8.4.
 //
 // Cuando se crea un implante, el diente correspondiente se marca con
-// state = "IMPLANTE" en `odontogram_entries`. El estado del odontograma
-// existente acepta este valor (`src/components/dashboard/odontogram/odontogram-data.ts`).
+// conditionId = "implant" en `odontogram_entries` (catálogo de hallazgos v2).
 // El color del diente refleja `currentStatus` del implante vía CSS.
 
 import type { ImplantStatus } from "@prisma/client";
 
-export type OdontogramImplantState = "IMPLANTE";
+export type OdontogramImplantCondition = "implant";
 
 /**
  * Mapping de currentStatus a clase CSS para el odontograma. Permite
@@ -43,8 +42,8 @@ export function odontogramColorClassFor(status: ImplantStatus): string {
   }
 }
 
-/** Estado canónico que va en `odontogram_entries.state`. */
-export const ODONTOGRAM_STATE_FOR_IMPLANT: OdontogramImplantState = "IMPLANTE";
+/** conditionId canónico que va en `odontogram_entries."conditionId"`. */
+export const ODONTOGRAM_CONDITION_FOR_IMPLANT: OdontogramImplantCondition = "implant";
 
 /** Notas estructuradas para el campo `notes` del OdontogramEntry. */
 export function buildOdontogramNotes(args: {

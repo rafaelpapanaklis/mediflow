@@ -1,76 +1,45 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
-import { readActiveClinicCookie } from "@/lib/active-clinic";
+import {
+  ensurePatientInClinic,
+  getDbUser,
+  isMissingTableError,
+} from "@/lib/odontogram/api-auth";
 
 export const dynamic = "force-dynamic";
 
-const STATE = z.enum([
-  "SANO",
-  "CARIES",
-  "RESINA",
-  "CORONA",
-  "ENDODONCIA",
-  "IMPLANTE",
-  "AUSENTE",
-  "EXTRACCION",
-]);
+/** conditionId del catálogo nuevo (caries, caries_inc, crown, rct, ext_done,
+ *  post_core, …): minúsculas, dígitos y guión bajo. Es un id LIBRE, no un enum. */
+const CONDITION_ID = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z0-9_]+$/, "conditionId inválido");
 
 const SURFACE = z.enum(["M", "D", "V", "L", "O"]);
+
+/** conditionId reservado para la nota por diente — se gestiona en /note. */
+const NOTE_CONDITION = "__note__";
 
 const PutSchema = z.object({
   patientId: z.string().min(1),
   toothNumber: z.number().int().min(11).max(85),
   surface: SURFACE.nullable().optional(),
-  state: STATE,
-  notes: z.string().nullable().optional(),
+  conditionId: CONDITION_ID.refine((c) => c !== NOTE_CONDITION, {
+    message: "usa /api/odontogram/note para la nota por diente",
+  }),
+  notes: z.string().max(2000).nullable().optional(),
 });
 
 const DeleteSchema = z.object({
   patientId: z.string().min(1),
   toothNumber: z.number().int().min(11).max(85),
   surface: SURFACE.nullable().optional(),
+  /** Si se omite, borra todas las condiciones de esa (diente, cara) excepto la
+   *  nota. Si se manda, borra solo esa condición. */
+  conditionId: CONDITION_ID.optional(),
 });
-
-async function getDbUser() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const activeClinicId = readActiveClinicCookie();
-  if (activeClinicId) {
-    const u = await prisma.user.findFirst({
-      where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true },
-    });
-    if (u) return u;
-  }
-  return prisma.user.findFirst({
-    where: { supabaseId: user.id, isActive: true },
-    orderBy: { createdAt: "asc" },
-  });
-}
-
-async function ensurePatientInClinic(
-  patientId: string,
-  clinicId: string,
-): Promise<boolean> {
-  const p = await prisma.patient.findFirst({
-    where: { id: patientId, clinicId },
-    select: { id: true },
-  });
-  return p !== null;
-}
-
-/** Detecta el error específico de "tabla no existe" (Prisma P2021 / Postgres 42P01). */
-function isMissingTableError(err: unknown): boolean {
-  if (typeof err !== "object" || err === null) return false;
-  const e = err as { code?: string; message?: string; meta?: { code?: string } };
-  if (e.code === "P2021") return true;
-  if (e.code === "42P01") return true;
-  if (e.meta?.code === "42P01") return true;
-  if (typeof e.message === "string" && /relation .* does not exist|odontogram_entries.*does not exist/i.test(e.message)) return true;
-  return false;
-}
 
 function jsonError(message: string, status: number, extra?: Record<string, unknown>) {
   return NextResponse.json({ error: message, ...(extra ?? {}) }, { status });
@@ -78,23 +47,31 @@ function jsonError(message: string, status: number, extra?: Record<string, unkno
 
 function unexpectedError(err: unknown) {
   if (isMissingTableError(err)) {
-    return jsonError(
-      "schema_not_migrated",
-      503,
-      {
-        hint: "La tabla odontogram_entries no existe. Aplica la migración 20260427120000_odontogram_entry en Supabase.",
-      },
-    );
+    return jsonError("schema_not_migrated", 503, {
+      hint: "La tabla odontogram_entries no existe o falta la migración. Aplica sql/odontogram-v2.sql en Supabase.",
+    });
   }
   console.error("[/api/odontogram] unexpected error", err);
-  return jsonError(
-    "internal_error",
-    500,
-    { reason: err instanceof Error ? err.message : "unknown" },
-  );
+  return jsonError("internal_error", 500, {
+    reason: err instanceof Error ? err.message : "unknown",
+  });
 }
 
-/** GET /api/odontogram?patientId=ID — todas las entries del paciente. */
+const ENTRY_SELECT = {
+  id: true,
+  toothNumber: true,
+  surface: true,
+  conditionId: true,
+  notes: true,
+  updatedAt: true,
+} as const;
+
+/**
+ * GET /api/odontogram?patientId=ID
+ * Devuelve { entries, notes }:
+ *   - entries: condiciones del catálogo; varias por (diente, cara) son posibles.
+ *   - notes:   mapa { [toothNumber]: texto } con la nota clínica por diente.
+ */
 export async function GET(req: NextRequest) {
   try {
     const dbUser = await getDbUser();
@@ -104,25 +81,28 @@ export async function GET(req: NextRequest) {
     if (!(await ensurePatientInClinic(patientId, dbUser.clinicId))) {
       return jsonError("patient_not_found", 404);
     }
-    const entries = await prisma.odontogramEntry.findMany({
+    const rows = await prisma.odontogramEntry.findMany({
       where: { patientId },
       orderBy: [{ toothNumber: "asc" }, { surface: "asc" }],
-      select: {
-        id: true,
-        toothNumber: true,
-        surface: true,
-        state: true,
-        notes: true,
-        updatedAt: true,
-      },
+      select: ENTRY_SELECT,
     });
-    return NextResponse.json({ entries });
+
+    const entries = rows.filter((r) => r.conditionId !== NOTE_CONDITION);
+    const notes: Record<number, string> = {};
+    for (const r of rows) {
+      if (r.conditionId === NOTE_CONDITION && r.notes) notes[r.toothNumber] = r.notes;
+    }
+    return NextResponse.json({ entries, notes });
   } catch (err) {
     return unexpectedError(err);
   }
 }
 
-/** PUT /api/odontogram — upsert por (patientId, toothNumber, surface). */
+/**
+ * PUT /api/odontogram — agrega (o actualiza notes de) UNA condición específica
+ * en (patientId, toothNumber, surface?, conditionId). Idempotente: repetir no
+ * duplica. Para quitar usa DELETE. Para la nota por diente usa /note.
+ */
 export async function PUT(req: NextRequest) {
   try {
     const dbUser = await getDbUser();
@@ -140,68 +120,43 @@ export async function PUT(req: NextRequest) {
       return jsonError("patient_not_found", 404);
     }
 
+    const { patientId, toothNumber, conditionId } = parsed.data;
     const surface = parsed.data.surface ?? null;
+    const notes = parsed.data.notes ?? null;
 
-    // Postgres trata NULL como distinto en UNIQUE; para full-tooth (surface=null)
-    // hacemos el upsert manual: buscar existente y update, sino create.
+    // Postgres trata NULL como distinto en UNIQUE; para condiciones de diente
+    // completo (surface=null) hacemos el upsert manual por (tooth, conditionId).
     if (surface === null) {
       const existing = await prisma.odontogramEntry.findFirst({
-        where: {
-          patientId: parsed.data.patientId,
-          toothNumber: parsed.data.toothNumber,
-          surface: null,
-        },
+        where: { patientId, toothNumber, surface: null, conditionId },
         select: { id: true },
       });
       const entry = existing
         ? await prisma.odontogramEntry.update({
             where: { id: existing.id },
-            data: { state: parsed.data.state, notes: parsed.data.notes ?? null },
-            select: {
-              id: true, toothNumber: true, surface: true, state: true,
-              notes: true, updatedAt: true,
-            },
+            data: { notes },
+            select: ENTRY_SELECT,
           })
         : await prisma.odontogramEntry.create({
-            data: {
-              patientId: parsed.data.patientId,
-              toothNumber: parsed.data.toothNumber,
-              surface: null,
-              state: parsed.data.state,
-              notes: parsed.data.notes ?? null,
-            },
-            select: {
-              id: true, toothNumber: true, surface: true, state: true,
-              notes: true, updatedAt: true,
-            },
+            data: { patientId, toothNumber, surface: null, conditionId, notes },
+            select: ENTRY_SELECT,
           });
       return NextResponse.json({ entry });
     }
 
-    // Surface no-null: upsert real con la unique compound.
+    // Surface no-null: upsert real con la unique compound nueva.
     const entry = await prisma.odontogramEntry.upsert({
       where: {
-        patientId_toothNumber_surface: {
-          patientId: parsed.data.patientId,
-          toothNumber: parsed.data.toothNumber,
+        patientId_toothNumber_surface_conditionId: {
+          patientId,
+          toothNumber,
           surface,
+          conditionId,
         },
       },
-      create: {
-        patientId: parsed.data.patientId,
-        toothNumber: parsed.data.toothNumber,
-        surface,
-        state: parsed.data.state,
-        notes: parsed.data.notes ?? null,
-      },
-      update: {
-        state: parsed.data.state,
-        notes: parsed.data.notes ?? null,
-      },
-      select: {
-        id: true, toothNumber: true, surface: true, state: true,
-        notes: true, updatedAt: true,
-      },
+      create: { patientId, toothNumber, surface, conditionId, notes },
+      update: { notes },
+      select: ENTRY_SELECT,
     });
 
     return NextResponse.json({ entry });
@@ -210,7 +165,11 @@ export async function PUT(req: NextRequest) {
   }
 }
 
-/** DELETE /api/odontogram — quita una entry específica. */
+/**
+ * DELETE /api/odontogram — quita condiciones de (patientId, toothNumber, surface?).
+ *   - con conditionId: borra solo esa condición.
+ *   - sin conditionId: borra todas las condiciones de esa cara (excepto la nota).
+ */
 export async function DELETE(req: NextRequest) {
   try {
     const dbUser = await getDbUser();
@@ -228,11 +187,15 @@ export async function DELETE(req: NextRequest) {
       return jsonError("patient_not_found", 404);
     }
 
+    const surface = parsed.data.surface ?? null;
     const result = await prisma.odontogramEntry.deleteMany({
       where: {
         patientId: parsed.data.patientId,
         toothNumber: parsed.data.toothNumber,
-        surface: parsed.data.surface ?? null,
+        surface,
+        ...(parsed.data.conditionId
+          ? { conditionId: parsed.data.conditionId }
+          : { conditionId: { not: NOTE_CONDITION } }),
       },
     });
 

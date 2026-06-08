@@ -1226,15 +1226,16 @@ model OdontogramEntry {
   id          String   @id @default(cuid())
   patientId   String
   toothNumber Int // FDI numbering (11-18, 21-28, 31-38, 41-48, etc.)
-  surface     String? // M | D | V | L | O | null (full tooth)
-  state       String // SANO | CARIES | RESINA | CORONA | ENDODONCIA | IMPLANTE | AUSENTE | EXTRACCION
+  surface     String? // M | D | V | L | O | null (diente completo)
+  conditionId String // id del catálogo: caries | restoration | crown | rct | implant | missing | ext_done | ... (45 hallazgos) · "__note__" = nota por diente
   notes       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
-  @@unique([patientId, toothNumber, surface])
+  // Varias condiciones por (diente, cara): la unique incluye conditionId.
+  @@unique([patientId, toothNumber, surface, conditionId])
   @@index([patientId])
   @@map("odontogram_entries")
 }
@@ -1242,7 +1243,7 @@ model OdontogramEntry {
 /// Snapshot inmutable del odontograma al cerrar una consulta. Permite
 /// reconstruir el estado dental en cualquier punto en el tiempo y diff'ear
 /// contra el snapshot anterior para detectar tratamientos hechos.
-/// `entries` es JSON: [{ toothNumber, surface, state, notes }, ...].
+/// `entries` es JSON: [{ toothNumber, surface, conditionId, notes }, ...].
 model OdontogramSnapshot {
   id            String   @id @default(cuid())
   patientId     String

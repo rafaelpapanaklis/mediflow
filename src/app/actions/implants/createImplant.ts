@@ -7,7 +7,7 @@ import {
   type CreateImplantInput,
 } from "@/lib/validation/implants";
 import {
-  ODONTOGRAM_STATE_FOR_IMPLANT,
+  ODONTOGRAM_CONDITION_FOR_IMPLANT,
   buildOdontogramNotes,
 } from "@/lib/implants/odontogram-sync";
 import { IMPLANT_AUDIT_ACTIONS } from "./audit-actions";
@@ -64,32 +64,41 @@ export async function createImplant(
         select: { id: true, patientId: true },
       });
 
-      // Sincroniza odontograma: marca el diente como IMPLANTE.
-      // Spec §8.4. Reusa el modelo OdontogramEntry compartido —
-      // surface=null indica que aplica al diente completo.
+      // Sincroniza odontograma: marca el diente con la condición "implant".
+      // Spec §8.4. Reusa el modelo OdontogramEntry compartido — surface=null
+      // indica que aplica al diente completo. Postgres trata NULL como distinto
+      // en UNIQUE, así que el upsert por (tooth, conditionId) es manual.
       const fullToothNotes = buildOdontogramNotes({
         brand: parsed.data.brand,
         modelName: parsed.data.modelName,
         lotNumber: parsed.data.lotNumber,
         currentStatus: parsed.data.initialStatus,
       });
-      await tx.odontogramEntry.upsert({
+      const existingTooth = await tx.odontogramEntry.findFirst({
         where: {
-          patientId_toothNumber_surface: {
-            patientId: parsed.data.patientId,
-            toothNumber: parsed.data.toothFdi,
-            surface: null as unknown as string,
-          },
-        },
-        update: { state: ODONTOGRAM_STATE_FOR_IMPLANT, notes: fullToothNotes },
-        create: {
           patientId: parsed.data.patientId,
           toothNumber: parsed.data.toothFdi,
           surface: null,
-          state: ODONTOGRAM_STATE_FOR_IMPLANT,
-          notes: fullToothNotes,
+          conditionId: ODONTOGRAM_CONDITION_FOR_IMPLANT,
         },
+        select: { id: true },
       });
+      if (existingTooth) {
+        await tx.odontogramEntry.update({
+          where: { id: existingTooth.id },
+          data: { notes: fullToothNotes },
+        });
+      } else {
+        await tx.odontogramEntry.create({
+          data: {
+            patientId: parsed.data.patientId,
+            toothNumber: parsed.data.toothFdi,
+            surface: null,
+            conditionId: ODONTOGRAM_CONDITION_FOR_IMPLANT,
+            notes: fullToothNotes,
+          },
+        });
+      }
 
       return implant;
     });

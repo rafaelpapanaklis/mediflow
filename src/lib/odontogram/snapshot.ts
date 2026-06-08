@@ -4,25 +4,23 @@ import type { Prisma } from "@prisma/client";
 
 /* ─────── Tipos ───────────────────────────────────────────── */
 
-export type ToothState =
-  | "SANO" | "CARIES" | "RESINA" | "CORONA"
-  | "ENDODONCIA" | "IMPLANTE" | "AUSENTE" | "EXTRACCION";
-
 export type SurfaceKey = "M" | "D" | "V" | "L" | "O";
 
 export interface SnapshotEntry {
   toothNumber: number;
-  /** null = estado a nivel diente completo. */
+  /** null = condición a nivel diente completo. */
   surface: SurfaceKey | null;
-  state: ToothState;
+  /** id del catálogo de hallazgos (caries, restoration, crown, rct, …). */
+  conditionId: string;
   notes?: string | null;
 }
 
 export interface SnapshotChange {
   toothNumber: number;
   surface: SurfaceKey | null;
-  prevState: ToothState | null; // null si no existía antes
-  newState: ToothState;
+  conditionId: string;
+  /** "added" = condición nueva vs. el snapshot anterior; "removed" = ya no está. */
+  type: "added" | "removed";
 }
 
 export interface SuggestedTreatment {
@@ -34,70 +32,67 @@ export interface SuggestedTreatment {
   procedureCatalogId: string | null;
 }
 
+/** conditionId reservado para la nota por diente — nunca entra al snapshot. */
+const NOTE_CONDITION = "__note__";
+
 /* ─────── Lectura del estado vigente ───────────────────────── */
 
-/** Lee odontogram_entries del paciente y devuelve array serializable. */
+/** Lee odontogram_entries del paciente (excluye la nota por diente). */
 export async function readCurrentEntries(patientId: string): Promise<SnapshotEntry[]> {
   const rows = await prisma.odontogramEntry.findMany({
-    where: { patientId },
+    where: { patientId, conditionId: { not: NOTE_CONDITION } },
     orderBy: [{ toothNumber: "asc" }, { surface: "asc" }],
     select: {
       toothNumber: true,
       surface: true,
-      state: true,
+      conditionId: true,
       notes: true,
     },
   });
   return rows.map((r) => ({
     toothNumber: r.toothNumber,
     surface: (r.surface ?? null) as SurfaceKey | null,
-    state: r.state as ToothState,
+    conditionId: r.conditionId,
     notes: r.notes,
   }));
 }
 
 /* ─────── Diff entre snapshots ─────────────────────────────── */
 
-function keyOf(e: { toothNumber: number; surface: SurfaceKey | null }): string {
-  return `${e.toothNumber}:${e.surface ?? "_"}`;
+function keyOf(e: {
+  toothNumber: number;
+  surface: SurfaceKey | null;
+  conditionId: string;
+}): string {
+  return `${e.toothNumber}:${e.surface ?? "_"}:${e.conditionId}`;
 }
 
 /**
- * Compara dos sets de entries y devuelve los cambios.
- * Una entry "borrada" (estaba antes y ya no) cuenta como vuelta a SANO.
- * Una entry "nueva" (no estaba antes) tiene prevState=null.
+ * Compara dos sets de entries y devuelve los cambios por condición. Cada
+ * (diente, cara) puede tener VARIAS condiciones; cada una se trata como un
+ * toggle independiente: aparece ("added") o desaparece ("removed").
  */
 export function diffSnapshots(prev: SnapshotEntry[], curr: SnapshotEntry[]): SnapshotChange[] {
-  const prevMap = new Map(prev.map((e) => [keyOf(e), e]));
-  const currMap = new Map(curr.map((e) => [keyOf(e), e]));
+  const prevKeys = new Set(prev.map(keyOf));
+  const currKeys = new Set(curr.map(keyOf));
   const changes: SnapshotChange[] = [];
 
-  // Entries en curr (nuevas o cambiadas).
-  currMap.forEach((c, k) => {
-    const p = prevMap.get(k);
-    if (!p) {
+  for (const c of curr) {
+    if (!prevKeys.has(keyOf(c))) {
       changes.push({
         toothNumber: c.toothNumber, surface: c.surface,
-        prevState: null, newState: c.state,
-      });
-    } else if (p.state !== c.state) {
-      changes.push({
-        toothNumber: c.toothNumber, surface: c.surface,
-        prevState: p.state, newState: c.state,
+        conditionId: c.conditionId, type: "added",
       });
     }
-  });
-
-  // Entries que estaban antes y ya no (vuelta a SANO).
-  prevMap.forEach((p, k) => {
-    if (!currMap.has(k)) {
+  }
+  for (const p of prev) {
+    if (!currKeys.has(keyOf(p))) {
       changes.push({
         toothNumber: p.toothNumber, surface: p.surface,
-        prevState: p.state, newState: "SANO",
+        conditionId: p.conditionId, type: "removed",
       });
     }
-  });
-
+  }
   return changes;
 }
 
@@ -124,21 +119,20 @@ export const DENTAL_CATALOG_SEED: CatalogSeedItem[] = [
   { code: "ODO_BLANQUEAMIENTO", name: "Blanqueamiento",           category: "dental", basePrice: 3500, duration: 60 },
 ];
 
-/** Mapping estado → código del catálogo. null = no facturable. */
-export function stateToTreatmentCode(change: SnapshotChange): string | null {
-  const { prevState, newState } = change;
-  // Diagnósticos (no facturables): aparecer/quitar caries.
-  if (newState === "CARIES" && prevState !== "RESINA") return null;
-  if (newState === "SANO") return null; // undo / corrección de marca
+/** Mapping conditionId → código del catálogo facturable. Los diagnósticos
+ *  (caries, …) y los ~37 hallazgos nuevos no facturan (devuelven null). */
+const CONDITION_TREATMENT_CODE: Record<string, string> = {
+  restoration: "ODO_RESINA",
+  crown: "ODO_CORONA",
+  rct: "ODO_ENDODONCIA",
+  implant: "ODO_IMPLANTE",
+  missing: "ODO_EXTRACCION",
+  ext_done: "ODO_EXTRACCION",
+};
 
-  if (newState === "RESINA" && prevState === "CARIES") return "ODO_RESINA";
-  if (newState === "RESINA" && prevState !== "CARIES") return "ODO_RESINA";
-  if (newState === "CORONA") return "ODO_CORONA";
-  if (newState === "ENDODONCIA") return "ODO_ENDODONCIA";
-  if (newState === "IMPLANTE") return "ODO_IMPLANTE";
-  if (newState === "AUSENTE") return "ODO_EXTRACCION";
-  if (newState === "EXTRACCION") return "ODO_EXTRACCION";
-  return null;
+/** conditionId → código del catálogo. null = no facturable. */
+export function conditionToTreatmentCode(conditionId: string): string | null {
+  return CONDITION_TREATMENT_CODE[conditionId] ?? null;
 }
 
 /** Garantiza que la clínica tenga el catálogo dental sembrado. Idempotente. */
@@ -165,9 +159,10 @@ export async function ensureDentalCatalog(clinicId: string): Promise<void> {
 
 /**
  * Mapea cambios → tratamientos sugeridos cruzando con el catálogo de la
- * clínica. Cambios sin código mapeable se ignoran. Si el código no existe
- * en el catálogo (e.g. clínica eliminó la fila), procedureCatalogId queda
- * null y unitPrice cae al precio default del seed.
+ * clínica. Solo las condiciones AÑADIDAS y facturables generan sugerencia;
+ * quitar una marca nunca factura. Si el código no existe en el catálogo
+ * (e.g. clínica eliminó la fila), procedureCatalogId queda null y unitPrice
+ * cae al precio default del seed.
  */
 export async function changesToTreatments(
   changes: SnapshotChange[],
@@ -182,7 +177,8 @@ export async function changesToTreatments(
 
   const out: SuggestedTreatment[] = [];
   for (const ch of changes) {
-    const code = stateToTreatmentCode(ch);
+    if (ch.type !== "added") continue;
+    const code = conditionToTreatmentCode(ch.conditionId);
     if (!code) continue;
     const cat = byCode.get(code);
     const seed = seedByCode.get(code);
@@ -228,6 +224,37 @@ export async function createOrUpdateSnapshot(
   return { id: created.id };
 }
 
+/* ─────── Snapshot anterior (con compat legacy `state`) ─────── */
+
+/** Migración de los snapshots viejos: el JSON guardaba `state` (8 enum). */
+const LEGACY_STATE_TO_CONDITION: Record<string, string> = {
+  CARIES: "caries",
+  RESINA: "restoration",
+  CORONA: "crown",
+  ENDODONCIA: "rct",
+  IMPLANTE: "implant",
+  AUSENTE: "missing",
+  EXTRACCION: "ext_done",
+};
+
+/**
+ * Normaliza una entry de snapshot: soporta el formato nuevo (con conditionId)
+ * y el legacy (con `state`). Descarta SANO y la nota por diente para que el
+ * diff/facturación no las trate como hallazgos.
+ */
+function normalizeSnapshotEntry(e: Record<string, unknown>): SnapshotEntry | null {
+  const toothNumber = Number(e.toothNumber);
+  const surface = (e.surface ?? null) as SurfaceKey | null;
+  let conditionId = typeof e.conditionId === "string" ? e.conditionId : null;
+  if (!conditionId && typeof e.state === "string") {
+    conditionId = LEGACY_STATE_TO_CONDITION[e.state] ?? e.state.toLowerCase();
+  }
+  if (!conditionId || conditionId === "sano" || conditionId === NOTE_CONDITION) {
+    return null;
+  }
+  return { toothNumber, surface, conditionId, notes: (e.notes ?? null) as string | null };
+}
+
 /** Busca el snapshot inmediatamente anterior a una fecha dada. */
 export async function findPreviousSnapshot(
   patientId: string,
@@ -244,5 +271,8 @@ export async function findPreviousSnapshot(
     select: { entries: true },
   });
   if (!prev) return null;
-  return prev.entries as unknown as SnapshotEntry[];
+  const raw = (prev.entries as unknown as Record<string, unknown>[]) ?? [];
+  return raw
+    .map(normalizeSnapshotEntry)
+    .filter((e): e is SnapshotEntry => e !== null);
 }

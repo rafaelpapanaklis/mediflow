@@ -128,16 +128,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       const changes = diffSnapshots(prevEntries, currentEntries);
       suggestedTreatments = await changesToTreatments(changes, session.clinic.id);
     } else {
-      // Primera consulta: tratamos el snapshot completo como "todos los
-      // estados activos son tratamientos hechos hoy".
-      const changes = currentEntries
-        .filter((e) => e.state !== "SANO")
-        .map((e) => ({
-          toothNumber: e.toothNumber,
-          surface: e.surface,
-          prevState: null,
-          newState: e.state,
-        }));
+      // Primera consulta: tratamos el snapshot completo como "todas las
+      // condiciones activas son tratamientos hechos hoy".
+      const changes = currentEntries.map((e) => ({
+        toothNumber: e.toothNumber,
+        surface: e.surface,
+        conditionId: e.conditionId,
+        type: "added" as const,
+      }));
       suggestedTreatments = await changesToTreatments(changes, session.clinic.id);
     }
   } catch (err) {
