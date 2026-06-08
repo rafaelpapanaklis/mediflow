@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import {
-  MessageCircle, CheckCircle, ExternalLink, Eye, EyeOff,
+  MessageCircle, CheckCircle, ExternalLink, Eye, EyeOff, Bot,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { CardNew }   from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
@@ -25,6 +26,7 @@ export function WhatsAppClient({
   reminderMsg: initMsg, reminder24h: init24h, reminder1h: init1h, clinicName,
 }: Props) {
   const t = useT();
+  const router = useRouter();
   const askConfirm = useConfirm();
   const [connected,  setConnected]  = useState(initConnected);
   const [step,       setStep]       = useState<"intro" | "config" | "done">(initConnected ? "done" : "intro");
@@ -104,9 +106,14 @@ export function WhatsAppClient({
             </p>
           </div>
         </div>
-        <BadgeNew tone={connected ? "success" : "danger"} dot>
-          {connected ? t("inbox.whatsapp.connected") : t("inbox.whatsapp.disconnected")}
-        </BadgeNew>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <BadgeNew tone={connected ? "success" : "danger"} dot>
+            {connected ? t("inbox.whatsapp.connected") : t("inbox.whatsapp.disconnected")}
+          </BadgeNew>
+          <ButtonNew variant="secondary" icon={<Bot size={15} />} onClick={() => router.push("/dashboard/whatsapp/bot")}>
+            Configurar bot
+          </ButtonNew>
+        </div>
       </div>
 
       {/* INTRO */}
