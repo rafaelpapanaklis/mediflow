@@ -56,6 +56,10 @@ function boneColormap(): THREE.DataTexture {
     data[i * 4 + 3] = Math.round(a[4] + (b[4] - a[4]) * f);
   }
   const tex = new THREE.DataTexture(data, 256, 1, THREE.RGBAFormat);
+  // El colormap son COLORES (no datos lineales): marcarlo sRGB para que three
+  // lo decodifique a lineal al muestrear y el hueso/marfil salga con el tono
+  // correcto (sin esto se ve lavado por el encode de salida sin decode previo).
+  tex.colorSpace = THREE.SRGBColorSpace;
   tex.needsUpdate = true;
   return tex;
 }
@@ -89,43 +93,125 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
     const H = Math.max(1, Math.floor(rows / sy));
     const D = Math.max(1, Math.floor(depth / sz));
 
-    // Mapeo plano-de-textura → corte del estudio con el eje Z INVERTIDO: el
-    // cráneo venía boca abajo, así que el corte más alto del set se coloca al
-    // tope del volumen para que, con camera.up = +Z, quede derecho.
-    const srcZ = (z: number) => slices[Math.min(depth - 1, (D - 1 - z) * sz)].pixels;
+    // --- ESPACIADO ANATÓMICO (corrección de proporción) ------------------
+    // Los vóxeles del CBCT casi nunca son isotrópicos: el grosor de corte (z)
+    // suele diferir del pixelSpacing en plano (x,y), así que el cráneo sale
+    // estirado/aplastado. Leemos el espaciado DICOM de forma DEFENSIVA (aún no
+    // está en VolSlice; lo añade WS2-T2); si falta cae a 1 mm → la escala queda
+    // como (sx,sy,sz) y es no-op cuando los factores de submuestreo son iguales.
+    // Contrato WS2-T2 (dicom-decode-core): pixelSpacing YA viene invertido a
+    // [Δx(columna), Δy(fila)] en mm, y el espaciado entre cortes es `zSpacing`
+    // (no sliceThickness). Defensivo: si algo falta cae a 1.
+    const sp = slices[0] as any;
+    const colSp = Number(sp?.pixelSpacing?.[0]) || 1; // x (columna), mm
+    const rowSp = Number(sp?.pixelSpacing?.[1] ?? sp?.pixelSpacing?.[0]) || 1; // y (fila), mm
+    const zSp = Number(sp?.zSpacing ?? sp?.sliceThickness) || 1; // z, mm
+    // Tamaño físico de CADA vóxel de SALIDA (incluye el submuestreo por eje) y
+    // aspecto RELATIVO (el eje más fino = 1, los demás ≥ 1).
+    const pmin = Math.min(sx * colSp, sy * rowSp, sz * zSp) || 1;
+    const aspectX = (sx * colSp) / pmin;
+    const aspectY = (sy * rowSp) / pmin;
+    const aspectZ = (sz * zSp) / pmin;
+    const Wp = W * aspectX; // dimensiones YA escaladas para encuadrar la cámara
+    const Hp = H * aspectY;
+    const Dp = D * aspectZ;
 
-    // Construye el volumen normalizado a 0-255. min/max en el mismo paso.
-    const vol = new Uint8Array(W * H * D);
+    // --- CONSTRUCCIÓN DEL VOLUMEN ----------------------------------------
+    // Submuestreo por PROMEDIADO (box-filter): cada vóxel de salida es la MEDIA
+    // del bloque sx×sy×sz de vóxeles de origen, no un punto decimado → menos
+    // aliasing, conserva trabéculas. El eje Z se INVIERTE en la base del bloque
+    // ((D-1-z)*sz, cráneo derecho con z=0 = tope) promediando hacia adelante.
+    // Guardamos el promedio en float para sacar percentiles en una 2ª pasada.
+    const avg = new Float32Array(W * H * D);
     let minV = Infinity;
     let maxV = -Infinity;
-    // 1ª pasada: min/max del volumen submuestreado.
+    let p = 0;
     for (let z = 0; z < D; z++) {
-      const px = srcZ(z);
+      const zBase = (D - 1 - z) * sz; // inversión SOLO en la base del bloque
       for (let y = 0; y < H; y++) {
-        const row = y * sy * cols;
+        const yBase = y * sy;
         for (let x = 0; x < W; x++) {
-          const v = px[row + x * sx];
-          if (v < minV) minV = v;
-          if (v > maxV) maxV = v;
+          const xBase = x * sx;
+          let sum = 0;
+          let n = 0;
+          for (let dz = 0; dz < sz; dz++) {
+            const sIdx = zBase + dz;
+            if (sIdx > depth - 1) continue;
+            const px = slices[sIdx].pixels;
+            for (let dy = 0; dy < sy; dy++) {
+              const r = yBase + dy;
+              if (r > rows - 1) continue;
+              const rowOff = r * cols;
+              for (let dx = 0; dx < sx; dx++) {
+                const c = xBase + dx;
+                if (c > cols - 1) continue;
+                const val = px[rowOff + c];
+                if (Number.isFinite(val)) {
+                  sum += val;
+                  n++;
+                }
+              }
+            }
+          }
+          const a = n > 0 ? sum / n : 0;
+          avg[p++] = a;
+          if (a < minV) minV = a;
+          if (a > maxV) maxV = a;
         }
       }
     }
-    if (!Number.isFinite(minV)) {
+    if (!Number.isFinite(minV) || !Number.isFinite(maxV)) {
       minV = 0;
       maxV = 255;
     }
-    const range = maxV - minV || 1;
-    // 2ª pasada: normaliza.
-    let p = 0;
-    for (let z = 0; z < D; z++) {
-      const px = srcZ(z);
-      for (let y = 0; y < H; y++) {
-        const row = y * sy * cols;
-        for (let x = 0; x < W; x++) {
-          let g = ((px[row + x * sx] - minV) / range) * 255;
-          g = g < 0 ? 0 : g > 255 ? 255 : g;
-          vol[p++] = g;
+
+    // Normalización por PERCENTILES p1/p99 vía histograma (sin ordenar millones
+    // de valores): un único vóxel de metal/artefacto dispara el max y aplasta el
+    // contraste óseo, así que normalizamos contra [p1,p99] saturando las colas.
+    const vol = new Uint8Array(W * H * D);
+    const span = maxV - minV;
+    if (span <= 0) {
+      vol.fill(0); // volumen plano: nada que normalizar
+    } else {
+      const BINS = 1024;
+      const binW = span / BINS;
+      const hist = new Uint32Array(BINS);
+      for (let i = 0; i < avg.length; i++) {
+        let b = Math.floor(((avg[i] - minV) / span) * BINS);
+        if (b < 0) b = 0;
+        else if (b >= BINS) b = BINS - 1; // v==maxV cae en BINS: recórtalo
+        hist[b]++;
+      }
+      const total = avg.length;
+      const loT = total * 0.01;
+      const hiT = total * 0.99;
+      let cum = 0;
+      let loBin = 0;
+      let hiBin = BINS - 1;
+      let loFound = false;
+      for (let b = 0; b < BINS; b++) {
+        cum += hist[b];
+        if (!loFound && cum >= loT) {
+          loBin = b;
+          loFound = true;
         }
+        if (cum >= hiT) {
+          hiBin = b;
+          break;
+        }
+      }
+      let p1 = minV + loBin * binW;
+      let p99 = minV + (hiBin + 1) * binW;
+      if (p99 - p1 < binW) {
+        // casi todo en un bin: cae a min/max para no colapsar el rango
+        p1 = minV;
+        p99 = maxV;
+      }
+      const range = p99 - p1 || 1;
+      for (let i = 0; i < avg.length; i++) {
+        let g = ((avg[i] - p1) / range) * 255;
+        g = g < 0 ? 0 : g > 255 ? 255 : g;
+        vol[i] = g;
       }
     }
 
@@ -149,7 +235,7 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
 
     const scene = new THREE.Scene();
     const aspect = width / height;
-    const frustum = Math.max(W, H, D) * 1.4;
+    const frustum = Math.max(Wp, Hp, Dp) * 1.4;
     const camera = new THREE.OrthographicCamera(
       (-frustum * aspect) / 2,
       (frustum * aspect) / 2,
@@ -163,10 +249,10 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
     // del cráneo (con la inversión de Z de arriba → frente arriba, mandíbula
     // abajo, mirando al frente).
     camera.up.set(0, 0, 1);
-    camera.position.set(W * 0.6, -H * 1.5, D * 0.62);
+    camera.position.set(Wp * 0.6, -Hp * 1.5, Dp * 0.62);
 
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.set(W / 2, H / 2, D / 2);
+    controls.target.set(Wp / 2, Hp / 2, Dp / 2);
     controls.enableDamping = true;
     controls.dampingFactor = 0.1;
     controls.update();
@@ -190,6 +276,11 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
     const geometry = new THREE.BoxGeometry(W, H, D);
     geometry.translate(W / 2, H / 2, D / 2);
     const mesh = new THREE.Mesh(geometry, material);
+    // Proporción anatómica SOLO en el mesh (modelMatrix). u_size y la geometría
+    // siguen siendo (W,H,D): el ray casting marcha en espacio LOCAL y el
+    // inverse(modelViewMatrix) del shader elimina esta escala del marchado, así
+    // que solo cambia la proporción EN PANTALLA, no el muestreo del volumen.
+    mesh.scale.set(aspectX, aspectY, aspectZ);
     scene.add(mesh);
 
     // --- RENDER BAJO DEMANDA ---------------------------------------------
@@ -223,6 +314,69 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
     };
     animate();
 
+    // --- ROBUSTEZ ANTE PÉRDIDA DE CONTEXTO WebGL --------------------------
+    // Un reset de GPU (suspender el laptop, presión de VRAM, hipo del driver)
+    // dispara 'webglcontextlost' en el canvas; por DEFECTO WebGL NO restaura y
+    // el lienzo queda NEGRO para siempre. Lo manejamos respetando el on-demand.
+    let lostOverlay: HTMLDivElement | null = null;
+    let lostTimer: ReturnType<typeof setTimeout> | null = null;
+    const showLostOverlay = (text: string) => {
+      if (!lostOverlay) {
+        lostOverlay = document.createElement("div");
+        lostOverlay.style.position = "absolute";
+        lostOverlay.style.top = "50%";
+        lostOverlay.style.left = "50%";
+        lostOverlay.style.transform = "translate(-50%, -50%)";
+        lostOverlay.style.padding = "8px 14px";
+        lostOverlay.style.borderRadius = "8px";
+        lostOverlay.style.background = "rgba(0, 0, 0, 0.72)";
+        lostOverlay.style.color = "#f5f5f5";
+        lostOverlay.style.font = "12px system-ui, sans-serif";
+        lostOverlay.style.textAlign = "center";
+        lostOverlay.style.pointerEvents = "none";
+        lostOverlay.style.zIndex = "5";
+        if (getComputedStyle(mount).position === "static") {
+          mount.style.position = "relative";
+        }
+        mount.appendChild(lostOverlay);
+      }
+      lostOverlay.textContent = text;
+    };
+    const removeLostOverlay = () => {
+      if (lostOverlay && lostOverlay.parentNode) {
+        lostOverlay.parentNode.removeChild(lostOverlay);
+      }
+      lostOverlay = null;
+    };
+    const onContextLost = (e: Event) => {
+      // preventDefault() es OBLIGATORIO: sin él el navegador nunca emite
+      // 'webglcontextrestored' y el contexto se pierde de forma permanente.
+      e.preventDefault();
+      cancelAnimationFrame(raf);
+      raf = 0;
+      showLostOverlay("Reiniciando el visor 3D…");
+      if (lostTimer) clearTimeout(lostTimer);
+      // Si no restaura en unos segundos (crash de GPU/driver): pedir recarga.
+      lostTimer = setTimeout(() => {
+        showLostOverlay("El visor 3D perdió el contexto de GPU. Recarga la página.");
+      }, 6000);
+    };
+    const onContextRestored = () => {
+      if (lostTimer) {
+        clearTimeout(lostTimer);
+        lostTimer = null;
+      }
+      // Los recursos GPU se perdieron pero los objetos JS viven en el closure;
+      // forzamos la resubida de las texturas caras y reanudamos el loop on-demand.
+      texture.needsUpdate = true;
+      cmtex.needsUpdate = true;
+      removeLostOverlay();
+      needsRender = true;
+      if (!raf) animate();
+    };
+    renderer.domElement.addEventListener("webglcontextlost", onContextLost, false);
+    renderer.domElement.addEventListener("webglcontextrestored", onContextRestored, false);
+
     const onResize = () => {
       const nw = mount.clientWidth || 600;
       renderer.setSize(nw, height);
@@ -238,6 +392,10 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
       controls.removeEventListener("change", requestRender);
+      renderer.domElement.removeEventListener("webglcontextlost", onContextLost);
+      renderer.domElement.removeEventListener("webglcontextrestored", onContextRestored);
+      if (lostTimer) clearTimeout(lostTimer);
+      removeLostOverlay();
       requestRenderRef.current = null;
       controls.dispose();
       geometry.dispose();
