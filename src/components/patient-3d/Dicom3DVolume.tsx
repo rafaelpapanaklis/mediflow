@@ -68,6 +68,10 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
   styleRef.current = renderstyle;
   const isoRef = useRef(iso);
   isoRef.current = iso;
+  // Render BAJO DEMANDA: el efecto del visor publica aquí su "pedir un frame"
+  // para que los cambios de estilo/umbral (estado de React, que NO re-ejecutan
+  // el efecto) puedan despertar el loop y pintar un cuadro nuevo.
+  const requestRenderRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -136,7 +140,9 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
     const width = mount.clientWidth || 600;
     const height = 460;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    // antialias:false → el MSAA solo suaviza los bordes del cubo contenedor; el
+    // ray casting de volumen no se beneficia, así que es coste inútil de GPU.
+    const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true });
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
     renderer.setSize(width, height);
     mount.appendChild(renderer.domElement);
@@ -186,13 +192,34 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
 
+    // --- RENDER BAJO DEMANDA ---------------------------------------------
+    // Antes se llamaba renderer.render() en CADA frame aunque la imagen
+    // estuviera quieta: el ray casting de volumen (fragment shader pesado)
+    // mantenía la GPU al 100% y fundía la batería con el modelo inmóvil.
+    // Ahora solo pintamos cuando algo cambió.
+    let needsRender = true; // pinta el primer cuadro
+    const requestRender = () => {
+      needsRender = true;
+    };
+    // OrbitControls dispara 'change' en cada cambio de cámara (arrastre, zoom,
+    // pan) y en cada paso de la inercia del damping hasta que se asienta.
+    controls.addEventListener("change", requestRender);
+    requestRenderRef.current = requestRender;
+
     let raf = 0;
     const animate = () => {
       raf = requestAnimationFrame(animate);
-      uniforms.u_renderstyle.value = styleRef.current;
-      uniforms.u_renderthreshold.value = isoRef.current;
+      // autoRotate (si se activa) mueve la cámara solo: hay que seguir pintando.
+      if (controls.autoRotate) needsRender = true;
+      // update() aplica el damping; al mover la cámara emite 'change' (que
+      // vuelve a pedir frame) hasta que la inercia cae bajo el umbral y para.
       controls.update();
-      renderer.render(scene, camera);
+      if (needsRender) {
+        uniforms.u_renderstyle.value = styleRef.current;
+        uniforms.u_renderthreshold.value = isoRef.current;
+        renderer.render(scene, camera);
+        needsRender = false;
+      }
     };
     animate();
 
@@ -203,12 +230,15 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
       camera.left = (-frustum * a) / 2;
       camera.right = (frustum * a) / 2;
       camera.updateProjectionMatrix();
+      requestRender(); // el cambio de tamaño necesita un cuadro nuevo
     };
     window.addEventListener("resize", onResize);
 
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
+      controls.removeEventListener("change", requestRender);
+      requestRenderRef.current = null;
       controls.dispose();
       geometry.dispose();
       material.dispose();
@@ -221,6 +251,12 @@ export default function Dicom3DVolume({ slices }: { slices: VolSlice[] }) {
       }
     };
   }, [slices]);
+
+  // Estilo (MIP/ISO) y umbral viven en estado de React: cambiarlos NO
+  // re-ejecuta el efecto del visor, así que pedimos un frame para reflejarlos.
+  useEffect(() => {
+    requestRenderRef.current?.();
+  }, [renderstyle, iso]);
 
   return (
     <div>
