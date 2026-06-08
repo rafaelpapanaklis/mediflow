@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { BUCKETS, extractStoragePath, signMaybeUrl } from "@/lib/storage";
+import { BUCKETS, extractStoragePath, signMaybeUrl, signMaybeUrls } from "@/lib/storage";
 
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
@@ -21,12 +21,9 @@ export async function GET(req: NextRequest) {
 
   // Firma cada URL on-demand (TTL 5 min). Tolera tanto paths nuevos como
   // URLs legacy guardadas antes de la migración a bucket privado.
-  const signed = await Promise.all(
-    photos.map(async (p) => ({
-      ...p,
-      url: await signMaybeUrl(p.url).catch(() => ""),
-    })),
-  );
+  // Firma todas las URLs en UN round-trip (createSignedUrls) en vez de N×.
+  const urls = await signMaybeUrls(photos.map((p) => p.url));
+  const signed = photos.map((p, i) => ({ ...p, url: urls[i] }));
 
   return NextResponse.json(signed);
 }

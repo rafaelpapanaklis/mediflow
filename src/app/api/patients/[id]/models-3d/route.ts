@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdmin } from "@supabase/supabase-js";
-import { BUCKETS, signMaybeUrl } from "@/lib/storage";
+import { BUCKETS, signMaybeUrl, signMaybeUrls } from "@/lib/storage";
 import { validateModel3D } from "@/lib/validate-upload";
 
 export const runtime = "nodejs";
@@ -80,9 +80,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     },
   });
 
-  const signed = await Promise.all(
-    files.map(async (f) => ({ ...f, url: await signMaybeUrl(f.url).catch(() => "") })),
-  );
+  // Firma todas las URLs en UN round-trip (createSignedUrls) en vez de N×.
+  const urls = await signMaybeUrls(files.map((f) => f.url));
+  const signed = files.map((f, i) => ({ ...f, url: urls[i] }));
   return NextResponse.json(signed);
 }
 

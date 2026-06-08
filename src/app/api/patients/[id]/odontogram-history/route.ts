@@ -24,15 +24,21 @@ async function getDbUser() {
 
 interface Params { params: { id: string } }
 
+const DEFAULT_LIMIT = 40;
+const MAX_LIMIT = 100;
+
 /**
- * GET /api/patients/[id]/odontogram-history
- * Devuelve los snapshots del paciente ordenados desc por fecha.
- * Cada snapshot incluye: id, appointmentId, snapshotAt, entries (JSON).
+ * GET /api/patients/[id]/odontogram-history?cursor=&limit=
+ * Devuelve los snapshots del paciente ordenados desc por fecha, PAGINADOS por
+ * cursor (keyset sobre snapshotAt+id, sin OFFSET). Responde { snapshots,
+ * nextCursor }; nextCursor=null cuando no hay más páginas.
  */
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    // Aislamiento multi-tenant: el snapshot no tiene clinicId, así que el gate
+    // es que el paciente pertenezca a la clínica del usuario.
     const patient = await prisma.patient.findFirst({
       where: { id: params.id, clinicId: dbUser.clinicId },
       select: { id: true },
@@ -40,9 +46,19 @@ export async function GET(_req: NextRequest, { params }: Params) {
     if (!patient) {
       return NextResponse.json({ error: "patient_not_found" }, { status: 404 });
     }
-    const snapshots = await prisma.odontogramSnapshot.findMany({
+
+    const sp = req.nextUrl.searchParams;
+    const limitParam = parseInt(sp.get("limit") ?? "", 10);
+    const limit = Number.isFinite(limitParam)
+      ? Math.min(Math.max(limitParam, 1), MAX_LIMIT)
+      : DEFAULT_LIMIT;
+    const cursor = sp.get("cursor");
+
+    const rows = await prisma.odontogramSnapshot.findMany({
       where: { patientId: params.id },
-      orderBy: { snapshotAt: "desc" },
+      orderBy: [{ snapshotAt: "desc" }, { id: "desc" }],
+      take: limit + 1, // 1 extra para saber si hay más
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       select: {
         id: true,
         appointmentId: true,
@@ -57,8 +73,13 @@ export async function GET(_req: NextRequest, { params }: Params) {
         },
       },
     });
+
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const nextCursor = hasMore ? page[page.length - 1].id : null;
+
     return NextResponse.json({
-      snapshots: snapshots.map((s) => ({
+      snapshots: page.map((s) => ({
         id: s.id,
         appointmentId: s.appointmentId,
         snapshotAt: s.snapshotAt.toISOString(),
@@ -69,6 +90,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
           ? `Dr/a. ${s.appointment.doctor.firstName} ${s.appointment.doctor.lastName}`.trim()
           : null,
       })),
+      nextCursor,
     });
   } catch (err) {
     if ((err as { code?: string }).code === "P2021") {

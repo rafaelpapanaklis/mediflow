@@ -119,21 +119,46 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<HistorySnapshot[]>([]);
   const [viewingSnapshotId, setViewingSnapshotId] = useState<string | null>(null);
+  const [historyCursor, setHistoryCursor] = useState<string | null>(null);
+  const [loadingMoreHistory, setLoadingMoreHistory] = useState(false);
   const [expandedGroup, setExpandedGroup] = useState<ToothState | null>(null);
   const [hoverGroup, setHoverGroup] = useState<ToothState | null>(null);
   const inflightRef = useRef<AbortController | null>(null);
 
-  /** Fetch del historial de snapshots (lazy: solo al abrir el dropdown). */
+  /** Fetch de la 1ª página del historial (lazy: solo al abrir el dropdown).
+   *  Paginado por cursor para no traer todos los snapshots de golpe. */
   const loadHistory = useCallback(async () => {
     try {
-      const res = await fetch(`/api/patients/${patientId}/odontogram-history`, { cache: "no-store" });
+      const res = await fetch(`/api/patients/${patientId}/odontogram-history?limit=40`, { cache: "no-store" });
       if (!res.ok) throw new Error(await readErrorMessage(res, t("clinical.odontogram.errHistoryLoad")));
-      const { data } = await safeJson<{ snapshots: HistorySnapshot[] }>(res);
+      const { data } = await safeJson<{ snapshots: HistorySnapshot[]; nextCursor?: string | null }>(res);
       setHistory(data?.snapshots ?? []);
+      setHistoryCursor(data?.nextCursor ?? null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("clinical.odontogram.errHistoryGeneric"));
     }
   }, [patientId, t]);
+
+  /** Carga la siguiente página y la AGREGA (append) — "ver snapshot" busca por
+   *  id en el array local, así que no debe reemplazarse. */
+  const loadMoreHistory = useCallback(async () => {
+    if (!historyCursor || loadingMoreHistory) return;
+    setLoadingMoreHistory(true);
+    try {
+      const res = await fetch(
+        `/api/patients/${patientId}/odontogram-history?limit=40&cursor=${encodeURIComponent(historyCursor)}`,
+        { cache: "no-store" },
+      );
+      if (!res.ok) throw new Error(await readErrorMessage(res, t("clinical.odontogram.errHistoryLoad")));
+      const { data } = await safeJson<{ snapshots: HistorySnapshot[]; nextCursor?: string | null }>(res);
+      setHistory((prev) => [...prev, ...(data?.snapshots ?? [])]);
+      setHistoryCursor(data?.nextCursor ?? null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("clinical.odontogram.errHistoryGeneric"));
+    } finally {
+      setLoadingMoreHistory(false);
+    }
+  }, [patientId, t, historyCursor, loadingMoreHistory]);
 
   // Carga el historial la primera vez que se abre el popover.
   useEffect(() => {
@@ -516,6 +541,18 @@ export function Odontogram({ patientId, readOnly: readOnlyProp = false }: Odonto
                         </button>
                       );
                     })}
+                    {historyCursor && (
+                      <button
+                        type="button"
+                        className={styles.historyItem}
+                        onClick={loadMoreHistory}
+                        disabled={loadingMoreHistory}
+                      >
+                        <span className={styles.historyItemLabel}>
+                          {loadingMoreHistory ? "Cargando…" : "Cargar más"}
+                        </span>
+                      </button>
+                    )}
                   </>
                 )}
               </Popover.Content>

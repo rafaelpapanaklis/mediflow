@@ -100,25 +100,65 @@ export async function signMaybeUrl(
 }
 
 /**
- * Versión batch — útil para listas de archivos. Falla suave: si una URL no
- * se puede firmar, la devuelve vacía y loguea warning (sin romper toda la
- * respuesta).
+ * Versión batch — útil para listas de archivos. Firma TODAS las URLs internas
+ * en UN solo round-trip con `createSignedUrls` (plural) en vez de N× llamadas
+ * a `createSignedUrl`. Las URLs externas / fuera del bucket se devuelven tal
+ * cual (passthrough). Falla suave: si una URL no se puede firmar, queda vacía
+ * (sin romper toda la respuesta). El resultado conserva el orden del input.
  */
 export async function signMaybeUrls(
   urls: Array<string | null | undefined>,
   ttlSeconds: number = SIGNED_URL_TTL_SECONDS,
   bucket: BucketName = BUCKETS.PATIENT_FILES,
 ): Promise<string[]> {
-  return Promise.all(
-    urls.map(async (u) => {
-      try {
-        return await signMaybeUrl(u, ttlSeconds, bucket);
-      } catch (e) {
-        console.warn("[storage.signMaybeUrls] fallo al firmar:", (e as Error).message);
-        return "";
+  const result: string[] = new Array(urls.length).fill("");
+  // Separa los inputs: passthrough (vacío / URL externa) vs paths firmables.
+  const toSign: Array<{ idx: number; path: string }> = [];
+  urls.forEach((u, idx) => {
+    if (!u) return; // queda ""
+    const path = extractStoragePath(u, bucket);
+    if (!path) {
+      result[idx] = u; // URL externa o de otro bucket: passthrough
+      return;
+    }
+    toSign.push({ idx, path });
+  });
+
+  if (toSign.length === 0) return result;
+
+  try {
+    const { data, error } = await admin()
+      .storage.from(bucket)
+      .createSignedUrls(
+        toSign.map((t) => t.path),
+        ttlSeconds,
+      );
+    if (error || !data) {
+      console.warn(
+        "[storage.signMaybeUrls] createSignedUrls falló:",
+        error?.message ?? "sin data",
+      );
+      return result; // falla suave: las firmables quedan ""
+    }
+    // `data` viene en el MISMO orden que los paths enviados.
+    data.forEach((row, i) => {
+      const target = toSign[i];
+      if (!target) return;
+      if (row.error || !row.signedUrl) {
+        console.warn(
+          `[storage.signMaybeUrls] fallo al firmar ${bucket}/${target.path}:`,
+          row.error ?? "sin signedUrl",
+        );
+        return; // queda ""
       }
-    }),
-  );
+      result[target.idx] = row.signedUrl;
+    });
+  } catch (e) {
+    console.warn("[storage.signMaybeUrls] excepción:", (e as Error).message);
+    // result ya tiene "" en las firmables y passthrough en las externas.
+  }
+
+  return result;
 }
 
 /**

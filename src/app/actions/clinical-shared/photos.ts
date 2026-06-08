@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { ClinicalModule, ClinicalPhotoStage, ClinicalPhotoType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
-import { signMaybeUrl } from "@/lib/storage";
+import { signMaybeUrls } from "@/lib/storage";
 import { auditClinicalShared, guardPatient } from "@/lib/clinical-shared/auth/guard";
 import {
   ALLOWED_PHOTO_MIME,
@@ -167,22 +167,29 @@ export async function listClinicalPhotosAction(
     take: 200,
   });
 
-  const dtos: ClinicalPhotoDTO[] = await Promise.all(
-    rows.map(async (r) => ({
-      id: r.id,
-      patientId: r.patientId,
-      module: r.module,
-      toothFdi: r.toothFdi,
-      photoType: r.photoType,
-      stage: r.stage,
-      capturedAt: r.capturedAt.toISOString(),
-      capturedBy: r.capturedBy,
-      blobUrl: await signMaybeUrl(r.blobUrl),
-      thumbnailUrl: r.thumbnailUrl ? await signMaybeUrl(r.thumbnailUrl) : null,
-      notes: r.notes,
-      annotations: (r.annotations as unknown as PhotoAnnotation[] | null) ?? null,
-    })),
-  );
+  // Firma blobUrl + thumbnailUrl de TODAS las filas en UN solo round-trip
+  // (createSignedUrls) en vez de hasta 2×N llamadas. Orden plano:
+  // [blob0, thumb0, blob1, thumb1, ...].
+  const signInputs: Array<string | null | undefined> = [];
+  for (const r of rows) {
+    signInputs.push(r.blobUrl);
+    signInputs.push(r.thumbnailUrl);
+  }
+  const signedUrls = await signMaybeUrls(signInputs);
+  const dtos: ClinicalPhotoDTO[] = rows.map((r, i) => ({
+    id: r.id,
+    patientId: r.patientId,
+    module: r.module,
+    toothFdi: r.toothFdi,
+    photoType: r.photoType,
+    stage: r.stage,
+    capturedAt: r.capturedAt.toISOString(),
+    capturedBy: r.capturedBy,
+    blobUrl: signedUrls[i * 2],
+    thumbnailUrl: r.thumbnailUrl ? signedUrls[i * 2 + 1] : null,
+    notes: r.notes,
+    annotations: (r.annotations as unknown as PhotoAnnotation[] | null) ?? null,
+  }));
 
   return ok(dtos);
 }

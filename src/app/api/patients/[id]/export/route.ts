@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { signMaybeUrl } from "@/lib/storage";
+import { signMaybeUrls } from "@/lib/storage";
 import { logMutation } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
@@ -84,19 +84,20 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     prisma.beforeAfterPhoto.findMany({ where: { patientId: patient.id } }),
   ]);
 
-  // Firma cada URL de archivo (path interno → signed URL 24h).
-  const signedFiles = await Promise.all(
-    files.map(async (f) => ({ ...f, url: await signMaybeUrl(f.url, FILE_TTL).catch(() => "") })),
-  );
-  const signedConsents = await Promise.all(
-    consentForms.map(async (c) => ({
-      ...c,
-      signatureUrl: c.signatureUrl ? await signMaybeUrl(c.signatureUrl, FILE_TTL).catch(() => "") : null,
-    })),
-  );
-  const signedBeforeAfter = await Promise.all(
-    beforeAfterPhotos.map(async (p) => ({ ...p, url: await signMaybeUrl(p.url, FILE_TTL).catch(() => "") })),
-  );
+  // Firma cada URL de archivo (path interno → signed URL 24h) en batch con
+  // createSignedUrls: 3 round-trips en vez de N×. Promise.all de 3 (regla <7);
+  // el orden del resultado coincide con el del input.
+  const [fileUrls, consentUrls, beforeAfterUrls] = await Promise.all([
+    signMaybeUrls(files.map((f) => f.url), FILE_TTL),
+    signMaybeUrls(consentForms.map((c) => c.signatureUrl), FILE_TTL),
+    signMaybeUrls(beforeAfterPhotos.map((p) => p.url), FILE_TTL),
+  ]);
+  const signedFiles = files.map((f, i) => ({ ...f, url: fileUrls[i] }));
+  const signedConsents = consentForms.map((c, i) => ({
+    ...c,
+    signatureUrl: c.signatureUrl ? consentUrls[i] : null,
+  }));
+  const signedBeforeAfter = beforeAfterPhotos.map((p, i) => ({ ...p, url: beforeAfterUrls[i] }));
 
   await logMutation({
     req,

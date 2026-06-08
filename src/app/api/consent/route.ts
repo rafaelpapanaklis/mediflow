@@ -3,7 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { randomBytes } from "crypto";
 import { logMutation } from "@/lib/audit";
-import { signMaybeUrl } from "@/lib/storage";
+import { signMaybeUrls } from "@/lib/storage";
 
 const CONSENT_TEMPLATES: Record<string, string> = {
   "Extracción simple": `CONSENTIMIENTO INFORMADO PARA EXTRACCIÓN DENTAL
@@ -84,12 +84,12 @@ export async function GET(req: NextRequest) {
     orderBy: { createdAt: "desc" },
   });
 
-  const signed = await Promise.all(
-    forms.map(async (f) => ({
-      ...f,
-      signatureUrl: f.signatureUrl ? await signMaybeUrl(f.signatureUrl).catch(() => "") : null,
-    })),
-  );
+  // Firma todas las firmas en UN round-trip (createSignedUrls) en vez de N×.
+  const sigUrls = await signMaybeUrls(forms.map((f) => f.signatureUrl));
+  const signed = forms.map((f, i) => ({
+    ...f,
+    signatureUrl: f.signatureUrl ? sigUrls[i] : null,
+  }));
 
   return NextResponse.json(signed);
 }

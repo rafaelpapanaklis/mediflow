@@ -68,10 +68,33 @@ export async function GET(req: NextRequest, { params }: Params) {
   const dateGte = from ?? undefined;
   const dateLte = to ?? undefined;
 
-  // Helper: agregar filtro de fechas a un where dado.
+  // Paginación keyset. El cursor es `${ISOdate}__${eventId}` del último evento
+  // de la página previa; over-fetchamos limit+1 por fuente y recortamos tras el
+  // merge global. take/limit por defecto 40 (máx 100).
+  const limitParam = parseInt(sp.get("limit") ?? "", 10);
+  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 100) : 40;
+  const cursorRaw = sp.get("cursor");
+  let cursorDateIso = "";
+  let cursorId = "";
+  let cursorDate: Date | null = null;
+  if (cursorRaw) {
+    const sep = cursorRaw.indexOf("__");
+    if (sep > 0) {
+      cursorDateIso = cursorRaw.slice(0, sep);
+      cursorId = cursorRaw.slice(sep + 2);
+      const d = new Date(cursorDateIso);
+      if (!Number.isNaN(d.getTime())) cursorDate = d;
+    }
+  }
+  const useCursor = cursorDate !== null;
+  // Límite superior efectivo de la query = min(to del usuario, fecha del cursor).
+  const upper: Date | null =
+    to && cursorDate ? (to.getTime() < cursorDate.getTime() ? to : cursorDate) : (to ?? cursorDate ?? null);
+
+  // Helper: agregar filtro de fechas a un where dado (gte=from, lte=upper).
   function dateRange<F extends string>(field: F): Record<F, unknown> | Record<string, never> {
-    if (!from && !to) return {};
-    return { [field]: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } as Record<F, unknown>;
+    if (!from && !upper) return {};
+    return { [field]: { ...(from ? { gte: from } : {}), ...(upper ? { lte: upper } : {}) } } as Record<F, unknown>;
   }
 
   const wantSoap        = requestedTypes.includes("soap");
@@ -92,6 +115,7 @@ export async function GET(req: NextRequest, { params }: Params) {
         doctor: { select: { firstName: true, lastName: true } },
       },
       orderBy: { visitDate: "desc" },
+      take: limit + 1,
     }) : Promise.resolve([]),
     wantAppt ? prisma.appointment.findMany({
       where: {
@@ -107,6 +131,7 @@ export async function GET(req: NextRequest, { params }: Params) {
         doctor: { select: { firstName: true, lastName: true } },
       },
       orderBy: { startsAt: "desc" },
+      take: limit + 1,
     }) : Promise.resolve([]),
     wantRx ? prisma.prescription.findMany({
       where: { clinicId: user.clinicId, patientId: params.id, ...dateRange<"issuedAt">("issuedAt") },
@@ -116,6 +141,7 @@ export async function GET(req: NextRequest, { params }: Params) {
         doctor: { select: { firstName: true, lastName: true } },
       },
       orderBy: { issuedAt: "desc" },
+      take: limit + 1,
     }) : Promise.resolve([]),
     wantXray ? prisma.patientFile.findMany({
       // Coherente con la pestaña "Radiografías" (/api/xrays). Filtramos a
@@ -132,6 +158,7 @@ export async function GET(req: NextRequest, { params }: Params) {
         xrayAnalysis: { select: { summary: true, severity: true } },
       },
       orderBy: { createdAt: "desc" },
+      take: limit + 1,
     }) : Promise.resolve([]),
     wantTreatment ? prisma.treatmentPlan.findMany({
       where: { clinicId: user.clinicId, patientId: params.id, ...dateRange<"startDate">("startDate") },
@@ -140,6 +167,7 @@ export async function GET(req: NextRequest, { params }: Params) {
         doctor: { select: { firstName: true, lastName: true } },
       },
       orderBy: { startDate: "desc" },
+      take: limit + 1,
     }) : Promise.resolve([]),
     wantReferral ? prisma.referral.findMany({
       where: { clinicId: user.clinicId, patientId: params.id, ...dateRange<"sentAt">("sentAt") },
@@ -149,6 +177,7 @@ export async function GET(req: NextRequest, { params }: Params) {
         fromDoctor: { select: { firstName: true, lastName: true } },
       },
       orderBy: { sentAt: "desc" },
+      take: limit + 1,
     }) : Promise.resolve([]),
     wantDiagnosis ? prisma.medicalRecordDiagnosis.findMany({
       where: {
@@ -163,6 +192,7 @@ export async function GET(req: NextRequest, { params }: Params) {
         },
       },
       orderBy: { createdAt: "desc" },
+      take: limit + 1,
     }) : Promise.resolve([]),
   ]);
 
@@ -281,14 +311,26 @@ export async function GET(req: NextRequest, { params }: Params) {
     });
   }
 
-  events.sort((a, b) => b.date.localeCompare(a.date));
+  // Orden total estable desc (fecha, luego id) para un cursor determinista.
+  events.sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+
+  // Keyset: descarta lo ya mostrado (>= cursor en el orden desc) y recorta a
+  // limit. nextCursor=null cuando no hay más páginas.
+  const fresh = useCursor
+    ? events.filter((e) => e.date < cursorDateIso || (e.date === cursorDateIso && e.id < cursorId))
+    : events;
+  const hasMore = fresh.length > limit;
+  const page = hasMore ? fresh.slice(0, limit) : fresh;
+  const last = page[page.length - 1];
+  const nextCursor = hasMore && last ? `${last.date}__${last.id}` : null;
 
   return NextResponse.json({
     patientId: params.id,
     from: dateGte?.toISOString() ?? null,
     to: dateLte?.toISOString() ?? null,
     types: requestedTypes,
-    count: events.length,
-    events,
+    count: page.length,
+    events: page,
+    nextCursor,
   });
 }

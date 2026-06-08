@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Stethoscope,
   Pill,
@@ -113,21 +113,31 @@ export function HistoriaTimeline({
   const t = useT();
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [range, setRange] = useState<RangePreset>("365");
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [enabledTypes, setEnabledTypes] = useState<Set<TimelineEventType>>(new Set(TYPE_ORDER));
+
+  // Tamaño de página: en compacto basta con los que se muestran; en completo
+  // pedimos 50 y dejamos "cargar más" para paginar el resto (cursor).
+  const pageLimit = compact ? (limit ?? 8) : 50;
+  const buildBaseParams = useCallback(() => {
+    const params = new URLSearchParams();
+    const preset = RANGE_PRESETS.find((p) => p.id === range);
+    if (preset && preset.days > 0) {
+      params.set("from", new Date(Date.now() - preset.days * 86400000).toISOString());
+    }
+    params.set("limit", String(pageLimit));
+    return params;
+  }, [range, pageLimit]);
 
   useEffect(() => {
     const ctrl = new AbortController();
     setLoading(true);
     setError(null);
-    const params = new URLSearchParams();
-    const preset = RANGE_PRESETS.find((p) => p.id === range);
-    if (preset && preset.days > 0) {
-      const from = new Date(Date.now() - preset.days * 86400000).toISOString();
-      params.set("from", from);
-    }
-    fetch(`/api/patients/${patientId}/timeline?${params}`, { signal: ctrl.signal })
+    setNextCursor(null);
+    fetch(`/api/patients/${patientId}/timeline?${buildBaseParams()}`, { signal: ctrl.signal })
       .then(async (r) => {
         if (!r.ok) {
           const body = await r.json().catch(() => ({}));
@@ -135,8 +145,9 @@ export function HistoriaTimeline({
         }
         return r.json();
       })
-      .then((data: { events: TimelineEvent[] }) => {
+      .then((data: { events: TimelineEvent[]; nextCursor?: string | null }) => {
         setEvents(data.events ?? []);
+        setNextCursor(data.nextCursor ?? null);
         setLoading(false);
       })
       .catch((e) => {
@@ -145,7 +156,7 @@ export function HistoriaTimeline({
         setLoading(false);
       });
     return () => ctrl.abort();
-  }, [patientId, range]);
+  }, [patientId, buildBaseParams]);
 
   const filtered = useMemo(() => {
     const base = events.filter((e) => enabledTypes.has(e.type));
@@ -168,6 +179,28 @@ export function HistoriaTimeline({
       if (next.size === 0) return new Set(TYPE_ORDER);
       return next;
     });
+  }
+
+  async function loadMore() {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const params = buildBaseParams();
+      params.set("cursor", nextCursor);
+      const r = await fetch(`/api/patients/${patientId}/timeline?${params}`);
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.error ?? "timeline_failed");
+      }
+      const data: { events: TimelineEvent[]; nextCursor?: string | null } = await r.json();
+      // Keyset garantiza no solapamiento: append directo.
+      setEvents((prev) => [...prev, ...(data.events ?? [])]);
+      setNextCursor(data.nextCursor ?? null);
+    } catch (e) {
+      setError(String((e as Error).message ?? e));
+    } finally {
+      setLoadingMore(false);
+    }
   }
 
   function handleClickEvent(e: TimelineEvent) {
@@ -277,6 +310,7 @@ export function HistoriaTimeline({
           </div>
         )
       ) : (
+        <>
         <ol className="relative ml-3 space-y-3 border-l-2 border-border">
           {filtered.map((e) => {
             const meta = TYPE_META[e.type];
@@ -336,6 +370,20 @@ export function HistoriaTimeline({
             );
           })}
         </ol>
+        {!compact && nextCursor && (
+          <div className="flex justify-center pt-1">
+            <button
+              type="button"
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg border border-border bg-card hover:bg-muted disabled:opacity-60"
+            >
+              {loadingMore && <Loader2 size={14} className="animate-spin" />}
+              Cargar más
+            </button>
+          </div>
+        )}
+        </>
       )}
     </div>
   );

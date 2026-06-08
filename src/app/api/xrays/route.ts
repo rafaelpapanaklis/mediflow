@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdmin } from "@supabase/supabase-js";
-import { BUCKETS, signMaybeUrl } from "@/lib/storage";
+import { BUCKETS, signMaybeUrl, signMaybeUrls } from "@/lib/storage";
 
 function getAdminSupabase() {
   return createAdmin(
@@ -45,12 +45,9 @@ export async function GET(req: NextRequest) {
 
   // Firma cada URL on-demand (TTL 5 min). Acepta tanto paths nuevos como
   // URLs legacy guardadas antes de la migración a bucket privado.
-  const signed = await Promise.all(
-    files.map(async (f) => ({
-      ...f,
-      url: await signMaybeUrl(f.url).catch(() => ""),
-    })),
-  );
+  // Firma todas las URLs en UN round-trip (createSignedUrls) en vez de N×.
+  const urls = await signMaybeUrls(files.map((f) => f.url));
+  const signed = files.map((f, i) => ({ ...f, url: urls[i] }));
 
   return NextResponse.json(signed);
 }
