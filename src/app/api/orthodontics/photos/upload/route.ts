@@ -61,6 +61,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Seguridad: `view` viene del cliente y se interpola en el path del bucket. Sin
+  // sanitizar, un valor como "../<otra-clinica>/..." escaparía la carpeta de la
+  // clínica (path traversal cross-tenant). Lo restringimos a un slug seguro; los
+  // valores legítimos (enum OrthoPhotoView) ya son ASCII, así que no se alteran.
+  const safeView = String(view ?? "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40);
+  if (!safeView) {
+    return NextResponse.json({ error: "view inválido" }, { status: 400 });
+  }
+
   const set = await prisma.orthoPhotoSet.findFirst({
     where: { id: setId, clinicId: ctx.clinicId },
     select: { id: true, patientId: true, setType: true },
@@ -89,10 +98,14 @@ export async function POST(req: NextRequest) {
     auth: { persistSession: false },
   });
 
-  const basePath = `${ctx.clinicId}/orthodontics/${set.patientId}/${set.id}-${view}`;
+  const basePath = `${ctx.clinicId}/orthodontics/${set.patientId}/${set.id}-${safeView}`;
   const originalPath = `${basePath}.jpg`;
   const thumbPath = `${basePath}-thumb.webp`;
 
+  // upsert:true intencional: el path queda confinado al tenant (clinicId de la
+  // sesión + set verificado de la clínica + safeView), así que solo puede
+  // sobrescribir la propia foto de esta vista. Es lo que requiere reintentar o
+  // retomar una vista del set; ya no hay vector cross-tenant tras sanitizar view.
   const [originalUpload, thumbUpload] = await Promise.all([
     supabase.storage.from(BUCKET).upload(originalPath, original, {
       contentType: "image/jpeg",
@@ -117,12 +130,12 @@ export async function POST(req: NextRequest) {
       clinicId: ctx.clinicId,
       patientId: set.patientId,
       uploadedBy: ctx.userId,
-      name: `${view}.jpg`,
+      name: `${safeView}.jpg`,
       url: originalPath,
       size: original.length,
       mimeType: "image/jpeg",
       category: fileCategoryFromSetType(set.setType),
-      notes: `Set ${set.setType} · vista ${view}`,
+      notes: `Set ${set.setType} · vista ${safeView}`,
     },
     select: { id: true, url: true },
   });
