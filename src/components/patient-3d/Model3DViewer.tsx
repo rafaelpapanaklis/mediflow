@@ -26,6 +26,7 @@ import { PLYLoader } from "three/examples/jsm/loaders/PLYLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DRenderer, CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
+import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import {
   Ruler,
   RotateCw,
@@ -323,6 +324,19 @@ export default function Model3DViewer({
     // ante cualquier interacción de cámara aunque estuviera en reposo.
     controls.addEventListener("change", requestRender);
 
+    // Pérdida/recuperación de contexto WebGL (GPU reset, tab en segundo plano,
+    // driver): preventDefault deja que el navegador restaure el contexto en vez
+    // de dejar el canvas en negro permanente. Al restaurarse, repintamos vía el
+    // render ON-DEMAND (requestRender) para que la escena vuelva a dibujarse.
+    const onContextLost = (e: Event) => {
+      e.preventDefault();
+    };
+    const onContextRestored = () => {
+      requestRender();
+    };
+    renderer.domElement.addEventListener("webglcontextlost", onContextLost);
+    renderer.domElement.addEventListener("webglcontextrestored", onContextRestored);
+
     // Recorre los materiales de cada mesh del modelo cargado.
     const forEachMeshMaterial = (fn: (m: THREE.Material) => void) => {
       if (!object) return;
@@ -466,7 +480,9 @@ export default function Model3DViewer({
     };
 
     const meshFromGeometry = (geometry: THREE.BufferGeometry) => {
-      geometry.computeVertexNormals();
+      // Solo recalculamos normales si la geometría no las trae (p. ej. PLY que
+      // las incluye debe respetarlas; STL ya las recalculó tras el welding).
+      if (!geometry.hasAttribute("normal")) geometry.computeVertexNormals();
       const hasColor = geometry.hasAttribute("color");
       const material = new THREE.MeshPhongMaterial({
         color: hasColor ? 0xffffff : COLOR_PRESETS[DEFAULT_COLOR],
@@ -494,8 +510,20 @@ export default function Model3DViewer({
         const blob = await blobPromise;
         if (disposed) return;
         if (fmt === "stl") {
-          addObject(meshFromGeometry(new STLLoader().parse(await blob.arrayBuffer())));
+          // STL llega NO indexado con normales por cara → aspecto facetado. Para
+          // un sombreado suave: borramos la normal por cara (si no, mergeVertices
+          // no fusionaría posiciones coincidentes con normales distintas),
+          // fusionamos vértices duplicados y recalculamos normales suaves.
+          let geometry = new STLLoader().parse(await blob.arrayBuffer());
+          geometry.deleteAttribute("normal");
+          geometry = mergeVertices(geometry);
+          geometry.computeVertexNormals();
+          addObject(meshFromGeometry(geometry));
         } else if (fmt === "ply") {
+          // PLYLoader (r184) ya convierte los colores por vértice de sRGB a
+          // lineal al parsear (setRGB(..., SRGBColorSpace)); con el
+          // outputColorSpace sRGB por defecto del renderer se ven correctos.
+          // No reconvertir aquí: duplicaría la corrección y oscurecería.
           addObject(meshFromGeometry(new PLYLoader().parse(await blob.arrayBuffer())));
         } else {
           // OBJ → Group; aplicamos material uniforme a cada mesh para uniformar
@@ -688,6 +716,8 @@ export default function Model3DViewer({
       window.removeEventListener("resize", onResize);
       renderer.domElement.removeEventListener("pointerdown", onPointerDown);
       renderer.domElement.removeEventListener("pointerup", onPointerUp);
+      renderer.domElement.removeEventListener("webglcontextlost", onContextLost);
+      renderer.domElement.removeEventListener("webglcontextrestored", onContextRestored);
       clearMeasurements();
       clearPinObjects();
       lineMat.dispose();

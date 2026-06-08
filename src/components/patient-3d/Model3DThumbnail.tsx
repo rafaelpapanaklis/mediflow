@@ -14,6 +14,7 @@ import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { PLYLoader } from "three/examples/jsm/loaders/PLYLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
+import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { Box, Loader2, Layers } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
 import { fetchWithCache } from "@/lib/dicom-cache";
@@ -97,9 +98,25 @@ async function loadObject(
     return group;
   }
 
-  const geo =
-    fmt === "ply" ? new PLYLoader().parse(buf) : new STLLoader().parse(buf);
-  geo.computeVertexNormals();
+  let geo: THREE.BufferGeometry;
+  if (fmt === "ply") {
+    geo = new PLYLoader().parse(buf);
+    // PLY puede traer sus propias normales: solo recalculamos si faltan (no las
+    // forzamos para no estropear el sombreado que el archivo ya define).
+    if (!geo.hasAttribute("normal")) geo.computeVertexNormals();
+    // PLYLoader (r184) ya convierte los colores por vértice de sRGB a lineal al
+    // parsear; con el outputColorSpace sRGB por defecto se ven correctos. No
+    // reconvertir aquí: duplicaría la corrección y oscurecería.
+  } else {
+    // STL llega NO indexado con normales por cara → aspecto facetado. Para un
+    // sombreado suave: borramos la normal por cara (si no, mergeVertices no
+    // fusionaría posiciones coincidentes con normales distintas), fusionamos
+    // vértices duplicados y recalculamos normales suaves.
+    geo = new STLLoader().parse(buf);
+    geo.deleteAttribute("normal");
+    geo = mergeVertices(geo);
+    geo.computeVertexNormals();
+  }
   const hasColor = geo.hasAttribute("color");
   const material = new THREE.MeshPhongMaterial({
     color: hasColor ? 0xffffff : TOOTH_COLOR,
@@ -138,6 +155,12 @@ async function renderToDataUrl(
   let object: THREE.Object3D | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let settled = false;
+  // Canvas y handlers de pérdida/restauración de contexto WebGL. Se guardan a
+  // nivel de función para poder quitarlos SIEMPRE en el `finally` (sin fugas),
+  // aunque se registren dentro del closure de render.
+  let canvas: HTMLCanvasElement | null = null;
+  let onContextLost: ((e: Event) => void) | null = null;
+  let onContextRestored: (() => void) | null = null;
   try {
     const work = (async (): Promise<string> => {
       if (signal.aborted) throw new Error("aborted");
@@ -171,6 +194,22 @@ async function renderToDataUrl(
       renderer.setPixelRatio(1.5);
       renderer.setSize(THUMB_PX, THUMB_PX, false);
       renderer.setClearColor(0x000000, 0);
+
+      // Robustez ante pérdida de contexto WebGL. preventDefault permite que el
+      // navegador pueda RESTAURAR el contexto (si no, el canvas queda negro para
+      // siempre). Al restaurarse, repintamos SOLO si el render aún no terminó
+      // (cache-miss / en vuelo): nunca tocamos una miniatura ya cacheada.
+      canvas = renderer.domElement;
+      const sceneRef = scene;
+      const cameraRef = camera;
+      onContextLost = (e: Event) => e.preventDefault();
+      onContextRestored = () => {
+        if (settled) return; // ya completado/cacheado: no re-renderizar.
+        renderer?.render(sceneRef, cameraRef);
+      };
+      canvas.addEventListener("webglcontextlost", onContextLost, false);
+      canvas.addEventListener("webglcontextrestored", onContextRestored, false);
+
       renderer.render(scene, camera);
       const dataUrl = renderer.domElement.toDataURL("image/png");
       // Persiste la miniatura por fileId (best-effort, no bloquea el retorno).
@@ -184,6 +223,11 @@ async function renderToDataUrl(
   } finally {
     settled = true;
     if (timer) clearTimeout(timer);
+    // Quitar los listeners de contexto SIEMPRE (evita fugas en listas largas).
+    if (canvas) {
+      if (onContextLost) canvas.removeEventListener("webglcontextlost", onContextLost, false);
+      if (onContextRestored) canvas.removeEventListener("webglcontextrestored", onContextRestored, false);
+    }
     if (object) disposeObject(object);
     if (renderer) {
       renderer.dispose();
