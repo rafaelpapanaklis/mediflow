@@ -76,18 +76,28 @@ export function decodeSlice(buf: ArrayBuffer, fallbackOrder: number): DecodedSli
       const n = Math.min(frameLen, raw.length);
       for (let i = 0; i < n; i++) {
         const v = raw[i] * slope + intercept;
-        out[i] = v;
-        if (v < minV) minV = v;
-        if (v > maxV) maxV = v;
+        // HU → Int16: redondea y satura al rango int16. Evita el wraparound
+        // silencioso si un set trae RescaleSlope fraccional o densidades muy
+        // altas (p. ej. metal en CT). Para CBCT normal (slope=1, HU en rango)
+        // hu === v, así que el comportamiento no cambia.
+        const hu = v < -32768 ? -32768 : v > 32767 ? 32767 : Math.round(v);
+        out[i] = hu;
+        if (hu < minV) minV = hu;
+        if (hu > maxV) maxV = hu;
       }
     } else {
       const raw = byteArray.subarray(el.dataOffset, el.dataOffset + el.length);
       const n = Math.min(frameLen, raw.length);
       for (let i = 0; i < n; i++) {
         const v = raw[i] * slope + intercept;
-        out[i] = v;
-        if (v < minV) minV = v;
-        if (v > maxV) maxV = v;
+        // HU → Int16: redondea y satura al rango int16. Evita el wraparound
+        // silencioso si un set trae RescaleSlope fraccional o densidades muy
+        // altas (p. ej. metal en CT). Para CBCT normal (slope=1, HU en rango)
+        // hu === v, así que el comportamiento no cambia.
+        const hu = v < -32768 ? -32768 : v > 32767 ? 32767 : Math.round(v);
+        out[i] = hu;
+        if (hu < minV) minV = hu;
+        if (hu > maxV) maxV = hu;
       }
     }
     if (!Number.isFinite(minV)) {
