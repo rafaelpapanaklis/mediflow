@@ -20,8 +20,26 @@ export async function GET(req: NextRequest) {
   const patientId = new URL(req.url).searchParams.get("patientId");
   if (!patientId) return NextResponse.json({ error: "patientId required" }, { status: 400 });
 
+  // Los modelos 3D (SCAN_STL + mallas/DICOM por extensión) viven SOLO en la
+  // pestaña "Modelos 3D" (GET /api/patients/[id]/models-3d). Excluimos aquí el
+  // ESPEJO EXACTO de ese filtro para que un archivo nunca aparezca en ambas
+  // vistas: /api/xrays devuelve justo el complemento. Una sola fuente de verdad.
+  // (No toca la subida ni el aislamiento por clinicId.)
   const files = await prisma.patientFile.findMany({
-    where: { patientId, clinicId: ctx.clinicId },
+    where: {
+      patientId,
+      clinicId: ctx.clinicId,
+      NOT: {
+        OR: [
+          { category: "SCAN_STL" as any },
+          { name: { endsWith: ".stl" } },
+          { name: { endsWith: ".ply" } },
+          { name: { endsWith: ".obj" } },
+          { name: { endsWith: ".dcm" } },
+          { name: { endsWith: ".dicom" } },
+        ],
+      },
+    },
     orderBy: { createdAt: "desc" },
   });
 
