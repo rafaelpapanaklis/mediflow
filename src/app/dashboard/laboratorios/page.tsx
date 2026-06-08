@@ -12,9 +12,13 @@ export default async function LaboratoriosPage() {
   // así que solo necesitamos validar que haya usuario autenticado.
   await getCurrentUser();
 
+  // Tope de seguridad: LaboratoriosClient filtra/busca en memoria (sin "Ver
+  // más"). Acota a 100 para no escanear todo el directorio global de
+  // laboratorios. TODO: paginación server-side real al pasar de 100.
   const labs = await prisma.dentalLab.findMany({
     where: { status: "APPROVED" },
     orderBy: { name: "asc" },
+    take: 100,
     select: {
       id: true,
       name: true,

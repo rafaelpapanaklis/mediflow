@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import type { DentalLabDTO } from "@/lib/laboratorios/types";
+import { parsePageParams } from "@/lib/pagination";
 
 // Mapea un DentalLab de Prisma al DTO de red (fechas Date → ISO string).
 // Helper local — NO se comparte un serializers.ts (regla del módulo).
@@ -72,9 +73,12 @@ export async function GET(req: NextRequest) {
     ];
   }
 
+  const { take, skip } = parsePageParams(searchParams);
   const labs = await prisma.dentalLab.findMany({
     where,
     orderBy: { name: "asc" },
+    take,
+    skip,
   });
 
   const dtos = labs.map(toDentalLabDTO);

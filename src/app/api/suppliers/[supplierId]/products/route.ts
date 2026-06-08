@@ -5,6 +5,7 @@ import type {
   SupplierProductDTO,
   SupplierProductImageDTO,
 } from "@/lib/suppliers/types";
+import { parsePageParams } from "@/lib/pagination";
 
 function toImageDTO(img: any): SupplierProductImageDTO {
   return {
@@ -53,10 +54,13 @@ export async function GET(
     return NextResponse.json({ error: "Proveedor no encontrado" }, { status: 404 });
   }
 
+  const { take, skip } = parsePageParams(req.nextUrl.searchParams);
   const products = await prisma.supplierProduct.findMany({
     where: { supplierId: params.supplierId, isActive: true },
     orderBy: { createdAt: "desc" },
     include: { images: { orderBy: { sortOrder: "asc" } } },
+    take,
+    skip,
   });
 
   const dtos: SupplierProductDTO[] = products.map(toProductDTO);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { toSupplierDTO } from "@/lib/suppliers/serializers";
+import { parsePageParams } from "@/lib/pagination";
 
 // GET /api/suppliers — proveedores APPROVED para el directorio de la clínica.
 export async function GET(req: NextRequest) {
@@ -26,9 +27,12 @@ export async function GET(req: NextRequest) {
     ];
   }
 
+  const { take, skip } = parsePageParams(searchParams);
   const suppliers = await prisma.supplier.findMany({
     where,
     orderBy: { businessName: "asc" },
+    take,
+    skip,
   });
 
   // Favoritos de la clínica de sesión → set de supplierId para marcar

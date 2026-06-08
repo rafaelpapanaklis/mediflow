@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import type { SupplierStatus } from "@/lib/suppliers/types";
+import { parsePageParams } from "@/lib/pagination";
 
 function isAdminAuthed() {
   const token = cookies().get("admin_token")?.value;
@@ -21,9 +22,12 @@ export async function GET(req: NextRequest) {
     ? (statusParam as SupplierStatus)
     : undefined;
 
+  const { take, skip } = parsePageParams(req.nextUrl.searchParams);
   const suppliers = await prisma.supplier.findMany({
     where: status ? { status } : undefined,
     orderBy: { createdAt: "desc" },
+    take,
+    skip,
   });
   return NextResponse.json(suppliers);
 }

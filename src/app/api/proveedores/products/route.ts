@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSupplierContext } from "@/lib/supplier-auth";
 import type { SupplierProductDTO } from "@/lib/suppliers/types";
+import { parsePageParams } from "@/lib/pagination";
 
 // Lee cookies de sesión (getSupplierContext) → siempre dinámico, nunca cacheado.
 export const dynamic = "force-dynamic";
@@ -34,17 +35,20 @@ function serializeProduct(p: any): SupplierProductDTO {
 
 // ── GET /api/proveedores/products ────────────────────────────────────────
 // Catálogo del proveedor en sesión. supplierId SIEMPRE de la sesión.
-export async function GET() {
+export async function GET(req: NextRequest) {
   const ctx = await getSupplierContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (ctx.status !== "APPROVED") {
     return NextResponse.json({ error: "Tu cuenta de proveedor no está aprobada." }, { status: 403 });
   }
 
+  const { take, skip } = parsePageParams(req.nextUrl.searchParams);
   const products = await prisma.supplierProduct.findMany({
     where: { supplierId: ctx.supplierId },
     include: { images: { orderBy: { sortOrder: "asc" } } },
     orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
+    take,
+    skip,
   });
 
   return NextResponse.json(products.map(serializeProduct));

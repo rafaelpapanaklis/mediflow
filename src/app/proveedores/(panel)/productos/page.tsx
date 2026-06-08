@@ -17,10 +17,14 @@ export default async function ProductosPage() {
   if (!ctx) redirect("/proveedores/login");
   if (ctx.status !== "APPROVED") redirect("/proveedores/pendiente");
 
+  // Tope de seguridad del catálogo propio del proveedor (el panel no pagina).
+  // 200 es holgado para un catálogo real y acota crecimiento patológico.
+  // TODO: paginación/"Ver más" si un proveedor supera 200 productos.
   const products = await prisma.supplierProduct.findMany({
     where: { supplierId: ctx.supplierId },
     include: { images: { orderBy: { sortOrder: "asc" } } },
     orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
+    take: 200,
   });
 
   const initialProducts: SupplierProductDTO[] = products.map((p) => ({

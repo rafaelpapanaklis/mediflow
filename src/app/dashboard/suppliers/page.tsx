@@ -12,9 +12,13 @@ export default async function SuppliersPage() {
   // así que solo necesitamos la sesión para resolver sus favoritos.
   const user = await getCurrentUser();
 
+  // Tope de seguridad: SuppliersClient filtra/busca en memoria sobre esta lista
+  // (sin "Ver más"), así que acotamos a 100 para no escanear todo el directorio
+  // global conforme crece. TODO: paginación server-side real al pasar de 100.
   const suppliers = await prisma.supplier.findMany({
     where: { status: "APPROVED" },
     orderBy: { businessName: "asc" },
+    take: 100,
     select: {
       id: true,
       businessName: true,

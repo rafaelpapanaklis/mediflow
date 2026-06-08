@@ -47,6 +47,22 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "invalid_range_order" }, { status: 400 });
   }
 
+  // Tope de span: la UI del calendario nunca pide más de ~42 días (vista mes =
+  // grilla 6x7; lista = hoy+30). Un rango enorme (años) escanearía toda la
+  // agenda de la clínica sin límite. Cap defensivo a 92 días — preserva
+  // intactas las vistas mes/semana/día/lista; el clinicId sigue siendo el de
+  // la sesión.
+  const MAX_RANGE_DAYS = 92;
+  const spanDays = Math.round(
+    (Date.parse(`${toISO}T00:00:00Z`) - Date.parse(`${fromISO}T00:00:00Z`)) / 86_400_000,
+  );
+  if (spanDays > MAX_RANGE_DAYS) {
+    return NextResponse.json(
+      { error: "range_too_large", maxDays: MAX_RANGE_DAYS },
+      { status: 400 },
+    );
+  }
+
   const tz = session.clinic.timezone;
   // Usamos el helper centralizado de día calendario en tz: el rango es
   // `[fromISO 00:00 tz, toISO+1 00:00 tz)`. Esto garantiza que una cita
