@@ -249,7 +249,7 @@ export default function Model3DViewer({
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 5000);
     camera.position.set(0, 0, 100);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(renderer.domElement);
@@ -288,6 +288,41 @@ export default function Model3DViewer({
     let disposed = false;
     let markerRadius = 1;
 
+    // ---- Render ON-DEMAND ----
+    // El modelo es estático: en vez de renderizar a 60fps perpetuos (GPU/CPU,
+    // batería y ventilador al 100% con la imagen quieta), solo dibujamos cuando
+    // algo cambia. requestRender() pide un frame y arranca el loop; el loop se
+    // mantiene vivo únicamente mientras la cámara se mueve (damping de
+    // OrbitControls en curso o autoRotate) y se detiene al asentarse.
+    let raf = 0;
+    let needsRender = false;
+    const loop = () => {
+      if (disposed) {
+        raf = 0;
+        return;
+      }
+      // controls.update() devuelve true mientras la cámara cambia (damping o
+      // autoRotate); así sabemos si hay que seguir pidiendo frames.
+      const moving = controls.update();
+      if (needsRender || moving) {
+        needsRender = false;
+        renderer.render(scene, camera);
+        // labelRenderer SIEMPRE acoplado a renderer: las etiquetas CSS2D se
+        // reproyectan a pantalla en cada render, junto con la escena.
+        labelRenderer.render(scene, camera);
+      }
+      raf = moving || controls.autoRotate ? requestAnimationFrame(loop) : 0;
+    };
+    // Pide un frame; si el loop estaba detenido, lo reactiva.
+    const requestRender = () => {
+      if (disposed) return;
+      needsRender = true;
+      if (raf === 0) raf = requestAnimationFrame(loop);
+    };
+    // OrbitControls emite 'change' en cada arrastre/zoom/pan → reactiva el loop
+    // ante cualquier interacción de cámara aunque estuviera en reposo.
+    controls.addEventListener("change", requestRender);
+
     // Recorre los materiales de cada mesh del modelo cargado.
     const forEachMeshMaterial = (fn: (m: THREE.Material) => void) => {
       if (!object) return;
@@ -299,16 +334,20 @@ export default function Model3DViewer({
         }
       });
     };
-    const setObjectWireframe = (on: boolean) =>
+    const setObjectWireframe = (on: boolean) => {
       forEachMeshMaterial((m) => {
         (m as THREE.MeshPhongMaterial).wireframe = on;
       });
-    const setObjectColor = (hex: number) =>
+      requestRender();
+    };
+    const setObjectColor = (hex: number) => {
       forEachMeshMaterial((m) => {
         const mm = m as THREE.MeshPhongMaterial;
         if (mm.vertexColors) return; // no recolorear PLY con color por vértice.
         mm.color?.setHex?.(hex);
       });
+      requestRender();
+    };
 
     // Centra el objeto en el origen y encuadra la cámara a su bounding box.
     const frameObject = (obj: THREE.Object3D) => {
@@ -324,6 +363,7 @@ export default function Model3DViewer({
       camera.updateProjectionMatrix();
       controls.target.set(0, 0, 0);
       controls.update();
+      requestRender();
     };
 
     // Vistas rápidas ortogonales (aprox. según orientación del escaneo).
@@ -345,11 +385,13 @@ export default function Model3DViewer({
       controls.target.set(0, 0, 0);
       camera.lookAt(0, 0, 0);
       controls.update();
+      requestRender();
     };
 
     const syncAutoRotate = () => {
       controls.autoRotate =
         autoRotateRef.current && modeRef.current === "rotate" && !reduceMotion;
+      requestRender(); // arranca el loop si se activó autoRotate.
     };
 
     const onLoadError = (err: unknown) => {
@@ -384,6 +426,7 @@ export default function Model3DViewer({
       labelObj.position.set(pin.x, pin.y, pin.z);
       markGroup.add(labelObj);
       pinRecs.set(pin.id, { labelEl: el, marker, labelObj });
+      requestRender();
     };
 
     const removePinObjects = (id: string) => {
@@ -395,6 +438,7 @@ export default function Model3DViewer({
       rec.labelEl?.remove?.();
       rec.labelObj.parent?.remove(rec.labelObj);
       pinRecs.delete(id);
+      requestRender();
     };
 
     const clearPinObjects = () => {
@@ -418,6 +462,7 @@ export default function Model3DViewer({
       for (const pin of restored) makePinObjects(pin);
       if (restored.length) setMarks(restored);
       setStatus("ready");
+      requestRender();
     };
 
     const meshFromGeometry = (geometry: THREE.BufferGeometry) => {
@@ -529,12 +574,14 @@ export default function Model3DViewer({
       pendingMarkers.length = 0;
       pts.length = 0;
       setMeasureCount(0);
+      requestRender();
     };
 
     const placePoint = (p: THREE.Vector3) => {
       const point = p.clone();
       pts.push(point);
       pendingMarkers.push(makeMarker(point));
+      requestRender(); // muestra el marcador (y, al completar el par, la cota).
       if (pts.length < 2) return;
 
       const [a, b] = pts;
@@ -601,6 +648,7 @@ export default function Model3DViewer({
     apiRef.current = {
       applyUnit: (u) => {
         for (const meas of measurements) meas.labelEl.textContent = formatDistance(meas.raw, u);
+        requestRender();
       },
       clearMeasure: clearMeasurements,
       syncAutoRotate,
@@ -615,17 +663,13 @@ export default function Model3DViewer({
       setPinLabel: (id, label) => {
         const rec = pinRecs.get(id);
         if (rec) rec.labelEl.textContent = label || "•";
+        requestRender();
       },
     };
 
-    let raf = 0;
-    const animate = () => {
-      raf = requestAnimationFrame(animate);
-      controls.update();
-      renderer.render(scene, camera);
-      labelRenderer.render(scene, camera);
-    };
-    animate();
+    // Primer frame: dibuja la escena/fondo inicial. El modelo dispara su propio
+    // render al terminar de cargar (addObject → requestRender).
+    requestRender();
 
     const onResize = () => {
       const w = container.clientWidth || width;
@@ -634,6 +678,7 @@ export default function Model3DViewer({
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
       labelRenderer.setSize(w, h);
+      requestRender();
     };
     window.addEventListener("resize", onResize);
 
@@ -646,6 +691,7 @@ export default function Model3DViewer({
       clearMeasurements();
       clearPinObjects();
       lineMat.dispose();
+      controls.removeEventListener("change", requestRender);
       controls.dispose();
       if (object) disposeObject(object);
       renderer.dispose();
