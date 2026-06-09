@@ -160,3 +160,17 @@ export async function resetOdontogram(patientId: string): Promise<void> {
   const res = await fetch(`${BASE}/reset?patientId=${encodeURIComponent(patientId)}`, { method: "POST" });
   if (!res.ok) throw new Error(await readErrorMessage(res, "No se pudo limpiar el odontograma"));
 }
+
+/**
+ * Reemplaza TODO el odontograma vivo del paciente con `records` (POST
+ * /api/odontogram/sync). Lo usa "Guardar consulta" para que el estado del
+ * paciente avance con cada consulta (modelo "un odontograma que evoluciona").
+ */
+export async function syncOdontogram(patientId: string, records: Records): Promise<void> {
+  const res = await fetch(`${BASE}/sync`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ patientId, records }),
+  });
+  if (!res.ok) throw new Error(await readErrorMessage(res, "No se pudo sincronizar el odontograma"));
+}

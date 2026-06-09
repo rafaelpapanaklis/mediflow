@@ -9,7 +9,7 @@ import { TreatmentTimeline } from "@/components/clinical/shared";
 import { PrescriptionModal } from "@/components/clinical/shared/prescription-modal";
 import { useT } from "@/i18n/i18n-provider";
 import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
-import { fetchRecords } from "@/components/dashboard/odontogram-v2/adapter";
+import { fetchRecords, syncOdontogram } from "@/components/dashboard/odontogram-v2/adapter";
 import type { Records } from "@/components/dashboard/odontogram-v2/types";
 
 interface CatalogProcedure { id: string; name: string; basePrice: number; category: string }
@@ -223,6 +223,9 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
         });
         if (!res.ok) throw new Error((await res.json()).error ?? t("clinical.dentalForm.saveError"));
         record = await res.json();
+        // El odontograma del paciente AVANZA con esta consulta (modelo "evoluciona"):
+        // sincroniza el estado vivo con la foto recién guardada. Best-effort.
+        syncOdontogram(patientId, odontogram).catch(() => {});
         if (selectedProcs.length > 0) {
           toast.success(`✅ ${t("clinical.dentalForm.savedWithInvoiceToast", { total: formatCurrency(proceduresTotal) })}`);
         } else {
