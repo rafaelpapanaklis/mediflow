@@ -8,36 +8,12 @@ import toast from "react-hot-toast";
 import { TreatmentTimeline } from "@/components/clinical/shared";
 import { PrescriptionModal } from "@/components/clinical/shared/prescription-modal";
 import { useT } from "@/i18n/i18n-provider";
+import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
 
 interface CatalogProcedure { id: string; name: string; basePrice: number; category: string }
 interface SelectedProcedure { id: string; name: string; price: number; quantity: number }
 
-// labelKey resolves via t() at render time (never call t() at module scope).
-const TOOTH_CONDITIONS: Record<string, { labelKey: string; color: string; bg: string; border: string }> = {
-  healthy:      { labelKey: "clinical.dentalForm.condHealthy",     color: "#94a3b8", bg: "#fff",    border: "#94a3b8" },
-  caries:       { labelKey: "clinical.dentalForm.condCaries",      color: "#7f1d1d", bg: "#fca5a5", border: "#ef4444" },
-  restoration:  { labelKey: "clinical.dentalForm.condRestoration", color: "#1e3a8a", bg: "#bfdbfe", border: "#3b82f6" },
-  crown:        { labelKey: "clinical.dentalForm.condCrown",       color: "#78350f", bg: "#fde68a", border: "#f59e0b" },
-  endo:         { labelKey: "clinical.dentalForm.condEndo",        color: "#4c1d95", bg: "#c4b5fd", border: "#7c3aed" },
-  absent:       { labelKey: "clinical.dentalForm.condAbsent",      color: "#94a3b8", bg: "#f1f5f9", border: "#cbd5e1" },
-  extraction:   { labelKey: "clinical.dentalForm.condExtraction",  color: "#7c2d12", bg: "#fed7aa", border: "#f97316" },
-  implant:      { labelKey: "clinical.dentalForm.condImplant",     color: "#064e3b", bg: "#a7f3d0", border: "#10b981" },
-};
-
-const UPPER_TEETH = [18,17,16,15,14,13,12,11, 21,22,23,24,25,26,27,28];
-const LOWER_TEETH = [48,47,46,45,44,43,42,41, 31,32,33,34,35,36,37,38];
-
-// Dentición temporal (FDI notation for primary teeth)
-const UPPER_PRIMARY = [55,54,53,52,51, 61,62,63,64,65];
-const LOWER_PRIMARY = [85,84,83,82,81, 71,72,73,74,75];
-// Procedures are now loaded from /api/procedures catalog per clinic
-
-// Surface keys: O=Oclusal/Incisal, M=Mesial, D=Distal, V=Vestibular, L=Lingual/Palatino
-const SURFACES = ["O","M","D","V","L"] as const;
-type Surface = typeof SURFACES[number];
-type ToothSurfaces = Partial<Record<Surface, string>>;
-// Whole-tooth conditions (applied to entire tooth, not per-surface)
-const WHOLE_TOOTH_CONDITIONS = ["absent","extraction","implant","endo","crown"];
+// Procedures are loaded from /api/procedures catalog per clinic.
 
 interface Props {
   patientId: string;
@@ -58,25 +34,11 @@ interface Props {
   };
 }
 
-export function DentalForm({ patientId, onSaved, isChild = false, initialRecord }: Props) {
+export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
   const t = useT();
   const isEditing = !!initialRecord;
   const initialSpec = (initialRecord?.specialtyData ?? {}) as any;
   const [saving,     setSaving]     = useState(false);
-  const [activeTool, setActiveTool] = useState<keyof typeof TOOTH_CONDITIONS>("caries");
-  // NEW: per-surface odontogram — Record<toothNumber, { O?: condition, M?: condition, ... }>
-  const [odontogram, setOdontogram] = useState<Record<number, ToothSurfaces>>(() => {
-    const raw = initialSpec.odontogram as Record<string, ToothSurfaces> | undefined;
-    if (!raw) return {};
-    const result: Record<number, ToothSurfaces> = {};
-    for (const [k, v] of Object.entries(raw)) {
-      const n = Number(k);
-      if (!isNaN(n) && v) result[n] = v;
-    }
-    return result;
-  });
-  const upperTeeth = isChild ? UPPER_PRIMARY : UPPER_TEETH;
-  const lowerTeeth = isChild ? LOWER_PRIMARY : LOWER_TEETH;
   const [catalog, setCatalog] = useState<CatalogProcedure[]>([]);
   const [selectedProcs, setSelectedProcs] = useState<SelectedProcedure[]>(() => {
     const raw = initialSpec.procedures;
@@ -91,7 +53,6 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
       }));
   });
   const [procSearch, setProcSearch] = useState("");
-  const [selectedTooth, setSelectedTooth] = useState<number | null>(null);
 
   // Receta NOM-024 — la receta se emite standalone (sin consulta asociada)
   // para no contaminar el histórico clínico con medicalRecord huérfanos.
@@ -169,28 +130,6 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
   }));
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
 
-  function clickSurface(num: number, surface: Surface) {
-    setSelectedTooth(num);
-    if (WHOLE_TOOTH_CONDITIONS.includes(activeTool)) {
-      // Whole-tooth conditions apply to all surfaces at once
-      const all: ToothSurfaces = {};
-      SURFACES.forEach(s => { all[s] = activeTool; });
-      setOdontogram(o => ({ ...o, [num]: all }));
-    } else {
-      // Per-surface condition (caries, restoration)
-      setOdontogram(o => {
-        const prev = o[num] ?? {};
-        const current = prev[surface];
-        // Toggle: if already same condition, clear it
-        const next = current === activeTool ? undefined : activeTool;
-        const updated = { ...prev, [surface]: next };
-        // Clean up undefined
-        if (!next) delete updated[surface];
-        return { ...o, [num]: updated };
-      });
-    }
-  }
-
   function toggleProc(cat: CatalogProcedure) {
     setSelectedProcs(prev => {
       const exists = prev.find(p => p.id === cat.id);
@@ -220,7 +159,6 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
     try {
       const specialtyData = {
         type: "dental",
-        odontogram,
         procedures: selectedProcs,
         proceduresTotal,
         periodontal: form.periodontal,
@@ -290,132 +228,6 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
     setRxOpen(true);
   }
 
-  function getSurfaceColor(num: number, surface: Surface): string {
-    const cond = odontogram[num]?.[surface];
-    return cond ? (TOOTH_CONDITIONS[cond]?.bg ?? "#fff") : "#fff";
-  }
-  function getSurfaceBorder(num: number, surface: Surface): string {
-    const cond = odontogram[num]?.[surface];
-    return cond ? (TOOTH_CONDITIONS[cond]?.border ?? "#94a3b8") : "#94a3b8";
-  }
-  function isWholeTooth(num: number): string | null {
-    const surfaces = odontogram[num];
-    if (!surfaces) return null;
-    const vals = Object.values(surfaces);
-    if (vals.length === 5 && WHOLE_TOOTH_CONDITIONS.includes(vals[0]!) && vals.every(v => v === vals[0])) return vals[0]!;
-    return null;
-  }
-
-  // Classic 5-surface tooth diagram (cross pattern)
-  //        ┌──V──┐
-  //        │╲   ╱│
-  //        │M│O│D│
-  //        │╱   ╲│
-  //        └──L──┘
-  const SZ = 48;       // total size — large enough to click comfortably
-  const INNER = 18;    // center oclusal square
-  const PAD = (SZ - INNER) / 2; // = 15
-  // Centroids for surface labels
-  const LABEL: Record<Surface, { x: number; y: number }> = {
-    V: { x: SZ / 2,          y: PAD / 2 },
-    L: { x: SZ / 2,          y: SZ - PAD / 2 },
-    M: { x: PAD / 2,         y: SZ / 2 },
-    D: { x: SZ - PAD / 2,    y: SZ / 2 },
-    O: { x: SZ / 2,          y: SZ / 2 },
-  };
-
-  const renderTooth = (num: number) => {
-    const isSelected = selectedTooth === num;
-    const wholeCond = isWholeTooth(num);
-    const wholeStyle = wholeCond ? TOOTH_CONDITIONS[wholeCond] : null;
-
-    return (
-      <div key={num} className="flex flex-col items-center gap-1">
-        <span className="text-[10px] text-muted-foreground font-mono font-bold leading-none">{num}</span>
-        {wholeCond && wholeStyle ? (
-          /* Whole-tooth condition — single colored block */
-          <div
-            className="flex items-center justify-center rounded-lg border-2 cursor-pointer transition-all hover:scale-105"
-            style={{ width: SZ, height: SZ, background: wholeStyle.bg, borderColor: isSelected ? "#2563eb" : wholeStyle.border, color: wholeStyle.color, boxShadow: isSelected ? "0 0 0 3px rgba(37,99,235,0.4)" : "none" }}
-            onClick={() => clickSurface(num, "O")}
-            title={`#${num} — ${t(wholeStyle.labelKey)}`}
-          >
-            <span className="text-sm font-bold">
-              {wholeCond === "absent" ? "✕" : wholeCond === "implant" ? "I" : wholeCond === "endo" ? "E" : wholeCond === "crown" ? "C" : "EX"}
-            </span>
-          </div>
-        ) : (
-          /* Per-surface SVG diagram */
-          <svg width={SZ} height={SZ} viewBox={`0 0 ${SZ} ${SZ}`}
-            className={`cursor-pointer transition-all hover:scale-105 rounded-lg ${isSelected ? "ring-2 ring-brand-600 ring-offset-1" : ""}`}
-            style={{ filter: isSelected ? "drop-shadow(0 0 4px rgba(37,99,235,0.35))" : "none" }}>
-            {/* Outer border */}
-            <rect x="0" y="0" width={SZ} height={SZ} rx="6" fill="none" stroke="#cbd5e1" strokeWidth="1.5" />
-
-            {/* V - Vestibular (top) */}
-            <polygon
-              points={`1,1 ${SZ-1},1 ${PAD+INNER},${PAD} ${PAD},${PAD}`}
-              fill={getSurfaceColor(num,"V")}
-              stroke={getSurfaceBorder(num,"V")}
-              strokeWidth="1"
-              onClick={() => clickSurface(num,"V")}
-              className="hover:brightness-90 transition-all"
-            ><title>V (Vestibular) #{num}</title></polygon>
-
-            {/* L - Lingual (bottom) */}
-            <polygon
-              points={`${PAD},${PAD+INNER} ${PAD+INNER},${PAD+INNER} ${SZ-1},${SZ-1} 1,${SZ-1}`}
-              fill={getSurfaceColor(num,"L")}
-              stroke={getSurfaceBorder(num,"L")}
-              strokeWidth="1"
-              onClick={() => clickSurface(num,"L")}
-              className="hover:brightness-90 transition-all"
-            ><title>L (Lingual) #{num}</title></polygon>
-
-            {/* M - Mesial (left) */}
-            <polygon
-              points={`1,1 ${PAD},${PAD} ${PAD},${PAD+INNER} 1,${SZ-1}`}
-              fill={getSurfaceColor(num,"M")}
-              stroke={getSurfaceBorder(num,"M")}
-              strokeWidth="1"
-              onClick={() => clickSurface(num,"M")}
-              className="hover:brightness-90 transition-all"
-            ><title>M (Mesial) #{num}</title></polygon>
-
-            {/* D - Distal (right) */}
-            <polygon
-              points={`${PAD+INNER},${PAD} ${SZ-1},1 ${SZ-1},${SZ-1} ${PAD+INNER},${PAD+INNER}`}
-              fill={getSurfaceColor(num,"D")}
-              stroke={getSurfaceBorder(num,"D")}
-              strokeWidth="1"
-              onClick={() => clickSurface(num,"D")}
-              className="hover:brightness-90 transition-all"
-            ><title>D (Distal) #{num}</title></polygon>
-
-            {/* O - Oclusal (center) */}
-            <rect
-              x={PAD} y={PAD} width={INNER} height={INNER}
-              fill={getSurfaceColor(num,"O")}
-              stroke={getSurfaceBorder(num,"O")}
-              strokeWidth="1"
-              onClick={() => clickSurface(num,"O")}
-              className="hover:brightness-90 transition-all"
-            ><title>O (Oclusal) #{num}</title></rect>
-
-            {/* Surface labels */}
-            {SURFACES.map(s => (
-              <text key={s} x={LABEL[s].x} y={LABEL[s].y} textAnchor="middle" dominantBaseline="central"
-                fontSize="8" fontWeight="700" fill={odontogram[num]?.[s] ? TOOTH_CONDITIONS[odontogram[num]![s]!]?.color ?? "#94a3b8" : "#94a3b8"}
-                pointerEvents="none" className="select-none">
-                {s}
-              </text>
-            ))}
-          </svg>
-        )}
-      </div>
-    );
-  };
-
   return (
     <form onSubmit={e => { e.preventDefault(); handleSave(); }} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {orthoMilestones && orthoMilestones.months.length > 0 && (
@@ -448,166 +260,9 @@ export function DentalForm({ patientId, onSaved, isChild = false, initialRecord 
         </div>
       </div>
 
-      {/* ODONTOGRAMA */}
-      <div style={{
-        background: "var(--bg-elev)",
-        border: "1px solid var(--border-soft)",
-        borderRadius: "var(--radius-lg)",
-        padding: 20,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <h3 style={{
-            fontSize: 13, fontWeight: 600, color: "var(--text-1)",
-            margin: 0, display: "flex", alignItems: "center", gap: 6,
-          }}>
-            🦷 {t("clinical.dentalForm.odontogramTitle")}
-          </h3>
-          <span style={{ fontSize: 11, color: "var(--text-3)" }}>
-            {selectedTooth
-              ? t("clinical.dentalForm.toothSelected", { n: selectedTooth })
-              : t("clinical.dentalForm.clickSurfaceHint")}
-          </span>
-        </div>
-
-        {/* Tool selector */}
-        <div style={{
-          display: "flex", flexWrap: "wrap", gap: 6,
-          marginBottom: 16, paddingBottom: 12,
-          borderBottom: "1px solid var(--border-soft)",
-        }}>
-          {Object.entries(TOOTH_CONDITIONS).map(([key, val]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setActiveTool(key as keyof typeof TOOTH_CONDITIONS)}
-              style={{
-                padding: "4px 10px",
-                borderRadius: 6,
-                fontSize: 11,
-                fontWeight: 600,
-                border: `1px solid ${val.border}`,
-                background: activeTool === key ? val.bg : "transparent",
-                color: val.color,
-                cursor: "pointer",
-                transition: "all .12s",
-                boxShadow: activeTool === key ? `0 0 0 1px ${val.color}40` : "none",
-              }}
-            >
-              {t(val.labelKey)}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => { setOdontogram({}); setSelectedTooth(null); }}
-            className="btn-new btn-new--ghost btn-new--sm"
-            style={{ marginLeft: "auto" }}
-          >
-            {t("clinical.dentalForm.clearAll")}
-          </button>
-        </div>
-
-        {/* Canvas */}
-        <div style={{
-          background: "var(--bg-elev-2)",
-          border: "1px solid var(--border-soft)",
-          borderRadius: "var(--radius)",
-          padding: 20,
-        }}>
-          <div style={{
-            fontSize: 10, textAlign: "center",
-            color: "var(--text-3)", marginBottom: 10,
-            textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600,
-          }}>
-            {t("clinical.dentalForm.upperJaw")}
-          </div>
-          <div style={{ display: "flex", justifyContent: "center", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-            {upperTeeth.map(renderTooth)}
-          </div>
-          <div style={{
-            borderTop: "2px dashed var(--border-soft)",
-            margin: "14px 32px",
-          }} />
-          <div style={{ display: "flex", justifyContent: "center", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-            {lowerTeeth.map(renderTooth)}
-          </div>
-          <div style={{
-            fontSize: 10, textAlign: "center",
-            color: "var(--text-3)", marginTop: 10,
-            textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600,
-          }}>
-            {t("clinical.dentalForm.lowerJaw")}
-          </div>
-        </div>
-
-        {/* Selected tooth detail */}
-        {selectedTooth && odontogram[selectedTooth] && Object.keys(odontogram[selectedTooth]!).length > 0 && (
-          <div style={{
-            marginTop: 12, paddingTop: 12,
-            borderTop: "1px solid var(--border-soft)",
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: "var(--text-1)" }}>
-                {t("clinical.dentalForm.toothLabel", { n: selectedTooth })}:
-              </span>
-              {SURFACES.map(s => {
-                const cond = odontogram[selectedTooth!]?.[s];
-                if (!cond) return null;
-                const style = TOOTH_CONDITIONS[cond];
-                const surfaceLabels: Record<Surface, string> = {
-                  O: t("clinical.dentalForm.surfaceOcclusal"),
-                  M: t("clinical.dentalForm.surfaceMesial"),
-                  D: t("clinical.dentalForm.surfaceDistal"),
-                  V: t("clinical.dentalForm.surfaceVestibular"),
-                  L: t("clinical.dentalForm.surfaceLingual"),
-                };
-                return (
-                  <span
-                    key={s}
-                    style={{
-                      fontSize: 10, fontWeight: 600,
-                      padding: "2px 8px", borderRadius: 12,
-                      background: style.bg, border: `1px solid ${style.border}`,
-                      color: style.color,
-                    }}
-                  >
-                    {surfaceLabels[s]}: {t(style.labelKey)}
-                  </span>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Legend */}
-        <div style={{
-          display: "flex", flexWrap: "wrap", gap: 10,
-          marginTop: 12, paddingTop: 12,
-          borderTop: "1px solid var(--border-soft)",
-        }}>
-          {Object.entries(TOOTH_CONDITIONS).map(([, val]) => (
-            <div key={val.labelKey} style={{
-              display: "flex", alignItems: "center", gap: 4,
-              fontSize: 10, color: "var(--text-3)",
-            }}>
-              <div style={{
-                width: 10, height: 10, borderRadius: 3,
-                background: val.bg, border: `1px solid ${val.border}`,
-              }} />
-              {t(val.labelKey)}
-            </div>
-          ))}
-        </div>
-        <div style={{
-          display: "flex", flexWrap: "wrap", gap: 10,
-          marginTop: 8, fontSize: 10, color: "var(--text-4)",
-        }}>
-          <span className="mono" style={{ fontWeight: 600 }}>{t("clinical.dentalForm.surfacesLabel")}</span>
-          <span>O = {t("clinical.dentalForm.surfaceOcclusal")}</span>
-          <span>M = {t("clinical.dentalForm.surfaceMesial")}</span>
-          <span>D = {t("clinical.dentalForm.surfaceDistal")}</span>
-          <span>V = {t("clinical.dentalForm.surfaceVestibular")}</span>
-          <span>L = {t("clinical.dentalForm.surfaceLingualPalatal")}</span>
-        </div>
+      {/* ODONTOGRAMA — OdontogramV2 (estado vivo; la foto se toma al firmar la consulta) */}
+      <div style={{ width: "100%", overflowX: "auto" }}>
+        <OdontogramV2 patientId={patientId} />
       </div>
 
       {/* PERIODONTAL */}
