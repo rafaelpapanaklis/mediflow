@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import { Toaster } from "react-hot-toast";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 import "./globals.css";
 
@@ -106,6 +107,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
         </ConfirmProvider>
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
