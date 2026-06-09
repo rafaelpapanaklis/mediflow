@@ -55,7 +55,7 @@ function Seg({ value, set, options }: { value: string; set: (v: string) => void;
   return (
     <div className="seg">
       {options.map((o) => (
-        <button key={o.v} className={"seg-btn" + (value === o.v ? " on" : "")} onClick={() => set(o.v)}>
+        <button type="button" key={o.v} className={"seg-btn" + (value === o.v ? " on" : "")} onClick={() => set(o.v)}>
           {o.l}
         </button>
       ))}
@@ -247,7 +247,7 @@ export function OdontogramV2({ patientId }: { patientId: string }) {
             <div className="odo-summary">
               <span><b>{toothCount}</b> {t.teeth}</span>
               <span><b>{findingCount}</b> {t.findings}</span>
-              <button className="odo-clearall" onClick={clearAll}>{t.clearAll}</button>
+              <button type="button" className="odo-clearall" onClick={clearAll}>{t.clearAll}</button>
             </div>
           </div>
           <div className="odo-chart-scroll" aria-busy={loading}>

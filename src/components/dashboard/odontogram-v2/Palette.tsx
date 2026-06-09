@@ -19,7 +19,7 @@ export function Palette({ lang, brush, eraser, onPick, onEraser }: PaletteProps)
     <div className="odo-palette">
       <div className="odo-pal-tabs">
         {GROUPS.map((g) => (
-          <button
+          <button type="button"
             key={g.id}
             className={"odo-tab" + (active === g.id ? " on" : "")}
             style={active === g.id ? { color: g.color, borderColor: g.color } : {}}
@@ -31,7 +31,7 @@ export function Palette({ lang, brush, eraser, onPick, onEraser }: PaletteProps)
         ))}
       </div>
       <div className="odo-pal-items">
-        <button className={"odo-chip eraser" + (eraser ? " on" : "")} onClick={onEraser}>
+        <button type="button" className={"odo-chip eraser" + (eraser ? " on" : "")} onClick={onEraser}>
           <span className="odo-chip-ic">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M7 21h10" />
@@ -41,7 +41,7 @@ export function Palette({ lang, brush, eraser, onPick, onEraser }: PaletteProps)
           <span className="odo-chip-lb">{t.eraser}</span>
         </button>
         {conds.map((c) => (
-          <button
+          <button type="button"
             key={c.id}
             className={"odo-chip" + (brush === c.id ? " on" : "")}
             style={brush === c.id ? { borderColor: gc, boxShadow: `0 0 0 2px ${gc}33` } : {}}

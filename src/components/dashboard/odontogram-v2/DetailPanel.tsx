@@ -79,19 +79,19 @@ export function DetailPanel({
               </div>
             </div>
           </div>
-          <button className="odo-dt-close" onClick={onClose}>×</button>
+          <button type="button" className="odo-dt-close" onClick={onClose}>×</button>
         </div>
 
         <div className="odo-dt-body">
           {/* view toggle */}
           <div className="odo-viewtabs">
-            <button className={"odo-viewtab" + (view === "3d" ? " on" : "")} onClick={() => setView("3d")}>{t.view3d}</button>
-            <button className={"odo-viewtab" + (view === "2d" ? " on" : "")} onClick={() => setView("2d")}>{t.view2d}</button>
+            <button type="button" className={"odo-viewtab" + (view === "3d" ? " on" : "")} onClick={() => setView("3d")}>{t.view3d}</button>
+            <button type="button" className={"odo-viewtab" + (view === "2d" ? " on" : "")} onClick={() => setView("2d")}>{t.view2d}</button>
           </div>
 
           {view === "3d" ? (
             <div className="odo-3d-stage">
-              <button className="odo-3d-reset" onClick={() => setResetKey((k) => k + 1)}>{t.resetView}</button>
+              <button type="button" className="odo-3d-reset" onClick={() => setResetKey((k) => k + 1)}>{t.resetView}</button>
               <Tooth3D
                 meta={meta}
                 record={record}
@@ -113,7 +113,7 @@ export function DetailPanel({
             {surfaceLetters.map((letter) => {
               const col = surfaceColor(letter);
               return (
-                <button
+                <button type="button"
                   key={letter}
                   className={"odo-surf-btn" + (col ? " has" : "")}
                   style={col ? { background: col } : {}}
@@ -143,7 +143,7 @@ export function DetailPanel({
                   <span className="odo-find-dot" style={{ background: cond ? GROUP_COLOR[cond.group] : "#ccc" }} />
                   <span className="odo-find-lb">{cond ? cond[lang] : f.id}</span>
                   <span className="odo-find-loc">{f.scope === "surface" ? f.letter : (lang === "es" ? "diente" : "tooth")}</span>
-                  <button className="odo-find-rm" onClick={() => onRemove(fdi, f.scope, f.letter, f.id)}>×</button>
+                  <button type="button" className="odo-find-rm" onClick={() => onRemove(fdi, f.scope, f.letter, f.id)}>×</button>
                 </div>
               );
             })}
@@ -160,8 +160,8 @@ export function DetailPanel({
           />
 
           <div className="odo-dt-actions">
-            <button className="odo-btn danger" onClick={onClearTooth}>{t.clear} {t.tooth.toLowerCase()}</button>
-            <button className="odo-btn" onClick={onClose}>{t.close}</button>
+            <button type="button" className="odo-btn danger" onClick={onClearTooth}>{t.clear} {t.tooth.toLowerCase()}</button>
+            <button type="button" className="odo-btn" onClick={onClose}>{t.close}</button>
           </div>
         </div>
       </aside>
@@ -181,7 +181,7 @@ function DetailPalette({ lang, brush, onPick }: { lang: Lang; brush: string | nu
     <div>
       <div className="odo-pal-tabs" style={{ borderBottom: "1px solid var(--line-2)", marginBottom: 10 }}>
         {GROUPS.map((g) => (
-          <button
+          <button type="button"
             key={g.id}
             className={"odo-tab" + (active === g.id ? " on" : "")}
             style={{ padding: "7px 9px", fontSize: 12, ...(active === g.id ? { color: g.color } : {}) }}
@@ -194,7 +194,7 @@ function DetailPalette({ lang, brush, onPick }: { lang: Lang; brush: string | nu
       </div>
       <div className="odo-dt-pal">
         {conds.map((c) => (
-          <button
+          <button type="button"
             key={c.id}
             className={"odo-chip" + (brush === c.id ? " on" : "")}
             style={brush === c.id ? { borderColor: gc, boxShadow: `0 0 0 2px ${gc}33` } : {}}

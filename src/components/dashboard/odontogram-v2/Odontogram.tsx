@@ -51,7 +51,7 @@ export function ToothCell({ fdi, numbering, record, brush, eraser, selected, onA
     <Surface2D meta={meta} record={record} size={circle} onSurface={surfaceClick} dimmed={(record.tooth || []).includes("missing")} />
   );
   const label = (
-    <button className="odo-num" data-screen-label={`tooth-${num.label}`} onClick={(e) => { e.stopPropagation(); onSelect(fdi); }}>
+    <button type="button" className="odo-num" data-screen-label={`tooth-${num.label}`} onClick={(e) => { e.stopPropagation(); onSelect(fdi); }}>
       {numbering === "palmer" ? <PalmerLabel quad={num.quad} label={num.label} /> : num.label}
     </button>
   );
