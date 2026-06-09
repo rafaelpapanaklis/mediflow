@@ -227,8 +227,21 @@
   grid-template-columns: 220px 1fr;
 }
 .layoutWide .sidePanel { display: none; }
+
+/* Base del side-panel: rail derecho sticky en desktop (≥1367px). Va AQUÍ,
+   ANTES de sus @media, para que los overrides responsive ganen la cascada
+   (misma especificidad → decide el orden de fuente). Antes vivía ~360 líneas
+   más abajo, DESPUÉS del @media 1366 → la base ganaba y el panel quedaba
+   sticky/flex encimándose del menú en laptop. Los estilos visuales de las
+   tarjetas siguen en la sección SIDE CARDS, más abajo. */
+.sidePanel {
+  position: sticky;
+  top: 16px;
+  display: flex; flex-direction: column;
+  gap: 12px;
+}
 /* Laptop ≤1366px: el side-panel cae al flujo normal, en una fila nueva de
-   ancho completo DEBAJO del contenido (NO se oculta — Reglas 2 y 3). Las 4
+   ancho completo DEBAJO del contenido (NO se oculta — Reglas 2 y 3). Las
    cards se reparten en grid auto-fit para no apilarse demasiado alto. */
 @media (max-width: 1366px) {
   .layout { grid-template-columns: 200px 1fr; }
@@ -243,7 +256,8 @@
 }
 @media (max-width: 1024px) {
   .layout { grid-template-columns: 1fr; }
-  .quickNav { display: none; }
+  /* .quickNav { display: none } vive en la sección QUICK NAV, después de su
+     base, para respetar override-después-de-base en la cascada. */
 }
 
 .mainColumn { min-width: 0; }
@@ -490,6 +504,11 @@
   background: var(--border-soft);
   border-radius: 8px;
 }
+/* Tablet/móvil ≤1024px: el quick-nav lateral se oculta y la navegación pasa
+   al .mobileTabBar. Override DESPUÉS de la base para ganar la cascada. */
+@media (max-width: 1024px) {
+  .quickNav { display: none; }
+}
 .navSection { margin-bottom: 12px; }
 .navSection:last-child { margin-bottom: 0; }
 .navSectionLabel {
@@ -585,12 +604,9 @@
 .navItemDimmed:hover .navItemPlusIcon { opacity: 1; }
 
 /* ─────── SIDE CARDS ─────── */
-.sidePanel {
-  position: sticky;
-  top: 16px;
-  display: flex; flex-direction: column;
-  gap: 12px;
-}
+/* La regla base .sidePanel (layout/posición del rail) se movió a la sección
+   LAYOUT —antes de sus @media— para corregir la cascada responsive. Aquí
+   quedan solo los estilos visuales de las tarjetas. */
 .sideCard {
   background: var(--bg-elev);
   border: 1px solid var(--border-soft);
