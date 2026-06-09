@@ -4259,6 +4259,7 @@
       "lowerArch": "Arcada inferior"
     },
     "dentalForm": {
+      "selectPlaceholder": "Seleccionar…",
       "condHealthy": "Sano",
       "condCaries": "Caries",
       "condRestoration": "Restauración",

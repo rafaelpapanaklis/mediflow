@@ -4259,6 +4259,7 @@
       "lowerArch": "Lower arch"
     },
     "dentalForm": {
+      "selectPlaceholder": "Select…",
       "condHealthy": "Healthy",
       "condCaries": "Caries",
       "condRestoration": "Restoration",
