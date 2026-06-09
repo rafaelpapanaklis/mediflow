@@ -159,6 +159,10 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
     try {
       const specialtyData = {
         type: "dental",
+        // "Guardar consulta" la deja FINALIZADA (no borrador). El flujo de
+        // "Iniciar consulta" firma aparte vía /api/appointments/[id]/complete.
+        status: "SIGNED",
+        signedAt: new Date().toISOString(),
         procedures: selectedProcs,
         proceduresTotal,
         periodontal: form.periodontal,

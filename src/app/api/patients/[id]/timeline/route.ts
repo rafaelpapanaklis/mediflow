@@ -203,14 +203,17 @@ export async function GET(req: NextRequest, { params }: Params) {
     const summary = subj
       ? subj.split("\n")[0].slice(0, 140)
       : (r.assessment ?? r.plan ?? "Nota clínica sin contenido.").slice(0, 140);
+    // Un medicalRecord con specialtyData.type es una CONSULTA (Nueva consulta /
+    // Historial de consultas), NO una nota SOAP. Etiquetar acorde.
+    const specialtyType = (r.specialtyData as { type?: string } | null)?.type ?? null;
     events.push({
       id: `soap-${r.id}`,
       type: "soap",
       date: r.visitDate.toISOString(),
-      title: "Nota SOAP",
+      title: specialtyType ? "Consulta" : "Nota SOAP",
       summary,
       doctorName: r.doctor ? `Dr/a. ${r.doctor.firstName} ${r.doctor.lastName}` : null,
-      meta: { recordId: r.id, specialtyType: (r.specialtyData as { type?: string } | null)?.type ?? null },
+      meta: { recordId: r.id, specialtyType },
     });
   }
 
