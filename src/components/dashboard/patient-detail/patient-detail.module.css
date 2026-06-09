@@ -466,12 +466,29 @@
 /* ─────── QUICK NAV ─────── */
 .quickNav {
   position: sticky;
-  top: 16px;
+  /* El topbar del dashboard (.topbar-new) es sticky top:0 con 52px de alto y
+     vive en el MISMO contenedor scrolleable (el div lg:overflow-y-auto). Si el
+     menú se fijaba a 16px, su inicio quedaba TAPADO por el topbar al scrollear.
+     Lo anclamos debajo: 52px del topbar + 16px de respiro = 68px (antes 16px). */
+  top: 68px;
   background: var(--bg-elev);
   border: 1px solid var(--border-soft);
   border-radius: 12px;
   padding: 10px 8px;
   font-family: var(--font-sans, system-ui, sans-serif);
+  /* Scroll vertical dedicado: en laptops de pantalla corta el menú (13+ items)
+     excedía el alto del viewport y "Facturación" quedaba inalcanzable. Lo
+     acotamos al espacio disponible entre el topbar y el fondo: 68px del top
+     (incluye los 52px del topbar) + 16px de respiro abajo = 84px. */
+  max-height: calc(100vh - 84px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* Scrollbar fino solo para el quick-nav. */
+.quickNav::-webkit-scrollbar { width: 8px; }
+.quickNav::-webkit-scrollbar-thumb {
+  background: var(--border-soft);
+  border-radius: 8px;
 }
 .navSection { margin-bottom: 12px; }
 .navSection:last-child { margin-bottom: 0; }
