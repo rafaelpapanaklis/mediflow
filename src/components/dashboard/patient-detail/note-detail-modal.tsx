@@ -16,6 +16,7 @@ import toast from "react-hot-toast";
 import styles from "./patient-detail.module.css";
 import { Cie10Selector } from "@/components/dashboard/clinical/cie10-selector";
 import { useT } from "@/i18n/i18n-provider";
+import { DentalRecordDetail } from "@/components/clinical/records-list";
 
 interface Cie10Code {
   code: string;
@@ -47,6 +48,9 @@ export interface ClinicalNote {
   doctor?: { firstName: string; lastName: string } | null;
   /** specialtyData[] guarda { status: 'DRAFT'|'SIGNED', signedAt, attachments[], icd10[] } */
   specialtyData?: {
+    /** Tipo de consulta de especialidad (p.ej. "dental"). Si existe, el modal
+     *  muestra la vista de CONSULTA en vez del formato S/O/A/P. */
+    type?: string;
     status?: "DRAFT" | "SIGNED";
     signedAt?: string;
     attachments?: NoteAttachment[];
@@ -221,6 +225,9 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
 
   const status: "DRAFT" | "SIGNED" = note.specialtyData?.status ?? "DRAFT";
   const isSigned = status === "SIGNED";
+  // Una consulta de especialidad (DentalForm guarda specialtyData.type:"dental")
+  // se muestra como CONSULTA, no como SOAP. Sin type → nota S/O/A/P normal.
+  const hasSpecialtyConsult = !!note.specialtyData?.type;
   const attachments = note.specialtyData?.attachments ?? [];
   const icd10 = note.specialtyData?.icd10 ?? [];
   const signedAt = note.specialtyData?.signedAt;
@@ -272,8 +279,13 @@ export function NoteDetailModal({ open, note, onClose, onUpdated }: NoteDetailMo
         </header>
 
         <div className={styles.noteModalBody}>
-          {isSigned ? (
-            // ─── Read-only S/O/A/P ───
+          {hasSpecialtyConsult ? (
+            // Consulta de especialidad (p.ej. dental) → vista de CONSULTA
+            // (odontograma-foto de la consulta, procedimientos, perio…), NO el
+            // formato S/O/A/P. Regla del proyecto: consulta ≠ SOAP.
+            <DentalRecordDetail data={note.specialtyData ?? {}} record={note} />
+          ) : isSigned ? (
+            // ─── Read-only S/O/A/P (notas sin especialidad) ───
             <div className={styles.noteSoapView}>
               <SoapSection label={t("patients.noteDetailModal.soapSubjective")} value={note.subjective} />
               <SoapSection label={t("patients.noteDetailModal.soapObjective")} value={note.objective} />

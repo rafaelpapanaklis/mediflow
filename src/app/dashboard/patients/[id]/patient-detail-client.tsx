@@ -23,7 +23,6 @@ import { DentalForm }          from "@/components/clinical/dental-form";
 import { NutritionForm }       from "@/components/clinical/nutrition-form";
 import { PsychologyForm }      from "@/components/clinical/psychology-form";
 import { GeneralMedicineForm } from "@/components/clinical/medicine-form";
-import { EvolutionChart, TreatmentTimeline } from "@/components/clinical/shared";
 import { ReferralsTab } from "@/components/dashboard/patients/referrals-tab";
 import { Models3DTab } from "@/components/patient-3d/Models3DTab";
 import toast from "react-hot-toast";
@@ -223,7 +222,6 @@ const TABS_BASE = [
   { id: "odontograma",   labelKey: "patients.tabs.odontograma"        },
   { id: "expediente",    labelKey: "patients.tabs.expediente"         },
   { id: "historial-consultas", labelKey: "patients.tabs.historialConsultas" },
-  { id: "evolucion",     labelKey: "patients.tabs.evolucion"          },
   { id: "radiografias",  labelKey: "patients.tabs.radiografias"       },
   { id: "modelos-3d",    labelKey: "patients.tabs.modelos3d"          },
   { id: "tratamiento",   labelKey: "patients.tabs.tratamiento"        },
@@ -729,78 +727,6 @@ export function PatientDetailClient({
   const detectedSpecialty = detectSpecialty(specialty);
   const currentSpecialty = overrideSpecialty ?? detectedSpecialty;
 
-  const [evolutionPlans, setEvolutionPlans] = useState<any[]>([]);
-  useEffect(() => {
-    fetch(`/api/treatments?patientId=${patient.id}`)
-      .then(r => r.ok ? r.json() : [])
-      .then(d => setEvolutionPlans(Array.isArray(d) ? d : []))
-      .catch(() => {});
-  }, [patient.id]);
-
-  const mainChart = useMemo(() => {
-    if (detectedSpecialty === "dental") return null;
-    if (detectedSpecialty === "nutrition") {
-      const data = records
-        .filter((r: any) => r?.specialtyData?.anthropometrics?.weight)
-        .map((r: any) => ({
-          date: new Date(r.visitDate).toLocaleDateString("es-MX", { day: "numeric", month: "short" }),
-          value: Number(r.specialtyData.anthropometrics.weight),
-        }))
-        .reverse();
-      return { data, metric: t("patients.chart.weight"), color: "#fbbf24", unit: "kg" as string | undefined, normalRange: undefined as { min: number; max: number } | undefined };
-    }
-    if (detectedSpecialty === "psychology") {
-      const data = records
-        .filter((r: any) => r?.specialtyData?.scales?.phq9?.score !== undefined)
-        .map((r: any) => ({
-          date: new Date(r.visitDate).toLocaleDateString("es-MX", { day: "numeric", month: "short" }),
-          value: Number(r.specialtyData.scales.phq9.score),
-        }))
-        .reverse();
-      return { data, metric: t("patients.chart.phq9"), color: "#38bdf8", unit: undefined, normalRange: { min: 0, max: 4 } };
-    }
-    const data: { date: string; value: number }[] = [];
-    for (const r of records) {
-      const bp = r?.vitals?.bloodPressure ?? r?.specialtyData?.vitals?.bloodPressure;
-      if (!bp) continue;
-      if (typeof bp === "string") {
-        const m = bp.match(/(\d+)\s*\/\s*(\d+)/);
-        if (m) data.push({
-          date: new Date(r.visitDate).toLocaleDateString("es-MX", { day: "numeric", month: "short" }),
-          value: Number(m[1]),
-        });
-      } else if (typeof bp === "object" && bp.systolic) {
-        data.push({
-          date: new Date(r.visitDate).toLocaleDateString("es-MX", { day: "numeric", month: "short" }),
-          value: Number(bp.systolic),
-        });
-      }
-    }
-    return { data: data.reverse(), metric: t("patients.chart.systolicBp"), color: "#34d399", unit: "mmHg", normalRange: { min: 90, max: 120 } };
-  }, [records, detectedSpecialty]);
-
-  const activePlanMilestones = useMemo(() => {
-    const plan = evolutionPlans.find(p => p.status === "ACTIVE") ?? evolutionPlans[0];
-    if (!plan?.startDate) return null;
-    const start = new Date(plan.startDate);
-    const end = plan.endDate ? new Date(plan.endDate) : new Date(start.getTime() + (plan.totalSessions ?? 6) * (plan.sessionIntervalDays ?? 30) * 86400000);
-    const now = new Date();
-    const months: { date: string; title: string; status: "completed" | "current" | "pending" }[] = [];
-    const cursor = new Date(start);
-    let i = 0;
-    while (cursor <= end && i < 24) {
-      const isCompleted = cursor < now && (cursor.getFullYear() < now.getFullYear() || cursor.getMonth() < now.getMonth());
-      const isCurrent = cursor.getFullYear() === now.getFullYear() && cursor.getMonth() === now.getMonth();
-      months.push({
-        date: cursor.toLocaleDateString("es-MX", { month: "short", year: "2-digit" }),
-        title: t("patients.milestone.session", { num: i + 1 }),
-        status: isCompleted ? "completed" : isCurrent ? "current" : "pending",
-      });
-      cursor.setMonth(cursor.getMonth() + 1);
-      i++;
-    }
-    return { plan, months };
-  }, [evolutionPlans]);
   const age = patient.dob ? new Date().getFullYear() - new Date(patient.dob).getFullYear() : null;
   const initials = getInitials(patient.firstName, patient.lastName);
   const color    = avatarColor(patient.id);
@@ -2272,148 +2198,6 @@ export function PatientDetailClient({
                 );
               })}
             </div>
-          )}
-
-          {/* ===== TAB: EVOLUCION ===== */}
-          {tab === "evolucion" && (
-            <>
-              {(mainChart || activePlanMilestones) && (
-                <div style={{ display: "grid", gridTemplateColumns: mainChart && activePlanMilestones ? "1fr 1fr" : "1fr", gap: 14, marginBottom: 14 }}>
-                  {mainChart && (
-                    mainChart.data.length < 2 ? (
-                      <div className="card" style={{ padding: 16, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200 }}>
-                        <div style={{ fontSize: 12, color: "var(--text-2)" }}>
-                          {t("patients.evolution.needMore", { metric: mainChart.metric })}
-                        </div>
-                      </div>
-                    ) : (
-                      <EvolutionChart
-                        data={mainChart.data}
-                        metric={mainChart.metric}
-                        color={mainChart.color}
-                        unit={mainChart.unit}
-                        normalRange={mainChart.normalRange}
-                      />
-                    )
-                  )}
-                  {activePlanMilestones && activePlanMilestones.months.length > 0 && (
-                    <div>
-                      <div style={{ fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 8 }}>
-                        {activePlanMilestones.plan.name}
-                      </div>
-                      <TreatmentTimeline milestones={activePlanMilestones.months} />
-                    </div>
-                  )}
-                </div>
-              )}
-              <div className="bg-card border border-border rounded-xl overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                <h2 className="text-sm font-bold">{t("patients.evolution.title", { count: records.length })}</h2>
-                <button onClick={() => setTab("expediente")} className="text-xs font-semibold text-brand-600 hover:underline">{t("patients.evolution.newNote")}</button>
-              </div>
-              <div className="p-5">
-                {records.length === 0 ? (
-                  <div className="text-center py-8">
-                    <p className="text-sm text-muted-foreground mb-3">{t("patients.evolution.empty")}</p>
-                    <button onClick={() => setTab("expediente")} className="text-xs font-semibold text-brand-600 hover:underline">{t("patients.evolution.createFirst")}</button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {records.map((record, idx) => {
-                      const noteStatus: "DRAFT" | "SIGNED" =
-                        record.specialtyData?.status ?? "DRAFT";
-                      const isSigned = noteStatus === "SIGNED";
-                      return (
-                      <div key={record.id} className="flex gap-3">
-                        <div className="flex flex-col items-center">
-                          <div className="w-7 h-7 rounded-full bg-blue-100 border-2 border-brand-500 flex items-center justify-center text-[9px] font-bold text-brand-700 flex-shrink-0 z-10">
-                            {records.length - idx}
-                          </div>
-                          {idx < records.length - 1 && <div className="w-px flex-1 bg-border mt-1" />}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setNoteDetailOpen(record as ClinicalNote)}
-                          className={`${patientDetailStyles.noteRow} flex-1 bg-muted rounded-xl border border-border p-3 mb-1 text-left w-full`}
-                          aria-label={t("patients.evolution.viewDetailAria", { date: formatDate(record.visitDate) })}
-                        >
-                          <div className="flex items-center justify-between gap-2 mb-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] text-muted-foreground">{formatDate(record.visitDate)}</span>
-                              <span
-                                className={`${patientDetailStyles.noteRowStatusBadge} ${
-                                  isSigned ? patientDetailStyles.signed : patientDetailStyles.draft
-                                }`}
-                              >
-                                {isSigned ? t("patients.note.signed") : t("patients.note.draft")}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-bold text-brand-600">{t("patients.doctorPrefix")} {record.doctor?.firstName} {record.doctor?.lastName}</span>
-                              <span className={patientDetailStyles.noteRowChevron} aria-hidden>›</span>
-                            </div>
-                          </div>
-                          {record.subjective && (
-                            <p className="text-xs text-foreground mb-1.5 leading-relaxed">{record.subjective}</p>
-                          )}
-                          {record.assessment && (
-                            <div className="text-xs"><span className="font-bold text-muted-foreground">{t("patients.note.dx")}</span> {record.assessment}</div>
-                          )}
-                          {record.plan && (
-                            <div className="text-xs mt-1"><span className="font-bold text-muted-foreground">{t("patients.note.plan")}</span> {record.plan}</div>
-                          )}
-                          {/* Specialty badges */}
-                          {record.specialtyData?.procedures?.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-2">
-                              {record.specialtyData.procedures.map((p: any) => {
-                                const label = typeof p === "string" ? p : (p?.name ?? t("patients.note.procedure"));
-                                const key = typeof p === "string" ? p : (p?.id ?? label);
-                                return <span key={key} className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">{label}</span>;
-                              })}
-                            </div>
-                          )}
-                          {record.specialtyData?.scales && (
-                            <div className="flex gap-2 mt-2">
-                              <span className="text-[10px] bg-card border border-border rounded px-2 py-0.5">PHQ-9: {record.specialtyData.scales.phq9?.score}/27 ({record.specialtyData.scales.phq9?.severity})</span>
-                              <span className="text-[10px] bg-card border border-border rounded px-2 py-0.5">GAD-7: {record.specialtyData.scales.gad7?.score}/21 ({record.specialtyData.scales.gad7?.severity})</span>
-                            </div>
-                          )}
-                          {record.specialtyData?.anthropometrics && (
-                            <div className="flex gap-3 mt-2 text-[10px] text-muted-foreground">
-                              {record.specialtyData.anthropometrics.weight && <span>{t("patients.note.weight")} <strong>{record.specialtyData.anthropometrics.weight}kg</strong></span>}
-                              {record.specialtyData.anthropometrics.bmi    && <span>{t("patients.note.bmi")} <strong>{record.specialtyData.anthropometrics.bmi}</strong></span>}
-                            </div>
-                          )}
-                          {record.specialtyData?.medications?.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-2">
-                              {record.specialtyData.medications.filter((m: any) => m.drug).map((m: any, i: number) => (
-                                <span key={i} className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200">💊 {m.drug}</span>
-                              ))}
-                            </div>
-                          )}
-                        </button>
-                        {(record.specialtyData?.status ?? "DRAFT") === "DRAFT" && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteRecord(record);
-                            }}
-                            className="self-start p-2 rounded-lg text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                            aria-label={t("patients.note.deleteDraftAria")}
-                            title={t("patients.note.deleteDraftAria")}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-            </>
           )}
 
           {/* ===== TAB: PLAN DE TRATAMIENTO ===== */}

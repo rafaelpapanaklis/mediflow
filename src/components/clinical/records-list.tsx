@@ -19,7 +19,7 @@ const SPECIALTY_LABEL_KEYS: Record<string, string> = {
   medicine:   "clinical.recordsList.specialtyMedicine",
 };
 
-function DentalRecordDetail({ data, record }: { data: any; record: any }) {
+export function DentalRecordDetail({ data, record }: { data: any; record: any }) {
   const t = useT();
   return (
     <div className="space-y-4 text-sm">
