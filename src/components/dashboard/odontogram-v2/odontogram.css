@@ -85,7 +85,7 @@
 .odo-app .odo-chart-scroll { overflow-x: auto; padding: 8px 0 4px; }
 
 /* ============ CHART ============ */
-.odo-app .odo-chart { min-width: 1060px; position: relative; padding: 4px 8px; }
+.odo-app .odo-chart { min-width: 0; width: 100%; position: relative; padding: 4px 8px; }
 .odo-app .odo-arch-label { text-align: center; font-size: 11px; text-transform: uppercase; letter-spacing: .14em; color: var(--ink-3); font-weight: 700; }
 .odo-app .odo-arch-label.top { margin-bottom: 2px; }
 .odo-app .odo-arch-label.bottom { margin-top: 2px; }
@@ -96,14 +96,19 @@
 
 .odo-app .odo-cell {
   display: flex; flex-direction: column; align-items: center;
+  flex: 1 1 0; min-width: 0;
   border-radius: 10px; padding: 3px 1px; cursor: pointer;
   transition: background .12s;
 }
 .odo-app .odo-cell:hover { background: #f7f9fc; }
 .odo-app .odo-cell.sel { background: var(--accent-soft); outline: 2px solid var(--accent); }
-.odo-app .odo-cell-inner { display: flex; flex-direction: column; align-items: center; gap: 1px; }
-.odo-app .odo-glyph-wrap, .odo-app .odo-circle-wrap, .odo-app .odo-label-wrap { display: grid; place-items: center; }
+.odo-app .odo-cell-inner { display: flex; flex-direction: column; align-items: center; gap: 1px; width: 100%; }
+.odo-app .odo-glyph-wrap, .odo-app .odo-circle-wrap, .odo-app .odo-label-wrap { display: grid; place-items: center; width: 100%; }
 .odo-app .odo-glyph-wrap { min-height: 50px; align-items: flex-end; }
+/* Responsive: los dientes (SVG con viewBox) escalan al ancho del cell, sin superar su tamaño natural */
+.odo-app .odo-glyph-wrap svg, .odo-app .odo-circle-wrap svg { width: 100%; height: auto; }
+.odo-app .odo-glyph-wrap svg { max-width: 42px; }
+.odo-app .odo-circle-wrap svg { max-width: 62px; }
 
 .odo-app .odo-num {
   border: 0; background: transparent; color: var(--ink-2);
