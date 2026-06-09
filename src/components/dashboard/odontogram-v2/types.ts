@@ -203,3 +203,12 @@ export interface DetailPanelProps {
   onRemove: OnRemove;
   onPick: (id: string) => void;
 }
+
+/** OdontogramV2 root. Modo VIVO: solo `patientId` (lee/escribe odontogram_entries).
+ *  Modo CONTROLADO: además `value` + `onChange` -> el estado lo maneja el padre
+ *  (input de formulario, foto por consulta) y NO toca el servidor. */
+export interface OdontogramV2Props {
+  patientId: string;
+  value?: Records;
+  onChange?: (records: Records) => void;
+}

@@ -9,11 +9,12 @@
    - Renders OdoDefs + Odontogram + Legend + Palette + DetailPanel (the stubs).
    - WITHOUT the Tweaks panel and WITHOUT warm/dark variants.
    ============================================================ */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { I18N, COND_BY_ID, GROUP_COLOR } from "./data";
 import type {
   Records, ToothRecord, Lang, Numbering, Dentition, ApplyKind, RemoveScope, SurfaceLetter,
+  OdontogramV2Props,
 } from "./types";
 import {
   fetchRecords, putFinding, deleteFinding, setNote as apiSetNote, resetOdontogram,
@@ -63,51 +64,74 @@ function Seg({ value, set, options }: { value: string; set: (v: string) => void;
   );
 }
 
-export function OdontogramV2({ patientId }: { patientId: string }) {
+export function OdontogramV2({ patientId, value, onChange }: OdontogramV2Props) {
+  // Modo CONTROLADO (foto por consulta): si llegan value+onChange, el estado lo
+  // maneja el padre y NO se toca el servidor. Si no, modo VIVO (como la pestaña).
+  const controlled = value !== undefined && !!onChange;
   const [lang, setLang] = useState<Lang>("es");
   const [numbering, setNumbering] = useState<Numbering>("fdi");
   const [dentition, setDentition] = useState<Dentition>("permanent");
   const [brush, setBrush] = useState<string | null>(null);
   const [eraser, setEraser] = useState(false);
-  const [records, setRecords] = useState<Records>({});
+  const [internalRecords, setInternalRecords] = useState<Records>({});
+  const records = controlled ? (value ?? {}) : internalRecords;
   const [selected, setSelected] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!controlled);
   const [error, setError] = useState<string | null>(null);
   const t = I18N[lang];
 
+  // setRecords unificado: en controlado -> onChange (soporta updater funcional);
+  // en vivo -> estado interno. ctrlRef lo mantiene estable (no rompe las deps).
+  const ctrlRef = useRef({ controlled, value, onChange });
+  ctrlRef.current = { controlled, value, onChange };
+  const setRecords = useCallback((updater: Records | ((prev: Records) => Records)) => {
+    const c = ctrlRef.current;
+    if (c.controlled) {
+      const prev = c.value ?? {};
+      const next = typeof updater === "function" ? (updater as (p: Records) => Records)(prev) : updater;
+      c.onChange?.(next);
+    } else {
+      setInternalRecords(updater);
+    }
+  }, []);
+
   // Load on mount / patient change via the adapter — NOT localStorage.
+  // En modo controlado el estado viene del padre: no se carga del servidor.
   useEffect(() => {
+    if (controlled) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
     fetchRecords(patientId)
-      .then((recs) => { if (!cancelled) setRecords(recs); })
+      .then((recs) => { if (!cancelled) setInternalRecords(recs); })
       .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Error"); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [patientId]);
+  }, [patientId, controlled]);
 
   // Re-sync from the server (recover from a failed optimistic mutation).
   const resync = useCallback(() => {
-    fetchRecords(patientId).then(setRecords).catch(() => {});
+    if (ctrlRef.current.controlled) return;
+    fetchRecords(patientId).then(setInternalRecords).catch(() => {});
   }, [patientId]);
 
   const pickBrush = (id: string) => { setEraser(false); setBrush((b) => (b === id ? null : id)); };
   const pickEraser = () => { setBrush(null); setEraser((e) => !e); };
 
   const apply = useCallback((fdi: number, kind: ApplyKind, letter?: SurfaceLetter | string) => {
+    const live = !ctrlRef.current.controlled;
     // ---- eraser ----
     if (eraser) {
       if (kind === "surface" && letter) {
         const lk = String(letter);
         const ids = records[fdi]?.surfaces?.[lk] ?? [];
         setRecords((prev) => applyToRecords(prev, fdi, (r) => { delete r.surfaces[lk]; }));
-        ids.forEach((conditionId) =>
+        if (live) ids.forEach((conditionId) =>
           deleteFinding({ patientId, toothNumber: fdi, surface: lk, conditionId }).catch(resync));
       } else {
         const ids = records[fdi]?.tooth ?? [];
         setRecords((prev) => applyToRecords(prev, fdi, (r) => { r.tooth = []; }));
-        ids.forEach((conditionId) =>
+        if (live) ids.forEach((conditionId) =>
           deleteFinding({ patientId, toothNumber: fdi, surface: null, conditionId }).catch(resync));
       }
       return;
@@ -133,10 +157,12 @@ export function OdontogramV2({ patientId }: { patientId: string }) {
       }
     }));
 
-    const op = present
-      ? deleteFinding({ patientId, toothNumber: fdi, surface: lk, conditionId: brush })
-      : putFinding({ patientId, toothNumber: fdi, surface: lk, conditionId: brush });
-    op.catch(resync);
+    if (live) {
+      const op = present
+        ? deleteFinding({ patientId, toothNumber: fdi, surface: lk, conditionId: brush })
+        : putFinding({ patientId, toothNumber: fdi, surface: lk, conditionId: brush });
+      op.catch(resync);
+    }
   }, [brush, eraser, records, patientId, resync]);
 
   const removeFinding = useCallback((fdi: number, scope: RemoveScope, letter: string | undefined, condId: string) => {
@@ -151,7 +177,7 @@ export function OdontogramV2({ patientId }: { patientId: string }) {
         if (i >= 0) r.tooth.splice(i, 1);
       }
     }));
-    deleteFinding({
+    if (!ctrlRef.current.controlled) deleteFinding({
       patientId, toothNumber: fdi,
       surface: scope === "surface" ? (letter ?? null) : null,
       conditionId: condId,
@@ -162,17 +188,19 @@ export function OdontogramV2({ patientId }: { patientId: string }) {
     const rec = records[fdi];
     setRecords((prev) => applyToRecords(prev, fdi, (r) => { r.tooth = []; r.surfaces = {}; r.note = ""; }));
     if (!rec) return;
-    (rec.tooth || []).forEach((conditionId) =>
-      deleteFinding({ patientId, toothNumber: fdi, surface: null, conditionId }).catch(resync));
-    Object.entries(rec.surfaces || {}).forEach(([letter, arr]) =>
-      arr.forEach((conditionId) =>
-        deleteFinding({ patientId, toothNumber: fdi, surface: letter, conditionId }).catch(resync)));
-    if (rec.note) apiSetNote(patientId, fdi, "").catch(resync);
+    if (!ctrlRef.current.controlled) {
+      (rec.tooth || []).forEach((conditionId) =>
+        deleteFinding({ patientId, toothNumber: fdi, surface: null, conditionId }).catch(resync));
+      Object.entries(rec.surfaces || {}).forEach(([letter, arr]) =>
+        arr.forEach((conditionId) =>
+          deleteFinding({ patientId, toothNumber: fdi, surface: letter, conditionId }).catch(resync)));
+      if (rec.note) apiSetNote(patientId, fdi, "").catch(resync);
+    }
   }, [records, patientId, resync]);
 
   const handleNote = useCallback((fdi: number, txt: string) => {
     setRecords((prev) => applyToRecords(prev, fdi, (r) => { r.note = txt; }));
-    apiSetNote(patientId, fdi, txt).catch(resync);
+    if (!ctrlRef.current.controlled) apiSetNote(patientId, fdi, txt).catch(resync);
   }, [patientId, resync]);
 
   const clearAll = () => {
@@ -180,7 +208,7 @@ export function OdontogramV2({ patientId }: { patientId: string }) {
     if (!ok) return;
     setRecords({});
     setSelected(null);
-    resetOdontogram(patientId).catch(resync);
+    if (!ctrlRef.current.controlled) resetOdontogram(patientId).catch(resync);
   };
 
   // summary counts

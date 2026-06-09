@@ -9,6 +9,8 @@ import { TreatmentTimeline } from "@/components/clinical/shared";
 import { PrescriptionModal } from "@/components/clinical/shared/prescription-modal";
 import { useT } from "@/i18n/i18n-provider";
 import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
+import { fetchRecords } from "@/components/dashboard/odontogram-v2/adapter";
+import type { Records } from "@/components/dashboard/odontogram-v2/types";
 
 interface CatalogProcedure { id: string; name: string; basePrice: number; category: string }
 interface SelectedProcedure { id: string; name: string; price: number; quantity: number }
@@ -53,6 +55,17 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
       }));
   });
   const [procSearch, setProcSearch] = useState("");
+
+  // Odontograma de ESTA consulta: foto independiente (NO el vivo del paciente).
+  // En edición arranca con la foto guardada; en consulta nueva se precarga del
+  // estado vivo actual para que el doctor parta de ahí y registre los cambios.
+  const [odontogram, setOdontogram] = useState<Records>(() => (initialSpec.odontogram as Records) ?? {});
+  useEffect(() => {
+    if (initialRecord) return; // edición: ya tenemos la foto guardada
+    let cancelled = false;
+    fetchRecords(patientId).then(r => { if (!cancelled) setOdontogram(r); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [patientId, initialRecord]);
 
   // Receta NOM-024 — la receta se emite standalone (sin consulta asociada)
   // para no contaminar el histórico clínico con medicalRecord huérfanos.
@@ -163,6 +176,7 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
         // "Iniciar consulta" firma aparte vía /api/appointments/[id]/complete.
         status: "SIGNED",
         signedAt: new Date().toISOString(),
+        odontogram,
         procedures: selectedProcs,
         proceduresTotal,
         periodontal: form.periodontal,
@@ -264,9 +278,10 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
         </div>
       </div>
 
-      {/* ODONTOGRAMA — OdontogramV2 (estado vivo; la foto se toma al firmar la consulta) */}
+      {/* ODONTOGRAMA — OdontogramV2 en modo CONTROLADO: foto independiente de
+          esta consulta (no toca el odontograma vivo del paciente). */}
       <div style={{ width: "100%", overflowX: "auto" }}>
-        <OdontogramV2 patientId={patientId} />
+        <OdontogramV2 patientId={patientId} value={odontogram} onChange={setOdontogram} />
       </div>
 
       {/* PERIODONTAL */}
