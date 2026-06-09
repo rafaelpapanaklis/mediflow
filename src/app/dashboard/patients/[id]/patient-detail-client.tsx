@@ -1088,9 +1088,10 @@ export function PatientDetailClient({
 
   // El módulo Ortodoncia rediseño usa max-width 1920px (mockup verbatim:
   // viewport 1920+ aprovechado con sub-sidebar + sections + right rail).
-  // Otros tabs conservan 1400 para no romper densidad existente.
+  // Otros tabs usan 1760 para aprovechar monitores grandes sin estirar laptops
+  // (que no llegan a ese ancho, así que ahí no cambia nada).
   const isOrthoTab = tab === "ortodoncia" && Boolean(orthoRedesignVM);
-  const outerMaxWidth = isOrthoTab ? 1920 : 1400;
+  const outerMaxWidth = isOrthoTab ? 1920 : 1760;
 
   return (
     <div style={{ padding: "20px 28px 28px", maxWidth: outerMaxWidth, margin: "0 auto" }}>

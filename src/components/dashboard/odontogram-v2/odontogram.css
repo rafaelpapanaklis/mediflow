@@ -107,8 +107,8 @@
 .odo-app .odo-glyph-wrap { min-height: 50px; align-items: flex-end; }
 /* Responsive: los dientes (SVG con viewBox) escalan al ancho del cell, sin superar su tamaño natural */
 .odo-app .odo-glyph-wrap svg, .odo-app .odo-circle-wrap svg { width: 100%; height: auto; }
-.odo-app .odo-glyph-wrap svg { max-width: 42px; }
-.odo-app .odo-circle-wrap svg { max-width: 62px; }
+.odo-app .odo-glyph-wrap svg { max-width: 60px; }
+.odo-app .odo-circle-wrap svg { max-width: 88px; }
 
 .odo-app .odo-num {
   border: 0; background: transparent; color: var(--ink-2);
