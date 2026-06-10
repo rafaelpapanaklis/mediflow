@@ -555,14 +555,14 @@
       "createPatient": "Create patient"
     },
     "importPatients": {
-      "errFileType": "Only .xlsx, .xls or .csv files",
-      "errFileSize": "File exceeds 10MB",
+      "errFileType": "Only .xlsx or .csv files",
+      "errFileSize": "File exceeds 5MB",
       "errProcess": "Error processing",
       "errProcessFile": "Error processing file",
       "errImport": "Error importing",
       "title": "Import patients from Excel/CSV",
       "dropzone": "Drag your file here or click to select",
-      "dropzoneHint": ".xlsx, .xls or .csv · Max 10MB · up to 5,000 rows",
+      "dropzoneHint": ".xlsx or .csv · Max 5MB · up to 5,000 rows",
       "downloadTemplate": "Download template",
       "processing": "Processing {name}…",
       "statValid": "Valid",

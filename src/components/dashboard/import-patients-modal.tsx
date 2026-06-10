@@ -63,11 +63,11 @@ export function ImportPatientsModal({ open, onClose, onImported }: Props) {
   }
 
   async function handleFile(f: File) {
-    if (!/\.(xlsx|xls|csv)$/i.test(f.name)) {
+    if (!/\.(xlsx|csv)$/i.test(f.name)) {
       toast.error(t("shell.importPatients.errFileType"));
       return;
     }
-    if (f.size > 10 * 1024 * 1024) {
+    if (f.size > 5 * 1024 * 1024) {
       toast.error(t("shell.importPatients.errFileSize"));
       return;
     }
@@ -149,7 +149,7 @@ export function ImportPatientsModal({ open, onClose, onImported }: Props) {
                 <input
                   ref={inputRef}
                   type="file"
-                  accept=".xlsx,.xls,.csv"
+                  accept=".xlsx,.csv"
                   style={{ display: "none" }}
                   onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
                 />

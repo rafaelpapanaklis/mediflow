@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import * as XLSX from "xlsx";
+import * as ExcelJS from "exceljs";
+import { Readable } from "stream";
 import { getAuthContext } from "@/lib/auth-context";
 import { rateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
@@ -9,7 +10,7 @@ import { validateSpreadsheet } from "@/lib/validate-upload";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MAX_BYTES = 10 * 1024 * 1024;
+const MAX_BYTES = 5 * 1024 * 1024;
 const MAX_ROWS  = 5000;
 const BATCH     = 200;
 
@@ -99,6 +100,85 @@ function isRowEmpty(raw: Record<string, any>, headerMap: Record<string, string>)
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// Parseo del upload con exceljs.
+//
+// La lib `xlsx` (SheetJS 0.18.5) tiene 2 HIGH sin fix — GHSA-4r6h-8v6p-xvw6
+// (prototype pollution) y GHSA-5pgg-2g8v-p4x9 (ReDoS) — y aquí el archivo lo
+// SUBE el usuario: input no confiable. `xlsx` queda solo para GENERAR archivos
+// (template de import, exports de reportes), que es output confiable.
+//
+// El formato .xls legacy (OLE2) deja de aceptarse: exceljs solo lee OOXML/CSV.
+// La validación de extensión responde 400 "Solo .xlsx o .csv".
+// ---------------------------------------------------------------------------
+
+function utcDateToLocal(d: Date): Date {
+  // exceljs ancla las fechas de celda a medianoche UTC; se re-anclan a
+  // medianoche local para que la dob no retroceda un día al mostrarse en MX.
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
+function cellToRaw(cell: ExcelJS.Cell): any {
+  const v = cell.value as any;
+  if (v === null || v === undefined) return "";
+  if (v instanceof Date) return utcDateToLocal(v);
+  if (typeof v === "object") {
+    if (v.result instanceof Date) return utcDateToLocal(v.result);
+    return cell.text ?? ""; // richText / hyperlink / fórmula → texto renderizado
+  }
+  return v; // string | number | boolean
+}
+
+async function readUploadWorksheet(fileBytes: ArrayBuffer, ext: string): Promise<ExcelJS.Worksheet | undefined> {
+  const wb = new ExcelJS.Workbook();
+  if (ext === "csv") {
+    const buf = Buffer.from(fileBytes);
+    // Excel "CSV UTF-8" antepone BOM; sin quitarlo el primer header no matchea.
+    const clean =
+      buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf ? buf.subarray(3) : buf;
+    // Sniff del separador en la primera línea (Excel en locales es-* exporta con ";").
+    const firstLine = clean.subarray(0, Math.min(clean.length, 4096)).toString("utf8").split(/\r?\n/, 1)[0] ?? "";
+    const delimiter = [",", ";", "\t"].reduce((a, b) => (firstLine.split(b).length > firstLine.split(a).length ? b : a));
+    return wb.csv.read(Readable.from([clean]), {
+      parserOptions: { delimiter },
+      map: (v: any) => v, // valores crudos como texto, igual que el parser anterior
+    });
+  }
+  await wb.xlsx.load(fileBytes);
+  return wb.worksheets[0];
+}
+
+function worksheetToRows(ws: ExcelJS.Worksheet, maxRows: number): { rows: Record<string, any>[]; exceeded: boolean } {
+  // Headers desde la fila 1; duplicados con sufijo _N (mismo criterio que sheet_to_json).
+  const headers: { col: number; key: string }[] = [];
+  const seen = new Map<string, number>();
+  ws.getRow(1).eachCell({ includeEmpty: false }, (cell, col) => {
+    let key = String(cell.text ?? "").trim();
+    if (!key) return;
+    const n = seen.get(key) ?? 0;
+    seen.set(key, n + 1);
+    if (n > 0) key = `${key}_${n}`;
+    headers.push({ col, key });
+  });
+
+  const rows: Record<string, any>[] = [];
+  let exceeded = false;
+  ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber === 1 || exceeded || headers.length === 0) return;
+    const obj: Record<string, any> = {};
+    let hasValue = false;
+    for (const h of headers) {
+      const raw = cellToRaw(row.getCell(h.col));
+      obj[h.key] = raw;
+      if (String(raw ?? "").trim() !== "") hasValue = true;
+    }
+    if (!hasValue) return; // fila en blanco: el parser anterior también la saltaba
+    rows.push(obj);
+    if (rows.length > maxRows) exceeded = true;
+  });
+  return { rows, exceeded };
+}
+
 export async function POST(req: NextRequest) {
   const rl = rateLimit(req, 3, 60_000);
   if (rl) return rl;
@@ -120,11 +200,12 @@ export async function POST(req: NextRequest) {
   if (!file || !(file instanceof File)) {
     return NextResponse.json({ error: "Falta el archivo" }, { status: 400 });
   }
-  if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
-    return NextResponse.json({ error: "Solo .xlsx, .xls o .csv" }, { status: 400 });
+  // .xls legacy (OLE2) ya NO se acepta: el parseo migró a exceljs (ver helpers).
+  if (!/\.(xlsx|csv)$/i.test(file.name)) {
+    return NextResponse.json({ error: "Solo .xlsx o .csv" }, { status: 400 });
   }
   if (file.size > MAX_BYTES) {
-    return NextResponse.json({ error: "Archivo supera 10MB" }, { status: 413 });
+    return NextResponse.json({ error: "Archivo supera 5MB" }, { status: 413 });
   }
 
   // Blindaje: valida la FIRMA real del contenido (no la extensión). .xlsx debe
@@ -146,21 +227,23 @@ export async function POST(req: NextRequest) {
   }
 
   let rawRows: Record<string, any>[];
+  let rowsExceeded = false;
   try {
-    const buf = Buffer.from(fileBytes);
-    const wb  = XLSX.read(buf, { type: "buffer", cellDates: true, raw: false });
-    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const sheet = await readUploadWorksheet(fileBytes, ext);
     if (!sheet) return NextResponse.json({ error: "Archivo vacío" }, { status: 400 });
-    rawRows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { raw: false, defval: "" });
+    const collected = worksheetToRows(sheet, MAX_ROWS);
+    rawRows = collected.rows;
+    rowsExceeded = collected.exceeded;
   } catch (e: any) {
     return NextResponse.json({ error: "No se pudo leer el archivo: " + (e?.message ?? "parse error") }, { status: 400 });
   }
 
+  // Tope de filas ANTES de validar/tocar la DB.
+  if (rowsExceeded) {
+    return NextResponse.json({ error: `Máximo ${MAX_ROWS} filas. Divide el archivo.` }, { status: 413 });
+  }
   if (rawRows.length === 0) {
     return NextResponse.json({ error: "Sin filas de datos" }, { status: 400 });
-  }
-  if (rawRows.length > MAX_ROWS) {
-    return NextResponse.json({ error: `Máximo ${MAX_ROWS} filas. Divide el archivo.` }, { status: 400 });
   }
 
   const headerMap = buildHeaderMap(Object.keys(rawRows[0]));
