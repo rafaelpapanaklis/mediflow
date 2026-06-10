@@ -15,7 +15,7 @@ export interface BirthdayCardData {
   clinicName: string;
   /** ISO date string del cumpleaños — se formatea es-MX. */
   birthdayDate: string;
-  /** Color principal (default morado MediFlow). */
+  /** Color principal (default morado DaleControl). */
   primaryColor?: string;
   /** Color secundario (default rosa pastel). */
   accentColor?: string;

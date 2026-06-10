@@ -555,14 +555,14 @@ export function Step3PlanPayment({
               >
                 Política de privacidad
               </Link>{" "}
-              de MediFlow.
+              de DaleControl.
             </Checkbox>
             {values.payMethod !== "none" && (
               <Checkbox
                 checked={values.acceptedCharge}
                 onChange={v => onChange({ acceptedCharge: v })}
               >
-                Autorizo a MediFlow a cobrar mi método de pago al terminar los 14
+                Autorizo a DaleControl a cobrar mi método de pago al terminar los 14
                 días si no cancelo antes.
               </Checkbox>
             )}

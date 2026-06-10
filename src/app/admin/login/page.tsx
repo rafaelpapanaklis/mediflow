@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { AdminLoginForm } from "./admin-login-form";
 
-export const metadata: Metadata = { title: "Admin — MediFlow" };
+export const metadata: Metadata = { title: "Admin — DaleControl" };
 
 export default function AdminLoginPage() {
   return (

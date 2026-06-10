@@ -7,7 +7,7 @@ import { OverviewClient } from "./overview-client";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { getServerT } from "@/i18n/server";
 
-export const metadata: Metadata = { title: "Analytics — MediFlow" };
+export const metadata: Metadata = { title: "Analytics — DaleControl" };
 
 const MIN_APPTS_FOR_INSIGHTS = 30;
 

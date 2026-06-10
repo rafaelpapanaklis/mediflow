@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { TvModesClient } from "./tv-modes-client";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 
-export const metadata: Metadata = { title: "Pantallas TV — MediFlow" };
+export const metadata: Metadata = { title: "Pantallas TV — DaleControl" };
 
 export default async function TvModesPage() {
   const user = await getCurrentUser();

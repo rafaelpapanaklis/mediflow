@@ -1,5 +1,5 @@
 // MercadoPago REST wrapper — token POR VENDEDOR (cada lab/proveedor pega su propio
-// access token; el cobro va DIRECTO a su cuenta, sin comisión MediFlow). Sin SDK:
+// access token; el cobro va DIRECTO a su cuenta, sin comisión DaleControl). Sin SDK:
 // fetch nativo. Modelado en createMercadoPagoPreference de src/app/api/portal/pay/route.ts.
 
 const MP_API = "https://api.mercadopago.com";

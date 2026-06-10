@@ -8,7 +8,7 @@ import type { SupplierProductDTO } from "@/lib/suppliers/types";
 import { ProductoForm } from "../producto-form";
 
 export const metadata: Metadata = {
-  title: "Editar producto · Proveedor — MediFlow",
+  title: "Editar producto · Proveedor — DaleControl",
   robots: { index: false, follow: false },
 };
 

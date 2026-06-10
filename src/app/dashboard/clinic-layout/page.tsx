@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { TREATMENT_KINDS } from "@/lib/agenda/types";
 import { ClinicLayoutClient } from "./layout-client";
 
-export const metadata: Metadata = { title: "Mi Clínica Visual — MediFlow" };
+export const metadata: Metadata = { title: "Mi Clínica Visual — DaleControl" };
 
 export default async function ClinicLayoutPage() {
   const user = await getCurrentUser();

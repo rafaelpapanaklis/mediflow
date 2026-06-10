@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { XraysPatientsList } from "./patients-list-client";
 
-export const metadata: Metadata = { title: "Radiografías — MediFlow" };
+export const metadata: Metadata = { title: "Radiografías — DaleControl" };
 
 export default async function XraysPage() {
   const user = await getCurrentUser();

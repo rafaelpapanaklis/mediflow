@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { OnboardingClient } from "./onboarding-client";
 
-export const metadata: Metadata = { title: "Onboarding — Admin MediFlow" };
+export const metadata: Metadata = { title: "Onboarding — Admin DaleControl" };
 
 const ONBOARDING_STEPS = [
   { id: "doctor",      label: "1. Doctor creado" },

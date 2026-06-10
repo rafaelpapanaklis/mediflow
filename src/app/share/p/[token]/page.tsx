@@ -166,7 +166,7 @@ export default async function PublicSharePage(props: PageProps) {
         <footer
           style={{ marginTop: 18, fontSize: 11, color: "var(--text-2)", textAlign: "center" }}
         >
-          Compartido el {new Date(v.generatedAt).toLocaleDateString("es-MX")} · MediFlow
+          Compartido el {new Date(v.generatedAt).toLocaleDateString("es-MX")} · DaleControl
         </footer>
       </div>
     </main>

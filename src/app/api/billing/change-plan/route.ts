@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
     unit_amount: targetPlan.priceMxn * 100,
     recurring: { interval: "month" },
     product_data: {
-      name: `MediFlow ${targetPlan.name} — Suscripción mensual`,
+      name: `DaleControl ${targetPlan.name} — Suscripción mensual`,
       metadata: { plan: targetPlan.id },
     },
   });

@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { WalkInClient } from "./walk-in-client";
 
-export const metadata: Metadata = { title: "Fila de Espera — MediFlow" };
+export const metadata: Metadata = { title: "Fila de Espera — DaleControl" };
 
 export default async function WalkInPage() {
   const user = await getCurrentUser();

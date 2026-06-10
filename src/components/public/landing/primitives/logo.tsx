@@ -29,7 +29,7 @@ export function Logo({ size = 20, color = "var(--ld-brand-light, #a78bfa)", show
             color: "var(--ld-fg, #f5f5f7)",
           }}
         >
-          MediFlow
+          DaleControl
         </span>
       )}
     </span>

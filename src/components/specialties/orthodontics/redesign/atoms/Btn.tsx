@@ -1,4 +1,4 @@
-// Atom: Botón con variants alineados al design system MediFlow violet.
+// Atom: Botón con variants alineados al design system DaleControl violet.
 
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 

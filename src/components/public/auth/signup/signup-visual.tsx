@@ -86,7 +86,7 @@ export function SignupVisual() {
           }}
         >
           Únete a 2,400+ clínicas que ya gestionan sus pacientes, citas y facturación con
-          MediFlow.
+          DaleControl.
         </p>
       </div>
 

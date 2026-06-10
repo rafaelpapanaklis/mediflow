@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
 }
 
 // ─── TODO upgrade Pro ────────────────────────────────────────────────
-// Cuando MediFlow upgrade a Vercel Pro, cambiar el schedule de este cron
+// Cuando DaleControl upgrade a Vercel Pro, cambiar el schedule de este cron
 // en `vercel.json` de `"0 7 * * *"` (diario 07:00 UTC) a `"*/15 * * * *"`
 // para procesamiento near-real-time del WhatsApp queue.
 //

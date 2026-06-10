@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ResourceBookingsClient } from "./resource-bookings-client";
 
-export const metadata: Metadata = { title: "Reservas legacy — MediFlow" };
+export const metadata: Metadata = { title: "Reservas legacy — DaleControl" };
 
 export default async function ResourceBookingsPage() {
   const user = await getCurrentUser();

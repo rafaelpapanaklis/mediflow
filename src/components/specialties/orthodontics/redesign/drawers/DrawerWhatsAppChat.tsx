@@ -41,7 +41,7 @@ export function DrawerWhatsAppChat(props: DrawerWhatsAppChatProps) {
             <div key={m.id} className={`flex ${m.direction === "out" ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[80%] px-3 py-2 rounded-lg text-sm ${m.direction === "out" ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100" : "bg-white border border-slate-200 text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"}`}>
                 <div className="text-[10px] uppercase tracking-wider opacity-60 mb-0.5">
-                  {m.direction === "out" ? "MediFlow → paciente" : (m.patientName ?? "Paciente")} · {m.at}
+                  {m.direction === "out" ? "DaleControl → paciente" : (m.patientName ?? "Paciente")} · {m.at}
                 </div>
                 <div className="leading-relaxed">{m.preview}</div>
               </div>

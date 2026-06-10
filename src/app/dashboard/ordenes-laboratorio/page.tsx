@@ -11,7 +11,7 @@ import type {
 } from "@/lib/laboratorios/types";
 import { OrdenesClient } from "./ordenes-client";
 
-export const metadata: Metadata = { title: "Órdenes de laboratorio — MediFlow" };
+export const metadata: Metadata = { title: "Órdenes de laboratorio — DaleControl" };
 
 const iso = (d: Date): string => d.toISOString();
 

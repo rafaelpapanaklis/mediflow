@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { toPublicFileUrl } from "@/lib/storage";
 import { XraysClient } from "../xrays-client";
 
-export const metadata: Metadata = { title: "Radiografías · paciente — MediFlow" };
+export const metadata: Metadata = { title: "Radiografías · paciente — DaleControl" };
 
 interface Props {
   params: { patientId: string };

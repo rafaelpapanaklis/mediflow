@@ -8,7 +8,7 @@ import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-helpers";
 import { getServerT } from "@/i18n/server";
 
-export const metadata: Metadata = { title: "Agenda — MediFlow" };
+export const metadata: Metadata = { title: "Agenda — DaleControl" };
 
 export default async function AppointmentsPage() {
   const { t } = await getServerT();

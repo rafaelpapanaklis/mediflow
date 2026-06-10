@@ -35,7 +35,7 @@ const ROLES = [
   { value:"ADMIN",        labelKey:"settings.team.roleAdmin",        icon:"🛡️", descKey:"settings.team.roleAdminDesc"  },
   { value:"RECEPTIONIST", labelKey:"settings.team.roleReceptionist", icon:"📋", descKey:"settings.team.roleReceptionistDesc" },
 ];
-// MediFlow es DENTAL — solo specialties dentales en el selector del
+// DaleControl es DENTAL — solo specialties dentales en el selector del
 // equipo. Si el SaaS expande a multi-specialty, restaurar la lista
 // general aquí.
 // id = código estable; nameKey -> resolved via t() at render time.

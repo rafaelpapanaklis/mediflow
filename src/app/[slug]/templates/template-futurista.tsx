@@ -649,7 +649,7 @@ export function TemplateFuturista({ clinic, highlights }: TemplateProps) {
           <div className="border-t" style={{ borderColor: alpha("#ffffff", 0.1) }}>
             <div className="max-w-6xl mx-auto px-5 sm:px-8 py-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-[13px] opacity-60">
               <span>© {new Date().getFullYear()} {clinic.name}. Todos los derechos reservados.</span>
-              <span className="flex items-center gap-1.5">Hecho con <a href="/" className="font-bold transition hover:opacity-100" style={{ color: glow }}>MediFlow</a></span>
+              <span className="flex items-center gap-1.5">Hecho con <a href="/" className="font-bold transition hover:opacity-100" style={{ color: glow }}>DaleControl</a></span>
             </div>
           </div>
         </footer>

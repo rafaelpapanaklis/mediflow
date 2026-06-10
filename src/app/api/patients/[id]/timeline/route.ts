@@ -105,7 +105,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   const wantReferral    = requestedTypes.includes("referral");
   const wantDiagnosis   = requestedTypes.includes("diagnosis");
 
-  // Promise.all con max 7 entidades (regla MediFlow).
+  // Promise.all con max 7 entidades (regla DaleControl).
   const [soapRows, apptRows, rxRows, xrayRows, treatmentRows, referralRows, dxRows] = await Promise.all([
     wantSoap ? prisma.medicalRecord.findMany({
       where: { clinicId: user.clinicId, patientId: params.id, ...dateRange<"visitDate">("visitDate") },

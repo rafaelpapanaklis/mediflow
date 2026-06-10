@@ -6,7 +6,7 @@ import { getSupplierContext } from "@/lib/supplier-auth";
 import { ProductoForm } from "../producto-form";
 
 export const metadata: Metadata = {
-  title: "Nuevo producto · Proveedor — MediFlow",
+  title: "Nuevo producto · Proveedor — DaleControl",
   robots: { index: false, follow: false },
 };
 

@@ -202,7 +202,7 @@ export function ClinicalNoteDocument(props: ClinicalNoteDocumentProps) {
       <Page size="LETTER" style={styles.page} wrap>
         <View style={styles.header} fixed>
           <View>
-            <Text style={styles.brand}>MediFlow</Text>
+            <Text style={styles.brand}>DaleControl</Text>
             <Text style={styles.brandSub}>Nota clínica · expediente electrónico</Text>
           </View>
           <View>
@@ -265,7 +265,7 @@ export function ClinicalNoteDocument(props: ClinicalNoteDocumentProps) {
         )}
 
         <Text style={styles.footer} fixed>
-          MediFlow · Expediente clínico electrónico conforme a NOM-024-SSA3-2012 ·
+          DaleControl · Expediente clínico electrónico conforme a NOM-024-SSA3-2012 ·
           Generado el {fmtDateTime(generatedAt)}
         </Text>
       </Page>

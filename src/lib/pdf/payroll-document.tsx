@@ -189,7 +189,7 @@ export function PayrollDocument({ clinicName, periodLabel, generatedAt, rows }: 
       <Page size="LETTER" style={styles.page} wrap>
         <View style={styles.header}>
           <View>
-            <Text style={styles.brand}>MediFlow</Text>
+            <Text style={styles.brand}>DaleControl</Text>
             <Text style={styles.brandSub}>Reporte de nómina</Text>
           </View>
           <View>
@@ -262,7 +262,7 @@ export function PayrollDocument({ clinicName, periodLabel, generatedAt, rows }: 
         )}
 
         <Text style={styles.footer} fixed>
-          MediFlow · Reporte interno de nómina · Sin valor fiscal · Generado el{" "}
+          DaleControl · Reporte interno de nómina · Sin valor fiscal · Generado el{" "}
           {new Date(generatedAt).toLocaleString("es-MX")}
         </Text>
       </Page>

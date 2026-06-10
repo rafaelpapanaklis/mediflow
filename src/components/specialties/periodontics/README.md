@@ -1,6 +1,6 @@
 # Periodoncia (módulo 3/5 del paquete dental)
 
-Implementación completa del módulo de Periodoncia para MediFlow.
+Implementación completa del módulo de Periodoncia para DaleControl.
 Sigue la SPEC en `docs/marketplace/research/periodoncia/SPEC.md` con las
 22 decisiones bloqueadas de la sección 1.
 
@@ -210,6 +210,6 @@ test (no hay infra) — pendiente para v1.1.
 - **LFPDPPP**: consentimiento explícito SRP/cirugía vía
   `signSrpConsent`/`signSurgeryConsent`. Compartir con médico tratante
   registrado en audit log.
-- **RLS**: deny-all en las 9 tablas del módulo. MediFlow usa service
+- **RLS**: deny-all en las 9 tablas del módulo. DaleControl usa service
   role bypass; defensa adicional con `clinicId` filter en cada server
   action.

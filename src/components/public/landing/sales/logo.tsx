@@ -1,17 +1,17 @@
 import Link from "next/link";
 
 /**
- * Lockup de marca MediFlow para fondo claro: marca cuadrada violeta con un
+ * Lockup de marca DaleControl para fondo claro: marca cuadrada violeta con un
  * diente estilizado + wordmark en tinta oscura. `invert` para fondos oscuros
  * (footer/CTA no lo usan, pero queda disponible).
  */
 export function SalesLogo({ invert = false }: { invert?: boolean }) {
   return (
-    <Link href="/" className={`mfh-logo${invert ? " mfh-logo--invert" : ""}`} aria-label="MediFlow — inicio">
+    <Link href="/" className={`mfh-logo${invert ? " mfh-logo--invert" : ""}`} aria-label="DaleControl — inicio">
       <span className="mfh-logo__mark" aria-hidden="true">
         <ToothGlyph />
       </span>
-      <span className="mfh-logo__name">MediFlow</span>
+      <span className="mfh-logo__name">DaleControl</span>
     </Link>
   );
 }

@@ -1,5 +1,5 @@
 /**
- * MediFlow — Design Tokens (TypeScript bindings)
+ * DaleControl — Design Tokens (TypeScript bindings)
  *
  * Refleja los tokens CSS de `globals.css` como strings para uso en inline
  * styles, componentes custom, y lógica TS. La fuente de verdad SIGUE siendo

@@ -7,8 +7,8 @@ import { SupplierRegistroForm } from "@/components/proveedores/supplier-registro
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Regístrate como proveedor · MediFlow",
-  description: "Crea tu cuenta de proveedor en MediFlow y vende tus insumos a clínicas dentales.",
+  title: "Regístrate como proveedor · DaleControl",
+  description: "Crea tu cuenta de proveedor en DaleControl y vende tus insumos a clínicas dentales.",
   robots: { index: false, follow: false },
 };
 

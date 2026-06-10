@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { isStripeConfigured, STRIPE_SETUP_INSTRUCTIONS } from "@/lib/stripe";
 import { AdminClinicDetailClient } from "./clinic-detail-client";
 
-export const metadata: Metadata = { title: "Detalle Clínica — Admin MediFlow" };
+export const metadata: Metadata = { title: "Detalle Clínica — Admin DaleControl" };
 
 export default async function AdminClinicDetailPage({ params }: { params: { id: string } }) {
   const clinic = await prisma.clinic.findUnique({

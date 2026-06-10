@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { OrthoticsClient } from "./orthotics-client";
 
-export const metadata: Metadata = { title: "Ortopédicos — MediFlow" };
+export const metadata: Metadata = { title: "Ortopédicos — DaleControl" };
 
 export default async function OrthoticsPage() {
   const user = await getCurrentUser();

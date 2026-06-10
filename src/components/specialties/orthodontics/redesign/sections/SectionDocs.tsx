@@ -363,7 +363,7 @@ function WhatsAppPanel({ entries }: { entries: WhatsAppLogEntry[] }) {
                 <span className="text-xs font-medium text-slate-900 dark:text-slate-100">
                   {w.direction === "in"
                     ? w.patientName ?? "Paciente"
-                    : "MediFlow → paciente"}
+                    : "DaleControl → paciente"}
                 </span>
                 {w.template ? (
                   <Pill color="violet" size="xs">

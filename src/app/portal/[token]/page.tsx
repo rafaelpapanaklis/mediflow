@@ -7,7 +7,7 @@ import type { Metadata } from "next";
 
 interface Props { params: { token: string } }
 
-export const metadata: Metadata = { title: "Mi Portal — MediFlow" };
+export const metadata: Metadata = { title: "Mi Portal — DaleControl" };
 
 export default async function PatientPortalPage({ params }: Props) {
   // Minimización de datos (NOM-024/LFPDPPP): select explícito de SOLO lo que

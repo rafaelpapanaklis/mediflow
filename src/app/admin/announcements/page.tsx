@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { AnnouncementsClient } from "./announcements-client";
 
-export const metadata: Metadata = { title: "Anuncios globales — Admin MediFlow" };
+export const metadata: Metadata = { title: "Anuncios globales — Admin DaleControl" };
 
 export default async function AdminAnnouncementsPage() {
   const announcements = await prisma.adminAnnouncement.findMany({

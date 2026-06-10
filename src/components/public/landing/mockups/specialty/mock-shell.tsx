@@ -119,7 +119,7 @@ const MiniLogo: React.FC<{ color: string }> = ({ color }) => (
         boxShadow: `0 0 10px ${color}55`,
       }}
     />
-    MediFlow
+    DaleControl
   </div>
 );
 

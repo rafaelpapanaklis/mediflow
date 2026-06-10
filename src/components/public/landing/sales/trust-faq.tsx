@@ -11,10 +11,10 @@ const TRUST = [
 ];
 
 const FAQ = [
-  { q: "¿MediFlow sirve para mi clínica dental?", a: "Sí. Hoy MediFlow está enfocado 100% en clínicas y consultorios dentales: agenda, expediente con odontograma, radiografías, laboratorios y facturación, todo pensado para el día a día odontológico." },
+  { q: "¿DaleControl sirve para mi clínica dental?", a: "Sí. Hoy DaleControl está enfocado 100% en clínicas y consultorios dentales: agenda, expediente con odontograma, radiografías, laboratorios y facturación, todo pensado para el día a día odontológico." },
   { q: "¿Las facturas son CFDI 4.0 válidas ante el SAT?", a: "Sí. Generas y timbras CFDI 4.0 directamente desde el cobro, con RFC, uso de CFDI y método de pago. Cumple con la normatividad fiscal vigente en México." },
   { q: "¿Pueden migrar mis datos de Excel o de otro sistema?", a: "Sí. Te acompañamos en la migración de pacientes, citas e historial sin costo adicional, para que arranques con tu información ya cargada." },
-  { q: "¿Necesito instalar algo?", a: "No. MediFlow funciona en el navegador desde cualquier computadora o tablet. Tus datos se sincronizan en la nube de forma segura." },
+  { q: "¿Necesito instalar algo?", a: "No. DaleControl funciona en el navegador desde cualquier computadora o tablet. Tus datos se sincronizan en la nube de forma segura." },
   { q: "¿Hay permanencia o contrato forzoso?", a: "No. Trabajamos sin permanencia: puedes cambiar de plan o cancelar cuando quieras desde tu panel." },
   { q: "¿La IA de radiografías reemplaza el diagnóstico del dentista?", a: "No. La IA es una herramienta de apoyo que resalta posibles hallazgos con su nivel de confianza. El diagnóstico y el criterio clínico siempre son del profesional." },
 ];

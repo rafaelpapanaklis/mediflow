@@ -15,7 +15,7 @@
 
 import { create } from "xmlbuilder2";
 
-// OID raíz reservado para MediFlow (ejemplo). En producción registrar
+// OID raíz reservado para DaleControl (ejemplo). En producción registrar
 // uno oficial con HL7 México.
 const OID_MEDIFLOW_ROOT = "2.16.840.1.113883.3.7777.1";
 const OID_MEDIFLOW_PATIENT = "2.16.840.1.113883.3.7777.1.1";

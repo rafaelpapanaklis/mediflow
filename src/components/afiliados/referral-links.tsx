@@ -28,7 +28,7 @@ export function ReferralLinks({
     {
       key: "page",
       label: "Tu página de socio",
-      hint: "Una landing de venta de MediFlow lista para compartir. Cada botón ya incluye tu código.",
+      hint: "Una landing de venta de DaleControl lista para compartir. Cada botón ya incluye tu código.",
       url: `${base}/socio/${slug}`,
       icon: Link2,
     },

@@ -66,7 +66,7 @@ export function SpecMockupShowcase({ spec }: { spec: Specialty }) {
           </p>
         </div>
         <BrowserFrame
-          url={`app.mediflow.mx/${spec.mockupKey}`}
+          url={`app.dalecontrol.mx/${spec.mockupKey}`}
           style={{ maxWidth: 1080, margin: "0 auto", overflow: "hidden" }}
         >
           <div

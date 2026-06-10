@@ -7,8 +7,8 @@ import { AffiliateRegistroForm } from "@/components/afiliados/affiliate-registro
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Conviértete en afiliado · MediFlow",
-  description: "Recomienda MediFlow y gana comisión recurrente por cada clínica que se suscriba.",
+  title: "Conviértete en afiliado · DaleControl",
+  description: "Recomienda DaleControl y gana comisión recurrente por cada clínica que se suscriba.",
   robots: { index: false, follow: false },
 };
 

@@ -22,7 +22,7 @@ export const maxDuration = 60;
  * Pacientes seedeados llevan tag "demo" para borrarlos
  * en bulk con DELETE.
  *
- * MediFlow es DENTAL — todos los tratamientos, dx CIE-10 y recetas son
+ * DaleControl es DENTAL — todos los tratamientos, dx CIE-10 y recetas son
  * de odontología.
  */
 

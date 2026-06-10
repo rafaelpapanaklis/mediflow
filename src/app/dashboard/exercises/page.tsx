@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ExercisesClient } from "./exercises-client";
 
-export const metadata: Metadata = { title: "Ejercicios — MediFlow" };
+export const metadata: Metadata = { title: "Ejercicios — DaleControl" };
 
 export default async function ExercisesPage() {
   const user = await getCurrentUser();

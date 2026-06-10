@@ -6,7 +6,7 @@ import { getPricingConfig } from "@/lib/ai-billing/pricing";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// Tesorería de IA (solo MediFlow). Aquí SÍ se ve USD, costo real y margen.
+// Tesorería de IA (solo DaleControl). Aquí SÍ se ve USD, costo real y margen.
 // Unidades del contrato T1 (no confundir):
 //   AiUsageEvent.costUsdMicros  = USD * 1e6   (micro-USD, costo real Anthropic)
 //   AiUsageEvent.billedCents    = MXN cents   (cobrado a la clínica, fx + fee incluidos)

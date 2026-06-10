@@ -112,7 +112,7 @@ export default async function ChurnPage() {
                     <td style={{ textAlign: "right" }}>
                       {c.users[0]?.email ? (
                         <a
-                          href={`mailto:${c.users[0]?.email}?subject=Tu%20clínica%20en%20MediFlow&body=Hola%20${encodeURIComponent(c.users[0]?.firstName ?? "")},%20notamos%20que%20no%20has%20usado%20MediFlow%20recientemente.%20¿Hay%20algo%20en%20que%20podamos%20ayudarte?`}
+                          href={`mailto:${c.users[0]?.email}?subject=Tu%20clínica%20en%20DaleControl&body=Hola%20${encodeURIComponent(c.users[0]?.firstName ?? "")},%20notamos%20que%20no%20has%20usado%20DaleControl%20recientemente.%20¿Hay%20algo%20en%20que%20podamos%20ayudarte?`}
                           className="btn-new btn-new--secondary btn-new--sm"
                           style={{ textDecoration: "none" }}
                         >

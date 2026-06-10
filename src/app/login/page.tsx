@@ -11,8 +11,8 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Iniciar sesión · MediFlow",
-  description: "Accede a tu panel de MediFlow — software médico mexicano con CFDI, WhatsApp e IA para radiografías.",
+  title: "Iniciar sesión · DaleControl",
+  description: "Accede a tu panel de DaleControl — software médico mexicano con CFDI, WhatsApp e IA para radiografías.",
   robots: { index: false, follow: false },
 };
 

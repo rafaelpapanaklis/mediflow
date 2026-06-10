@@ -754,7 +754,7 @@ export function TemplateHealthtech({ clinic, highlights }: TemplateProps) {
             <span>© {new Date().getFullYear()} {clinic.name}. Todos los derechos reservados.</span>
             <div className="flex items-center gap-5">
               <a href="/privacidad" target="_blank" rel="noreferrer" className="hover:opacity-100 transition">Aviso de privacidad</a>
-              <span className="flex items-center gap-1.5">Hecho con <span style={{ color: tint(theme, 0.3), fontWeight: 700 }}>MediFlow</span></span>
+              <span className="flex items-center gap-1.5">Hecho con <span style={{ color: tint(theme, 0.3), fontWeight: 700 }}>DaleControl</span></span>
             </div>
           </div>
         </div>

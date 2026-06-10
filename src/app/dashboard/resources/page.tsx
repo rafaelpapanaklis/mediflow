@@ -9,7 +9,7 @@ import {
 import { hasPermission } from "@/lib/auth/permissions";
 import { ResourcesManager } from "@/components/dashboard/resources/resources-manager";
 
-export const metadata: Metadata = { title: "Recursos — MediFlow" };
+export const metadata: Metadata = { title: "Recursos — DaleControl" };
 
 export default async function ResourcesPage() {
   const user = await getCurrentUser();

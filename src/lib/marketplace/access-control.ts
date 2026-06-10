@@ -59,7 +59,7 @@ export async function canAccessModule(
 
 /**
  * Lista de keys consideradas "especialidades" en el marketplace. Cuando
- * MediFlow lance otros módulos clínicos se agregan aquí para que aparezcan
+ * DaleControl lance otros módulos clínicos se agregan aquí para que aparezcan
  * en el grupo "Especialidades" del sidebar. Ordenadas por nombre clínico.
  */
 const SPECIALTY_MODULE_KEYS: readonly string[] = [

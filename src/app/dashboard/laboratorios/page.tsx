@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { LaboratoriosClient } from "./laboratorios-client";
 
-export const metadata: Metadata = { title: "Laboratorios — MediFlow" };
+export const metadata: Metadata = { title: "Laboratorios — DaleControl" };
 
 export default async function LaboratoriosPage() {
   // Exige sesión de clínica. El laboratorio es global (sin clinicId),

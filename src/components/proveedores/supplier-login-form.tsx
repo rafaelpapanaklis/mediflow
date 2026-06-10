@@ -61,7 +61,7 @@ export function SupplierLoginForm() {
           Portal de proveedores
         </h1>
         <p style={{ fontSize: 14, color: "var(--ld-fg-muted)", margin: 0 }}>
-          Accede a tu panel de proveedor en MediFlow
+          Accede a tu panel de proveedor en DaleControl
         </p>
       </div>
 

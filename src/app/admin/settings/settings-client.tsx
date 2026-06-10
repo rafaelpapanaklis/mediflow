@@ -76,7 +76,7 @@ export function AdminSettingsClient({ envStatus }: { envStatus: EnvStatus }) {
           Configuración del sistema
         </h1>
         <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, margin: 0 }}>
-          Administra todos los parámetros de tu plataforma MediFlow
+          Administra todos los parámetros de tu plataforma DaleControl
         </p>
       </div>
 
@@ -110,7 +110,7 @@ export function AdminSettingsClient({ envStatus }: { envStatus: EnvStatus }) {
               <CardNew title="Datos de tu empresa" sub="Información básica y contactos públicos">
                 <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 520 }}>
                   {[
-                    { label: "Nombre de la empresa", placeholder: "MediFlow", defaultValue: "MediFlow" },
+                    { label: "Nombre de la empresa", placeholder: "DaleControl", defaultValue: "DaleControl" },
                     { label: "Email de soporte", placeholder: "soporte@mediflow.app", defaultValue: "soporte@mediflow.app" },
                     { label: "WhatsApp de soporte", placeholder: "+52 999 123 4567", defaultValue: "" },
                     { label: "Sitio web", placeholder: "https://mediflow.app", defaultValue: "https://mediflow.app" },
@@ -315,7 +315,7 @@ export function AdminSettingsClient({ envStatus }: { envStatus: EnvStatus }) {
                     { label: "Usuario SMTP",   placeholder: "apikey",             type: "text" },
                     { label: "Contraseña SMTP", placeholder: "SG.xxx...",         type: "password" },
                     { label: "Email remitente", placeholder: "hola@mediflow.app", type: "email" },
-                    { label: "Nombre remitente", placeholder: "MediFlow",         type: "text" },
+                    { label: "Nombre remitente", placeholder: "DaleControl",         type: "text" },
                   ].map(f => (
                     <div key={f.label} className="field-new">
                       <label className="field-new__label">{f.label}</label>
@@ -382,7 +382,7 @@ export function AdminSettingsClient({ envStatus }: { envStatus: EnvStatus }) {
               <CardNew title="Información del sistema">
                 <div style={{ display: "flex", flexDirection: "column" }}>
                   {[
-                    { label: "Versión",       value: "MediFlow v1.0.0" },
+                    { label: "Versión",       value: "DaleControl v1.0.0" },
                     { label: "Framework",     value: "Next.js 14.2.5" },
                     { label: "Base de datos", value: "Supabase PostgreSQL" },
                     { label: "ORM",           value: "Prisma 5.17.0" },

@@ -233,7 +233,7 @@ export function ReferralLetterDocument(props: ReferralLetterDocumentProps) {
         </View>
 
         <Text style={styles.footer} fixed>
-          Generada en MediFlow el {fmtDate(props.generatedAt)} · Documento informativo
+          Generada en DaleControl el {fmtDate(props.generatedAt)} · Documento informativo
         </Text>
       </Page>
     </Document>

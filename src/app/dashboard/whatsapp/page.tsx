@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth";
 import { WhatsAppClient } from "./whatsapp-client";
 
-export const metadata: Metadata = { title: "WhatsApp — MediFlow" };
+export const metadata: Metadata = { title: "WhatsApp — DaleControl" };
 
 export default async function WhatsAppPage() {
   const user = await getCurrentUser();

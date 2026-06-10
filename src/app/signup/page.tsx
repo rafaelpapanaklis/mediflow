@@ -10,9 +10,9 @@ import { getSession } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Prueba gratis 14 días · MediFlow",
+  title: "Prueba gratis 14 días · DaleControl",
   description:
-    "Crea tu cuenta en MediFlow — 14 días gratis, cancela cuando quieras. Software médico mexicano con CFDI, WhatsApp e IA.",
+    "Crea tu cuenta en DaleControl — 14 días gratis, cancela cuando quieras. Software médico mexicano con CFDI, WhatsApp e IA.",
   robots: { index: true, follow: true },
 };
 

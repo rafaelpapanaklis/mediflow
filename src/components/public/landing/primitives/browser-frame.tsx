@@ -6,7 +6,7 @@ interface BrowserFrameProps {
   style?: CSSProperties;
 }
 
-export function BrowserFrame({ children, url = "app.mediflow.mx", style }: BrowserFrameProps) {
+export function BrowserFrame({ children, url = "app.dalecontrol.mx", style }: BrowserFrameProps) {
   return (
     <div
       style={{

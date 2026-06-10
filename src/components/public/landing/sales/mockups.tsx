@@ -1,5 +1,5 @@
 /**
- * Mockups del producto MediFlow construidos en CSS/SVG (no capturas).
+ * Mockups del producto DaleControl construidos en CSS/SVG (no capturas).
  * Fieles a las pantallas reales del panel: colores, layout y datos de
  * ejemplo realistas. Son presentacionales (sin hooks) → se pueden usar
  * tanto dentro del window interactivo del hero como en los spotlights

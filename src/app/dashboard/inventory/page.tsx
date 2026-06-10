@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { InventoryClient } from "./inventory-client";
 
-export const metadata: Metadata = { title: "Inventario — MediFlow" };
+export const metadata: Metadata = { title: "Inventario — DaleControl" };
 
 // Full dental inventory list — seeded server-side on first visit
 const DENTAL_SEED = [

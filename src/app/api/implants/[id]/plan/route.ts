@@ -48,7 +48,7 @@ export async function GET(req: NextRequest, ctx: Params) {
     data: {
       patient: data.patient,
       doctor: data.doctor,
-      clinic: { name: "MediFlow", phone: null }, // upstream no incluye clinic; usamos placeholder
+      clinic: { name: "DaleControl", phone: null }, // upstream no incluye clinic; usamos placeholder
       implants: data.implants.map((i) => ({
         toothFdi: i.toothFdi,
         brand: i.brand,

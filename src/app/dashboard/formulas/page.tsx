@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { FormulasClient } from "./formulas-client";
 
-export const metadata: Metadata = { title: "Fórmulas — MediFlow" };
+export const metadata: Metadata = { title: "Fórmulas — DaleControl" };
 
 export default async function FormulasPage() {
   const user = await getCurrentUser();

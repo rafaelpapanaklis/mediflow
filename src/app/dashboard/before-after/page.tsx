@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { BeforeAfterClient } from "./before-after-client";
 
-export const metadata: Metadata = { title: "Antes y Después — MediFlow" };
+export const metadata: Metadata = { title: "Antes y Después — DaleControl" };
 
 export default async function BeforeAfterPage() {
   const user = await getCurrentUser();

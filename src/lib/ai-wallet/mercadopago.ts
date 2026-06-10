@@ -7,7 +7,7 @@ import { getPayment } from "@/lib/mercadopago";
  * Recarga del monedero de IA vía MercadoPago (one-shot, sin auto-recarga).
  *
  * A diferencia de las órdenes B2B (lab/proveedor), que cobran a la cuenta del
- * vendedor con su propio token, ESTA recarga la cobra MediFlow con su token de
+ * vendedor con su propio token, ESTA recarga la cobra DaleControl con su token de
  * PLATAFORMA (`MERCADOPAGO_ACCESS_TOKEN`). Por eso vive en su propio módulo y no
  * toca la lib `ai-billing` (T1) ni el flujo de proveedores.
  *

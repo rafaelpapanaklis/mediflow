@@ -20,7 +20,7 @@ export function SocialProof() {
     <section className="mfh-section mfh-section--tight mfh-band--soft" aria-label="Confianza y resultados">
       <div className="mfh-container">
         <p className="mfh-center" style={{ fontSize: 13, fontWeight: 600, color: "#94a3b8", margin: "0 0 26px", letterSpacing: ".02em" }}>
-          Clínicas dentales de todo México ya trabajan con MediFlow
+          Clínicas dentales de todo México ya trabajan con DaleControl
         </p>
         <div className="mfh-logos">
           {LOGOS.map((l) => {

@@ -295,7 +295,7 @@ export function LegalReportPdf({ data }: { data: EndoLegalReportPdfData }) {
             Certificación NOM-024-SSA3-2012
           </Text>
           <Text>
-            Documento generado por MediFlow conforme a la Norma Oficial Mexicana
+            Documento generado por DaleControl conforme a la Norma Oficial Mexicana
             NOM-024-SSA3-2012 que establece los objetivos funcionales y
             funcionalidades que deberán observar los productos de Sistemas de
             Expediente Clínico Electrónico para garantizar la interoperabilidad,

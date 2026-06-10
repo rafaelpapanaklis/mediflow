@@ -259,7 +259,7 @@ export async function createTopupCheckout(params: {
         price_data: {
           currency: "mxn",
           unit_amount: amount, // ya en centavos MXN (unidad mínima de Stripe)
-          product_data: { name: "Recarga de saldo IA — MediFlow" },
+          product_data: { name: "Recarga de saldo IA — DaleControl" },
         },
         quantity: 1,
       },

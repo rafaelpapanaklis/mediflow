@@ -201,7 +201,7 @@ export function SignupForm() {
         }
       }
 
-      toast.success("¡Cuenta creada! Bienvenido a MediFlow 🎉");
+      toast.success("¡Cuenta creada! Bienvenido a DaleControl 🎉");
       // Hard navigation: ver login-form.tsx — evita la cascada de
       // fetches que causaba router.push + router.refresh síncronos.
       window.location.href = "/dashboard";

@@ -15,7 +15,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!token || !phoneNumberId) {
     return NextResponse.json(
       {
-        error: "WhatsApp de MediFlow no está configurado",
+        error: "WhatsApp de DaleControl no está configurado",
         instructions:
           "Agrega MEDIFLOW_WHATSAPP_TOKEN y MEDIFLOW_WHATSAPP_PHONE_ID en Vercel → Environment Variables. Usa un número de WhatsApp Business dedicado para estos envíos administrativos (no el de tu clínica).",
       },

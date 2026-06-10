@@ -9,7 +9,7 @@
  */
 export const SPEI_ACCOUNT = {
   /** Razon social / titular de la cuenta receptora. */
-  beneficiary: process.env.SPEI_BENEFICIARY_NAME || "MediFlow",
+  beneficiary: process.env.SPEI_BENEFICIARY_NAME || "DaleControl",
   /** Banco receptor (ej. "BBVA", "STP"). */
   bank: process.env.SPEI_BANK || "",
   /** CLABE interbancaria de 18 digitos. */

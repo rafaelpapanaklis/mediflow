@@ -553,7 +553,7 @@ export function ClinicLandingClient({ clinic, highlights }:{ clinic:Clinic; high
               {clinic.city && <div className="text-xs text-gray-600">{clinic.city}</div>}
             </div>
           </div>
-          <div className="text-xs">Powered by <a href="/" className="text-gray-400 hover:text-white font-bold transition-colors">MediFlow</a></div>
+          <div className="text-xs">Powered by <a href="/" className="text-gray-400 hover:text-white font-bold transition-colors">DaleControl</a></div>
         </div>
       </footer>
 

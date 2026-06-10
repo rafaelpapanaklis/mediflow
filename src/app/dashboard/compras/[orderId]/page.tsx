@@ -32,7 +32,7 @@ import { getServerT } from "@/i18n/server";
 import { PayWithMercadoPago } from "./pay-mercadopago";
 import { OrderActions } from "./order-actions";
 
-export const metadata: Metadata = { title: "Pedido — MediFlow" };
+export const metadata: Metadata = { title: "Pedido — DaleControl" };
 
 type BadgeTone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
 

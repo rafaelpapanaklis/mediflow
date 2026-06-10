@@ -1,4 +1,4 @@
-// Atom: KpiTile — tile estilo "KPI dashboard" del producto MediFlow.
+// Atom: KpiTile — tile estilo "KPI dashboard" del producto DaleControl.
 // Label small caps + icon en badge + valor grande + delta + sub.
 
 import type { ReactNode } from "react";

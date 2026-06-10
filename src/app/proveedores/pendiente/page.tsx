@@ -27,21 +27,21 @@ export default async function SupplierPendingPage() {
       title: "Tu solicitud fue rechazada",
       body:
         rejectedReason ??
-        "El equipo de MediFlow revisó tu solicitud y no pudo aprobarla en este momento. Si crees que se trata de un error, ponte en contacto con nuestro equipo.",
+        "El equipo de DaleControl revisó tu solicitud y no pudo aprobarla en este momento. Si crees que se trata de un error, ponte en contacto con nuestro equipo.",
       tone: "danger",
     };
   } else if (ctx.status === "SUSPENDED") {
     copy = {
       title: "Tu cuenta está suspendida",
       body:
-        "El acceso de tu cuenta de proveedor ha sido suspendido. Contacta al equipo de MediFlow para más información sobre cómo restablecerlo.",
+        "El acceso de tu cuenta de proveedor ha sido suspendido. Contacta al equipo de DaleControl para más información sobre cómo restablecerlo.",
       tone: "danger",
     };
   } else {
     copy = {
       title: "Tu registro está en revisión",
       body:
-        "El equipo de MediFlow revisará tu solicitud y recibirás acceso al panel de proveedores en cuanto sea aprobada. Te notificaremos por correo cuando esté lista.",
+        "El equipo de DaleControl revisará tu solicitud y recibirás acceso al panel de proveedores en cuanto sea aprobada. Te notificaremos por correo cuando esté lista.",
       tone: "neutral",
     };
   }

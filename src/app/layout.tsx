@@ -14,12 +14,12 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://mediflow-pi.vercel
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "MediFlow — Software para clínicas en México",
-    template: "%s | MediFlow",
+    default: "DaleControl — Software para clínicas en México",
+    template: "%s | DaleControl",
   },
   description:
-    "MediFlow es el software de gestión todo-en-uno para clínicas de salud, estética y belleza en México. Agenda, expedientes, facturación CFDI 4.0 y WhatsApp.",
-  applicationName: "MediFlow",
+    "DaleControl es el software de gestión todo-en-uno para clínicas de salud, estética y belleza en México. Agenda, expedientes, facturación CFDI 4.0 y WhatsApp.",
+  applicationName: "DaleControl",
   generator: "Next.js",
   keywords: [
     "software para clínicas",
@@ -33,15 +33,15 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "es_MX",
-    siteName: "MediFlow",
+    siteName: "DaleControl",
     url: SITE_URL,
-    title: "MediFlow — Software para clínicas en México",
+    title: "DaleControl — Software para clínicas en México",
     description:
       "Agenda, expedientes, facturación CFDI 4.0 y WhatsApp para clínicas de salud, estética y belleza.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "MediFlow — Software para clínicas en México",
+    title: "DaleControl — Software para clínicas en México",
     description:
       "Agenda, expedientes, facturación CFDI 4.0 y WhatsApp para clínicas en un solo lugar.",
   },

@@ -435,7 +435,7 @@ export function OrthodonticsRedesignClient(props: OrthodonticsRedesignClientProp
           <PhaseTransitionAuditTeaser count={vm.phaseTransitions.length} />
 
           <footer className="text-[11px] text-slate-400 text-center py-4 dark:text-slate-500">
-            MediFlow · Ortodoncia · Patient Detail · 11 gaps integrados (G1 G3 G4 G5 G6 G9 G10 G11
+            DaleControl · Ortodoncia · Patient Detail · 11 gaps integrados (G1 G3 G4 G5 G6 G9 G10 G11
             G12 G15 G16 G18) · 6 differentiators preservados (M1-M6)
           </footer>
         </main>

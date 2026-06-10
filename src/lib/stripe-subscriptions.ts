@@ -26,7 +26,7 @@ export async function createSubscription(params: {
     currency: "mxn",
     recurring: { interval: "month" },
     product_data: {
-      name: `MediFlow ${params.plan}`,
+      name: `DaleControl ${params.plan}`,
       metadata: { plan: params.plan },
     },
   });
@@ -69,7 +69,7 @@ export async function createCheckoutForSubscription(params: {
         currency: "mxn",
         unit_amount: amount * 100,
         recurring: { interval: "month" },
-        product_data: { name: `MediFlow Plan ${params.plan}` },
+        product_data: { name: `DaleControl Plan ${params.plan}` },
       },
       quantity: 1,
     }],
@@ -94,7 +94,7 @@ export async function createOxxoPayment(params: {
     customer: params.customerId,
     payment_method_types: ["oxxo"],
     metadata: { clinicId: params.clinicId, type: "subscription" },
-    description: `MediFlow — ${params.clinicName}`,
+    description: `DaleControl — ${params.clinicName}`,
   });
 
   return { clientSecret: paymentIntent.client_secret! };

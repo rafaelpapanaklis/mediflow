@@ -191,7 +191,7 @@ export function LabRegistroForm() {
           Regístrate como laboratorio
         </h1>
         <p style={{ fontSize: 14, color: "var(--ld-fg-muted)", margin: 0 }}>
-          Crea tu cuenta para atender órdenes de clínicas en MediFlow
+          Crea tu cuenta para atender órdenes de clínicas en DaleControl
         </p>
       </div>
 

@@ -206,7 +206,7 @@ export function LabOrderDocument(props: LabOrderDocumentProps) {
         </View>
 
         <Text style={styles.footer} fixed>
-          Generada en MediFlow el {fmtDate(props.generatedAt)}
+          Generada en DaleControl el {fmtDate(props.generatedAt)}
         </Text>
       </Page>
     </Document>

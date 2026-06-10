@@ -228,13 +228,13 @@ function SupplierReceiptDocument(props: ReceiptProps) {
   return (
     <Document
       title={`Comprobante ${props.orderNumber}`}
-      author="MediFlow"
+      author="DaleControl"
       subject={`Pedido ${props.orderNumber}`}
     >
       <Page size="LETTER" style={styles.page} wrap>
         <View style={styles.header}>
           <View>
-            <Text style={styles.brand}>MediFlow</Text>
+            <Text style={styles.brand}>DaleControl</Text>
             <Text style={styles.brandSub}>Comprobante de compra</Text>
           </View>
           <View style={styles.metaBox}>
@@ -308,7 +308,7 @@ function SupplierReceiptDocument(props: ReceiptProps) {
         ) : null}
 
         <Text style={styles.footer} fixed>
-          MediFlow · Comprobante de compra · Documento informativo sin valor fiscal ·
+          DaleControl · Comprobante de compra · Documento informativo sin valor fiscal ·
           Pedido {props.orderNumber}
         </Text>
       </Page>

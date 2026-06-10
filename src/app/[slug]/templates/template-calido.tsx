@@ -493,7 +493,7 @@ export function TemplateCalido({ clinic }: TemplateProps) {
         <div className="border-t" style={{ borderColor: alpha("#ffffff", 0.12) }}>
           <div className="max-w-6xl mx-auto px-5 sm:px-8 py-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-[13px] opacity-70">
             <span>© {new Date().getFullYear()} {brand}. Todos los derechos reservados.</span>
-            <span className="flex items-center gap-1.5">Hecho con <a href="/" className="font-bold" style={{ color: tint(accent, 0.3) }}>MediFlow</a></span>
+            <span className="flex items-center gap-1.5">Hecho con <a href="/" className="font-bold" style={{ color: tint(accent, 0.3) }}>DaleControl</a></span>
           </div>
         </div>
       </footer>

@@ -8,7 +8,7 @@ import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { getServerT } from "@/i18n/server";
 
-export const metadata: Metadata = { title: "Configuración — MediFlow" };
+export const metadata: Metadata = { title: "Configuración — DaleControl" };
 
 interface Props {
   searchParams: { tab?: string; gcal?: string };

@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { BotClient } from "./bot-client";
 
-export const metadata: Metadata = { title: "Bot de WhatsApp — MediFlow" };
+export const metadata: Metadata = { title: "Bot de WhatsApp — DaleControl" };
 
 export default async function WhatsAppBotPage() {
   const user = await getCurrentUser();

@@ -688,7 +688,7 @@ export function LivePublicClient({
 
       <footer className={liveStyles.footer}>
         <span>Powered by</span>
-        <strong>MediFlow</strong>
+        <strong>DaleControl</strong>
       </footer>
 
       <LiveTooltip data={hover} />

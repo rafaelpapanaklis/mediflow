@@ -14,14 +14,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!isAdminAuthed()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const apiKey = process.env.RESEND_API_KEY;
-  const fromAddress = process.env.MEDIFLOW_EMAIL_FROM || "MediFlow <soporte@mediflow.app>";
+  const fromAddress = process.env.MEDIFLOW_EMAIL_FROM || "DaleControl <soporte@mediflow.app>";
 
   if (!apiKey) {
     return NextResponse.json(
       {
-        error: "Email de MediFlow no está configurado",
+        error: "Email de DaleControl no está configurado",
         instructions:
-          "1) Crea cuenta gratis en https://resend.com (3,000 emails/mes gratis). 2) Verifica el dominio mediflow.app. 3) Agrega RESEND_API_KEY y MEDIFLOW_EMAIL_FROM (ej: 'MediFlow <soporte@mediflow.app>') en Vercel → Environment Variables.",
+          "1) Crea cuenta gratis en https://resend.com (3,000 emails/mes gratis). 2) Verifica el dominio mediflow.app. 3) Agrega RESEND_API_KEY y MEDIFLOW_EMAIL_FROM (ej: 'DaleControl <soporte@mediflow.app>') en Vercel → Environment Variables.",
       },
       { status: 503 },
     );

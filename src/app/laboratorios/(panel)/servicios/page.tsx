@@ -8,7 +8,7 @@ import type { DentalLabServiceDTO } from "@/lib/laboratorios/types";
 import { ServiciosClient } from "./servicios-client";
 
 export const metadata: Metadata = {
-  title: "Servicios · Laboratorio — MediFlow",
+  title: "Servicios · Laboratorio — DaleControl",
   robots: { index: false, follow: false },
 };
 

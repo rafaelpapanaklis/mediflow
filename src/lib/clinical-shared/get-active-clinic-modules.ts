@@ -33,7 +33,7 @@ import {
 
 /**
  * Universo de keys consideradas "especialidad clínica" en el sidebar y
- * en el tab strip del paciente. Cuando MediFlow lance un nuevo módulo
+ * en el tab strip del paciente. Cuando DaleControl lance un nuevo módulo
  * clínico se agrega aquí + en `NAV_ITEMS`/`buildTabs` correspondientes.
  */
 export const SPECIALTY_MODULE_KEYS = [

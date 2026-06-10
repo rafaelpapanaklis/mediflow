@@ -76,7 +76,7 @@ export function PayoutForm({
     <form onSubmit={handleSubmit}>
       <CardNew title="Datos de pago">
         <p style={{ fontSize: 13, color: "var(--text-3)", margin: "0 0 18px", lineHeight: 1.5 }}>
-          Indícanos cómo prefieres recibir tus comisiones. El equipo de MediFlow usará estos datos para
+          Indícanos cómo prefieres recibir tus comisiones. El equipo de DaleControl usará estos datos para
           procesar tus pagos.
         </p>
 

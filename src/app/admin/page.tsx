@@ -14,7 +14,7 @@ import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { AvatarNew } from "@/components/ui/design-system/avatar-new";
 import { KpiCard }   from "@/components/ui/design-system/kpi-card";
 
-export const metadata: Metadata = { title: "Super Admin — MediFlow" };
+export const metadata: Metadata = { title: "Super Admin — DaleControl" };
 
 const PLAN_PRICES: Record<string, number> = { BASIC: 299, PRO: 499, CLINIC: 799 };
 

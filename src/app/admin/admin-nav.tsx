@@ -131,7 +131,7 @@ export function AdminSidebar({ counts }: { counts?: { clinics?: number; atRisk?:
             </svg>
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="sidebar-new__brandname">MediFlow</div>
+            <div className="sidebar-new__brandname">DaleControl</div>
             <div className="sidebar-new__brandsub">Panel admin</div>
           </div>
           <BadgeNew tone="brand">OWNER</BadgeNew>

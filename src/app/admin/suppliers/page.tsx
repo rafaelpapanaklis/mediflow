@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { SuppliersClient } from "./suppliers-client";
 
-export const metadata: Metadata = { title: "Proveedores — Admin MediFlow" };
+export const metadata: Metadata = { title: "Proveedores — Admin DaleControl" };
 
 // Supplier es global (sin clinicId): el admin ve TODOS los proveedores.
 export default async function AdminSuppliersPage() {

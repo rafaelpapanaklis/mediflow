@@ -169,7 +169,7 @@ export function Footer() {
                   "var(--font-mono, ui-monospace, monospace)",
               }}
             >
-              © 2026 MediFlow · Hecho en México 🇲🇽
+              © 2026 DaleControl · Hecho en México 🇲🇽
             </span>
           </div>
 

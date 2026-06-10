@@ -1,6 +1,6 @@
 /**
  * Single source of truth para los planes de suscripción de la
- * plataforma MediFlow.
+ * plataforma DaleControl.
  *
  * Los precios viven aquí (no en una tabla todavía) para evitar que el
  * cliente y el endpoint /api/billing/checkout puedan diferir. Si en el

@@ -1,6 +1,6 @@
 # Ortodoncia (módulo 5/5 del paquete dental)
 
-Implementación completa del módulo de Ortodoncia para MediFlow.
+Implementación completa del módulo de Ortodoncia para DaleControl.
 Sigue la SPEC en `docs/marketplace/research/ortodoncia/SPEC.md` con las
 25 decisiones bloqueadas + 3 confirmaciones del Coordinator.
 
@@ -210,7 +210,7 @@ tests del SPEC §13 quedan como TODO documentados:
   esa firma, fotos solo para uso interno + reporte de progreso al propio
   paciente. Watermark "Uso clínico — confidencial" en
   progress-report.tsx si no hay firma.
-- **RLS**: deny-all en las 9 tablas del módulo. MediFlow usa service
+- **RLS**: deny-all en las 9 tablas del módulo. DaleControl usa service
   role bypass; defensa adicional con filtro `clinicId` en cada server
   action.
 

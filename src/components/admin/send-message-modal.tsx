@@ -100,7 +100,7 @@ export function SendMessageModal({ clinicId, clinicName, channel, onClose }: Pro
             <div>
               <div className="modal__title">{title} — {clinicName}</div>
               <div style={{ fontSize: 11, color: "var(--text-3)" }}>
-                Se enviará desde la cuenta oficial de MediFlow.
+                Se enviará desde la cuenta oficial de DaleControl.
               </div>
             </div>
           </div>

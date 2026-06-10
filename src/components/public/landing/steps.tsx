@@ -158,7 +158,7 @@ export function Steps() {
     {
       num: "04",
       title: "Escala con confianza",
-      desc: "Segunda sucursal. Tercera. Quinta. MediFlow crece contigo. Reportes consolidados, agenda unificada, inventario por ubicación.",
+      desc: "Segunda sucursal. Tercera. Quinta. DaleControl crece contigo. Reportes consolidados, agenda unificada, inventario por ubicación.",
       visual: (
         <div>
           <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>

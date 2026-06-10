@@ -7,8 +7,8 @@ import { LabRegistroForm } from "@/components/laboratorios/lab-registro-form";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Regístrate como laboratorio · MediFlow",
-  description: "Crea tu cuenta de laboratorio dental en MediFlow y atiende órdenes de clínicas.",
+  title: "Regístrate como laboratorio · DaleControl",
+  description: "Crea tu cuenta de laboratorio dental en DaleControl y atiende órdenes de clínicas.",
   robots: { index: false, follow: false },
 };
 

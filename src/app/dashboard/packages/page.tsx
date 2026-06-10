@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PackagesClient } from "./packages-client";
 
-export const metadata: Metadata = { title: "Paquetes — MediFlow" };
+export const metadata: Metadata = { title: "Paquetes — DaleControl" };
 
 export default async function PackagesPage() {
   const user = await getCurrentUser();

@@ -28,7 +28,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Recibo — MediFlow ${payment.id.slice(0, 8)}</title>
+  <title>Recibo — DaleControl ${payment.id.slice(0, 8)}</title>
   <style>
     * { box-sizing: border-box; }
     body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: #f1f5f9; margin: 0; padding: 32px; color: #0f172a; }
@@ -53,7 +53,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   <div class="card">
     <div class="header">
       <div>
-        <h1>MediFlow</h1>
+        <h1>DaleControl</h1>
         <div class="muted">Recibo no fiscal</div>
         <div class="muted">Folio: ${payment.id}</div>
       </div>
@@ -87,14 +87,14 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     <div class="total">
       <div>
         <div style="font-size:11px;opacity:0.7;text-transform:uppercase">Total pagado</div>
-        <div style="font-size:13px;opacity:0.9;margin-top:4px">Suscripción MediFlow</div>
+        <div style="font-size:13px;opacity:0.9;margin-top:4px">Suscripción DaleControl</div>
       </div>
       <div class="amount">${fmtMoney(payment.amount)}</div>
     </div>
 
     <div class="footer">
       Este documento es un comprobante interno de pago, NO sustituye una factura fiscal (CFDI).<br/>
-      Para obtener CFDI timbrado ante el SAT, solicítalo al equipo de MediFlow.
+      Para obtener CFDI timbrado ante el SAT, solicítalo al equipo de DaleControl.
     </div>
   </div>
 </body>

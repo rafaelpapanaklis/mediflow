@@ -356,7 +356,7 @@ export function PediatricsExportDocument(props: PediatricsExportDocumentProps) {
         </Section>
 
         <Text style={styles.footer} fixed>
-          Generado en MediFlow el {fmtDate(props.generatedAt)}
+          Generado en DaleControl el {fmtDate(props.generatedAt)}
         </Text>
       </Page>
     </Document>

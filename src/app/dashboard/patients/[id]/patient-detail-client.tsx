@@ -193,9 +193,9 @@ function resolveOrthoFileUrl(fileId: string): string {
   return `/api/patient-files/${fileId}`;
 }
 
-// MediFlow es DENTAL — el form de "Nueva consulta" siempre usa DentalForm.
+// DaleControl es DENTAL — el form de "Nueva consulta" siempre usa DentalForm.
 // El parámetro `specialty` viene del Clinic.specialty (legacy) y se ignora.
-// Si en el futuro MediFlow expande a otras specialties, restaurar la
+// Si en el futuro DaleControl expande a otras specialties, restaurar la
 // lógica de detección y los renders condicionales abajo.
 function detectSpecialty(_raw: string) {
   return "dental";

@@ -23,7 +23,7 @@ export function FeaturesGrid() {
           <span className="mfh-kicker">Una sola plataforma</span>
           <h2 className="mfh-h2 mfh-balance">Todo tu consultorio, en un solo lugar</h2>
           <p className="mfh-lede">
-            Deja de saltar entre la agenda, el Excel, el facturador y el chat. MediFlow reúne
+            Deja de saltar entre la agenda, el Excel, el facturador y el chat. DaleControl reúne
             todo lo que tu clínica dental necesita para operar cada día.
           </p>
         </div>

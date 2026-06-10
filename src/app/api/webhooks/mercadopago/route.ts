@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
 
   try {
     // ── Recarga del monedero de IA (T4) ──────────────────────────────────────
-    // Rama propia: MediFlow cobra ESTA recarga con su token de PLATAFORMA (no el
+    // Rama propia: DaleControl cobra ESTA recarga con su token de PLATAFORMA (no el
     // del vendedor). Se distingue por el ref "aitopup:<topupId>". Verifica el pago
     // y acredita de forma atómica/idempotente. Deja intacto el flujo B2B de abajo.
     if (kind === "aitopup") {

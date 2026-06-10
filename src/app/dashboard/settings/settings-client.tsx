@@ -21,7 +21,7 @@ const DAYS        = [
   "settings.clientDays.saturday",
   "settings.clientDays.sunday",
 ];
-// MediFlow es DENTAL — solo categorías dentales en el selector de
+// DaleControl es DENTAL — solo categorías dentales en el selector de
 // clínica. La lista completa de categorías legacy queda en el enum
 // ClinicCategory de Prisma para no romper datos históricos.
 // labelKey apunta a una llave i18n; se resuelve con t(labelKey) en el render.

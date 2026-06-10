@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { AdminSettingsClient } from "./settings-client";
 
-export const metadata: Metadata = { title: "Configuración — Admin MediFlow" };
+export const metadata: Metadata = { title: "Configuración — Admin DaleControl" };
 
 export default function AdminSettingsPage() {
   // Sólo podemos leer env vars en el server. Las exponemos como booleanos al

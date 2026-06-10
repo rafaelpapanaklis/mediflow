@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { SaldoClient } from "./saldo-client";
 
-export const metadata: Metadata = { title: "Saldo de IA — MediFlow" };
+export const metadata: Metadata = { title: "Saldo de IA — DaleControl" };
 
 export default async function AiWalletSaldoPage() {
   const user = await getCurrentUser();

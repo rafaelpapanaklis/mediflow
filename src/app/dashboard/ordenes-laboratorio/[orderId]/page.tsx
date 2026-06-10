@@ -25,7 +25,7 @@ import {
 } from "@/components/laboratorios/order-route-map";
 import { OrderChatDock } from "@/components/laboratorios/order-chat-dock";
 
-export const metadata: Metadata = { title: "Orden — MediFlow" };
+export const metadata: Metadata = { title: "Orden — DaleControl" };
 
 type BadgeTone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
 

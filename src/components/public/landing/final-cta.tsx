@@ -46,7 +46,7 @@ export function FinalCTA() {
             color: "var(--ld-fg, var(--fg))",
           }}
         >
-          ¿Listo para ver MediFlow en tu clínica?
+          ¿Listo para ver DaleControl en tu clínica?
         </h2>
 
         <p

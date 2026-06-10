@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { isCFDIConfigured, cfdiNotConfiguredInstructions } from "@/lib/cfdi";
 import { CfdiClient } from "./cfdi-client";
 
-export const metadata: Metadata = { title: "CFDI — Admin MediFlow" };
+export const metadata: Metadata = { title: "CFDI — Admin DaleControl" };
 
 export default async function CfdiPaymentPage({ params }: { params: { id: string } }) {
   const payment = await prisma.subscriptionInvoice.findUnique({

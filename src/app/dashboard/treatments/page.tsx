@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TreatmentsClient } from "./treatments-client";
 
-export const metadata: Metadata = { title: "Tratamientos — MediFlow" };
+export const metadata: Metadata = { title: "Tratamientos — DaleControl" };
 
 export default async function TreatmentsPage() {
   const user = await getCurrentUser();

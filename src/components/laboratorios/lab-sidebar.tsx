@@ -111,7 +111,7 @@ export function LabSidebar({
             <Logo size={20} showText={false} color="#fff" />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="sidebar-new__brandname">MediFlow</div>
+            <div className="sidebar-new__brandname">DaleControl</div>
             <div className="sidebar-new__brandsub">Laboratorio</div>
           </div>
           <button

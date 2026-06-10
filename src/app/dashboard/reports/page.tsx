@@ -6,7 +6,7 @@ import { ReportsClient } from "./reports-client";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { getServerT } from "@/i18n/server";
 
-export const metadata: Metadata = { title: "Reportes — MediFlow" };
+export const metadata: Metadata = { title: "Reportes — DaleControl" };
 
 async function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
   try { return await p; }

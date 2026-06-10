@@ -52,7 +52,7 @@ export function Comparison() {
       <div className="mfh-container">
         <div className="mfh-head mfh-center mfh-reveal">
           <span className="mfh-kicker">Comparativa</span>
-          <h2 className="mfh-h2 mfh-balance">MediFlow vs. lo que usabas antes</h2>
+          <h2 className="mfh-h2 mfh-balance">DaleControl vs. lo que usabas antes</h2>
           <p className="mfh-lede">Mira por qué las clínicas dentales dejan los sistemas sueltos y el Excel.</p>
         </div>
 
@@ -60,7 +60,7 @@ export function Comparison() {
           <div className="mfh-cmp__row mfh-cmp__row--head">
             <div className="mfh-cmp__cell mfh-cmp__cell--feat mfh-cmp__h">Función</div>
             <div className="mfh-cmp__cell mfh-cmp__cell--mf">
-              <span className="mfh-cmp__h mfh-cmp__h--mf"><Stethoscope /> MediFlow</span>
+              <span className="mfh-cmp__h mfh-cmp__h--mf"><Stethoscope /> DaleControl</span>
             </div>
             <div className="mfh-cmp__cell"><span className="mfh-cmp__h">Otros software</span></div>
             <div className="mfh-cmp__cell"><span className="mfh-cmp__h">Excel + facturador</span></div>

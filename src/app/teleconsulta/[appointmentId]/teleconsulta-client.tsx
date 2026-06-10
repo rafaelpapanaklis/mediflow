@@ -109,7 +109,7 @@ export function TeleconsultaClient({
             Duración: {formatTime(duration)}
           </p>
           <p className="text-slate-500 text-sm mb-6">
-            Gracias por usar MediFlow.
+            Gracias por usar DaleControl.
           </p>
           <a
             href="/"
@@ -129,7 +129,7 @@ export function TeleconsultaClient({
         {/* Header */}
         <div className="px-6 py-4">
           <div className="text-xl font-extrabold tracking-tight">
-            <span className="text-blue-500">Medi</span>Flow
+            <span className="text-blue-500">Dale</span>Control
           </div>
         </div>
 
@@ -186,7 +186,7 @@ export function TeleconsultaClient({
       <div className="flex items-center justify-between px-4 py-3 bg-slate-900 border-b border-slate-800 shrink-0">
         <div className="flex items-center gap-4">
           <div className="text-lg font-extrabold tracking-tight">
-            <span className="text-blue-500">Medi</span>Flow
+            <span className="text-blue-500">Dale</span>Control
           </div>
           <span className="text-sm text-slate-400">
             {role === "doctor" ? patientName : doctorName}

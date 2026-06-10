@@ -59,7 +59,7 @@ export function AffiliateLoginForm() {
           Portal de afiliados
         </h1>
         <p style={{ fontSize: 14, color: "var(--ld-fg-muted)", margin: 0 }}>
-          Accede a tu panel de afiliado de MediFlow
+          Accede a tu panel de afiliado de DaleControl
         </p>
       </div>
 

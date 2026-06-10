@@ -31,7 +31,7 @@ export function Testimonials() {
         <div className="mfh-head mfh-center mfh-reveal">
           <span className="mfh-kicker">Clientes</span>
           <h2 className="mfh-h2 mfh-balance">Dentistas que ya cambiaron su forma de trabajar</h2>
-          <p className="mfh-lede">Resultados reales de clínicas dentales que operan con MediFlow.</p>
+          <p className="mfh-lede">Resultados reales de clínicas dentales que operan con DaleControl.</p>
         </div>
 
         <div className="mfh-tgrid">

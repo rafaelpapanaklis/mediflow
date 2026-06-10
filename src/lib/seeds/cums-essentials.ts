@@ -1,6 +1,6 @@
 /**
  * CUMS essentials — medicamentos más usados en odontología y medicina
- * general en MX. Las claves siguen formato "MX-XXXX" (interno MediFlow)
+ * general en MX. Las claves siguen formato "MX-XXXX" (interno DaleControl)
  * porque el catálogo CUMS oficial cambia trimestralmente y debe importarse
  * vía POST /api/admin/seed-cums con el archivo oficial cuando esté
  * disponible. La tabla soporta las claves oficiales sin cambios.

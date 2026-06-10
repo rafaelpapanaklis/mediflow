@@ -1,7 +1,7 @@
 import { createClient as createAdmin } from "@supabase/supabase-js";
 
 /**
- * Buckets de Supabase Storage usados por MediFlow.
+ * Buckets de Supabase Storage usados por DaleControl.
  *
  * - PATIENT_FILES: PRIVADO. Contiene archivos clínicos (radiografías, fotos
  *   intraorales, firmas de consent, before/after). Acceso SIEMPRE vía signed

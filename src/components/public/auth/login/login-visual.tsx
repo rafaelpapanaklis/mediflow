@@ -38,7 +38,7 @@ export function LoginVisual() {
             marginBottom: 28,
           }}
         >
-          MediFlow me ahorra 10 horas de papeleo cada semana.
+          DaleControl me ahorra 10 horas de papeleo cada semana.
         </p>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <div
@@ -112,7 +112,7 @@ export function LoginVisual() {
           </span>
         </div>
         <span style={{ fontSize: 12, color: "var(--ld-fg-muted)" }}>
-          clínicas confían en MediFlow
+          clínicas confían en DaleControl
         </span>
       </div>
     </div>

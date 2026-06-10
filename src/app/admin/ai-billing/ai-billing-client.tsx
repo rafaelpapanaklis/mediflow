@@ -274,7 +274,7 @@ export function AiBillingClient() {
         <div>
           <h1 style={{ fontSize: 22, letterSpacing: "-0.02em", color: "var(--text-1)", fontWeight: 600, margin: 0 }}>Tesorería de IA</h1>
           <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, margin: 0 }}>
-            Costo real en USD, margen y saldo de Anthropic. Solo visible para MediFlow.
+            Costo real en USD, margen y saldo de Anthropic. Solo visible para DaleControl.
           </p>
         </div>
         <ButtonNew variant="secondary" icon={<RefreshCw size={14} />} onClick={() => fetchData()}>
@@ -320,7 +320,7 @@ export function AiBillingClient() {
 
       {/* Editor de precios + recarga Anthropic */}
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 14, marginBottom: 20 }}>
-        <CardNew title="Precios y tipo de cambio" sub="Solo MediFlow · la clínica nunca ve USD ni el fee">
+        <CardNew title="Precios y tipo de cambio" sub="Solo DaleControl · la clínica nunca ve USD ni el fee">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 12 }}>
             {PRICE_FIELDS.map((f) => (
               <label key={f.key} style={{ display: "block" }}>

@@ -70,7 +70,7 @@ export function LoginForm() {
           Bienvenido de vuelta
         </h1>
         <p style={{ fontSize: 14, color: "var(--ld-fg-muted)", margin: 0 }}>
-          Accede a tu panel de MediFlow
+          Accede a tu panel de DaleControl
         </p>
       </div>
 

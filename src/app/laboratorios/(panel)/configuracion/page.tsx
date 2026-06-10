@@ -12,7 +12,7 @@ import { BancoForm } from "./banco-form";
 import { PagosForm } from "./pagos-form";
 
 export const metadata: Metadata = {
-  title: "Configuración · Laboratorio — MediFlow",
+  title: "Configuración · Laboratorio — DaleControl",
   robots: { index: false, follow: false },
 };
 

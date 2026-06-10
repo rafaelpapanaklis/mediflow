@@ -80,7 +80,7 @@ export function AffiliateShell({
             <Handshake size={14} color="#fff" />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="sidebar-new__brandname">MediFlow</div>
+            <div className="sidebar-new__brandname">DaleControl</div>
             <div className="sidebar-new__brandsub">Afiliados</div>
           </div>
           <button

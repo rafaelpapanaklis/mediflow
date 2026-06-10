@@ -66,7 +66,7 @@ export function AgendaTopbar() {
           borderRadius: 5,
           color: "#fff", fontSize: 10, fontWeight: 800,
         }}>M</span>
-        <span>MediFlow</span>
+        <span>DaleControl</span>
       </div>
 
       <div className={styles.viewTabs} role="tablist" aria-label={t("agenda.topbar.viewTabsLabel")}>

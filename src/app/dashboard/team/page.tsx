@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { TeamClient } from "./team-client";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 
-export const metadata: Metadata = { title: "Equipo — MediFlow" };
+export const metadata: Metadata = { title: "Equipo — DaleControl" };
 
 export default async function TeamPage() {
   const user = await getCurrentUser();

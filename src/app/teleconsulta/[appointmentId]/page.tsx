@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { TeleconsultaClient } from "./teleconsulta-client";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 
-export const metadata = { title: "Teleconsulta — MediFlow" };
+export const metadata = { title: "Teleconsulta — DaleControl" };
 
 export default async function TeleconsultaPage({ params, searchParams }: { params: { appointmentId: string }; searchParams: { role?: string; token?: string } }) {
   const appointment = await prisma.appointment.findUnique({

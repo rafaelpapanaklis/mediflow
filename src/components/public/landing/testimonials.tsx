@@ -77,7 +77,7 @@ export function Testimonials() {
             color: "var(--ld-fg, var(--fg))",
           }}
         >
-          Clínicas que crecen con MediFlow.
+          Clínicas que crecen con DaleControl.
         </h2>
       </div>
 

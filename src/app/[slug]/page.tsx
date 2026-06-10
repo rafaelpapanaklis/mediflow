@@ -73,7 +73,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const specialty = getSpecialty(params.slug);
   if (specialty) {
     return buildMetadata({
-      title: `${specialty.name} · MediFlow`,
+      title: `${specialty.name} · DaleControl`,
       description: specialty.heroSub,
       path: `/${specialty.slug}`,
       ogImage: `/og/${specialty.slug}`,
@@ -104,13 +104,13 @@ export default async function ClinicLandingPage({ params, searchParams }: Props)
     const url = `${SITE_URL}/${specialty.slug}`;
     const ldBlocks: object[] = [
       softwareApplicationLd({
-        name: `MediFlow para ${specialty.name}`,
+        name: `DaleControl para ${specialty.name}`,
         description: specialty.heroSub,
         url,
         category: "HealthApplication",
       }),
       medicalBusinessLd({
-        name: `MediFlow — software para ${specialty.name.toLowerCase()}`,
+        name: `DaleControl — software para ${specialty.name.toLowerCase()}`,
         description: specialty.heroSub,
         url,
         medicalSpecialty: specialty.category,

@@ -1,5 +1,5 @@
 import Link from "next/link";
-export const metadata = { title: "Pago exitoso — MediFlow" };
+export const metadata = { title: "Pago exitoso — DaleControl" };
 export default function PagoExitosoPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 px-4">

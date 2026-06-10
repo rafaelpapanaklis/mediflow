@@ -17,7 +17,7 @@ const BodySchema = z.object({
  * POST /api/billing/checkout
  *
  * Crea una Stripe Checkout Session para que la clínica del usuario
- * activo renueve/active su suscripción a la plataforma MediFlow.
+ * activo renueve/active su suscripción a la plataforma DaleControl.
  *
  * - Auth: getCurrentUser (cualquier rol logueado).
  * - Multi-tenant: clinicId siempre se toma del contexto, NUNCA del body.
@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
           unit_amount: plan.priceMxn * 100,
           recurring: { interval: "month" },
           product_data: {
-            name: `MediFlow ${plan.name} — Suscripción mensual`,
+            name: `DaleControl ${plan.name} — Suscripción mensual`,
             metadata: { plan: plan.id },
           },
         },

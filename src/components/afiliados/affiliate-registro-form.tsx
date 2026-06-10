@@ -155,7 +155,7 @@ export function AffiliateRegistroForm() {
           Conviértete en afiliado
         </h1>
         <p style={{ fontSize: 14, color: "var(--ld-fg-muted)", margin: 0 }}>
-          Recomienda MediFlow y gana comisión recurrente por cada clínica que se suscriba
+          Recomienda DaleControl y gana comisión recurrente por cada clínica que se suscriba
         </p>
       </div>
 

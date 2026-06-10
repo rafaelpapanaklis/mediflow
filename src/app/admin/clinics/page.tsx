@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { AdminClinicsClient } from "./clinics-client";
 
-export const metadata: Metadata = { title: "Clínicas — Admin MediFlow" };
+export const metadata: Metadata = { title: "Clínicas — Admin DaleControl" };
 
 export default async function AdminClinicsPage() {
   const clinics = await prisma.clinic.findMany({

@@ -1040,7 +1040,7 @@ export function ClinicLayoutClient({
         <div className={styles.topbar}>
           <div className={styles.brand}>
             <span className={styles.brandIcon}><Building2 size={16} aria-hidden /></span>
-            <span className={styles.brandText}>MediFlow</span>
+            <span className={styles.brandText}>DaleControl</span>
           </div>
           <span className={styles.divider} />
           <span className={styles.clinicPill}>{clinic.name}</span>

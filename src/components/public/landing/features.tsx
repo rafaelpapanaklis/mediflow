@@ -452,7 +452,7 @@ export function Features() {
             <FeatureLabel
               kicker="01 · Agenda"
               title="Citas con recordatorios por WhatsApp"
-              desc="Tu equipo deja de llamar uno por uno. MediFlow envía confirmaciones y recordatorios automáticos, y el paciente responde con un tap."
+              desc="Tu equipo deja de llamar uno por uno. DaleControl envía confirmaciones y recordatorios automáticos, y el paciente responde con un tap."
             />
             <MiniAgenda />
           </FeatureCard>
@@ -616,7 +616,7 @@ export function Features() {
               }}
             >
               <div style={{ color: "var(--ld-fg-muted)", marginBottom: 8 }}>
-                tuClinica.mediflow.mx
+                tuClinica.dalecontrol.mx
               </div>
               <div
                 style={{

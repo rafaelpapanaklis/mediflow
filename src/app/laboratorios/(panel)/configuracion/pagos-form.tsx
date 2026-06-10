@@ -177,7 +177,7 @@ export function PagosForm({ canEdit, initial }: { canEdit: boolean; initial: Pag
       </div>
       <p style={{ color: "var(--text-3)", fontSize: 12, marginTop: -4, marginBottom: 14, lineHeight: 1.5 }}>
         Elige cómo pueden pagarte las clínicas por tus servicios. El cobro de MercadoPago llega
-        directo a tu cuenta, sin comisión de MediFlow.
+        directo a tu cuenta, sin comisión de DaleControl.
       </p>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

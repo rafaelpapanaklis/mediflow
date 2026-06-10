@@ -169,7 +169,7 @@ export function SpecHero({ spec }: { spec: Specialty }) {
 
           <div style={{ position: "relative", minWidth: 0 }}>
             <BrowserFrame
-              url={`app.mediflow.mx/${urlSlug}`}
+              url={`app.dalecontrol.mx/${urlSlug}`}
               style={{ width: "100%", maxWidth: 560, overflow: "hidden" }}
             >
               <div style={{ width: 560, height: 560 * (560 / 960) }}>

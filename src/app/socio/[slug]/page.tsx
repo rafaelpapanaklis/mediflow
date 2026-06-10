@@ -16,7 +16,7 @@ import { ProductWindow } from "@/components/public/landing/sales/product-window"
 import { SalesLogo } from "@/components/public/landing/sales/logo";
 import "@/components/public/landing/sales/sales.css";
 
-// Página hosteada del socio/afiliado: una landing de venta de MediFlow donde
+// Página hosteada del socio/afiliado: una landing de venta de DaleControl donde
 // TODOS los CTA apuntan a /signup?ref=<referralCode> para atribuir el alta.
 // Dynamic: depende del slug + estado del afiliado (no SSG).
 export const dynamic = "force-dynamic";
@@ -43,9 +43,9 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const affiliate = await getApprovedAffiliate(params.slug);
-  if (!affiliate) return { title: "Socio no encontrado · MediFlow" };
+  if (!affiliate) return { title: "Socio no encontrado · DaleControl" };
   return {
-    title: `${affiliate.name} te recomienda MediFlow`,
+    title: `${affiliate.name} te recomienda DaleControl`,
     description:
       "Software dental todo-en-uno para clínicas en México: agenda con WhatsApp, expediente con odontograma, radiografías con IA y facturación CFDI 4.0.",
     // Las páginas de socio son variantes del home; las dejamos fuera del índice
@@ -138,9 +138,9 @@ export default async function PartnerLandingPage({ params }: Props) {
               <div className="mfh-cta__glow" aria-hidden="true" />
               <div className="mfh-cta__grid" aria-hidden="true" />
               <div className="mfh-cta__inner">
-                <h2 className="mfh-cta__h mfh-balance">Empieza hoy con MediFlow</h2>
+                <h2 className="mfh-cta__h mfh-balance">Empieza hoy con DaleControl</h2>
                 <p className="mfh-cta__p">
-                  {affiliate.name} te recomienda MediFlow. Crea tu cuenta y lleva agenda, expedientes,
+                  {affiliate.name} te recomienda DaleControl. Crea tu cuenta y lleva agenda, expedientes,
                   radiografías con IA y facturación CFDI 4.0 a una sola plataforma.
                 </p>
                 <div className="mfh-cta__row">
@@ -173,7 +173,7 @@ export default async function PartnerLandingPage({ params }: Props) {
           <SalesLogo />
           <p style={{ margin: 0 }}>
             Recomendado por <strong style={{ color: "rgba(255,255,255,0.85)" }}>{affiliate.name}</strong> ·
-            MediFlow © {new Date().getFullYear()}
+            DaleControl © {new Date().getFullYear()}
           </p>
           <Link href={signupHref} style={{ color: "var(--mfh-brand, #a78bfa)", fontWeight: 600, textDecoration: "none" }}>
             Crear cuenta gratis →

@@ -27,7 +27,7 @@ export function ProductWindow() {
           <i style={{ background: "#febc2e" }} />
           <i style={{ background: "#28c840" }} />
         </div>
-        <div className="mfh-win__url"><Lock /> app.mediflow.mx/dashboard</div>
+        <div className="mfh-win__url"><Lock /> app.dalecontrol.mx/dashboard</div>
       </div>
 
       <div className="mfh-ptabs" role="tablist" aria-label="Vista del producto">

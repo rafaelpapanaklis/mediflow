@@ -175,7 +175,7 @@ export function ComparisonPdf({ data }: { data: ComparisonPdfData }) {
         </Text>
 
         <Text style={styles.footer} fixed>
-          Generado en MediFlow el {fmtDate(data.generatedAtIso)}
+          Generado en DaleControl el {fmtDate(data.generatedAtIso)}
         </Text>
       </Page>
 
@@ -189,7 +189,7 @@ export function ComparisonPdf({ data }: { data: ComparisonPdfData }) {
           <Text style={styles.setCaption}>{data.initialSet.label}</Text>
           <PhotoGrid set={data.initialSet} />
           <Text style={styles.footer} fixed>
-            Generado en MediFlow el {fmtDate(data.generatedAtIso)}
+            Generado en DaleControl el {fmtDate(data.generatedAtIso)}
           </Text>
         </Page>
       ) : null}
@@ -217,7 +217,7 @@ export function ComparisonPdf({ data }: { data: ComparisonPdfData }) {
             <PhotoGrid set={set} />
           )}
           <Text style={styles.footer} fixed>
-            Generado en MediFlow el {fmtDate(data.generatedAtIso)}
+            Generado en DaleControl el {fmtDate(data.generatedAtIso)}
           </Text>
         </Page>
       ))}
@@ -245,7 +245,7 @@ export function ComparisonPdf({ data }: { data: ComparisonPdfData }) {
             <PhotoGrid set={data.finalSet} />
           )}
           <Text style={styles.footer} fixed>
-            Generado en MediFlow el {fmtDate(data.generatedAtIso)}
+            Generado en DaleControl el {fmtDate(data.generatedAtIso)}
           </Text>
         </Page>
       ) : null}
@@ -255,7 +255,7 @@ export function ComparisonPdf({ data }: { data: ComparisonPdfData }) {
         <Text style={styles.h1}>Plan de retención</Text>
         <Text style={styles.body}>{data.retentionPlanText}</Text>
         <Text style={styles.footer} fixed>
-          Generado en MediFlow el {fmtDate(data.generatedAtIso)}
+          Generado en DaleControl el {fmtDate(data.generatedAtIso)}
         </Text>
       </Page>
     </Document>

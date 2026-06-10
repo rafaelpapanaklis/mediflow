@@ -7,8 +7,8 @@ import { SupplierLoginForm } from "@/components/proveedores/supplier-login-form"
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Portal de proveedores · MediFlow",
-  description: "Accede al panel de proveedores de MediFlow para gestionar tu catálogo y pedidos.",
+  title: "Portal de proveedores · DaleControl",
+  description: "Accede al panel de proveedores de DaleControl para gestionar tu catálogo y pedidos.",
   robots: { index: false, follow: false },
 };
 

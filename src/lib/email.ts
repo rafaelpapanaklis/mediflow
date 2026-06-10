@@ -24,7 +24,7 @@ type EmailPayload = {
  */
 export async function sendEmail(payload: EmailPayload): Promise<{ delivered: boolean }> {
   const key = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM ?? "MediFlow <no-reply@mediflow.mx>";
+  const from = process.env.EMAIL_FROM ?? "DaleControl <no-reply@mediflow.mx>";
 
   if (!key) {
     // Stub: log en desarrollo y en producción hasta que se configure el provider.
@@ -86,13 +86,13 @@ export async function sendWelcomeEmail(opts: {
 <body style="font-family: system-ui, -apple-system, sans-serif; background: #0b0815; color: #f5f5f7; margin: 0; padding: 40px 20px;">
   <div style="max-width: 560px; margin: 0 auto; background: #121020; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 40px 32px;">
     <div style="font-size: 22px; font-weight: 600; letter-spacing: -0.02em; color: #a78bfa; margin-bottom: 20px;">
-      MediFlow
+      DaleControl
     </div>
     <h1 style="font-size: 24px; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 12px 0; color: #f5f5f7;">
       ¡Bienvenido${firstName ? `, ${firstName}` : ""}! 🎉
     </h1>
     <p style="font-size: 15px; color: rgba(245,245,247,0.7); line-height: 1.55; margin: 0 0 24px 0;">
-      Tu cuenta de MediFlow está lista y tu clínica <strong style="color: #f5f5f7;">${clinicName}</strong> ya puede empezar a operar.
+      Tu cuenta de DaleControl está lista y tu clínica <strong style="color: #f5f5f7;">${clinicName}</strong> ya puede empezar a operar.
     </p>
 
     <div style="padding: 18px 20px; background: rgba(124,58,237,0.1); border: 1px solid rgba(124,58,237,0.3); border-radius: 10px; margin: 24px 0;">
@@ -124,7 +124,7 @@ export async function sendWelcomeEmail(opts: {
       ¿Tienes dudas? Responde este correo o escríbenos a
       <a href="mailto:soporte@mediflow.mx" style="color: #a78bfa;">soporte@mediflow.mx</a>.
       <br /><br />
-      MediFlow — Software médico 🇲🇽
+      DaleControl — Software médico 🇲🇽
     </div>
   </div>
 </body>
@@ -132,7 +132,7 @@ export async function sendWelcomeEmail(opts: {
 
   const text =
     `¡Bienvenido${firstName ? `, ${firstName}` : ""}!\n\n` +
-    `Tu cuenta de MediFlow está lista y tu clínica "${clinicName}" ya puede empezar a operar.\n\n` +
+    `Tu cuenta de DaleControl está lista y tu clínica "${clinicName}" ya puede empezar a operar.\n\n` +
     `Prueba gratis de 14 días — termina el ${trialDate}.\n\n` +
     `Accede a tu dashboard: ${dashboardUrl}\n\n` +
     `Tips para empezar:\n` +
@@ -141,11 +141,11 @@ export async function sendWelcomeEmail(opts: {
     `• Configura tu RFC emisor para CFDI\n` +
     `• Invita a tu equipo\n\n` +
     `¿Dudas? soporte@mediflow.mx\n` +
-    `MediFlow — Software médico MX`;
+    `DaleControl — Software médico MX`;
 
   await sendEmail({
     to: email,
-    subject: "Bienvenido a MediFlow · Tu prueba de 14 días empieza hoy",
+    subject: "Bienvenido a DaleControl · Tu prueba de 14 días empieza hoy",
     html,
     text,
   });

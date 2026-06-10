@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { IntegrationsClient } from "./integrations-client";
 
-export const metadata: Metadata = { title: "Integraciones — MediFlow" };
+export const metadata: Metadata = { title: "Integraciones — DaleControl" };
 
 export default async function IntegrationsPage() {
   const user = await getCurrentUser();

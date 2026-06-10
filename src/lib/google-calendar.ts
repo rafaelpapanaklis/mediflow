@@ -65,7 +65,7 @@ export async function getOrCreateClinicCalendar(
     // Check if clinic calendar already exists
     const listRes = await calendar.calendarList.list();
     const existing = listRes.data.items?.find(
-      c => c.summary === clinicName || c.description?.includes("MediFlow-clinic")
+      c => c.summary === clinicName || c.description?.includes("DaleControl-clinic")
     );
     if (existing?.id) return existing.id;
 
@@ -73,7 +73,7 @@ export async function getOrCreateClinicCalendar(
     const newCal = await calendar.calendars.insert({
       requestBody: {
         summary:     clinicName,
-        description: `Agenda de ${clinicName} — MediFlow-clinic`,
+        description: `Agenda de ${clinicName} — DaleControl-clinic`,
         timeZone:    "America/Mexico_City",
       },
     });
@@ -138,7 +138,7 @@ export async function createCalendarEvent(
       `Tipo: ${appt.type}`,
       appt.doctorName ? `Doctor/a: ${appt.doctorName}` : "",
       appt.notes ? `Notas: ${appt.notes}` : "",
-      `\nAgendado desde MediFlow`,
+      `\nAgendado desde DaleControl`,
     ].filter(Boolean).join("\n");
 
     const event = await calendar.events.insert({
@@ -200,7 +200,7 @@ export async function updateCalendarEvent(
       `Tipo: ${appt.type}`,
       appt.doctorName ? `Doctor/a: ${appt.doctorName}` : "",
       appt.notes ? `Notas: ${appt.notes}` : "",
-      `\nAgendado desde MediFlow`,
+      `\nAgendado desde DaleControl`,
     ].filter(Boolean).join("\n");
 
     await calendar.events.update({

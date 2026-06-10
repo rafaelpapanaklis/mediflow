@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { AffiliatesClient } from "./affiliates-client";
 
-export const metadata: Metadata = { title: "Afiliados — Admin MediFlow" };
+export const metadata: Metadata = { title: "Afiliados — Admin DaleControl" };
 
 // Affiliate es global (sin clinicId): el admin ve TODOS los afiliados.
 export default async function AdminAffiliatesPage() {

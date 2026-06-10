@@ -117,7 +117,7 @@ export function OrthoSharePage(props: OrthoSharePageProps) {
             textAlign: "center",
           }}
         >
-          Información generada por tu clínica vía MediFlow. Si tienes dudas,
+          Información generada por tu clínica vía DaleControl. Si tienes dudas,
           contáctala directamente.
         </footer>
       </article>

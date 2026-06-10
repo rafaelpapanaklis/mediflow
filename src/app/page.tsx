@@ -17,7 +17,7 @@ const inter = Inter({
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://mediflow-pi.vercel.app";
 
 export const metadata: Metadata = {
-  title: { absolute: "MediFlow — Software dental todo-en-uno para clínicas en México" },
+  title: { absolute: "DaleControl — Software dental todo-en-uno para clínicas en México" },
   description:
     "Agenda con WhatsApp, expediente con odontograma, radiografías con IA y facturación CFDI 4.0 para clínicas dentales en México. Todo en una sola plataforma.",
   keywords: [
@@ -35,15 +35,15 @@ export const metadata: Metadata = {
     type: "website",
     locale: "es_MX",
     url: SITE_URL,
-    siteName: "MediFlow",
-    title: "MediFlow — Software dental todo-en-uno para clínicas en México",
+    siteName: "DaleControl",
+    title: "DaleControl — Software dental todo-en-uno para clínicas en México",
     description:
       "Agenda, expediente con odontograma, radiografías con IA y facturación CFDI 4.0 para clínicas dentales en México.",
-    images: [{ url: "/og-home.png", width: 1200, height: 630, alt: "MediFlow — software dental todo-en-uno" }],
+    images: [{ url: "/og-home.png", width: 1200, height: 630, alt: "DaleControl — software dental todo-en-uno" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "MediFlow — Software dental para clínicas en México",
+    title: "DaleControl — Software dental para clínicas en México",
     description:
       "Agenda con WhatsApp, odontograma, radiografías con IA y CFDI 4.0. Todo en una sola plataforma.",
     images: ["/og-home.png"],
@@ -57,7 +57,7 @@ const JSON_LD = {
     {
       "@type": "Organization",
       "@id": `${SITE_URL}/#organization`,
-      name: "MediFlow",
+      name: "DaleControl",
       url: SITE_URL,
       description: "Software de gestión para clínicas dentales en México.",
       areaServed: "MX",
@@ -66,13 +66,13 @@ const JSON_LD = {
       "@type": "WebSite",
       "@id": `${SITE_URL}/#website`,
       url: SITE_URL,
-      name: "MediFlow",
+      name: "DaleControl",
       inLanguage: "es-MX",
       publisher: { "@id": `${SITE_URL}/#organization` },
     },
     {
       "@type": "SoftwareApplication",
-      name: "MediFlow",
+      name: "DaleControl",
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web",
       inLanguage: "es-MX",

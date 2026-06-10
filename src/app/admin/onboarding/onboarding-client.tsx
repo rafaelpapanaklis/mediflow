@@ -170,7 +170,7 @@ export function OnboardingClient({ rows, steps }: { rows: Row[]; steps: Step[] }
                 <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
                   {r.email ? (
                     <a
-                      href={`mailto:${r.email}?subject=Tu%20onboarding%20en%20MediFlow&body=Hola,%20notamos%20que%20no%20has%20completado%20la%20configuración%20inicial.%20¿Podemos%20ayudarte?`}
+                      href={`mailto:${r.email}?subject=Tu%20onboarding%20en%20DaleControl&body=Hola,%20notamos%20que%20no%20has%20completado%20la%20configuración%20inicial.%20¿Podemos%20ayudarte?`}
                       style={{ flex: 1, textDecoration: "none" }}
                     >
                       <ButtonNew size="sm" variant="secondary" style={{ width: "100%" }}>

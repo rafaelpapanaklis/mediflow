@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
     const msg = createError?.message ?? "";
     if (msg.includes("already been registered") || msg.includes("already exists")) {
       return NextResponse.json({
-        error: "Este email ya tiene cuenta en MediFlow. El doctor debe usar su contraseña existente.",
+        error: "Este email ya tiene cuenta en DaleControl. El doctor debe usar su contraseña existente.",
       }, { status: 400 });
     }
     return NextResponse.json({ error: msg || "Error al crear usuario" }, { status: 400 });

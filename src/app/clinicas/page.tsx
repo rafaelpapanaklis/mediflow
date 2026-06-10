@@ -99,7 +99,7 @@ export default function ClinicasPage() {
         <div style={{ maxWidth:960, margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <Link href="/" style={{ display:"flex", alignItems:"center", gap:10, textDecoration:"none" }}>
             <div style={{ width:36, height:36, borderRadius:10, background:"#2563eb", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", fontWeight:800, fontSize:16 }}>M</div>
-            <span style={{ fontWeight:800, fontSize:18, color:"#fff" }}>MediFlow</span>
+            <span style={{ fontWeight:800, fontSize:18, color:"#fff" }}>DaleControl</span>
           </Link>
           <div style={{ display:"flex", gap:12 }}>
             <Link href="/login"    style={{ color:"#94a3b8", fontSize:14, fontWeight:600, textDecoration:"none" }}>Iniciar sesión</Link>
@@ -328,7 +328,7 @@ export default function ClinicasPage() {
             ¿Tienes una clínica?
           </div>
           <div style={{ fontSize:14, color:"#bfdbfe", marginBottom:18 }}>
-            Regístrate en MediFlow y aparece en este directorio para recibir pacientes nuevos
+            Regístrate en DaleControl y aparece en este directorio para recibir pacientes nuevos
           </div>
           <Link href="/signup"
             style={{ display:"inline-block", background:"#fff", color:"#1d4ed8", fontWeight:700, fontSize:14, padding:"12px 28px", borderRadius:12, textDecoration:"none" }}>

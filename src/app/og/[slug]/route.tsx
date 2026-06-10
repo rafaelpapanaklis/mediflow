@@ -9,7 +9,7 @@ export function generateStaticParams() {
 
 export async function GET(_req: Request, { params }: { params: { slug: string } }) {
   const specialty = getSpecialty(params.slug);
-  const title = specialty?.name ?? "MediFlow";
+  const title = specialty?.name ?? "DaleControl";
   const subtitle = specialty
     ? `Software para ${specialty.name.toLowerCase()} en México`
     : "Software para clínicas en México";
@@ -45,7 +45,7 @@ export async function GET(_req: Request, { params }: { params: { slug: string } 
           >
             M
           </div>
-          <span style={{ color: "white", fontSize: "36px", fontWeight: 700 }}>MediFlow</span>
+          <span style={{ color: "white", fontSize: "36px", fontWeight: 700 }}>DaleControl</span>
         </div>
         <div
           style={{

@@ -23,7 +23,7 @@ const PRIVACY_INBOX = process.env.PRIVACY_INBOX_EMAIL ?? "privacidad@mediflow.ap
  *  - Si patientId viene, validamos contra patients y heredamos su
  *    clinicId. La solicitud queda scoped a esa clínica.
  *  - Si no viene patientId, la solicitud queda con clinicId=null
- *    (anónima, gestionada por el equipo de privacidad de MediFlow,
+ *    (anónima, gestionada por el equipo de privacidad de DaleControl,
  *    no por una clínica específica).
  *  - NUNCA aceptamos clinicId del request body.
  *

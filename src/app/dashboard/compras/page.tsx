@@ -10,7 +10,7 @@ import {
 } from "@/lib/suppliers/serializers";
 import { ComprasClient } from "./compras-client";
 
-export const metadata: Metadata = { title: "Compras — MediFlow" };
+export const metadata: Metadata = { title: "Compras — DaleControl" };
 
 export default async function ComprasPage() {
   const user = await getCurrentUser();

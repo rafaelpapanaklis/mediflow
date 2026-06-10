@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { BugAuditClient } from "./bug-audit-client";
 
-export const metadata: Metadata = { title: "Auditoría de bugs · Admin MediFlow" };
+export const metadata: Metadata = { title: "Auditoría de bugs · Admin DaleControl" };
 
 /**
  * Panel de auditoría de bugs — zona /admin/* (platform owner).

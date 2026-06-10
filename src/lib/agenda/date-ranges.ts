@@ -13,7 +13,7 @@ export interface AgendaDateRange {
 }
 
 /**
- * TZ default cuando el caller no provee una válida. MediFlow opera en
+ * TZ default cuando el caller no provee una válida. DaleControl opera en
  * México: usar este fallback evita que un `state.timezone` vacío caiga
  * al runtime default (UTC en SSR Vercel) y produzca el offset de -6h
  * que se observó en la vista Mes (Bug D).

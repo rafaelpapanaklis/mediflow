@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import { ArcoForm } from "./arco-form";
 
 export const metadata: Metadata = {
-  title: "Aviso de privacidad — MediFlow",
+  title: "Aviso de privacidad — DaleControl",
   description:
     "Aviso de privacidad integral conforme a la Ley Federal de Protección de Datos Personales en Posesión de los Particulares (LFPDPPP).",
 };
 
 const LAST_UPDATED = "30 de abril de 2026";
-const RESPONSIBLE_NAME = "MediFlow (operado por Rafael Papanaklis)";
+const RESPONSIBLE_NAME = "DaleControl (operado por Rafael Papanaklis)";
 const RESPONSIBLE_ADDRESS = "México · contacto: privacidad@mediflow.app";
 const PRIVACY_EMAIL = "privacidad@mediflow.app";
 
@@ -46,7 +46,7 @@ export default function PrivacidadPage() {
 
       <Section title="2. Datos personales que recabamos">
         <p>
-          Para prestar los servicios de MediFlow, recabamos los siguientes datos:
+          Para prestar los servicios de DaleControl, recabamos los siguientes datos:
         </p>
         <ul>
           <li>

@@ -360,7 +360,7 @@ export function SurgicalReportDocument(props: { data: SurgicalReportPdfData }) {
         </View>
 
         <Text style={styles.footer} fixed>
-          Documento generado por MediFlow · Conservación recomendada 10
+          Documento generado por DaleControl · Conservación recomendada 10
           años (NOM-024-SSA3-2012). Trazabilidad COFEPRIS clase III
           preservada. Cualquier modificación posterior queda registrada
           en el audit log.

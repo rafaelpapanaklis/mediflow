@@ -31,7 +31,7 @@ export function SalesFooter() {
           <div className="mfh-foot__col">
             <h4>Empresa</h4>
             <a href="#clientes">Clientes</a>
-            <a href="#funciones">Por qué MediFlow</a>
+            <a href="#funciones">Por qué DaleControl</a>
             <Link href="/login">Iniciar sesión</Link>
             <Link href="/signup">Crear cuenta</Link>
           </div>
@@ -45,7 +45,7 @@ export function SalesFooter() {
         </div>
 
         <div className="mfh-foot__bottom">
-          <span className="mfh-foot__legal">© 2026 MediFlow. Todos los derechos reservados.</span>
+          <span className="mfh-foot__legal">© 2026 DaleControl. Todos los derechos reservados.</span>
           <span className="mfh-foot__made">Hecho con cariño en México 🇲🇽</span>
         </div>
       </div>

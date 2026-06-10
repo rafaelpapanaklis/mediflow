@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { PagoClient } from "./pago-client";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 
-export const metadata = { title: "Pagar teleconsulta — MediFlow" };
+export const metadata = { title: "Pagar teleconsulta — DaleControl" };
 
 export default async function PagoPage({ params }: { params: { appointmentId: string } }) {
   const appointment = await prisma.appointment.findUnique({

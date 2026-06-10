@@ -2,7 +2,7 @@ import { CalendarDays, Sparkles, Receipt, Building2, Check, Lock, ArrowRight } f
 import { AgendaMock, XrayMock, BillingMock, ClinicMock, WhatsAppMini } from "./mockups";
 
 /* Marco de ventana para los mockups de spotlight. */
-function Win({ children, url = "app.mediflow.mx" }: { children: React.ReactNode; url?: string }) {
+function Win({ children, url = "app.dalecontrol.mx" }: { children: React.ReactNode; url?: string }) {
   return (
     <div className="mfh-win">
       <div className="mfh-win__bar">
@@ -39,7 +39,7 @@ export function Spotlights() {
             <span className="mfh-spot__tag"><CalendarDays /> Agenda inteligente</span>
             <h2 className="mfh-h2 mfh-balance">Llena tu agenda y olvida las faltas</h2>
             <p className="mfh-lede">
-              Sincroniza con Google Calendar y deja que MediFlow recuerde y confirme cada cita
+              Sincroniza con Google Calendar y deja que DaleControl recuerde y confirme cada cita
               por WhatsApp. Tus pacientes confirman con un mensaje; tú llenas los huecos.
             </p>
             <Bullets items={[
@@ -53,7 +53,7 @@ export function Spotlights() {
             </a>
           </div>
           <div className="mfh-spot__media">
-            <Win url="app.mediflow.mx/agenda"><AgendaMock /></Win>
+            <Win url="app.dalecontrol.mx/agenda"><AgendaMock /></Win>
             <div style={{ marginTop: 14, maxWidth: 340, marginLeft: "auto" }}>
               <WhatsAppMini />
             </div>
@@ -80,7 +80,7 @@ export function Spotlights() {
             </a>
           </div>
           <div className="mfh-spot__media">
-            <Win url="app.mediflow.mx/radiografias"><XrayMock /></Win>
+            <Win url="app.dalecontrol.mx/radiografias"><XrayMock /></Win>
           </div>
         </div>
 
@@ -104,7 +104,7 @@ export function Spotlights() {
             </a>
           </div>
           <div className="mfh-spot__media">
-            <Win url="app.mediflow.mx/facturacion"><BillingMock /></Win>
+            <Win url="app.dalecontrol.mx/facturacion"><BillingMock /></Win>
           </div>
         </div>
 
@@ -128,7 +128,7 @@ export function Spotlights() {
             </a>
           </div>
           <div className="mfh-spot__media">
-            <Win url="app.mediflow.mx/mi-clinica"><ClinicMock /></Win>
+            <Win url="app.dalecontrol.mx/mi-clinica"><ClinicMock /></Win>
           </div>
         </div>
 

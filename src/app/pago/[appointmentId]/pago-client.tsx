@@ -102,7 +102,7 @@ export function PagoClient({
           {/* Logo */}
           <div className="text-center mb-8">
             <div className="text-2xl font-extrabold tracking-tight">
-              <span className="text-blue-600">Medi</span>Flow
+              <span className="text-blue-600">Dale</span>Control
             </div>
             <p className="text-muted-foreground text-sm mt-1">Pago de teleconsulta</p>
           </div>

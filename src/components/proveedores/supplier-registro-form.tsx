@@ -196,7 +196,7 @@ export function SupplierRegistroForm() {
           Regístrate como proveedor
         </h1>
         <p style={{ fontSize: 14, color: "var(--ld-fg-muted)", margin: 0 }}>
-          Crea tu cuenta para vender a clínicas en MediFlow
+          Crea tu cuenta para vender a clínicas en DaleControl
         </p>
       </div>
 

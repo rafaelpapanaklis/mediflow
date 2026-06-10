@@ -4,8 +4,8 @@ import { Footer } from "@/components/public/landing/footer";
 import { ROADMAP, STATUS_META, type RoadmapStatus } from "@/lib/roadmap";
 
 export const metadata: Metadata = {
-  title: "Roadmap — MediFlow",
-  description: "Qué hemos lanzado, en qué trabajamos y qué viene en MediFlow.",
+  title: "Roadmap — DaleControl",
+  description: "Qué hemos lanzado, en qué trabajamos y qué viene en DaleControl.",
 };
 
 const ORDER: RoadmapStatus[] = ["launched", "in_progress", "planned"];
@@ -24,7 +24,7 @@ export default function RoadmapPage() {
       <main className="max-w-5xl mx-auto px-6 py-16">
         <div className="text-center mb-14">
           <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight mb-4">
-            Roadmap público de MediFlow
+            Roadmap público de DaleControl
           </h1>
           <p className="text-slate-400 text-lg max-w-2xl mx-auto">
             Aquí puedes ver qué hemos lanzado, en qué estamos trabajando ahora mismo y qué funcionalidades vienen próximamente. Nos guía el feedback de las clínicas que usan la plataforma todos los días.

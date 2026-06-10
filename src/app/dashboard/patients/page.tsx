@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PatientsClient } from "./patients-client";
 
-export const metadata: Metadata = { title: "Pacientes — MediFlow" };
+export const metadata: Metadata = { title: "Pacientes — DaleControl" };
 
 /**
  * /dashboard/patients — server component minimal.

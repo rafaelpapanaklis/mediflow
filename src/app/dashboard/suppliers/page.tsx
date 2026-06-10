@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { SuppliersClient } from "./suppliers-client";
 
-export const metadata: Metadata = { title: "Proveedores — MediFlow" };
+export const metadata: Metadata = { title: "Proveedores — DaleControl" };
 
 export default async function SuppliersPage() {
   // Exige sesión de clínica. El proveedor es global (sin clinicId),

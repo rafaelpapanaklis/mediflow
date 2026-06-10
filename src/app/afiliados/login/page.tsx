@@ -7,8 +7,8 @@ import { AffiliateLoginForm } from "@/components/afiliados/affiliate-login-form"
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Portal de afiliados · MediFlow",
-  description: "Accede a tu panel de afiliado de MediFlow para seguir tus referidos y comisiones.",
+  title: "Portal de afiliados · DaleControl",
+  description: "Accede a tu panel de afiliado de DaleControl para seguir tus referidos y comisiones.",
   robots: { index: false, follow: false },
 };
 

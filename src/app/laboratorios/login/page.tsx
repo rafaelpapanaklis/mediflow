@@ -7,8 +7,8 @@ import { LabLoginForm } from "@/components/laboratorios/lab-login-form";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Portal de laboratorios · MediFlow",
-  description: "Accede al panel de laboratorios dentales de MediFlow para gestionar tus servicios y órdenes.",
+  title: "Portal de laboratorios · DaleControl",
+  description: "Accede al panel de laboratorios dentales de DaleControl para gestionar tus servicios y órdenes.",
   robots: { index: false, follow: false },
 };
 

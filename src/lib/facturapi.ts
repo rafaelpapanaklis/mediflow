@@ -2,7 +2,7 @@
  * Facturapi integration for CFDI 4.0
  * Docs: https://docs.facturapi.io
  * 
- * Architecture: MediFlow has ONE Facturapi account.
+ * Architecture: DaleControl has ONE Facturapi account.
  * Each clinic is an "Organization" in Facturapi (multi-RFC).
  * The clinic configures their RFC/CSD once in Settings.
  * We call Facturapi on their behalf using their orgId.

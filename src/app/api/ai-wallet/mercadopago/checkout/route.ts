@@ -14,7 +14,7 @@ const MAX_TOPUP_CENTS = 5_000_000; // $50,000.00 MXN
 
 // POST /api/ai-wallet/mercadopago/checkout  { amountCents }
 // Inicia una recarga ONE-SHOT del monedero de IA vía MercadoPago. A diferencia de
-// las órdenes B2B (que cobran a la cuenta del vendedor), MediFlow cobra ESTA
+// las órdenes B2B (que cobran a la cuenta del vendedor), DaleControl cobra ESTA
 // recarga con su token de PLATAFORMA. Crea primero un AiTopup(PENDING) y ancla el
 // external_reference/notification_url a él; el webhook acredita al aprobarse.
 // clinicId SIEMPRE de la sesión: una clínica jamás recarga el monedero de otra.
