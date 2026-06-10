@@ -2308,6 +2308,9 @@ model Prescription {
   clinicId         String
   medications      Json
   indications      String?   @db.Text
+  // Diagnóstico opcional que el doctor decide incluir en la receta (PDF y
+  // dashboard; NUNCA se muestra en la verificación pública).
+  diagnosis        String?   @db.Text
   qrCode           String    @unique
   verifyUrl        String
   issuedAt         DateTime  @default(now())

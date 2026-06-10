@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, ShieldCheck, Save, Loader2 } from "lucide-react";
+import { X, ShieldCheck, Save, Loader2, CheckCircle2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { CumsSelector, type PrescriptionItemDraft } from "@/components/dashboard/clinical/cums-selector";
 import { useT } from "@/i18n/i18n-provider";
@@ -44,20 +44,27 @@ interface Props {
  *  - POST /api/prescriptions con items (cumsKey + dosage*).
  *  - Si checkbox "Firmar electrónicamente" está activo y hay cert,
  *    POST /api/signature/sign con docType=PRESCRIPTION.
+ *  - Tras crear, muestra un paso de éxito dentro del modal con acciones:
+ *    PDF, enviar por WhatsApp/email y verificación pública.
  */
 export function PrescriptionModal({ open, patientId, medicalRecordId, onClose, onCreated }: Props) {
   const t = useT();
   const [items, setItems] = useState<PrescriptionItemDraft[]>([]);
   const [indications, setIndications] = useState("");
+  const [diagnosis, setDiagnosis] = useState("");
+  const [validUntil, setValidUntil] = useState("");
   const [cofeprisFolio, setCofeprisFolio] = useState("");
   const [signCheck, setSignCheck] = useState(false);
   const [keyPassword, setKeyPassword] = useState("");
   const [cert, setCert] = useState<CertInfo | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [createdRx, setCreatedRx] = useState<{ id: string; verifyUrl: string } | null>(null);
+  const [sendingVia, setSendingVia] = useState<null | "whatsapp" | "email">(null);
 
   useEffect(() => {
     if (!open) return;
-    setItems([]); setIndications(""); setCofeprisFolio(""); setSignCheck(false); setKeyPassword("");
+    setItems([]); setIndications(""); setDiagnosis(""); setValidUntil(""); setCofeprisFolio(""); setSignCheck(false); setKeyPassword("");
+    setCreatedRx(null); setSendingVia(null);
     fetch("/api/signature/cert")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
@@ -110,6 +117,8 @@ export function PrescriptionModal({ open, patientId, medicalRecordId, onClose, o
             notes: it.notes || undefined,
           })),
           indications: indications || undefined,
+          diagnosis: diagnosis.trim() || undefined,
+          expiresAt: validUntil ? new Date(validUntil + "T23:59:59").toISOString() : undefined,
           cofeprisGroup: cofeprisGroup || undefined,
           cofeprisFolio: cofeprisFolio || undefined,
         }),
@@ -144,11 +153,33 @@ export function PrescriptionModal({ open, patientId, medicalRecordId, onClose, o
       }
 
       onCreated?.({ id: rx.id, verifyUrl: rx.verifyUrl });
-      onClose();
+      setCreatedRx({ id: rx.id, verifyUrl: rx.verifyUrl });
     } catch (err) {
       toast.error(t("clinical.prescriptionModal.errorGeneric", { error: String(err) }));
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function sendVia(via: "whatsapp" | "email") {
+    if (!createdRx || sendingVia) return;
+    setSendingVia(via);
+    try {
+      const res = await fetch(`/api/prescriptions/${createdRx.id}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ via }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error(t("clinical.prescriptionModal.sendFailed", { error: err.error ?? err.detail ?? String(res.status) }));
+      } else {
+        toast.success(t("clinical.prescriptionModal.sent"));
+      }
+    } catch (err) {
+      toast.error(t("clinical.prescriptionModal.sendFailed", { error: String(err) }));
+    } finally {
+      setSendingVia(null);
     }
   }
 
@@ -181,80 +212,162 @@ export function PrescriptionModal({ open, patientId, medicalRecordId, onClose, o
         </header>
 
         <div style={{ padding: 20, overflowY: "auto", display: "flex", flexDirection: "column", gap: 14 }}>
-          <div>
-            <label style={labelStyle}>{t("clinical.prescriptionModal.medicationsLabel")}</label>
-            <CumsSelector items={items} onChange={setItems} disabled={submitting} />
-          </div>
-
-          {cofeprisGroup && (
-            <div style={{ padding: "8px 12px", background: "rgba(220, 38, 38, 0.08)", border: "1px solid rgba(220, 38, 38, 0.30)", borderRadius: 8, fontSize: 12, color: "#b91c1c" }}>
-              <strong>{t("clinical.prescriptionModal.controlledSubstance", { group: cofeprisGroup })}</strong>{" "}
-              {t("clinical.prescriptionModal.legalValidity", { eta: t(COFEPRIS_ETA_KEY[cofeprisGroup] ?? "clinical.prescriptionModal.eta180d") })}
-            </div>
-          )}
-
-          <div>
-            <label style={labelStyle}>{t("clinical.prescriptionModal.generalIndicationsLabel")}</label>
-            <textarea
-              className="input-new"
-              style={{ minHeight: 64, padding: "10px 12px", resize: "vertical", width: "100%" }}
-              placeholder={t("clinical.prescriptionModal.indicationsPlaceholder")}
-              value={indications}
-              onChange={(e) => setIndications(e.target.value)}
-              disabled={submitting}
-            />
-          </div>
-
-          {cofeprisGroup && (cofeprisGroup === "I" || cofeprisGroup === "II") && (
-            <div>
-              <label style={labelStyle}>{t("clinical.prescriptionModal.cofeprisFolioLabel", { group: cofeprisGroup })}</label>
-              <input
-                className="input-new"
-                style={{ width: "100%" }}
-                placeholder={t("clinical.prescriptionModal.cofeprisFolioPlaceholder")}
-                value={cofeprisFolio}
-                onChange={(e) => setCofeprisFolio(e.target.value.trim())}
-                disabled={submitting}
-              />
-            </div>
-          )}
-
-          {/* Firma electrónica opcional */}
-          {cert ? (
-            <div style={{ padding: 12, background: "rgba(16, 185, 129, 0.06)", border: "1px solid rgba(16, 185, 129, 0.30)", borderRadius: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
-                <input type="checkbox" checked={signCheck} onChange={(e) => setSignCheck(e.target.checked)} disabled={submitting} />
-                <ShieldCheck size={14} aria-hidden style={{ color: "#059669" }} />
-                {t("clinical.prescriptionModal.signWithFiel")}
-              </label>
-              {signCheck && (
-                <input
-                  type="password"
-                  className="input-new"
-                  style={{ width: "100%" }}
-                  placeholder={t("clinical.prescriptionModal.keyPasswordPlaceholder")}
-                  value={keyPassword}
-                  onChange={(e) => setKeyPassword(e.target.value)}
-                  disabled={submitting}
-                  autoComplete="off"
-                />
-              )}
-              <span style={{ fontSize: 11, color: "var(--text-3)" }}>
-                {t("clinical.prescriptionModal.certValidUntil", { date: new Date(cert.validUntil).toLocaleDateString("es-MX") })}
-              </span>
+          {createdRx ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "6px 0" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <CheckCircle2 size={22} aria-hidden style={{ color: "#059669", flexShrink: 0 }} />
+                <h4 style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>{t("clinical.prescriptionModal.successTitle")}</h4>
+              </div>
+              <p style={{ fontSize: 12, color: "var(--text-3)", margin: 0 }}>{t("clinical.prescriptionModal.successHint")}</p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                <a
+                  href={`/api/prescriptions/${createdRx.id}/pdf`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ ...btnGhost, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
+                >
+                  {t("clinical.prescriptionModal.actionPdf")}
+                </a>
+                <button
+                  type="button"
+                  onClick={() => sendVia("whatsapp")}
+                  disabled={sendingVia !== null}
+                  style={{ ...btnGhost, display: "inline-flex", alignItems: "center", gap: 6 }}
+                >
+                  {sendingVia === "whatsapp" && <Loader2 size={13} className="animate-spin" aria-hidden />}
+                  {t("clinical.prescriptionModal.actionWhatsApp")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => sendVia("email")}
+                  disabled={sendingVia !== null}
+                  style={{ ...btnGhost, display: "inline-flex", alignItems: "center", gap: 6 }}
+                >
+                  {sendingVia === "email" && <Loader2 size={13} className="animate-spin" aria-hidden />}
+                  {t("clinical.prescriptionModal.actionEmail")}
+                </button>
+                <a
+                  href={createdRx.verifyUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ ...btnGhost, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
+                >
+                  {t("clinical.prescriptionModal.actionVerify")}
+                </a>
+              </div>
             </div>
           ) : (
-            <div style={{ fontSize: 11, color: "var(--text-3)", padding: "6px 4px" }}>
-              {t("clinical.prescriptionModal.noCert")}
-            </div>
+            <>
+              <div>
+                <label style={labelStyle}>{t("clinical.prescriptionModal.medicationsLabel")}</label>
+                <CumsSelector items={items} onChange={setItems} disabled={submitting} />
+              </div>
+
+              {cofeprisGroup && (
+                <div style={{ padding: "8px 12px", background: "rgba(220, 38, 38, 0.08)", border: "1px solid rgba(220, 38, 38, 0.30)", borderRadius: 8, fontSize: 12, color: "#b91c1c" }}>
+                  <strong>{t("clinical.prescriptionModal.controlledSubstance", { group: cofeprisGroup })}</strong>{" "}
+                  {t("clinical.prescriptionModal.legalValidity", { eta: t(COFEPRIS_ETA_KEY[cofeprisGroup] ?? "clinical.prescriptionModal.eta180d") })}
+                </div>
+              )}
+
+              <div>
+                <label style={labelStyle}>{t("clinical.prescriptionModal.diagnosisLabel")}</label>
+                <textarea
+                  className="input-new"
+                  style={{ minHeight: 56, padding: "10px 12px", resize: "vertical", width: "100%" }}
+                  placeholder={t("clinical.prescriptionModal.diagnosisPlaceholder")}
+                  value={diagnosis}
+                  onChange={(e) => setDiagnosis(e.target.value)}
+                  disabled={submitting}
+                />
+              </div>
+
+              <div>
+                <label style={labelStyle}>{t("clinical.prescriptionModal.generalIndicationsLabel")}</label>
+                <textarea
+                  className="input-new"
+                  style={{ minHeight: 64, padding: "10px 12px", resize: "vertical", width: "100%" }}
+                  placeholder={t("clinical.prescriptionModal.indicationsPlaceholder")}
+                  value={indications}
+                  onChange={(e) => setIndications(e.target.value)}
+                  disabled={submitting}
+                />
+              </div>
+
+              <div>
+                <label style={labelStyle}>{t("clinical.prescriptionModal.validityLabel")}</label>
+                <input
+                  type="date"
+                  className="input-new"
+                  style={{ width: "100%" }}
+                  min={new Date().toISOString().slice(0, 10)}
+                  value={validUntil}
+                  onChange={(e) => setValidUntil(e.target.value)}
+                  disabled={submitting}
+                />
+                <span style={{ display: "block", fontSize: 11, color: "var(--text-3)", marginTop: 4 }}>
+                  {t("clinical.prescriptionModal.validityHint")}
+                </span>
+              </div>
+
+              {cofeprisGroup && (cofeprisGroup === "I" || cofeprisGroup === "II") && (
+                <div>
+                  <label style={labelStyle}>{t("clinical.prescriptionModal.cofeprisFolioLabel", { group: cofeprisGroup })}</label>
+                  <input
+                    className="input-new"
+                    style={{ width: "100%" }}
+                    placeholder={t("clinical.prescriptionModal.cofeprisFolioPlaceholder")}
+                    value={cofeprisFolio}
+                    onChange={(e) => setCofeprisFolio(e.target.value.trim())}
+                    disabled={submitting}
+                  />
+                </div>
+              )}
+
+              {/* Firma electrónica opcional */}
+              {cert ? (
+                <div style={{ padding: 12, background: "rgba(16, 185, 129, 0.06)", border: "1px solid rgba(16, 185, 129, 0.30)", borderRadius: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
+                    <input type="checkbox" checked={signCheck} onChange={(e) => setSignCheck(e.target.checked)} disabled={submitting} />
+                    <ShieldCheck size={14} aria-hidden style={{ color: "#059669" }} />
+                    {t("clinical.prescriptionModal.signWithFiel")}
+                  </label>
+                  {signCheck && (
+                    <input
+                      type="password"
+                      className="input-new"
+                      style={{ width: "100%" }}
+                      placeholder={t("clinical.prescriptionModal.keyPasswordPlaceholder")}
+                      value={keyPassword}
+                      onChange={(e) => setKeyPassword(e.target.value)}
+                      disabled={submitting}
+                      autoComplete="off"
+                    />
+                  )}
+                  <span style={{ fontSize: 11, color: "var(--text-3)" }}>
+                    {t("clinical.prescriptionModal.certValidUntil", { date: new Date(cert.validUntil).toLocaleDateString("es-MX") })}
+                  </span>
+                </div>
+              ) : (
+                <div style={{ fontSize: 11, color: "var(--text-3)", padding: "6px 4px" }}>
+                  {t("clinical.prescriptionModal.noCert")}
+                </div>
+              )}
+            </>
           )}
         </div>
 
         <footer style={{ padding: "14px 20px", borderTop: "1px solid var(--border-soft)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button type="button" onClick={onClose} disabled={submitting} style={btnGhost}>{t("common.cancel")}</button>
-          <button type="button" onClick={submit} disabled={submitting || items.length === 0} style={btnPrimary}>
-            {submitting ? <><Loader2 size={13} className="animate-spin" /> {t("common.saving")}</> : <><Save size={13} aria-hidden /> {t("clinical.prescriptionModal.createPrescription")}</>}
-          </button>
+          {createdRx ? (
+            <button type="button" onClick={onClose} style={btnPrimary}>{t("clinical.prescriptionModal.done")}</button>
+          ) : (
+            <>
+              <button type="button" onClick={onClose} disabled={submitting} style={btnGhost}>{t("common.cancel")}</button>
+              <button type="button" onClick={submit} disabled={submitting || items.length === 0} style={btnPrimary}>
+                {submitting ? <><Loader2 size={13} className="animate-spin" /> {t("common.saving")}</> : <><Save size={13} aria-hidden /> {t("clinical.prescriptionModal.createPrescription")}</>}
+              </button>
+            </>
+          )}
         </footer>
       </div>
     </div>

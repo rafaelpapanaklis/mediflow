@@ -19,7 +19,7 @@ export default async function VerifyPrescriptionPage({ params }: PageProps) {
   const rx = await prisma.prescription.findUnique({
     where: { id: params.id },
     include: {
-      patient: { select: { firstName: true, lastName: true, dob: true, gender: true, curp: true } },
+      patient: { select: { firstName: true, lastName: true } },
       doctor:  {
         select: {
           firstName: true,
@@ -68,6 +68,23 @@ export default async function VerifyPrescriptionPage({ params }: PageProps) {
         {expired ? "⚠ Receta vencida — no debe ser surtida" : "✓ Receta válida y vigente"}
       </div>
 
+      <a
+        href={`/api/prescriptions/${rx.id}/verify/pdf`}
+        style={{
+          display: "inline-block",
+          padding: "10px 16px",
+          background: "#7c3aed",
+          color: "#fff",
+          borderRadius: 10,
+          fontWeight: 700,
+          fontSize: 14,
+          textDecoration: "none",
+          marginBottom: 20,
+        }}
+      >
+        Descargar receta (PDF)
+      </a>
+
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Receta médica electrónica</h1>
       <p style={{ fontSize: 12, color: "#64748b", marginBottom: 28 }}>
         Folio: <code style={{ fontFamily: "monospace" }}>{rx.qrCode}</code>
@@ -93,11 +110,6 @@ export default async function VerifyPrescriptionPage({ params }: PageProps) {
 
       <Section title="Paciente">
         <p><b>{patientFullName}</b></p>
-        {rx.patient.curp && <p>CURP: <code style={{ fontFamily: "monospace" }}>{rx.patient.curp}</code></p>}
-        {rx.patient.dob && (
-          <p>Fecha de nacimiento: {new Date(rx.patient.dob).toLocaleDateString("es-MX")}</p>
-        )}
-        <p>Sexo: {rx.patient.gender === "M" ? "Masculino" : rx.patient.gender === "F" ? "Femenino" : "Otro"}</p>
       </Section>
 
       <Section title="Medicamentos prescritos">
@@ -140,7 +152,7 @@ export default async function VerifyPrescriptionPage({ params }: PageProps) {
       </Section>
 
       <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 32, textAlign: "center" }}>
-        Documento verificable en {rx.verifyUrl}
+        Documento verificable en {rx.verifyUrl} · Verificación provista por DaleControl
       </p>
     </main>
   );

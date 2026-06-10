@@ -681,7 +681,7 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
       <PrescriptionModal
         open={rxOpen}
         patientId={patientId}
-        medicalRecordId={null}
+        medicalRecordId={initialRecord?.id ?? null}
         onClose={() => setRxOpen(false)}
         onCreated={(rx) => setRxResult(rx)}
       />

@@ -85,11 +85,15 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { medicalRecordId, patientId, items, indications, cofeprisGroup, cofeprisFolio, expiresAt: expiresAtOverride } = body;
+  const { medicalRecordId, patientId, items, indications, diagnosis, cofeprisGroup, cofeprisFolio, expiresAt: expiresAtOverride } = body;
   const medicationsLegacy = body.medications;
 
   if (!patientId) {
     return NextResponse.json({ error: "patientId requerido" }, { status: 400 });
+  }
+
+  if (diagnosis !== undefined && diagnosis !== null && typeof diagnosis !== "string") {
+    return NextResponse.json({ error: "diagnosis_invalid" }, { status: 400 });
   }
 
   // Multi-tenant: el paciente debe pertenecer a la clínica del usuario.
@@ -167,6 +171,7 @@ export async function POST(req: NextRequest) {
         clinicId: ctx.clinicId,
         medications: medicationsLegacy ?? itemsArray, // legacy JSON snapshot
         indications: indications ?? null,
+        diagnosis: (typeof diagnosis === "string" && diagnosis.trim()) ? diagnosis.trim().slice(0, 2000) : null,
         qrCode,
         verifyUrl: "",
         cofeprisGroup: cofeprisGroup ?? null,
