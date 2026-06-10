@@ -102,6 +102,11 @@ model Clinic {
   postApptFollowupActive Boolean   @default(false) // seguimiento post-cita por WhatsApp
   noShowTaskActive       Boolean   @default(false) // tarea de staff por riesgo de no-show
 
+  // Cambios de cita desde el portal del paciente (WS1-T5). Si autoApprove está
+  // OFF, las solicitudes quedan PENDING hasta que la clínica las resuelva.
+  patientChangesAutoApprove Boolean @default(false)
+  patientChangesMinHours    Int     @default(24) // ventana mínima en horas
+
   // Landing page
   landingActive       Boolean  @default(false)
   landingThemeColor   String?  @default("#2563eb")
@@ -157,6 +162,7 @@ model Clinic {
   users                User[]
   patients             Patient[]
   appointments         Appointment[]
+  appointmentChangeRequests AppointmentChangeRequest[]
   records              MedicalRecord[]
   invoices             Invoice[]
   schedules            ClinicSchedule[]
@@ -995,6 +1001,7 @@ model User {
   adminNotesAuthored AdminClinicNote[]
   prescriptions      Prescription[]
   apptsOverriddenBy  Appointment[]       @relation("ApptOverriddenBy")
+  resolvedChangeRequests AppointmentChangeRequest[] @relation("ApptChangeResolvedBy")
   waitlistCreated    WaitlistEntry[]     @relation("WaitlistCreatedBy")
   waitlistPreferred  WaitlistEntry[]     @relation("WaitlistPreferredDoctor")
   inboxAssigned      InboxThread[]       @relation("InboxAssignee")
@@ -1134,6 +1141,7 @@ model Patient {
   clinic              Clinic               @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   primaryDoctor       User?                @relation("PrimaryDoctor", fields: [primaryDoctorId], references: [id])
   appointments        Appointment[]
+  appointmentChangeRequests AppointmentChangeRequest[]
   records             MedicalRecord[]
   invoices            Invoice[]
   files               PatientFile[]
@@ -1476,6 +1484,7 @@ model Appointment {
   invoice              Invoice?
   odontogramSnapshot   OdontogramSnapshot?
   reminders            WhatsAppReminder[]
+  changeRequests       AppointmentChangeRequest[]
   // Analytics relations (Push 1)
   timeline             AppointmentTimeline?
   noShowPrediction     NoShowPrediction?
@@ -1514,6 +1523,36 @@ enum AppointmentStatus {
   CHECKED_OUT
   CANCELLED
   NO_SHOW
+}
+
+model AppointmentChangeRequest {
+  id            String  @id @default(cuid())
+  clinicId      String
+  appointmentId String
+  patientId     String
+  accountId     String // PatientAccount.id que solicitó (audit de quién pidió)
+  type          String // "RESCHEDULE" | "CANCEL" — String a propósito, sin enum PG
+  status        String  @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED"
+  reason        String? @db.VarChar(500)
+  proposedStartsAt DateTime? @db.Timestamptz(6)
+  proposedEndsAt   DateTime? @db.Timestamptz(6)
+  autoApproved   Boolean   @default(false)
+  resolvedById   String?
+  resolvedAt     DateTime? @db.Timestamptz(6)
+  resolutionNote String?   @db.VarChar(500)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clinic      Clinic      @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patient     Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  resolvedBy  User?       @relation("ApptChangeResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  // Nota: en SQL existe además un UNIQUE parcial (un solo PENDING por cita),
+  // que Prisma no puede declarar: sql/reagendar-citas.sql.
+  @@index([clinicId, status, createdAt])
+  @@index([appointmentId, status])
+  @@map("appointment_change_requests")
 }
 
 model MedicalRecord {

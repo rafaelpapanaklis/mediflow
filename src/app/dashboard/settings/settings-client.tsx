@@ -76,6 +76,9 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
     Object.fromEntries((initClinic.schedules ?? []).map((s: any) => [s.dayOfWeek, { enabled:s.enabled, open:s.openTime, close:s.closeTime }]))
   );
   const [pwForm,   setPwForm]   = useState({ current:"", next:"", confirm:"" });
+  // Portal del paciente — cambios de cita (WS1-T5). Draft local del input de
+  // horas; se guarda al blur. `?? 24` tolera clínicas sin los campos nuevos.
+  const [minHoursDraft, setMinHoursDraft] = useState<string>(String(initClinic.patientChangesMinHours ?? 24));
 
   // Show toast feedback from Google Calendar OAuth redirect
   useEffect(() => {
@@ -141,6 +144,46 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       toast.success("Automatización actualizada");
     } catch {
       setClinic((c: any) => ({ ...c, ...Object.fromEntries(Object.keys(patch).map(k => [k, !patch[k]])) }));
+      toast.error("Error al guardar");
+    }
+  }
+
+  // Portal del paciente — cambios de cita (WS1-T5). Mismo patrón optimista
+  // de saveAutomation: guardado inmediato, revierte si falla.
+  async function savePortalAutoApprove(next: boolean) {
+    setClinic((c: any) => ({ ...c, patientChangesAutoApprove: next }));
+    try {
+      const res = await fetch("/api/clinic", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ patientChangesAutoApprove: next }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("Configuración del portal actualizada");
+    } catch {
+      setClinic((c: any) => ({ ...c, patientChangesAutoApprove: !next }));
+      toast.error("Error al guardar");
+    }
+  }
+
+  // Ventana mínima en horas (0..720) para que un paciente pida cambios.
+  // Guarda al blur; clamp local espejo del clamp del endpoint.
+  async function savePortalMinHours() {
+    const prev = clinic.patientChangesMinHours ?? 24;
+    const parsed = parseInt(minHoursDraft, 10);
+    const next = Number.isNaN(parsed) ? 24 : Math.max(0, Math.min(720, parsed));
+    setMinHoursDraft(String(next));
+    if (next === prev) return;
+    setClinic((c: any) => ({ ...c, patientChangesMinHours: next }));
+    try {
+      const res = await fetch("/api/clinic", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ patientChangesMinHours: next }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("Configuración del portal actualizada");
+    } catch {
+      setClinic((c: any) => ({ ...c, patientChangesMinHours: prev }));
+      setMinHoursDraft(String(prev));
       toast.error("Error al guardar");
     }
   }
@@ -282,6 +325,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
 
       {/* ── CLÍNICA ── */}
       {tab === "clinica" && (
+        <>
         <div className="bg-card border border-border rounded-2xl p-6 shadow-card max-w-lg space-y-4">
           <h2 className="text-base font-bold">{t("settings.client.clinicDataTitle")}</h2>
           <div className="space-y-1.5">
@@ -386,6 +430,47 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             <Button onClick={saveClinic} disabled={saving}>{saving ? t("common.saving") : t("common.saveChanges")}</Button>
           </div>
         </div>
+
+        {/* Portal del paciente — cambios de cita (WS1-T5). Solo admins: el
+            PATCH /api/clinic rechaza otros roles y estos toggles guardan al
+            instante. */}
+        {isAdminUser && (
+          <div className="bg-card border border-border rounded-2xl p-6 shadow-card max-w-lg mt-5 space-y-4">
+            <div>
+              <h2 className="text-base font-bold">Portal del paciente — cambios de cita</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Controla cómo se manejan las solicitudes de reagendar o cancelar que tus pacientes envían desde su portal.
+              </p>
+            </div>
+            <div className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-colors ${clinic.patientChangesAutoApprove ? "border-violet-500 bg-violet-600/10" : "border-border bg-transparent"}`}>
+              <div className="pr-4">
+                <div className={`text-sm font-bold ${clinic.patientChangesAutoApprove ? "text-violet-700 dark:text-violet-300" : "text-foreground"}`}>Auto-aprobar cambios de pacientes</div>
+                <div className="text-xs mt-0.5 text-muted-foreground">Si está apagado, las solicitudes llegan a tu agenda para aprobarlas.</div>
+              </div>
+              <button type="button" onClick={() => savePortalAutoApprove(!(clinic.patientChangesAutoApprove ?? false))}
+                className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors ${clinic.patientChangesAutoApprove ? "bg-violet-600" : "bg-muted-foreground/30"}`}>
+                <div className="absolute top-0.5 w-5 h-5 rounded-full bg-card shadow-sm transition-all" style={{ left: clinic.patientChangesAutoApprove ? "22px" : "2px" }} />
+              </button>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Ventana mínima (horas)</Label>
+              <Input
+                type="number"
+                min={0}
+                max={720}
+                step={1}
+                value={minHoursDraft}
+                onChange={e => setMinHoursDraft(e.target.value)}
+                onBlur={savePortalMinHours}
+                onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+              />
+              <div className="text-[11px] text-muted-foreground">
+                Los pacientes no pueden pedir cambios a menos de estas horas de su cita.
+              </div>
+            </div>
+          </div>
+        )}
+        </>
       )}
 
       {/* ── SERVICIOS POR DOCTOR ── */}

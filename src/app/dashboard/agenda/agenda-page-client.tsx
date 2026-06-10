@@ -30,6 +30,7 @@ import { AgendaWeekView } from "@/components/dashboard/agenda/agenda-week-view";
 import { AgendaResourcesModal } from "@/components/dashboard/agenda/agenda-resources-modal";
 import { AgendaRescheduleConfirmModal } from "@/components/dashboard/agenda/agenda-reschedule-confirm-modal";
 import { AgendaValidateBanner } from "@/components/dashboard/agenda/agenda-validate-banner";
+import { ChangeRequestsPanel } from "@/components/dashboard/change-requests-panel";
 import { AgendaWaitlistSidebar } from "@/components/dashboard/agenda/agenda-waitlist-sidebar";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
@@ -377,9 +378,18 @@ function AgendaShell({ highlightId }: { highlightId: string | null }) {
     setPendingReschedule(null);
   }, [rescheduling]);
 
+  // WS1-T5: tras aprobar/rechazar una solicitud de cambio del portal, la cita
+  // cambió en el server. Mismo mecanismo que AgendaValidateBanner: limpiar el
+  // cache SWR de rangos + router.refresh() para rehidratar initialPayload.
+  const handleChangeRequestResolved = useCallback(() => {
+    invalidateRangeCache();
+    router.refresh();
+  }, [invalidateRangeCache, router]);
+
   const body = (
     <div className={styles.body}>
       <AgendaValidateBanner />
+      <ChangeRequestsPanel onResolved={handleChangeRequestResolved} />
       {state.viewMode === "list" ? (
         <AgendaListView />
       ) : state.viewMode === "month" ? (

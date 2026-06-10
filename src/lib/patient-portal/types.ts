@@ -18,6 +18,12 @@
 //   · PATCH /api/paciente/profile     → 200 { ok } | 400 | 401
 //   · GET  /api/paciente/summary      → 200 PacienteSummaryResponse | 401
 //   · GET  /api/paciente/appointments → 200 PacienteCitasResponse | 401
+//   · GET  /api/paciente/appointments/[id]/slots?date=YYYY-MM-DD (WS1-T5)
+//                                     → 200 { date, timezone, durationMin,
+//                                        slots: "HH:mm"[] } | 400 | 401 | 404 | 422
+//   · POST /api/paciente/appointments/[id]/change-request (WS1-T5)
+//                                     → 200 { ok, autoApproved, status } | 400
+//                                       | 401 | 404 | 409 | 422
 //   · GET  /api/paciente/history      → 200 PacienteHistorialResponse | 401
 //   · GET  /api/paciente/payments     → 200 PacientePagosResponse | 401
 //
@@ -128,6 +134,21 @@ export interface PacienteClinica {
   patientNumber: string;
 }
 
+/** Solicitud de cambio PENDING de una cita (reagendar/cancelar, WS1-T5). */
+export interface PacienteCambioPendiente {
+  id: string;
+  type: "RESCHEDULE" | "CANCEL";
+  proposedStartsAt: string | null;
+  createdAt: string;
+}
+
+/** Política de cambios de citas por clínica (ventana mínima + auto-aprobación). */
+export interface PacientePoliticaCambios {
+  clinicId: string;
+  minHours: number;
+  autoApprove: boolean;
+}
+
 export interface PacienteCita {
   id: string;
   clinicId: string;
@@ -137,6 +158,11 @@ export interface PacienteCita {
   startsAt: string; // ISO UTC
   endsAt: string; // ISO UTC
   doctorName: string;
+  /**
+   * Solicitud de cambio PENDING de esta cita, o null. Solo la puebla
+   * /api/paciente/appointments en `upcoming`; otros endpoints (summary) la omiten.
+   */
+  pendingChange?: PacienteCambioPendiente | null;
 }
 
 /** Consulta paciente-safe: solo que hubo visita y con quién. CERO SOAP. */
@@ -201,6 +227,8 @@ export interface PacienteCitasResponse {
   upcoming: PacienteCita[];
   /** startsAt < ahora o canceladas, descendente, máx 100. */
   past: PacienteCita[];
+  /** Política de cambios por clínica de los links (WS1-T5). */
+  policies: PacientePoliticaCambios[];
 }
 
 export interface PacienteHistorialResponse {

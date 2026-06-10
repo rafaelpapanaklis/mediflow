@@ -7,13 +7,18 @@
 //   doctor { firstName, lastName } → doctorName ("Dr/a. Nombre Apellido" NO —
 //   solo "Nombre Apellido", el prefijo lo pone la UI si quiere).
 // · NUNCA: notes, price, tokens de telemedicina, overrideReason, etc.
+// · WS1-T5: cada cita de `upcoming` trae `pendingChange` (solicitud PENDING de
+//   esa cita o null, UNA query extra) y el response trae `policies` (por
+//   clínica de los links: minHours + autoApprove). En `past` siempre null.
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getPatientPortalContext, pacienteUnauthorized } from "@/lib/patient-portal/guard";
 import type {
+  PacienteCambioPendiente,
   PacienteCita,
   PacienteCitasResponse,
   PacienteClinica,
+  PacientePoliticaCambios,
 } from "@/lib/patient-portal/types";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +44,7 @@ type CitaRow = {
   doctor: { firstName: string; lastName: string };
 };
 
-function toCita(a: CitaRow): PacienteCita {
+function toCita(a: CitaRow, pendingChange: PacienteCambioPendiente | null): PacienteCita {
   return {
     id: a.id,
     clinicId: a.clinicId,
@@ -48,6 +53,7 @@ function toCita(a: CitaRow): PacienteCita {
     startsAt: a.startsAt.toISOString(),
     endsAt: a.endsAt.toISOString(),
     doctorName: `${a.doctor.firstName} ${a.doctor.lastName}`,
+    pendingChange,
   };
 }
 
@@ -69,7 +75,16 @@ export async function GET() {
             id: true,
             patientNumber: true,
             clinic: {
-              select: { id: true, name: true, slug: true, logoUrl: true, city: true, phone: true },
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                logoUrl: true,
+                city: true,
+                phone: true,
+                patientChangesMinHours: true,
+                patientChangesAutoApprove: true,
+              },
             },
           },
         },
@@ -100,6 +115,35 @@ export async function GET() {
     }),
   ]);
 
+  // WS1-T5: solicitudes PENDING de las citas próximas en UNA sola query extra.
+  // Scope multi-tenant doble: ids de citas ya filtradas por la sesión + patientIds.
+  const pendingByAppt = new Map<string, PacienteCambioPendiente>();
+  const upcomingIds = upcomingRows.map((a) => a.id);
+  if (upcomingIds.length > 0) {
+    const pendingRows = await prisma.appointmentChangeRequest.findMany({
+      where: {
+        appointmentId: { in: upcomingIds },
+        patientId: { in: patientIds },
+        status: "PENDING",
+      },
+      select: {
+        id: true,
+        appointmentId: true,
+        type: true,
+        proposedStartsAt: true,
+        createdAt: true,
+      },
+    });
+    for (const r of pendingRows) {
+      pendingByAppt.set(r.appointmentId, {
+        id: r.id,
+        type: r.type as PacienteCambioPendiente["type"],
+        proposedStartsAt: r.proposedStartsAt ? r.proposedStartsAt.toISOString() : null,
+        createdAt: r.createdAt.toISOString(),
+      });
+    }
+  }
+
   const clinics: PacienteClinica[] = links.map((l) => ({
     clinicId: l.clinicId,
     clinicName: l.patient.clinic.name,
@@ -111,10 +155,23 @@ export async function GET() {
     patientNumber: l.patient.patientNumber,
   }));
 
+  // WS1-T5: política de cambios por clínica (deduplicada por clinicId).
+  const policiesMap = new Map<string, PacientePoliticaCambios>();
+  for (const l of links) {
+    if (!policiesMap.has(l.clinicId)) {
+      policiesMap.set(l.clinicId, {
+        clinicId: l.clinicId,
+        minHours: l.patient.clinic.patientChangesMinHours ?? 24,
+        autoApprove: l.patient.clinic.patientChangesAutoApprove ?? false,
+      });
+    }
+  }
+
   const body: PacienteCitasResponse = {
     clinics,
-    upcoming: upcomingRows.map(toCita),
-    past: pastRows.map(toCita),
+    upcoming: upcomingRows.map((a) => toCita(a, pendingByAppt.get(a.id) ?? null)),
+    past: pastRows.map((a) => toCita(a, null)),
+    policies: Array.from(policiesMap.values()),
   };
   return NextResponse.json(body);
 }

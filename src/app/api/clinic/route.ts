@@ -77,6 +77,15 @@ export async function PATCH(req: NextRequest) {
   if (body.birthdayMsgActive      !== undefined) data.birthdayMsgActive      = Boolean(body.birthdayMsgActive);
   if (body.postApptFollowupActive !== undefined) data.postApptFollowupActive = Boolean(body.postApptFollowupActive);
   if (body.noShowTaskActive       !== undefined) data.noShowTaskActive       = Boolean(body.noShowTaskActive);
+  // Portal del paciente — cambios de cita (WS1-T5). Auto-aprobar (default
+  // false) + ventana mínima en horas (clamp 0..720, fallback 24 si NaN).
+  if (body.patientChangesAutoApprove !== undefined) {
+    data.patientChangesAutoApprove = Boolean(body.patientChangesAutoApprove);
+  }
+  if (body.patientChangesMinHours !== undefined) {
+    const hours = parseInt(body.patientChangesMinHours, 10);
+    data.patientChangesMinHours = Number.isNaN(hours) ? 24 : Math.max(0, Math.min(720, hours));
+  }
 
   const updated = await prisma.clinic.update({
     where: { id: dbUser.clinicId },

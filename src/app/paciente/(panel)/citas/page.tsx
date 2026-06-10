@@ -11,7 +11,7 @@
 //   (width 100%, sin min-width que corte).
 import { useState } from "react";
 import { usePacienteData } from "@/lib/patient-portal/use-paciente";
-import type { PacienteCitasResponse } from "@/lib/patient-portal/types";
+import type { PacienteCita, PacienteCitasResponse } from "@/lib/patient-portal/types";
 import {
   PacienteCard,
   PacienteEmptyState,
@@ -20,18 +20,25 @@ import {
   clinicName,
   formatFechaHora,
 } from "@/components/paciente/ui";
+import { ReagendarModal } from "@/components/paciente/reagendar-modal";
+import { CancelarModal } from "@/components/paciente/cancelar-modal";
 
 const GAP = "clamp(12px, 2vw, 20px)";
 const GRID_COLS = "repeat(auto-fit, minmax(min(100%, 340px), 1fr))";
 const H2_STYLE = { margin: 0, fontSize: "clamp(15px, 1.8vw, 17px)", fontWeight: 600, opacity: 0.9 };
 const MUTED = "rgba(255,255,255,0.65)";
 const FAINT = "rgba(255,255,255,0.5)";
+/** Estados de cita que el paciente puede reagendar/cancelar. */
+const CHANGEABLE_STATUSES = ["PENDING", "SCHEDULED", "CONFIRMED"];
 
 export default function PacienteCitasPage() {
   const { data, error, isLoading, mutate } = usePacienteData<PacienteCitasResponse>(
     "/api/paciente/appointments"
   );
   const [clinicId, setClinicId] = useState<string | null>(null);
+  const [sel, setSel] = useState<{ cita: PacienteCita; kind: "reagendar" | "cancelar" } | null>(
+    null
+  );
 
   const clinics = data ? data.clinics : [];
   const multiClinic = clinics.length > 1;
@@ -39,6 +46,11 @@ export default function PacienteCitasPage() {
     (c) => !clinicId || c.clinicId === clinicId
   );
   const past = (data ? data.past : []).filter((c) => !clinicId || c.clinicId === clinicId);
+
+  // Política de la clínica de la cita seleccionada (para los modales).
+  const selPol =
+    sel && data ? data.policies?.find((p) => p.clinicId === sel.cita.clinicId) : undefined;
+  const selAutoApprove = selPol?.autoApprove ?? false;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: GAP, width: "100%", minWidth: 0 }}>
@@ -106,39 +118,126 @@ export default function PacienteCitasPage() {
               <PacienteEmptyState message="No tienes citas próximas" />
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: GRID_COLS, gap: GAP }}>
-                {upcoming.map((cita) => (
-                  <PacienteCard key={cita.id} style={{ width: "100%" }}>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "flex-start",
-                          justifyContent: "space-between",
-                          gap: 8,
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <span
+                {upcoming.map((cita) => {
+                  const pol = data.policies?.find((p) => p.clinicId === cita.clinicId);
+                  const minHours = pol?.minHours ?? 24;
+                  const changeable = CHANGEABLE_STATUSES.includes(cita.status);
+                  const inWindow =
+                    new Date(cita.startsAt).getTime() - Date.now() > minHours * 3600000;
+
+                  return (
+                    <PacienteCard key={cita.id} style={{ width: "100%" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+                        <div
                           style={{
-                            fontSize: "clamp(16px, 2vw, 20px)",
-                            fontWeight: 700,
-                            lineHeight: 1.25,
+                            display: "flex",
+                            alignItems: "flex-start",
+                            justifyContent: "space-between",
+                            gap: 8,
+                            flexWrap: "wrap",
                           }}
                         >
-                          {formatFechaHora(cita.startsAt)}
-                        </span>
-                        <StatusBadge kind="cita" value={cita.status} />
+                          <span
+                            style={{
+                              fontSize: "clamp(16px, 2vw, 20px)",
+                              fontWeight: 700,
+                              lineHeight: 1.25,
+                            }}
+                          >
+                            {formatFechaHora(cita.startsAt)}
+                          </span>
+                          <StatusBadge kind="cita" value={cita.status} />
+                        </div>
+                        <span style={{ fontSize: 14, fontWeight: 600 }}>{cita.type}</span>
+                        <span style={{ fontSize: 13, color: MUTED }}>Con {cita.doctorName}</span>
+                        {multiClinic && (
+                          <span style={{ fontSize: 12, color: FAINT }}>
+                            {clinicName(clinics, cita.clinicId)}
+                          </span>
+                        )}
+                        {cita.pendingChange ? (
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              alignItems: "flex-start",
+                              gap: 4,
+                              marginTop: 4,
+                            }}
+                          >
+                            <span
+                              style={{
+                                display: "inline-block",
+                                fontSize: 11,
+                                fontWeight: 600,
+                                padding: "3px 10px",
+                                borderRadius: 999,
+                                whiteSpace: "nowrap",
+                                color: "#fbbf24",
+                                background: "rgba(251,191,36,0.12)",
+                              }}
+                            >
+                              Cambio solicitado
+                            </span>
+                            <span style={{ fontSize: 12, color: MUTED }}>
+                              {cita.pendingChange.type === "RESCHEDULE"
+                                ? `Propusiste: ${
+                                    cita.pendingChange.proposedStartsAt
+                                      ? formatFechaHora(cita.pendingChange.proposedStartsAt)
+                                      : "nueva fecha"
+                                  }`
+                                : "Pediste cancelarla"}
+                            </span>
+                            <span style={{ fontSize: 12, color: FAINT }}>
+                              En revisión por la clínica
+                            </span>
+                          </div>
+                        ) : changeable && inWindow ? (
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                            <button
+                              type="button"
+                              onClick={() => setSel({ cita, kind: "reagendar" })}
+                              style={{
+                                padding: "6px 14px",
+                                borderRadius: 10,
+                                fontSize: 12.5,
+                                fontWeight: 600,
+                                fontFamily: "inherit",
+                                cursor: "pointer",
+                                background: "transparent",
+                                border: "1px solid #8b5cf6",
+                                color: "#c4b5fd",
+                              }}
+                            >
+                              Reagendar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSel({ cita, kind: "cancelar" })}
+                              style={{
+                                padding: "6px 14px",
+                                borderRadius: 10,
+                                fontSize: 12.5,
+                                fontWeight: 600,
+                                fontFamily: "inherit",
+                                cursor: "pointer",
+                                background: "transparent",
+                                border: "1px solid transparent",
+                                color: "#f87171",
+                              }}
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        ) : changeable ? (
+                          <span style={{ fontSize: 12, color: FAINT, marginTop: 4 }}>
+                            Para cambios a menos de {minHours} h, contacta a la clínica.
+                          </span>
+                        ) : null}
                       </div>
-                      <span style={{ fontSize: 14, fontWeight: 600 }}>{cita.type}</span>
-                      <span style={{ fontSize: 13, color: MUTED }}>Con {cita.doctorName}</span>
-                      {multiClinic && (
-                        <span style={{ fontSize: 12, color: FAINT }}>
-                          {clinicName(clinics, cita.clinicId)}
-                        </span>
-                      )}
-                    </div>
-                  </PacienteCard>
-                ))}
+                    </PacienteCard>
+                  );
+                })}
               </div>
             )}
           </section>
@@ -182,6 +281,27 @@ export default function PacienteCitasPage() {
               </PacienteCard>
             )}
           </section>
+        </>
+      )}
+
+      {sel && (
+        <>
+          <ReagendarModal
+            cita={sel.cita}
+            clinicNombre={clinicName(clinics, sel.cita.clinicId)}
+            autoApprove={selAutoApprove}
+            open={sel.kind === "reagendar"}
+            onClose={() => setSel(null)}
+            onDone={() => mutate()}
+          />
+          <CancelarModal
+            cita={sel.cita}
+            clinicNombre={clinicName(clinics, sel.cita.clinicId)}
+            autoApprove={selAutoApprove}
+            open={sel.kind === "cancelar"}
+            onClose={() => setSel(null)}
+            onDone={() => mutate()}
+          />
         </>
       )}
     </div>
