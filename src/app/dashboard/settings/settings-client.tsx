@@ -10,6 +10,12 @@ import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { useT } from "@/i18n/i18n-provider";
 import toast from "react-hot-toast";
+import dynamic from "next/dynamic";
+
+const ClinicLocationPicker = dynamic(
+  () => import("@/components/dashboard/ClinicLocationPicker").then((m) => m.ClinicLocationPicker),
+  { ssr: false, loading: () => <div className="h-[260px] animate-pulse rounded-xl border border-border bg-muted/20" /> },
+);
 
 // Días de la semana: el id apunta a una llave i18n; la etiqueta visible se
 // resuelve con t(id) en el render (nunca a nivel de módulo).
@@ -109,7 +115,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
     try {
       const res = await fetch("/api/clinic", {
         method: "PATCH", headers: { "Content-Type":"application/json" },
-        body: JSON.stringify({ name:clinic.name, city:clinic.city, phone:clinic.phone, email:clinic.email, address:clinic.address, mapsUrl:clinic.mapsUrl, description:clinic.description, isPublic, category:clinic.category, clues:clinic.clues, timezone:clinic.timezone })
+        body: JSON.stringify({ name:clinic.name, city:clinic.city, phone:clinic.phone, email:clinic.email, address:clinic.address, mapsUrl:clinic.mapsUrl, description:clinic.description, isPublic, category:clinic.category, clues:clinic.clues, timezone:clinic.timezone, latitude: clinic.latitude ?? null, longitude: clinic.longitude ?? null })
       });
       if (!res.ok) throw new Error();
       toast.success(t("settings.client.clinicSavedToast"));
@@ -380,6 +386,18 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             <div className="text-[11px] text-muted-foreground">
               {t("settings.client.mapsLinkHelp")}
             </div>
+          </div>
+          <div className="space-y-1.5">
+            <ClinicLocationPicker
+              address={clinic.address}
+              city={clinic.city}
+              state={clinic.state}
+              initialLat={clinic.latitude ?? null}
+              initialLng={clinic.longitude ?? null}
+              onChange={(coords) =>
+                setClinic((c: any) => ({ ...c, latitude: coords?.lat ?? null, longitude: coords?.lng ?? null }))
+              }
+            />
           </div>
           <div className="space-y-1.5"><Label>{t("settings.client.phoneLabel")}</Label><Input value={clinic.phone ?? ""} onChange={e => setClinic((c: any) => ({ ...c, phone: e.target.value }))} /></div>
           <div className="space-y-1.5"><Label>{t("settings.client.contactEmailLabel")}</Label><Input type="email" value={clinic.email ?? ""} onChange={e => setClinic((c: any) => ({ ...c, email: e.target.value }))} /></div>

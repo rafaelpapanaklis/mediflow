@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { isValidLatLng } from "@/lib/directory/distance";
 
 async function getDbUser() {
   const supabase = createClient();
@@ -85,6 +86,17 @@ export async function PATCH(req: NextRequest) {
   if (body.patientChangesMinHours !== undefined) {
     const hours = parseInt(body.patientChangesMinHours, 10);
     data.patientChangesMinHours = Number.isNaN(hours) ? 24 : Math.max(0, Math.min(720, hours));
+  }
+  // Pin del mapa del directorio (WS2-T3). Se guarda el par completo o se limpia;
+  // nunca medio pin. Solo se toca si el cliente envía lat/lng (settings → Clínica).
+  if (body.latitude !== undefined || body.longitude !== undefined) {
+    if (isValidLatLng(body.latitude, body.longitude)) {
+      data.latitude = body.latitude;
+      data.longitude = body.longitude;
+    } else {
+      data.latitude = null;
+      data.longitude = null;
+    }
   }
 
   const updated = await prisma.clinic.update({

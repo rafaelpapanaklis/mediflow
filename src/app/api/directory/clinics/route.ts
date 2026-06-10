@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
+  DIRECTORY_MAP_MAX,
   DIRECTORY_PAGE_SIZE,
   getCategoryBySlug,
   type DirectoryClinic,
   type DirectoryClinicsResponse,
 } from "@/lib/directory/types";
+import { boundingBox, haversineKm, isValidLatLng, parseCoord } from "@/lib/directory/distance";
 
 // GET /api/directory/clinics — API pública del directorio (sin auth).
 // Query params:
@@ -47,6 +49,8 @@ function queryDirectoryClinics(where: any, skip: number, take: number) {
       state: true,
       address: true,
       phone: true,
+      latitude: true,
+      longitude: true,
       logoUrl: true,
       description: true,
       landingCoverUrl: true,
@@ -109,6 +113,8 @@ function toDirectoryClinic(row: any): DirectoryClinic {
     state: row.state,
     address: row.address,
     phone: row.phone,
+    latitude: row.latitude ?? null,
+    longitude: row.longitude ?? null,
     logoUrl: row.logoUrl,
     coverUrl: row.landingCoverUrl,
     description: row.description,
@@ -177,6 +183,84 @@ export async function GET(req: NextRequest) {
     const rawPage = parseInt(searchParams.get("page") ?? "1", 10);
     const page = Number.isFinite(rawPage) ? Math.min(500, Math.max(1, rawPage)) : 1;
 
+    // ── "Cerca de mí" + modo mapa ─────────────────────────────────────────────
+    // lat/lng (válidos) → orden por distancia + distanceKm en cada item.
+    // radius (km, opcional) → filtro duro (bounding box en SQL + círculo en JS).
+    // limit (opcional) → MODO MAPA: una sola página de hasta DIRECTORY_MAP_MAX
+    //   clínicas CON pin, para graficar markers.
+    const userLat = parseCoord(searchParams.get("lat"));
+    const userLng = parseCoord(searchParams.get("lng"));
+    const nearMode = isValidLatLng(userLat, userLng);
+
+    const rawRadius = parseCoord(searchParams.get("radius"));
+    const radiusKm = rawRadius != null ? Math.min(500, Math.max(1, rawRadius)) : null;
+
+    const rawLimit = parseInt(searchParams.get("limit") ?? "", 10);
+    const mapMode = Number.isFinite(rawLimit) && rawLimit > 0;
+    const limit = mapMode ? Math.min(DIRECTORY_MAP_MAX, Math.max(1, rawLimit)) : 0;
+
+    // Prisma/Postgres no ordena por Haversine sin PostGIS: cuando hay que ordenar
+    // por distancia, traemos hasta CANDIDATE_CAP filas y ordenamos en memoria.
+    // Acotado para no jalar toda la tabla; sobra para el directorio a esta escala.
+    const CANDIDATE_CAP = 500;
+    const distanceOf = (c: DirectoryClinic): number | null =>
+      c.latitude != null && c.longitude != null
+        ? Math.round(haversineKm(userLat as number, userLng as number, c.latitude, c.longitude) * 100) / 100
+        : null;
+
+    // ── MODO MAPA: solo clínicas con pin, hasta `limit`, una sola página ──────
+    if (mapMode) {
+      const mapWhere: any = { ...where, latitude: { not: null }, longitude: { not: null } };
+      if (nearMode && radiusKm != null) {
+        const box = boundingBox(userLat as number, userLng as number, radiusKm);
+        mapWhere.latitude = { gte: box.minLat, lte: box.maxLat };
+        mapWhere.longitude = { gte: box.minLng, lte: box.maxLng };
+      }
+      const [count, rows] = await Promise.all([
+        prisma.clinic.count({ where: mapWhere }),
+        queryDirectoryClinics(mapWhere, 0, nearMode ? CANDIDATE_CAP : limit),
+      ]);
+      let items = rows.map(toDirectoryClinic);
+      if (nearMode) {
+        items = items
+          .map((c) => ({ ...c, distanceKm: distanceOf(c) }))
+          .filter((c) => (radiusKm != null ? (c.distanceKm ?? Infinity) <= radiusKm : true))
+          .sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity))
+          .slice(0, limit);
+      }
+      const body: DirectoryClinicsResponse = {
+        items,
+        total: nearMode ? items.length : count,
+        page: 1,
+        pageSize: limit,
+        totalPages: 1,
+      };
+      return NextResponse.json(body, { headers: { "Cache-Control": CACHE_CONTROL } });
+    }
+
+    // ── MODO LISTA "cerca de mí": orden por distancia; conserva las sin pin ───
+    // Sin radio: las clínicas sin pin se mantienen (al final, sin "a X km").
+    // Con radio: solo las que caen dentro del radio (las sin pin quedan fuera).
+    if (nearMode) {
+      const rows = await queryDirectoryClinics({ ...where }, 0, CANDIDATE_CAP);
+      let items = rows.map(toDirectoryClinic).map((c) => ({ ...c, distanceKm: distanceOf(c) }));
+      if (radiusKm != null) {
+        items = items.filter((c) => c.distanceKm != null && c.distanceKm <= radiusKm);
+      }
+      items.sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity));
+      const total = items.length;
+      const start = (page - 1) * DIRECTORY_PAGE_SIZE;
+      const body: DirectoryClinicsResponse = {
+        items: items.slice(start, start + DIRECTORY_PAGE_SIZE),
+        total,
+        page,
+        pageSize: DIRECTORY_PAGE_SIZE,
+        totalPages: Math.ceil(total / DIRECTORY_PAGE_SIZE),
+      };
+      return NextResponse.json(body, { headers: { "Cache-Control": CACHE_CONTROL } });
+    }
+
+    // ── MODO NORMAL: paginación en SQL ────────────────────────────────────────
     // Exactamente 2 promesas (regla del repo: máx 7). Queries cortas — PgBouncer.
     const [total, rows] = await Promise.all([
       prisma.clinic.count({ where }),

@@ -279,6 +279,12 @@ model Clinic {
   affiliateId String?
   affiliate   Affiliate? @relation(fields: [affiliateId], references: [id])
 
+  // Geolocalizacion del directorio publico (/descubre) — pin del mapa "cerca de
+  // mi". Nullable: clinicas sin pin no salen en el mapa pero si en la lista.
+  // WS2-T3. Requiere sql/mapa-directorio.sql aplicado en Supabase.
+  latitude  Float?
+  longitude Float?
+
   @@map("clinics")
 }
 

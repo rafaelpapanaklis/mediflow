@@ -90,6 +90,25 @@ export function categoryLabel(category: string): string {
 export const DIRECTORY_API = "/api/directory/clinics";
 export const DIRECTORY_PAGE_SIZE = 12;
 
+// ── Mapa / "cerca de mí" ─────────────────────────────────────────────────────
+// La API acepta además (todos opcionales):
+//   lat,lng  — punto del usuario; activan orden por distancia + distanceKm.
+//   radius   — km; filtro duro opcional (bounding box + círculo). Sin radius,
+//              near-me solo ordena por distancia (no esconde clínicas lejanas).
+//   limit    — modo mapa: devuelve hasta DIRECTORY_MAP_MAX en una sola página.
+
+/** Tope de markers que la API devuelve en modo mapa (?limit=). Acota la query a un set plotable. */
+export const DIRECTORY_MAP_MAX = 200;
+
+/** Centro por defecto del mapa (CDMX) cuando no hay ubicación del usuario ni clínicas con pin. */
+export const MAP_DEFAULT_CENTER = { lat: 19.4326, lng: -99.1332 } as const;
+
+/** Punto geográfico simple (grados decimales). */
+export interface GeoPoint {
+  lat: number;
+  lng: number;
+}
+
 export interface DirectoryDoctor {
   id: string;
   firstName: string;
@@ -128,6 +147,11 @@ export interface DirectoryClinic {
   featuredServices: string[];
   doctors: DirectoryDoctor[];
   schedules: DirectorySchedule[];
+  /** Pin del mapa (grados decimales). null → la clínica no sale en el mapa, solo en lista. */
+  latitude: number | null;
+  longitude: number | null;
+  /** Distancia en km al punto del usuario; presente SOLO en modo "cerca de mí". */
+  distanceKm?: number | null;
 }
 
 export interface DirectoryClinicsResponse {

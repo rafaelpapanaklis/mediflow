@@ -4,6 +4,7 @@ import Link from "next/link";
 import { CalendarCheck, MapPin } from "lucide-react";
 import { categoryLabel, type DirectoryClinic } from "@/lib/directory/types";
 import { openBookingPopup } from "@/lib/directory/booking-state";
+import { formatDistanceEs } from "@/lib/directory/distance";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Card de clínica del directorio público (/descubre). Imágenes remotas con
@@ -91,6 +92,12 @@ export function ClinicCard({ clinic }: ClinicCardProps) {
           <MapPin size={14} className="shrink-0 text-[var(--b,#7c3aed)]" aria-hidden="true" />
           <span className="line-clamp-1">{location}</span>
         </p>
+
+        {clinic.distanceKm != null && formatDistanceEs(clinic.distanceKm) && (
+          <span className="self-start rounded-full bg-[var(--v50,#f5f3ff)] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--b2,#6d28d9)]">
+            {formatDistanceEs(clinic.distanceKm)}
+          </span>
+        )}
 
         {blurb && (
           <p className="line-clamp-2 text-[13px] leading-relaxed text-[var(--body,#475569)]">
