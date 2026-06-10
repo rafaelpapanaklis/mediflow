@@ -20,6 +20,7 @@ import {
   Calendar,
   FileText,
   CreditCard,
+  FolderOpen,
   User,
   LogOut,
 } from "lucide-react";
@@ -44,6 +45,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/paciente/citas", label: "Citas", icon: Calendar },
   { href: "/paciente/historial", label: "Historial", icon: FileText },
   { href: "/paciente/pagos", label: "Pagos", icon: CreditCard },
+  { href: "/paciente/documentos", label: "Documentos", icon: FolderOpen },
   { href: "/paciente/perfil", label: "Perfil", icon: User },
 ];
 
@@ -347,7 +349,7 @@ export function PacientePortalShell({ me, children }: PacientePortalShellProps) 
           left: 0,
           right: 0,
           zIndex: 30,
-          gridTemplateColumns: "repeat(5, 1fr)",
+          gridTemplateColumns: `repeat(${NAV_ITEMS.length}, 1fr)`,
           background: "rgba(11,8,21,0.96)",
           backdropFilter: "blur(10px)",
           WebkitBackdropFilter: "blur(10px)",
@@ -370,7 +372,10 @@ export function PacientePortalShell({ me, children }: PacientePortalShellProps) 
                 alignItems: "center",
                 gap: 3,
                 padding: "8px 2px 7px",
-                fontSize: 10.5,
+                // 6 items: el label más largo ("Documentos") debe caber en
+                // pantallas de 320px sin cortarse.
+                fontSize: "clamp(9px, 2.5vw, 10.5px)",
+                whiteSpace: "nowrap",
                 fontWeight: 500,
                 textDecoration: "none",
                 background: active ? "rgba(124,58,237,0.15)" : "transparent",

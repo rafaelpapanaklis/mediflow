@@ -30,7 +30,6 @@ export async function GET() {
     take: 100,
     select: {
       id: true,
-      patientId: true,
       clinicId: true,
       issuedAt: true,
       expiresAt: true,
@@ -59,7 +58,6 @@ export async function GET() {
   const now = Date.now();
   const recetas = list.map((rx) => ({
     id: rx.id,
-    patientId: rx.patientId,
     clinicId: rx.clinicId,
     clinicName: rx.clinic.name,
     doctorName: [rx.doctor.firstName, rx.doctor.lastName].filter(Boolean).join(" "),
@@ -83,5 +81,8 @@ export async function GET() {
     })),
   }));
 
-  return NextResponse.json({ recetas });
+  return NextResponse.json(
+    { recetas },
+    { headers: { "Cache-Control": "private, no-store" } },
+  );
 }

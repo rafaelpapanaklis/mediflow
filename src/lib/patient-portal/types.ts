@@ -21,6 +21,15 @@
 //   · GET  /api/paciente/history      → 200 PacienteHistorialResponse | 401
 //   · GET  /api/paciente/payments     → 200 PacientePagosResponse | 401
 //
+//   Documentos (WS1-T6, aditivo):
+//   · GET  /api/paciente/documentos   → 200 PacienteDocumentosResponse | 401
+//   · GET  /api/paciente/documentos/descargar?tipo=consentimiento&id=<id>
+//       → 200 { url } (signed URL TTL 300s generada server-side TRAS validar
+//         el vínculo; NUNCA paths del bucket) | 400 | 401 | 404
+//   · GET  /api/paciente/recetas      → 200 PacienteRecetasResponse | 401
+//   · GET  /api/paciente/recetas/[id]/pdf → 200 PDF (ownership por links) | 401 | 404
+//   · GET  /api/paciente/recibos/[id]/pdf → 200 PDF (ownership por links) | 401 | 404
+//
 //   · /paciente/login y /paciente/registro aceptan ?next=<ruta interna> para
 //     volver a donde estaba (solo rutas que empiecen con "/" — nunca URLs
 //     absolutas, evita open redirect).
@@ -37,6 +46,11 @@
 //   · TreatmentPlan: name, status, fechas y progreso de sesiones. NUNCA
 //     description ni notas de sesiones.
 //   · Odontograma: SOLO conteos agregados (sin notas por diente).
+//   · Payment (recibo): id, amount, method, paidAt + invoiceNumber/clinicId de
+//     su factura. NUNCA notes ni reference (internos de la clínica).
+//   · ConsentForm: SOLO firmados (signedAt != null): procedure, content,
+//     signedAt y la firma del propio paciente vía signed URL on-demand.
+//     NUNCA token de firma, expiresAt del link, ni paths del bucket.
 //
 // Multi-tenant estricto: toda query del panel filtra por los patientId de
 // PatientAccountLink de la sesión (y clinicId del propio link). Jamás aceptar
@@ -210,4 +224,69 @@ export interface PacientePerfil {
   phone: string | null;
   createdAt: string; // ISO
   clinics: PacienteClinica[];
+}
+
+// ── Documentos (WS1-T6) ─────────────────────────────────────────────────────
+
+/** Consentimiento firmado paciente-safe (espejo del portal por token). */
+export interface PacienteConsentimiento {
+  id: string;
+  clinicId: string;
+  /** Procedimiento del consentimiento (ej. "Extracción simple"). */
+  procedure: string;
+  /** Texto que el paciente leyó y aceptó al firmar. */
+  content: string;
+  signedAt: string; // ISO
+  /** true si hay firma descargable vía /api/paciente/documentos/descargar. */
+  hasFirma: boolean;
+}
+
+/** Pago individual paciente-safe. NUNCA notes ni reference. */
+export interface PacienteRecibo {
+  id: string; // Payment.id
+  clinicId: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  amount: number; // MXN
+  method: string; // crudo de DB; la UI lo mapea a español
+  paidAt: string; // ISO
+}
+
+export interface PacienteDocumentosResponse {
+  clinics: PacienteClinica[];
+  consentimientos: PacienteConsentimiento[]; // desc por signedAt, máx 100
+  recibos: PacienteRecibo[]; // desc por paidAt, máx 200
+}
+
+/** Medicamento de una receta (shape de GET /api/paciente/recetas). */
+export interface PacienteRecetaMed {
+  id: string;
+  nombre: string;
+  presentacion: string | null;
+  dosis: string;
+  duracion: string | null;
+  cantidad: string | null;
+  notas: string | null;
+}
+
+/** Receta del portal (shape EXACTO que ya devuelve GET /api/paciente/recetas). */
+export interface PacienteReceta {
+  id: string;
+  clinicId: string;
+  clinicName: string;
+  doctorName: string;
+  issuedAt: string; // ISO
+  expiresAt: string | null;
+  expired: boolean;
+  folio: string;
+  verifyUrl: string;
+  diagnosis: string | null;
+  indications: string | null;
+  cofeprisGroup: string | null;
+  cofeprisFolio: string | null;
+  medicamentos: PacienteRecetaMed[];
+}
+
+export interface PacienteRecetasResponse {
+  recetas: PacienteReceta[];
 }
