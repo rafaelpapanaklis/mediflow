@@ -58,30 +58,47 @@ export interface MercadoPagoPayment {
   id: string;
   status: string;
   externalReference: string | null;
+  /** Monto realmente pagado (transaction_amount de MP, MXN). null si MP no lo manda. */
+  transactionAmount: number | null;
 }
 
 /**
  * Consulta un pago en la cuenta del vendedor. status === "approved" ⇒ pagado.
- * externalReference debe coincidir con el id de la orden (defensa anti-spoof en el webhook).
+ * externalReference debe coincidir con el id de la orden Y transactionAmount
+ * cubrir el total (defensa anti-spoof y anti-monto-menor en el webhook).
+ *
+ * Contrato de errores (el webhook lo usa para decidir su status code):
+ *  · Devuelve null en fallas DETERMINISTAS: paymentId no 100% numérico (nunca
+ *    se fetchea — el id viaja en la URL de la API de MP, evita path traversal)
+ *    o respuesta 4xx de MP (pago inexistente / token inválido). Reintentar la
+ *    notificación no cambiaría nada.
+ *  · LANZA en fallas TRANSITORIAS: red caída (el fetch lanza solo) o 5xx/429
+ *    de MP. El webhook responde 500 y MercadoPago reintenta la notificación.
  */
 export async function getPayment(
   accessToken: string,
   paymentId: string,
-): Promise<MercadoPagoPayment> {
+): Promise<MercadoPagoPayment | null> {
+  if (!/^\d+$/.test(paymentId)) return null;
+
   const res = await fetch(`${MP_API}/v1/payments/${paymentId}`, {
     method: "GET",
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(
-      typeof data?.message === "string" ? data.message : `MercadoPago error ${res.status}`,
-    );
+  if (res.status >= 500 || res.status === 429) {
+    throw new Error(`MercadoPago error ${res.status}`);
   }
+  if (!res.ok) return null;
+
+  const data = await res.json().catch(() => ({}));
   return {
     id: String(data.id),
     status: data.status,
     externalReference: data.external_reference ?? null,
+    transactionAmount:
+      typeof data.transaction_amount === "number" && Number.isFinite(data.transaction_amount)
+        ? data.transaction_amount
+        : null,
   };
 }

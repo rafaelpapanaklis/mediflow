@@ -30,19 +30,24 @@ export function buildMpTopupRef(topupId: string): string {
  * external_reference apunta exactamente a este topup (anti-spoof, mismo patrón
  * que el flujo B2B), acredita el saldo de forma ATÓMICA e IDEMPOTENTE.
  *
- * Pensado para el webhook: si `getPayment` falla, deja propagar el error al
- * try/catch del webhook (que responde 200 igual); MercadoPago reintenta y el
- * claim atómico evita la doble acreditación.
+ * Pensado para el webhook: si `getPayment` falla de forma TRANSITORIA (red,
+ * 5xx/429 de MP), deja propagar el error — el webhook responde 500, MercadoPago
+ * REINTENTA y el claim atómico evita la doble acreditación. Si el pago no
+ * existe o no aplica (determinista: getPayment devuelve null, no aprobado, ref
+ * que no coincide), retorna sin acreditar y el webhook responde 200.
  */
 export async function verifyAndCreditMpTopup(topupId: string, paymentId: string): Promise<void> {
   const token = env.MERCADOPAGO_ACCESS_TOKEN;
   if (!token) {
+    // Sin token NO podemos verificar un pago que puede ser real: lanzamos (el
+    // webhook responde 500) para que MP reintente, en vez de tragarnos con un
+    // 200 una recarga aprobada y dejarla PENDING para siempre.
     console.error("[ai-topup] MERCADOPAGO_ACCESS_TOKEN no configurado; no se puede verificar el pago");
-    return;
+    throw new Error("MERCADOPAGO_ACCESS_TOKEN no configurado");
   }
 
   const pay = await getPayment(token, paymentId);
-  if (pay.status !== "approved" || pay.externalReference !== buildMpTopupRef(topupId)) {
+  if (!pay || pay.status !== "approved" || pay.externalReference !== buildMpTopupRef(topupId)) {
     return;
   }
 
