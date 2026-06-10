@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import {
   Clock, CheckCircle2, XCircle, Ban,
@@ -32,6 +32,21 @@ type AffiliateRow = {
   createdAt: string | Date;
   approvedAt: string | Date | null;
   _count?: { clinics: number };
+};
+
+// Vendedor del equipo de un afiliado (GET /api/admin/affiliates/[id]/sellers).
+type SellerRow = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  commissionPct: number;
+  isActive: boolean;
+  payoutMethod: string | null;
+  payoutDetails: string | null;
+  pendingMxn: number;
+  paidMxn: number;
+  clinics: number;
 };
 
 const STATUS_LABELS: Record<AffiliateStatus, string> = {
@@ -130,6 +145,12 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
   const [list, setList] = useState<AffiliateRow[]>(initial);
   const [filter, setFilter] = useState<FilterKey>("ALL");
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  // Equipo de vendedores por afiliado (expandible bajo cada fila).
+  const [expandedTeam, setExpandedTeam] = useState<string | null>(null);
+  const [teamByAffiliate, setTeamByAffiliate] = useState<Record<string, SellerRow[]>>({});
+  const [teamLoading, setTeamLoading] = useState<string | null>(null);
+  const [busySellerId, setBusySellerId] = useState<string | null>(null);
 
   // Métricas del programa (A7)
   const [metrics, setMetrics] = useState<AdminAffiliateMetricsResponse | null>(null);
@@ -293,6 +314,165 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
     } finally {
       setBusyId(null);
     }
+  }
+
+  // Carga (o recarga) el equipo de vendedores de un afiliado.
+  const loadTeam = useCallback(async (affiliateId: string) => {
+    setTeamLoading(affiliateId);
+    try {
+      const res = await fetch(`/api/admin/affiliates/${affiliateId}/sellers`);
+      const data = await res.json().catch(() => ({} as any));
+      if (!res.ok) throw new Error(data?.error ?? "No se pudo cargar el equipo");
+      setTeamByAffiliate((prev) => ({ ...prev, [affiliateId]: data?.sellers ?? [] }));
+    } catch (e: any) {
+      toast.error(e?.message ?? "No se pudo cargar el equipo");
+      setTeamByAffiliate((prev) => ({ ...prev, [affiliateId]: [] }));
+    } finally {
+      setTeamLoading(null);
+    }
+  }, []);
+
+  // Abre/cierra el equipo de un afiliado; carga la primera vez que se expande.
+  function toggleTeam(affiliateId: string) {
+    if (expandedTeam === affiliateId) {
+      setExpandedTeam(null);
+      return;
+    }
+    setExpandedTeam(affiliateId);
+    if (!teamByAffiliate[affiliateId]) void loadTeam(affiliateId);
+  }
+
+  // Marca pagadas las comisiones pendientes de UN vendedor (espejo de markPaid).
+  async function markSellerPaid(affiliateId: string, seller: SellerRow) {
+    const ok = await askConfirm({
+      title: "¿Marcar comisiones del vendedor como pagadas?",
+      description: `Todas las comisiones pendientes de ${seller.name} se marcarán como pagadas y se notificará al vendedor por email.`,
+      variant: "warning",
+      confirmText: "Marcar pagadas",
+    });
+    if (!ok) return;
+
+    setBusySellerId(seller.id);
+    try {
+      const res = await fetch(`/api/admin/affiliates/sellers/${seller.id}/payouts`, { method: "POST" });
+      const data = await res.json().catch(() => ({} as any));
+      if (!res.ok) throw new Error(data?.error ?? "No se pudo registrar el pago");
+      const paid: number = data?.paid ?? 0;
+      if (paid === 0) {
+        toast.success("Sin comisiones pendientes");
+      } else {
+        const monto = formatCurrency(data?.totalMxn ?? 0);
+        toast.success(
+          paid === 1
+            ? `Se liquidó 1 comisión por ${monto}`
+            : `Se liquidaron ${paid} comisiones por ${monto}`
+        );
+      }
+      // Refresca el equipo (montos) y las métricas del programa.
+      void loadTeam(affiliateId);
+      void loadMetrics();
+    } catch (e: any) {
+      toast.error(e?.message ?? "No se pudo registrar el pago");
+    } finally {
+      setBusySellerId(null);
+    }
+  }
+
+  // Panel expandible con el equipo de vendedores de un afiliado.
+  function renderTeam(a: AffiliateRow) {
+    const loading = teamLoading === a.id;
+    const sellers = teamByAffiliate[a.id];
+
+    return (
+      <div style={{ padding: "14px 16px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>
+            Equipo de {a.name}
+          </div>
+          <ButtonNew size="sm" variant="ghost" disabled={loading} onClick={() => void loadTeam(a.id)}>
+            {loading ? "Cargando…" : "Actualizar"}
+          </ButtonNew>
+        </div>
+
+        {loading && !sellers ? (
+          <div style={{ fontSize: 13, color: "var(--text-3)", padding: "10px 0" }}>Cargando equipo…</div>
+        ) : !sellers || sellers.length === 0 ? (
+          <div style={{ fontSize: 13, color: "var(--text-3)", padding: "10px 0" }}>
+            Este afiliado aún no tiene vendedores en su equipo.
+          </div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table className="table-new">
+              <thead>
+                <tr>
+                  <th>Vendedor</th>
+                  <th>Datos de pago</th>
+                  <th>Comisión</th>
+                  <th>Clínicas</th>
+                  <th>Pendiente</th>
+                  <th>Pagado</th>
+                  <th>Estado</th>
+                  <th style={{ textAlign: "right" }}>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sellers.map((s) => {
+                  const busy = busySellerId === s.id;
+                  return (
+                    <tr key={s.id}>
+                      <td>
+                        <div style={{ fontWeight: 600, color: "var(--text-1)" }}>{s.name}</div>
+                        <div style={{ fontSize: 12, color: "var(--text-3)" }}>{s.email}</div>
+                        {s.phone && (
+                          <div className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>{s.phone}</div>
+                        )}
+                      </td>
+                      <td>
+                        {s.payoutMethod || s.payoutDetails ? (
+                          <>
+                            {s.payoutMethod && (
+                              <div style={{ fontSize: 12, color: "var(--text-2)" }}>{s.payoutMethod}</div>
+                            )}
+                            {s.payoutDetails && (
+                              <div className="mono" style={{ fontSize: 12, color: "var(--text-1)", wordBreak: "break-all" }}>
+                                {s.payoutDetails}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <span style={{ fontSize: 12, color: "var(--text-3)" }}>Sin datos</span>
+                        )}
+                      </td>
+                      <td className="mono" style={{ color: "var(--text-2)", fontSize: 12 }}>{s.commissionPct}%</td>
+                      <td className="mono" style={{ color: "var(--text-2)", fontSize: 12 }}>{s.clinics}</td>
+                      <td className="mono" style={{ color: "var(--warning)", fontSize: 12 }}>{formatCurrency(s.pendingMxn)}</td>
+                      <td className="mono" style={{ color: "var(--text-2)", fontSize: 12 }}>{formatCurrency(s.paidMxn)}</td>
+                      <td>
+                        <BadgeNew tone={s.isActive ? "success" : "neutral"} dot>
+                          {s.isActive ? "Activo" : "Inactivo"}
+                        </BadgeNew>
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                          <ButtonNew
+                            size="sm"
+                            variant="ghost"
+                            disabled={busy || s.pendingMxn <= 0}
+                            onClick={() => markSellerPaid(a.id, s)}
+                          >
+                            {busy ? "Pagando…" : "Marcar pagado"}
+                          </ButtonNew>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -518,7 +698,8 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                 const busy = busyId === a.id;
                 const referred = a._count?.clinics ?? 0;
                 return (
-                  <tr key={a.id}>
+                  <Fragment key={a.id}>
+                  <tr>
                     <td>
                       <div style={{ fontWeight: 600, color: "var(--text-1)" }}>{a.name}</div>
                       <div className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>/socio/{a.slug}</div>
@@ -563,9 +744,24 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                         <ButtonNew size="sm" variant="ghost" disabled={busy} onClick={() => markPaid(a)}>
                           Marcar pagadas
                         </ButtonNew>
+                        <ButtonNew
+                          size="sm"
+                          variant={expandedTeam === a.id ? "secondary" : "ghost"}
+                          onClick={() => toggleTeam(a.id)}
+                        >
+                          {expandedTeam === a.id ? "Ocultar equipo" : "Ver equipo"}
+                        </ButtonNew>
                       </div>
                     </td>
                   </tr>
+                  {expandedTeam === a.id && (
+                    <tr>
+                      <td colSpan={8} style={{ padding: 0, background: "var(--surface-2, rgba(255,255,255,0.02))" }}>
+                        {renderTeam(a)}
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>

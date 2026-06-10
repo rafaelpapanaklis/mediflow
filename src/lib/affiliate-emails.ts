@@ -253,3 +253,117 @@ export async function sendAffiliatePayoutPaidEmail(opts: {
     console.error("[affiliate-emails] sendAffiliatePayoutPaidEmail:", err);
   }
 }
+
+// ── EQUIPOS DE VENDEDORES ─────────────────────────────────────────────────
+// Espejos de los emails de afiliado, dirigidos al VENDEDOR (AffiliateSeller).
+// Mismo idioma visual y misma garantía: jamás tiran.
+
+/**
+ * "¡Ganaste una comisión de equipo! 💜" — aviso al VENDEDOR cuando una clínica
+ * que le fue atribuida paga su primera factura. SOLO si la comisión recién
+ * creada es la PRIMERA de ese vendedor para esa clínica (se llama justo después
+ * del create → count === 1; si es mayor, return silencioso). Jamás tira.
+ */
+export async function sendAffiliateSellerConversionEmail({
+  sellerId,
+  clinicId,
+  commissionMxn,
+}: {
+  sellerId: string;
+  clinicId: string;
+  commissionMxn: number;
+}): Promise<void> {
+  try {
+    const n = await prisma.affiliateSellerCommission.count({
+      where: { sellerId, clinicId },
+    });
+    if (n !== 1) return; // ya era cliente — solo celebramos la primera factura
+
+    const seller = await prisma.affiliateSeller.findUnique({
+      where: { id: sellerId },
+      select: { name: true, email: true },
+    });
+    if (!seller) return;
+
+    const clinic = await prisma.clinic.findUnique({
+      where: { id: clinicId },
+      select: { name: true },
+    });
+    const clinicName = esc(clinic?.name ?? "tu clínica referida");
+    const amount = fmtMxn(commissionMxn);
+
+    const html = affiliateEmailHtml({
+      heading: "¡Ganaste una comisión de equipo! 💜",
+      introHtml: `Hola, ${esc(seller.name)}: <strong style="color: #f5f5f7;">${clinicName}</strong>, una clínica que registraste, pagó su primera factura en DaleControl.`,
+      box: {
+        label: "Comisión ganada",
+        contentHtml: `<strong style="color: #f5f5f7;">${amount}</strong> — y seguirás ganando una comisión cada mes mientras la clínica siga activa.`,
+      },
+    });
+    const text =
+      `Hola, ${seller.name}:\n\n` +
+      `${clinic?.name ?? "Una clínica que registraste"} pagó su primera factura en DaleControl.\n\n` +
+      `Ganaste ${amount} y seguirás ganando una comisión cada mes mientras la clínica siga activa.\n\n` +
+      `Tu panel: ${SITE_URL}/afiliados/inicio\n\n` +
+      `DaleControl — Programa de afiliados`;
+
+    await sendEmail({
+      to: seller.email,
+      subject: "¡Ganaste una comisión de equipo! 💜",
+      html,
+      text,
+    });
+  } catch (err) {
+    console.error("[affiliate-emails] sendAffiliateSellerConversionEmail:", err);
+  }
+}
+
+/**
+ * "Tu pago de comisiones está en camino 💸" — espejo de
+ * sendAffiliatePayoutPaidEmail pero dirigido al VENDEDOR. Lo dispara el admin
+ * al liquidar las comisiones pending del vendedor. Jamás tira.
+ */
+export async function sendAffiliateSellerPayoutPaidEmail({
+  sellerId,
+  totalMxn,
+  count,
+}: {
+  sellerId: string;
+  totalMxn: number;
+  count: number;
+}): Promise<void> {
+  try {
+    const seller = await prisma.affiliateSeller.findUnique({
+      where: { id: sellerId },
+      select: { name: true, email: true },
+    });
+    if (!seller) return;
+
+    const total = fmtMxn(totalMxn);
+    const unit = count === 1 ? "comisión" : "comisiones";
+
+    const html = affiliateEmailHtml({
+      heading: "Tu pago está en camino 💸",
+      introHtml: `Hola, ${esc(seller.name)}: acabamos de liquidar ${count} ${unit} de tu cuenta de vendedor.`,
+      box: {
+        label: "Total liquidado",
+        contentHtml: `<strong style="color: #f5f5f7;">${total}</strong> (${count} ${unit}). Revisa que tus datos de pago estén al día en la sección <strong style="color: #f5f5f7;">Configuración</strong> de tu panel.`,
+      },
+    });
+    const text =
+      `Hola, ${seller.name}:\n\n` +
+      `Acabamos de liquidar ${count} ${unit} por un total de ${total}.\n\n` +
+      `Revisa que tus datos de pago estén al día en la sección Configuración de tu panel.\n\n` +
+      `Tu panel: ${SITE_URL}/afiliados/inicio\n\n` +
+      `DaleControl — Programa de afiliados`;
+
+    await sendEmail({
+      to: seller.email,
+      subject: "Tu pago de comisiones está en camino 💸",
+      html,
+      text,
+    });
+  } catch (err) {
+    console.error("[affiliate-emails] sendAffiliateSellerPayoutPaidEmail:", err);
+  }
+}

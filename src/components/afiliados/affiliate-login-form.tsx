@@ -30,8 +30,12 @@ export function AffiliateLoginForm() {
         return;
       }
       toast.success("¡Bienvenido!");
-      // Hard navigation: garantiza un único mount del layout del panel.
-      window.location.href = "/afiliados/inicio";
+      // Enruta según quién inicia sesión: afiliado → /afiliados/inicio,
+      // vendedor (equipo) → /afiliados/vendedor/inicio. Si whoami falla por lo
+      // que sea, cae al panel del afiliado. Hard navigation: garantiza un único
+      // mount del layout del panel.
+      const r = await fetch("/api/afiliados/whoami").then((x) => x.json()).catch(() => null);
+      window.location.href = r?.home ?? "/afiliados/inicio";
     } catch (err: any) {
       setError(err?.message ?? "Error al iniciar sesión");
       setLoading(false);

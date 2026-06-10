@@ -1,9 +1,12 @@
 "use client";
 
+// Shell/sidebar del VENDEDOR (equipo). Espejo de affiliate-shell.tsx: mismo CSS
+// (sidebar-new), hamburguesa móvil y logout. Subtítulo "Vendedor" + nombre del
+// afiliado padre en el footer. NAV reducido: Inicio, Herramientas, Datos de pago.
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { LayoutDashboard, Settings, LogOut, Menu, X, Handshake, BarChart3, FileText, Megaphone, Users } from "lucide-react";
+import { LayoutDashboard, Settings, LogOut, Menu, X, Handshake, Megaphone } from "lucide-react";
 
 type NavItem = {
   href: string;
@@ -12,19 +15,18 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/afiliados/inicio", label: "Inicio", icon: LayoutDashboard },
-  { href: "/afiliados/herramientas", label: "Herramientas", icon: Megaphone },
-  { href: "/afiliados/equipo", label: "Mi equipo", icon: Users },
-  { href: "/afiliados/estadisticas", label: "Estadísticas", icon: BarChart3 },
-  { href: "/afiliados/reportes", label: "Reportes", icon: FileText },
-  { href: "/afiliados/configuracion", label: "Datos de pago", icon: Settings },
+  { href: "/afiliados/vendedor/inicio", label: "Inicio", icon: LayoutDashboard },
+  { href: "/afiliados/vendedor/herramientas", label: "Herramientas", icon: Megaphone },
+  { href: "/afiliados/vendedor/configuracion", label: "Datos de pago", icon: Settings },
 ];
 
-export function AffiliateShell({
-  affiliateName,
+export function SellerShell({
+  sellerName,
+  parentName,
   children,
 }: {
-  affiliateName: string;
+  sellerName: string;
+  parentName: string;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -85,7 +87,7 @@ export function AffiliateShell({
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="sidebar-new__brandname">DaleControl</div>
-            <div className="sidebar-new__brandsub">Afiliados</div>
+            <div className="sidebar-new__brandsub">Vendedor</div>
           </div>
           <button
             type="button"
@@ -134,9 +136,19 @@ export function AffiliateShell({
                   whiteSpace: "nowrap",
                 }}
               >
-                {affiliateName}
+                {sellerName}
               </div>
-              <div style={{ fontSize: 11, color: "var(--text-3)" }}>Afiliado</div>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "var(--text-3)",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Vendedor de {parentName}
+              </div>
             </div>
             <button
               type="button"

@@ -6866,6 +6866,7 @@ model SupportMessage {
 model AffiliateLink {
   id          String   @id @default(cuid())
   affiliateId String
+  sellerId    String? // vendedor dueño del link (equipo). null = link del propio afiliado. FK en SQL.
   name        String
   campaign    String // slug corto [a-z0-9-], inmutable (estabilidad de URL/QR)
   clicks      Int      @default(0)
@@ -6876,6 +6877,7 @@ model AffiliateLink {
 
   @@unique([affiliateId, campaign])
   @@index([affiliateId])
+  @@index([sellerId])
   @@map("affiliate_links")
 }
 
@@ -6906,12 +6908,14 @@ model AffiliateConversion {
 model AffiliateCoupon {
   id          String   @id @default(cuid())
   affiliateId String
+  sellerId    String? // vendedor dueño del cupón (equipo). null = cupón del propio afiliado. FK en SQL.
   couponId    String   @unique
   createdAt   DateTime @default(now())
 
   affiliate Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
 
   @@index([affiliateId])
+  @@index([sellerId])
   @@map("affiliate_coupons")
 }
 
@@ -6929,4 +6933,81 @@ model AffiliateProgramConfig {
   updatedAt       DateTime @updatedAt
 
   @@map("affiliate_program_config")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AFILIADOS — EQUIPOS DE VENDEDORES (jun 2026, WS3 · feat/afiliados-equipo)
+// Un AFILIADO (padre) registra manualmente a sus VENDEDORES. El vendedor gana
+// comisión por las clínicas que trae y el padre un OVERRIDE; juntos suman el
+// % del nivel del padre — la plataforma NO paga de más. Máximo 2 niveles: el
+// vendedor jamás registra gente ni tiene equipo propio.
+//
+// SIN relación Prisma a Affiliate/Clinic (mismo patrón que AffiliateCommission
+// / AffiliateClick): las FKs viven en sql/afiliados-equipo.sql. Así no se toca
+// el modelo Affiliate y un deploy sin el SQL solo afecta a las features nuevas
+// (cero drift — ver lesson_ortho_schema_drift). Único ALTER a tablas
+// existentes: columna nullable sellerId en affiliate_links / affiliate_coupons.
+// Al FINAL del schema para no chocar con ramas paralelas de la ola.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Vendedor de un afiliado. Login propio vía Supabase (supabaseId), igual que
+/// AffiliateUser pero sin tabla puente: el mapeo supabaseId→vendedor vive aquí.
+/// commissionPct = % que el padre le asigna (0..% del nivel del padre); se
+/// CONGELA en cada conversión nueva (no retroactivo). Datos de pago propios:
+/// DaleControl le paga directo con el mismo flujo (mismo mínimo) del afiliado.
+model AffiliateSeller {
+  id            String   @id @default(cuid())
+  affiliateId   String // padre (sin relación Prisma; FK en SQL)
+  supabaseId    String?  @unique // login del vendedor (null hasta primer acceso)
+  name          String
+  email         String // lowercase; único por afiliado (Supabase lo hace único global)
+  phone         String?
+  commissionPct Float    @default(0) // % asignado por el padre (0..nivel del padre)
+  isActive      Boolean  @default(true)
+  payoutMethod  String? // SPEI | PAYPAL | OTHER
+  payoutDetails String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([affiliateId, email])
+  @@index([affiliateId])
+  @@map("affiliate_sellers")
+}
+
+/// Atribución clínica → vendedor (1 por clínica). Congela el % del vendedor al
+/// alta. La clínica sigue ligada al PADRE por clinics.affiliateId (cuenta para
+/// el nivel del padre); esto solo dice "qué vendedor la trajo y con qué %".
+model AffiliateSellerAttribution {
+  id          String   @id @default(cuid())
+  clinicId    String   @unique
+  sellerId    String
+  affiliateId String // padre (denormalizado para reportes/limpieza)
+  sellerPct   Float // % del vendedor CONGELADO al alta (no retroactivo)
+  createdAt   DateTime @default(now())
+
+  @@index([sellerId])
+  @@index([affiliateId])
+  @@map("affiliate_seller_attributions")
+}
+
+/// Porción del VENDEDOR por factura pagada (sidecar de affiliate_commissions).
+/// El override del padre queda en affiliate_commissions.commissionMxn (reducido
+/// al override cuando hay vendedor); aquí va SOLO la parte del vendedor. La
+/// suma de ambos = comisión total del nivel (la plataforma no paga de más).
+/// Idempotente por stripeInvoiceId (igual que affiliate_commissions).
+model AffiliateSellerCommission {
+  id              String    @id @default(cuid())
+  sellerId        String
+  affiliateId     String // padre
+  clinicId        String
+  stripeInvoiceId String    @unique
+  amountMxn       Float // factura pagada (igual que la del padre)
+  commissionMxn   Float // porción del VENDEDOR (amount × min(%congelado, nivel%))
+  status          String    @default("pending") // pending | paid
+  createdAt       DateTime  @default(now())
+  paidAt          DateTime?
+
+  @@index([sellerId, status])
+  @@index([affiliateId])
+  @@map("affiliate_seller_commissions")
 }

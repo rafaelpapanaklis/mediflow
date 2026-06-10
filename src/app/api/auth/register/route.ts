@@ -205,6 +205,56 @@ export async function POST(req: NextRequest) {
       } catch {}
     }
 
+    // Atribución a VENDEDOR (best-effort, ADITIVO): si el alta vino por el link
+    // o cupón de un vendedor (hijo del afiliado padre atribuido), registra una
+    // atribución aparte con su % CONGELADO (no retroactivo). NO cambia la
+    // atribución del afiliado ni clinics.affiliateId (la clínica sigue ligada al
+    // PADRE, que cuenta para su nivel). Tablas nuevas pueden no existir → silencio.
+    if (referringAffiliate) {
+      try {
+        // 1) Determinar el sellerId candidato (link del padre o cupón del padre).
+        let candidato: string | null = null;
+        if (campaign) {
+          const link = await prisma.affiliateLink
+            .findUnique({
+              where: { affiliateId_campaign: { affiliateId: referringAffiliate.id, campaign } },
+            })
+            .catch(() => null);
+          if (link?.sellerId) candidato = link.sellerId;
+        }
+        if (!candidato && conversionSource === "coupon" && couponRow) {
+          const ac = await prisma.affiliateCoupon
+            .findUnique({ where: { couponId: couponRow.id } })
+            .catch(() => null);
+          if (ac?.sellerId) candidato = ac.sellerId;
+        }
+
+        // 2) Validar el vendedor: existe, activo, hijo del padre atribuido y
+        //    anti self-referral (su email ≠ el del alta).
+        if (candidato) {
+          const seller = await prisma.affiliateSeller.findUnique({ where: { id: candidato } });
+          if (
+            seller &&
+            seller.isActive === true &&
+            seller.affiliateId === referringAffiliate.id &&
+            seller.email.trim().toLowerCase() !== data.email.trim().toLowerCase()
+          ) {
+            // 3) Congela el pct al momento del alta y registra la atribución.
+            //    clinicId es @unique → en P2002 se ignora.
+            const pct = seller.commissionPct;
+            await prisma.affiliateSellerAttribution.create({
+              data: {
+                clinicId: clinic.id,
+                sellerId: seller.id,
+                affiliateId: referringAffiliate.id,
+                sellerPct: pct,
+              },
+            });
+          }
+        }
+      } catch {}
+    }
+
     // Canje del cupón (best-effort): suma 1 a usedCount.
     if (couponValid && couponRow) {
       try {

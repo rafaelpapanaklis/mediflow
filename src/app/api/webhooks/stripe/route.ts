@@ -4,8 +4,9 @@ import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
 import { logAudit } from "@/lib/audit";
 import type Stripe from "stripe";
 import { calcCommissionMxn } from "@/lib/affiliates";
-import { sendAffiliateConversionEmail } from "@/lib/affiliate-emails";
+import { sendAffiliateConversionEmail, sendAffiliateSellerConversionEmail } from "@/lib/affiliate-emails";
 import { getProgramConfig, countActiveReferred, computeLevel, levelPct } from "@/lib/affiliate-levels";
+import { computeSellerSplit } from "@/lib/affiliates/team";
 import {
   creditWalletFromStripe,
   setWalletCardIfEmpty,
@@ -252,25 +253,78 @@ export async function POST(req: NextRequest) {
 
         const commissionMxn = calcCommissionMxn(amountMxn, pct);
 
+        // ── EQUIPOS DE VENDEDORES: si la clínica tiene atribución de
+        //    vendedor, la comisión total (= % del nivel VIGENTE del padre, sin
+        //    pagar de más) se REPARTE: el vendedor su % congelado al alta
+        //    (clamp al nivel) y el padre el override (= total − vendedor). Las
+        //    clínicas sin atribución siguen 100% al padre (sin cambio).
+        const attr = await prisma.affiliateSellerAttribution
+          .findUnique({ where: { clinicId: clinic.id } })
+          .catch(() => null);
+
         try {
-          await prisma.affiliateCommission.create({
-            data: {
+          if (attr) {
+            const split = computeSellerSplit(amountMxn, pct, attr.sellerPct);
+            // Las dos comisiones se crean en una transacción. El primer create
+            // (affiliateCommission, stripeInvoiceId @unique) lanza P2002 en
+            // reintentos → la transacción aborta y el catch de abajo lo trata
+            // como ya-procesado (no-op). Suma garantizada por el contrato:
+            // split.overrideMxn + split.sellerMxn === split.totalMxn.
+            await prisma.$transaction(async (tx) => {
+              await tx.affiliateCommission.create({
+                data: {
+                  affiliateId: clinic.affiliateId,
+                  clinicId: clinic.id,
+                  stripeInvoiceId: invoiceId,
+                  amountMxn,
+                  commissionMxn: split.overrideMxn,
+                  status: "pending",
+                },
+              });
+              await tx.affiliateSellerCommission.create({
+                data: {
+                  sellerId: attr.sellerId,
+                  affiliateId: clinic.affiliateId,
+                  clinicId: clinic.id,
+                  stripeInvoiceId: invoiceId,
+                  amountMxn,
+                  commissionMxn: split.sellerMxn,
+                  status: "pending",
+                },
+              });
+            });
+            // Emails fire-and-forget (cada helper avisa solo en la 1a comisión
+            // de la clínica): override al padre, porción al vendedor.
+            sendAffiliateConversionEmail({
               affiliateId: clinic.affiliateId,
               clinicId: clinic.id,
-              stripeInvoiceId: invoiceId,
-              amountMxn,
+              commissionMxn: split.overrideMxn,
+            }).catch(() => {});
+            sendAffiliateSellerConversionEmail({
+              sellerId: attr.sellerId,
+              clinicId: clinic.id,
+              commissionMxn: split.sellerMxn,
+            }).catch(() => {});
+          } else {
+            await prisma.affiliateCommission.create({
+              data: {
+                affiliateId: clinic.affiliateId,
+                clinicId: clinic.id,
+                stripeInvoiceId: invoiceId,
+                amountMxn,
+                commissionMxn,
+                status: "pending",
+              },
+            });
+            // Email de conversión al afiliado (solo la 1a comisión de la
+            // clínica; el helper lo verifica). Fire-and-forget: el webhook
+            // NO espera el envío.
+            sendAffiliateConversionEmail({
+              affiliateId: clinic.affiliateId,
+              clinicId: clinic.id,
               commissionMxn,
-              status: "pending",
-            },
-          });
-          // Email de conversión al afiliado (solo la 1a comisión de la
-          // clínica; el helper lo verifica). Fire-and-forget: el webhook
-          // NO espera el envío.
-          sendAffiliateConversionEmail({
-            affiliateId: clinic.affiliateId,
-            clinicId: clinic.id,
-            commissionMxn,
-          }).catch(() => {});
+            }).catch(() => {});
+          }
         } catch (err: any) {
           // P2002 = unique violation → la comisión ya existía, no-op.
           if (err?.code !== "P2002") throw err;
