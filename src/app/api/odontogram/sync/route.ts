@@ -12,12 +12,29 @@ export const dynamic = "force-dynamic";
 /** conditionId reservado para la nota por diente. */
 const NOTE_CONDITION = "__note__";
 
-const ID = z.string().min(1).max(64);
+/* Mismas reglas de validación que el route principal /api/odontogram (un route
+   de Next solo puede exportar handlers HTTP, así que no se pueden importar de
+   ahí — mantener AMBOS en sync). */
+const CONDITION_ID = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z0-9_]+$/, "conditionId inválido");
+
+const SURFACE = z.enum(["M", "D", "V", "L", "O"]);
+
+/** Dientes FDI reales: permanentes 11-18 / 21-28 / 31-38 / 41-48 y temporales
+ *  51-55 / 61-65 / 71-75 / 81-85. El rango plano 11..85 aceptaba huecos
+ *  inexistentes (19, 29, 39, 49, 56-60, 66-70, 76-80). */
+const FDI_TEETH = new Set<number>([
+  ...[1, 2, 3, 4].flatMap((q) => Array.from({ length: 8 }, (_, i) => q * 10 + 1 + i)),
+  ...[5, 6, 7, 8].flatMap((q) => Array.from({ length: 5 }, (_, i) => q * 10 + 1 + i)),
+]);
 
 /** Shape `Records` del OdontogramV2: { [fdi]: { surfaces?, tooth?, note? } }. */
 const RecSchema = z.object({
-  surfaces: z.record(z.array(ID)).optional(),
-  tooth: z.array(ID).optional(),
+  surfaces: z.record(SURFACE, z.array(CONDITION_ID)).optional(),
+  tooth: z.array(CONDITION_ID).optional(),
   note: z.string().max(2000).optional(),
 });
 
@@ -66,7 +83,14 @@ export async function POST(req: NextRequest) {
     }[] = [];
     for (const [fdiStr, rec] of Object.entries(records)) {
       const toothNumber = Number(fdiStr);
-      if (!Number.isInteger(toothNumber) || toothNumber < 11 || toothNumber > 85) continue;
+      // Rechazo explícito (no skip silencioso): este endpoint REEMPLAZA el
+      // odontograma completo; descartar dientes en silencio = pérdida de datos.
+      if (!FDI_TEETH.has(toothNumber)) {
+        return NextResponse.json(
+          { error: "invalid_tooth", tooth: fdiStr },
+          { status: 400 },
+        );
+      }
       for (const [surface, ids] of Object.entries(rec.surfaces ?? {})) {
         for (const conditionId of ids) {
           if (conditionId === NOTE_CONDITION) continue;

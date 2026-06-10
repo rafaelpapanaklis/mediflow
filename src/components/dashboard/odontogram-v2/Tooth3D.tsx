@@ -10,10 +10,9 @@ import { COND_BY_ID, GROUP_COLOR } from "./data";
    Rotatable (drag) with 5 clickable face patches synced to record.
    Ported 1:1 from the design handoff (jsx/tooth3d.jsx).
 
-   Render is ON-DEMAND (st.draw()) in addition to a rAF loop:
-   rAF pauses in headless/background, so every interaction and
-   every record/reset change calls st.draw() directly to guarantee
-   a frame. Both mechanisms are intentionally kept.
+   Render is ON-DEMAND (st.draw()): drag/hover, record/reset changes
+   and resize each call st.draw() directly. NO perpetual rAF loop —
+   a static tooth costs 0 CPU/GPU between interactions.
 
    three is r0.184 here (design targeted r134, global THREE):
    - lights scaled by Math.PI (legacy→physically-correct intensity;
@@ -107,8 +106,8 @@ export function Tooth3D({ meta, record, onSurface, style, resetKey }: Tooth3DPro
     const camera = new THREE.PerspectiveCamera(40, W / H, 0.1, 100);
     camera.position.set(0, 0.45, 6.5);
     camera.lookAt(0, 0.05, 0);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true });
+    renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio || 1));
     renderer.setSize(W, H);
     mount.appendChild(renderer.domElement);
 
@@ -208,9 +207,6 @@ export function Tooth3D({ meta, record, onSurface, style, resetKey }: Tooth3DPro
     Object.values(patches).forEach((p) => { scene.remove(p); tooth.add(p); });
     scene.children.filter((c) => c instanceof THREE.Sprite).forEach((s) => { scene.remove(s); tooth.add(s); });
 
-    let raf = 0;
-    const loop = () => { if (st.draw) st.draw(); raf = requestAnimationFrame(loop); };
-
     const onResize = () => {
       const w = mount.clientWidth || 300, h = mount.clientHeight || 280;
       camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h);
@@ -245,10 +241,8 @@ export function Tooth3D({ meta, record, onSurface, style, resetKey }: Tooth3DPro
       renderer.render(scene, camera);
     };
     st.draw();
-    loop();
 
     return () => {
-      cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
       el.removeEventListener("pointerdown", onDown);
       el.removeEventListener("pointermove", onMove);

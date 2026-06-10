@@ -1,9 +1,10 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, memo } from "react";
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import { classify, numberLabel, PERM, PRIMARY, MIXED, I18N, COND_BY_ID } from "./data";
 import type { OdontogramProps, ToothCellProps, PalmerLabelProps } from "./types";
+import { EMPTY_RECORD } from "./types";
 import { Surface2D } from "./Surface2D";
 import { ToothGlyph } from "./ToothGlyph";
 
@@ -28,7 +29,7 @@ export function PalmerLabel({ quad, label }: PalmerLabelProps) {
  * Composes Surface2D/ToothGlyph and wires the click logic
  * (surface vs whole-tooth vs select). 1:1 with design jsx/odontogram.jsx.
  */
-export function ToothCell({ fdi, numbering, record, brush, eraser, selected, onApply, onSelect, compact }: ToothCellProps) {
+export const ToothCell = memo(function ToothCell({ fdi, numbering, record, brush, eraser, selected, onApply, onSelect, compact }: ToothCellProps) {
   const meta = classify(fdi);
   const num = numberLabel(fdi, numbering);
   const glyphW = compact ? 34 : 42;
@@ -66,7 +67,7 @@ export function ToothCell({ fdi, numbering, record, brush, eraser, selected, onA
       </div>
     </div>
   );
-}
+});
 
 function Arch({ list, parent }: { list: number[]; parent: OdontogramProps }) {
   const mid = Math.floor(list.length / 2);
@@ -80,7 +81,7 @@ function Arch({ list, parent }: { list: number[]; parent: OdontogramProps }) {
               fdi={fdi}
               lang={parent.lang}
               numbering={parent.numbering}
-              record={parent.records[fdi] || { surfaces: {}, tooth: [] }}
+              record={parent.records[fdi] || EMPTY_RECORD}
               brush={parent.brush}
               eraser={parent.eraser}
               selected={parent.selected === fdi}

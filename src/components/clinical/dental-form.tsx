@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { FileText } from "lucide-react";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { CardNew } from "@/components/ui/design-system/card-new";
@@ -10,7 +10,28 @@ import { PrescriptionModal } from "@/components/clinical/shared/prescription-mod
 import { useT } from "@/i18n/i18n-provider";
 import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
 import { fetchRecords, syncOdontogram } from "@/components/dashboard/odontogram-v2/adapter";
-import type { Records } from "@/components/dashboard/odontogram-v2/types";
+import type { Records, ToothRecord } from "@/components/dashboard/odontogram-v2/types";
+
+/** ¿El registro de un diente trae algo marcado? (superficies, hallazgos o nota) */
+function toothRecordHasContent(rec: ToothRecord | undefined): boolean {
+  if (!rec) return false;
+  if ((rec.tooth?.length ?? 0) > 0 || (rec.note ?? "").trim()) return true;
+  return Object.values(rec.surfaces ?? {}).some(ids => ids.length > 0);
+}
+
+/**
+ * Mezcla la precarga del odontograma vivo con lo ya marcado localmente: si el
+ * doctor tocó dientes ANTES de que resolviera el fetch, esos dientes conservan
+ * sus marcas y el resto toma el estado vivo del paciente.
+ */
+function mergeLiveOdontogram(live: Records, local: Records, touched: boolean): Records {
+  if (!touched) return live;
+  const merged: Records = { ...live };
+  for (const [fdi, rec] of Object.entries(local)) {
+    if (toothRecordHasContent(rec)) merged[Number(fdi)] = rec;
+  }
+  return merged;
+}
 
 interface CatalogProcedure { id: string; name: string; basePrice: number; category: string }
 interface SelectedProcedure { id: string; name: string; price: number; quantity: number }
@@ -60,12 +81,32 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
   // En edición arranca con la foto guardada; en consulta nueva se precarga del
   // estado vivo actual para que el doctor parta de ahí y registre los cambios.
   const [odontogram, setOdontogram] = useState<Records>(() => (initialSpec.odontogram as Records) ?? {});
+  // Estado de la precarga del vivo. Si NO llegó a "ready", al guardar NO se
+  // sincroniza: /api/odontogram/sync REEMPLAZA todo el odontograma del paciente,
+  // y sincronizar tras una precarga fallida borraría su historial dental
+  // (quedaría solo lo marcado en esta consulta). En edición no hay precarga.
+  const [odoStatus, setOdoStatus] = useState<"loading" | "ready" | "error">(isEditing ? "ready" : "loading");
+  const [odoRetry, setOdoRetry] = useState(0);
+  // true desde que el doctor toca el odontograma; la precarga no pisa sus marcas.
+  const odoTouchedRef = useRef(false);
   useEffect(() => {
     if (initialRecord) return; // edición: ya tenemos la foto guardada
     let cancelled = false;
-    fetchRecords(patientId).then(r => { if (!cancelled) setOdontogram(r); }).catch(() => {});
+    setOdoStatus("loading");
+    fetchRecords(patientId)
+      .then(live => {
+        if (cancelled) return;
+        setOdontogram(prev => mergeLiveOdontogram(live, prev, odoTouchedRef.current));
+        setOdoStatus("ready");
+      })
+      .catch(() => { if (!cancelled) setOdoStatus("error"); });
     return () => { cancelled = true; };
-  }, [patientId, initialRecord]);
+  }, [patientId, initialRecord, odoRetry]);
+
+  const handleOdontogramChange = useCallback((next: Records) => {
+    odoTouchedRef.current = true;
+    setOdontogram(next);
+  }, []);
 
   // Receta NOM-024 — la receta se emite standalone (sin consulta asociada)
   // para no contaminar el histórico clínico con medicalRecord huérfanos.
@@ -223,9 +264,18 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
         });
         if (!res.ok) throw new Error((await res.json()).error ?? t("clinical.dentalForm.saveError"));
         record = await res.json();
-        // El odontograma del paciente AVANZA con esta consulta (modelo "evoluciona"):
-        // sincroniza el estado vivo con la foto recién guardada. Best-effort.
-        syncOdontogram(patientId, odontogram).catch(() => {});
+        // El odontograma del paciente AVANZA con esta consulta (modelo "evoluciona").
+        // Solo si la precarga del vivo llegó a "ready": el sync REEMPLAZA todo, y
+        // hacerlo tras una precarga fallida/incompleta borraría el historial dental.
+        if (odoStatus === "ready") {
+          try {
+            await syncOdontogram(patientId, odontogram);
+          } catch {
+            toast.error("La consulta se guardó; el odontograma del paciente no se pudo actualizar.", { duration: 7000 });
+          }
+        } else {
+          toast("El odontograma del paciente no se actualizó: no se pudo cargar su estado actual antes de guardar.", { icon: "⚠️", duration: 7000 });
+        }
         if (selectedProcs.length > 0) {
           toast.success(`✅ ${t("clinical.dentalForm.savedWithInvoiceToast", { total: formatCurrency(proceduresTotal) })}`);
         } else {
@@ -283,8 +333,28 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
 
       {/* ODONTOGRAMA — OdontogramV2 en modo CONTROLADO: foto independiente de
           esta consulta (no toca el odontograma vivo del paciente). */}
+      {!isEditing && odoStatus === "loading" && (
+        <div className="text-xs text-muted-foreground -mb-3">
+          Cargando el odontograma actual del paciente…
+        </div>
+      )}
+      {!isEditing && odoStatus === "error" && (
+        <div className="flex flex-wrap items-center gap-2 p-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg text-xs text-amber-700 dark:text-amber-300 -mb-3">
+          <span>
+            ⚠️ No se pudo cargar el odontograma actual del paciente. Puedes capturar la
+            consulta, pero al guardar NO se actualizará el odontograma del paciente.
+          </span>
+          <button
+            type="button"
+            onClick={() => setOdoRetry(k => k + 1)}
+            className="px-2 py-0.5 rounded border border-amber-300 dark:border-amber-700 font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/30"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
       <div style={{ width: "100%", overflowX: "auto" }}>
-        <OdontogramV2 patientId={patientId} value={odontogram} onChange={setOdontogram} />
+        <OdontogramV2 patientId={patientId} value={odontogram} onChange={handleOdontogramChange} />
       </div>
 
       {/* PERIODONTAL */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import { GROUPS, CONDITIONS, GROUP_COLOR, I18N, classify } from "./data";
 import type { PaletteProps, ConditionSwatchProps, ToothRecord } from "./types";
 import { Surface2D } from "./Surface2D";
@@ -9,7 +9,7 @@ import { Surface2D } from "./Surface2D";
  * Palette — specialty tabs + finding chips + eraser. 1:1 port of design
  * jsx/odontogram.jsx (Palette + ConditionSwatch). Swatches render via Surface2D.
  */
-export function Palette({ lang, brush, eraser, onPick, onEraser }: PaletteProps) {
+export const Palette = memo(function Palette({ lang, brush, eraser, onPick, onEraser }: PaletteProps) {
   const t = I18N[lang];
   const [active, setActive] = useState<string>("diagnostic");
   const conds = CONDITIONS.filter((c) => c.group === active);
@@ -54,7 +54,7 @@ export function Palette({ lang, brush, eraser, onPick, onEraser }: PaletteProps)
       </div>
     </div>
   );
-}
+});
 
 /** ConditionSwatch — mini preview of how a finding renders (fake record on molar 16). */
 export function ConditionSwatch({ cond }: ConditionSwatchProps) {

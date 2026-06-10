@@ -9,13 +9,14 @@
    - Renders OdoDefs + Odontogram + Legend + Palette + DetailPanel (the stubs).
    - WITHOUT the Tweaks panel and WITHOUT warm/dark variants.
    ============================================================ */
-import { useState, useEffect, useCallback, useRef } from "react";
+import { memo, useState, useEffect, useCallback, useRef } from "react";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { I18N, COND_BY_ID, GROUP_COLOR } from "./data";
 import type {
   Records, ToothRecord, Lang, Numbering, Dentition, ApplyKind, RemoveScope, SurfaceLetter,
   OdontogramV2Props,
 } from "./types";
+import { EMPTY_RECORD } from "./types";
 import {
   fetchRecords, putFinding, deleteFinding, setNote as apiSetNote, resetOdontogram,
 } from "./adapter";
@@ -64,7 +65,7 @@ function Seg({ value, set, options }: { value: string; set: (v: string) => void;
   );
 }
 
-export function OdontogramV2({ patientId, value, onChange }: OdontogramV2Props) {
+export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onChange }: OdontogramV2Props) {
   // Modo CONTROLADO (foto por consulta): si llegan value+onChange, el estado lo
   // maneja el padre y NO se toca el servidor. Si no, modo VIVO (como la pestaña).
   const controlled = value !== undefined && !!onChange;
@@ -84,6 +85,10 @@ export function OdontogramV2({ patientId, value, onChange }: OdontogramV2Props) 
   // en vivo -> estado interno. ctrlRef lo mantiene estable (no rompe las deps).
   const ctrlRef = useRef({ controlled, value, onChange });
   ctrlRef.current = { controlled, value, onChange };
+  // `records` por ref (mismo patrón que ctrlRef): `apply` lo lee al momento del
+  // click sin llevar `records` en sus deps → identidad estable para React.memo.
+  const recordsRef = useRef(records);
+  recordsRef.current = records;
   const setRecords = useCallback((updater: Records | ((prev: Records) => Records)) => {
     const c = ctrlRef.current;
     if (c.controlled) {
@@ -115,10 +120,12 @@ export function OdontogramV2({ patientId, value, onChange }: OdontogramV2Props) 
     fetchRecords(patientId).then(setInternalRecords).catch(() => {});
   }, [patientId]);
 
-  const pickBrush = (id: string) => { setEraser(false); setBrush((b) => (b === id ? null : id)); };
-  const pickEraser = () => { setBrush(null); setEraser((e) => !e); };
+  const pickBrush = useCallback((id: string) => { setEraser(false); setBrush((b) => (b === id ? null : id)); }, []);
+  const pickEraser = useCallback(() => { setBrush(null); setEraser((e) => !e); }, []);
+  const handleSelect = useCallback((fdi: number) => setSelected(fdi), []);
 
   const apply = useCallback((fdi: number, kind: ApplyKind, letter?: SurfaceLetter | string) => {
+    const records = recordsRef.current;
     const live = !ctrlRef.current.controlled;
     // ---- eraser ----
     if (eraser) {
@@ -163,7 +170,7 @@ export function OdontogramV2({ patientId, value, onChange }: OdontogramV2Props) 
         : putFinding({ patientId, toothNumber: fdi, surface: lk, conditionId: brush });
       op.catch(resync);
     }
-  }, [brush, eraser, records, patientId, resync]);
+  }, [brush, eraser, patientId, resync]);
 
   const removeFinding = useCallback((fdi: number, scope: RemoveScope, letter: string | undefined, condId: string) => {
     setRecords((prev) => applyToRecords(prev, fdi, (r) => {
@@ -288,7 +295,7 @@ export function OdontogramV2({ patientId, value, onChange }: OdontogramV2Props) 
               eraser={eraser}
               selected={selected}
               onApply={apply}
-              onSelect={(fdi) => setSelected(fdi)}
+              onSelect={handleSelect}
             />
           </div>
           <Legend lang={lang} />
@@ -304,7 +311,7 @@ export function OdontogramV2({ patientId, value, onChange }: OdontogramV2Props) 
           fdi={selected}
           lang={lang}
           numbering={numbering}
-          record={records[selected] || { surfaces: {}, tooth: [] }}
+          record={records[selected] || EMPTY_RECORD}
           brush={brush}
           eraser={eraser}
           onApply={apply}
@@ -317,6 +324,6 @@ export function OdontogramV2({ patientId, value, onChange }: OdontogramV2Props) 
       )}
     </div>
   );
-}
+});
 
 export default OdontogramV2;

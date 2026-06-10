@@ -92,6 +92,12 @@ export interface ToothRecord {
 
 export type Records = { [fdi: number]: ToothRecord };
 
+/** Registro vacío COMPARTIDO para paths de render: identidad estable para que
+ *  React.memo (ToothCell / DetailPanel) no se invalide con literales `{...}`
+ *  nuevos en cada render. NUNCA mutarlo — los builders (applyToRecords y el
+ *  adapter) crean siempre objetos frescos. */
+export const EMPTY_RECORD: ToothRecord = { surfaces: {}, tooth: [] };
+
 /* ---------- interaction callback shapes (shared) ---------- */
 export type ApplyKind = "surface" | "tooth" | "glyphErase";
 export type OnApply = (fdi: number, kind: ApplyKind, letter?: SurfaceLetter | string) => void;

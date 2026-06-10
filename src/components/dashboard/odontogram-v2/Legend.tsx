@@ -1,10 +1,11 @@
 "use client";
 
+import { memo } from "react";
 import { GROUPS } from "./data";
 import type { LegendProps } from "./types";
 
 /** Legend — specialty color legend. Ported from design jsx/odontogram.jsx. */
-export function Legend({ lang }: LegendProps) {
+export const Legend = memo(function Legend({ lang }: LegendProps) {
   return (
     <div className="odo-legend">
       {GROUPS.map((g) => (
@@ -15,4 +16,4 @@ export function Legend({ lang }: LegendProps) {
       ))}
     </div>
   );
-}
+});
