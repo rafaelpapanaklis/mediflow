@@ -41,6 +41,10 @@
       "schedule": "0 17 * * *"
     },
     {
+      "path": "/api/cron/treatment-followup",
+      "schedule": "0 6 * * *"
+    },
+    {
       "path": "/api/cron/ai-wallet",
       "schedule": "0 * * * *"
     }

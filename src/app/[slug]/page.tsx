@@ -6,14 +6,22 @@ import {
   getSpecialty,
   SPECIALTY_SLUGS,
 } from "@/lib/specialty-data";
-import { SpecialtyPage } from "@/components/public/landing/specialty/specialty-page";
+import { SpecNavSession } from "@/components/public/landing/nav-session";
+import { SpecFAQ } from "@/components/public/landing/specialty/spec-faq";
+import { SpecFeatures } from "@/components/public/landing/specialty/spec-features";
+import { SpecFinalCTA } from "@/components/public/landing/specialty/spec-final-cta";
+import { SpecHero } from "@/components/public/landing/specialty/spec-hero";
+import { SpecMockupShowcase } from "@/components/public/landing/specialty/spec-mockup-showcase";
+import { SpecPricing } from "@/components/public/landing/specialty/spec-pricing";
+import { SpecRelated } from "@/components/public/landing/specialty/spec-related";
+import { SpecTestimonial } from "@/components/public/landing/specialty/spec-testimonial";
+import { Footer } from "@/components/public/landing/footer";
 import {
   buildMetadata,
   softwareApplicationLd,
   medicalBusinessLd,
   SITE_URL,
 } from "@/lib/seo";
-import { getSession } from "@/lib/auth";
 import { TemplateFuturista } from "./templates/template-futurista";
 import { TemplateHealthtech } from "./templates/template-healthtech";
 import { TemplateCalido } from "./templates/template-calido";
@@ -39,10 +47,12 @@ const CATEGORY_HIGHLIGHTS: Record<string, string[]> = {
   OTHER: ["Expediente clínico digital", "Agenda inteligente", "Facturación integrada"],
 };
 
-// Antes generateStaticParams permitía pre-render de los 17 specialty slugs.
-// Ahora la página llama getSession() (lee cookies) → debe ser dynamic per
-// request. Las cookies invalidan el SSG; force-dynamic lo hace explícito.
-export const dynamic = "force-dynamic";
+// Las 17 landings de especialidad se pre-renderizan en build
+// (generateStaticParams) y revalidan cada 5 min (ISR). La sesión ya no se lee
+// en el server: el nav la detecta client-side (nav-session.tsx). Las landings
+// de clínica siguen renderizando per-request porque leen searchParams
+// (?preview=), lo que opta fuera del cache estático solo en esa rama.
+export const revalidate = 300;
 
 /** Slugs reservados top-level que [slug] nunca intenta resolver. */
 const NON_SPECIALTY_RESERVED = [
@@ -91,13 +101,6 @@ export default async function ClinicLandingPage({ params, searchParams }: Props)
   // 2) Specialty landing (Claude Design)
   const specialty = getSpecialty(params.slug);
   if (specialty) {
-    // Detecta sesión activa para que el SpecNav muestre "Ir al dashboard"
-    // en lugar de Iniciar sesión / Prueba gratis. La página deja de ser
-    // estática (force-dynamic implícito vía cookies()), pero el SEO no
-    // se afecta: bots sin cookies caen en isLoggedIn=false como antes.
-    const user = await getSession();
-    const isLoggedIn = user !== null && user !== undefined;
-
     const url = `${SITE_URL}/${specialty.slug}`;
     const ldBlocks: object[] = [
       softwareApplicationLd({
@@ -113,6 +116,9 @@ export default async function ClinicLandingPage({ params, searchParams }: Props)
         medicalSpecialty: specialty.category,
       }),
     ];
+    // Composición inline de SpecialtyPage con el nav client-aware: las
+    // secciones siguen siendo server components (cero JS extra) y solo el
+    // SpecNav decide su CTA leyendo la cookie sb-* tras hidratar.
     return (
       <>
         {ldBlocks.map((ld, i) => (
@@ -122,7 +128,18 @@ export default async function ClinicLandingPage({ params, searchParams }: Props)
             dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
           />
         ))}
-        <SpecialtyPage slug={specialty.slug} isLoggedIn={isLoggedIn} />
+        <div className="landing-theme" data-mode="dark" style={{ minHeight: "100vh" }}>
+          <SpecNavSession currentSlug={specialty.slug} />
+          <SpecHero spec={specialty} />
+          <SpecFeatures spec={specialty} />
+          <SpecMockupShowcase spec={specialty} />
+          <SpecTestimonial spec={specialty} />
+          <SpecPricing spec={specialty} />
+          <SpecFAQ spec={specialty} />
+          <SpecFinalCTA spec={specialty} />
+          <SpecRelated currentSlug={specialty.slug} />
+          <Footer />
+        </div>
       </>
     );
   }

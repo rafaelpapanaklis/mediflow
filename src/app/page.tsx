@@ -1,15 +1,11 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import { getSession } from "@/lib/auth";
 import {
-  SalesNav, SalesHero, SocialProof, FeaturesGrid, Spotlights,
+  SalesHero, SocialProof, FeaturesGrid, Spotlights,
   Comparison, Testimonials, Pricing, TrustFaq, FinalCta, SalesFooter,
 } from "@/components/public/landing/sales";
+import { SalesNavSession } from "@/components/public/landing/nav-session";
 import "@/components/public/landing/sales/sales.css";
-
-// getSession lee cookies → la landing es dynamic. El contenido es idéntico
-// para SEO (los bots sin cookies ven el flujo no-logueado).
-export const dynamic = "force-dynamic";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -111,14 +107,14 @@ const JSON_LD = {
   ],
 };
 
-export default async function HomePage() {
-  const user = await getSession();
-  const isLoggedIn = user !== null && user !== undefined;
-
+// Página 100% estática (SSG): la sesión solo afecta al nav y se detecta
+// client-side tras hidratar (nav-session.tsx). No llamar getSession() aquí —
+// leer cookies en el server volvería dynamic toda la landing.
+export default function HomePage() {
   return (
     <div className={`mfh ${inter.variable}`} style={{ minHeight: "100dvh" }}>
       <a href="#mfh-main" className="mf-skip-link">Saltar al contenido</a>
-      <SalesNav isLoggedIn={isLoggedIn} />
+      <SalesNavSession />
       <main id="mfh-main">
         <SalesHero />
         <SocialProof />
