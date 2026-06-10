@@ -6,6 +6,7 @@ import { SalesNavSession } from "@/components/public/landing/nav-session";
 import { SalesFooter } from "@/components/public/landing/sales";
 import { DirectoryExplorer } from "@/components/directory/DirectoryExplorer";
 import { CategoryGrid, CATEGORY_ICONS } from "@/components/directory/CategoryGrid";
+import { CategoryCityLinks } from "@/components/directory/CityLinks";
 import { buildMetadata, SITE_URL } from "@/lib/seo";
 import { DIRECTORY_CATEGORIES, getCategoryBySlug } from "@/lib/directory/types";
 import "@/components/public/landing/sales/sales.css";
@@ -26,6 +27,7 @@ export function generateStaticParams() {
   return DIRECTORY_CATEGORIES.map((c) => ({ categoria: c.slug }));
 }
 export const dynamicParams = false;
+export const revalidate = 86400;
 
 export function generateMetadata({ params }: Props): Metadata {
   const cat = getCategoryBySlug(params.categoria);
@@ -108,6 +110,13 @@ export default function CategoriaPage({ params }: Props) {
             <CategoryGrid variant="pills" activeSlug={cat.slug} />
           </section>
         </DirectoryExplorer>
+
+        {/* Interlinking: ciudades de esta categoría (ISR, null sin DB) */}
+        <section className="mfh-section--tight" style={{ paddingTop: 0 }}>
+          <div className="mfh-container">
+            <CategoryCityLinks categorySlug={cat.slug} categoryPlural={cat.plural} />
+          </div>
+        </section>
 
         {/* CTA para dueños de clínicas */}
         <section className="mfh-band--soft mfh-section--tight">

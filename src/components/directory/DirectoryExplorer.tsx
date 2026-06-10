@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { Search, X, List, Map as MapIcon, LocateFixed, Loader2 } from "lucide-react";
 import {
   DIRECTORY_API,
+  DIRECTORY_CITY_PARAM,
   DIRECTORY_MAP_MAX,
   getCategoryBySlug,
   type DirectoryClinic,
@@ -13,6 +14,7 @@ import {
 } from "@/lib/directory/types";
 import { ClinicGrid } from "./ClinicGrid";
 import { ClinicCard } from "./ClinicCard";
+import { CityFilter } from "./CityFilter";
 import { BookingPopupController } from "./BookingPopupController";
 
 // Leaflet solo se carga al activar el mapa: dynamic import client-only (ssr:false)
@@ -34,14 +36,15 @@ type ViewMode = "list" | "map";
 type GeoStatus = "idle" | "locating" | "on" | "denied" | "unsupported" | "error";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Orquestador client del directorio: buscador con debounce (350 ms) +
-// (children: sección de categorías server-rendered) + resultados paginados +
-// montaje del popup de reserva.
+// Orquestador client del directorio: buscador con debounce (350 ms) + filtro de
+// ciudad + (children: sección de categorías server-rendered) + resultados
+// paginados (lista o mapa) + montaje del popup de reserva.
 //
-// La búsqueda y la página viven en la URL (?q=&page=) vía window.location +
-// history.replaceState DENTRO de efectos — nada de useSearchParams/useRouter
-// (romperían el SSG con Suspense). Solo se tocan las llaves "q" y "page";
-// las de reserva (reservar/servicio/doctor/fecha/hora) las maneja booking-state.
+// La búsqueda, la ciudad y la página viven en la URL (?q=&city=&page=) vía
+// window.location + history.replaceState DENTRO de efectos — nada de
+// useSearchParams/useRouter (romperían el SSG con Suspense). Solo se tocan las
+// llaves "q", "city" y "page"; las de reserva (reservar/servicio/doctor/fecha/
+// hora) las maneja booking-state.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface DirectoryExplorerProps {
@@ -54,6 +57,7 @@ export interface DirectoryExplorerProps {
 export function DirectoryExplorer({ initialCategory, children }: DirectoryExplorerProps) {
   const [q, setQ] = useState("");
   const [qDebounced, setQDebounced] = useState("");
+  const [city, setCity] = useState("");
   const [page, setPage] = useState(1);
   const [data, setData] = useState<DirectoryClinicsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -67,8 +71,8 @@ export function DirectoryExplorer({ initialCategory, children }: DirectoryExplor
   const [mapData, setMapData] = useState<DirectoryClinic[] | null>(null);
   const [mapLoading, setMapLoading] = useState(false);
 
-  /** q/page leídos de la URL al montar: el fetch espera a que el estado los refleje. */
-  const pendingRestore = useRef<{ q: string; page: number } | null>(null);
+  /** q/city/page leídos de la URL al montar: el fetch espera a que el estado los refleje. */
+  const pendingRestore = useRef<{ q: string; city: string; page: number } | null>(null);
   /** Ancla del heading de resultados para el scroll suave al paginar. */
   const resultsRef = useRef<HTMLDivElement | null>(null);
 
@@ -78,14 +82,16 @@ export function DirectoryExplorer({ initialCategory, children }: DirectoryExplor
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlQ = params.get("q") ?? "";
+    const urlCity = params.get(DIRECTORY_CITY_PARAM) ?? "";
     const rawPage = parseInt(params.get("page") ?? "", 10);
     const urlPage = Number.isFinite(rawPage) && rawPage > 1 ? rawPage : 1;
-    if (urlQ === "" && urlPage === 1) return;
-    pendingRestore.current = { q: urlQ, page: urlPage };
+    if (urlQ === "" && urlCity === "" && urlPage === 1) return;
+    pendingRestore.current = { q: urlQ, city: urlCity, page: urlPage };
     if (urlQ !== "") {
       setQ(urlQ);
       setQDebounced(urlQ);
     }
+    if (urlCity !== "") setCity(urlCity);
     if (urlPage !== 1) setPage(urlPage);
   }, []);
 
@@ -99,15 +105,17 @@ export function DirectoryExplorer({ initialCategory, children }: DirectoryExplor
     return () => clearTimeout(timer);
   }, [q, qDebounced]);
 
-  // Fetch de resultados + sync de la URL (solo "q" y "page"; page=1 se borra).
+  // Fetch de resultados + sync de la URL (solo "q", "city" y "page"; page=1 se borra).
   useEffect(() => {
     const pending = pendingRestore.current;
-    if (pending && (pending.q !== qDebounced || pending.page !== page)) return;
+    if (pending && (pending.q !== qDebounced || pending.city !== city || pending.page !== page)) return;
     pendingRestore.current = null;
 
     const url = new URL(window.location.href);
     if (qDebounced) url.searchParams.set("q", qDebounced);
     else url.searchParams.delete("q");
+    if (city) url.searchParams.set(DIRECTORY_CITY_PARAM, city);
+    else url.searchParams.delete(DIRECTORY_CITY_PARAM);
     if (page > 1) url.searchParams.set("page", String(page));
     else url.searchParams.delete("page");
     window.history.replaceState(window.history.state, "", url.toString());
@@ -116,6 +124,7 @@ export function DirectoryExplorer({ initialCategory, children }: DirectoryExplor
     const params = new URLSearchParams();
     if (initialCategory) params.set("category", initialCategory);
     if (qDebounced) params.set("q", qDebounced);
+    if (city) params.set(DIRECTORY_CITY_PARAM, city);
     params.set("page", String(page));
     // "Cerca de mí": ordena la lista por distancia y agrega "a X km" a las cards.
     if (geo) {
@@ -146,7 +155,7 @@ export function DirectoryExplorer({ initialCategory, children }: DirectoryExplor
         setLoading(false);
       });
     return () => controller.abort();
-  }, [qDebounced, page, initialCategory, retryTick, geo]);
+  }, [qDebounced, city, page, initialCategory, retryTick, geo]);
 
   const handlePageChange = (nextPage: number) => {
     setPage(nextPage);
@@ -185,13 +194,14 @@ export function DirectoryExplorer({ initialCategory, children }: DirectoryExplor
   };
 
   // Datos del mapa: hasta DIRECTORY_MAP_MAX clínicas CON pin para los markers,
-  // respetando categoría/búsqueda (+ cerca de mí). Solo cuando el mapa está activo.
+  // respetando categoría/búsqueda/ciudad (+ cerca de mí). Solo con el mapa activo.
   useEffect(() => {
     if (view !== "map") return;
     const controller = new AbortController();
     const params = new URLSearchParams();
     if (initialCategory) params.set("category", initialCategory);
     if (qDebounced) params.set("q", qDebounced);
+    if (city) params.set(DIRECTORY_CITY_PARAM, city);
     params.set("limit", String(DIRECTORY_MAP_MAX));
     if (geo) {
       params.set("lat", String(geo.lat));
@@ -213,7 +223,7 @@ export function DirectoryExplorer({ initialCategory, children }: DirectoryExplor
         setMapLoading(false);
       });
     return () => controller.abort();
-  }, [view, qDebounced, initialCategory, geo, retryTick]);
+  }, [view, qDebounced, city, initialCategory, geo, retryTick]);
 
   const total = data?.total ?? 0;
 
@@ -279,6 +289,27 @@ export function DirectoryExplorer({ initialCategory, children }: DirectoryExplor
               <X style={{ width: 16, height: 16 }} />
             </button>
           )}
+        </div>
+
+        {/* Filtro de ciudad (ciudades reales de la DB; se oculta solo si no hay) */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            flexWrap: "wrap",
+            gap: 8,
+            maxWidth: 640,
+            margin: "12px auto 0",
+          }}
+        >
+          <CityFilter
+            category={initialCategory}
+            value={city}
+            onChange={(c) => {
+              setCity(c);
+              setPage(1);
+            }}
+          />
         </div>
       </div>
 

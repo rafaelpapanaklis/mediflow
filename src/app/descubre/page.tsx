@@ -5,6 +5,7 @@ import { SalesNavSession } from "@/components/public/landing/nav-session";
 import { SalesFooter } from "@/components/public/landing/sales";
 import { DirectoryExplorer } from "@/components/directory/DirectoryExplorer";
 import { CategoryGrid } from "@/components/directory/CategoryGrid";
+import { TopCombosFooter } from "@/components/directory/CityLinks";
 import { buildMetadata, SITE_URL } from "@/lib/seo";
 import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
 import "@/components/public/landing/sales/sales.css";
@@ -32,6 +33,8 @@ export const metadata: Metadata = buildMetadata({
     "fisioterapia",
   ],
 });
+
+export const revalidate = 86400;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // /descubre — página B2C del directorio (estilo Doctoralia).
@@ -108,6 +111,9 @@ export default function DescubrePage() {
             </div>
           </section>
         </DirectoryExplorer>
+
+        {/* Interlinking: combinaciones populares (ISR, null sin DB) */}
+        <TopCombosFooter />
 
         {/* 3) CTA para dueños de clínica */}
         <section className="mfh-section--tight mfh-band--soft">

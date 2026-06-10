@@ -86,9 +86,24 @@ export function categoryLabel(category: string): string {
 //               page=<n base 1> (opcional, default 1) · slug=<clinicSlug> (lookup
 //               puntual para reabrir el popup al volver del registro).
 // SOLO datos públicos. Nunca exponer: email interno, tokens, billing, configs.
+// city=<slug de ciudad> (opcional; se resuelve contra el texto libre de
+//   Clinic.city vía @/lib/directory/cities).
 
 export const DIRECTORY_API = "/api/directory/clinics";
 export const DIRECTORY_PAGE_SIZE = 12;
+
+// ── API GET /api/directory/cities ────────────────────────────────────────────
+// Query params: category=<slug es> (opcional) — acota las ciudades a esa
+// categoría. Devuelve las ciudades REALES derivadas de la DB con su conteo.
+export const DIRECTORY_CITIES_API = "/api/directory/cities";
+
+/** Param de ciudad compartido por la API de clínicas y la URL del explorador. */
+export const DIRECTORY_CITY_PARAM = "city";
+
+export type { CityOption } from "./cities";
+export interface DirectoryCitiesResponse {
+  cities: import("./cities").CityOption[];
+}
 
 // ── Mapa / "cerca de mí" ─────────────────────────────────────────────────────
 // La API acepta además (todos opcionales):

@@ -8,11 +8,14 @@ import {
   type DirectoryClinicsResponse,
 } from "@/lib/directory/types";
 import { boundingBox, haversineKm, isValidLatLng, parseCoord } from "@/lib/directory/distance";
+import { resolveCityVariants } from "@/lib/directory/query";
 
 // GET /api/directory/clinics — API pública del directorio (sin auth).
 // Query params:
 //   category — slug en español de la categoría (ej. "dental"); inválida → 400.
 //   q        — búsqueda libre (trim, máx 100 chars) sobre name/city/state/description.
+//   city     — slug de ciudad (ej. "guadalajara"); se traduce al texto libre real
+//              de Clinic.city. Sin coincidencias → lista vacía (no error).
 //   slug     — lookup puntual de UNA clínica (ignora category/q/page; items de 0 o 1).
 //   page     — base 1, clamp [1, 500]. pageSize fijo = DIRECTORY_PAGE_SIZE.
 // Solo datos públicos (nunca email/tokens/billing). Cache CDN 120s + SWR 600s.
@@ -22,6 +25,10 @@ import { boundingBox, haversineKm, isValidLatLng, parseCoord } from "@/lib/direc
 export const dynamic = "force-dynamic";
 
 const CACHE_CONTROL = "public, s-maxage=120, stale-while-revalidate=600";
+
+function emptyResponse(page: number): DirectoryClinicsResponse {
+  return { items: [], total: 0, page, pageSize: DIRECTORY_PAGE_SIZE, totalPages: 0 };
+}
 
 /** Visibilidad base (SIEMPRE, también con slug): públicas y no canceladas. */
 function visibilityWhere(): any {
@@ -182,6 +189,18 @@ export async function GET(req: NextRequest) {
 
     const rawPage = parseInt(searchParams.get("page") ?? "1", 10);
     const page = Number.isFinite(rawPage) ? Math.min(500, Math.max(1, rawPage)) : 1;
+
+    // Ciudad: slug → variantes reales del texto libre de Clinic.city (dentro de
+    // visibilidad + categoría). Sin coincidencias → lista vacía. Acota `where`,
+    // así que aplica a todos los modos (lista, "cerca de mí" y mapa).
+    const citySlug = (searchParams.get("city") ?? "").trim().toLowerCase();
+    if (citySlug) {
+      const variants = await resolveCityVariants(citySlug, { ...where });
+      if (variants.length === 0) {
+        return NextResponse.json(emptyResponse(page), { headers: { "Cache-Control": CACHE_CONTROL } });
+      }
+      where.city = { in: variants };
+    }
 
     // ── "Cerca de mí" + modo mapa ─────────────────────────────────────────────
     // lat/lng (válidos) → orden por distancia + distanceKm en cada item.
