@@ -90,6 +90,24 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     });
     if (!existing) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
+    // FK del body acotados a la clínica de la sesión (mismo patrón que el
+    // POST de threads): un patientId ajeno vinculado aquí filtraría su PII
+    // vía el GET de este mismo thread.
+    if (parsed.data.patientId != null) {
+      const patient = await prisma.patient.findFirst({
+        where: { id: parsed.data.patientId, clinicId: dbUser.clinicId },
+        select: { id: true },
+      });
+      if (!patient) return NextResponse.json({ error: "patient_not_found" }, { status: 404 });
+    }
+    if (parsed.data.assignedToId != null) {
+      const assignee = await prisma.user.findFirst({
+        where: { id: parsed.data.assignedToId, clinicId: dbUser.clinicId, isActive: true },
+        select: { id: true },
+      });
+      if (!assignee) return NextResponse.json({ error: "assignee_not_found" }, { status: 404 });
+    }
+
     const data: Record<string, unknown> = {};
     if (parsed.data.status !== undefined) data.status = parsed.data.status;
     if (parsed.data.assignedToId !== undefined) data.assignedToId = parsed.data.assignedToId;

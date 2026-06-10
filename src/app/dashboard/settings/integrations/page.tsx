@@ -29,18 +29,21 @@ export default async function IntegrationsPage() {
     postmarkInbound: Boolean(process.env.POSTMARK_INBOUND_SECRET),
   };
 
+  // El Auth Token de Twilio NUNCA baja al cliente: solo el hecho de que
+  // existe y un enmascarado para mostrar.
+  const twilioToken = clinic?.twilioAuthToken ?? null;
+
   return (
     <IntegrationsClient
-      clinic={
-        clinic ?? {
-          id: "",
-          name: "",
-          twilioAccountSid: null,
-          twilioAuthToken: null,
-          twilioWhatsappNumber: null,
-          postmarkInboundEmail: null,
-        }
-      }
+      clinic={{
+        id: clinic?.id ?? "",
+        name: clinic?.name ?? "",
+        twilioAccountSid: clinic?.twilioAccountSid ?? null,
+        twilioConnected: Boolean(twilioToken),
+        twilioTokenMasked: twilioToken ? "••••" + twilioToken.slice(-4) : null,
+        twilioWhatsappNumber: clinic?.twilioWhatsappNumber ?? null,
+        postmarkInboundEmail: clinic?.postmarkInboundEmail ?? null,
+      }}
       serverStatus={serverStatus}
     />
   );

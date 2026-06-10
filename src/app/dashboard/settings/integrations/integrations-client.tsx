@@ -25,7 +25,9 @@ interface ClinicCreds {
   id: string;
   name: string;
   twilioAccountSid: string | null;
-  twilioAuthToken: string | null;
+  // El Auth Token nunca llega al cliente; solo si HAY uno guardado y su enmascarado.
+  twilioConnected: boolean;
+  twilioTokenMasked: string | null;
   twilioWhatsappNumber: string | null;
   postmarkInboundEmail: string | null;
 }
@@ -45,7 +47,10 @@ export function IntegrationsClient({
 }) {
   const t = useT();
   const [twilioSid, setTwilioSid] = useState(clinic.twilioAccountSid ?? "");
-  const [twilioToken, setTwilioToken] = useState(clinic.twilioAuthToken ?? "");
+  // Token: nunca se prefill. Vacío = conservar el guardado; con texto = reemplazarlo.
+  const [twilioToken, setTwilioToken] = useState("");
+  const [twilioConnected, setTwilioConnected] = useState(clinic.twilioConnected);
+  const [twilioMasked, setTwilioMasked] = useState(clinic.twilioTokenMasked);
   const [twilioNumber, setTwilioNumber] = useState(clinic.twilioWhatsappNumber ?? "");
   const [showToken, setShowToken] = useState(false);
   const [postmarkEmail, setPostmarkEmail] = useState(clinic.postmarkInboundEmail ?? "");
@@ -53,10 +58,11 @@ export function IntegrationsClient({
   const [savingEmail, setSavingEmail] = useState(false);
 
   const twilioStatus: Status = useMemo(() => {
-    if (twilioSid && twilioToken && twilioNumber) return "ok";
-    if (twilioSid || twilioToken || twilioNumber) return "warn";
+    const hasToken = twilioConnected || Boolean(twilioToken);
+    if (twilioSid && hasToken && twilioNumber) return "ok";
+    if (twilioSid || hasToken || twilioNumber) return "warn";
     return "off";
-  }, [twilioSid, twilioToken, twilioNumber]);
+  }, [twilioSid, twilioToken, twilioNumber, twilioConnected]);
 
   const emailStatus: Status = useMemo(() => {
     if (postmarkEmail && serverStatus.postmarkInbound) return "ok";
@@ -70,18 +76,27 @@ export function IntegrationsClient({
   const saveTwilio = useCallback(async () => {
     setSavingTwilio(true);
     try {
+      // El token solo viaja si el usuario escribió uno nuevo; omitirlo
+      // conserva el guardado (el PATCH solo copia llaves presentes).
+      const payload: Record<string, string | null> = {
+        twilioAccountSid: twilioSid || null,
+        twilioWhatsappNumber: twilioNumber || null,
+      };
+      const newToken = twilioToken.trim();
+      if (newToken) payload.twilioAuthToken = newToken;
       const res = await fetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          twilioAccountSid: twilioSid || null,
-          twilioAuthToken: twilioToken || null,
-          twilioWhatsappNumber: twilioNumber || null,
-        }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const errText = await res.text().catch(() => "");
         throw new Error(errText || t("settings.integrations.saveError"));
+      }
+      if (newToken) {
+        setTwilioConnected(true);
+        setTwilioMasked("••••" + newToken.slice(-4));
+        setTwilioToken("");
       }
       toast.success(t("settings.integrations.twilioSaved"));
     } catch (err) {
@@ -152,7 +167,7 @@ export function IntegrationsClient({
               hint={t("settings.integrations.twilioTokenHint")}
               value={twilioToken}
               onChange={setTwilioToken}
-              placeholder="••••••••••••••••••••••••••••••••"
+              placeholder={twilioConnected && twilioMasked ? twilioMasked : "••••••••••••••••••••••••••••••••"}
               type={showToken ? "text" : "password"}
               suffix={
                 <button
