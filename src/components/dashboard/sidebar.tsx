@@ -11,7 +11,7 @@ import {
   CreditCard, BarChart3, Monitor, UserCog, Globe, ClipboardList, Settings,
   ShoppingBag, Baby, Zap, Smile, Anchor, Truck, ShoppingCart,
   ChevronDown, ChevronRight, Moon, Sun, LogOut, PanelLeftClose, PanelLeft,
-  X, Plus, LifeBuoy, type LucideIcon,
+  X, Plus, LifeBuoy, Star, type LucideIcon,
 } from "lucide-react";
 import { useSidebarCounts } from "@/hooks/use-sidebar-counts";
 import { useActiveConsult } from "@/hooks/use-active-consult";
@@ -224,6 +224,7 @@ const NAV_ITEMS: NavItemDef[] = [
   // Soporte Técnico: sin `permission` a propósito — cualquier usuario de la
   // clínica puede levantar tickets hacia DaleControl.
   { id: "soporte",        section: "admin", label: "Soporte Técnico",   href: "/dashboard/soporte",       icon: LifeBuoy },
+  { id: "resenas",        section: "admin", label: "Reseñas",           href: "/dashboard/resenas",       icon: Star, adminOnly: true },
 ];
 
 // ═══════════════════════════════════════════════════════════════════

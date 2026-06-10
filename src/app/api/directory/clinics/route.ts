@@ -9,6 +9,7 @@ import {
 } from "@/lib/directory/types";
 import { boundingBox, haversineKm, isValidLatLng, parseCoord } from "@/lib/directory/distance";
 import { resolveCityVariants } from "@/lib/directory/query";
+import { getRatingsForClinics } from "@/lib/reviews/service";
 
 // GET /api/directory/clinics — API pública del directorio (sin auth).
 // Query params:
@@ -110,7 +111,7 @@ function buildFeaturedServices(users: any[], landingServices: unknown): string[]
   return out;
 }
 
-function toDirectoryClinic(row: any): DirectoryClinic {
+function toDirectoryClinic(row: any, rating?: { avg: number; count: number }): DirectoryClinic {
   return {
     id: row.id,
     name: row.name,
@@ -144,6 +145,8 @@ function toDirectoryClinic(row: any): DirectoryClinic {
       openTime: s.openTime,
       closeTime: s.closeTime,
     })),
+    ratingAvg: rating?.avg ?? 0,
+    ratingCount: rating?.count ?? 0,
   };
 }
 
@@ -155,7 +158,8 @@ export async function GET(req: NextRequest) {
     const slug = searchParams.get("slug")?.trim() ?? "";
     if (slug) {
       const rows = await queryDirectoryClinics({ ...visibilityWhere(), slug }, 0, 1);
-      const items = rows.map(toDirectoryClinic);
+      const ratings = await getRatingsForClinics(rows.map((r) => r.id));
+      const items = rows.map((r) => toDirectoryClinic(r, ratings.get(r.id)));
       const body: DirectoryClinicsResponse = {
         items,
         total: items.length,
@@ -239,7 +243,8 @@ export async function GET(req: NextRequest) {
         prisma.clinic.count({ where: mapWhere }),
         queryDirectoryClinics(mapWhere, 0, nearMode ? CANDIDATE_CAP : limit),
       ]);
-      let items = rows.map(toDirectoryClinic);
+      const ratings = await getRatingsForClinics(rows.map((r) => r.id));
+      let items = rows.map((r) => toDirectoryClinic(r, ratings.get(r.id)));
       if (nearMode) {
         items = items
           .map((c) => ({ ...c, distanceKm: distanceOf(c) }))
@@ -262,7 +267,8 @@ export async function GET(req: NextRequest) {
     // Con radio: solo las que caen dentro del radio (las sin pin quedan fuera).
     if (nearMode) {
       const rows = await queryDirectoryClinics({ ...where }, 0, CANDIDATE_CAP);
-      let items = rows.map(toDirectoryClinic).map((c) => ({ ...c, distanceKm: distanceOf(c) }));
+      const ratings = await getRatingsForClinics(rows.map((r) => r.id));
+      let items = rows.map((r) => toDirectoryClinic(r, ratings.get(r.id))).map((c) => ({ ...c, distanceKm: distanceOf(c) }));
       if (radiusKm != null) {
         items = items.filter((c) => c.distanceKm != null && c.distanceKm <= radiusKm);
       }
@@ -286,8 +292,9 @@ export async function GET(req: NextRequest) {
       queryDirectoryClinics(where, (page - 1) * DIRECTORY_PAGE_SIZE, DIRECTORY_PAGE_SIZE),
     ]);
 
+    const ratings = await getRatingsForClinics(rows.map((r) => r.id));
     const body: DirectoryClinicsResponse = {
-      items: rows.map(toDirectoryClinic),
+      items: rows.map((r) => toDirectoryClinic(r, ratings.get(r.id))),
       total,
       page,
       pageSize: DIRECTORY_PAGE_SIZE,

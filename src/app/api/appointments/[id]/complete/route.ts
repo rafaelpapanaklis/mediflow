@@ -13,6 +13,7 @@ import {
   findPreviousSnapshot,
   readCurrentEntries,
 } from "@/lib/odontogram/snapshot";
+import { sendReviewInvitation } from "@/lib/reviews/invite";
 
 export const dynamic = "force-dynamic";
 
@@ -140,6 +141,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
   } catch (err) {
     console.error("[/api/appointments/:id/complete] snapshot/diff error", err);
+  }
+
+  // Invitación a reseña verificada (best-effort; nunca rompe el cierre). WS2-T2.
+  try {
+    await sendReviewInvitation(params.id);
+  } catch (err) {
+    console.error("[/api/appointments/:id/complete] review invite error", err);
   }
 
   revalidateAfter("appointments");

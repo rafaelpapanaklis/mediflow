@@ -5,6 +5,7 @@ import { CalendarCheck, MapPin } from "lucide-react";
 import { categoryLabel, type DirectoryClinic } from "@/lib/directory/types";
 import { openBookingPopup } from "@/lib/directory/booking-state";
 import { formatDistanceEs } from "@/lib/directory/distance";
+import { ReviewStars } from "@/components/reviews/ReviewStars";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Card de clínica del directorio público (/descubre). Imágenes remotas con
@@ -98,6 +99,13 @@ export function ClinicCard({ clinic }: ClinicCardProps) {
             {formatDistanceEs(clinic.distanceKm)}
           </span>
         )}
+        {clinic.ratingCount > 0 && (
+          <p className="flex items-center gap-1.5 text-[13px]">
+            <ReviewStars value={clinic.ratingAvg} size={14} />
+            <span className="font-semibold text-[var(--ink,#0f172a)]">{clinic.ratingAvg.toFixed(1)}</span>
+            <span className="text-[var(--muted,#64748b)]">({clinic.ratingCount})</span>
+          </p>
+        )}
 
         {blurb && (
           <p className="line-clamp-2 text-[13px] leading-relaxed text-[var(--body,#475569)]">
@@ -142,14 +150,12 @@ export function ClinicCard({ clinic }: ClinicCardProps) {
           <CalendarCheck size={16} aria-hidden="true" />
           Reservar cita
         </button>
-        {clinic.landingActive && (
-          <Link
-            href={`/${clinic.slug}`}
-            className="inline-flex items-center justify-center whitespace-nowrap rounded-xl border border-[var(--line,#e9e7f3)] px-3.5 py-2.5 text-sm font-medium text-[var(--ink,#0f172a)] transition hover:bg-[var(--tint2,#faf8ff)]"
-          >
-            Ver clínica
-          </Link>
-        )}
+        <Link
+          href={`/descubre/clinica/${clinic.slug}`}
+          className="inline-flex items-center justify-center whitespace-nowrap rounded-xl border border-[var(--line,#e9e7f3)] px-3.5 py-2.5 text-sm font-medium text-[var(--ink,#0f172a)] transition hover:bg-[var(--tint2,#faf8ff)]"
+        >
+          Ver perfil
+        </Link>
       </div>
     </article>
   );

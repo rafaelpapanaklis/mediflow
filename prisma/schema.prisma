@@ -7011,3 +7011,48 @@ model AffiliateSellerCommission {
   @@index([affiliateId])
   @@map("affiliate_seller_commissions")
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Reseñas verificadas del directorio público (WS2-T2 perfil-resenas).
+// Una reseña por cita COMPLETADA (appointmentId @unique). Se invita por link
+// tokenizado de un solo uso (expira 30 días); el paciente envía rating 1-5 +
+// comentario sin login. La clínica responde (una vez); el admin oculta las
+// reportadas. SIN relaciones Prisma hacia Clinic/Patient/Appointment a
+// propósito: las FKs viven en sql/resenas.sql para NO editar esos modelos y
+// evitar colisiones con otras terminales que también tocan el schema. RLS
+// deny-all en sql/resenas.sql (patrón rls-deny-all-policies). authorName se
+// congela al invitar (nombre + inicial) para mostrar sin join.
+// ═══════════════════════════════════════════════════════════════════
+model ClinicReview {
+  id            String  @id @default(cuid())
+  clinicId      String
+  patientId     String
+  appointmentId String  @unique
+  authorName    String
+  rating        Int? // 1-5; null hasta que el paciente envía
+  comment       String? // texto plano sanitizado server-side
+  status        String  @default("pending") // pending | published | hidden
+
+  // Respuesta de la clínica (una sola).
+  response      String?
+  respondedAt   DateTime?
+  respondedById String?
+
+  // Moderación: cualquiera puede reportar; el admin oculta.
+  reported       Boolean   @default(false)
+  reportedReason String?
+  reportedAt     DateTime?
+
+  // Invitación tokenizada de un solo uso.
+  token           String   @unique
+  tokenExpiresAt  DateTime
+  submittedAt     DateTime?
+  invitedChannels String[] @default([]) // ["whatsapp","email"] enviados
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clinicId, status, createdAt])
+  @@index([clinicId, reported])
+  @@map("clinic_reviews")
+}

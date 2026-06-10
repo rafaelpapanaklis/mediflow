@@ -84,3 +84,53 @@ export function medicalBusinessLd(opts: MedicalBusinessLd) {
     ...(opts.medicalSpecialty ? { medicalSpecialty: opts.medicalSpecialty } : {}),
   };
 }
+
+export type LocalBusinessLd = {
+  name: string;
+  description: string;
+  url: string;
+  image?: string | null;
+  telephone?: string | null;
+  address?: { street?: string | null; city?: string | null; state?: string | null; country?: string };
+  /** Promedio + total de reseñas → AggregateRating (solo si count > 0). */
+  rating?: { value: number; count: number } | null;
+  priceRange?: string;
+};
+
+/** LocalBusiness con AggregateRating opcional — para el perfil público de clínica. */
+export function localBusinessLd(opts: LocalBusinessLd) {
+  const a = opts.address;
+  const hasAddress = Boolean(a && (a.street || a.city || a.state));
+  return {
+    "@context": "https://schema.org",
+    "@type": "LocalBusiness",
+    name: opts.name,
+    description: opts.description,
+    url: opts.url,
+    ...(opts.image ? { image: opts.image } : {}),
+    ...(opts.telephone ? { telephone: opts.telephone } : {}),
+    ...(opts.priceRange ? { priceRange: opts.priceRange } : {}),
+    ...(hasAddress
+      ? {
+          address: {
+            "@type": "PostalAddress",
+            ...(a?.street ? { streetAddress: a.street } : {}),
+            ...(a?.city ? { addressLocality: a.city } : {}),
+            ...(a?.state ? { addressRegion: a.state } : {}),
+            addressCountry: a?.country ?? "MX",
+          },
+        }
+      : {}),
+    ...(opts.rating && opts.rating.count > 0
+      ? {
+          aggregateRating: {
+            "@type": "AggregateRating",
+            ratingValue: opts.rating.value,
+            reviewCount: opts.rating.count,
+            bestRating: 5,
+            worstRating: 1,
+          },
+        }
+      : {}),
+  };
+}

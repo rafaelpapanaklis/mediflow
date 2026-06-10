@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { tzLocalToUtc } from "@/lib/agenda/time-utils";
+import { tzLocalToUtc, getTzParts } from "@/lib/agenda/time-utils";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 
 // GET /api/public/availability?slug=my-clinic&date=2026-04-10&doctorId=xxx
@@ -98,7 +98,23 @@ export async function GET(req: NextRequest) {
   });
 
   const bookedTimes = new Set(booked.map(b => timeHHMMInTz(b.startsAt, clinic.timezone)));
-  const available   = slots.filter(s => !bookedTimes.has(s));
+  let available     = slots.filter(s => !bookedTimes.has(s));
+
+  // Si la fecha pedida es HOY en la zona horaria de la clínica, oculta los
+  // horarios cuya hora de inicio ya pasó (antes solo se filtraban días pasados,
+  // no las horas vencidas del día en curso).
+  const nowTz = getTzParts(new Date(), clinic.timezone);
+  const todayInTz = `${nowTz.year}-${String(nowTz.month).padStart(2, "0")}-${String(nowTz.day).padStart(2, "0")}`;
+  if (dateStr === todayInTz) {
+    const nowMins = nowTz.hour * 60 + nowTz.minute;
+    available = available.filter(s => {
+      const [h, mn] = s.split(":").map(Number);
+      return h * 60 + mn > nowMins;
+    });
+    if (available.length === 0) {
+      return NextResponse.json({ slots: [], reason: "No quedan horarios disponibles para hoy" });
+    }
+  }
 
   return NextResponse.json({
     clinic: {

@@ -167,6 +167,10 @@ export interface DirectoryClinic {
   longitude: number | null;
   /** Distancia en km al punto del usuario; presente SOLO en modo "cerca de mí". */
   distanceKm?: number | null;
+  /** Promedio de reseñas verificadas publicadas, 0 si no hay (WS2-T2). */
+  ratingAvg: number;
+  /** Número de reseñas verificadas publicadas (WS2-T2). */
+  ratingCount: number;
 }
 
 export interface DirectoryClinicsResponse {
