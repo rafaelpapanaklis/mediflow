@@ -1,5 +1,7 @@
 import { AdminSidebar } from "./admin-nav";
 import { prisma } from "@/lib/prisma";
+import { isAdminAuthed } from "@/lib/admin-auth";
+import AdminLoginPage from "./login/page";
 
 async function getNavCounts() {
   try {
@@ -18,6 +20,14 @@ async function getNavCounts() {
 }
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  // Defensa en profundidad (CVE-2025-29927): no depender solo del middleware.
+  // /admin/login vive BAJO este layout, así que redirect("/admin/login") aquí
+  // haría loop infinito para el visitante sin cookie; en su lugar se renderiza
+  // el login y children (las páginas admin) nunca llega al cliente.
+  if (!isAdminAuthed()) {
+    return <AdminLoginPage />;
+  }
+
   const counts = await getNavCounts();
 
   return (

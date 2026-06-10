@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
+import { isAdminAuthed } from "@/lib/admin-auth";
 import { prisma } from "@/lib/prisma";
 import { CIE9_ESSENTIALS } from "@/lib/seeds/cie9-essentials";
 
@@ -8,12 +8,11 @@ export const maxDuration = 60;
 
 /**
  * POST /api/admin/seed-cie9 — carga catálogo CIE-9-MC essentials.
- * Solo SUPER_ADMIN. Idempotente.
+ * Solo admin de plataforma (cookie admin_token, isAdminAuthed). Idempotente.
  */
 export async function POST() {
-  const user = await getCurrentUser();
-  if (user.role !== "SUPER_ADMIN") {
-    return NextResponse.json({ error: "forbidden_super_admin_only" }, { status: 403 });
+  if (!isAdminAuthed()) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const result = await prisma.cie9Code.createMany({
     data: CIE9_ESSENTIALS,

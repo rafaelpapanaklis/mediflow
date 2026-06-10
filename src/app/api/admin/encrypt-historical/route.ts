@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
+import { isAdminAuthed } from "@/lib/admin-auth";
 import { prisma } from "@/lib/prisma";
 import { encryptField, isEnvelope } from "@/lib/crypto/envelope";
 
@@ -12,18 +12,19 @@ export const maxDuration = 300;
  * Sweep de cifrado para datos históricos en texto plano. Idempotente:
  * solo cifra rows cuyos campos NO tengan ya el prefijo "v1:".
  *
- * Solo SUPER_ADMIN. Ejecuta de a batches con limit (default 50).
+ * Solo admin de plataforma (cookie admin_token, isAdminAuthed) — el rol
+ * SUPER_ADMIN lo tiene cualquier dueño de clínica y NO sirve como gate aquí.
+ * Ejecuta de a batches con limit (default 50).
  *
  * Por defecto dryRun=true (solo cuenta sin escribir).
  *
- * Multi-tenant: NO filtramos por clinicId — el SUPER_ADMIN sweep cubre
+ * Multi-tenant: NO filtramos por clinicId — el sweep de plataforma cubre
  * todas las clínicas. Los datos cifrados siguen perteneciendo a su clinic
  * vía el clinicId existente en cada row, no se cruzan.
  */
 export async function POST(req: NextRequest) {
-  const user = await getCurrentUser();
-  if (user.role !== "SUPER_ADMIN") {
-    return NextResponse.json({ error: "forbidden_super_admin_only" }, { status: 403 });
+  if (!isAdminAuthed()) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const sp = req.nextUrl.searchParams;

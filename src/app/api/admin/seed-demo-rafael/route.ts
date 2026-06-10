@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
+import { isAdminAuthed } from "@/lib/admin-auth";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { TREATMENT_KINDS } from "@/lib/agenda/types";
@@ -17,7 +17,9 @@ export const maxDuration = 60;
  * IDEMPOTENTE: cada etapa chequea si ya hay datos seedeados antes de crear.
  * Si una llamada falla a mitad, la siguiente continúa donde quedó.
  *
- * Solo SUPER_ADMIN. Pacientes seedeados llevan tag "demo" para borrarlos
+ * Solo admin de plataforma (cookie admin_token, isAdminAuthed) — el rol
+ * SUPER_ADMIN es de dueño de clínica, no gate de plataforma.
+ * Pacientes seedeados llevan tag "demo" para borrarlos
  * en bulk con DELETE.
  *
  * MediFlow es DENTAL — todos los tratamientos, dx CIE-10 y recetas son
@@ -324,9 +326,8 @@ interface SeedError { stage: string; message: string; item?: string }
 // ─────────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  const user = await getCurrentUser();
-  if (user.role !== "SUPER_ADMIN") {
-    return NextResponse.json({ error: "forbidden_super_admin_only" }, { status: 403 });
+  if (!isAdminAuthed()) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await req.json().catch(() => ({})) as {
@@ -1042,9 +1043,8 @@ export async function POST(req: NextRequest) {
 // ─────────────────────────────────────────────────────────────────────────
 
 export async function DELETE(req: NextRequest) {
-  const user = await getCurrentUser();
-  if (user.role !== "SUPER_ADMIN") {
-    return NextResponse.json({ error: "forbidden_super_admin_only" }, { status: 403 });
+  if (!isAdminAuthed()) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const confirm = req.headers.get("x-confirm-delete-demo");
