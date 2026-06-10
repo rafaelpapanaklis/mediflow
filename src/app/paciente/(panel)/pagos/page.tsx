@@ -9,6 +9,10 @@
 //   kind="factura", total/paid/balance (formatMxn). Pendientes resaltadas.
 // · Estados vacíos. Responsive: tabla fluida desktop / cards móvil, sin
 //   anchos fijos con scroll cortado.
+// · Acciones por factura (A3): "Pagar ahora" → POST /api/paciente/payments/
+//   checkout {invoiceId} → redirige a {url} (solo si la clínica tiene
+//   onlinePaymentEnabled); si no, "Paga en tu clínica". "Recibo (PDF)" si
+//   paid > 0 → GET /api/paciente/invoices/[id]/receipt en pestaña nueva.
 import { useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { usePacienteData } from "@/lib/patient-portal/use-paciente";
@@ -35,16 +39,16 @@ const summaryGrid: CSSProperties = {
   gap: 12,
 };
 
-// Cada factura es un grid responsive: en desktop se alinea como tabla fluida
-// (mismas columnas en todas las filas) y en pantallas angostas las celdas
-// se apilan como card — sin anchos fijos ni scroll horizontal.
-const rowGrid: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))",
-  gap: 10,
-  alignItems: "center",
-  padding: "12px 2px",
-};
+// Cada factura es un grid responsive sin anchos fijos ni scroll horizontal:
+// · <768px: auto-fit apila las celdas como card (1 col en ~360px, 2-3 según
+//   quepan mínimos de 150px).
+// · ≥768px: 5 columnas fijas proporcionales (minmax(0,…fr)) para que todas
+//   las filas alineen entre sí (efecto tabla). auto-fit solo no alcanza
+//   5×150px con sidebar de 240px en viewports de 1024-1125px (~700px útiles).
+const facturaRowCss = `
+.a8FacturaRow{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:10px;align-items:center;padding:12px 2px}
+@media (min-width:768px){.a8FacturaRow{grid-template-columns:minmax(0,1.6fr) repeat(3,minmax(0,1fr)) minmax(0,1.2fr)}}
+`;
 
 const breakdownBox: CSSProperties = {
   marginTop: 12,
@@ -162,6 +166,7 @@ export default function PacientePagosPage() {
         />
       ) : (
         <PacienteCard title="Facturas">
+          <style>{facturaRowCss}</style>
           <div>
             {visibles.map((f, i) => (
               <FacturaRow
@@ -169,6 +174,10 @@ export default function PacientePagosPage() {
                 factura={f}
                 first={i === 0}
                 clinicLabel={multiClinic ? clinicName(clinics, f.clinicId) : null}
+                onlinePaymentEnabled={
+                  clinics.find((c) => c.clinicId === f.clinicId)?.onlinePaymentEnabled ===
+                  true
+                }
               />
             ))}
           </div>
@@ -192,14 +201,42 @@ function FacturaRow({
   factura: f,
   first,
   clinicLabel,
+  onlinePaymentEnabled,
 }: {
   factura: PacienteFactura;
   first: boolean;
   clinicLabel: string | null;
+  onlinePaymentEnabled: boolean;
 }) {
+  const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
   const saldoPendiente = f.balance > 0 && f.status !== "CANCELLED";
+
+  async function handlePagar() {
+    setPaying(true);
+    setPayError(null);
+    try {
+      const res = await fetch("/api/paciente/payments/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoiceId: f.id }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data && data.url) {
+        // Mantiene "Abriendo pago…" deshabilitado mientras redirige.
+        window.location.href = data.url;
+        return;
+      }
+      setPayError((data && data.error) || "No se pudo iniciar el pago. Intenta de nuevo.");
+      setPaying(false);
+    } catch {
+      setPayError("No se pudo iniciar el pago. Intenta de nuevo.");
+      setPaying(false);
+    }
+  }
+
   return (
-    <div style={{ ...rowGrid, borderTop: first ? "none" : DIVIDER }}>
+    <div className="a8FacturaRow" style={{ borderTop: first ? "none" : DIVIDER }}>
       <div style={{ minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
           <span style={{ color: TEXT, fontWeight: 600, fontSize: 15 }}>
@@ -219,6 +256,72 @@ function FacturaRow({
         value={formatMxn(f.balance)}
         color={saldoPendiente ? AMBER : MUTED}
       />
+      <div
+        style={{
+          minWidth: 0,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-start",
+          gap: 6,
+        }}
+      >
+        {saldoPendiente &&
+          (onlinePaymentEnabled ? (
+            <div style={{ minWidth: 0, maxWidth: "100%" }}>
+              <button
+                type="button"
+                onClick={handlePagar}
+                disabled={paying}
+                style={{
+                  background: "#7c3aed",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 10,
+                  padding: "9px 16px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: paying ? "default" : "pointer",
+                  minHeight: 38,
+                  // Cubre el ancho de "Abriendo pago…" para que el botón no
+                  // salte al entrar al estado loading.
+                  minWidth: 132,
+                  maxWidth: "100%",
+                  opacity: paying ? 0.7 : 1,
+                }}
+              >
+                {paying ? "Abriendo pago…" : "Pagar ahora"}
+              </button>
+              {payError && (
+                <div role="alert" style={{ color: "#f87171", fontSize: 12, marginTop: 4 }}>
+                  {payError}
+                </div>
+              )}
+            </div>
+          ) : (
+            <span style={{ color: MUTED, fontSize: 13 }}>Paga en tu clínica</span>
+          ))}
+        {f.paid > 0 && (
+          <a
+            href={"/api/paciente/invoices/" + f.id + "/receipt"}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={"Recibo PDF de la factura " + f.invoiceNumber}
+            style={{
+              // Área táctil ≥34px y aire respecto al botón "Pagar ahora".
+              display: "inline-flex",
+              alignItems: "center",
+              minHeight: 34,
+              padding: "2px 10px 2px 0",
+              color: "#a78bfa",
+              fontSize: 13,
+              textDecoration: "none",
+              fontWeight: 600,
+            }}
+          >
+            Recibo (PDF)
+          </a>
+        )}
+      </div>
     </div>
   );
 }

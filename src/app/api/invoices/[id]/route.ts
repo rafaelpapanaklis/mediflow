@@ -32,24 +32,34 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const ctx = await getCtx();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { clinicId } = ctx;
-  const { amount, method, reference, notes, paidAt } = await req.json();
-  const invoice = await prisma.invoice.findFirst({ where: { id: params.id, clinicId } });
-  if (!invoice) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (invoice.status === "DRAFT") return NextResponse.json({ error: "Confirma la factura antes de registrar pagos" }, { status: 400 });
-  if (invoice.status === "CANCELLED") return NextResponse.json({ error: "Esta factura está cancelada" }, { status: 400 });
-  if (amount <= 0) return NextResponse.json({ error: "El monto debe ser mayor a 0" }, { status: 400 });
-  if (amount > invoice.balance) return NextResponse.json({ error: "El monto excede el saldo pendiente" }, { status: 400 });
+  const { amount: rawAmount, method, reference, notes, paidAt } = await req.json();
+  const amount = Number(rawAmount);
+  if (!isFinite(amount) || amount <= 0) return NextResponse.json({ error: "El monto debe ser mayor a 0" }, { status: 400 });
   // paidAt es opcional. Permite back-date para registrar pagos pasados; si
   // viene inválido, ignoramos y usamos default(now()).
   const paidAtDate = paidAt ? new Date(paidAt) : null;
   const validPaidAt = paidAtDate && !isNaN(paidAtDate.getTime()) ? paidAtDate : undefined;
-  const newPaid = invoice.paid + amount;
-  const newBalance = invoice.total - newPaid;
-  const newStatus = newBalance <= 0 ? "PAID" : "PARTIAL";
-  await prisma.$transaction([
-    prisma.payment.create({ data: { invoiceId: params.id, amount, method, reference, notes, ...(validPaidAt ? { paidAt: validPaidAt } : {}) } }),
-    prisma.invoice.updateMany({ where: { id: params.id, clinicId }, data: { paid: newPaid, balance: Math.max(0, newBalance), status: newStatus as any, paidAt: newStatus === "PAID" ? (validPaidAt ?? new Date()) : undefined, paymentMethod: method } }),
-  ]);
+
+  // Lectura + escritura en la MISMA transacción con lock de fila (FOR UPDATE):
+  // serializa contra el webhook de pago en línea del portal del paciente
+  // (online-payment.ts) y contra dobles registros simultáneos — sin lost
+  // updates de paid/balance.
+  const result = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${params.id} FOR UPDATE`;
+    const invoice = await tx.invoice.findFirst({ where: { id: params.id, clinicId } });
+    if (!invoice) return { error: "Not found", status: 404 };
+    if (invoice.status === "DRAFT") return { error: "Confirma la factura antes de registrar pagos", status: 400 };
+    if (invoice.status === "CANCELLED") return { error: "Esta factura está cancelada", status: 400 };
+    if (amount > invoice.balance) return { error: "El monto excede el saldo pendiente", status: 400 };
+    const newPaid = invoice.paid + amount;
+    const newBalance = invoice.total - newPaid;
+    const newStatus = newBalance <= 0 ? "PAID" : "PARTIAL";
+    await tx.payment.create({ data: { invoiceId: params.id, amount, method, reference, notes, ...(validPaidAt ? { paidAt: validPaidAt } : {}) } });
+    await tx.invoice.updateMany({ where: { id: params.id, clinicId }, data: { paid: newPaid, balance: Math.max(0, newBalance), status: newStatus as any, paidAt: newStatus === "PAID" ? (validPaidAt ?? new Date()) : undefined, paymentMethod: method } });
+    return { invoice, newPaid, newBalance, newStatus };
+  });
+  if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.status });
+  const { invoice, newPaid, newBalance, newStatus } = result;
 
   await logMutation({
     req,

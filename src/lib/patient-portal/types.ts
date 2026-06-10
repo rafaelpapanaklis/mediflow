@@ -26,6 +26,8 @@
 //                                       | 401 | 404 | 409 | 422
 //   · GET  /api/paciente/history      → 200 PacienteHistorialResponse | 401
 //   · GET  /api/paciente/payments     → 200 PacientePagosResponse | 401
+//   · POST /api/paciente/payments/checkout → 200 { url } | 400 | 401 | 404 | 409 | 429
+//   · GET  /api/paciente/invoices/[id]/receipt → 200 PDF | 400 | 401 | 404
 //
 //   Documentos (WS1-T6, aditivo):
 //   · GET  /api/paciente/documentos   → 200 PacienteDocumentosResponse | 401
@@ -132,6 +134,8 @@ export interface PacienteClinica {
   phone: string | null;
   patientId: string;
   patientNumber: string;
+  /** true si la clínica acepta pago en línea desde el portal (WS1-T4). */
+  onlinePaymentEnabled?: boolean;
 }
 
 /** Solicitud de cambio PENDING de una cita (reagendar/cancelar, WS1-T5). */

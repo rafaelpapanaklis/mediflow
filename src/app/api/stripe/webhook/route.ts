@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { createRoom, createMeetingToken } from "@/lib/daily";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
+import { PATIENT_INVOICE_KIND, applyInvoiceOnlinePayment } from "@/lib/patient-portal/online-payment";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,21 @@ export async function POST(req: NextRequest) {
 
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as any;
+
+      // Pago de factura desde el portal del paciente (WS1-T4): se identifica
+      // por metadata.kind para no confundirlo con teleconsultas.
+      if (session.metadata?.kind === PATIENT_INVOICE_KIND) {
+        const invoiceId = session.metadata?.invoiceId;
+        if (invoiceId) {
+          await applyInvoiceOnlinePayment({
+            invoiceId,
+            amountMxn: (session.amount_total ?? 0) / 100,
+            reference: (typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id) || session.id,
+          });
+        }
+        return NextResponse.json({ received: true });
+      }
+
       const appointmentId = session.metadata?.appointmentId;
 
       if (!appointmentId) {

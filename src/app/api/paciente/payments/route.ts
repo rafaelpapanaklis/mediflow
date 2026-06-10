@@ -11,6 +11,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getPatientPortalContext, pacienteUnauthorized } from "@/lib/patient-portal/guard";
+import { getClinicConnectAccounts } from "@/lib/patient-portal/online-payment";
 import type {
   PacienteClinica,
   PacienteFactura,
@@ -33,6 +34,7 @@ export async function GET() {
     if (!ctx) return pacienteUnauthorized();
 
     const patientIds = ctx.links.map((l) => l.patientId);
+    const clinicIds = Array.from(new Set(ctx.links.map((l) => l.clinicId)));
     if (patientIds.length === 0) {
       const empty: PacientePagosResponse = {
         clinics: [],
@@ -43,7 +45,7 @@ export async function GET() {
       return NextResponse.json(empty);
     }
 
-    const [links, invoiceRows] = await Promise.all([
+    const [links, invoiceRows, connectAccounts] = await Promise.all([
       prisma.patientAccountLink.findMany({
         where: { accountId: ctx.account.id, patient: { deletedAt: null } },
         select: {
@@ -87,6 +89,7 @@ export async function GET() {
           paidAt: true,
         },
       }),
+      getClinicConnectAccounts(clinicIds),
     ]);
 
     const clinics: PacienteClinica[] = links.map((l) => ({
@@ -98,6 +101,7 @@ export async function GET() {
       phone: l.patient.clinic.phone,
       patientId: l.patient.id,
       patientNumber: l.patient.patientNumber,
+      onlinePaymentEnabled: connectAccounts.has(l.patient.clinic.id),
     }));
 
     // Solo facturas de expedientes visibles (paciente no soft-deleted),

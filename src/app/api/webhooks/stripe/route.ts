@@ -14,6 +14,7 @@ import {
   AI_TOPUP_KIND,
   AI_SETUP_KIND,
 } from "@/lib/ai-billing/recharge";
+import { PATIENT_INVOICE_KIND, applyInvoiceOnlinePayment } from "@/lib/patient-portal/online-payment";
 
 // Next.js App Router: no hace body-parsing automático aquí porque leemos el
 // raw body para verificar la firma de Stripe.
@@ -50,6 +51,21 @@ export async function POST(req: NextRequest) {
       // viven en el mismo webhook pero NO traen este flag.
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
+
+        // Pago de factura desde el portal del paciente (WS1-T4). Idempotente —
+        // el webhook de teleconsulta puede procesar la misma sesión.
+        if (session.metadata?.kind === PATIENT_INVOICE_KIND) {
+          const invoiceId = session.metadata?.invoiceId;
+          if (invoiceId) {
+            await applyInvoiceOnlinePayment({
+              invoiceId,
+              amountMxn: (session.amount_total ?? 0) / 100,
+              reference: (typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id) || session.id,
+            });
+          }
+          break;
+        }
+
         if (session.metadata?.kind !== "platform-subscription") break;
 
         const clinicId = session.metadata?.clinicId;

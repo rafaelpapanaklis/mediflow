@@ -36,23 +36,30 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const { method } = await req.json().catch(() => ({ method: undefined }));
   const payMethod = (method ?? "cash") as string;
 
-  const invoice = await prisma.invoice.findFirst({ where: { id: params.id, clinicId } });
-  if (!invoice) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
-  if (invoice.status === "DRAFT")     return NextResponse.json({ error: "Confirma la factura antes de marcarla pagada" }, { status: 400 });
-  if (invoice.status === "CANCELLED") return NextResponse.json({ error: "La factura está cancelada" }, { status: 400 });
-  if (invoice.status === "PAID")      return NextResponse.json({ error: "La factura ya está pagada" }, { status: 400 });
-  if (invoice.balance <= 0)           return NextResponse.json({ error: "No hay saldo pendiente" }, { status: 400 });
-
-  const amount = invoice.balance;
   const now = new Date();
 
-  await prisma.$transaction([
-    prisma.payment.create({ data: { invoiceId: params.id, amount, method: payMethod, paidAt: now } }),
-    prisma.invoice.updateMany({
+  // Lectura + escritura con lock de fila (FOR UPDATE): serializa contra el
+  // webhook de pago en línea del portal del paciente (online-payment.ts) y
+  // contra dobles clicks — sin lost updates de paid/balance.
+  const result = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${params.id} FOR UPDATE`;
+    const invoice = await tx.invoice.findFirst({ where: { id: params.id, clinicId } });
+    if (!invoice) return { error: "Factura no encontrada", status: 404 };
+    if (invoice.status === "DRAFT")     return { error: "Confirma la factura antes de marcarla pagada", status: 400 };
+    if (invoice.status === "CANCELLED") return { error: "La factura está cancelada", status: 400 };
+    if (invoice.status === "PAID")      return { error: "La factura ya está pagada", status: 400 };
+    if (invoice.balance <= 0)           return { error: "No hay saldo pendiente", status: 400 };
+
+    const amount = invoice.balance;
+    await tx.payment.create({ data: { invoiceId: params.id, amount, method: payMethod, paidAt: now } });
+    await tx.invoice.updateMany({
       where: { id: params.id, clinicId },
       data:  { paid: invoice.paid + amount, balance: 0, status: "PAID", paidAt: now, paymentMethod: payMethod },
-    }),
-  ]);
+    });
+    return { invoice, amount };
+  });
+  if ("error" in result) return NextResponse.json({ error: result.error }, { status: result.status });
+  const { invoice, amount } = result;
 
   await logMutation({
     req, clinicId, userId: ctx.userId,
