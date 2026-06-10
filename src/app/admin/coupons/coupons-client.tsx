@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { Trash2, Plus, Copy, X, Ticket, CheckCircle2, XCircle } from "lucide-react";
+import { Trash2, Plus, Copy, X, Ticket, CheckCircle2, XCircle, Pencil } from "lucide-react";
 import { CardNew }   from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
@@ -22,6 +22,8 @@ interface Coupon {
   appliesTo: string;
   active: boolean;
   createdAt: string;
+  // Solo cupones solicitados por un afiliado (GET /api/admin/coupons lo enriquece).
+  affiliateName?: string;
 }
 
 export function CouponsClient({ initial }: { initial: Coupon[] }) {
@@ -37,12 +39,45 @@ export function CouponsClient({ initial }: { initial: Coupon[] }) {
     maxUses: "",
     validUntil: "",
   });
+  const [onlyAffiliates, setOnlyAffiliates] = useState(false);
+  const [editing, setEditing] = useState<Coupon | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editForm, setEditForm] = useState({
+    value: "",
+    appliesTo: "all" as "all" | "BASIC" | "PRO" | "CLINIC",
+    maxUses: "",
+    validUntil: "",
+  });
+
+  // El server component carga los cupones sin affiliateName; el GET del API
+  // sí lo enriquece. Hidratamos solo ese campo (sin pisar cambios locales).
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/admin/coupons")
+      .then(res => (res.ok ? res.json() : Promise.reject()))
+      .then((data: Coupon[]) => {
+        if (cancelled || !Array.isArray(data)) return;
+        const names = new Map<string, string>();
+        for (const d of data) if (d.affiliateName) names.set(d.id, d.affiliateName);
+        if (names.size === 0) return;
+        setList(prev => prev.map(c => (names.has(c.id) ? { ...c, affiliateName: names.get(c.id) } : c)));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const stats = useMemo(() => ({
     active:   list.filter(c => c.active).length,
     expired:  list.filter(c => c.validUntil && new Date(c.validUntil) < new Date()).length,
     redeemed: list.reduce((s, c) => s + c.usedCount, 0),
   }), [list]);
+
+  const affiliateCount = useMemo(() => list.filter(c => !!c.affiliateName).length, [list]);
+
+  const visible = useMemo(
+    () => (onlyAffiliates ? list.filter(c => !!c.affiliateName) : list),
+    [list, onlyAffiliates]
+  );
 
   function openCreate() {
     setForm({ code: "", type: "percentage", value: "", appliesTo: "all", maxUses: "", validUntil: "" });
@@ -86,8 +121,50 @@ export function CouponsClient({ initial }: { initial: Coupon[] }) {
       });
       if (!res.ok) throw new Error();
       const updated = await res.json();
-      setList(prev => prev.map(x => (x.id === c.id ? updated : x)));
+      // El PATCH no devuelve affiliateName; lo conservamos de la fila previa.
+      setList(prev => prev.map(x => (x.id === c.id ? { ...updated, affiliateName: x.affiliateName } : x)));
     } catch { toast.error("Error al actualizar"); }
+  }
+
+  function openEdit(c: Coupon) {
+    setEditing(c);
+    setEditForm({
+      value: String(c.value),
+      appliesTo: (["all", "BASIC", "PRO", "CLINIC"].includes(c.appliesTo) ? c.appliesTo : "all") as any,
+      maxUses: c.maxUses != null ? String(c.maxUses) : "",
+      validUntil: c.validUntil ? String(c.validUntil).slice(0, 10) : "",
+    });
+  }
+
+  // Reusa el PATCH existente (/api/admin/coupons/[id]); típico para ajustar el
+  // 10% placeholder de un cupón de afiliado antes de activarlo.
+  async function saveEdit() {
+    if (!editing) return;
+    const value = Number(editForm.value);
+    if (!Number.isFinite(value) || value <= 0) { toast.error("Valor inválido"); return; }
+    if (editing.type === "percentage" && value > 100) {
+      toast.error("El porcentaje no puede ser mayor a 100");
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const res = await fetch(`/api/admin/coupons/${editing.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          value,
+          appliesTo: editForm.appliesTo,
+          maxUses: editForm.maxUses ? Number(editForm.maxUses) : null,
+          validUntil: editForm.validUntil || null,
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error ?? "Error al guardar");
+      const updated = await res.json();
+      setList(prev => prev.map(x => (x.id === editing.id ? { ...updated, affiliateName: x.affiliateName } : x)));
+      toast.success("Cupón actualizado");
+      setEditing(null);
+    } catch (e: any) { toast.error(e?.message ?? "Error al guardar"); }
+    finally { setSavingEdit(false); }
   }
 
   async function remove(id: string) {
@@ -137,11 +214,23 @@ export function CouponsClient({ initial }: { initial: Coupon[] }) {
           delta={{ value: "Sin uso", direction: "down" }} />
       </div>
 
+      {/* Filtro: todos vs. solo cupones de afiliados */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
+        <ButtonNew size="sm" variant={!onlyAffiliates ? "primary" : "ghost"} onClick={() => setOnlyAffiliates(false)}>
+          Todos
+          <span style={{ marginLeft: 6, opacity: 0.65 }}>{list.length}</span>
+        </ButtonNew>
+        <ButtonNew size="sm" variant={onlyAffiliates ? "primary" : "ghost"} onClick={() => setOnlyAffiliates(true)}>
+          Solo de afiliados
+          <span style={{ marginLeft: 6, opacity: 0.65 }}>{affiliateCount}</span>
+        </ButtonNew>
+      </div>
+
       {/* Table */}
-      <CardNew noPad title={`Cupones (${list.length})`}>
-        {list.length === 0 ? (
+      <CardNew noPad title={`Cupones (${visible.length})`}>
+        {visible.length === 0 ? (
           <div style={{ padding: "40px 18px", textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
-            Sin cupones
+            {onlyAffiliates ? "No hay cupones de afiliados." : "Sin cupones"}
           </div>
         ) : (
           <table className="table-new">
@@ -158,9 +247,12 @@ export function CouponsClient({ initial }: { initial: Coupon[] }) {
               </tr>
             </thead>
             <tbody>
-              {list.map(c => {
+              {visible.map(c => {
                 const expired = !!(c.validUntil && new Date(c.validUntil) < new Date());
                 const isActive = c.active && !expired;
+                // Cupón solicitado por un afiliado: nace INACTIVO con 10% placeholder;
+                // el admin ajusta el valor (Editar) y lo aprueba con Activar.
+                const pendingAffiliate = !!c.affiliateName && !c.active;
                 return (
                   <tr key={c.id}>
                     <td>
@@ -180,6 +272,11 @@ export function CouponsClient({ initial }: { initial: Coupon[] }) {
                         <span className="mono" style={{ fontWeight: 600, color: "var(--brand)" }}>{c.code}</span>
                         <Copy size={12} style={{ color: "var(--text-3)" }} />
                       </button>
+                      {c.affiliateName && (
+                        <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
+                          Afiliado: <span style={{ color: "var(--text-2)", fontWeight: 500 }}>{c.affiliateName}</span>
+                        </div>
+                      )}
                     </td>
                     <td>
                       <BadgeNew tone={c.type === "percentage" ? "info" : "brand"}>
@@ -201,12 +298,15 @@ export function CouponsClient({ initial }: { initial: Coupon[] }) {
                       </BadgeNew>
                     </td>
                     <td>
-                      <BadgeNew tone={expired ? "neutral" : isActive ? "success" : "warning"} dot>
-                        {expired ? "Expirado" : isActive ? "Activo" : "Pausado"}
+                      <BadgeNew tone={pendingAffiliate ? "warning" : expired ? "neutral" : isActive ? "success" : "warning"} dot>
+                        {pendingAffiliate ? "Pendiente de aprobar" : expired ? "Expirado" : isActive ? "Activo" : "Pausado"}
                       </BadgeNew>
                     </td>
                     <td>
-                      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                        <ButtonNew size="sm" variant="ghost" icon={<Pencil size={13} />} onClick={() => openEdit(c)}>
+                          Editar
+                        </ButtonNew>
                         <ButtonNew size="sm" variant="ghost" onClick={() => toggleActive(c)}>
                           {c.active ? "Pausar" : "Activar"}
                         </ButtonNew>
@@ -345,6 +445,99 @@ export function CouponsClient({ initial }: { initial: Coupon[] }) {
               </ButtonNew>
               <ButtonNew variant="primary" onClick={create} disabled={saving}>
                 {saving ? "Creando…" : "Crear cupón"}
+              </ButtonNew>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit modal (reusa el PATCH existente; el código y el tipo no cambian) */}
+      {editing && (
+        <div className="modal-overlay" onClick={() => setEditing(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal__header">
+              <div className="modal__title">Editar cupón</div>
+              <button
+                type="button"
+                onClick={() => setEditing(null)}
+                className="btn-new btn-new--ghost btn-new--sm"
+                aria-label="Cerrar"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            <div className="modal__body">
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span className="mono" style={{ fontWeight: 600, color: "var(--brand)" }}>{editing.code}</span>
+                  <BadgeNew tone={editing.type === "percentage" ? "info" : "brand"}>
+                    {editing.type === "percentage" ? "%" : "$ fijo"}
+                  </BadgeNew>
+                  {editing.affiliateName && <BadgeNew tone="info">Afiliado: {editing.affiliateName}</BadgeNew>}
+                </div>
+                {!!editing.affiliateName && !editing.active && (
+                  <p style={{ color: "var(--text-3)", fontSize: 12, lineHeight: 1.5, margin: 0 }}>
+                    Cupón solicitado por el afiliado (valor placeholder). Ajusta el descuento real, guarda y
+                    actívalo con el botón Activar de la lista.
+                  </p>
+                )}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div className="field-new">
+                    <label className="field-new__label">
+                      Valor ({editing.type === "percentage" ? "%" : "$ MXN"}) <span className="req">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      className="input-new"
+                      value={editForm.value}
+                      onChange={e => setEditForm(f => ({ ...f, value: e.target.value }))}
+                    />
+                  </div>
+                  <div className="field-new">
+                    <label className="field-new__label">Aplica a</label>
+                    <select
+                      className="input-new"
+                      value={editForm.appliesTo}
+                      onChange={e => setEditForm(f => ({ ...f, appliesTo: e.target.value as any }))}
+                    >
+                      <option value="all">Todos los planes</option>
+                      <option value="BASIC">Solo BASIC</option>
+                      <option value="PRO">Solo PRO</option>
+                      <option value="CLINIC">Solo CLINIC</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div className="field-new">
+                    <label className="field-new__label">Usos máximos</label>
+                    <input
+                      type="number"
+                      className="input-new"
+                      placeholder="Ilimitado"
+                      value={editForm.maxUses}
+                      onChange={e => setEditForm(f => ({ ...f, maxUses: e.target.value }))}
+                    />
+                  </div>
+                  <div className="field-new">
+                    <label className="field-new__label">Válido hasta</label>
+                    <input
+                      type="date"
+                      className="input-new"
+                      value={editForm.validUntil}
+                      onChange={e => setEditForm(f => ({ ...f, validUntil: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="modal__footer">
+              <ButtonNew variant="ghost" onClick={() => setEditing(null)}>
+                Cancelar
+              </ButtonNew>
+              <ButtonNew variant="primary" onClick={saveEdit} disabled={savingEdit}>
+                {savingEdit ? "Guardando…" : "Guardar cambios"}
               </ButtonNew>
             </div>
           </div>

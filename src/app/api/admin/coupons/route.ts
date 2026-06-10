@@ -16,7 +16,29 @@ export async function GET() {
   const coupons = await prisma.coupon.findMany({
     orderBy: { createdAt: "desc" },
   });
-  return NextResponse.json(coupons);
+
+  // Cupones de afiliado: enriquece con el nombre del socio dueño. La tabla
+  // puede no existir aún (sql/afiliados-ventas.sql sin correr) → sin enriquecer.
+  const affiliateByCoupon = new Map<string, string>();
+  try {
+    const acs = await prisma.affiliateCoupon.findMany({
+      where: { couponId: { in: coupons.map((c) => c.id) } },
+      include: { affiliate: { select: { name: true, slug: true } } },
+    });
+    for (const ac of acs) {
+      if (ac.affiliate?.name) affiliateByCoupon.set(ac.couponId, ac.affiliate.name);
+    }
+  } catch {
+    // Tabla sin crear: los cupones se devuelven sin affiliateName.
+  }
+
+  return NextResponse.json(
+    coupons.map((c) => {
+      const affiliateName = affiliateByCoupon.get(c.id);
+      // affiliateName?: string — undefined si el cupón no es de afiliado.
+      return affiliateName ? { ...c, affiliateName } : c;
+    })
+  );
 }
 
 export async function POST(req: NextRequest) {

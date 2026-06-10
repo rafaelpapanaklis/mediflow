@@ -34,6 +34,8 @@ const schema = z.object({
   paymentMethodLast4: z.string().regex(/^\d{4}$/).optional(), // solo para card
   billing: z.enum(["monthly", "annual"]).default("monthly"),
   ref: z.string().optional(), // referralCode de afiliado (atribución en el alta)
+  campaign: z.string().optional(), // campaña del link de afiliado (?c=)
+  coupon: z.string().optional(), // código de cupón/socio (best-effort, nunca rompe el alta)
 });
 
 async function generateSlug(name: string) {
@@ -105,7 +107,68 @@ export async function POST(req: NextRequest) {
       referringAffiliate = null;
     }
 
-    await prisma.clinic.create({
+    // Campaña del link de afiliado (body o query ?c=), solo para atribución
+    // de la conversión. Formato estricto; inválida → se ignora en silencio.
+    const rawCampaign = data.campaign ?? req.nextUrl.searchParams.get("c") ?? "";
+    const campaign = /^[a-z0-9-]{1,40}$/.test(rawCampaign) ? rawCampaign : undefined;
+
+    // Cupón (best-effort, NUNCA rompe el alta): valida contra el sistema
+    // existente de coupons. Un cupón inválido solo se reporta en la respuesta.
+    let couponRow: any = null;
+    let couponValid = false;
+    let conversionSource: string | null = null;
+    if (data.coupon) {
+      try {
+        const couponCode = data.coupon.trim().toUpperCase();
+        if (couponCode) {
+          couponRow = await prisma.coupon.findUnique({ where: { code: couponCode } });
+          if (couponRow) {
+            const now = new Date();
+            couponValid =
+              couponRow.active &&
+              couponRow.validFrom <= now &&
+              (!couponRow.validUntil || couponRow.validUntil > now) &&
+              (!couponRow.maxUses || couponRow.usedCount < couponRow.maxUses) &&
+              (couponRow.appliesTo === "all" || couponRow.appliesTo === data.plan);
+          }
+        }
+      } catch {
+        couponRow = null;
+        couponValid = false;
+      }
+    }
+
+    // Atribución por cupón de afiliado: si el cupón pertenece a un socio
+    // (tabla puente affiliate_coupons) y el alta NO venía ya atribuida por
+    // ?ref, se atribuye al socio con el MISMO anti self-referral de arriba.
+    // Tablas nuevas pueden no existir aún → try/catch defensivo.
+    if (couponValid && couponRow && !referringAffiliate) {
+      try {
+        const ac = await prisma.affiliateCoupon
+          .findUnique({ where: { couponId: couponRow.id } })
+          .catch(() => null);
+        if (ac) {
+          const affiliate = await prisma.affiliate.findUnique({
+            where: { id: ac.affiliateId },
+            select: { id: true, status: true, commissionPct: true, email: true },
+          });
+          if (
+            affiliate &&
+            affiliate.status === "APPROVED" &&
+            affiliate.email.trim().toLowerCase() !== data.email.trim().toLowerCase()
+          ) {
+            referringAffiliate = {
+              id: affiliate.id,
+              commissionPct: affiliate.commissionPct,
+              email: affiliate.email,
+            };
+            conversionSource = "coupon";
+          }
+        }
+      } catch {}
+    }
+
+    const clinic = await prisma.clinic.create({
       data: {
         name: data.clinicName, slug, specialty: specialtyLabel,
         affiliateId: referringAffiliate?.id,
@@ -126,6 +189,32 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // Conversión de afiliado (best-effort): registra la atribución con su
+    // campaña y origen. Si la tabla nueva no existe aún, silencio total.
+    if (referringAffiliate) {
+      try {
+        await prisma.affiliateConversion.create({
+          data: {
+            affiliateId: referringAffiliate.id,
+            clinicId: clinic.id,
+            campaign: campaign ?? null,
+            source: conversionSource ?? "link",
+            couponId: couponValid ? couponRow.id : null,
+          },
+        });
+      } catch {}
+    }
+
+    // Canje del cupón (best-effort): suma 1 a usedCount.
+    if (couponValid && couponRow) {
+      try {
+        await prisma.coupon.update({
+          where: { id: couponRow.id },
+          data: { usedCount: { increment: 1 } },
+        });
+      } catch {}
+    }
+
     // Welcome email (no bloquea el response si falla)
     sendWelcomeEmail({
       email: data.email,
@@ -135,7 +224,8 @@ export async function POST(req: NextRequest) {
       dashboardUrl: `${SITE_URL}/dashboard`,
     }).catch(err => logError("[register] welcome email failed:", err));
 
-    // Aviso al afiliado referente (no bloquea el response si falla)
+    // Aviso al afiliado referente (no bloquea el response si falla). Aplica
+    // igual si la atribución vino por link (?ref) o por cupón del socio.
     if (referringAffiliate) {
       sendAffiliateNewReferralEmail({
         affiliateId: referringAffiliate.id,
@@ -143,7 +233,11 @@ export async function POST(req: NextRequest) {
       }).catch(err => logError("[register] affiliate referral email failed:", err));
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      success: true,
+      // "applied" | "invalid" | null — informativo para el form (no bloquea)
+      coupon: data.coupon ? (couponValid ? "applied" : "invalid") : null,
+    });
   } catch (err: any) {
     logError("[register]", err);
     return NextResponse.json({ error: err.message ?? "Error interno" }, { status: 500 });

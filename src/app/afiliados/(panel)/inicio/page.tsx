@@ -10,6 +10,8 @@ import { CardNew } from "@/components/ui/design-system/card-new";
 import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { ReferralLinks } from "@/components/afiliados/referral-links";
+import { getAffiliateLevelInfo } from "@/lib/affiliate-levels";
+import { LevelProgress } from "@/components/afiliados/level-progress";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://mediflow-pi.vercel.app";
 
@@ -48,6 +50,10 @@ export default async function AffiliateHomePage() {
     : [];
   const clinicNameById = new Map(clinics.map((c) => [c.id, c.name]));
 
+  // Nivel bronce/plata/oro y % vigente (fuera del Promise.all: tiene sus
+  // propios try/catch internos y cae a legacy si la tabla de config no existe).
+  const levelInfo = await getAffiliateLevelInfo(affiliateId, ctx.affiliate.commissionPct);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       {/* Hero */}
@@ -85,10 +91,13 @@ export default async function AffiliateHomePage() {
             Hola, {ctx.affiliate.name}
           </h1>
           <p style={{ color: "var(--text-3)", fontSize: 13, marginTop: 4, marginBottom: 0 }}>
-            Comparte tu enlace y gana {ctx.affiliate.commissionPct}% recurrente por cada clínica que se suscriba.
+            Comparte tu enlace y gana {levelInfo.pct}% recurrente por cada clínica que se suscriba.
           </p>
         </div>
       </div>
+
+      {/* Nivel y comisión */}
+      <LevelProgress info={levelInfo} />
 
       {/* Enlaces de referido */}
       <CardNew>
@@ -139,7 +148,7 @@ export default async function AffiliateHomePage() {
         <KpiCard label="Comisión acumulada" value={formatCurrency(accrued)} icon={DollarSign} />
         <KpiCard label="Pendiente de pago" value={formatCurrency(pendingTotal)} icon={Clock} />
         <KpiCard label="Pagado" value={formatCurrency(paidTotal)} icon={Wallet} />
-        <KpiCard label="Tu comisión" value={`${ctx.affiliate.commissionPct}%`} icon={Percent} />
+        <KpiCard label="Tu comisión" value={`${levelInfo.pct}%`} icon={Percent} />
       </div>
 
       {/* Comisiones recientes */}

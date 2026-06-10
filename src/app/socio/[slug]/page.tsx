@@ -15,10 +15,12 @@ import {
 import { ProductWindow } from "@/components/public/landing/sales/product-window";
 import { SalesLogo } from "@/components/public/landing/sales/logo";
 import { RefClickTracker } from "@/components/afiliados/ref-click-tracker";
+import { SavingsCalculator } from "@/components/socio/savings-calculator";
 import "@/components/public/landing/sales/sales.css";
 
 // Página hosteada del socio/afiliado: una landing de venta de DaleControl donde
-// TODOS los CTA apuntan a /signup?ref=<referralCode> para atribuir el alta.
+// TODOS los CTA apuntan a /signup?ref=<referralCode> (+ &c=<campaña> si llegó
+// un ?c= válido, para atribuir el alta a la campaña del socio).
 // Dynamic: depende del slug + estado del afiliado (no SSG).
 export const dynamic = "force-dynamic";
 
@@ -34,12 +36,15 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://mediflow-pi.vercel
 async function getApprovedAffiliate(slug: string) {
   return prisma.affiliate.findFirst({
     where: { slug, status: "APPROVED" },
-    select: { name: true, slug: true, referralCode: true },
+    select: { id: true, name: true, slug: true, referralCode: true },
   });
 }
 
 interface Props {
   params: { slug: string };
+  // ?c=<campaña> para click tracking; generateMetadata NO lo usa (el canonical
+  // queda limpio, sin ?c).
+  searchParams?: { [key: string]: string | string[] | undefined };
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -56,11 +61,33 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function PartnerLandingPage({ params }: Props) {
+export default async function PartnerLandingPage({ params, searchParams }: Props) {
   const affiliate = await getApprovedAffiliate(params.slug);
   if (!affiliate) notFound();
 
-  const signupHref = `/signup?ref=${affiliate.referralCode}`;
+  // Campaña opcional (?c=instagram-bio, ?c=qr-consultorio…). Solo se acepta
+  // un slug seguro; cualquier otra cosa se ignora por completo.
+  const rawCampaign = searchParams?.c;
+  const c =
+    typeof rawCampaign === "string" && /^[a-z0-9-]{1,40}$/.test(rawCampaign)
+      ? rawCampaign
+      : undefined;
+
+  // Click tracking de la campaña. updateMany (no update) ⇒ una campaña no
+  // registrada simplemente actualiza 0 filas sin tronar; y si la tabla aún no
+  // existe en la BD, el catch lo silencia: el tracking nunca tumba la landing.
+  if (c) {
+    try {
+      await prisma.affiliateLink.updateMany({
+        where: { affiliateId: affiliate.id, campaign: c },
+        data: { clicks: { increment: 1 } },
+      });
+    } catch {}
+  }
+
+  // Único punto donde se arma el href de alta: TODOS los CTAs (header, hero,
+  // calculadora, CTA final y footer) lo reusan y propagan la campaña al signup.
+  const signupHref = `/signup?ref=${affiliate.referralCode}${c ? `&c=${c}` : ""}`;
 
   return (
     <div className={`mfh ${inter.variable}`} style={{ minHeight: "100dvh" }}>
@@ -132,6 +159,26 @@ export default async function PartnerLandingPage({ params }: Props) {
         <Comparison />
         <Testimonials />
         <TrustFaq />
+
+        {/* Calculadora de ahorro — última parada antes del CTA final */}
+        <section className="mfh-section mfh-band--violet" aria-label="Calculadora de ahorro">
+          <div className="mfh-container">
+            <div className="mfh-head mfh-center mfh-reveal">
+              <span className="mfh-kicker">Calculadora</span>
+              <h2 className="mfh-h2 mfh-balance">
+                ¿Cuánto vale el tiempo administrativo de tu clínica?
+              </h2>
+              <p className="mfh-lede">
+                Mueve los controles y estima cuánto tiempo administrativo podría
+                recuperar tu equipo al concentrar agenda, expedientes y facturación
+                en una sola plataforma.
+              </p>
+            </div>
+            <div className="mfh-reveal" style={{ maxWidth: 920, margin: "44px auto 0" }}>
+              <SavingsCalculator signupHref={signupHref} />
+            </div>
+          </div>
+        </section>
 
         {/* CTA final — vuelve a /signup?ref */}
         <section className="mfh-section mfh-band">

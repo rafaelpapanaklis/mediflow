@@ -21,6 +21,7 @@ export interface Step3Values {
   billing: Billing;
   payMethod: "card" | "paypal" | "none";
   card: CardDetails;
+  coupon: string;
   acceptedTerms: boolean;
   acceptedCharge: boolean;
 }
@@ -530,6 +531,23 @@ export function Step3PlanPayment({
                   </span>
                 </div>
               ))}
+            </div>
+
+            {/* Código de promoción / socio (opcional, nunca bloquea el alta) */}
+            <div style={{ marginTop: 16, maxWidth: 340 }}>
+              <FormField
+                label="Código de promoción o de socio (opcional)"
+                hint="Si un socio de DaleControl te recomendó, escribe aquí su código."
+              >
+                <input
+                  placeholder="JUAN10"
+                  autoComplete="off"
+                  maxLength={12}
+                  value={values.coupon}
+                  onChange={e => onChange({ coupon: e.target.value.toUpperCase() })}
+                  style={{ ...inputStyle(false), textTransform: "uppercase" }}
+                />
+              </FormField>
             </div>
           </section>
 

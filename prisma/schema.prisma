@@ -3013,6 +3013,9 @@ model Affiliate {
   clinics     Clinic[]
   commissions AffiliateCommission[]
   users       AffiliateUser[]
+  links           AffiliateLink[]
+  conversions     AffiliateConversion[]
+  affiliateCoupons AffiliateCoupon[]
 
   @@index([status])
   @@map("affiliates")
@@ -6838,4 +6841,86 @@ model SupportMessage {
 
   @@index([ticketId, createdAt])
   @@map("support_messages")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AFILIADOS — HERRAMIENTAS DE VENTA (jun 2026, WS3-T3)
+// Multi-links con campaña, cupón propio del afiliado (integrado al sistema
+// existente de admin/coupons vía tabla puente) y niveles bronce/plata/oro.
+// A PROPÓSITO sin tocar columnas de tablas existentes (clinics/coupons/
+// affiliate_commissions): solo tablas nuevas → si el SQL no se ha corrido,
+// nada existente se rompe (lesson_ortho_schema_drift).
+// SQL espejo: sql/afiliados-ventas.sql. Al final del schema para no chocar
+// con ramas paralelas.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Link nombrado del afiliado ("Facebook", "Expo dental"). URL pública:
+/// /socio/<slug>?c=<campaign>. El click suma al contador en la página de
+/// socio y la campaña viaja al registro (AffiliateConversion.campaign).
+model AffiliateLink {
+  id          String   @id @default(cuid())
+  affiliateId String
+  name        String
+  campaign    String // slug corto [a-z0-9-], inmutable (estabilidad de URL/QR)
+  clicks      Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  affiliate Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+
+  @@unique([affiliateId, campaign])
+  @@index([affiliateId])
+  @@map("affiliate_links")
+}
+
+/// Conversión atribuida (sidecar de analytics): qué clínica llegó por qué
+/// campaña o cupón. La atribución REAL para comisiones sigue siendo
+/// clinics.affiliateId (no cambia). Sin relación Prisma a Clinic a propósito
+/// (FK en el SQL; mismo patrón que AffiliateCommission). El panel del
+/// afiliado solo ve CONTEOS de esta tabla, nunca datos de la clínica.
+model AffiliateConversion {
+  id          String   @id @default(cuid())
+  affiliateId String
+  clinicId    String   @unique // 1 conversión por clínica
+  campaign    String? // campaña del link (?c=) si la hubo
+  source      String   @default("link") // link | coupon
+  couponId    String?
+  createdAt   DateTime @default(now())
+
+  affiliate Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+
+  @@index([affiliateId, campaign])
+  @@map("affiliate_conversions")
+}
+
+/// Une un cupón del sistema EXISTENTE (admin/coupons) con su afiliado dueño.
+/// Tabla puente a propósito (no columna en coupons) para no romper las
+/// queries existentes de Coupon antes de correr el SQL. couponId sin relación
+/// Prisma (FK con ON DELETE CASCADE en el SQL).
+model AffiliateCoupon {
+  id          String   @id @default(cuid())
+  affiliateId String
+  couponId    String   @unique
+  createdAt   DateTime @default(now())
+
+  affiliate Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+
+  @@index([affiliateId])
+  @@map("affiliate_coupons")
+}
+
+/// Config GLOBAL del programa (una sola fila id=1): % de comisión por nivel
+/// y umbrales de clínicas ACTIVAS referidas. Si la tabla aún no existe, el
+/// código cae a modo legacy (Affiliate.commissionPct) y nada se rompe.
+/// El % del nivel se usa al GENERARSE la comisión (no retroactivo).
+model AffiliateProgramConfig {
+  id              Int      @id @default(1)
+  bronzePct       Float    @default(10)
+  silverPct       Float    @default(12)
+  goldPct         Float    @default(15)
+  silverMinActive Int      @default(3)
+  goldMinActive   Int      @default(10)
+  updatedAt       DateTime @updatedAt
+
+  @@map("affiliate_program_config")
 }

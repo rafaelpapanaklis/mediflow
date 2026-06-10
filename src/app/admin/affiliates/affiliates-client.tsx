@@ -106,6 +106,25 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "REJECTED", label: "Rechazados" },
 ];
 
+// Config global de niveles (GET/PUT /api/admin/affiliates/config).
+type ConfigFieldKey = "bronzePct" | "silverPct" | "goldPct" | "silverMinActive" | "goldMinActive";
+
+const CONFIG_FIELDS: { key: ConfigFieldKey; label: string; min: number; max: number; step: number }[] = [
+  { key: "bronzePct", label: "Bronce %", min: 0, max: 50, step: 0.5 },
+  { key: "silverPct", label: "Plata %", min: 0, max: 50, step: 0.5 },
+  { key: "goldPct", label: "Oro %", min: 0, max: 50, step: 0.5 },
+  { key: "silverMinActive", label: "Clínicas activas para Plata", min: 1, max: 1000, step: 1 },
+  { key: "goldMinActive", label: "Clínicas activas para Oro", min: 1, max: 1000, step: 1 },
+];
+
+const DEFAULT_CONFIG_FORM: Record<ConfigFieldKey, string> = {
+  bronzePct: "10",
+  silverPct: "12",
+  goldPct: "15",
+  silverMinActive: "3",
+  goldMinActive: "10",
+};
+
 export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
   const askConfirm = useConfirm();
   const [list, setList] = useState<AffiliateRow[]>(initial);
@@ -134,6 +153,64 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
   useEffect(() => {
     void loadMetrics();
   }, [loadMetrics]);
+
+  // Niveles y comisiones del programa (config global, fila id=1).
+  const [cfg, setCfg] = useState<Record<ConfigFieldKey, string>>(DEFAULT_CONFIG_FORM);
+  const [cfgExists, setCfgExists] = useState(true);
+  const [cfgLoading, setCfgLoading] = useState(true);
+  const [cfgSaving, setCfgSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/admin/affiliates/config")
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((data) => {
+        if (cancelled) return;
+        setCfgExists(data?.exists !== false);
+        if (data?.config) {
+          setCfg({
+            bronzePct: String(data.config.bronzePct ?? DEFAULT_CONFIG_FORM.bronzePct),
+            silverPct: String(data.config.silverPct ?? DEFAULT_CONFIG_FORM.silverPct),
+            goldPct: String(data.config.goldPct ?? DEFAULT_CONFIG_FORM.goldPct),
+            silverMinActive: String(data.config.silverMinActive ?? DEFAULT_CONFIG_FORM.silverMinActive),
+            goldMinActive: String(data.config.goldMinActive ?? DEFAULT_CONFIG_FORM.goldMinActive),
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setCfgLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function saveConfig() {
+    setCfgSaving(true);
+    try {
+      const res = await fetch("/api/admin/affiliates/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bronzePct: Number(cfg.bronzePct),
+          silverPct: Number(cfg.silverPct),
+          goldPct: Number(cfg.goldPct),
+          silverMinActive: Number(cfg.silverMinActive),
+          goldMinActive: Number(cfg.goldMinActive),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error ?? "No se pudo guardar la configuración");
+      }
+      toast.success("Configuración de niveles guardada");
+    } catch (e: any) {
+      toast.error(e?.message ?? "No se pudo guardar la configuración");
+    } finally {
+      setCfgSaving(false);
+    }
+  }
 
   const counts = useMemo(() => {
     const c: Record<AffiliateStatus, number> = { PENDING: 0, APPROVED: 0, REJECTED: 0, SUSPENDED: 0 };
@@ -495,6 +572,68 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
           </table>
         )}
       </CardNew>
+
+      {/* Niveles y comisiones del programa */}
+      <div style={{ marginTop: 20 }}>
+        <CardNew
+          title="Niveles y comisiones del programa"
+          sub="Bronce, Plata y Oro según las clínicas referidas con suscripción activa."
+        >
+          {!cfgLoading && !cfgExists && (
+            <div
+              style={{
+                padding: "12px 16px",
+                borderRadius: 12,
+                border: "1px solid rgba(245,158,11,0.35)",
+                background: "rgba(245,158,11,0.08)",
+                color: "var(--text-2)",
+                fontSize: 13,
+                lineHeight: 1.5,
+                marginBottom: 14,
+              }}
+            >
+              Niveles inactivos: corre <span className="mono">sql/afiliados-ventas.sql</span> en Supabase.
+            </div>
+          )}
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 }}>
+            {CONFIG_FIELDS.map((f) => (
+              <div className="field-new" key={f.key}>
+                <label className="field-new__label" htmlFor={`cfg-${f.key}`}>{f.label}</label>
+                <input
+                  id={`cfg-${f.key}`}
+                  type="number"
+                  className="input-new"
+                  min={f.min}
+                  max={f.max}
+                  step={f.step}
+                  value={cfg[f.key]}
+                  disabled={cfgLoading}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setCfg((prev) => ({ ...prev, [f.key]: v }));
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+
+          <p style={{ color: "var(--text-3)", fontSize: 12, lineHeight: 1.5, margin: "12px 0 0" }}>
+            El % del nivel se aplica a las comisiones NUEVAS (no retroactivo). Nivel por clínicas referidas con
+            suscripción activa.
+          </p>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
+            <ButtonNew
+              variant="primary"
+              disabled={!cfgExists || cfgLoading || cfgSaving}
+              onClick={saveConfig}
+            >
+              {cfgSaving ? "Guardando…" : "Guardar"}
+            </ButtonNew>
+          </div>
+        </CardNew>
+      </div>
     </div>
   );
 }

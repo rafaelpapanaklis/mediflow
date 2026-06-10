@@ -29,6 +29,7 @@ interface SignupState {
   billing: Billing;
   payMethod: "card" | "paypal" | "none";
   card: CardDetails;
+  coupon: string;
   acceptedTerms: boolean;
   acceptedCharge: boolean;
 }
@@ -46,6 +47,7 @@ const INITIAL: SignupState = {
   billing: "monthly",
   payMethod: "card",
   card: { number: "", expiry: "", cvc: "", name: "", zip: "" },
+  coupon: "",
   acceptedTerms: false,
   acceptedCharge: false,
 };
@@ -92,6 +94,10 @@ export function SignupForm() {
   // Se reenvía al backend, que lo resuelve best-effort (ata la clínica al
   // afiliado APPROVED). Si es inválido, el registro sigue sin atribución.
   const ref = searchParams.get("ref") ?? undefined;
+  // Campaña del link de afiliado: ?c=<campaign> (links nombrados del panel de
+  // socios). Formato estricto; si no cumple, se ignora.
+  const campaignParam = searchParams.get("c") ?? "";
+  const campaign = /^[a-z0-9-]{1,40}$/.test(campaignParam) ? campaignParam : undefined;
   const initialStepParam = searchParams.get("step");
   const initialStep: 1 | 2 | 3 =
     initialStepParam === "2" ? 2 :
@@ -170,6 +176,8 @@ export function SignupForm() {
             email: form.email,
             password: form.password,
             ref,
+            campaign,
+            coupon: form.coupon.trim() || undefined,
             ...basePayload,
           }),
         });
@@ -178,6 +186,7 @@ export function SignupForm() {
       const data = (await res.json().catch(() => ({}))) as {
         success?: boolean;
         error?: string;
+        coupon?: string | null; // "applied" | "invalid" | null
       };
       if (res.status === 409) {
         toast.error(data.error ?? "Ya existe una cuenta con este correo");
@@ -187,6 +196,13 @@ export function SignupForm() {
         return;
       }
       if (!res.ok) throw new Error(data.error ?? "Error al crear cuenta");
+
+      // Aviso no bloqueante: el cupón no aplicó pero la cuenta ya existe.
+      if (data.coupon === "invalid") {
+        toast("El código de promoción no era válido; tu cuenta se creó de todas formas", {
+          icon: "⚠️",
+        });
+      }
 
       // Auto-login sólo en flujo email/password (OAuth ya tiene sesión activa)
       if (!isOAuthFlow) {
@@ -321,6 +337,7 @@ export function SignupForm() {
             billing: form.billing,
             payMethod: form.payMethod,
             card: form.card,
+            coupon: form.coupon,
             acceptedTerms: form.acceptedTerms,
             acceptedCharge: form.acceptedCharge,
           }}

@@ -5,6 +5,7 @@ import { logAudit } from "@/lib/audit";
 import type Stripe from "stripe";
 import { calcCommissionMxn } from "@/lib/affiliates";
 import { sendAffiliateConversionEmail } from "@/lib/affiliate-emails";
+import { getProgramConfig, countActiveReferred, computeLevel, levelPct } from "@/lib/affiliate-levels";
 import {
   creditWalletFromStripe,
   setWalletCardIfEmpty,
@@ -222,7 +223,18 @@ export async function POST(req: NextRequest) {
         const amountMxn = (invoice.amount_paid ?? 0) / 100;
         if (amountMxn <= 0) break;
 
-        const commissionMxn = calcCommissionMxn(amountMxn, clinic.affiliate.commissionPct);
+        // % del nivel VIGENTE al generarse (no retroactivo); sin tabla de
+        // config → legacy commissionPct.
+        let pct = clinic.affiliate.commissionPct;
+        try {
+          const cfg = await getProgramConfig();
+          if (cfg) {
+            const active = await countActiveReferred(clinic.affiliateId);
+            pct = levelPct(computeLevel(active, cfg), cfg);
+          }
+        } catch {}
+
+        const commissionMxn = calcCommissionMxn(amountMxn, pct);
 
         try {
           await prisma.affiliateCommission.create({
