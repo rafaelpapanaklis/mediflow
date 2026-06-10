@@ -59,9 +59,12 @@ export default async function DashboardHomePage({ searchParams }: PageProps) {
     role === "ADMIN" || role === "SUPER_ADMIN";
 
   if (isAdminLike) {
-    const hybridCheck = await fetchHybridRoleCheck();
-
-    const adminData = await fetchAdminData(period);
+    // hybridCheck y adminData no dependen entre sí — una sola ronda en
+    // paralelo; solo doctorData queda condicionado al resultado del check.
+    const [hybridCheck, adminData] = await Promise.all([
+      fetchHybridRoleCheck(),
+      fetchAdminData(period),
+    ]);
     const doctorData = hybridCheck.canBeDoctor ? await fetchDoctorData() : null;
 
     return (

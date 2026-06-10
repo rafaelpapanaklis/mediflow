@@ -1,13 +1,18 @@
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { readActiveClinicCookie, logClinicFallback } from "@/lib/active-clinic";
 
-export async function getSession() {
+// getSession/getCurrentUser/getUserClinics van memoizadas por request con
+// React cache(): layout, page y route handlers invocados in-process dentro
+// del mismo render comparten UNA ejecución de cada una (antes cada
+// navegación pagaba 3-4 supabase.auth.getUser() + sus queries duplicadas).
+export const getSession = cache(async () => {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   return user;
-}
+});
 
 export async function requireAuth() {
   const user = await getSession();
@@ -25,7 +30,7 @@ function normalizeUser<T extends { permissionsOverride?: string[] | null } & obj
   return { ...u, permissionsOverride: (u.permissionsOverride as string[] | null | undefined) ?? [] };
 }
 
-export async function getCurrentUser() {
+export const getCurrentUser = cache(async () => {
   const supabaseUser = await requireAuth();
   const activeClinicId = readActiveClinicCookie();
 
@@ -34,10 +39,7 @@ export async function getCurrentUser() {
       where: { supabaseId: supabaseUser.id, clinicId: activeClinicId, isActive: true },
       include: { clinic: true },
     });
-    if (user) {
-      console.log("[AUTH-DEBUG getCurrentUser] cookie OK", JSON.stringify({ picked: user.clinicId }));
-      return normalizeUser(user);
-    }
+    if (user) return normalizeUser(user);
   }
 
   const candidates = await prisma.user.findMany({
@@ -83,9 +85,9 @@ export async function getCurrentUser() {
   }
 
   return normalizeUser(user);
-}
+});
 
-export async function getUserClinics() {
+export const getUserClinics = cache(async () => {
   const supabaseUser = await requireAuth();
   const users = await prisma.user.findMany({
     where: { supabaseId: supabaseUser.id, isActive: true },
@@ -101,4 +103,4 @@ export async function getUserClinics() {
     role: u.role,
     userId: u.id,
   }));
-}
+});

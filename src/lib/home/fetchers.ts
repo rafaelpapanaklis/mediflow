@@ -1,6 +1,9 @@
 // src/lib/home/fetchers.ts
 import "server-only";
-import { headers, cookies } from "next/headers";
+import { NextRequest } from "next/server";
+import { GET as getAdminHome } from "@/app/api/dashboard/home/admin/route";
+import { GET as getDoctorHome } from "@/app/api/dashboard/home/doctor/route";
+import { GET as getReceptionistHome } from "@/app/api/dashboard/home/receptionist/route";
 import type {
   HomeReceptionistData,
   HomeDoctorData,
@@ -9,26 +12,20 @@ import type {
   HybridRoleCheck,
 } from "./types";
 
-function baseUrl(): string {
-  const h = headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host");
-  const proto = h.get("x-forwarded-proto") ?? "https";
-  return `${proto}://${host}`;
-}
-
-function forwardCookies(): string {
-  return cookies()
-    .getAll()
-    .map((c) => `${c.name}=${c.value}`)
-    .join("; ");
-}
-
-async function safeFetch<T>(path: string, fallback: T): Promise<T> {
+// Antes estos fetchers hacían fetch HTTP a la PROPIA app (self-invoke): cada
+// home server-side pagaba una invocación serverless extra + re-auth completa
+// (supabase.auth.getUser + lookup Prisma) por endpoint. Ahora invocan el
+// handler GET de la ruta en el mismo proceso: loadClinicSession dentro del
+// handler reusa el getCurrentUser memoizado por request (React cache() en
+// lib/auth), y el resultado se sigue consumiendo vía res.json() para
+// conservar el shape serializado (fechas como string) que esperan los
+// componentes. El contrato no cambia: status !ok o throw → fallback vacío.
+async function callRoute<T>(
+  run: () => Promise<Response>,
+  fallback: T,
+): Promise<T> {
   try {
-    const res = await fetch(`${baseUrl()}${path}`, {
-      headers: { Cookie: forwardCookies(), Accept: "application/json" },
-      cache: "no-store",
-    });
+    const res = await run();
     if (!res.ok) return fallback;
     return (await res.json()) as T;
   } catch {
@@ -60,20 +57,29 @@ const EMPTY_ADMIN = (period: AdminPeriod): HomeAdminData => ({
 });
 
 export function fetchReceptionistData(): Promise<HomeReceptionistData> {
-  return safeFetch("/api/dashboard/home/receptionist", EMPTY_RECEPTIONIST);
+  return callRoute(() => getReceptionistHome(), EMPTY_RECEPTIONIST);
 }
 
 export function fetchDoctorData(): Promise<HomeDoctorData> {
-  return safeFetch("/api/dashboard/home/doctor", EMPTY_DOCTOR);
+  return callRoute(() => getDoctorHome(), EMPTY_DOCTOR);
 }
 
 export function fetchAdminData(period: AdminPeriod): Promise<HomeAdminData> {
-  return safeFetch(
-    `/api/dashboard/home/admin?period=${period}`,
+  return callRoute(
+    () =>
+      getAdminHome(
+        new NextRequest(
+          `http://mediflow.internal/api/dashboard/home/admin?period=${period}`,
+        ),
+      ),
     EMPTY_ADMIN(period),
   );
 }
 
-export function fetchHybridRoleCheck(): Promise<HybridRoleCheck> {
-  return safeFetch("/api/dashboard/home/can-be-doctor", { canBeDoctor: false });
+// El endpoint /api/dashboard/home/can-be-doctor NUNCA se implementó: el
+// fetch anterior 404eaba siempre y devolvía este mismo fallback tras pagar
+// un roundtrip HTTP completo. Se devuelve directo hasta que exista la
+// lógica real del toggle híbrido admin/doctor.
+export async function fetchHybridRoleCheck(): Promise<HybridRoleCheck> {
+  return { canBeDoctor: false };
 }

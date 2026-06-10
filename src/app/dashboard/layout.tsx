@@ -21,6 +21,14 @@ import { localeFromClinic } from "@/i18n/server";
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "paid"]);
 
+// Checklist de onboarding: epoch ms (por clinicId) hasta el que los 6 pasos
+// con datos se dan por completados sin re-correr los COUNT(*). Solo se
+// cachea el estado terminal (los 6 en verde) — completar onboarding es
+// monotónico — así una clínica a medias consulta SIEMPRE fresco y su
+// checklist avanza en vivo. Memoria por instancia, TTL 10 min.
+const ONBOARDING_DONE_TTL_MS = 10 * 60_000;
+const onboardingCountsDoneUntil = new Map<string, number>();
+
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
   const clinic = user.clinic;
@@ -57,16 +65,27 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const trialExpired = !!trialEndsAt && trialEndsAt < now;
   const isExpired = trialExpired && !subscriptionActive;
   const isInTrial = !!trialEndsAt && trialEndsAt > now && !subscriptionActive;
-  const allClinics = await getUserClinics();
-
+  // allClinics (switcher), módulos activos y counts de onboarding no
+  // dependen entre sí: una sola ronda en paralelo en vez de 3 awaits serie.
+  //
   // Marketplace specialties — set de keys para el sidebar global. Cada
   // item de "Especialidades" en el sidebar exige que su moduleKey esté
   // en esta lista; si no quedan items, la sección entera se oculta.
   // Durante trial vigente getActiveClinicModuleKeys devuelve todas las
   // SPECIALTY_MODULE_KEYS — todas las especialidades quedan visibles.
-  const clinicModuleKeys = await getActiveClinicModuleKeys(clinic.id);
+  //
+  // Los 6 COUNT(*) solo alimentan el checklist de onboarding del sidebar;
+  // si la clínica ya quedó marcada como completa se omiten (waConnected
+  // sale de la clínica ya cargada, no de esta query).
+  const countsKnownDone =
+    (onboardingCountsDoneUntil.get(clinic.id) ?? 0) > Date.now();
 
-  const counts = await prisma.$queryRaw<[{ doctors: bigint; patients: bigint; appts: bigint; records: bigint; invoices: bigint; schedules: bigint }]>`
+  const [allClinics, clinicModuleKeys, counts] = await Promise.all([
+    getUserClinics(),
+    getActiveClinicModuleKeys(clinic.id),
+    countsKnownDone
+      ? null
+      : prisma.$queryRaw<[{ doctors: bigint; patients: bigint; appts: bigint; records: bigint; invoices: bigint; schedules: bigint }]>`
     SELECT
       (SELECT COUNT(*) FROM users WHERE "clinicId" = ${clinic.id} AND role = 'DOCTOR') AS doctors,
       (SELECT COUNT(*) FROM patients WHERE "clinicId" = ${clinic.id}) AS patients,
@@ -74,23 +93,24 @@ export default async function DashboardLayout({ children }: { children: React.Re
       (SELECT COUNT(*) FROM medical_records WHERE "clinicId" = ${clinic.id}) AS records,
       (SELECT COUNT(*) FROM invoices WHERE "clinicId" = ${clinic.id}) AS invoices,
       (SELECT COUNT(*) FROM clinic_schedules WHERE "clinicId" = ${clinic.id}) AS schedules
-  `;
-
-  const c = counts[0];
-  const doctorCount   = Number(c.doctors);
-  const patientCount  = Number(c.patients);
-  const apptCount     = Number(c.appts);
-  const recordCount   = Number(c.records);
-  const invoiceCount  = Number(c.invoices);
-  const scheduleCount = Number(c.schedules);
+  `,
+  ]);
 
   const onboardingCompleted: string[] = [];
-  if (doctorCount   > 0) onboardingCompleted.push("doctor");
-  if (scheduleCount > 0) onboardingCompleted.push("schedule");
-  if (patientCount  > 0) onboardingCompleted.push("patient");
-  if (apptCount     > 0) onboardingCompleted.push("appointment");
-  if (recordCount   > 0) onboardingCompleted.push("record");
-  if (invoiceCount  > 0) onboardingCompleted.push("invoice");
+  if (counts) {
+    const c = counts[0];
+    if (Number(c.doctors)   > 0) onboardingCompleted.push("doctor");
+    if (Number(c.schedules) > 0) onboardingCompleted.push("schedule");
+    if (Number(c.patients)  > 0) onboardingCompleted.push("patient");
+    if (Number(c.appts)     > 0) onboardingCompleted.push("appointment");
+    if (Number(c.records)   > 0) onboardingCompleted.push("record");
+    if (Number(c.invoices)  > 0) onboardingCompleted.push("invoice");
+    if (onboardingCompleted.length === 6) {
+      onboardingCountsDoneUntil.set(clinic.id, Date.now() + ONBOARDING_DONE_TTL_MS);
+    }
+  } else {
+    onboardingCompleted.push("doctor", "schedule", "patient", "appointment", "record", "invoice");
+  }
   if (clinic.waConnected) onboardingCompleted.push("whatsapp");
 
   return (
