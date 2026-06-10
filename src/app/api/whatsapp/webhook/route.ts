@@ -4,6 +4,8 @@ import { createHmac } from "crypto";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 import { runBotTurn } from "@/lib/whatsapp/bot/engine";
+import { isAffirmative, isNegative, isCancelWord } from "@/lib/whatsapp/bot/booking-helpers";
+import type { BotHistoryItem } from "@/lib/whatsapp/bot/types";
 import { Prisma } from "@prisma/client";
 
 // GET — webhook verification by Meta
@@ -63,6 +65,17 @@ export async function POST(req: NextRequest) {
     });
     if (!clinic) return NextResponse.json({ ok: true });
 
+    // Dedup por wamid: Meta reintenta el webhook ante timeouts/5xx. Si este
+    // mensaje ya fue ingestado, salir antes de crear el IN y de runBotTurn
+    // (sin esto el bot llama a Claude y responde DOS veces, cobrando doble).
+    if (msg.id) {
+      const duplicate = await prisma.inboxMessage.findFirst({
+        where: { externalId: msg.id, thread: { clinicId: clinic.id } },
+        select: { id: true },
+      });
+      if (duplicate) return NextResponse.json({ ok: true });
+    }
+
     // Empareja al paciente por teléfono (Meta manda "521234567890" → últimos 10).
     const fromNormalized = from.replace(/^52/, "").slice(-10);
     const patient = await prisma.patient.findFirst({
@@ -104,7 +117,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    await prisma.inboxMessage.create({
+    const inMsg = await prisma.inboxMessage.create({
       data: {
         threadId: thread.id,
         direction: "IN",
@@ -112,6 +125,7 @@ export async function POST(req: NextRequest) {
         externalId: msg.id,
         sentAt: now,
       },
+      select: { id: true },
     });
 
     // ── CONSERVA el flujo de confirmar/cancelar recordatorios (igual que hoy) ──
@@ -130,10 +144,26 @@ export async function POST(req: NextRequest) {
       : null;
 
     if (reminder) {
-      const isConfirm = ["si", "sí", "confirmar", "confirmo", "yes", "1"].some((k) => text.includes(k));
-      const isCancel  = ["no", "cancelar", "cancelo", "cancel", "2"].some((k) => text.includes(k));
+      // Palabra completa (\b) vía helpers del bot: con substring, "necesito
+      // cancelar" contiene "si" y CONFIRMABA. Cancelar se evalúa PRIMERO para
+      // frases ambiguas ("mejor no, sí cancélala"); "1"/"2" solo por igualdad
+      // exacta (rawText ya viene trimmed).
+      const isCancel  = text === "2" || isCancelWord(text) || isNegative(text);
+      const isConfirm = !isCancel && (text === "1" || isAffirmative(text));
 
-      if (isConfirm) {
+      if (isCancel) {
+        await prisma.appointment.update({
+          where: { id: reminder.appointmentId },
+          data:  { status: "CANCELLED", cancelledAt: new Date(), cancelReason: "Cancelado por paciente vía WhatsApp" },
+        });
+        await prisma.$executeRaw`UPDATE whatsapp_reminders SET "patientReply"=${text}, "repliedAt"=NOW() WHERE id=${reminder.id}`;
+
+        if (clinic.waAccessToken && clinic.waPhoneNumberId) {
+          await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, from,
+            `❌ Tu cita ha sido *cancelada*. Si deseas reagendar, comunícate con nosotros. ¡Hasta pronto!`
+          );
+        }
+      } else if (isConfirm) {
         await prisma.appointment.update({
           where: { id: reminder.appointmentId },
           data:  { status: "CONFIRMED", confirmedAt: new Date() },
@@ -149,18 +179,6 @@ export async function POST(req: NextRequest) {
             `✅ ¡Perfecto! Tu cita del ${dateStr} a las ${timeHHMMInTz(appt.startsAt, clinic.timezone)} está *confirmada*. Te esperamos. 😊`
           );
         }
-      } else if (isCancel) {
-        await prisma.appointment.update({
-          where: { id: reminder.appointmentId },
-          data:  { status: "CANCELLED", cancelledAt: new Date(), cancelReason: "Cancelado por paciente vía WhatsApp" },
-        });
-        await prisma.$executeRaw`UPDATE whatsapp_reminders SET "patientReply"=${text}, "repliedAt"=NOW() WHERE id=${reminder.id}`;
-
-        if (clinic.waAccessToken && clinic.waPhoneNumberId) {
-          await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, from,
-            `❌ Tu cita ha sido *cancelada*. Si deseas reagendar, comunícate con nosotros. ¡Hasta pronto!`
-          );
-        }
       } else {
         // Guarda la respuesta sin cambiar el estado de la cita.
         await prisma.$executeRaw`UPDATE whatsapp_reminders SET "patientReply"=${text}, "repliedAt"=NOW() WHERE id=${reminder.id}`;
@@ -170,12 +188,26 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Sin recordatorio pendiente → bot híbrido configurable (FAQ + Claude + agenda) ──
+    // Memoria del bot: últimos 10 mensajes del hilo en orden cronológico, sin
+    // notas internas ni el IN recién creado (ese va como incomingText; ai.ts ya
+    // lo agrega como último turno user y lo duplicaría).
+    const recentMessages = await prisma.inboxMessage.findMany({
+      where: { threadId: thread.id, isInternal: false, id: { not: inMsg.id } },
+      orderBy: { sentAt: "desc" },
+      take: 10,
+      select: { direction: true, body: true, sentById: true },
+    });
+    const history: BotHistoryItem[] = recentMessages.reverse().map((m) => ({
+      role: m.direction === "IN" ? "patient" : m.sentById ? "staff" : "bot",
+      text: m.body,
+    }));
+
     const result = await runBotTurn({
       clinicId: clinic.id,
       threadId: thread.id,
       patient: patient ? { id: patient.id, phone: from } : undefined,
       incomingText: rawText,
-      history: [],
+      history,
       botState: (thread.botState ?? null) as Prisma.JsonValue | null,
     });
 
