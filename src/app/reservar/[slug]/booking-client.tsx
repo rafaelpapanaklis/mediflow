@@ -98,6 +98,33 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
       .finally(() => setLoadSlots(false));
   }, [selDate, doctor, clinic.slug]);
 
+  // Reservar requiere cuenta de paciente (cookie patient_session): sin sesión
+  // → registro con ?next= de regreso; con sesión → prefill de contacto.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/paciente/me", { credentials: "same-origin", cache: "no-store" })
+      .then(r => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then(me => {
+        if (cancelled) return;
+        if (!me) {
+          window.location.assign(`/paciente/registro?next=${encodeURIComponent(`/reservar/${clinic.slug}`)}`);
+          return;
+        }
+        setForm(f => {
+          const parts = typeof me.name === "string" ? me.name.trim().split(/\s+/) : [];
+          return {
+            ...f,
+            firstName: f.firstName || (parts[0] ?? ""),
+            lastName:  f.lastName  || parts.slice(1).join(" "),
+            email:     f.email     || (me.email ?? ""),
+            phone:     f.phone     || (me.phone ?? ""),
+          };
+        });
+      });
+    return () => { cancelled = true; };
+  }, [clinic.slug]);
+
   async function submit() {
     setError(""); setSubmitting(true);
     try {
@@ -115,6 +142,10 @@ export function BookingClient({ clinic, preselectedService, categoryServices }: 
       const text = await res.text();
       let data: any;
       try { data = JSON.parse(text); } catch { data = { error: text || `Error del servidor (${res.status})` }; }
+      if (res.status === 401) {
+        window.location.assign(`/paciente/registro?next=${encodeURIComponent(`/reservar/${clinic.slug}`)}`);
+        return;
+      }
       if (!res.ok) throw new Error(data.error ?? "Error al agendar");
       setStep(5);
     } catch (err: any) { setError(err.message); }

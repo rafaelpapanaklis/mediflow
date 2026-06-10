@@ -1148,6 +1148,7 @@ model Patient {
   inboxThreads        InboxThread[]
   patientReminders    Reminder[]
   referrals           Referral[]
+  accountLinks        PatientAccountLink[]
 
   // Pediatrics module — see docs/marketplace/research/odontopediatria/SPEC.md §5
   pediatricRecord      PediatricRecord?
@@ -6625,4 +6626,71 @@ model AnthropicRecharge {
   createdAt      DateTime @default(now())
 
   @@map("anthropic_recharges")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Portal del paciente — cuentas reales (jun 2026). PatientAccount es GLOBAL
+// (sin clinicId): una persona puede tener expedientes en varias clínicas.
+// PatientAccountLink une cuenta ↔ Patient(clinicId). La sesión vive en
+// patient_account_sessions: la cookie httpOnly `patient_session` guarda el
+// token plano y en DB solo se persiste sha256(token).
+// Vinculación SOLO por email verificado o por reserva con sesión iniciada —
+// NUNCA por teléfono solo (robo de expediente).
+// ═══════════════════════════════════════════════════════════════════════════
+
+model PatientAccount {
+  id            String  @id @default(cuid())
+  email         String  @unique // siempre lowercase
+  emailVerified Boolean @default(false)
+  name          String
+  phone         String?
+  passwordHash  String
+
+  // Verificación de email por código de 6 dígitos (se guarda sha256 del código)
+  verifyCodeHash   String?
+  verifyCodeExpiry DateTime?
+  verifyAttempts   Int       @default(0)
+
+  // Recuperación de contraseña (se guarda sha256 del token)
+  resetTokenHash   String?
+  resetTokenExpiry DateTime?
+
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  links    PatientAccountLink[]
+  sessions PatientAccountSession[]
+
+  @@map("patient_accounts")
+}
+
+model PatientAccountLink {
+  id        String   @id @default(cuid())
+  accountId String
+  patientId String
+  clinicId  String // denormalizado del Patient para filtrar por clínica sin join
+  createdAt DateTime @default(now())
+
+  account PatientAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  patient Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, patientId])
+  @@index([accountId, clinicId])
+  @@index([patientId])
+  @@map("patient_account_links")
+}
+
+model PatientAccountSession {
+  id        String   @id @default(cuid())
+  accountId String
+  tokenHash String   @unique // sha256 del token de la cookie
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  account PatientAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([expiresAt])
+  @@map("patient_account_sessions")
 }

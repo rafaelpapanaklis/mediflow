@@ -4,6 +4,8 @@ import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { createCalendarEvent, refreshAccessToken, getOrCreateClinicCalendar } from "@/lib/google-calendar";
 import { rateLimit } from "@/lib/rate-limit";
 import { tzLocalToUtc } from "@/lib/agenda/time-utils";
+import { getPatientPortalContext } from "@/lib/patient-portal/guard";
+import { resolveBookingPatient } from "@/lib/patient-portal/link";
 
 export async function POST(req: NextRequest) {
   try {
@@ -41,6 +43,15 @@ export async function POST(req: NextRequest) {
   // Validate startTime format HH:MM
   if (!/^\d{2}:\d{2}$/.test(startTime)) {
     return NextResponse.json({ error: "Formato de hora inválido" }, { status: 400 });
+  }
+
+  // ── Require patient portal session ─────────────────────────────────────────
+  const ctx = await getPatientPortalContext();
+  if (!ctx) {
+    return NextResponse.json(
+      { error: "Inicia sesión para reservar tu cita", requiresAuth: true },
+      { status: 401 }
+    );
   }
 
   // ── Find clinic ────────────────────────────────────────────────────────────
@@ -82,38 +93,17 @@ export async function POST(req: NextRequest) {
   const endMins = slotMins + 30;
   const endTime = `${String(Math.floor(endMins / 60)).padStart(2,"0")}:${String(endMins % 60).padStart(2,"0")}`;
 
-  // ── Find or create patient ─────────────────────────────────────────────────
-  let patient = await prisma.patient.findFirst({
-    where: { clinicId: clinic.id, phone: cleanPhone },
+  // ── Resolve patient from portal session (link por email verificado o crear) ─
+  const resolved = await resolveBookingPatient({
+    accountId:       ctx.account.id,
+    accountEmail:    ctx.account.email,
+    clinicId:        clinic.id,
+    firstName:       firstName.trim(),
+    lastName:        lastName.trim(),
+    phone:           cleanPhone,
+    email:           email?.trim() || null,
+    primaryDoctorId: doctorId,
   });
-
-  if (!patient) {
-    try {
-      patient = await prisma.$transaction(async (tx) => {
-        // Serializa creates concurrentes por clínica tomando row-lock del registro de la clínica
-        await tx.$executeRaw`SELECT 1 FROM clinics WHERE id = ${clinic.id} FOR UPDATE`;
-        const count = await tx.patient.count({ where: { clinicId: clinic.id } });
-        const patientNumber = `P${String(count + 1).padStart(4, "0")}`;
-        return tx.patient.create({
-          data: {
-            clinicId:       clinic.id,
-            patientNumber,
-            firstName:      firstName.trim(),
-            lastName:       lastName.trim(),
-            phone:          cleanPhone,
-            email:          email?.trim() || null,
-            primaryDoctorId:doctorId,
-          },
-        });
-      });
-    } catch (err) {
-      console.error("[public/book] patient create failed:", err);
-    }
-  }
-
-  if (!patient) {
-    return NextResponse.json({ error: "Error creando perfil de paciente" }, { status: 500 });
-  }
 
   // ── Check conflict + create appointment in a transaction (prevent double-booking) ──
   const startsAtBook = tzLocalToUtc(date, slotH, slotM, clinic.timezone);
@@ -135,7 +125,7 @@ export async function POST(req: NextRequest) {
     return tx.appointment.create({
       data: {
         clinicId:    clinic.id,
-        patientId:   patient!.id,
+        patientId:   resolved.patientId,
         doctorId,
         type:        type?.trim() || "Consulta general",
         startsAt:    startsAtBook,
@@ -234,7 +224,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     success:       true,
     appointmentId: appt.id,
-    patientId:     patient.id,
+    patientId:     resolved.patientId,
     message:       "¡Cita agendada con éxito! Te enviaremos un recordatorio por WhatsApp.",
   });
   } catch (err: any) {

@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { Phone, MapPin, Clock, Instagram, Facebook, Star, ChevronDown, ChevronUp, X, Check, Loader2, ChevronLeft, ChevronRight, Calendar, ArrowRight, Menu } from "lucide-react";
+import type { PacienteMe } from "@/lib/patient-portal/types";
 
 const MONTHS_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const DAYS_SHORT = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
@@ -15,6 +16,23 @@ function hexAdjust(hex: string, amount: number) {
   const b = Math.min(255,Math.max(0,(n&0xff)+amount));
   return `#${((r<<16)|(g<<8)|b).toString(16).padStart(6,"0")}`;
 }
+
+/** Sesión del portal del paciente: GET /api/paciente/me → PacienteMe | null. */
+async function fetchPacienteMe(): Promise<PacienteMe | null> {
+  try {
+    const res = await fetch("/api/paciente/me", { credentials: "same-origin", cache: "no-store" });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+/** Primer token → firstName; el resto → lastName (un solo token → lastName ""). */
+function splitFullName(name: string): { firstName: string; lastName: string } {
+  const tokens = (name || "").trim().split(/\s+/).filter(Boolean);
+  return { firstName: tokens[0] ?? "", lastName: tokens.slice(1).join(" ") };
+}
+interface BookingPrefill { firstName: string; lastName: string; phone: string; email: string }
 
 interface Clinic {
   id:string; name:string; slug:string; specialty:string;
@@ -34,6 +52,7 @@ export function ClinicLandingClient({ clinic, highlights }:{ clinic:Clinic; high
   const theme     = clinic.landingThemeColor ?? "#0f766e";
   const themeDark = hexAdjust(theme, -35);
   const [showBook, setShowBook] = useState(false);
+  const [bookPrefill, setBookPrefill] = useState<BookingPrefill|null>(null);
   const [lightbox, setLightbox] = useState<number|null>(null);
   const [openFaq, setOpenFaq]   = useState<number|null>(null);
   const [scrolled, setScrolled] = useState(false);
@@ -58,6 +77,31 @@ export function ClinicLandingClient({ clinic, highlights }:{ clinic:Clinic; high
     const fn = () => setScrolled(window.scrollY > 50);
     window.addEventListener("scroll", fn);
     return () => window.removeEventListener("scroll", fn);
+  }, []);
+
+  // GATE: reservar requiere sesión del portal del paciente. Sin sesión →
+  // registro con ?next= de vuelta a esta landing (reabre el modal solo).
+  async function openBooking() {
+    const me = await fetchPacienteMe();
+    if (!me) {
+      window.location.assign(`/paciente/registro?next=${encodeURIComponent(`/${clinic.slug}?reservar=1`)}`);
+      return;
+    }
+    const { firstName, lastName } = splitFullName(me.name);
+    setBookPrefill({ firstName, lastName, phone: me.phone ?? "", email: me.email });
+    setShowBook(true);
+  }
+
+  // AUTO-REOPEN: al volver de registro/login con ?reservar=1, corre el mismo
+  // gate y limpia el query de la URL.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("reservar") !== "1") return;
+    params.delete("reservar");
+    const qs = params.toString();
+    window.history.replaceState(null, "", window.location.pathname + (qs ? `?${qs}` : "") + window.location.hash);
+    openBooking();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const navLinks = [
@@ -110,7 +154,7 @@ export function ClinicLandingClient({ clinic, highlights }:{ clinic:Clinic; high
                 💬 WhatsApp
               </a>
             )}
-            <button onClick={() => setShowBook(true)} className="l-btn text-sm font-bold px-5 py-2.5 rounded-xl flex items-center gap-2">
+            <button onClick={() => openBooking()} className="l-btn text-sm font-bold px-5 py-2.5 rounded-xl flex items-center gap-2">
               <Calendar size={14}/> Agendar
             </button>
             <button onClick={() => setMobileMenu(!mobileMenu)} className={`md:hidden p-2 rounded-lg ${scrolled ? "text-gray-600" : "text-white"}`}>
@@ -166,7 +210,7 @@ export function ClinicLandingClient({ clinic, highlights }:{ clinic:Clinic; high
               </div>
             )}
             <div className="l-anim l-delay2 flex flex-wrap gap-3">
-              <button onClick={() => setShowBook(true)} className="l-btn px-8 py-4 rounded-2xl text-base font-bold flex items-center gap-2.5">
+              <button onClick={() => openBooking()} className="l-btn px-8 py-4 rounded-2xl text-base font-bold flex items-center gap-2.5">
                 Agendar cita <ArrowRight size={18}/>
               </button>
               {waLink && (
@@ -225,7 +269,7 @@ export function ClinicLandingClient({ clinic, highlights }:{ clinic:Clinic; high
                   {svc.desc && <p className="text-gray-400 text-sm leading-relaxed">{svc.desc}</p>}
                   <div className="mt-6 flex items-center justify-between">
                     {svc.price ? <span className="font-bold text-lg" style={{color:theme}}>{svc.price}</span> : <span/>}
-                    <button onClick={() => setShowBook(true)} className="text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1" style={{background:`${theme}10`,color:theme}}>
+                    <button onClick={() => openBooking()} className="text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1" style={{background:`${theme}10`,color:theme}}>
                       Agendar <ArrowRight size={12}/>
                     </button>
                   </div>
@@ -267,7 +311,7 @@ export function ClinicLandingClient({ clinic, highlights }:{ clinic:Clinic; high
                         {doc.services.length > 3 && <span className="text-xs px-3 py-1 rounded-full bg-gray-50 text-gray-400">+{doc.services.length-3}</span>}
                       </div>
                     )}
-                    <button onClick={() => setShowBook(true)} className="l-btn w-full py-3 rounded-2xl text-sm font-bold">
+                    <button onClick={() => openBooking()} className="l-btn w-full py-3 rounded-2xl text-sm font-bold">
                       Agendar consulta
                     </button>
                   </div>
@@ -528,7 +572,7 @@ export function ClinicLandingClient({ clinic, highlights }:{ clinic:Clinic; high
           </h2>
           <p className="text-white/65 text-xl mb-12 max-w-xl mx-auto">Agenda en menos de 2 minutos. Sin llamadas, sin esperas, sin complicaciones.</p>
           <div className="flex flex-wrap justify-center gap-4">
-            <button onClick={() => setShowBook(true)}
+            <button onClick={() => openBooking()}
               className="bg-white font-bold px-10 py-4 rounded-2xl text-base shadow-2xl hover:bg-gray-50 transition-all flex items-center gap-2.5"
               style={{color:theme}}>
               <Calendar size={18}/> Agendar mi cita
@@ -558,13 +602,13 @@ export function ClinicLandingClient({ clinic, highlights }:{ clinic:Clinic; high
       </footer>
 
       {/* BOOKING MODAL */}
-      {showBook && <BookingModal clinic={clinic} onClose={() => setShowBook(false)} theme={theme} themeDark={themeDark}/>}
+      {showBook && <BookingModal clinic={clinic} onClose={() => setShowBook(false)} theme={theme} themeDark={themeDark} prefill={bookPrefill}/>}
     </div>
     </>
   );
 }
 
-function BookingModal({ clinic, onClose, theme, themeDark }:{ clinic:Clinic; onClose:()=>void; theme:string; themeDark:string }) {
+function BookingModal({ clinic, onClose, theme, themeDark, prefill }:{ clinic:Clinic; onClose:()=>void; theme:string; themeDark:string; prefill?:BookingPrefill|null }) {
   const [step, setStep]           = useState(1);
   const [doctor, setDoctor]       = useState<Clinic["users"][0]|null>(null);
   const [calDate, setCalDate]     = useState(new Date());
@@ -574,7 +618,7 @@ function BookingModal({ clinic, onClose, theme, themeDark }:{ clinic:Clinic; onC
   const [loadSlots, setLoadSlots] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError]         = useState("");
-  const [form, setForm]           = useState({ firstName:"", lastName:"", phone:"", email:"", type:"Consulta general", notes:"" });
+  const [form, setForm]           = useState({ firstName:prefill?.firstName??"", lastName:prefill?.lastName??"", phone:prefill?.phone??"", email:prefill?.email??"", type:"Consulta general", notes:"" });
 
   const schedMap = Object.fromEntries(clinic.schedules.map(s=>[s.dayOfWeek,s]));
   function isDayEnabled(date:Date) {
@@ -603,6 +647,7 @@ function BookingModal({ clinic, onClose, theme, themeDark }:{ clinic:Clinic; onC
     try {
       const res=await fetch("/api/public/book",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({slug:clinic.slug,doctorId:doctor!.id,date:selDate,startTime:selSlot,type:form.type,firstName:form.firstName.trim(),lastName:form.lastName.trim(),phone:form.phone.trim(),email:form.email.trim()||undefined,notes:form.notes.trim()||undefined})});
       const data=await res.json();
+      if (res.status===401) { window.location.assign(`/paciente/registro?next=${encodeURIComponent(`/${clinic.slug}?reservar=1`)}`); return; }
       if (!res.ok) throw new Error(data.error??"Error al agendar");
       setStep(4);
     } catch(e:any){setError(e.message);} finally{setSubmitting(false);}

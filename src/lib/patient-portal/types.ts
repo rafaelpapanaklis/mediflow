@@ -1,0 +1,213 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// CONTRATO DEL PORTAL DEL PACIENTE (cuentas reales) — PUBLICADO Y FIJO.
+// Otra terminal consume este contrato tal cual: NO renombrar cookie, rutas,
+// ni shapes sin coordinar.
+//
+//   · Cookie de sesión: httpOnly, nombre EXACTO `patient_session`.
+//   · GET /api/paciente/me            → 200 PacienteMe | 401
+//   · POST /api/paciente/register     → 200 { ok, email } | 400 | 409 | 429
+//   · POST /api/paciente/verify       → 200 { ok } + Set-Cookie (auto-login +
+//                                        auto-link por email) | 400 | 429
+//   · POST /api/paciente/verify/resend→ 200 { ok } siempre | 429
+//   · POST /api/paciente/login        → 200 { ok } + Set-Cookie | 401
+//                                      | 403 { error, needsVerification: true } | 429
+//   · POST /api/paciente/logout       → 200 { ok } + clear cookie
+//   · POST /api/paciente/password/forgot → 200 { ok } siempre (sin enumeración) | 429
+//   · POST /api/paciente/password/reset  → 200 { ok } | 400
+//   · GET  /api/paciente/profile      → 200 PacientePerfil | 401
+//   · PATCH /api/paciente/profile     → 200 { ok } | 400 | 401
+//   · GET  /api/paciente/summary      → 200 PacienteSummaryResponse | 401
+//   · GET  /api/paciente/appointments → 200 PacienteCitasResponse | 401
+//   · GET  /api/paciente/history      → 200 PacienteHistorialResponse | 401
+//   · GET  /api/paciente/payments     → 200 PacientePagosResponse | 401
+//
+//   · /paciente/login y /paciente/registro aceptan ?next=<ruta interna> para
+//     volver a donde estaba (solo rutas que empiecen con "/" — nunca URLs
+//     absolutas, evita open redirect).
+//
+// REGLAS DE VISIBILIDAD PACIENTE-SAFE (mismas del portal por token, auditadas):
+//   · MedicalRecord: SOLO id, visitDate y nombre del doctor. NUNCA subjective/
+//     objective/assessment/plan/diagnoses/vitals/specialtyData/isPrivate.
+//     Las consultas NO son SOAP: al paciente solo se le muestra que hubo visita.
+//   · Patient: NUNCA notes internas, curp, rfc, portalToken, tokens de
+//     telemedicina ni campos del doctor.
+//   · Appointment: id, type, status, startsAt, endsAt, doctor (nombre) — nada más.
+//   · Invoice: id, invoiceNumber, status, total, paid, balance, createdAt,
+//     dueDate, paidAt. NUNCA items (pueden traer notas internas) ni notes.
+//   · TreatmentPlan: name, status, fechas y progreso de sesiones. NUNCA
+//     description ni notas de sesiones.
+//   · Odontograma: SOLO conteos agregados (sin notas por diente).
+//
+// Multi-tenant estricto: toda query del panel filtra por los patientId de
+// PatientAccountLink de la sesión (y clinicId del propio link). Jamás aceptar
+// patientId/clinicId del cliente sin validar que pertenece a la cuenta.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export const PATIENT_SESSION_COOKIE = "patient_session";
+export const PATIENT_SESSION_DAYS = 30;
+export const VERIFY_CODE_TTL_MIN = 15;
+export const VERIFY_MAX_ATTEMPTS = 5;
+export const RESET_TOKEN_TTL_MIN = 60;
+
+// ── Auth ────────────────────────────────────────────────────────────────────
+
+/** Respuesta de GET /api/paciente/me (contrato FIJO). */
+export interface PacienteMe {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+}
+
+/** Contexto de sesión que devuelve el guard server-side. */
+export interface PatientPortalContext {
+  account: PacienteMe;
+  /** Vínculos cuenta ↔ expediente. Fuente de verdad del multi-tenant. */
+  links: { patientId: string; clinicId: string }[];
+}
+
+export interface RegisterBody {
+  name: string;
+  email: string;
+  phone: string;
+  password: string; // mínimo 8 caracteres
+}
+
+export interface VerifyBody {
+  email: string;
+  code: string; // 6 dígitos
+}
+
+export interface LoginBody {
+  email: string;
+  password: string;
+}
+
+export interface ForgotPasswordBody {
+  email: string;
+}
+
+export interface ResetPasswordBody {
+  token: string;
+  password: string; // mínimo 8 caracteres
+}
+
+export interface UpdateProfileBody {
+  name?: string;
+  phone?: string;
+  /** Para cambiar contraseña deben venir ambos. */
+  currentPassword?: string;
+  newPassword?: string;
+}
+
+// ── Datos del panel ─────────────────────────────────────────────────────────
+
+/** Una clínica donde la cuenta tiene expediente vinculado. */
+export interface PacienteClinica {
+  clinicId: string;
+  clinicName: string;
+  clinicSlug: string;
+  logoUrl: string | null;
+  city: string | null;
+  phone: string | null;
+  patientId: string;
+  patientNumber: string;
+}
+
+export interface PacienteCita {
+  id: string;
+  clinicId: string;
+  type: string;
+  /** AppointmentStatus como string: PENDING|SCHEDULED|CONFIRMED|CHECKED_IN|IN_CHAIR|IN_PROGRESS|COMPLETED|CHECKED_OUT|CANCELLED|NO_SHOW */
+  status: string;
+  startsAt: string; // ISO UTC
+  endsAt: string; // ISO UTC
+  doctorName: string;
+}
+
+/** Consulta paciente-safe: solo que hubo visita y con quién. CERO SOAP. */
+export interface PacienteConsulta {
+  id: string;
+  clinicId: string;
+  visitDate: string; // ISO
+  doctorName: string;
+}
+
+export interface PacienteTratamiento {
+  id: string;
+  clinicId: string;
+  name: string;
+  /** TreatmentStatus como string: ACTIVE|COMPLETED|ABANDONED|PAUSED */
+  status: string;
+  startDate: string; // ISO
+  endDate: string | null;
+  totalSessions: number;
+  sessionsDone: number;
+}
+
+/** Resumen agregado del odontograma por clínica (solo conteos, sin notas). */
+export interface PacienteOdontoResumen {
+  clinicId: string;
+  /** Dientes distintos con al menos un hallazgo registrado. */
+  teethWithFindings: number;
+  /** Total de hallazgos registrados (excluye notas "__note__"). */
+  totalFindings: number;
+  updatedAt: string | null; // ISO del hallazgo más reciente
+}
+
+export interface PacienteFactura {
+  id: string;
+  clinicId: string;
+  invoiceNumber: string;
+  /** InvoiceStatus como string: DRAFT|PENDING|PARTIAL|PAID|OVERDUE|CANCELLED */
+  status: string;
+  total: number; // MXN
+  paid: number; // MXN
+  balance: number; // MXN
+  createdAt: string; // ISO
+  dueDate: string | null;
+  paidAt: string | null;
+}
+
+// ── Shapes de respuesta por endpoint ────────────────────────────────────────
+
+export interface PacienteSummaryResponse {
+  me: PacienteMe;
+  clinics: PacienteClinica[];
+  /** Próximas 5 citas (startsAt >= ahora, status no cancelado/no-show), ascendente. */
+  upcoming: PacienteCita[];
+  /** Saldo pendiente (suma de Invoice.balance con status PENDING|PARTIAL|OVERDUE) por clínica. */
+  pendingByClinic: { clinicId: string; amount: number }[];
+  pendingTotal: number; // MXN
+}
+
+export interface PacienteCitasResponse {
+  clinics: PacienteClinica[];
+  /** startsAt >= ahora, ascendente. Incluye PENDING/SCHEDULED/CONFIRMED. */
+  upcoming: PacienteCita[];
+  /** startsAt < ahora o canceladas, descendente, máx 100. */
+  past: PacienteCita[];
+}
+
+export interface PacienteHistorialResponse {
+  clinics: PacienteClinica[];
+  consultas: PacienteConsulta[]; // desc por visitDate, máx 100
+  tratamientos: PacienteTratamiento[]; // desc por startDate
+  odontograma: PacienteOdontoResumen[]; // una entrada por clínica con datos
+}
+
+export interface PacientePagosResponse {
+  clinics: PacienteClinica[];
+  invoices: PacienteFactura[]; // desc por createdAt, máx 200, sin DRAFT
+  totals: { paidTotal: number; pendingTotal: number }; // MXN global
+  byClinic: { clinicId: string; paid: number; pending: number }[];
+}
+
+export interface PacientePerfil {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  createdAt: string; // ISO
+  clinics: PacienteClinica[];
+}
