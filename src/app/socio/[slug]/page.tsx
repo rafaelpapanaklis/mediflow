@@ -14,6 +14,7 @@ import {
 } from "@/components/public/landing/sales";
 import { ProductWindow } from "@/components/public/landing/sales/product-window";
 import { SalesLogo } from "@/components/public/landing/sales/logo";
+import { RefClickTracker } from "@/components/afiliados/ref-click-tracker";
 import "@/components/public/landing/sales/sales.css";
 
 // Página hosteada del socio/afiliado: una landing de venta de DaleControl donde
@@ -64,6 +65,7 @@ export default async function PartnerLandingPage({ params }: Props) {
   return (
     <div className={`mfh ${inter.variable}`} style={{ minHeight: "100dvh" }}>
       <a href="#mfh-main" className="mf-skip-link">Saltar al contenido</a>
+      <RefClickTracker refCode={affiliate.referralCode} />
 
       {/* Nav del socio — logo + CTA de registro con ref */}
       <header className="mfh-nav" data-scrolled="true">

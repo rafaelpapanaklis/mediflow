@@ -7,6 +7,7 @@ import { sendWelcomeEmail } from "@/lib/email";
 import { SITE_URL } from "@/lib/seo";
 import { logError } from "@/lib/safe-log";
 import { resolveApprovedAffiliateByCode } from "@/lib/affiliates";
+import { sendAffiliateNewReferralEmail } from "@/lib/affiliate-emails";
 
 const CATEGORY_MAP: Record<string, string> = {
   dental: "DENTAL", odontologia: "DENTAL",
@@ -133,6 +134,14 @@ export async function POST(req: NextRequest) {
       trialEndsAt,
       dashboardUrl: `${SITE_URL}/dashboard`,
     }).catch(err => logError("[register] welcome email failed:", err));
+
+    // Aviso al afiliado referente (no bloquea el response si falla)
+    if (referringAffiliate) {
+      sendAffiliateNewReferralEmail({
+        affiliateId: referringAffiliate.id,
+        clinicName: data.clinicName,
+      }).catch(err => logError("[register] affiliate referral email failed:", err));
+    }
 
     return NextResponse.json({ success: true });
   } catch (err: any) {

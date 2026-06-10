@@ -4,6 +4,7 @@ import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
 import { logAudit } from "@/lib/audit";
 import type Stripe from "stripe";
 import { calcCommissionMxn } from "@/lib/affiliates";
+import { sendAffiliateConversionEmail } from "@/lib/affiliate-emails";
 import {
   creditWalletFromStripe,
   setWalletCardIfEmpty,
@@ -234,6 +235,14 @@ export async function POST(req: NextRequest) {
               status: "pending",
             },
           });
+          // Email de conversión al afiliado (solo la 1a comisión de la
+          // clínica; el helper lo verifica). Fire-and-forget: el webhook
+          // NO espera el envío.
+          sendAffiliateConversionEmail({
+            affiliateId: clinic.affiliateId,
+            clinicId: clinic.id,
+            commissionMxn,
+          }).catch(() => {});
         } catch (err: any) {
           // P2002 = unique violation → la comisión ya existía, no-op.
           if (err?.code !== "P2002") throw err;

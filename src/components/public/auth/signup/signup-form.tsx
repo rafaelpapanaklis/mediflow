@@ -11,6 +11,7 @@ import { Step1Account } from "./step-1-account";
 import { Step2Clinic } from "./step-2-clinic";
 import { Step3PlanPayment, type CardDetails } from "./step-3-plan-payment";
 import type { Billing, PlanId } from "./plan-card";
+import { RefClickTracker } from "@/components/afiliados/ref-click-tracker";
 
 interface SignupState {
   // Step 1
@@ -215,6 +216,7 @@ export function SignupForm() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <RefClickTracker refCode={ref} />
       {/* Logo */}
       <div>
         <Logo size={22} color="var(--ld-brand-light)" />

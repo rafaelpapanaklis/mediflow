@@ -6707,3 +6707,39 @@ model PatientAccountSession {
   @@index([expiresAt])
   @@map("patient_account_sessions")
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// AFILIADOS — ESTADÍSTICAS Y REPORTES
+// Tracking de clicks del funnel (click → registro → activa → pagando) y
+// preferencias de notificación por email del afiliado.
+// SIN relación Prisma a Affiliate (mismo patrón que AI billing): las FKs
+// viven en sql/afiliados-stats.sql. Así NO se toca el modelo Affiliate y un
+// deploy sin el SQL aplicado solo afecta a las features nuevas (cero drift
+// en los SELECT existentes — ver lesson_ortho_schema_drift).
+// Privacidad: ipHash = sha256(salt+ip) truncado; NUNCA la IP cruda.
+// ─────────────────────────────────────────────────────────────────────────
+
+model AffiliateClick {
+  id          String   @id @default(cuid())
+  affiliateId String
+  ref         String // referralCode o slug usado en el enlace
+  campaign    String? // ?c= / utm_campaign (opcional, tolerante)
+  landingPage String? // path de aterrizaje, sin querystring
+  ipHash      String? // sha256 truncado con salt — jamás IP cruda
+  userAgent   String? // resumido (máx 160 chars)
+  createdAt   DateTime @default(now())
+
+  @@index([affiliateId, createdAt])
+  @@index([ref, createdAt])
+  @@map("affiliate_clicks")
+}
+
+model AffiliatePrefs {
+  affiliateId      String   @id
+  notifySignup     Boolean  @default(true) // email al registrarse una clínica con su ref
+  notifyConversion Boolean  @default(true) // email cuando un referido paga su primera factura
+  notifyPayout     Boolean  @default(true) // email cuando el admin marca comisiones pagadas
+  updatedAt        DateTime @default(now()) @updatedAt
+
+  @@map("affiliate_prefs")
+}

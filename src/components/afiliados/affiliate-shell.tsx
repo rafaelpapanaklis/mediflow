@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { LayoutDashboard, Settings, LogOut, Menu, X, Handshake } from "lucide-react";
+import { LayoutDashboard, Settings, LogOut, Menu, X, Handshake, BarChart3, FileText } from "lucide-react";
 
 type NavItem = {
   href: string;
@@ -13,6 +13,8 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/afiliados/inicio", label: "Inicio", icon: LayoutDashboard },
+  { href: "/afiliados/estadisticas", label: "Estadísticas", icon: BarChart3 },
+  { href: "/afiliados/reportes", label: "Reportes", icon: FileText },
   { href: "/afiliados/configuracion", label: "Datos de pago", icon: Settings },
 ];
 
