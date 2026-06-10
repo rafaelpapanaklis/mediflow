@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { createHmac } from "crypto";
+import { createHmac, timingSafeEqual } from "crypto";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 import { runBotTurn } from "@/lib/whatsapp/bot/engine";
 import { isAffirmative, isNegative, isCancelWord } from "@/lib/whatsapp/bot/booking-helpers";
+import { rateLimitKey } from "@/lib/rate-limit";
 import type { BotHistoryItem } from "@/lib/whatsapp/bot/types";
 import { Prisma } from "@prisma/client";
+
+// Tope diario de respuestas del bot por clínica (proxy de gasto: cada
+// respuesta OUT del bot ≈ 1 llamada a Claude + 1 envío de WhatsApp).
+const BOT_DAILY_REPLY_CAP = parseInt(process.env.WA_BOT_DAILY_REPLY_CAP ?? "", 10) || 200;
+const BOT_CAP_REACHED_MSG =
+  "Por el momento te atiende un humano 🙋: tu mensaje quedó registrado y el equipo de la clínica te responderá en breve.";
 
 // GET — webhook verification by Meta
 export async function GET(req: NextRequest) {
@@ -15,7 +22,13 @@ export async function GET(req: NextRequest) {
   const token     = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
 
-  const verifyToken = process.env.WA_WEBHOOK_VERIFY_TOKEN ?? "mediflow_webhook_2026";
+  // Sin fallback hardcodeado: si la env no está configurada, no hay forma
+  // legítima de verificar el webhook.
+  const verifyToken = process.env.WA_WEBHOOK_VERIFY_TOKEN;
+  if (!verifyToken) {
+    console.error("[whatsapp/webhook] WA_WEBHOOK_VERIFY_TOKEN no configurado — rechazando verificación");
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   if (mode === "subscribe" && token === verifyToken) {
     return new NextResponse(challenge, { status: 200 });
@@ -37,7 +50,11 @@ export async function POST(req: NextRequest) {
     const signature = req.headers.get("x-hub-signature-256");
     if (!signature) return NextResponse.json({ error: "Missing signature" }, { status: 403 });
     const expectedSig = "sha256=" + createHmac("sha256", appSecret).update(rawBody).digest("hex");
-    if (signature !== expectedSig) {
+    // Comparación en tiempo constante; timingSafeEqual exige buffers del mismo
+    // largo (el largo del HMAC es público, comparar length no filtra nada).
+    const sigBuf = Buffer.from(signature);
+    const expectedBuf = Buffer.from(expectedSig);
+    if (sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) {
       return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
     }
 
@@ -93,18 +110,31 @@ export async function POST(req: NextRequest) {
       select: { id: true, botActive: true, botState: true, patientId: true },
     });
     if (!thread) {
-      thread = await prisma.inboxThread.create({
-        data: {
-          clinicId: clinic.id,
-          channel: "WHATSAPP",
-          externalId: externalThreadKey,
-          patientId: patient?.id ?? null,
-          subject: profileName ? `WhatsApp · ${profileName}` : `WhatsApp · ${from}`,
-          status: "UNREAD",
-          lastMessageAt: now,
-        },
-        select: { id: true, botActive: true, botState: true, patientId: true },
-      });
+      try {
+        thread = await prisma.inboxThread.create({
+          data: {
+            clinicId: clinic.id,
+            channel: "WHATSAPP",
+            externalId: externalThreadKey,
+            patientId: patient?.id ?? null,
+            subject: profileName ? `WhatsApp · ${profileName}` : `WhatsApp · ${from}`,
+            status: "UNREAD",
+            lastMessageAt: now,
+          },
+          select: { id: true, botActive: true, botState: true, patientId: true },
+        });
+      } catch (err) {
+        // Carrera entre reintentos de Meta: otro request creó el hilo entre el
+        // findFirst y el create (@@unique [clinicId, channel, externalId]) →
+        // re-busca el hilo existente y úsalo.
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+          thread = await prisma.inboxThread.findFirst({
+            where: { clinicId: clinic.id, channel: "WHATSAPP", externalId: externalThreadKey },
+            select: { id: true, botActive: true, botState: true, patientId: true },
+          });
+        }
+        if (!thread) throw err;
+      }
     } else {
       await prisma.inboxThread.update({
         where: { id: thread.id },
@@ -117,16 +147,27 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const inMsg = await prisma.inboxMessage.create({
-      data: {
-        threadId: thread.id,
-        direction: "IN",
-        body: rawText,
-        externalId: msg.id,
-        sentAt: now,
-      },
-      select: { id: true },
-    });
+    let inMsg: { id: string };
+    try {
+      inMsg = await prisma.inboxMessage.create({
+        data: {
+          threadId: thread.id,
+          direction: "IN",
+          body: rawText,
+          externalId: msg.id,
+          sentAt: now,
+        },
+        select: { id: true },
+      });
+    } catch (err) {
+      // @@unique [threadId, externalId]: el mensaje ya fue ingestado por un
+      // request concurrente (carrera que el dedup por wamid de arriba no
+      // alcanza a ver) → ya está procesado o procesándose, salir limpio.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        return NextResponse.json({ ok: true });
+      }
+      throw err;
+    }
 
     // ── CONSERVA el flujo de confirmar/cancelar recordatorios (igual que hoy) ──
     // Solo aplica si hay un WhatsAppReminder SENT pendiente para este paciente.
@@ -184,6 +225,43 @@ export async function POST(req: NextRequest) {
         await prisma.$executeRaw`UPDATE whatsapp_reminders SET "patientReply"=${text}, "repliedAt"=NOW() WHERE id=${reminder.id}`;
       }
 
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── Rate-limit del bot (anti-spam, anti-drenaje del wallet) ──
+    // Por remitente (wa_id) y por clínica, ANTES de llamar a Claude. Al
+    // excederse NO se responde (responder aquí permitiría spam de envíos
+    // salientes); el mensaje ya quedó arriba en el Inbox para el staff.
+    const senderAllowed = rateLimitKey(`wa-bot:${clinic.id}:${from}`, 6, 60_000);
+    const clinicAllowed = rateLimitKey(`wa-bot-clinic:${clinic.id}`, 60, 60_000);
+    if (!senderAllowed || !clinicAllowed) {
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── Tope diario de gasto del bot por clínica ──
+    // Cuenta las respuestas OUT del bot (sentById null = automáticas) de las
+    // últimas 24h. Al excederlo no se llama a Claude: se avisa máximo una vez
+    // por hilo al día que atiende un humano, y el resto queda en el Inbox.
+    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const botRepliesToday = await prisma.inboxMessage.count({
+      where: {
+        thread: { clinicId: clinic.id },
+        direction: "OUT",
+        sentById: null,
+        sentAt: { gte: dayAgo },
+      },
+    });
+    if (botRepliesToday >= BOT_DAILY_REPLY_CAP) {
+      const alreadyNotified = await prisma.inboxMessage.findFirst({
+        where: { threadId: thread.id, direction: "OUT", body: BOT_CAP_REACHED_MSG, sentAt: { gte: dayAgo } },
+        select: { id: true },
+      });
+      if (!alreadyNotified && clinic.waAccessToken && clinic.waPhoneNumberId) {
+        await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, from, BOT_CAP_REACHED_MSG);
+        await prisma.inboxMessage.create({
+          data: { threadId: thread.id, direction: "OUT", body: BOT_CAP_REACHED_MSG, sentAt: new Date() },
+        });
+      }
       return NextResponse.json({ ok: true });
     }
 

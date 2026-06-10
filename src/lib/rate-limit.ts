@@ -49,3 +49,23 @@ export function rateLimit(req: NextRequest, limit: number, windowMs = 60_000): N
 
   return null;
 }
+
+/**
+ * Variante por llave arbitraria (no por IP): para limitar por remitente de
+ * WhatsApp (wa_id), por clínica, etc. Devuelve true si la petición cabe en la
+ * ventana, false si excede el límite. Comparte el store en memoria — el
+ * límite es por instancia serverless, suficiente como freno de spam.
+ */
+export function rateLimitKey(key: string, limit: number, windowMs = 60_000): boolean {
+  cleanup();
+  const now = Date.now();
+  const entry = store.get(key);
+
+  if (!entry || entry.resetAt < now) {
+    store.set(key, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+
+  entry.count++;
+  return entry.count <= limit;
+}

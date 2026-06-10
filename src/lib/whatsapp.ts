@@ -1,9 +1,15 @@
+import { decryptField } from "@/lib/crypto/envelope";
+
 export async function sendWhatsAppMessage(
   phoneNumberId: string,
   accessToken: string,
   to: string,
   message: string
 ) {
+  // El token puede venir cifrado con envelope ("v1:...") o en claro (clínicas
+  // conectadas antes del cifrado): decryptField devuelve el claro tal cual
+  // (migración perezosa; se re-cifra al siguiente guardado en connect).
+  const token = decryptField(accessToken) ?? accessToken;
   // Normalize Mexican phone: always output 52 + 10 digits = 12 digits
   let phone = to.replace(/[\s\-\(\)\+]/g, "");
   // Strip country code if present to get raw 10 digits
@@ -16,7 +22,7 @@ export async function sendWhatsAppMessage(
   const doFetch = () =>
     fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({
         messaging_product: "whatsapp",
         to: formattedPhone,

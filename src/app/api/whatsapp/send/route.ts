@@ -1,26 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
-import { readActiveClinicCookie } from "@/lib/active-clinic";
+import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 
-async function getClinicId() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const activeClinicId = readActiveClinicCookie();
-  if (activeClinicId) {
-    const u = await prisma.user.findFirst({ where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true } });
-    if (u) return u.clinicId;
-  }
-  const dbUser = await prisma.user.findFirst({ where: { supabaseId: user.id, isActive: true }, orderBy: { createdAt: "asc" } });
-  return dbUser?.clinicId ?? null;
-}
-
 export async function POST(req: NextRequest) {
-  const clinicId = await getClinicId();
-  if (!clinicId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const ctx = await getAuthContext();
+  const denied = requireAdmin(ctx);
+  if (denied) return denied;
+  const clinicId = ctx!.clinicId;
 
   const { appointmentId } = await req.json();
 

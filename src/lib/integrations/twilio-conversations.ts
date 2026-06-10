@@ -1,5 +1,7 @@
 import "server-only";
 
+import { decryptField } from "@/lib/crypto/envelope";
+
 /**
  * Wrapper de Twilio Conversations API para WhatsApp inbound + outbound.
  *
@@ -58,7 +60,9 @@ export async function sendWhatsappMessage(
     if (!twilioFactory) {
       return { success: false, error: "twilio_sdk_not_installed", mock: true };
     }
-    const client: any = twilioFactory(creds.accountSid, creds.authToken);
+    // authToken puede venir cifrado (envelope v1:) o en claro (legacy).
+    const authToken = decryptField(creds.authToken) ?? creds.authToken;
+    const client: any = twilioFactory(creds.accountSid, authToken);
     const message: any = await client.messages.create({
       from: `whatsapp:${creds.whatsappNumber}`,
       to: `whatsapp:${input.to}`,
@@ -91,12 +95,14 @@ export async function verifyTwilioSignature(
 ): Promise<boolean> {
   if (!authToken || !signatureHeader) return process.env.NODE_ENV !== "production";
   try {
+    // authToken puede venir cifrado (envelope v1:) o en claro (legacy).
+    const token = decryptField(authToken) ?? authToken;
     const mod: any = await import("twilio" as string).catch(() => null);
     const twilioMod: any = mod?.default ?? mod;
     if (!twilioMod || typeof twilioMod.validateRequest !== "function") {
       return process.env.NODE_ENV !== "production";
     }
-    return Boolean(twilioMod.validateRequest(authToken, signatureHeader, url, params));
+    return Boolean(twilioMod.validateRequest(token, signatureHeader, url, params));
   } catch {
     return false;
   }

@@ -1,24 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
-import { readActiveClinicCookie } from "@/lib/active-clinic";
-
-async function getClinicId() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const activeClinicId = readActiveClinicCookie();
-  if (activeClinicId) {
-    const u = await prisma.user.findFirst({ where: { supabaseId: user.id, clinicId: activeClinicId, isActive: true } });
-    if (u) return u.clinicId;
-  }
-  const dbUser = await prisma.user.findFirst({ where: { supabaseId: user.id, isActive: true }, orderBy: { createdAt: "asc" } });
-  return dbUser?.clinicId ?? null;
-}
+import { getAuthContext, requireAdmin } from "@/lib/auth-context";
+import { encryptField } from "@/lib/crypto/envelope";
 
 export async function POST(req: NextRequest) {
-  const clinicId = await getClinicId();
-  if (!clinicId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const ctx = await getAuthContext();
+  const denied = requireAdmin(ctx);
+  if (denied) return denied;
+  const clinicId = ctx!.clinicId;
 
   const { phoneNumberId, accessToken } = await req.json();
 
@@ -37,9 +26,12 @@ export async function POST(req: NextRequest) {
     }
     const data = await res.json();
 
+    // Token cifrado en reposo (envelope AES-256-GCM); se descifra solo al
+    // usarlo en sendWhatsAppMessage. Tokens viejos en claro siguen funcionando
+    // y se re-cifran la próxima vez que la clínica reconecte.
     await prisma.clinic.update({
       where: { id: clinicId },
-      data: { waPhoneNumberId: phoneNumberId, waAccessToken: accessToken, waConnected: true },
+      data: { waPhoneNumberId: phoneNumberId, waAccessToken: encryptField(accessToken), waConnected: true },
     });
 
     return NextResponse.json({ success: true, displayName: data.display_phone_number ?? data.verified_name });
@@ -49,10 +41,11 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const clinicId = await getClinicId();
-  if (!clinicId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const ctx = await getAuthContext();
+  const denied = requireAdmin(ctx);
+  if (denied) return denied;
   await prisma.clinic.update({
-    where: { id: clinicId },
+    where: { id: ctx!.clinicId },
     data: { waPhoneNumberId: null, waAccessToken: null, waConnected: false },
   });
   return NextResponse.json({ success: true });

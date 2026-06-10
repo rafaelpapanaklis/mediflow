@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
+import { encryptField, isEnvelope } from "@/lib/crypto/envelope";
 
 export async function PATCH(req: NextRequest) {
   const ctx = await getAuthContext();
@@ -28,6 +29,13 @@ export async function PATCH(req: NextRequest) {
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+  }
+
+  // twilioAuthToken se guarda cifrado en reposo (envelope AES-256-GCM); se
+  // descifra solo al usarlo en twilio-conversations. isEnvelope evita
+  // re-cifrar si el cliente reenvía un valor ya cifrado.
+  if (typeof data.twilioAuthToken === "string" && data.twilioAuthToken && !isEnvelope(data.twilioAuthToken)) {
+    data.twilioAuthToken = encryptField(data.twilioAuthToken);
   }
 
   const clinic = await prisma.clinic.update({

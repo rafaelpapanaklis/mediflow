@@ -68,7 +68,10 @@ export function decryptField(value: string | null | undefined): string | null {
   const iv = Buffer.from(ivB64, "base64");
   const tag = Buffer.from(tagB64, "base64");
   const ct = Buffer.from(ctB64, "base64");
-  const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  if (tag.length !== 16) {
+    throw new Error("invalid_envelope_auth_tag_length");
+  }
+  const decipher = createDecipheriv("aes-256-gcm", key, iv, { authTagLength: 16 });
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(ct), decipher.final()]).toString("utf8");
 }

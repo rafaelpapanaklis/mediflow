@@ -50,7 +50,10 @@ export function decryptPrivateKey(opts: {
   const masterKey = getMasterKey();
   const iv = Buffer.from(opts.iv, "base64");
   const authTag = Buffer.from(opts.authTag, "base64");
-  const decipher = createDecipheriv("aes-256-gcm", masterKey, iv);
+  if (authTag.length !== 16) {
+    throw new Error("invalid_auth_tag_length");
+  }
+  const decipher = createDecipheriv("aes-256-gcm", masterKey, iv, { authTagLength: 16 });
   decipher.setAuthTag(authTag);
   return Buffer.concat([decipher.update(opts.ciphertext), decipher.final()]);
 }
