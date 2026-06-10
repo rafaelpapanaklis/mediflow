@@ -85,9 +85,34 @@ export async function processWhatsAppQueue(opts?: {
       },
     },
   });
-  summary.picked = due.length;
 
-  for (const r of due) {
+  if (due.length === 0) return summary;
+
+  // Claim-then-send: el batch se marca SENT ANTES de enviar. Si la lambda
+  // muere a mitad o corren dos instancias del cron a la vez, nadie re-envía
+  // lo ya reclamado (prioridad: no-duplicar > no-perder; un fallo real de
+  // send se marca FAILED abajo).
+  const ids = due.map((r) => r.id);
+  const claimStamp = new Date();
+  const claim = await prisma.whatsAppReminder.updateMany({
+    where: { id: { in: ids }, status: "PENDING" },
+    data: { status: "SENT", sentAt: claimStamp, errorMsg: null },
+  });
+
+  // Procesa SOLO lo reclamado: si otra corrida ganó parte del batch,
+  // re-lee cuáles quedaron con NUESTRO sello.
+  let claimed = due;
+  if (claim.count !== due.length) {
+    const mine = await prisma.whatsAppReminder.findMany({
+      where: { id: { in: ids }, status: "SENT", sentAt: claimStamp },
+      select: { id: true },
+    });
+    const mineIds = new Set(mine.map((m) => m.id));
+    claimed = due.filter((r) => mineIds.has(r.id));
+  }
+  summary.picked = claimed.length;
+
+  for (const r of claimed) {
     try {
       // Pre-checks: clínica con WhatsApp conectado.
       if (
@@ -164,10 +189,7 @@ export async function processWhatsAppQueue(opts?: {
         patientCtx.phone,
         body,
       );
-      await prisma.whatsAppReminder.update({
-        where: { id: r.id },
-        data: { status: "SENT", sentAt: new Date(), errorMsg: null },
-      });
+      // El row ya quedó SENT por el claim; no hay update post-send.
       summary.sent++;
       // Pausa breve para respetar rate limits.
       await new Promise((resolve) => setTimeout(resolve, 200));
@@ -189,7 +211,7 @@ async function markFailed(id: string, reason: string): Promise<void> {
       data: { status: "FAILED", errorMsg: reason },
     });
   } catch {
-    /* swallow — el registro queda PENDING para retry manual */
+    /* swallow — el registro queda SENT (claim); preferible a duplicar */
   }
 }
 

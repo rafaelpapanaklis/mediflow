@@ -13,20 +13,32 @@ export async function sendWhatsAppMessage(
   if (phone.length === 10) phone = `52${phone}`;
   const formattedPhone = phone;
 
-  const res = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      to: formattedPhone,
-      type: "text",
-      text: { body: message },
-    }),
-  });
+  const doFetch = () =>
+    fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to: formattedPhone,
+        type: "text",
+        text: { body: message },
+      }),
+      // Señal fresca por intento; sin timeout, un cuelgue de Meta congela el worker.
+      signal: AbortSignal.timeout(15000),
+    });
+
+  let res = await doFetch();
+  // Reintento único solo con respuesta 5xx/429. En timeout o error de red NO
+  // se reintenta: el mensaje pudo haber salido (no-duplicar > no-perder).
+  if (res.status >= 500 || res.status === 429) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    res = await doFetch();
+  }
 
   if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error?.message ?? "Error al enviar mensaje");
+    // Meta puede responder HTML (p. ej. 502 del gateway): no asumir JSON.
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message ?? `Error al enviar mensaje (HTTP ${res.status})`);
   }
   return await res.json();
 }

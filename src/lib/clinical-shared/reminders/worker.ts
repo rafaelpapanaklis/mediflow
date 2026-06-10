@@ -84,26 +84,31 @@ export async function processClinicalReminders(opts?: {
 
       const message = `${tpl.prefix}${lookupKey}::${r.id}`;
 
-      const wa = await prisma.whatsAppReminder.create({
-        data: {
-          clinicId: r.clinic.id,
-          patientPhone: r.patient.phone,
-          message,
-          type: tpl.prefix.replace(/_$/, ""),
-          status: "PENDING",
-          scheduledFor: r.dueDate,
-          payload: (r.payload as object | null) ?? undefined,
-        },
-        select: { id: true },
-      });
+      // Atómico: sin transacción, un crash entre create y update dejaría el
+      // ClinicalReminder en pending con el WhatsAppReminder ya creado →
+      // se encolaría OTRO mensaje en la corrida del día siguiente.
+      await prisma.$transaction(async (tx) => {
+        const wa = await tx.whatsAppReminder.create({
+          data: {
+            clinicId: r.clinic.id,
+            patientPhone: r.patient.phone,
+            message,
+            type: tpl.prefix.replace(/_$/, ""),
+            status: "PENDING",
+            scheduledFor: r.dueDate,
+            payload: (r.payload as object | null) ?? undefined,
+          },
+          select: { id: true },
+        });
 
-      await prisma.clinicalReminder.update({
-        where: { id: r.id },
-        data: {
-          status: "sent",
-          triggeredAt: new Date(),
-          whatsappReminderId: wa.id,
-        },
+        await tx.clinicalReminder.update({
+          where: { id: r.id },
+          data: {
+            status: "sent",
+            triggeredAt: new Date(),
+            whatsappReminderId: wa.id,
+          },
+        });
       });
 
       summary.enqueued++;
