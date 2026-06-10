@@ -2083,6 +2083,9 @@ model WhatsAppReminder {
   clinic      Clinic       @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
 
+  @@index([status, scheduledFor])
+  @@index([clinicId, status, sentAt])
+  @@index([clinicId, type, createdAt])
   @@map("whatsapp_reminders")
 }
 
@@ -2541,6 +2544,7 @@ model InboxThread {
   messages   InboxMessage[]
   reminders  Reminder[]
 
+  @@unique([clinicId, channel, externalId])
   @@index([clinicId, status, lastMessageAt(sort: Desc)])
   @@index([clinicId, channel, lastMessageAt(sort: Desc)])
   @@index([assignedToId, status])
@@ -2563,6 +2567,7 @@ model InboxMessage {
   thread InboxThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
   sentBy User?       @relation(fields: [sentById], references: [id])
 
+  @@unique([threadId, externalId])
   @@index([threadId, sentAt])
   @@map("inbox_messages")
 }
@@ -6592,6 +6597,7 @@ model AiTopup {
   paidAt      DateTime?
 
   @@index([clinicId])
+  @@index([gatewayRef])
   @@map("ai_topups")
 }
 
