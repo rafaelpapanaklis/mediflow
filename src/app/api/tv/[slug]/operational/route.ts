@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -13,19 +14,28 @@ export const dynamic = "force-dynamic";
  * Esta es la ÚNICA excepción al patrón "clinicId desde getCurrentUser":
  * aquí viene del TV display row porque es una vista pública sin sesión.
  *
- * Ratelimit implícito: vista TV refresca cada 15s = ~5760 req/día por
- * pantalla. Aceptable. Si abusan, puede agregarse rate limit por IP.
+ * PII (NOM-024): por defecto el nombre del paciente se enmascara a
+ * iniciales. Solo si el display tiene config.showPatientNames === true
+ * (configurable vía PATCH /api/tv-displays/[id]) se expone el nombre
+ * completo — mismo criterio que liveModeShowPatientNames en /api/live/[slug].
+ *
+ * Rate limit por IP: la TV refresca cada 15s (~4 req/min por pantalla);
+ * 60/min tolera varias pantallas tras la misma IP y frena scraping.
  */
-export async function GET(_req: NextRequest, { params }: { params: { slug: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { slug: string } }) {
+  const rl = rateLimit(req, 60);
+  if (rl) return rl;
+
   // Resuelve clinicId desde el slug (NO confía en query params).
   const display = await prisma.tVDisplay.findUnique({
     where: { publicSlug: params.slug },
-    select: { id: true, clinicId: true, active: true },
+    select: { id: true, clinicId: true, active: true, config: true },
   });
   if (!display || !display.active) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
   const clinicId = display.clinicId;
+  const showFull = (display.config as any)?.showPatientNames === true;
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -53,10 +63,11 @@ export async function GET(_req: NextRequest, { params }: { params: { slug: strin
   });
 
   function toItem(a: typeof appts[0]) {
-    const patient = a.patient ? `${a.patient.firstName} ${a.patient.lastName}` : "Paciente";
+    const fullName = a.patient ? `${a.patient.firstName} ${a.patient.lastName}` : "Paciente";
     const initials = a.patient
       ? `${(a.patient.firstName[0] ?? "").toUpperCase()}${(a.patient.lastName[0] ?? "").toUpperCase()}`
       : "—";
+    const masked = a.patient ? initials.split("").join(".") + "." : "Paciente";
     const doctor = a.doctor ? `Dr/a. ${a.doctor.lastName}` : "";
     const arrivedAt = a.timeline?.arrivedAt;
     const waitedMin = arrivedAt
@@ -64,7 +75,7 @@ export async function GET(_req: NextRequest, { params }: { params: { slug: strin
       : null;
     return {
       appointmentId: a.id,
-      patient,
+      patient: showFull ? fullName : masked,
       initials,
       type: a.type,
       doctor,

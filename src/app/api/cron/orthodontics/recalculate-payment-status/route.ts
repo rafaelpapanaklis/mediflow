@@ -12,6 +12,13 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function GET(request: Request) {
+  // Fail-closed: sin CRON_SECRET en el entorno, "Bearer undefined" pasaría
+  // el check de auth de abajo.
+  if (!process.env.CRON_SECRET) {
+    console.error("[ortho cron] CRON_SECRET no configurado");
+    return NextResponse.json({ ok: false, error: "CRON_NOT_CONFIGURED" }, { status: 503 });
+  }
+
   const authHeader = request.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });

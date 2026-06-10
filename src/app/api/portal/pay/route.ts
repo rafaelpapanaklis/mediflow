@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { rateLimit } from "@/lib/rate-limit";
 
 // ── Stripe (connect when you have account) ────────────────────────────────────
 async function createStripeSession(invoice: any, returnUrl: string) {
@@ -63,12 +64,30 @@ async function createMercadoPagoPreference(invoice: any, returnUrl: string) {
 
 // ── POST /api/portal/pay ──────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
+  // Endpoint público: rate limit por IP contra brute-force de tokens y spam
+  // de sesiones de pago.
+  const rl = rateLimit(req, 10);
+  if (rl) return rl;
+
   try {
     const { token, invoiceId, provider } = await req.json();
 
-    // Verify patient token
-    const patient = await prisma.patient.findFirst({ where: { portalToken: token } });
+    // Verify patient token. Sin el typeof, un token undefined haría que
+    // Prisma ignore el filtro portalToken y devuelva cualquier paciente.
+    if (typeof token !== "string" || !token) {
+      return NextResponse.json({ error: "Token inválido" }, { status: 401 });
+    }
+    const patient = await prisma.patient.findFirst({
+      where: { portalToken: token },
+      select: { id: true, portalTokenExpiry: true },
+    });
     if (!patient) return NextResponse.json({ error: "Token inválido" }, { status: 401 });
+    if (patient.portalTokenExpiry && patient.portalTokenExpiry < new Date()) {
+      return NextResponse.json(
+        { error: "Enlace expirado. Solicita uno nuevo a tu clínica." },
+        { status: 401 },
+      );
+    }
 
     // Get invoice
     const invoice = await prisma.invoice.findFirst({
