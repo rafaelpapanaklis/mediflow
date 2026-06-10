@@ -4,7 +4,7 @@ import { readActiveClinicCookie } from "@/lib/active-clinic";
 
 /**
  * Resuelve el usuario de la clínica activa a partir de la sesión de Supabase.
- * Compartido por /api/odontogram y /api/odontogram/note.
+ * Compartido por las rutas /api/odontogram/* (principal, note, sync, reset).
  */
 export async function getDbUser() {
   const supabase = createClient();

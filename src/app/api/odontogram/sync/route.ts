@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { extractAuditMeta } from "@/lib/audit";
 import {
   ensurePatientInClinic,
   getDbUser,
@@ -11,6 +12,13 @@ export const dynamic = "force-dynamic";
 
 /** conditionId reservado para la nota por diente. */
 const NOTE_CONDITION = "__note__";
+
+/** Roles que pueden REEMPLAZAR el odontograma vivo. Recepción/readonly NO. */
+const DESTRUCTIVE_ROLES = new Set<string>(["SUPER_ADMIN", "ADMIN", "DOCTOR"]);
+
+/** Tope de filas aplanadas (anti payload-bomba: este endpoint reemplaza TODO
+ *  el odontograma). Un odontograma real queda muy por debajo (~900 máx). */
+const MAX_SYNC_ROWS = 2000;
 
 /* Mismas reglas de validación que el route principal /api/odontogram (un route
    de Next solo puede exportar handlers HTTP, así que no se pueden importar de
@@ -57,6 +65,9 @@ export async function POST(req: NextRequest) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    if (!DESTRUCTIVE_ROLES.has(dbUser.role)) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
 
     const body = await req.json().catch(() => null);
     const parsed = SyncSchema.safeParse(body);
@@ -71,6 +82,21 @@ export async function POST(req: NextRequest) {
     // Aislamiento multi-tenant: el paciente debe pertenecer a la clínica activa.
     if (!(await ensurePatientInClinic(patientId, dbUser.clinicId))) {
       return NextResponse.json({ error: "patient_not_found" }, { status: 404 });
+    }
+
+    // Tope ANTES de aplanar: cuenta longitudes sin materializar objetos-fila,
+    // con salida temprana (una bomba de 10^6 ids no llega a construir rows).
+    let flatCount = 0;
+    for (const rec of Object.values(records)) {
+      for (const ids of Object.values(rec.surfaces ?? {})) flatCount += ids.length;
+      flatCount += (rec.tooth ?? []).length;
+      if (rec.note) flatCount += 1;
+      if (flatCount > MAX_SYNC_ROWS) {
+        return NextResponse.json(
+          { error: "payload_too_large", limit: MAX_SYNC_ROWS },
+          { status: 413 },
+        );
+      }
     }
 
     // Aplanar `records` -> filas de odontogram_entries.
@@ -106,13 +132,41 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Reemplazo atómico del odontograma del paciente (solo de ESTE paciente).
-    await prisma.$transaction([
-      prisma.odontogramEntry.deleteMany({ where: { patientId } }),
-      ...(rows.length
-        ? [prisma.odontogramEntry.createMany({ data: rows, skipDuplicates: true })]
-        : []),
-    ]);
+    const { ipAddress, userAgent } = extractAuditMeta(req);
+    // Reemplazo atómico del odontograma del paciente (solo de ESTE paciente),
+    // con snapshot defensivo: las filas previas quedan serializadas en
+    // audit_logs.changes (Json) dentro de la MISMA transacción — si algo
+    // falla no hay ni borrado ni snapshot; si commitea, el estado anterior es
+    // restaurable a mano. (Sin tabla de versiones en el schema, audit es el
+    // lugar natural.)
+    await prisma.$transaction(async (tx) => {
+      const prevRows = await tx.odontogramEntry.findMany({
+        where: { patientId },
+        select: { toothNumber: true, surface: true, conditionId: true, notes: true },
+        orderBy: { toothNumber: "asc" },
+      });
+      const del = await tx.odontogramEntry.deleteMany({ where: { patientId } });
+      const created = rows.length
+        ? await tx.odontogramEntry.createMany({ data: rows, skipDuplicates: true })
+        : { count: 0 };
+      await tx.auditLog.create({
+        data: {
+          clinicId: dbUser.clinicId,
+          userId: dbUser.id,
+          entityType: "patient",
+          entityId: patientId,
+          action: "odontogram_sync",
+          changes: {
+            _odontogram: {
+              before: { count: del.count, rows: prevRows },
+              after: { count: created.count },
+            },
+          },
+          ipAddress: ipAddress ?? null,
+          userAgent: userAgent ?? null,
+        },
+      });
+    });
 
     return NextResponse.json({ ok: true, count: rows.length });
   } catch (err) {

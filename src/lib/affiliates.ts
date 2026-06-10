@@ -47,17 +47,18 @@ export async function generateReferralCode(): Promise<string> {
  */
 export async function resolveApprovedAffiliateByCode(
   code: string | null | undefined,
-): Promise<{ id: string; commissionPct: number } | null> {
+): Promise<{ id: string; commissionPct: number; email: string } | null> {
   if (!code || typeof code !== "string") return null;
   const normalized = code.trim().toUpperCase();
   if (!normalized) return null;
   try {
     const affiliate = await prisma.affiliate.findUnique({
       where: { referralCode: normalized },
-      select: { id: true, status: true, commissionPct: true },
+      select: { id: true, status: true, commissionPct: true, email: true },
     });
     if (!affiliate || affiliate.status !== "APPROVED") return null;
-    return { id: affiliate.id, commissionPct: affiliate.commissionPct };
+    // email expuesto para el chequeo anti self-referral del alta.
+    return { id: affiliate.id, commissionPct: affiliate.commissionPct, email: affiliate.email };
   } catch {
     return null;
   }

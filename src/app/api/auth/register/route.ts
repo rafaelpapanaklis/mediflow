@@ -94,7 +94,15 @@ export async function POST(req: NextRequest) {
     // query string. Solo se aplica si es un Affiliate APPROVED. Nunca rompe el
     // registro si el ref es inválido (resolveApprovedAffiliateByCode → null).
     const refCode = data.ref ?? req.nextUrl.searchParams.get("ref") ?? undefined;
-    const referringAffiliate = await resolveApprovedAffiliateByCode(refCode);
+    let referringAffiliate = await resolveApprovedAffiliateByCode(refCode);
+    // Anti self-referral: si el email del registro es el del propio afiliado,
+    // se anula SOLO la atribución (el alta procede normal, sin comisión).
+    if (
+      referringAffiliate &&
+      referringAffiliate.email.trim().toLowerCase() === data.email.trim().toLowerCase()
+    ) {
+      referringAffiliate = null;
+    }
 
     await prisma.clinic.create({
       data: {

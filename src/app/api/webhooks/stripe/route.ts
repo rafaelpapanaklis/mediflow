@@ -209,10 +209,13 @@ export async function POST(req: NextRequest) {
           select: {
             id: true,
             affiliateId: true,
-            affiliate: { select: { commissionPct: true } },
+            affiliate: { select: { commissionPct: true, status: true } },
           },
         });
         if (!clinic?.affiliateId || !clinic.affiliate) break; // sin afiliado referente
+        // Solo afiliados APPROVED acumulan comisión: la aprobación puede
+        // revocarse (suspendido/rechazado) DESPUÉS de la atribución del alta.
+        if (clinic.affiliate.status !== "APPROVED") break;
 
         // amount_paid viene en centavos de la moneda de la suscripción (MXN).
         const amountMxn = (invoice.amount_paid ?? 0) / 100;
