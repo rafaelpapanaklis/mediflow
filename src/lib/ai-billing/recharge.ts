@@ -19,6 +19,13 @@ import type { RechargeResult } from "./types";
 export const MIN_TOPUP_CENTS = 5_000; // $50 MXN
 export const MAX_TOPUP_CENTS = 2_000_000; // $20,000 MXN
 
+/**
+ * Cooldown anti doble-cobro de la auto-recarga: si ya existe una recarga Stripe
+ * (PENDING/PAID) de la clínica dentro de esta ventana, no se vuelve a cobrar la
+ * tarjeta. Misma ventana que el idempotencyKey de chargeOffSession.
+ */
+export const AUTO_RECHARGE_COOLDOWN_MS = 5 * 60 * 1000;
+
 /** metadata.kind que marca un pago de Stripe como recarga / guardado de tarjeta del monedero. */
 export const AI_TOPUP_KIND = "ai-topup";
 export const AI_SETUP_KIND = "ai-setup";
@@ -305,20 +312,32 @@ export async function chargeOffSession(
 
   let pi: Stripe.PaymentIntent;
   try {
-    pi = await stripe.paymentIntents.create({
-      amount,
-      currency: "mxn",
-      customer: customerId,
-      payment_method: wallet.stripePaymentMethodId,
-      off_session: true,
-      confirm: true,
-      metadata: { kind: AI_TOPUP_KIND, clinicId, amountCents: String(amount), trigger: "auto" },
-    });
+    pi = await stripe.paymentIntents.create(
+      {
+        amount,
+        currency: "mxn",
+        customer: customerId,
+        payment_method: wallet.stripePaymentMethodId,
+        off_session: true,
+        confirm: true,
+        metadata: { kind: AI_TOPUP_KIND, clinicId, amountCents: String(amount), trigger: "auto" },
+      },
+      // Anti doble cobro (capa Stripe): disparos concurrentes de la misma clínica
+      // dentro de una ventana de 5 min colapsan en UN solo PaymentIntent (mismo
+      // pi.id), y la acreditación ya es idempotente por pi.id.
+      { idempotencyKey: `autorecharge:${clinicId}:${Math.floor(Date.now() / 300000)}` },
+    );
   } catch (err: any) {
+    const code = err?.code ?? err?.raw?.code;
+    // Otro disparo concurrente ya está creando este mismo intent (misma key en
+    // vuelo): no es fallo de tarjeta, NO dejar marca FAILED — el otro acredita.
+    if (code === "idempotency_key_in_use") {
+      return { ok: false, error: "Auto-recarga ya en curso" };
+    }
     // Tarjeta rechazada o que requiere autenticación (SCA): no se puede off-session.
     const failedPi: Stripe.PaymentIntent | undefined = err?.raw?.payment_intent ?? err?.payment_intent;
     await recordFailedTopup(clinicId, amount, failedPi?.id ?? null);
-    return { ok: false, error: err?.code ?? err?.raw?.code ?? err?.message ?? "Cobro rechazado" };
+    return { ok: false, error: code ?? err?.message ?? "Cobro rechazado" };
   }
 
   if (pi.status === "succeeded") {
@@ -335,7 +354,9 @@ export async function chargeOffSession(
  * Decide si corresponde una auto-recarga y la dispara (vía chargeOffSession).
  * Se invoca tras un cobro o cuando el saldo cae bajo el umbral. Seguro de llamar
  * varias veces: no hace nada si falta config (auto-recarga off, sin tarjeta,
- * monedero pausado o monto 0). chargeOffSession (T3) acredita si el cobro pasa.
+ * monedero pausado o monto 0) ni si hay una recarga Stripe reciente (cooldown
+ * de AUTO_RECHARGE_COOLDOWN_MS, anti doble-cobro con disparos concurrentes).
+ * chargeOffSession (T3) acredita si el cobro pasa.
  */
 export async function triggerAutoRechargeIfNeeded(clinicId: string): Promise<void> {
   try {
@@ -347,6 +368,19 @@ export async function triggerAutoRechargeIfNeeded(clinicId: string): Promise<voi
 
     const amount = wallet.autoRechargeAmountCents > 0 ? wallet.autoRechargeAmountCents : 0;
     if (amount <= 0) return;
+
+    // Cooldown (capa BD): dos mensajes concurrentes del bot disparan esto dos
+    // veces; si ya hay una recarga Stripe PENDING/PAID en la ventana, no cobres.
+    const recentTopup = await prisma.aiTopup.findFirst({
+      where: {
+        clinicId,
+        method: "STRIPE",
+        status: { in: ["PENDING", "PAID"] },
+        createdAt: { gte: new Date(Date.now() - AUTO_RECHARGE_COOLDOWN_MS) },
+      },
+      select: { id: true },
+    });
+    if (recentTopup) return;
 
     await chargeOffSession(clinicId, amount);
   } catch {

@@ -76,8 +76,10 @@ export async function GET(req: NextRequest) {
       let status = w.status;
 
       // (a) Backstop de auto-recarga. triggerAutoRechargeIfNeeded se auto-protege
-      // (no hace nada si falta config, el monedero está pausado o el saldo ya
-      // supera el umbral), así que es seguro llamarlo. Releemos el saldo después.
+      // (no hace nada si falta config, el monedero está pausado, el saldo ya
+      // supera el umbral o hay una recarga Stripe reciente — respeta el mismo
+      // cooldown anti doble-cobro), así que es seguro llamarlo. Releemos el
+      // saldo después.
       if (w.autoRecharge && balance < w.autoRechargeThresholdCents) {
         await triggerAutoRechargeIfNeeded(w.clinicId);
         const fresh = await prisma.aiWallet.findUnique({

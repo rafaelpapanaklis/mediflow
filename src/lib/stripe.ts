@@ -28,6 +28,10 @@ function buildClient(): Stripe {
   }
   return new Stripe(process.env.STRIPE_SECRET_KEY, {
     apiVersion: "2024-06-20" as any,
+    // No colgar requests si Stripe no responde y reintentar errores de red
+    // (el SDK solo reintenta cuando es seguro / con idempotency key).
+    timeout: 15000,
+    maxNetworkRetries: 2,
   });
 }
 
