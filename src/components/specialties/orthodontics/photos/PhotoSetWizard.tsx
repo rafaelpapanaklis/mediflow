@@ -9,7 +9,7 @@
 //   4. Marca foto como uploaded en estado local.
 // Si una foto falla, el banner permite reintentar sin bloquear el resto.
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { AlertCircle, CheckCircle2, RefreshCw, Upload } from "lucide-react";
 import { WizardShell } from "../shared/WizardShell";
@@ -64,6 +64,23 @@ export function PhotoSetWizard(props: PhotoSetWizardProps) {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Blob URLs de previews vivos. Se revocan al reemplazar la foto, al fallar
+  // el upload y al desmontar el wizard.
+  const objectUrlsRef = useRef<Set<string>>(new Set());
+  const revokePreview = (url?: string) => {
+    if (!url) return;
+    URL.revokeObjectURL(url);
+    objectUrlsRef.current.delete(url);
+  };
+
+  useEffect(() => {
+    const urls = objectUrlsRef.current;
+    return () => {
+      urls.forEach((u) => URL.revokeObjectURL(u));
+      urls.clear();
+    };
+  }, []);
+
   const uploadedCount = Object.values(statuses).filter(
     (s) => s?.state === "uploaded",
   ).length;
@@ -116,8 +133,11 @@ export function PhotoSetWizard(props: PhotoSetWizardProps) {
 
   const uploadFile = async (view: OrthoPhotoView, file: File) => {
     if (!setId) return;
+    const prevStatus = statuses[view];
+    if (prevStatus?.state === "uploaded") revokePreview(prevStatus.previewUrl);
     setStatuses((s) => ({ ...s, [view]: { state: "uploading" } }));
     const localPreview = URL.createObjectURL(file);
+    objectUrlsRef.current.add(localPreview);
 
     try {
       const fd = new FormData();
@@ -154,6 +174,7 @@ export function PhotoSetWizard(props: PhotoSetWizardProps) {
         },
       }));
     } catch (e) {
+      revokePreview(localPreview);
       const message = e instanceof Error ? e.message : "Error subiendo la foto";
       console.error("[PhotoSetWizard] upload failed:", e);
       setStatuses((s) => ({ ...s, [view]: { state: "error", message } }));

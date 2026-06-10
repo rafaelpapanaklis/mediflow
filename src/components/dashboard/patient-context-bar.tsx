@@ -14,6 +14,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useActiveConsult } from "@/hooks/use-active-consult";
+import { useConsultElapsedSeconds } from "./active-consult-provider";
 import { AlergiesPopover } from "./alergies-popover";
 import { PatientContextEndModal } from "./patient-context-end-modal";
 import { useT } from "@/i18n/i18n-provider";
@@ -22,7 +23,8 @@ import type { TFunction } from "@/i18n/t";
 export function PatientContextBar() {
   const router = useRouter();
   const t = useT();
-  const { consult, elapsedSeconds, loading } = useActiveConsult();
+  const { consult, loading } = useActiveConsult();
+  const elapsedSeconds = useConsultElapsedSeconds();
   const [endModalOpen, setEndModalOpen] = useState(false);
 
   // Early returns DESPUÉS de todos los hooks

@@ -27,9 +27,9 @@ export default function STLViewer3D({ url, onClose }: STLViewer3DProps) {
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
     camera.position.set(0, 0, 80);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: false });
     renderer.setSize(width, height);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
     container.appendChild(renderer.domElement);
 
     const ambient = new THREE.AmbientLight(0xffffff, 0.55);
@@ -61,6 +61,7 @@ export default function STLViewer3D({ url, onClose }: STLViewer3DProps) {
         const size = box.getSize(new THREE.Vector3()).length();
         camera.position.set(0, 0, size * 1.4);
         controls.update();
+        requestRender();
       },
       undefined,
       (err) => {
@@ -68,25 +69,37 @@ export default function STLViewer3D({ url, onClose }: STLViewer3DProps) {
       },
     );
 
+    // Render on-demand: un frame solo ante "change" de OrbitControls, resize
+    // o carga del STL. Con damping, controls.update() re-dispara "change"
+    // hasta que la inercia se asienta y el rAF se detiene solo.
     let raf = 0;
-    const animate = () => {
-      raf = requestAnimationFrame(animate);
+    let renderQueued = false;
+    const renderFrame = () => {
+      renderQueued = false;
       controls.update();
       renderer.render(scene, camera);
     };
-    animate();
+    const requestRender = () => {
+      if (renderQueued) return;
+      renderQueued = true;
+      raf = requestAnimationFrame(renderFrame);
+    };
+    controls.addEventListener("change", requestRender);
+    requestRender();
 
     const onResize = () => {
       const w = container.clientWidth;
       camera.aspect = w / height;
       camera.updateProjectionMatrix();
       renderer.setSize(w, height);
+      requestRender();
     };
     window.addEventListener("resize", onResize);
 
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
+      controls.removeEventListener("change", requestRender);
       controls.dispose();
       if (mesh) {
         mesh.geometry.dispose();

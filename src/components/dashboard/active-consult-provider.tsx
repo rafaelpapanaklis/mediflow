@@ -2,7 +2,9 @@
 import {
   createContext,
   useCallback,
+  useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -14,13 +16,50 @@ import type { ActiveConsult } from "@/hooks/use-active-consult";
 export interface ActiveConsultContextValue {
   consult: ActiveConsult | null;
   loading: boolean;
-  elapsedSeconds: number;
   startConsult: (patientId: string) => Promise<void>;
   endConsult: () => Promise<void>;
 }
 
 export const ActiveConsultContext =
   createContext<ActiveConsultContextValue | null>(null);
+
+// Cronómetro en contexto separado: su tick de 1s solo re-renderiza a los
+// consumidores que muestran el tiempo (patient-context-bar y end-modal), no
+// a los demás consumidores de ActiveConsultContext (sidebar, topbar,
+// command-palette, hero).
+const ConsultElapsedContext = createContext<number>(0);
+
+export function useConsultElapsedSeconds(): number {
+  return useContext(ConsultElapsedContext);
+}
+
+function ConsultTimerProvider({
+  startedAt,
+  children,
+}: {
+  startedAt: Date | null;
+  children: ReactNode;
+}) {
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
+
+  useEffect(() => {
+    if (!startedAt) {
+      setElapsedSeconds(0);
+      return;
+    }
+    const compute = () =>
+      Math.max(0, Math.floor((Date.now() - startedAt.getTime()) / 1000));
+    setElapsedSeconds(compute());
+    const id = window.setInterval(() => setElapsedSeconds(compute()), 1000);
+    return () => window.clearInterval(id);
+  }, [startedAt]);
+
+  return (
+    <ConsultElapsedContext.Provider value={elapsedSeconds}>
+      {children}
+    </ConsultElapsedContext.Provider>
+  );
+}
 
 const COOKIE_NAME = "activeConsultId";
 const CHANNEL_NAME = "mediflow:consult";
@@ -66,7 +105,6 @@ type ConsultBroadcast =
 export function ActiveConsultProvider({ children }: { children: ReactNode }) {
   const [consult, setConsult] = useState<ActiveConsult | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
   const channelRef = useRef<BroadcastChannel | null>(null);
   const router = useRouter();
 
@@ -107,18 +145,6 @@ export function ActiveConsultProvider({ children }: { children: ReactNode }) {
       ac.abort();
     };
   }, []);
-
-  useEffect(() => {
-    if (!consult) {
-      setElapsedSeconds(0);
-      return;
-    }
-    const compute = () =>
-      Math.max(0, Math.floor((Date.now() - consult.startedAt.getTime()) / 1000));
-    setElapsedSeconds(compute());
-    const id = window.setInterval(() => setElapsedSeconds(compute()), 1000);
-    return () => window.clearInterval(id);
-  }, [consult]);
 
   useEffect(() => {
     if (typeof BroadcastChannel === "undefined") return;
@@ -192,11 +218,16 @@ export function ActiveConsultProvider({ children }: { children: ReactNode }) {
     }
   }, [router]);
 
+  const value = useMemo(
+    () => ({ consult, loading, startConsult, endConsult }),
+    [consult, loading, startConsult, endConsult],
+  );
+
   return (
-    <ActiveConsultContext.Provider
-      value={{ consult, loading, elapsedSeconds, startConsult, endConsult }}
-    >
-      {children}
+    <ActiveConsultContext.Provider value={value}>
+      <ConsultTimerProvider startedAt={consult?.startedAt ?? null}>
+        {children}
+      </ConsultTimerProvider>
     </ActiveConsultContext.Provider>
   );
 }

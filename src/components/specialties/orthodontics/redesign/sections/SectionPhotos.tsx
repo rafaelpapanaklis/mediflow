@@ -73,6 +73,14 @@ export function SectionPhotos(props: SectionPhotosProps) {
   // Cada vez que cambia stage o el set para esa stage, recargamos.
   const [uploads, setUploads] = useState<Record<string, UploadEntry>>({});
   const [pending, setPending] = useState<Record<string, boolean>>({});
+  // Blob URLs de previews optimistas vivos. Se revocan al ser reemplazados
+  // por la signed URL (recarga de slots), al descartarse y al desmontar.
+  const objectUrlsRef = useRef<Set<string>>(new Set());
+  const revokeIfTracked = (url?: string) => {
+    if (!url || !objectUrlsRef.current.has(url)) return;
+    URL.revokeObjectURL(url);
+    objectUrlsRef.current.delete(url);
+  };
   const [lightbox, setLightbox] = useState<{
     slotId: string;
     label: string;
@@ -83,8 +91,20 @@ export function SectionPhotos(props: SectionPhotosProps) {
   // Pre-pobla `uploads` con los slots persistidos del set activo.
   useEffect(() => {
     const set = props.historicalSets.find((s) => s.stage === stage);
+    // Todo preview blob pendiente queda reemplazado por la signed URL o
+    // descartado al cambiar de etapa: revócalo antes de recargar.
+    objectUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
+    objectUrlsRef.current.clear();
     setUploads(set?.slots ?? {});
   }, [stage, props.historicalSets]);
+
+  useEffect(() => {
+    const urls = objectUrlsRef.current;
+    return () => {
+      urls.forEach((u) => URL.revokeObjectURL(u));
+      urls.clear();
+    };
+  }, []);
 
   const showG15 = props.monthCurrent >= 10 && props.monthCurrent <= 13;
   const hasControlSet = props.historicalSets.some((s) => s.stage === "CONTROL");
@@ -93,7 +113,9 @@ export function SectionPhotos(props: SectionPhotosProps) {
   const onPick = async (slotId: string, file: File) => {
     // Optimistic preview con blob URL — se reemplaza cuando router.refresh()
     // re-pinta el componente con la signed URL real.
+    revokeIfTracked(uploads[slotId]?.url);
     const blobUrl = URL.createObjectURL(file);
+    objectUrlsRef.current.add(blobUrl);
     const optimisticEntry: UploadEntry = {
       url: blobUrl,
       uploadedAt: new Date().toLocaleString("es-MX", {
@@ -112,6 +134,7 @@ export function SectionPhotos(props: SectionPhotosProps) {
       }
     } catch (e) {
       // Si el upload falla, revierte la previsualización.
+      revokeIfTracked(blobUrl);
       setUploads((prev) => {
         const next = { ...prev };
         delete next[slotId];
@@ -128,6 +151,7 @@ export function SectionPhotos(props: SectionPhotosProps) {
   };
 
   const onDelete = (slotId: string) => {
+    revokeIfTracked(uploads[slotId]?.url);
     setUploads((prev) => {
       const next = { ...prev };
       delete next[slotId];

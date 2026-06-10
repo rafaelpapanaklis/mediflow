@@ -4,6 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { X, CreditCard, CalendarPlus, LogOut, type LucideIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import { useActiveConsult } from "@/hooks/use-active-consult";
+import { useConsultElapsedSeconds } from "./active-consult-provider";
 import { useT } from "@/i18n/i18n-provider";
 
 interface PatientContextEndModalProps {
@@ -16,7 +17,8 @@ export function PatientContextEndModal({
 }: PatientContextEndModalProps) {
   const router = useRouter();
   const t = useT();
-  const { consult, elapsedSeconds, endConsult } = useActiveConsult();
+  const { consult, endConsult } = useActiveConsult();
+  const elapsedSeconds = useConsultElapsedSeconds();
 
   if (!consult) return null;
 
