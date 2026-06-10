@@ -5,6 +5,10 @@ import { isAdminAuthed } from "@/lib/admin-auth";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+// Tope por ajuste (valor absoluto, centavos MXN): un typo no debe poder mover
+// más de $50,000 MXN de una vez.
+const MAX_ADJUST_ABS_CENTS = 5_000_000;
+
 // Ajuste manual del saldo (MXN cents) de una clínica. amountCents puede ser
 // positivo (abono) o negativo (cargo). Atómico, mismo patrón que chargeUsage
 // (src/lib/ai-billing/wallet.ts): upsert del monedero + asiento en el libro
@@ -27,6 +31,12 @@ export async function POST(req: NextRequest) {
   if (!clinicId) return NextResponse.json({ error: "clinicId requerido" }, { status: 400 });
   if (!Number.isFinite(amountCents) || amountCents === 0) {
     return NextResponse.json({ error: "amountCents debe ser un entero distinto de 0" }, { status: 400 });
+  }
+  if (Math.abs(amountCents) > MAX_ADJUST_ABS_CENTS) {
+    return NextResponse.json(
+      { error: `amountCents excede el tope de ±$${MAX_ADJUST_ABS_CENTS / 100} MXN por ajuste` },
+      { status: 400 },
+    );
   }
 
   try {

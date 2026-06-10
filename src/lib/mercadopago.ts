@@ -60,6 +60,8 @@ export interface MercadoPagoPayment {
   externalReference: string | null;
   /** Monto realmente pagado (transaction_amount de MP, MXN). null si MP no lo manda. */
   transactionAmount: number | null;
+  /** Moneda del pago (currency_id de MP, ej. "MXN"). null si MP no la manda. */
+  currencyId: string | null;
 }
 
 /**
@@ -100,5 +102,6 @@ export async function getPayment(
       typeof data.transaction_amount === "number" && Number.isFinite(data.transaction_amount)
         ? data.transaction_amount
         : null,
+    currencyId: typeof data.currency_id === "string" ? data.currency_id : null,
   };
 }

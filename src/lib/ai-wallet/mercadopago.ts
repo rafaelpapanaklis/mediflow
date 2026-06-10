@@ -51,6 +51,24 @@ export async function verifyAndCreditMpTopup(topupId: string, paymentId: string)
     return;
   }
 
+  // Reconciliación de monto/moneda (defensa en profundidad, mismo espíritu que las
+  // ramas B2B del webhook): el pago real debe cubrir los centavos del AiTopup y
+  // venir en MXN. Fallar aquí es DETERMINISTA (pago menor/moneda ajena no cambian
+  // al reintentar): no se acredita, se loguea y el webhook responde 200.
+  const topup = await prisma.aiTopup.findUnique({
+    where: { id: topupId },
+    select: { amountCents: true },
+  });
+  if (!topup) return;
+  const paidCents =
+    pay.transactionAmount != null ? Math.round(pay.transactionAmount * 100) : null;
+  if (paidCents == null || paidCents < topup.amountCents || pay.currencyId !== "MXN") {
+    console.error(
+      `[ai-topup] pago ${paymentId} NO cubre el topup ${topupId}: pagado=${paidCents ?? "?"} ${pay.currencyId ?? "?"}, esperado>=${topup.amountCents} MXN centavos; no se acredita`,
+    );
+    return;
+  }
+
   await creditMpTopup(topupId, paymentId);
 }
 

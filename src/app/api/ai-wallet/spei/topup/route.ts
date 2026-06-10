@@ -37,6 +37,7 @@ function adminSupabase() {
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  if (!ctx.isAdmin) return NextResponse.json({ error: "Solo administradores" }, { status: 403 });
 
   let form: FormData;
   try {
