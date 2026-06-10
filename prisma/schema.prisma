@@ -40,7 +40,7 @@ model Clinic {
   updatedAt       DateTime       @updatedAt
 
   // WhatsApp (legacy Meta Cloud API)
-  waPhoneNumberId  String?
+  waPhoneNumberId  String? @unique
   waAccessToken    String?
   waConnected      Boolean @default(false)
   waReminderActive Boolean @default(true)
@@ -2728,7 +2728,7 @@ model WeeklyInsight {
 
   clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
-  @@index([clinicId, weekStart])
+  @@unique([clinicId, weekStart])
   @@map("weekly_insights")
 }
 
