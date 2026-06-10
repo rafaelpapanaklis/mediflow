@@ -11,7 +11,7 @@ import {
   CreditCard, BarChart3, Monitor, UserCog, Globe, ClipboardList, Settings,
   ShoppingBag, Baby, Zap, Smile, Anchor, Truck, ShoppingCart,
   ChevronDown, ChevronRight, Moon, Sun, LogOut, PanelLeftClose, PanelLeft,
-  X, Plus, type LucideIcon,
+  X, Plus, LifeBuoy, type LucideIcon,
 } from "lucide-react";
 import { useSidebarCounts } from "@/hooks/use-sidebar-counts";
 import { useActiveConsult } from "@/hooks/use-active-consult";
@@ -221,6 +221,9 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: "procedures",     section: "admin", label: "Procedimientos",    href: "/dashboard/procedures",    icon: ClipboardList,  permission: "procedures.view" },
   { id: "clinic-layout",  section: "admin", label: "Mi Clínica Visual", href: "/dashboard/clinic-layout", icon: Building2, adminOnly: true, permission: "clinicLayout.view" },
   { id: "settings",       section: "admin", label: "Configuración",     href: "/dashboard/settings",      icon: Settings,       permission: "settings.view" },
+  // Soporte Técnico: sin `permission` a propósito — cualquier usuario de la
+  // clínica puede levantar tickets hacia DaleControl.
+  { id: "soporte",        section: "admin", label: "Soporte Técnico",   href: "/dashboard/soporte",       icon: LifeBuoy },
 ];
 
 // ═══════════════════════════════════════════════════════════════════
