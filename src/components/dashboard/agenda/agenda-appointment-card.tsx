@@ -327,6 +327,15 @@ export function AgendaAppointmentCard({
         <span className={styles.apptTime}>
           {formatTimeInTz(appointment.startsAt, timezone)}
         </span>
+        {appointment.status === "CONFIRMED" && (
+          <span
+            title={t("agenda.apptCard.confirmedByPatient")}
+            aria-label={t("agenda.apptCard.confirmedByPatient")}
+            style={{ display: "inline-flex", flexShrink: 0, color: "var(--success)" }}
+          >
+            <Check size={10} aria-hidden />
+          </span>
+        )}
         <span className={styles.apptName}>{appointment.patient.name}</span>
       </div>
       {!compact && (

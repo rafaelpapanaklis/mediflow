@@ -768,6 +768,7 @@
       "approveFailed": "No se pudo aprobar",
       "statusChangeFailed": "No se pudo cambiar",
       "consultationFallback": "Consulta",
+      "confirmedByPatient": "Confirmada por el paciente",
       "appointmentAria": "Cita: {name} a las {time}",
       "nextStepTitle": "{label} ({name})",
       "nextStepAria": "{label} cita de {name}"
@@ -825,7 +826,10 @@
       "specialStatuses": "Estados especiales",
       "noActionsAvailable": "Sin acciones disponibles",
       "reopenAppointment": "Re-abrir cita",
-      "currentStatus": "Estado actual:"
+      "currentStatus": "Estado actual:",
+      "confirmedByPatient": "✅ Confirmada por el paciente",
+      "toConfirm": "Por confirmar",
+      "patientCancelled": "Canceló"
     },
     "editApptModal": {
       "title": "Editar cita",
@@ -2119,6 +2123,7 @@
     },
     "status": {
       "pending": "Pendiente",
+      "scheduled": "Por confirmar",
       "confirmed": "Confirmada",
       "inProgress": "En curso",
       "completed": "Completada",
@@ -2444,6 +2449,7 @@
       "tabBilling": "Facturación",
       "tabAi": "Asistente IA",
       "tabIntegrations": "Integraciones",
+      "tabReminders": "Recordatorios",
       "tabHours": "Horarios",
       "tabSecurity": "Seguridad",
       "pageTitle": "Configuración",
@@ -2539,6 +2545,35 @@
       "accountEmailLabel": "Email",
       "accountRoleLabel": "Rol",
       "accountMemberSinceLabel": "Miembro desde"
+    },
+    "reminders": {
+      "title": "Recordatorios automáticos de citas",
+      "subtitle": "Configura cuándo y por qué canal se les recuerdan las citas a tus pacientes.",
+      "enabledLabel": "Recordatorios automáticos activos",
+      "enabledDesc": "Se envían solos según los momentos y el canal que elijas.",
+      "offsetsLabel": "¿Cuándo enviar el recordatorio?",
+      "offset48h": "48 h antes",
+      "offset24h": "24 h antes",
+      "offset4h": "4 h antes",
+      "offset2h": "2 h antes",
+      "offset1h": "1 h antes",
+      "offsetsHint": "Puedes elegir hasta 4 momentos.",
+      "noOffsetsWarning": "Selecciona al menos un momento; si no, no se enviará ningún recordatorio.",
+      "channelLabel": "Canal de envío",
+      "channelWhatsapp": "WhatsApp",
+      "channelEmail": "Email",
+      "channelBoth": "Ambos (WhatsApp + Email)",
+      "waNotConnectedWarning": "Tu clínica aún no tiene WhatsApp conectado; los recordatorios por WhatsApp no se enviarán.",
+      "waConnectLink": "Conectar WhatsApp →",
+      "emailOnlyNote": "Los recordatorios por email solo se envían a pacientes con email registrado.",
+      "templateLabel": "Mensaje del recordatorio",
+      "templateVarsHint": "Variables disponibles: {paciente}, {clinica}, {fecha}, {hora}, {doctor}, {link}",
+      "restoreDefaultBtn": "Restaurar mensaje default",
+      "previewLabel": "Vista previa",
+      "previewSampleDate": "lunes 24 de junio",
+      "confirmLinkNote": "El recordatorio siempre incluye el link público de confirmación: el paciente puede confirmar o cancelar sin iniciar sesión y el estado se refleja en tu agenda.",
+      "savedToast": "Recordatorios guardados",
+      "saveErrorToast": "Error al guardar"
     },
     "signature": {
       "title": "Firma electrónica FIEL/SAT",

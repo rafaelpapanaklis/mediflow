@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Building, User, Clock, Shield, Receipt, Bot, CalendarCheck, ExternalLink, Zap, CreditCard } from "lucide-react";
+import { Building, User, Clock, Shield, Receipt, Bot, CalendarCheck, ExternalLink, Zap, CreditCard, Bell } from "lucide-react";
 import { SubscriptionTab } from "@/components/dashboard/subscription-tab";
+import { RemindersSection } from "./reminders-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -243,6 +244,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
     { id:"facturacion",  label:t("settings.client.tabBilling"),      icon:Receipt,       show:isAdminUser },
     { id:"ia",           label:t("settings.client.tabAi"),           icon:Bot,           show:true        },
     { id:"integraciones",label:t("settings.client.tabIntegrations"), icon:CalendarCheck, show:true        },
+    { id:"recordatorios",label:t("settings.client.tabReminders"),    icon:Bell,          show:isAdminUser },
     { id:"horarios",     label:t("settings.client.tabHours"),        icon:Clock,         show:isAdminUser },
     { id:"seguridad",    label:t("settings.client.tabSecurity"),     icon:Shield,        show:true        },
   ].filter(item => item.show);
@@ -704,6 +706,9 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           )}
         </div>
       )}
+
+      {/* ── RECORDATORIOS ── */}
+      {tab === "recordatorios" && <RemindersSection clinic={clinic} />}
 
       {/* ── HORARIOS ── */}
       {tab === "horarios" && (

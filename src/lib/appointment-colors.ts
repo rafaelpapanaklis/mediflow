@@ -22,6 +22,7 @@ export function getApptColors(status: string): ApptColors {
         label:  "Confirmada",
       };
     case "PENDING":
+    case "SCHEDULED":
       return {
         bg:     "rgba(245,158,11,0.12)",
         text:   "#fcd34d",

@@ -46,6 +46,7 @@ const APPT_TYPES = ["Consulta general","Primera vez","Revisión / Control","Limp
 // label = id de traducción (resuelto con t() al renderizar), no el texto visible.
 const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; dot: string; border: string }> = {
   PENDING:     { label:"appointments.status.pending",    bg:"bg-amber-100 dark:bg-amber-900/30",    text:"text-amber-700 dark:text-amber-300",    dot:"bg-amber-500",   border:"border-amber-300"   },
+  SCHEDULED:   { label:"appointments.status.scheduled",  bg:"bg-amber-100 dark:bg-amber-900/30",    text:"text-amber-700 dark:text-amber-300",    dot:"bg-amber-500",   border:"border-amber-300"   },
   CONFIRMED:   { label:"appointments.status.confirmed",  bg:"bg-emerald-100 dark:bg-emerald-900/30",text:"text-emerald-700 dark:text-emerald-300",dot:"bg-emerald-500", border:"border-emerald-300" },
   IN_PROGRESS: { label:"appointments.status.inProgress", bg:"bg-blue-100 dark:bg-blue-900/30",      text:"text-blue-700 dark:text-blue-300",      dot:"bg-blue-500",    border:"border-blue-300"    },
   COMPLETED:   { label:"appointments.status.completed",  bg:"bg-muted",       text:"text-muted-foreground",    dot:"bg-muted",   border:"border-border"   },

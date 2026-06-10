@@ -75,6 +75,7 @@ export interface AgendaAppointmentDTO extends HomeAppointmentDTO {
   checkedInAt?: string | null;
   startedAt?: string | null;
   completedAt?: string | null;
+  cancelReason?: string | null;
 }
 
 export interface ResourceDTO {

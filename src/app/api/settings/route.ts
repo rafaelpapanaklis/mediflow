@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { encryptField, isEnvelope } from "@/lib/crypto/envelope";
+import { sanitizeReminderSettings } from "@/lib/reminders/config";
 
 export async function PATCH(req: NextRequest) {
   const ctx = await getAuthContext();
@@ -25,6 +27,21 @@ export async function PATCH(req: NextRequest) {
   const data: Record<string, any> = {};
   for (const key of allowed) {
     if (key in body) data[key] = body[key];
+  }
+
+  // Recordatorios automáticos: el Json se valida con sanitizeReminderSettings
+  // (offsets permitidos, canal, plantilla con tope de largo). `null` explícito
+  // borra la config y la clínica vuelve al fallback legacy de /dashboard/whatsapp.
+  if ("reminderSettings" in body) {
+    if (body.reminderSettings === null) {
+      data.reminderSettings = Prisma.DbNull;
+    } else {
+      const sanitized = sanitizeReminderSettings(body.reminderSettings);
+      if (!sanitized) {
+        return NextResponse.json({ error: "reminderSettings inválido" }, { status: 400 });
+      }
+      data.reminderSettings = sanitized;
+    }
   }
 
   if (Object.keys(data).length === 0) {

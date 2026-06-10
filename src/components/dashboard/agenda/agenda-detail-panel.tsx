@@ -316,6 +316,28 @@ export function AgendaDetailPanel() {
 
       <div className={styles.detailSection}>
         <div className={styles.detailSectionTitle}>{t("agenda.detailPanel.sectionStatus")}</div>
+        {appt.status === "CONFIRMED" && (
+          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--success)" }}>
+            {t("agenda.detailPanel.confirmedByPatient")}
+          </div>
+        )}
+        {(appt.status === "SCHEDULED" || (appt.status as string) === "PENDING") && (
+          <div style={{ fontSize: 12, color: "var(--text-3)" }}>
+            {t("agenda.detailPanel.toConfirm")}
+          </div>
+        )}
+        {appt.status === "CANCELLED" && (
+          <div style={{ fontSize: 12 }}>
+            <span style={{ fontWeight: 600, color: "var(--danger)" }}>
+              {t("agenda.detailPanel.patientCancelled")}
+            </span>
+            {appt.cancelReason && (
+              <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
+                {appt.cancelReason}
+              </div>
+            )}
+          </div>
+        )}
       </div>
       <StatusPipeline
         appt={appt}

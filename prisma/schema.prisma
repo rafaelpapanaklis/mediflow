@@ -149,6 +149,11 @@ model Clinic {
   liveModeEnabled          Boolean @default(false)
   liveModeShowPatientNames Boolean @default(false)
 
+  // Recordatorios automáticos de citas — config JSON por clínica:
+  // { enabled, offsets: [minutos antes], channel: "whatsapp"|"email"|"both", template }.
+  // null = fallback a los campos legacy waReminderActive/waReminder24h/waReminder1h/waReminderMsg.
+  reminderSettings Json?
+
   users                User[]
   patients             Patient[]
   appointments         Appointment[]
@@ -1454,6 +1459,11 @@ model Appointment {
   paymentAmount    Float?
   stripePaymentId  String?
   stripeSessionId  String?
+
+  // Token público aleatorio para confirmar/cancelar por link
+  // (/cita/<token>/confirmar) sin exponer ids. Se genera al encolar el
+  // primer recordatorio automático de la cita.
+  confirmToken String? @unique
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

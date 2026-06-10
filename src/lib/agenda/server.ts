@@ -74,6 +74,7 @@ export function appointmentToDTO(
     checkedInAt: a.checkedInAt?.toISOString() ?? null,
     startedAt: a.startedAt?.toISOString() ?? null,
     completedAt: a.completedAt?.toISOString() ?? null,
+    cancelReason: a.cancelReason ?? null,
   };
 }
 

@@ -1,16 +1,21 @@
 // WhatsApp queue worker — A2 cross-módulos.
 //
 // Procesa WhatsAppReminder con status=PENDING y scheduledFor <= now.
-// Detecta el prefijo del campo `message` (ENDO_/PERIO_/ORTHO_/IMPLANT_)
-// y rutea al diccionario de plantillas correspondiente. Sustituye los
-// argumentos dinámicos desde `payload` (Json) + contexto del paciente
-// resuelto por `clinicId + patientPhone` o `appointmentId`.
+// Routing por canal: las filas APPT_AUTO con payload.channel === "email"
+// se envían por correo (sendEmail + buildAppointmentReminderEmail), sin
+// requerir WhatsApp conectado. El resto va por WhatsApp: detecta el
+// prefijo del campo `message` (ENDO_/PERIO_/ORTHO_/IMPLANT_) y rutea al
+// diccionario de plantillas correspondiente. Sustituye los argumentos
+// dinámicos desde `payload` (Json) + contexto del paciente resuelto por
+// `clinicId + patientPhone` o `appointmentId`.
 //
 // Backwards-compatible: mensajes legacy sin prefijo (recall manual,
 // /api/whatsapp/send) se envían tal cual el campo `message`.
 
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { sendEmail } from "@/lib/email";
+import { buildAppointmentReminderEmail } from "@/lib/reminders/email";
 import { ENDO_WHATSAPP_TEMPLATES } from "@/lib/endodontics/whatsapp-templates";
 import { ORTHO_WHATSAPP_TEMPLATES } from "@/lib/orthodontics/whatsapp-templates";
 import { PERIO_WHATSAPP_TEMPLATES } from "@/lib/periodontics/whatsapp-templates";
@@ -68,6 +73,7 @@ export async function processWhatsAppQueue(opts?: {
           id: true,
           name: true,
           timezone: true,
+          logoUrl: true,
           waConnected: true,
           waPhoneNumberId: true,
           waAccessToken: true,
@@ -77,8 +83,9 @@ export async function processWhatsAppQueue(opts?: {
         select: {
           id: true,
           startsAt: true,
+          status: true,
           patient: {
-            select: { firstName: true, lastName: true, phone: true },
+            select: { firstName: true, lastName: true, phone: true, email: true },
           },
           doctor: { select: { firstName: true, lastName: true } },
         },
@@ -114,6 +121,86 @@ export async function processWhatsAppQueue(opts?: {
 
   for (const r of claimed) {
     try {
+      // Re-check SOLO para recordatorios automáticos de cita: si la cita se
+      // canceló o cerró entre el encolado y el envío, no se manda nada.
+      // (Los tipos legacy ENDO_/PERIO_/etc. sí aplican a citas COMPLETED.)
+      if (
+        r.type === "APPT_AUTO" &&
+        r.appointment &&
+        ["CANCELLED", "COMPLETED", "CHECKED_OUT", "NO_SHOW"].includes(
+          (r.appointment as any).status,
+        )
+      ) {
+        await prisma.whatsAppReminder
+          .update({
+            where: { id: r.id },
+            data: { status: "CANCELLED", errorMsg: "Cita cancelada o cerrada antes del envío" },
+          })
+          .catch(() => {});
+        summary.skipped++;
+        continue;
+      }
+
+      // Routing por canal: filas APPT_AUTO con payload.channel "email" se
+      // envían por correo. NO pasan por el flujo WhatsApp ni requieren
+      // WhatsApp conectado en la clínica.
+      if ((r.payload as any)?.channel === "email") {
+        const toEmail = r.appointment?.patient?.email;
+        if (!toEmail) {
+          await markFailed(r.id, "Paciente sin email");
+          summary.skipped++;
+          continue;
+        }
+
+        // Fecha/hora locales de la clínica (mismo patrón que renderTemplate).
+        const startsAt = r.appointment?.startsAt ?? null;
+        const fecha = startsAt
+          ? new Intl.DateTimeFormat("es-MX", {
+              timeZone: r.clinic.timezone,
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+            }).format(startsAt)
+          : "(fecha por confirmar)";
+        const hora = startsAt
+          ? new Intl.DateTimeFormat("es-MX", {
+              timeZone: r.clinic.timezone,
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: false,
+            }).format(startsAt)
+          : "(hora por confirmar)";
+        const doctorName = r.appointment?.doctor
+          ? `Dr/a. ${r.appointment.doctor.firstName} ${r.appointment.doctor.lastName}`.trim()
+          : "tu doctor/a";
+
+        const built = buildAppointmentReminderEmail({
+          clinicName: r.clinic.name,
+          logoUrl: r.clinic.logoUrl,
+          patientName: r.appointment?.patient?.firstName ?? "",
+          fecha,
+          hora,
+          doctorName,
+          confirmUrl: (r.payload as any)?.confirmUrl ?? "",
+          message: r.message ?? "",
+          subject: (r.payload as any)?.subject,
+        });
+
+        const { delivered } = await sendEmail({
+          to: toEmail,
+          subject: built.subject,
+          html: built.html,
+          text: built.text,
+        });
+        if (!delivered) {
+          await markFailed(r.id, "Email no entregado (provider no configurado o error)");
+          summary.failed++;
+        } else {
+          summary.sent++;
+        }
+        continue;
+      }
+
       // Pre-checks: clínica con WhatsApp conectado.
       if (
         !r.clinic.waConnected ||

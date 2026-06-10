@@ -768,6 +768,7 @@
       "approveFailed": "Could not approve",
       "statusChangeFailed": "Could not change",
       "consultationFallback": "Consultation",
+      "confirmedByPatient": "Confirmed by the patient",
       "appointmentAria": "Appointment: {name} at {time}",
       "nextStepTitle": "{label} ({name})",
       "nextStepAria": "{label} appointment for {name}"
@@ -825,7 +826,10 @@
       "specialStatuses": "Special statuses",
       "noActionsAvailable": "No actions available",
       "reopenAppointment": "Reopen appointment",
-      "currentStatus": "Current status:"
+      "currentStatus": "Current status:",
+      "confirmedByPatient": "✅ Confirmed by the patient",
+      "toConfirm": "To be confirmed",
+      "patientCancelled": "Cancelled"
     },
     "editApptModal": {
       "title": "Edit appointment",
@@ -2119,6 +2123,7 @@
     },
     "status": {
       "pending": "Pending",
+      "scheduled": "To be confirmed",
       "confirmed": "Confirmed",
       "inProgress": "In progress",
       "completed": "Completed",
@@ -2444,6 +2449,7 @@
       "tabBilling": "Billing",
       "tabAi": "AI Assistant",
       "tabIntegrations": "Integrations",
+      "tabReminders": "Reminders",
       "tabHours": "Hours",
       "tabSecurity": "Security",
       "pageTitle": "Settings",
@@ -2539,6 +2545,35 @@
       "accountEmailLabel": "Email",
       "accountRoleLabel": "Role",
       "accountMemberSinceLabel": "Member since"
+    },
+    "reminders": {
+      "title": "Automatic appointment reminders",
+      "subtitle": "Choose when and through which channel your patients get appointment reminders.",
+      "enabledLabel": "Automatic reminders enabled",
+      "enabledDesc": "They are sent automatically based on the times and channel you choose.",
+      "offsetsLabel": "When should the reminder be sent?",
+      "offset48h": "48 h before",
+      "offset24h": "24 h before",
+      "offset4h": "4 h before",
+      "offset2h": "2 h before",
+      "offset1h": "1 h before",
+      "offsetsHint": "You can pick up to 4 times.",
+      "noOffsetsWarning": "Select at least one time; otherwise no reminders will be sent.",
+      "channelLabel": "Sending channel",
+      "channelWhatsapp": "WhatsApp",
+      "channelEmail": "Email",
+      "channelBoth": "Both (WhatsApp + Email)",
+      "waNotConnectedWarning": "Your clinic doesn't have WhatsApp connected yet; WhatsApp reminders won't be sent.",
+      "waConnectLink": "Connect WhatsApp →",
+      "emailOnlyNote": "Email reminders are only sent to patients with a registered email.",
+      "templateLabel": "Reminder message",
+      "templateVarsHint": "Available variables: {paciente}, {clinica}, {fecha}, {hora}, {doctor}, {link}",
+      "restoreDefaultBtn": "Restore default message",
+      "previewLabel": "Preview",
+      "previewSampleDate": "Monday, June 24",
+      "confirmLinkNote": "The reminder always includes the public confirmation link: the patient can confirm or cancel without signing in, and the status is reflected in your schedule.",
+      "savedToast": "Reminders saved",
+      "saveErrorToast": "Error saving"
     },
     "signature": {
       "title": "FIEL/SAT electronic signature",
