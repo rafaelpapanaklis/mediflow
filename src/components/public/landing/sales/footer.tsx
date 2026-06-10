@@ -10,7 +10,7 @@ export function SalesFooter() {
           <div className="mfh-foot__about">
             <SalesLogo />
             <p className="mfh-foot__tag">
-              El software todo-en-uno para clínicas dentales en México. Agenda, expedientes,
+              El software todo-en-uno para clínicas en México. Agenda, expedientes,
               radiografías con IA y facturación CFDI 4.0 en un solo lugar.
             </p>
             <div className="mfh-foot__soc">
@@ -22,16 +22,17 @@ export function SalesFooter() {
 
           <div className="mfh-foot__col">
             <h4>Producto</h4>
-            <a href="#funciones">Funciones</a>
-            <a href="#producto">Radiografías con IA</a>
-            <a href="#producto">Mi Clínica Visual</a>
-            <a href="#precios">Planes</a>
+            <a href="/#funciones">Funciones</a>
+            <a href="/#producto">Radiografías con IA</a>
+            <a href="/#producto">Mi Clínica Visual</a>
+            <a href="/#precios">Planes</a>
           </div>
 
           <div className="mfh-foot__col">
             <h4>Empresa</h4>
-            <a href="#clientes">Clientes</a>
-            <a href="#funciones">Por qué DaleControl</a>
+            <Link href="/descubre">Encuentra tu clínica</Link>
+            <a href="/#clientes">Clientes</a>
+            <a href="/#funciones">Por qué DaleControl</a>
             <Link href="/login">Iniciar sesión</Link>
             <Link href="/signup">Crear cuenta</Link>
           </div>
@@ -39,8 +40,8 @@ export function SalesFooter() {
           <div className="mfh-foot__col">
             <h4>Legal</h4>
             <Link href="/legal/privacy">Aviso de privacidad</Link>
-            <a href="#precios">Términos del servicio</a>
-            <a href="#producto">CFDI 4.0 · NOM-024</a>
+            <a href="/#precios">Términos del servicio</a>
+            <a href="/#producto">CFDI 4.0 · NOM-024</a>
           </div>
         </div>
 

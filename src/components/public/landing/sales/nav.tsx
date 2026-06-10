@@ -6,11 +6,15 @@ import { Menu, X, ArrowRight } from "lucide-react";
 import { SalesLogo } from "./logo";
 
 const LINKS = [
-  { href: "#producto", label: "Producto" },
-  { href: "#funciones", label: "Funciones" },
-  { href: "#precios", label: "Planes" },
-  { href: "#clientes", label: "Clientes" },
+  { href: "/descubre", label: "Encuentra tu clínica" },
+  { href: "/#producto", label: "Producto" },
+  { href: "/#funciones", label: "Funciones" },
+  { href: "/#precios", label: "Planes" },
+  { href: "/#clientes", label: "Clientes" },
 ];
+
+// Rutas de página (sin ancla) van con <Link>; las de ancla siguen con <a>.
+const isPageLink = (href: string) => href.startsWith("/") && !href.includes("#");
 
 export function SalesNav({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
   const [scrolled, setScrolled] = useState(false);
@@ -37,9 +41,13 @@ export function SalesNav({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
         <SalesLogo />
 
         <nav className="mfh-nav__links" aria-label="Principal">
-          {LINKS.map((l) => (
-            <a key={l.href} href={l.href} className="mfh-nav__link">{l.label}</a>
-          ))}
+          {LINKS.map((l) =>
+            isPageLink(l.href) ? (
+              <Link key={l.href} href={l.href} className="mfh-nav__link">{l.label}</Link>
+            ) : (
+              <a key={l.href} href={l.href} className="mfh-nav__link">{l.label}</a>
+            )
+          )}
         </nav>
 
         <div className="mfh-nav__right">
@@ -69,9 +77,13 @@ export function SalesNav({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
 
       <div className="mfh-mobile" data-open={open}>
         <div className="mfh-container mfh-mobile__inner">
-          {LINKS.map((l) => (
-            <a key={l.href} href={l.href} className="mfh-mobile__link" onClick={() => setOpen(false)}>{l.label}</a>
-          ))}
+          {LINKS.map((l) =>
+            isPageLink(l.href) ? (
+              <Link key={l.href} href={l.href} className="mfh-mobile__link" onClick={() => setOpen(false)}>{l.label}</Link>
+            ) : (
+              <a key={l.href} href={l.href} className="mfh-mobile__link" onClick={() => setOpen(false)}>{l.label}</a>
+            )
+          )}
           <div className="mfh-mobile__cta">
             {isLoggedIn ? (
               <Link href="/dashboard" className="mfh-btn mfh-btn--primary mfh-btn--block" onClick={() => setOpen(false)}>
