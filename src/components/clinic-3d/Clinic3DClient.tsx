@@ -44,17 +44,42 @@ import { createHand } from "./fps-hand";
 import { createInteraction } from "./interaction";
 import { createDoors } from "./doors";
 import { Clinic3DHud, type Hud3DPhase } from "./Clinic3DHud";
+import { adaptPublicLiveChairs } from "./public-live-adapter";
+
+/** Opciones del MODO PÚBLICO (vista de pacientes en /live/[slug]/3d). */
+export interface Clinic3DPublicMode {
+  /** slug público: el visor pollea /api/live/[slug] y enlaza "Ver plano 2D". */
+  slug: string;
+}
 
 export interface Clinic3DClientProps {
   clinic: { id: string; name: string; category: string };
   initialElements: LayoutElement[];
   initialMetadata: LayoutMetadata | null;
   initialChairs: { id: string; name: string; color: string | null }[];
+  /**
+   * Si está presente, el visor corre en MODO PÚBLICO: consume el endpoint
+   * público /api/live/[slug] (datos YA enmascarados server-side), SIN
+   * multijugador (canal privado del dashboard) y SIN interacción con datos
+   * (cero expedientes, cero agendar). Ausente/null = modo dashboard normal.
+   */
+  publicMode?: Clinic3DPublicMode | null;
 }
 
 const STATE_API = "/api/clinic-layout/3d-state";
 
-export function Clinic3DClient({ clinic, initialElements, initialMetadata, initialChairs }: Clinic3DClientProps) {
+export function Clinic3DClient({
+  clinic,
+  initialElements,
+  initialMetadata,
+  initialChairs,
+  publicMode = null,
+}: Clinic3DClientProps) {
+  // Primitivas estables del modo público (publicMode se fija al montar y no
+  // cambia; el efecto solo depende de `world`).
+  const isPublic = !!publicMode;
+  const publicSlug = publicMode?.slug ?? "";
+
   const containerRef = useRef<HTMLDivElement | null>(null);
   const touchLayerRef = useRef<HTMLDivElement | null>(null);
 
@@ -214,10 +239,15 @@ export function Clinic3DClient({ clinic, initialElements, initialMetadata, initi
       }
 
       // ── V2: interacción (raycast → expediente del paciente) ───────────────
-      interaction = createInteraction({
-        camera,
-        getInteractables: () => (liveLayer as any)?.getInteractables?.() ?? [],
-      });
+      // En MODO PÚBLICO NO se cablea: cero raycast a avatares, cero expedientes.
+      // (El adapter público nunca trae patientId — getInteractables ya quedaría
+      // vacío — pero ni siquiera lo creamos: defensa en profundidad.)
+      interaction = isPublic
+        ? null
+        : createInteraction({
+            camera,
+            getInteractables: () => (liveLayer as any)?.getInteractables?.() ?? [],
+          });
 
       // ── Estado vivo: polling (chairs) + bootstrap multijugador ────────────
       const chairStatus = new Map<string, Chair3DState>();
@@ -251,23 +281,43 @@ export function Clinic3DClient({ clinic, initialElements, initialMetadata, initi
 
       let latestPlayers: RemotePlayerState[] = [];
       let pollFails = 0;
+      // Intervalo base: en público igualamos el de la vista 2D (30s); en
+      // dashboard, POLL_MS (20s). Backoff exponencial ante fallos en ambos.
+      const pollBase = isPublic ? 30_000 : POLL_MS;
       const scheduleNextPoll = () => {
         if (disposed) return;
-        const backoff = Math.min(POLL_MS * 2 ** Math.min(pollFails, 4), 300_000);
+        const backoff = Math.min(pollBase * 2 ** Math.min(pollFails, 4), 300_000);
         pollTimer = window.setTimeout(poll, backoff);
       };
       const poll = async () => {
         try {
           ac?.abort();
           ac = new AbortController();
-          const res = await fetch(STATE_API, { signal: ac.signal, cache: "no-store" });
+          // Público: MISMO endpoint que la vista 2D (datos ya enmascarados);
+          // dashboard: estado privado por sesión.
+          const url = isPublic
+            ? `/api/live/${publicSlug}?date=${new Date().toISOString().slice(0, 10)}`
+            : STATE_API;
+          const res = await fetch(url, { signal: ac.signal, cache: "no-store" });
+          // 401 público = cookie de desbloqueo vencida a mitad del recorrido
+          // (TTL 12h, solo con clínica protegida). Recargamos → gate del server.
+          if (res.status === 401 && isPublic) {
+            if (!disposed) window.location.reload();
+            return;
+          }
           if (!res.ok) {
             pollFails++;
             return;
           }
-          const data = (await res.json()) as Clinic3DStatePayload;
-          if (!disposed && Array.isArray(data?.chairs)) applyStates(data.chairs);
-          if (!disposed) startMultiplayer(data);
+          const raw = await res.json();
+          // Público: adaptamos el payload 2D → Chair3DState[] (sin patientId).
+          const chairs = isPublic
+            ? adaptPublicLiveChairs(raw)
+            : (raw as Clinic3DStatePayload).chairs;
+          if (!disposed && Array.isArray(chairs)) applyStates(chairs);
+          // Multijugador SOLO en el dashboard (canal privado de la clínica).
+          // En público, jamás presencia ni broadcast.
+          if (!disposed && !isPublic) startMultiplayer(raw as Clinic3DStatePayload);
           pollFails = 0;
         } catch {
           if (!disposed) pollFails++;
@@ -287,6 +337,13 @@ export function Clinic3DClient({ clinic, initialElements, initialMetadata, initi
           desktop.lock();
           return;
         }
+        // Público: ya con lock, el clic SOLO controla la cámara. Cero
+        // interacción con datos — ni expediente ni agendar, ni nada que añadan
+        // otras capas (el return corta antes de cualquier interacción).
+        if (isPublic) {
+          hand?.tap();
+          return;
+        }
         if (interaction) {
           interaction.interactCenter();
           hand?.tap();
@@ -301,6 +358,9 @@ export function Clinic3DClient({ clinic, initialElements, initialMetadata, initi
         tStartX = t.clientX; tStartY = t.clientY; tStartT = e.timeStamp;
       };
       onTouchEnd = (e: TouchEvent) => {
+        // Público: sin interacción táctil con datos (el joystick lo maneja
+        // touch-controls aparte; esto es solo el tap→interactuar).
+        if (isPublic) return;
         const t = e.changedTouches[0];
         if (!t || !interaction || !domEl) return;
         const moved = Math.hypot(t.clientX - tStartX, t.clientY - tStartY);
@@ -530,6 +590,7 @@ export function Clinic3DClient({ clinic, initialElements, initialMetadata, initi
         minimapVisible={minimapVisible}
         onToggleMinimap={() => setMinimapVisible((v) => !v)}
         minimapFrameRef={minimapFrameRef}
+        publicMode={isPublic ? { backHref: `/live/${publicSlug}` } : null}
       />
     </div>
   );

@@ -83,6 +83,13 @@ export interface Clinic3DHudProps {
   onToggleMinimap: () => void;
   /** Frame del minimapa que el orquestador actualiza por frame (rAF del HUD). */
   minimapFrameRef: MutableRefObject<MinimapFrame>;
+  /**
+   * MODO PÚBLICO (/live/[slug]/3d). Si está presente: los enlaces internos
+   * ("Volver al editor" / "Ir al editor") se cambian por "Ver plano 2D"
+   * (backHref), se oculta el contador multijugador y se muestra branding
+   * discreto de DaleControl. null = modo dashboard.
+   */
+  publicMode?: { backHref: string } | null;
 }
 
 const EDITOR_HREF = "/dashboard/clinic-layout";
@@ -123,7 +130,27 @@ function LoadingScreen({ loadProgress }: { loadProgress: number }) {
   );
 }
 
-function EmptyScreen() {
+function EmptyScreen({ publicMode }: Pick<Clinic3DHudProps, "publicMode">) {
+  // En público, la clínica aún no configuró su plano: nada de "ir al editor".
+  if (publicMode) {
+    return (
+      <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#0b0d11] px-6 text-center text-white">
+        <div className="max-w-sm">
+          <p className="text-lg font-semibold">Recorrido 3D no disponible</p>
+          <p className="mt-2 text-sm leading-relaxed text-white/60">
+            Esta clínica aún no ha configurado su plano para recorrerlo en 3D.
+          </p>
+          <Link
+            href={publicMode.backHref}
+            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-500"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Ver plano 2D
+          </Link>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#0b0d11] px-6 text-center text-white">
       <div className="max-w-sm">
@@ -147,7 +174,10 @@ function ErrorScreen({
   errorTitle,
   errorMessage,
   onRetry,
-}: Pick<Clinic3DHudProps, "errorTitle" | "errorMessage" | "onRetry">) {
+  publicMode,
+}: Pick<Clinic3DHudProps, "errorTitle" | "errorMessage" | "onRetry" | "publicMode">) {
+  const backHref = publicMode?.backHref ?? EDITOR_HREF;
+  const backLabel = publicMode ? "Ver plano 2D" : "Volver al editor";
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#0b0d11] px-6 text-center text-white">
       <div className="max-w-sm">
@@ -164,10 +194,10 @@ function ErrorScreen({
             Reintentar
           </button>
           <Link
-            href={EDITOR_HREF}
+            href={backHref}
             className="rounded-lg px-4 py-2 text-sm font-medium text-violet-300 transition-colors hover:text-violet-200"
           >
-            Volver al editor
+            {backLabel}
           </Link>
         </div>
       </div>
@@ -312,6 +342,7 @@ function ReadyOverlay(props: Clinic3DHudProps) {
     minimapVisible,
     onToggleMinimap,
     minimapFrameRef,
+    publicMode,
   } = props;
 
   // Hint sutil que se desvanece ~5s una vez que el usuario tomó el control
@@ -342,30 +373,32 @@ function ReadyOverlay(props: Clinic3DHudProps) {
             {categoryLabel(category)}
           </span>
         </div>
-        {/* Contador de usuarios conectados (o aviso discreto si no hay multijugador) */}
-        {multiplayerEnabled ? (
-          <div className={`${panelBase} static flex items-center gap-1.5 px-2.5 py-1 text-[clamp(11px,1.4vw,13px)] tabular-nums`}>
-            <span aria-hidden="true">👥</span>
-            <span className="font-medium text-white/90">{Math.max(0, userCount || 0)}</span>
-            <span className="text-white/60">en la clínica</span>
-          </div>
-        ) : (
-          <span className="pointer-events-none pl-1 text-[10px] text-white/35">
-            multijugador no disponible
-          </span>
-        )}
+        {/* Contador de usuarios conectados (o aviso discreto si no hay multijugador).
+            En público NO hay multijugador (canal privado del dashboard): se oculta. */}
+        {!publicMode &&
+          (multiplayerEnabled ? (
+            <div className={`${panelBase} static flex items-center gap-1.5 px-2.5 py-1 text-[clamp(11px,1.4vw,13px)] tabular-nums`}>
+              <span aria-hidden="true">👥</span>
+              <span className="font-medium text-white/90">{Math.max(0, userCount || 0)}</span>
+              <span className="text-white/60">en la clínica</span>
+            </div>
+          ) : (
+            <span className="pointer-events-none pl-1 text-[10px] text-white/35">
+              multijugador no disponible
+            </span>
+          ))}
       </div>
 
       {/* Top-right: volver al editor + minimapa (toggle) + fullscreen, y debajo el minimapa */}
       <div className="pointer-events-none absolute right-0 top-0 m-[max(env(safe-area-inset-right),0.75rem)] mt-[max(env(safe-area-inset-top),0.75rem)] flex flex-col items-end gap-2">
         <div className="flex items-center gap-2">
           <Link
-            href={EDITOR_HREF}
+            href={publicMode?.backHref ?? EDITOR_HREF}
             className="pointer-events-auto inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-black/40 px-2.5 py-1.5 text-xs font-medium text-white/90 backdrop-blur-md transition-colors hover:bg-black/60 hover:text-white"
-            title="Volver al editor"
+            title={publicMode ? "Ver plano 2D" : "Volver al editor"}
           >
             <ArrowLeft className="h-4 w-4" />
-            <span className="hidden sm:inline">Volver al editor</span>
+            <span className="hidden sm:inline">{publicMode ? "Ver plano 2D" : "Volver al editor"}</span>
           </Link>
           <button
             type="button"
@@ -464,6 +497,15 @@ function ReadyOverlay(props: Clinic3DHudProps) {
           </span>
         </div>
       ) : null}
+
+      {/* Branding discreto DaleControl — solo en la cara pública. */}
+      {publicMode ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 mb-[max(env(safe-area-inset-bottom),0.5rem)] flex justify-center">
+          <span className="rounded-full border border-white/10 bg-black/35 px-2.5 py-1 text-[10px] font-medium tracking-wide text-white/55 backdrop-blur-md">
+            Powered by <span className="text-violet-300">DaleControl</span>
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -488,13 +530,14 @@ export function Clinic3DHud(props: Clinic3DHudProps) {
     case "loading":
       return <LoadingScreen loadProgress={props.loadProgress} />;
     case "empty":
-      return <EmptyScreen />;
+      return <EmptyScreen publicMode={props.publicMode} />;
     case "error":
       return (
         <ErrorScreen
           errorTitle={props.errorTitle}
           errorMessage={props.errorMessage}
           onRetry={props.onRetry}
+          publicMode={props.publicMode}
         />
       );
     case "ready":

@@ -45,6 +45,8 @@ export function SharePanel({
 
   const publicUrl =
     typeof window !== "undefined" && slug ? `${window.location.origin}/live/${slug}` : "";
+  // Recorrido 3D público (mismo slug + mismo gate de password). Solo con slug.
+  const public3dUrl = publicUrl ? `${publicUrl}/3d` : "";
 
   const saveAll = async () => {
     if (!slug.trim()) {
@@ -121,6 +123,16 @@ export function SharePanel({
     if (!publicUrl) return;
     try {
       await navigator.clipboard.writeText(publicUrl);
+      toast.success(t("pages.clinicLayout.shareUrlCopied"));
+    } catch {
+      toast.error(t("pages.clinicLayout.shareCopyFailed"));
+    }
+  };
+
+  const copy3dUrl = async () => {
+    if (!public3dUrl) return;
+    try {
+      await navigator.clipboard.writeText(public3dUrl);
       toast.success(t("pages.clinicLayout.shareUrlCopied"));
     } catch {
       toast.error(t("pages.clinicLayout.shareCopyFailed"));
@@ -266,6 +278,27 @@ export function SharePanel({
                     className={shareStyles.previewBtn}
                   >
                     <ExternalLink size={12} aria-hidden /> {t("pages.clinicLayout.shareOpen")}
+                  </a>
+                </div>
+              </div>
+              {/* Recorrido 3D público — mismo slug y mismo gate de password. */}
+              <div className={shareStyles.previewUrl}>
+                <code>🎮 {public3dUrl}</code>
+                <div className={shareStyles.previewActions}>
+                  <button
+                    type="button"
+                    className={shareStyles.previewBtn}
+                    onClick={copy3dUrl}
+                  >
+                    <Copy size={12} aria-hidden /> {t("pages.clinicLayout.shareCopy")}
+                  </button>
+                  <a
+                    href={public3dUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={shareStyles.previewBtn}
+                  >
+                    <ExternalLink size={12} aria-hidden /> Recorrido 3D
                   </a>
                 </div>
               </div>

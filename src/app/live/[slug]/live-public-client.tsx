@@ -618,6 +618,26 @@ export function LivePublicClient({
           <div className={liveStyles.headerClockSec}>{fmtHMS(now).slice(-2)}</div>
         </div>
         <div className={liveStyles.headerRight}>
+          {/* Entrada al recorrido PÚBLICO en 3D — mismo slug, mismo gate. */}
+          <a
+            href={`/live/${slug}/3d`}
+            className={liveStyles.fullscreenBtn}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              width: "auto",
+              padding: "0 12px",
+              gap: 6,
+              fontSize: 13,
+              fontWeight: 700,
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}
+            title="Recorrer la clínica en 3D"
+          >
+            <span aria-hidden>🎮</span>
+            <span>Recorrer en 3D</span>
+          </a>
           <button
             type="button"
             onClick={toggleFullscreen}
