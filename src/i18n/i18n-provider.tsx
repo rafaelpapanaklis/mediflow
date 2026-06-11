@@ -40,6 +40,16 @@ export function useT(): TFunction {
   return ctx.t;
 }
 
+/**
+ * Variante que NO lanza fuera del provider — para componentes del panel que
+ * también se renderizan en superficies públicas sin I18nProvider (ej. los
+ * componentes de live-mode reutilizados por /live/[slug]). Devuelve null si
+ * no hay contexto; el caller decide su fallback.
+ */
+export function useTOptional(): TFunction | null {
+  return useContext(I18nContext)?.t ?? null;
+}
+
 export function useLocale(): string {
   const ctx = useContext(I18nContext);
   if (!ctx) throw new Error("useLocale debe usarse dentro de <I18nProvider>");

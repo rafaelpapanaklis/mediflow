@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Clock, ExternalLink, FileText } from "lucide-react";
-import { useT } from "@/i18n/i18n-provider";
+import { useTOptional } from "@/i18n/i18n-provider";
+import { publicLiveFallbackT } from "./public-live-t";
 import { toScreen } from "@/lib/floor-plan/iso";
 import {
   STATUS_COLORS,
@@ -250,7 +251,9 @@ export function LiveStatusPanel({
    */
   onOpenOdontogram?: (apt: LiveAppointment) => void;
 }) {
-  const t = useT();
+  // useTOptional: este componente también se monta en /live (público, sin
+  // I18nProvider) — ahí cae al fallback ES en vez de lanzar.
+  const t = useTOptional() ?? publicLiveFallbackT;
   const placedChairs = useMemo(
     () =>
       elements
@@ -350,7 +353,9 @@ export function LiveTimeline({
   onSeek: (d: Date) => void;
   onResetNow: () => void;
 }) {
-  const t = useT();
+  // useTOptional: este componente también se monta en /live (público, sin
+  // I18nProvider) — ahí cae al fallback ES en vez de lanzar.
+  const t = useTOptional() ?? publicLiveFallbackT;
   const now = new Date();
   const nowFrac = timelineFraction(now);
   const viewFrac = timelineFraction(viewTime);

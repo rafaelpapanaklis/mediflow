@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bell, BellOff, Clock, Users } from "lucide-react";
 import type { LiveAppointment } from "@/lib/floor-plan/elements";
-import { useT } from "@/i18n/i18n-provider";
+import { useTOptional } from "@/i18n/i18n-provider";
+import { publicLiveFallbackT } from "./public-live-t";
 import waitingStyles from "./waiting-room.module.css";
 
 export interface WaitingRoomEntry {
@@ -48,7 +49,9 @@ export function WaitingRoom({
   chairs: ChairInfo[];
   enableSound?: boolean;
 }) {
-  const t = useT();
+  // useTOptional: este componente también se monta en /live (público, sin
+  // I18nProvider) — ahí cae al fallback ES en vez de lanzar.
+  const t = useTOptional() ?? publicLiveFallbackT;
   const [announcement, setAnnouncement] = useState<CallAnnouncement | null>(null);
   const [soundOn, setSoundOn] = useState(enableSound);
   const prevWaitingIdsRef = useRef<Set<string>>(new Set());
