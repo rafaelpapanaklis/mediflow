@@ -52,7 +52,7 @@ import { SharePanel } from "./components/share-panel";
 import { WaitingRoom, type WaitingRoomEntry } from "./components/waiting-room";
 import { WelcomePrompt } from "./components/welcome-prompt";
 import { OptimizerModal } from "./components/optimizer-modal";
-import { Share2 } from "lucide-react";
+import { Share2, Box } from "lucide-react";
 import { getChairStatus } from "@/lib/floor-plan/live-mode";
 import { useT } from "@/i18n/i18n-provider";
 import styles from "./clinic-layout.module.css";
@@ -1103,6 +1103,15 @@ export function ClinicLayoutClient({
           >
             <Share2 size={13} aria-hidden /> {t("pages.clinicLayout.share")}
           </button>
+          {/* Mi Clínica 3D: recorrido en primera persona del plano (aparte de
+              "Ver en vivo"). Vista nueva, no toca el modo en vivo. */}
+          <Link
+            href="/dashboard/clinic-layout/3d"
+            className={styles.toolbarBtn}
+            title="Recorre tu clínica en 3D (vista en primera persona)"
+          >
+            <Box size={13} aria-hidden /> Mi Clínica 3D
+          </Link>
           {/* Pill de iluminación dinámica — click avanza 3 horas y previsualiza
               el filtro feColorMatrix sobre el canvas. */}
           <button
