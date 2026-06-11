@@ -55,7 +55,7 @@ export async function GET(_req: NextRequest, ctx: Params) {
   if (implant.passport?.qrPublicEnabled && implant.passport.qrToken) {
     try {
       qrDataUrl = await QRCode.toDataURL(
-        `https://mediflow.app/i/${implant.passport.qrToken}`,
+        `https://www.dalecontrol.com/i/${implant.passport.qrToken}`,
         { margin: 0, width: 240 },
       );
     } catch (e) {

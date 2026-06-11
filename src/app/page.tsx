@@ -14,7 +14,7 @@ const inter = Inter({
   display: "swap",
 });
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://mediflow-pi.vercel.app";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com";
 
 export const metadata: Metadata = {
   title: { absolute: "DaleControl — Software dental todo-en-uno para clínicas en México" },

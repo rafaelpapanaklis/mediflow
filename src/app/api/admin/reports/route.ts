@@ -212,7 +212,7 @@ export async function GET(req: NextRequest) {
   XLSX.utils.book_append_sheet(wb, paymentsSheet, "Pagos");
 
   const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-  const fname = `mediflow-reporte-${from.toISOString().slice(0,10)}_${to.toISOString().slice(0,10)}.xlsx`;
+  const fname = `dalecontrol-reporte-${from.toISOString().slice(0,10)}_${to.toISOString().slice(0,10)}.xlsx`;
 
   return new NextResponse(buffer, {
     status: 200,

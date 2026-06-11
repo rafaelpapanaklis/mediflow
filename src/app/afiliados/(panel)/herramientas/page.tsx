@@ -19,7 +19,7 @@ import { MarketingKit } from "@/components/afiliados/tools/marketing-kit";
 import { ProspectTemplates } from "@/components/afiliados/tools/prospect-templates";
 import { LevelProgress } from "@/components/afiliados/level-progress";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://mediflow-pi.vercel.app";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com";
 
 export default async function HerramientasPage() {
   const ctx = await getAffiliateContext();

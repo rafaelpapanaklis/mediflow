@@ -47,7 +47,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   // Fallback por si la receta quedó sin verifyUrl persistida.
   const proto = req.headers.get("x-forwarded-proto") ?? "https";
-  const host = req.headers.get("host") ?? "mediflow.app";
+  const host = req.headers.get("host") ?? "www.dalecontrol.com";
   const verifyUrl = rx.verifyUrl || `${proto}://${host}/portal/prescription/${rx.id}/verify`;
 
   const issuedDate = rx.issuedAt.toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });

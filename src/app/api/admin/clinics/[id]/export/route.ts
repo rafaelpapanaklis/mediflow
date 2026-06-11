@@ -120,7 +120,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   for await (const chunk of pass) chunks.push(chunk as Buffer);
   const buffer = Buffer.concat(chunks);
 
-  const fname = `mediflow-export-${clinic.slug || clinic.id}-${new Date().toISOString().slice(0, 10)}.zip`;
+  const fname = `dalecontrol-export-${clinic.slug || clinic.id}-${new Date().toISOString().slice(0, 10)}.zip`;
 
   return new NextResponse(buffer, {
     status: 200,

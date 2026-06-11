@@ -163,7 +163,7 @@ export function formatApptDateParts(
 
 /** URL pública de confirmación para un confirmToken. */
 export function getConfirmUrl(token: string): string {
-  const base = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://mediflow-pi.vercel.app").replace(
+  const base = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com").replace(
     /\/+$/,
     "",
   );

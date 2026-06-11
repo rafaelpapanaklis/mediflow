@@ -305,7 +305,7 @@ export function AdminClinicDetailClient({
               <div style={{ display: "flex", flexDirection: "column", fontSize: 13 }}>
                 {[
                   { label: "Nombre",       val: clinic.name },
-                  { label: "Slug/URL",     val: `${clinic.slug}.mediflow.app` },
+                  { label: "Slug/URL",     val: `${clinic.slug}.dalecontrol.com` },
                   { label: "Especialidad", val: clinic.specialty },
                   { label: "País",         val: clinic.country },
                   { label: "Ciudad",       val: clinic.city ?? "—" },

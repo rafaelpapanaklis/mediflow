@@ -189,7 +189,7 @@ export function LoginForm() {
         <Link href="/terminos" style={{ color: "inherit", textDecoration: "none" }}>Términos</Link>
         <span>·</span>
         <a
-          href="mailto:soporte@mediflow.mx"
+          href="mailto:soporte@dalecontrol.com"
           style={{ color: "inherit", textDecoration: "none" }}
         >
           Soporte

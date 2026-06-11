@@ -6,7 +6,7 @@ import { rateLimit } from "@/lib/rate-limit";
 export const dynamic = "force-dynamic";
 
 const VALID_TYPES = new Set(["ACCESS", "RECTIFICATION", "CANCELLATION", "OPPOSITION"]);
-const PRIVACY_INBOX = process.env.PRIVACY_INBOX_EMAIL ?? "privacidad@mediflow.app";
+const PRIVACY_INBOX = process.env.PRIVACY_INBOX_EMAIL ?? "privacidad@dalecontrol.com";
 
 /**
  * POST /api/arco/request — solicitudes ARCO bajo LFPDPPP.

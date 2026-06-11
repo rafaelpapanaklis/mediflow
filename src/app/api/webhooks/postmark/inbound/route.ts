@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 /**
  * POST /api/webhooks/postmark/inbound
  * Cada clínica configura una dirección email tipo
- * "clinica-abc@inbox.mediflow.app". Postmark parsea el email entrante y nos
+ * "clinica-abc@inbox.dalecontrol.com". Postmark parsea el email entrante y nos
  * envía un JSON. Resolvemos por To → Clinic.postmarkInboundEmail.
  */
 export async function POST(req: NextRequest) {

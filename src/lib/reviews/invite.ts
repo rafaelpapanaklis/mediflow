@@ -12,7 +12,7 @@ import { buildAuthorName, REVIEW_STATUS, REVIEW_TOKEN_TTL_DAYS } from "./types";
 // dentro de un try/catch en el cierre de cita y no debe romper esa respuesta.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://mediflow-pi.vercel.app").replace(/\/+$/, "");
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com").replace(/\/+$/, "");
 
 export function reviewUrl(token: string): string {
   return `${SITE_URL}/resena/${token}`;

@@ -71,7 +71,7 @@ export default function RoadmapPage() {
           <h2 className="text-xl font-bold mb-2">¿Te falta algo en este roadmap?</h2>
           <p className="text-slate-400 text-sm mb-4">Escríbenos — priorizamos lo que más pidan las clínicas.</p>
           <a
-            href="mailto:soporte@mediflow.app"
+            href="mailto:soporte@dalecontrol.com"
             className="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-bold px-6 py-3 rounded-xl text-sm transition-colors"
           >
             Sugerir feature →

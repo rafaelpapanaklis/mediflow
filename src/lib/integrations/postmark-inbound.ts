@@ -2,7 +2,7 @@ import "server-only";
 
 /**
  * Wrapper de Postmark Inbound: cada clínica tiene una dirección única
- * (clinica-abc@inbox.mediflow.app) que apunta a este webhook. Postmark
+ * (clinica-abc@inbox.dalecontrol.com) que apunta a este webhook. Postmark
  * parsea el email y nos lo manda como JSON.
  *
  * https://postmarkapp.com/developer/user-guide/inbound/parse-an-email
@@ -26,12 +26,12 @@ export interface PostmarkInboundPayload {
     Content: string; // base64
     ContentLength: number;
   }>;
-  MailboxHash?: string; // ej: "clinica-abc" si la dirección es clinica-abc@inbox.mediflow.app
+  MailboxHash?: string; // ej: "clinica-abc" si la dirección es clinica-abc@inbox.dalecontrol.com
 }
 
 /**
  * Extrae la dirección de "clinic mailbox" del To. Si la cuenta usa
- * direcciones tipo "clinica-abc@inbox.mediflow.app", devuelve "clinica-abc".
+ * direcciones tipo "clinica-abc@inbox.dalecontrol.com", devuelve "clinica-abc".
  */
 export function extractClinicMailbox(to: string): string | null {
   const m = to.match(/^([^@]+)@/);

@@ -11,7 +11,7 @@
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://mediflow-pi.vercel.app";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com";
 
 /** Escapa texto interpolado en el HTML del email (nombres libres). */
 function esc(s: string): string {
@@ -31,7 +31,7 @@ function fmtMxn(n: number): string {
  * Layout compartido — calca el idioma visual de sendWelcomeEmail
  * (src/lib/email.ts): dark #0b0815, card #121020 border rgba(255,255,255,0.08)
  * radius 14, marca DaleControl #a78bfa, h1 #f5f5f7, CTA gradiente
- * #8b5cf6→#7c3aed, footer soporte@mediflow.mx.
+ * #8b5cf6→#7c3aed, footer soporte@dalecontrol.com.
  */
 function affiliateEmailHtml(opts: {
   heading: string;
@@ -74,7 +74,7 @@ ${boxHtml}
 
     <div style="font-size: 11px; color: rgba(245,245,247,0.4); line-height: 1.5;">
       ¿Tienes dudas? Responde este correo o escríbenos a
-      <a href="mailto:soporte@mediflow.mx" style="color: #a78bfa;">soporte@mediflow.mx</a>.
+      <a href="mailto:soporte@dalecontrol.com" style="color: #a78bfa;">soporte@dalecontrol.com</a>.
       <br /><br />
       DaleControl — Programa de afiliados 🇲🇽
     </div>

@@ -37,7 +37,7 @@ export interface SupportEmailContext {
 
 /** Bandeja interna de soporte de DaleControl. */
 export function getSupportInboxEmail(): string {
-  return process.env.SUPPORT_EMAIL_TO ?? "soporte@mediflow.mx";
+  return process.env.SUPPORT_EMAIL_TO ?? "soporte@dalecontrol.com";
 }
 
 function subjectWithFolio(ctx: SupportEmailContext, suffix: string): string {
@@ -63,7 +63,7 @@ function getBaseUrl(): string {
     process.env.NEXT_PUBLIC_APP_URL ??
     process.env.NEXT_PUBLIC_SITE_URL ??
     process.env.VERCEL_URL ??
-    "https://mediflow-pi.vercel.app";
+    "https://www.dalecontrol.com";
   const normalized = raw.startsWith("http") ? raw : `https://${raw}`;
   return normalized.replace(/\/+$/, "");
 }
@@ -94,7 +94,7 @@ ${inner}
     <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.08); margin: 28px 0;" />
     <div style="font-size: 11px; color: rgba(245,245,247,0.4); line-height: 1.5;">
       Si tienes dudas, escríbenos a
-      <a href="mailto:soporte@mediflow.mx" style="color: #a78bfa;">soporte@mediflow.mx</a>.
+      <a href="mailto:soporte@dalecontrol.com" style="color: #a78bfa;">soporte@dalecontrol.com</a>.
       <br /><br />
       DaleControl — Soporte técnico 🇲🇽
     </div>

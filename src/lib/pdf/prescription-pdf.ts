@@ -85,7 +85,7 @@ export async function buildPrescriptionPdf(
 
   const verifyUrl =
     rx.verifyUrl ||
-    `${process.env.NEXT_PUBLIC_APP_URL ?? "https://mediflow.app"}/portal/prescription/${rx.id}/verify`;
+    `${process.env.NEXT_PUBLIC_APP_URL ?? "https://www.dalecontrol.com"}/portal/prescription/${rx.id}/verify`;
 
   const [qrDataUrl, logoDataUrl] = await Promise.all([
     QRCode.toDataURL(verifyUrl, { margin: 0, width: 256 }).catch(() => null),

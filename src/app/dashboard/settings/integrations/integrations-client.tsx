@@ -229,7 +229,7 @@ export function IntegrationsClient({
               hint={t("settings.integrations.inboundAddressHint")}
               value={postmarkEmail}
               onChange={setPostmarkEmail}
-              placeholder="clinica-xxx@inbox.mediflow.app"
+              placeholder="clinica-xxx@inbox.dalecontrol.com"
             />
             <div className={styles.webhookBlock}>
               <span className={styles.webhookLabel}>{t("settings.integrations.webhookPostmark")}</span>

@@ -2393,7 +2393,7 @@
       "emailTitle": "Inbound email",
       "emailDesc": "Via Postmark Inbound Parse. The clinic receives email at a dedicated address and it appears as threads in the inbox.",
       "inboundAddressLabel": "Clinic inbound address",
-      "inboundAddressHint": "Example: clinica-aurora@inbox.mediflow.app",
+      "inboundAddressHint": "Example: clinica-aurora@inbox.dalecontrol.com",
       "webhookPostmark": "Webhook to configure in Postmark",
       "configured": "configured",
       "notConfigured": "not configured",

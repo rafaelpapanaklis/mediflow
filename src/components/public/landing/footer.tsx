@@ -44,17 +44,17 @@ const COLUMNS: FooterColumn[] = [
   {
     title: "Redes",
     links: [
-      { label: "Twitter", href: "https://twitter.com/mediflow" },
-      { label: "LinkedIn", href: "https://linkedin.com/company/mediflow" },
-      { label: "Instagram", href: "https://instagram.com/mediflow" },
+      { label: "Twitter", href: "https://twitter.com/dalecontrol" },
+      { label: "LinkedIn", href: "https://linkedin.com/company/dalecontrol" },
+      { label: "Instagram", href: "https://instagram.com/dalecontrol" },
     ],
   },
 ];
 
 const SOCIALS = [
-  { label: "Twitter", href: "https://twitter.com/mediflow" },
-  { label: "LinkedIn", href: "https://linkedin.com/company/mediflow" },
-  { label: "Instagram", href: "https://instagram.com/mediflow" },
+  { label: "Twitter", href: "https://twitter.com/dalecontrol" },
+  { label: "LinkedIn", href: "https://linkedin.com/company/dalecontrol" },
+  { label: "Instagram", href: "https://instagram.com/dalecontrol" },
 ];
 
 export function Footer() {

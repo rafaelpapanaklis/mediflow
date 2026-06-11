@@ -137,7 +137,7 @@ export function DrawerSignAtHome(props: DrawerSignAtHomeProps) {
               Hola {props.patientFirstName ?? "paciente"}, para iniciar tu tratamiento
               ortodóntico completa estos 4 pasos en este link seguro:{" "}
               <span className="text-violet-700 underline dark:text-violet-300">
-                mediflow.app/share/p/{tokenPreview.slice(0, 12)}…
+                dalecontrol.com/share/p/{tokenPreview.slice(0, 12)}…
               </span>
             </div>
           </div>

@@ -33,7 +33,7 @@ ${inner}
     <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.08); margin: 28px 0;" />
     <div style="font-size: 11px; color: rgba(245,245,247,0.4); line-height: 1.5;">
       Si tienes dudas, escríbenos a
-      <a href="mailto:soporte@mediflow.mx" style="color: #a78bfa;">soporte@mediflow.mx</a>.
+      <a href="mailto:soporte@dalecontrol.com" style="color: #a78bfa;">soporte@dalecontrol.com</a>.
       <br /><br />
       DaleControl — Portal del paciente 🇲🇽
     </div>

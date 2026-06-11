@@ -24,7 +24,7 @@ type EmailPayload = {
  */
 export async function sendEmail(payload: EmailPayload): Promise<{ delivered: boolean }> {
   const key = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM ?? "DaleControl <no-reply@mediflow.mx>";
+  const from = process.env.EMAIL_FROM ?? "DaleControl <no-reply@dalecontrol.com>";
 
   if (!key) {
     // Stub: log en desarrollo y en producción hasta que se configure el provider.
@@ -122,7 +122,7 @@ export async function sendWelcomeEmail(opts: {
 
     <div style="font-size: 11px; color: rgba(245,245,247,0.4); line-height: 1.5;">
       ¿Tienes dudas? Responde este correo o escríbenos a
-      <a href="mailto:soporte@mediflow.mx" style="color: #a78bfa;">soporte@mediflow.mx</a>.
+      <a href="mailto:soporte@dalecontrol.com" style="color: #a78bfa;">soporte@dalecontrol.com</a>.
       <br /><br />
       DaleControl — Software médico 🇲🇽
     </div>
@@ -140,7 +140,7 @@ export async function sendWelcomeEmail(opts: {
     `• Agenda tu primera cita con WhatsApp\n` +
     `• Configura tu RFC emisor para CFDI\n` +
     `• Invita a tu equipo\n\n` +
-    `¿Dudas? soporte@mediflow.mx\n` +
+    `¿Dudas? soporte@dalecontrol.com\n` +
     `DaleControl — Software médico MX`;
 
   await sendEmail({

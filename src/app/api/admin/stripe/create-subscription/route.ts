@@ -50,8 +50,8 @@ export async function POST(req: NextRequest) {
     mode: "subscription",
     customer: customerId,
     line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://mediflow.app"}/dashboard/billing/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url:  `${process.env.NEXT_PUBLIC_APP_URL ?? "https://mediflow.app"}/dashboard/billing/cancel`,
+    success_url: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://www.dalecontrol.com"}/dashboard/billing/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url:  `${process.env.NEXT_PUBLIC_APP_URL ?? "https://www.dalecontrol.com"}/dashboard/billing/cancel`,
     metadata: { clinicId: clinic.id, plan },
   });
 

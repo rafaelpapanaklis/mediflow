@@ -67,7 +67,7 @@ export default async function SuspendedPage() {
             {t("pages.suspended.renewPlanCta")}
           </a>
           <a
-            href="mailto:soporte@mediflow.app"
+            href="mailto:soporte@dalecontrol.com"
             className="inline-flex items-center justify-center rounded-xl border border-border bg-card px-6 py-4 text-base font-semibold text-foreground transition hover:bg-muted"
           >
             {t("pages.suspended.contactSupport")}
@@ -146,11 +146,11 @@ export default async function SuspendedPage() {
         <div className="mt-6 text-center text-sm text-muted-foreground">
           {t("pages.suspended.alreadyPaidPrefix")}{" "}
           <a
-            href="mailto:soporte@mediflow.app"
+            href="mailto:soporte@dalecontrol.com"
             className="font-semibold hover:underline"
             style={{ color: "var(--brand)" }}
           >
-            soporte@mediflow.app
+            soporte@dalecontrol.com
           </a>{" "}
           {t("pages.suspended.alreadyPaidSuffix")}
         </div>

@@ -111,10 +111,10 @@ export function AdminSettingsClient({ envStatus }: { envStatus: EnvStatus }) {
                 <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 520 }}>
                   {[
                     { label: "Nombre de la empresa", placeholder: "DaleControl", defaultValue: "DaleControl" },
-                    { label: "Email de soporte", placeholder: "soporte@mediflow.app", defaultValue: "soporte@mediflow.app" },
+                    { label: "Email de soporte", placeholder: "soporte@dalecontrol.com", defaultValue: "soporte@dalecontrol.com" },
                     { label: "WhatsApp de soporte", placeholder: "+52 999 123 4567", defaultValue: "" },
-                    { label: "Sitio web", placeholder: "https://mediflow.app", defaultValue: "https://mediflow.app" },
-                    { label: "Dominio de subdominos", placeholder: "mediflow.app", defaultValue: "mediflow.app" },
+                    { label: "Sitio web", placeholder: "https://www.dalecontrol.com", defaultValue: "https://www.dalecontrol.com" },
+                    { label: "Dominio de subdominos", placeholder: "dalecontrol.com", defaultValue: "dalecontrol.com" },
                   ].map(f => (
                     <div key={f.label} className="field-new">
                       <label className="field-new__label">{f.label}</label>
@@ -314,7 +314,7 @@ export function AdminSettingsClient({ envStatus }: { envStatus: EnvStatus }) {
                     { label: "Puerto",         placeholder: "587",                type: "number" },
                     { label: "Usuario SMTP",   placeholder: "apikey",             type: "text" },
                     { label: "Contraseña SMTP", placeholder: "SG.xxx...",         type: "password" },
-                    { label: "Email remitente", placeholder: "hola@mediflow.app", type: "email" },
+                    { label: "Email remitente", placeholder: "hola@dalecontrol.com", type: "email" },
                     { label: "Nombre remitente", placeholder: "DaleControl",         type: "text" },
                   ].map(f => (
                     <div key={f.label} className="field-new">

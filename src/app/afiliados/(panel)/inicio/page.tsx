@@ -13,7 +13,7 @@ import { ReferralLinks } from "@/components/afiliados/referral-links";
 import { getAffiliateLevelInfo } from "@/lib/affiliate-levels";
 import { LevelProgress } from "@/components/afiliados/level-progress";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://mediflow-pi.vercel.app";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com";
 
 export default async function AffiliateHomePage() {
   const ctx = await getAffiliateContext();

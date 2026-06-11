@@ -42,7 +42,7 @@ export default async function VendedorHerramientasPage() {
       </div>
 
       <SellerTools
-        siteUrl={process.env.NEXT_PUBLIC_SITE_URL ?? "https://mediflow-pi.vercel.app"}
+        siteUrl={process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com"}
         parentSlug={ctx.parentSlug}
       />
     </div>

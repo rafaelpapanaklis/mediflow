@@ -740,7 +740,7 @@ export async function POST(req: NextRequest) {
           const items = pickN(cumsAll, randInt(1, 3));
           const issuedAt = r.visitDate;
           const qrCode = `RX-DEMO-${Date.now()}-${rxIdx}-${Math.random().toString(36).slice(2, 8)}`;
-          const verifyUrl = `https://mediflow.app/portal/prescription/${qrCode}/verify`;
+          const verifyUrl = `https://www.dalecontrol.com/portal/prescription/${qrCode}/verify`;
           const primaryGroup = items[0]?.cofeprisGroup ?? null;
           const expiryDays = primaryGroup && ["I", "II", "III"].includes(primaryGroup) ? 30 : 90;
           const expiresAt = new Date(issuedAt.getTime() + expiryDays * 86400000);

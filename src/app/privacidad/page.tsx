@@ -9,8 +9,8 @@ export const metadata: Metadata = {
 
 const LAST_UPDATED = "30 de abril de 2026";
 const RESPONSIBLE_NAME = "DaleControl (operado por Rafael Papanaklis)";
-const RESPONSIBLE_ADDRESS = "México · contacto: privacidad@mediflow.app";
-const PRIVACY_EMAIL = "privacidad@mediflow.app";
+const RESPONSIBLE_ADDRESS = "México · contacto: privacidad@dalecontrol.com";
+const PRIVACY_EMAIL = "privacidad@dalecontrol.com";
 
 export default function PrivacidadPage() {
   return (

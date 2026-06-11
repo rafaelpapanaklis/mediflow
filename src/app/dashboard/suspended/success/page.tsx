@@ -89,7 +89,7 @@ export default async function SuspendedSuccessPage({ searchParams }: PageProps) 
               {t("pages.suspended.checkAgain")}
             </Link>
             <a
-              href="mailto:soporte@mediflow.app"
+              href="mailto:soporte@dalecontrol.com"
               className="inline-flex items-center justify-center rounded-xl border border-border bg-card px-6 py-3 text-base font-semibold text-foreground transition hover:bg-muted"
             >
               {t("pages.suspended.contactSupport")}

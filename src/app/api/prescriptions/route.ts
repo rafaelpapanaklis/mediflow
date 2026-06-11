@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 function buildVerifyUrl(req: NextRequest, id: string) {
   const proto = req.headers.get("x-forwarded-proto") ?? "https";
-  const host  = req.headers.get("host") ?? "mediflow.app";
+  const host  = req.headers.get("host") ?? "www.dalecontrol.com";
   return `${proto}://${host}/portal/prescription/${id}/verify`;
 }
 
