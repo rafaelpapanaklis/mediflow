@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { liveCookieName, verifyLivePassword, LIVE_UNLOCK_TTL_HOURS } from "@/lib/floor-plan/live-config";
+import { liveCookieName, verifyLivePassword, packLiveUnlockCookie, LIVE_UNLOCK_TTL_HOURS } from "@/lib/floor-plan/live-config";
 import { rateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -75,7 +75,9 @@ export async function POST(req: NextRequest, { params }: Params) {
     // (page server) como a /api/live/<slug> (fetch del cliente). El name
     // del cookie incluye el slug, así que múltiples clínicas mantienen
     // sesiones independientes.
-    res.cookies.set(liveCookieName(slug), "1", {
+    // Valor firmado (HMAC + expiración 12h atada al slug), no un "1"
+    // estático forjable. maxAge coincide con la expiración interna firmada.
+    res.cookies.set(liveCookieName(slug), packLiveUnlockCookie(slug), {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",

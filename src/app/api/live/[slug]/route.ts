@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { liveCookieName } from "@/lib/floor-plan/live-config";
+import { liveCookieName, verifyLiveUnlockCookie } from "@/lib/floor-plan/live-config";
 import { sanitizeElements, sanitizeMetadata } from "@/lib/floor-plan/sanitize";
 import { TREATMENT_KINDS } from "@/lib/agenda/types";
 
@@ -55,7 +55,9 @@ export async function GET(req: NextRequest, { params }: Params) {
     // proactivamente cookies con paths legacy.
     if (clinic.liveModePassword) {
       const cookie = cookies().get(liveCookieName(slug));
-      if (cookie?.value !== "1") {
+      // Cookie firmada (HMAC + expiración); legacy "1" o firma inválida/vencida
+      // ya no vale → 401 locked y limpia cookies de paths legacy.
+      if (!verifyLiveUnlockCookie(cookie?.value, slug)) {
         const res = NextResponse.json({ error: "locked" }, { status: 401 });
         res.cookies.set(liveCookieName(slug), "", { path: `/live/${slug}`, maxAge: 0 });
         res.cookies.set(liveCookieName(slug), "", { path: "/", maxAge: 0 });

@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import type { Metadata } from "next";
 import { AlertCircle, Building2 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { liveCookieName } from "@/lib/floor-plan/live-config";
+import { liveCookieName, verifyLiveUnlockCookie } from "@/lib/floor-plan/live-config";
 import { PasswordGate } from "./password-gate";
 import { LivePublicClient } from "./live-public-client";
 import liveStyles from "./live-public.module.css";
@@ -87,7 +87,9 @@ export default async function LivePublicPage({ params }: Props) {
   const hasPassword = Boolean(clinic.liveModePassword);
   if (hasPassword) {
     const cookie = cookies().get(liveCookieName(slug));
-    if (cookie?.value !== "1") {
+    // Cookie firmada (HMAC + expiración). Legacy "1" o firma inválida/vencida
+    // → de vuelta al gate de password, sin error feo.
+    if (!verifyLiveUnlockCookie(cookie?.value, slug)) {
       return <PasswordGate slug={slug} clinicName={clinic.name} />;
     }
   }
