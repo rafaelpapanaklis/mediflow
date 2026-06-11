@@ -8,6 +8,7 @@ import { isAffirmative, isNegative, isCancelWord } from "@/lib/whatsapp/bot/book
 import { rateLimitKey } from "@/lib/rate-limit";
 import type { BotHistoryItem } from "@/lib/whatsapp/bot/types";
 import { Prisma } from "@prisma/client";
+import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
 
 // Tope diario de respuestas del bot por clínica (proxy de gasto: cada
 // respuesta OUT del bot ≈ 1 llamada a Claude + 1 envío de WhatsApp).
@@ -176,7 +177,7 @@ export async function POST(req: NextRequest) {
           where: {
             clinicId:    clinic.id,
             appointment: { patientId: patient.id },
-            status:      "SENT",
+            status:      WA_REMINDER_STATUS.SENT,
             repliedAt:   null,
           },
           include: { appointment: true },

@@ -22,6 +22,7 @@ import {
   getEffectiveReminderSettings,
   renderReminderTemplate,
 } from "@/lib/reminders/config";
+import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
 
 export interface SweepSummary {
   clinics: number;
@@ -212,7 +213,7 @@ export async function sweepAppointmentReminders(opts?: {
                 appointmentId: appt.id,
                 type: APPT_AUTO_TYPE,
                 message,
-                status: "PENDING",
+                status: WA_REMINDER_STATUS.PENDING,
                 scheduledFor,
                 payload: {
                   kind: "APPT_AUTO",
@@ -235,7 +236,7 @@ export async function sweepAppointmentReminders(opts?: {
                 appointmentId: appt.id,
                 type: APPT_AUTO_TYPE,
                 message,
-                status: "PENDING",
+                status: WA_REMINDER_STATUS.PENDING,
                 scheduledFor,
                 payload: {
                   kind: "APPT_AUTO",

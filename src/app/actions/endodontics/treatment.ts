@@ -6,6 +6,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
 import {
   startTreatmentSchema,
   treatmentStep1Schema,
@@ -426,7 +427,7 @@ export async function completeTreatment(
           data: {
             clinicId: ctx.clinicId,
             type: "ENDO",
-            status: "PENDING",
+            status: WA_REMINDER_STATUS.PENDING,
             scheduledFor: r.scheduledFor,
             message: r.message,
             patientPhone: tx.patient?.phone ?? null,

@@ -7,6 +7,7 @@
 // gestiona por el queue-worker).
 
 import { prisma } from "@/lib/prisma";
+import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
 import {
   CLINICAL_REMINDER_TEMPLATES,
   type ClinicalReminderTemplate,
@@ -94,7 +95,7 @@ export async function processClinicalReminders(opts?: {
             patientPhone: r.patient.phone,
             message,
             type: tpl.prefix.replace(/_$/, ""),
-            status: "PENDING",
+            status: WA_REMINDER_STATUS.PENDING,
             scheduledFor: r.dueDate,
             payload: (r.payload as object | null) ?? undefined,
           },

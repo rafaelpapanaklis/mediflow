@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { WA_REMINDER_STATUS, WA_REMINDER_PENDING_STATUSES } from "@/lib/whatsapp/reminder-status";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -63,7 +64,7 @@ export async function GET(req: NextRequest) {
       where: {
         clinicId:  clinic.id,
         type:      "RECALL",
-        status:    { in: ["PENDING", "SENT"] },
+        status:    { in: [...WA_REMINDER_PENDING_STATUSES, WA_REMINDER_STATUS.SENT] },
         createdAt: { gte: dedupeCutoff },
       },
       select: { patientPhone: true },
@@ -88,7 +89,7 @@ export async function GET(req: NextRequest) {
         patientPhone: patient.phone,
         type:         "RECALL",
         message:      msg,
-        status:       "PENDING",
+        status:       WA_REMINDER_STATUS.PENDING,
         scheduledFor: now,
       });
       contacted.add(patient.phone); // evita duplicar dentro de la misma corrida

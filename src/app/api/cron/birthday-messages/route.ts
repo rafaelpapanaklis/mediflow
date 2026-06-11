@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,7 +65,7 @@ export async function GET(req: NextRequest) {
       patientPhone: p.phone,
       type:         "BIRTHDAY",
       message:      `¡Feliz cumpleaños, ${p.firstName}! 🎉\n\nTodo el equipo de *${clinic.name}* te desea un excelente día. Gracias por tu confianza. 💙`,
-      status:       "PENDING",
+      status:       WA_REMINDER_STATUS.PENDING,
       scheduledFor: now,
     }));
 

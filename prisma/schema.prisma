@@ -2128,7 +2128,7 @@ model WhatsAppReminder {
   // Null para mensajes legacy o templates sin argumentos.
   payload       Json?
   type          String                 @default("APPOINTMENT") // APPOINTMENT | RECALL | ENDO | PERIO | ORTHO | IMPLANT
-  status        WhatsAppReminderStatus @default(PENDING)
+  status        String                 @default("PENDING") // PENDING | SENT | FAILED | CANCELLED — TEXT en prod (el type Postgres nunca existió); filas legacy con 'ACTIVE' = pendiente
   sentAt        DateTime?
   errorMsg      String?
   scheduledFor  DateTime               @default(now())
@@ -2143,13 +2143,6 @@ model WhatsAppReminder {
   @@index([clinicId, status, sentAt])
   @@index([clinicId, type, createdAt])
   @@map("whatsapp_reminders")
-}
-
-enum WhatsAppReminderStatus {
-  PENDING
-  SENT
-  FAILED
-  CANCELLED
 }
 
 // ── Multi-category models ─────────────────────────────────────────────────────

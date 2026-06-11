@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -91,7 +92,7 @@ export async function GET(req: NextRequest) {
       patientPhone: plan.patient.phone,
       type:         "TREATMENT_FOLLOWUP",
       message,
-      status:       "PENDING",
+      status:       WA_REMINDER_STATUS.PENDING,
       scheduledFor: now,
     });
     claimedPlanIds.push(plan.id);

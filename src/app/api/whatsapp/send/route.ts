@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
+import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
 
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
@@ -36,12 +37,12 @@ export async function POST(req: NextRequest) {
     await sendWhatsAppMessage(clinic.waPhoneNumberId, clinic.waAccessToken, appt.patient.phone, defaultMsg);
     await prisma.appointment.update({ where: { id: appointmentId }, data: { reminderSent: true } });
     await prisma.whatsAppReminder.create({
-      data: { clinicId, appointmentId, type: "MANUAL", status: "SENT", sentAt: new Date(), scheduledFor: new Date() },
+      data: { clinicId, appointmentId, type: "MANUAL", status: WA_REMINDER_STATUS.SENT, sentAt: new Date(), scheduledFor: new Date() },
     });
     return NextResponse.json({ success: true });
   } catch (err: any) {
     await prisma.whatsAppReminder.create({
-      data: { clinicId, appointmentId, type: "MANUAL", status: "FAILED", errorMsg: err.message, scheduledFor: new Date() },
+      data: { clinicId, appointmentId, type: "MANUAL", status: WA_REMINDER_STATUS.FAILED, errorMsg: err.message, scheduledFor: new Date() },
     });
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

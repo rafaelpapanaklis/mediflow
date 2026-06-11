@@ -1,6 +1,10 @@
 // WhatsApp queue worker — A2 cross-módulos.
 //
-// Procesa WhatsAppReminder con status=PENDING y scheduledFor <= now.
+// Procesa WhatsAppReminder pendiente (status PENDING + legacy 'ACTIVE' de
+// filas viejas — la columna es TEXT en prod, ver
+// src/lib/whatsapp/reminder-status.ts) con scheduledFor <= now. Pendientes
+// con más de 7 días de atraso se expiran como CANCELLED para no disparar
+// recordatorios obsoletos en ráfaga tras un downtime de la cola.
 // Routing por canal: las filas APPT_AUTO con payload.channel === "email"
 // se envían por correo (sendEmail + buildAppointmentReminderEmail), sin
 // requerir WhatsApp conectado. El resto va por WhatsApp: detecta el
@@ -16,6 +20,10 @@ import { prisma } from "@/lib/prisma";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { sendEmail } from "@/lib/email";
 import { buildAppointmentReminderEmail } from "@/lib/reminders/email";
+import {
+  WA_REMINDER_STATUS,
+  WA_REMINDER_PENDING_STATUSES,
+} from "@/lib/whatsapp/reminder-status";
 import { ENDO_WHATSAPP_TEMPLATES } from "@/lib/endodontics/whatsapp-templates";
 import { ORTHO_WHATSAPP_TEMPLATES } from "@/lib/orthodontics/whatsapp-templates";
 import { PERIO_WHATSAPP_TEMPLATES } from "@/lib/periodontics/whatsapp-templates";
@@ -26,10 +34,14 @@ interface ProcessSummary {
   sent: number;
   failed: number;
   skipped: number;
+  expired: number;
   errors: Array<{ id: string; reason: string }>;
 }
 
 const PREFIXES = ["ENDO_", "PERIO_", "ORTHO_", "IMPLANT_"] as const;
+
+// Pendientes más viejos que esto se expiran en vez de enviarse.
+const STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 type Prefix = (typeof PREFIXES)[number];
 
 interface PatientCtx {
@@ -56,13 +68,31 @@ export async function processWhatsAppQueue(opts?: {
     sent: 0,
     failed: 0,
     skipped: 0,
+    expired: 0,
     errors: [],
   };
   const limit = opts?.batchSize ?? 50;
 
+  // Expira el backlog atascado ANTES del barrido: pendientes (incl. legacy
+  // 'ACTIVE') con scheduledFor de hace más de 7 días. Sin esto, el primer
+  // tick tras un downtime largo de la cola mandaría recordatorios obsoletos
+  // en ráfaga a pacientes.
+  const staleCutoff = new Date(Date.now() - STALE_AFTER_MS);
+  const expiredRes = await prisma.whatsAppReminder.updateMany({
+    where: {
+      status: { in: WA_REMINDER_PENDING_STATUSES },
+      scheduledFor: { lt: staleCutoff },
+    },
+    data: {
+      status: WA_REMINDER_STATUS.CANCELLED,
+      errorMsg: "Expirado: pendiente por más de 7 días (cola detenida)",
+    },
+  });
+  summary.expired = expiredRes.count;
+
   const due = await prisma.whatsAppReminder.findMany({
     where: {
-      status: "PENDING",
+      status: { in: WA_REMINDER_PENDING_STATUSES },
       scheduledFor: { lte: new Date() },
     },
     orderBy: { scheduledFor: "asc" },
@@ -101,9 +131,11 @@ export async function processWhatsAppQueue(opts?: {
   // send se marca FAILED abajo).
   const ids = due.map((r) => r.id);
   const claimStamp = new Date();
+  // El claim también NORMALIZA el legacy 'ACTIVE': de aquí solo se sale
+  // hacia SENT / FAILED / CANCELLED (valores canónicos).
   const claim = await prisma.whatsAppReminder.updateMany({
-    where: { id: { in: ids }, status: "PENDING" },
-    data: { status: "SENT", sentAt: claimStamp, errorMsg: null },
+    where: { id: { in: ids }, status: { in: WA_REMINDER_PENDING_STATUSES } },
+    data: { status: WA_REMINDER_STATUS.SENT, sentAt: claimStamp, errorMsg: null },
   });
 
   // Procesa SOLO lo reclamado: si otra corrida ganó parte del batch,
@@ -111,7 +143,7 @@ export async function processWhatsAppQueue(opts?: {
   let claimed = due;
   if (claim.count !== due.length) {
     const mine = await prisma.whatsAppReminder.findMany({
-      where: { id: { in: ids }, status: "SENT", sentAt: claimStamp },
+      where: { id: { in: ids }, status: WA_REMINDER_STATUS.SENT, sentAt: claimStamp },
       select: { id: true },
     });
     const mineIds = new Set(mine.map((m) => m.id));
@@ -127,14 +159,18 @@ export async function processWhatsAppQueue(opts?: {
       if (
         r.type === "APPT_AUTO" &&
         r.appointment &&
-        ["CANCELLED", "COMPLETED", "CHECKED_OUT", "NO_SHOW"].includes(
+        (["CANCELLED", "COMPLETED", "CHECKED_OUT", "NO_SHOW"].includes(
           (r.appointment as any).status,
-        )
+        ) ||
+          r.appointment.startsAt <= new Date())
       ) {
         await prisma.whatsAppReminder
           .update({
             where: { id: r.id },
-            data: { status: "CANCELLED", errorMsg: "Cita cancelada o cerrada antes del envío" },
+            data: {
+              status: WA_REMINDER_STATUS.CANCELLED,
+              errorMsg: "Cita cancelada, cerrada o ya iniciada antes del envío",
+            },
           })
           .catch(() => {});
         summary.skipped++;
@@ -295,7 +331,7 @@ async function markFailed(id: string, reason: string): Promise<void> {
   try {
     await prisma.whatsAppReminder.update({
       where: { id },
-      data: { status: "FAILED", errorMsg: reason },
+      data: { status: WA_REMINDER_STATUS.FAILED, errorMsg: reason },
     });
   } catch {
     /* swallow — el registro queda SENT (claim); preferible a duplicar */

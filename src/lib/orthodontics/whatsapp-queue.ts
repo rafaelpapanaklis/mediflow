@@ -15,6 +15,7 @@
 // ejecuta el encolado dos veces.
 
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
 import type { OrthoWhatsAppTemplateKey } from "./whatsapp-templates";
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -60,7 +61,7 @@ export async function enqueueOrthoWhatsApp(
     data: {
       clinicId: input.clinicId,
       type: "ORTHO",
-      status: "PENDING",
+      status: WA_REMINDER_STATUS.PENDING,
       scheduledFor: input.scheduledFor,
       message: messageKey,
       patientPhone: input.patientPhone,

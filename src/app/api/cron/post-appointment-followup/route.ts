@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,7 +75,7 @@ export async function GET(req: NextRequest) {
         patientPhone:  appt.patient.phone,
         type:          "FOLLOWUP",
         message:       `Hola ${appt.patient.firstName} 👋\n\nGracias por tu visita a *${clinic.name}*. ¿Cómo te sentiste con tu atención? Tu opinión nos ayuda a mejorar. 🙏\n\nResponde a este mensaje y con gusto te leemos.`,
-        status:        "PENDING",
+        status:        WA_REMINDER_STATUS.PENDING,
         scheduledFor:  now,
       });
       done.add(appt.id); // evita duplicar dentro de la misma corrida
