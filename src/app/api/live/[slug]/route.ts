@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { liveCookieName } from "@/lib/floor-plan/live-config";
+import { sanitizeElements, sanitizeMetadata } from "@/lib/floor-plan/sanitize";
 import { TREATMENT_KINDS } from "@/lib/agenda/types";
 
 export const dynamic = "force-dynamic";
@@ -213,8 +214,11 @@ export async function GET(req: NextRequest, { params }: Params) {
         showPatientNames: showFull,
       },
       layout: {
-        elements: (layout?.elements ?? []) as unknown,
-        metadata: layout?.metadata ?? null,
+        // Saneado server-side: el JSON persistido pudo guardarse con schema
+        // viejo. Garantizamos un array de elementos bien formados + metadata
+        // con defaults, para que el cliente nunca reciba algo que reviente.
+        elements: sanitizeElements(layout?.elements),
+        metadata: sanitizeMetadata(layout?.metadata),
       },
       chairs,
       appointments: liveAppointments,

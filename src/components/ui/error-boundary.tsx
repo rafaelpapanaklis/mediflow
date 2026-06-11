@@ -6,6 +6,12 @@ import { AlertTriangle, RefreshCw } from "lucide-react";
 interface Props {
   children: React.ReactNode;
   fallbackTitle?: string;
+  /**
+   * Si se provee, reemplaza el fallback default. Recibe `reset` para limpiar
+   * el estado de error y reintentar el render del subárbol sin recargar la
+   * página (útil para vistas con su propio estilo, ej. /live/[slug]).
+   */
+  fallbackRender?: (args: { error: Error | null; reset: () => void }) => React.ReactNode;
 }
 
 interface State {
@@ -27,8 +33,15 @@ export class ErrorBoundary extends React.Component<Props, State> {
     console.error("[ErrorBoundary]", error, info.componentStack);
   }
 
+  reset = () => {
+    this.setState({ hasError: false, error: null });
+  };
+
   render() {
     if (this.state.hasError) {
+      if (this.props.fallbackRender) {
+        return this.props.fallbackRender({ error: this.state.error, reset: this.reset });
+      }
       return (
         <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-border bg-card p-8 text-center">
           <AlertTriangle className="h-10 w-10 text-destructive" />

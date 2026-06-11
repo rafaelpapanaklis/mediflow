@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TREATMENT_KINDS } from "@/lib/agenda/types";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { ClinicLayoutClient } from "./layout-client";
 
 export const metadata: Metadata = { title: "Mi Clínica Visual — DaleControl" };
@@ -39,28 +40,33 @@ export default async function ClinicLayoutPage() {
       }),
     ]);
 
+    // Doble red de seguridad: el try/catch atrapa fallos de carga server-side;
+    // el ErrorBoundary atrapa crashes de render client-side del editor (datos
+    // de layout legacy/malformados). Complementario al saneo en layout-client.
     return (
-      <ClinicLayoutClient
-        clinic={{
-          id: clinic?.id ?? "",
-          name: clinic?.name ?? "",
-          category: clinic?.category ?? "DENTAL",
-          liveModeSlug: clinic?.liveModeSlug ?? null,
-          liveModeEnabled: clinic?.liveModeEnabled ?? false,
-          liveModeShowPatientNames: clinic?.liveModeShowPatientNames ?? false,
-        }}
-        initialElements={(layout?.elements ?? []) as unknown as Array<{
-          id: number;
-          type: string;
-          col: number;
-          row: number;
-          rotation: 0 | 90 | 180 | 270;
-          resourceId?: string | null;
-          name?: string | null;
-        }>}
-        initialMetadata={(layout?.metadata ?? null) as unknown as { zoom?: number; panOffset?: { x: number; y: number } } | null}
-        chairs={chairs.map((c) => ({ ...c, color: c.color ?? null }))}
-      />
+      <ErrorBoundary fallbackTitle="No se pudo cargar el editor de plano">
+        <ClinicLayoutClient
+          clinic={{
+            id: clinic?.id ?? "",
+            name: clinic?.name ?? "",
+            category: clinic?.category ?? "DENTAL",
+            liveModeSlug: clinic?.liveModeSlug ?? null,
+            liveModeEnabled: clinic?.liveModeEnabled ?? false,
+            liveModeShowPatientNames: clinic?.liveModeShowPatientNames ?? false,
+          }}
+          initialElements={(layout?.elements ?? []) as unknown as Array<{
+            id: number;
+            type: string;
+            col: number;
+            row: number;
+            rotation: 0 | 90 | 180 | 270;
+            resourceId?: string | null;
+            name?: string | null;
+          }>}
+          initialMetadata={(layout?.metadata ?? null) as unknown as { zoom?: number; panOffset?: { x: number; y: number } } | null}
+          chairs={chairs.map((c) => ({ ...c, color: c.color ?? null }))}
+        />
+      </ErrorBoundary>
     );
   } catch (err) {
     console.error("[/dashboard/clinic-layout]", err);

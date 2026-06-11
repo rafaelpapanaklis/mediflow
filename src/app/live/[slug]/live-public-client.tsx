@@ -28,6 +28,8 @@ import {
   type HoverData,
 } from "../../dashboard/clinic-layout/components/live-mode";
 import { WaitingRoom, type WaitingRoomEntry } from "../../dashboard/clinic-layout/components/waiting-room";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { sanitizeElements, sanitizeMetadata, sanitizeChairs } from "@/lib/floor-plan/sanitize";
 import liveStyles from "./live-public.module.css";
 
 interface Chair {
@@ -59,6 +61,68 @@ interface ApiResponse {
 
 const ORIG_X = 680;
 const ORIG_Y = 260;
+
+/**
+ * Normaliza la respuesta cruda del endpoint a una forma 100% segura para
+ * renderizar. El layout pudo guardarse hace semanas con un schema viejo; en
+ * vez de confiar en el JSON, saneamos cada campo y descartamos lo malformado.
+ * Así el render nunca recibe un `elements` no-array, un sillón sin id, ni una
+ * cita sin fechas — y el plano se dibuja con lo que haya en lugar de tronar.
+ */
+function sanitizeLiveData(raw: unknown): ApiResponse {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const clinicRaw = (r.clinic && typeof r.clinic === "object" ? r.clinic : {}) as Record<string, unknown>;
+  const layoutRaw = (r.layout && typeof r.layout === "object" ? r.layout : {}) as Record<string, unknown>;
+  const str = (v: unknown, fallback = ""): string => (typeof v === "string" ? v : fallback);
+
+  const appointments: ApiResponse["appointments"] = Array.isArray(r.appointments)
+    ? r.appointments
+        .filter((a): a is Record<string, unknown> => !!a && typeof a === "object")
+        .filter((a) => typeof a.id === "string" && typeof a.resourceId === "string")
+        .map((a) => ({
+          id: a.id as string,
+          resourceId: a.resourceId as string,
+          patient: str(a.patient, "Paciente"),
+          patientFull: typeof a.patientFull === "string" ? a.patientFull : undefined,
+          treatment: str(a.treatment, "Consulta"),
+          doctor: str(a.doctor, "—"),
+          start: str(a.start),
+          end: str(a.end),
+          status: typeof a.status === "string" ? a.status : undefined,
+        }))
+    : [];
+
+  const waitingRoom: WaitingRoomEntry[] = Array.isArray(r.waitingRoom)
+    ? r.waitingRoom
+        .filter((w): w is Record<string, unknown> => !!w && typeof w === "object")
+        .filter((w) => typeof w.id === "string")
+        .map((w) => ({
+          id: w.id as string,
+          patient: str(w.patient, "Paciente"),
+          treatment: str(w.treatment, "Consulta"),
+          doctor: str(w.doctor, "—"),
+          checkedInAt: typeof w.checkedInAt === "string" ? w.checkedInAt : null,
+          scheduledAt: str(w.scheduledAt),
+        }))
+    : [];
+
+  return {
+    clinic: {
+      id: str(clinicRaw.id),
+      name: str(clinicRaw.name),
+      logoUrl: typeof clinicRaw.logoUrl === "string" ? clinicRaw.logoUrl : null,
+      city: typeof clinicRaw.city === "string" ? clinicRaw.city : null,
+      showPatientNames: clinicRaw.showPatientNames === true,
+    },
+    layout: {
+      elements: sanitizeElements(layoutRaw.elements),
+      metadata: sanitizeMetadata(layoutRaw.metadata),
+    },
+    chairs: sanitizeChairs(r.chairs),
+    appointments,
+    waitingRoom,
+  };
+}
 
 export function LivePublicClient({
   slug,
@@ -206,7 +270,9 @@ export function LivePublicClient({
           if (!cancelled) setError({ kind, hint });
           return;
         }
-        const json = (await res.json()) as ApiResponse;
+        // Saneo defensivo: nunca confiamos en la forma cruda del JSON.
+        // sanitizeLiveData devuelve siempre arrays/objetos bien formados.
+        const json = sanitizeLiveData(await res.json());
         if (!cancelled) {
           setData(json);
           setError(null);
@@ -405,7 +471,7 @@ export function LivePublicClient({
 
   const appointments: LiveAppointment[] = useMemo(() => {
     if (!data) return [];
-    return data.appointments.map((a) => ({
+    return (data.appointments ?? []).map((a) => ({
       id: a.id,
       resourceId: a.resourceId,
       patient: a.patient,
@@ -465,7 +531,7 @@ export function LivePublicClient({
   }
   // Caso especial: clínica válida + endpoint OK pero sin layout/sillones.
   // Mostramos UI de "configura tu layout primero" en lugar de canvas vacío.
-  if ((data.layout?.elements?.length ?? 0) === 0 && data.chairs.length === 0) {
+  if ((data.layout?.elements?.length ?? 0) === 0 && (data.chairs?.length ?? 0) === 0) {
     return (
       <div className={liveStyles.errorWrap}>
         <div className={liveStyles.errorCard}>
@@ -493,7 +559,32 @@ export function LivePublicClient({
   const oy = ORIG_Y;
 
   return (
-    <div ref={containerRef} className={liveStyles.live}>
+    <ErrorBoundary
+      fallbackRender={({ reset }) => (
+        <div className={liveStyles.errorWrap}>
+          <div className={liveStyles.errorCard}>
+            <AlertCircle size={32} aria-hidden style={{ color: "#EF4444" }} />
+            <h1>No se pudo dibujar el plano</h1>
+            <p>
+              Hubo un problema al renderizar el layout de {clinicName}. Reintenta;
+              si persiste, el administrador puede reabrir el editor y volver a
+              guardar el plano.
+            </p>
+            <button
+              type="button"
+              className={liveStyles.errorBtn}
+              onClick={() => {
+                reset();
+                window.location.reload();
+              }}
+            >
+              Reintentar
+            </button>
+          </div>
+        </div>
+      )}
+    >
+      <div ref={containerRef} className={liveStyles.live}>
       <header className={liveStyles.header}>
         <div className={liveStyles.headerLeft}>
           {logoUrl ? (
@@ -695,7 +786,8 @@ export function LivePublicClient({
       </footer>
 
       <LiveTooltip data={hover} />
-    </div>
+      </div>
+    </ErrorBoundary>
   );
 }
 

@@ -32,6 +32,7 @@ import { toScreen, fromScreen, C as ISO_C } from "@/lib/floor-plan/iso";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { getCatalogForClinic } from "@/lib/floor-plan/elements";
 import { OPENABLE_TYPES } from "@/lib/floor-plan/element-types";
+import { sanitizeElements, sanitizeMetadata } from "@/lib/floor-plan/sanitize";
 import type {
   ElementType,
   LayoutElement,
@@ -99,12 +100,18 @@ export function ClinicLayoutClient({
   const askConfirm = useConfirm();
   const catalog = useMemo(() => getCatalogForClinic(clinic.category), [clinic.category]);
 
-  const [elements, setElements] = useState<LayoutElement[]>(initialElements);
+  // Saneamos el JSON persistido ANTES de sembrar el estado. El layout pudo
+  // guardarse con un schema viejo (elements no-array, entradas sin col/row);
+  // sin esto el editor crashea igual que la vista pública /live/[slug].
+  const safeInitialElements = useMemo(() => sanitizeElements(initialElements), [initialElements]);
+  const safeInitialMetadata = useMemo(() => sanitizeMetadata(initialMetadata), [initialMetadata]);
+
+  const [elements, setElements] = useState<LayoutElement[]>(safeInitialElements);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [history, setHistory] = useState<LayoutElement[][]>([initialElements]);
-  const [zoom, setZoom] = useState(initialMetadata?.zoom ?? 1);
+  const [history, setHistory] = useState<LayoutElement[][]>([safeInitialElements]);
+  const [zoom, setZoom] = useState(safeInitialMetadata.zoom ?? 1);
   const [panOffset, setPanOffset] = useState(
-    initialMetadata?.panOffset ?? { x: 0, y: 0 },
+    safeInitialMetadata.panOffset ?? { x: 0, y: 0 },
   );
   const [panMode, setPanMode] = useState(false);
   const [dragType, setDragType] = useState<string | null>(null);
@@ -145,7 +152,7 @@ export function ClinicLayoutClient({
     showPatientNames: clinic.liveModeShowPatientNames,
     hasPassword: false, // detectado al abrir share panel via PATCH response
   });
-  const [welcomeDismissed, setWelcomeDismissed] = useState(initialElements.length > 0);
+  const [welcomeDismissed, setWelcomeDismissed] = useState(safeInitialElements.length > 0);
   const [chairsState, setChairsState] = useState<Chair[]>(chairs);
   // En todo el render usamos `liveChairs` como source of truth (puede crecer
   // tras seed-demo o creación al drag). El prop original `chairs` queda
@@ -153,7 +160,7 @@ export function ClinicLayoutClient({
   const liveChairs = chairsState;
 
   const nextIdRef = useRef<number>(
-    Math.max(0, ...initialElements.map((e) => e.id)) + 1,
+    Math.max(0, ...safeInitialElements.map((e) => e.id)) + 1,
   );
   const svgRef = useRef<SVGSVGElement>(null);
   const panStartRef = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
@@ -1011,7 +1018,7 @@ export function ClinicLayoutClient({
         <div className={styles.welcomeWrap}>
           <WelcomePrompt
             onLoaded={(data) => {
-              const els = data.elements as LayoutElement[];
+              const els = sanitizeElements(data.elements);
               setElements(els);
               setHistory([els]);
               if (data.chairs.length > 0) setChairsState(data.chairs);

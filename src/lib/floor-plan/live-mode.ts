@@ -102,13 +102,21 @@ export function getNextChairAppointment(
   return best;
 }
 
-/** Formatea HH:MM (24h). */
+/** true si `d` es un Date renderizable (no Invalid Date). */
+function isValidDate(d: unknown): d is Date {
+  return d instanceof Date && !Number.isNaN(d.getTime());
+}
+
+/** Formatea HH:MM (24h). Tolera fechas inválidas: `Intl…format(Invalid Date)`
+ *  lanza RangeError, lo que crasheaba el render con datos legacy. */
 export function fmtHM(d: Date): string {
+  if (!isValidDate(d)) return "—";
   return new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
 }
 
-/** Formatea HH:MM:SS (24h, tabular). */
+/** Formatea HH:MM:SS (24h, tabular). Tolera fechas inválidas. */
 export function fmtHMS(d: Date): string {
+  if (!isValidDate(d)) return "--:--:--";
   const h = d.getHours().toString().padStart(2, "0");
   const m = d.getMinutes().toString().padStart(2, "0");
   const s = d.getSeconds().toString().padStart(2, "0");
