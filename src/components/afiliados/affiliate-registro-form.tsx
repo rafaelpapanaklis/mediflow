@@ -216,7 +216,7 @@ export function AffiliateRegistroForm() {
             style={selectStyle}
           >
             {PAYOUT_METHODS.map(m => (
-              <option key={m.value || "none"} value={m.value}>
+              <option key={m.value || "none"} value={m.value} style={{ backgroundColor: "#18181b", color: "#f4f4f5" }}>
                 {m.label}
               </option>
             ))}

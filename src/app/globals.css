@@ -287,6 +287,14 @@
     box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.18);
   }
 
+  /* El popup de <option> lo pinta el SO con fondo claro; sin esto, las
+     opciones heredan texto claro del panel oscuro y quedan blanco-sobre-blanco. */
+  select.input-new option,
+  select.input option {
+    background-color: #18181b;
+    color: #f4f4f5;
+  }
+
   .btn-new:focus-visible {
     outline: 2px solid var(--brand);
     outline-offset: 3px;

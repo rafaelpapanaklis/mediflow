@@ -87,7 +87,7 @@ export function SellerPayoutForm({
             <label style={labelStyle}>Método de pago</label>
             <select value={method} onChange={(e) => setMethod(e.target.value)} style={fieldStyle}>
               {PAYOUT_METHODS.map((m) => (
-                <option key={m.value || "none"} value={m.value}>
+                <option key={m.value || "none"} value={m.value} style={{ backgroundColor: "#18181b", color: "#f4f4f5" }}>
                   {m.label}
                 </option>
               ))}
