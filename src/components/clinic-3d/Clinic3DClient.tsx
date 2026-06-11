@@ -24,8 +24,10 @@ import {
   getPalette,
   colorFromName,
   isNightHour,
+  agendaNewApptUrl,
   type Chair3DState,
   type Clinic3DStatePayload,
+  type WaitingPatient,
   type LayoutElement,
   type LayoutMetadata,
   type MinimapFrame,
@@ -43,6 +45,8 @@ import { createRemoteAvatars } from "./remote-avatars";
 import { createHand } from "./fps-hand";
 import { createInteraction } from "./interaction";
 import { createDoors } from "./doors";
+import { createWaitingLayer } from "./waiting-layer";
+import { createProgressBars } from "./progress-bars";
 import { Clinic3DHud, type Hud3DPhase } from "./Clinic3DHud";
 import { adaptPublicLiveChairs } from "./public-live-adapter";
 
@@ -102,6 +106,8 @@ export function Clinic3DClient({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isTouch, setIsTouch] = useState(false);
   const [counts, setCounts] = useState({ occupied: 0, free: world.chairs.length, total: world.chairs.length });
+  // V3 — sala de espera viva
+  const [waitingCount, setWaitingCount] = useState(0);
   // V2 — HUD nuevo
   const [userCount, setUserCount] = useState(1);
   const [mpEnabled, setMpEnabled] = useState(false);
@@ -136,6 +142,8 @@ export function Clinic3DClient({
     let renderer: THREE.WebGLRenderer | null = null;
     let scene: THREE.Scene | null = null;
     let liveLayer: ReturnType<typeof createLiveLayer> | null = null;
+    let waitingLayer: ReturnType<typeof createWaitingLayer> | null = null;
+    let progressBars: ReturnType<typeof createProgressBars> | null = null;
     let desktop: ReturnType<typeof createDesktopControls> | null = null;
     let touchCtl: ReturnType<typeof createTouchControls> | null = null;
     let multiplayer: ReturnType<typeof createMultiplayer> | null = null;
@@ -208,6 +216,11 @@ export function Clinic3DClient({
       scene.add(buildFurniture(world));
       liveLayer = createLiveLayer(world);
       scene.add(liveLayer.group);
+      // V3 — sala de espera viva (avatares sentados + walkers) y barras de progreso.
+      waitingLayer = createWaitingLayer(world);
+      scene.add(waitingLayer.group);
+      progressBars = createProgressBars(world);
+      scene.add(progressBars.group);
 
       // ── V2: puertas animadas + avatares remotos ───────────────────────────
       doors = createDoors(world);
@@ -239,14 +252,20 @@ export function Clinic3DClient({
       }
 
       // ── V2: interacción (raycast → expediente del paciente) ───────────────
-      // En MODO PÚBLICO NO se cablea: cero raycast a avatares, cero expedientes.
-      // (El adapter público nunca trae patientId — getInteractables ya quedaría
-      // vacío — pero ni siquiera lo creamos: defensa en profundidad.)
+      // En MODO PÚBLICO NO se cablea: cero raycast a avatares, cero expedientes,
+      // cero agendar (el adapter público nunca trae patientId y los sillones
+      // vacíos no deben abrir la agenda para un visitante). Defensa en profundidad.
+      // En dashboard: interacción completa (ocupado→expediente, vacío→agendar).
       interaction = isPublic
         ? null
         : createInteraction({
             camera,
             getInteractables: () => (liveLayer as any)?.getInteractables?.() ?? [],
+            // V3 — sillones VACÍOS como targets de agendar; click → agenda en pestaña nueva.
+            getScheduleTargets: () => (liveLayer as any)?.getScheduleTargets?.() ?? [],
+            onSchedule: (resourceId: string) => {
+              window.open(agendaNewApptUrl(resourceId), "_blank", "noopener");
+            },
           });
 
       // ── Estado vivo: polling (chairs) + bootstrap multijugador ────────────
@@ -255,9 +274,18 @@ export function Clinic3DClient({
         chairStatus.clear();
         for (const c of chairs) chairStatus.set(c.resourceId, c);
         liveLayer?.update(chairStatus);
+        progressBars?.setStates(chairStatus);
         let occ = 0;
         for (const a of world.chairs) if (chairStatus.get(a.resourceId)?.status === "ocupado") occ++;
         setCounts({ occupied: occ, free: world.chairs.length - occ, total: world.chairs.length });
+      };
+
+      // V3 — sala de espera: aplica el set de pacientes en espera (CHECKED_IN) y
+      // detecta llamados. chairStatus ya está fresco (applyStates corre antes).
+      const applyWaiting = (waiting: WaitingPatient[]) => {
+        const list = Array.isArray(waiting) ? waiting : [];
+        waitingLayer?.setWaiting(list, chairStatus);
+        if (!disposed) setWaitingCount(list.length);
       };
 
       let mpStarted = false;
@@ -315,6 +343,9 @@ export function Clinic3DClient({
             ? adaptPublicLiveChairs(raw)
             : (raw as Clinic3DStatePayload).chairs;
           if (!disposed && Array.isArray(chairs)) applyStates(chairs);
+          // V3 — sala de espera viva: SOLO en dashboard (el payload privado trae
+          // waiting[] con nombres; el endpoint público no lo expone en esta forma).
+          if (!disposed && !isPublic) applyWaiting((raw as Clinic3DStatePayload).waiting ?? []);
           // Multijugador SOLO en el dashboard (canal privado de la clínica).
           // En público, jamás presencia ni broadcast.
           if (!disposed && !isPublic) startMultiplayer(raw as Clinic3DStatePayload);
@@ -409,6 +440,10 @@ export function Clinic3DClient({
         hand?.update(dt, { moving, speed });
         doors?.update(camera.position.x, camera.position.z, dt);
         remoteAvatars?.update(dt);
+        // V3 — walkers de la sala de espera + barras de progreso (reloj real para
+        // comparar con start/end de la cita; el loop ya pausa en pestaña oculta).
+        waitingLayer?.update(dt);
+        progressBars?.update(Date.now(), camera);
 
         // interacción: highlight + tooltip/crosshair (refleja al HUD solo si cambia)
         interaction?.update();
@@ -526,6 +561,8 @@ export function Clinic3DClient({
       desktop?.dispose();
       touchCtl?.dispose();
       liveLayer?.dispose();
+      waitingLayer?.dispose();
+      progressBars?.dispose();
       scene?.traverse((o) => {
         const m = o as THREE.Mesh;
         if (m.geometry) m.geometry.dispose();
@@ -574,6 +611,7 @@ export function Clinic3DClient({
         occupied={counts.occupied}
         free={counts.free}
         total={counts.total}
+        waitingCount={waitingCount}
         isTouch={isTouch}
         isLocked={isLocked}
         isFullscreen={isFullscreen}

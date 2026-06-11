@@ -188,6 +188,8 @@ export interface Chair3DState {
   /** ID del paciente de la cita activa (v2: click→expediente). Solo si ocupado. */
   patientId?: string | null;
   appointmentEndsAt?: string | null; // ISO
+  /** v3 — Inicio de la cita activa (para la barra de progreso). Solo si ocupado. */
+  appointmentStartsAt?: string | null; // ISO
 }
 
 export interface Clinic3DStatePayload {
@@ -199,6 +201,8 @@ export interface Clinic3DStatePayload {
   viewer?: { name: string; role: string };
   /** v2 — Nombre de canal Realtime por clínica = `c3d:<hmac>`. null = sin multijugador. */
   presenceChannel?: string | null;
+  /** v3 — Pacientes en sala de espera (citas CHECKED_IN), en orden de llegada. */
+  waiting?: WaitingPatient[];
 }
 
 // ── Paleta por categoría de clínica (tonos claros tipo clínica real) ─────────
@@ -321,4 +325,56 @@ export function colorFromName(name: string): string {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
   return hslToHex(h % 360, 62, 56);
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// V3 — INTERACCIÓN: sala de espera viva + llamado animado, barras de progreso,
+// click en sillón vacío → agendar. Contrato compartido (sin three). Lo consumen
+// waiting-layer, pathfinding, progress-bars, interaction, live-layer, el HUD, el
+// orquestador y la API /api/clinic-layout/3d-state.
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ── Sala de espera viva ──────────────────────────────────────────────────────
+/** Plazas por tipo de mueble de espera (keys REALES del catálogo dental). */
+export const WAITING_SEAT_CAPACITY: Record<string, number> = {
+  silla_espera: 1, // 1×1, una plaza
+  banca: 3,        // 3×1, "Banca 3P"
+};
+/** Nº de plazas de un tipo de mueble (0 si no es mueble de espera). */
+export function seatCapacityFor(type: string): number {
+  return WAITING_SEAT_CAPACITY[type] ?? 0;
+}
+/** ¿El tipo es mobiliario de sala de espera (tiene plazas)? */
+export function isWaitingSeatType(type: string): boolean {
+  return seatCapacityFor(type) > 0;
+}
+
+/** Un paciente en sala de espera (cita CHECKED_IN) — entrada del payload de la API. */
+export interface WaitingPatient {
+  appointmentId: string;
+  patientName: string;
+  /** resourceId del sillón destino si la cita lo tiene; null si aún no asignado. */
+  resourceId: string | null;
+}
+
+// ── Llamado animado (el paciente se levanta y camina del asiento al sillón) ───
+export const AVATAR_WALK_SPEED = 1.2;    // m/s del paciente caminando
+export const WALKER_FADE_MS = 400;       // ms de fade-in/out del walker
+export const WALKER_ARRIVE_DIST = 0.4;   // m: umbral de "llegó" al destino
+export const WALK_BOB_HZ = 1.9;          // ciclos/s del balanceo de piernas/brazos
+
+// ── Barras de progreso sobre sillones ocupados ───────────────────────────────
+export const PROGRESS_BAR_WIDTH = 1.2;   // m de ancho del billboard (discreto)
+export const PROGRESS_BAR_HEIGHT = 0.14; // m de alto de la barra
+export const PROGRESS_BAR_Y = 2.5;       // alto flotante (sobre la placa a 2.1 m)
+export const PROGRESS_OVERTIME_HZ = 1.2; // pulsos/s cuando se pasó del fin
+export const PROGRESS_FILL = "#38bdf8";       // sky-400: avance normal
+export const PROGRESS_FILL_NEAR = "#f59e0b";  // ámbar: >80% del tiempo
+export const PROGRESS_FILL_OVER = "#ef4444";  // rojo: sobretiempo (pulsa)
+
+// ── Agendar (click en sillón vacío → modal de nueva cita preseleccionado) ────
+export const AGENDA_PATH = "/dashboard/appointments";
+/** URL de la agenda con el modal de nueva cita abierto y el sillón preseleccionado. */
+export function agendaNewApptUrl(resourceId: string): string {
+  return `${AGENDA_PATH}?new=1&resourceId=${encodeURIComponent(resourceId)}`;
 }

@@ -72,7 +72,7 @@ import { TREATMENT_KINDS } from "@/lib/agenda/types";
 import { getChairStatus, getChairAppointment } from "@/lib/floor-plan/live-mode";
 import { sanitizeElements, sanitizeMetadata } from "@/lib/floor-plan/sanitize";
 import { isChairType } from "@/components/clinic-3d/world-types";
-import type { Chair3DState, Clinic3DStatePayload } from "@/components/clinic-3d/world-types";
+import type { Chair3DState, Clinic3DStatePayload, WaitingPatient } from "@/components/clinic-3d/world-types";
 import type { LiveAppointment, LiveApptStatus } from "@/lib/floor-plan/element-types";
 
 export const dynamic = "force-dynamic";
@@ -141,6 +141,7 @@ export async function GET() {
           resourceId: true,
           startsAt: true,
           endsAt: true,
+          checkedInAt: true,
           status: true,
           type: true,
           patient: { select: { id: true, firstName: true, lastName: true } },
@@ -188,6 +189,7 @@ export async function GET() {
         patientName: occupied ? active?.patient ?? null : null,
         doctorName: occupied ? active?.doctor ?? null : null,
         patientId: occupied ? active?.patientId ?? null : null,
+        appointmentStartsAt: occupied && active ? active.start.toISOString() : null,
         appointmentEndsAt: occupied && active ? active.end.toISOString() : null,
       };
     });
@@ -210,6 +212,25 @@ export async function GET() {
       .slice(0, 16);
     const presenceChannel = `c3d:${hmac}`;
 
+    // v3 — Sala de espera VIVA: citas CHECKED_IN, ordenadas por llegada
+    // (checkedInAt, con fallback a startsAt). Panel privado del dueño → nombres
+    // completos sin enmascarar. Derivado de las MISMAS rows ya traídas en
+    // `appts` (no añade queries; Promise.all sigue en 4).
+    const waiting: WaitingPatient[] = appts
+      .filter((a) => a.status === "CHECKED_IN")
+      .sort(
+        (a, b) =>
+          (a.checkedInAt?.getTime() ?? a.startsAt.getTime()) -
+          (b.checkedInAt?.getTime() ?? b.startsAt.getTime()),
+      )
+      .map((a) => ({
+        appointmentId: a.id,
+        patientName:
+          `${a.patient?.firstName ?? ""} ${a.patient?.lastName ?? ""}`.trim() ||
+          "Paciente",
+        resourceId: a.resourceId ?? null,
+      }));
+
     const payload: Clinic3DStatePayload = {
       clinicName: clinic?.name ?? "Mi clínica",
       category: clinic?.category ?? "DENTAL",
@@ -220,6 +241,7 @@ export async function GET() {
       chairs: chairStates,
       viewer,
       presenceChannel,
+      waiting,
     };
     return NextResponse.json(payload, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {

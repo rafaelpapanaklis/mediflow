@@ -64,11 +64,26 @@ export interface InteractionSystem {
 export interface InteractionOpts {
   camera: THREE.Camera;
   getInteractables: () => THREE.Object3D[];
+  /** v3 — Cajas-hit de sillones VACÍOS (raycast "agendar"). Opcional. */
+  getScheduleTargets?: () => THREE.Object3D[];
+  /** v3 — Callback al interactuar con un sillón vacío. El orquestador enruta. */
+  onSchedule?: (resourceId: string, name: string) => void;
 }
 
 // ── Highlight (emissive boost cálido; guarda/restaura el original por Mesh) ───
 const HIGHLIGHT_COLOR = new THREE.Color("#ffb347"); // tono cálido
 const HIGHLIGHT_INTENSITY = 0.55;
+// Opacidad de la caja-hit "agendar" cuando se apunta (MeshBasic, sin emissive).
+const SCHEDULE_HIGHLIGHT_OPACITY = 0.2;
+
+/** Tipo de target apuntado: expediente (avatar) o agendar (sillón vacío). */
+type TargetKind = "record" | "schedule" | null;
+
+/** Resultado de un pick: el nodo resuelto y su clase. */
+interface PickResult {
+  node: THREE.Object3D | null;
+  kind: TargetKind;
+}
 
 /** Snapshot del emissive original de un material para poder restaurarlo. */
 interface EmissiveSnapshot {
@@ -83,9 +98,12 @@ export function createInteraction(opts: InteractionOpts): InteractionSystem {
   const pointNdc = new THREE.Vector2();
 
   let target: THREE.Object3D | null = null;
+  let targetKind: TargetKind = null;
   let tooltip: string | null = null;
   let targeting = false;
   let highlighted: EmissiveSnapshot[] = [];
+  // Snapshot de la opacidad original de la caja-hit "agendar" resaltada (si la hay).
+  let scheduleBoxSnap: { mat: THREE.MeshBasicMaterial; opacity: number } | null = null;
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -99,17 +117,40 @@ export function createInteraction(opts: InteractionOpts): InteractionSystem {
     return null;
   }
 
-  /** Resuelve el primer hit válido (≤ INTERACT_RANGE y con ancestro paciente). */
-  function pick(ndc: THREE.Vector2): THREE.Object3D | null {
+  /** Sube por la jerarquía buscando el primer ancestro con userData.scheduleHit + resourceId. */
+  function findScheduleAncestor(o: THREE.Object3D | null): THREE.Object3D | null {
+    let cur: THREE.Object3D | null = o;
+    while (cur) {
+      if (cur.userData && cur.userData.scheduleHit && cur.userData.resourceId) return cur;
+      cur = cur.parent;
+    }
+    return null;
+  }
+
+  /**
+   * Resuelve el primer hit válido (≤ INTERACT_RANGE). Raycast ÚNICO sobre los
+   * candidatos de expediente Y de agendar combinados; el más cercano gana.
+   * Clasifica: ancestro con patientId → "record"; si no, ancestro con
+   * scheduleHit+resourceId → "schedule".
+   */
+  function pick(ndc: THREE.Vector2): PickResult {
     raycaster.setFromCamera(ndc, opts.camera);
-    const hits = raycaster.intersectObjects(opts.getInteractables(), true);
+    const records = opts.getInteractables() ?? [];
+    const schedules = opts.getScheduleTargets?.() ?? [];
+    const candidates: THREE.Object3D[] = [];
+    for (let i = 0; i < records.length; i++) if (records[i]) candidates.push(records[i]);
+    for (let i = 0; i < schedules.length; i++) if (schedules[i]) candidates.push(schedules[i]);
+    if (candidates.length === 0) return { node: null, kind: null };
+    const hits = raycaster.intersectObjects(candidates, true);
     for (let i = 0; i < hits.length; i++) {
       const h = hits[i];
       if (h.distance > INTERACT_RANGE) continue; // los hits vienen ordenados por distancia
-      const anc = findPatientAncestor(h.object);
-      if (anc) return anc;
+      const rec = findPatientAncestor(h.object);
+      if (rec) return { node: rec, kind: "record" };
+      const sch = findScheduleAncestor(h.object);
+      if (sch) return { node: sch, kind: "schedule" };
     }
-    return null;
+    return { node: null, kind: null };
   }
 
   /** Abre el expediente del paciente en una pestaña nueva (sin navegar la actual). */
@@ -119,15 +160,30 @@ export function createInteraction(opts: InteractionOpts): InteractionSystem {
     window.open(`/dashboard/patients/${pid}`, "_blank", "noopener");
   }
 
+  /** Dispara el callback "agendar" del nodo (caja-hit). El orquestador enruta. */
+  function fireSchedule(node: THREE.Object3D | null): void {
+    const rid = node?.userData?.resourceId;
+    if (!rid) return;
+    const name = (node?.userData?.name as string) || "";
+    opts.onSchedule?.(String(rid), name);
+  }
+
   function clearHighlight(): void {
+    // Expediente: restaurar emissive de cada material.
     for (let i = 0; i < highlighted.length; i++) {
       const s = highlighted[i];
       s.mat.emissive.setHex(s.color);
       s.mat.emissiveIntensity = s.intensity;
     }
     highlighted = [];
+    // Agendar: restaurar opacidad de la caja-hit.
+    if (scheduleBoxSnap) {
+      scheduleBoxSnap.mat.opacity = scheduleBoxSnap.opacity;
+      scheduleBoxSnap = null;
+    }
   }
 
+  /** Resalta un avatar de expediente (emissive boost; NO sirve para MeshBasic). */
   function applyHighlight(node: THREE.Object3D): void {
     const snaps: EmissiveSnapshot[] = [];
     node.traverse((o) => {
@@ -145,11 +201,24 @@ export function createInteraction(opts: InteractionOpts): InteractionSystem {
     highlighted = snaps;
   }
 
-  function setTarget(next: THREE.Object3D | null): void {
+  /** Resalta la caja-hit "agendar" subiendo su opacidad (MeshBasic, sin emissive). */
+  function applyScheduleHighlight(node: THREE.Object3D): void {
+    const mesh = node as THREE.Mesh;
+    const m = mesh.material as THREE.MeshBasicMaterial | undefined;
+    if (!m || typeof m.opacity !== "number") return;
+    scheduleBoxSnap = { mat: m, opacity: m.opacity };
+    m.opacity = SCHEDULE_HIGHLIGHT_OPACITY;
+  }
+
+  function setTarget(next: THREE.Object3D | null, kind: TargetKind): void {
     if (next === target) return;
-    clearHighlight();
+    clearHighlight(); // restaura el highlight del target anterior (cualquier tipo)
     target = next;
-    if (target) applyHighlight(target);
+    targetKind = next ? kind : null;
+    if (target) {
+      if (targetKind === "record") applyHighlight(target);
+      else if (targetKind === "schedule") applyScheduleHighlight(target);
+    }
   }
 
   // ── API ──────────────────────────────────────────────────────────────────
@@ -157,10 +226,14 @@ export function createInteraction(opts: InteractionOpts): InteractionSystem {
   return {
     update() {
       const next = pick(centerNdc);
-      setTarget(next);
-      if (target) {
+      setTarget(next.node, next.kind);
+      if (target && targetKind === "record") {
         const name = (target.userData?.patientName as string) || "paciente";
         tooltip = `Abrir expediente de ${name}`;
+        targeting = true;
+      } else if (target && targetKind === "schedule") {
+        const name = (target.userData?.name as string) || "este sillón";
+        tooltip = `Click: agendar cita en ${name}`;
         targeting = true;
       } else {
         tooltip = null;
@@ -168,12 +241,16 @@ export function createInteraction(opts: InteractionOpts): InteractionSystem {
       }
     },
     interactCenter() {
-      if (target) openRecord(target);
+      if (!target) return;
+      if (targetKind === "record") openRecord(target);
+      else if (targetKind === "schedule") fireSchedule(target);
     },
     interactAt(ndcX, ndcY) {
       pointNdc.set(ndcX, ndcY);
       const hit = pick(pointNdc);
-      if (hit) openRecord(hit);
+      if (!hit.node) return;
+      if (hit.kind === "record") openRecord(hit.node);
+      else if (hit.kind === "schedule") fireSchedule(hit.node);
     },
     getTooltip() {
       return tooltip;
@@ -182,8 +259,9 @@ export function createInteraction(opts: InteractionOpts): InteractionSystem {
       return targeting;
     },
     dispose() {
-      clearHighlight();
+      clearHighlight(); // restaura emissive de expediente Y opacidad de caja "agendar"
       target = null;
+      targetKind = null;
       tooltip = null;
       targeting = false;
     },

@@ -46,7 +46,7 @@
 
 import * as THREE from "three";
 import { fmtHM } from "@/lib/floor-plan/live-mode";
-import { STATUS_RING_COLOR, type Chair3DState, type WorldChairAnchor, type WorldModel } from "./world-types";
+import { STATUS_RING_COLOR, type Chair3DState, type ChairLiveStatus, type WorldChairAnchor, type WorldModel } from "./world-types";
 
 export interface LiveLayer {
   group: THREE.Group;
@@ -54,6 +54,8 @@ export interface LiveLayer {
   update(states: Map<string, Chair3DState>): void;
   /** Grupos paciente/doctor visibles y con patientId → candidatos del raycast (A4). */
   getInteractables(): THREE.Object3D[];
+  /** Cajas-hit invisibles de sillones NO ocupados → candidatos del raycast "agendar" (A6/V3). */
+  getScheduleTargets(): THREE.Object3D[];
   dispose(): void;
 }
 
@@ -82,6 +84,11 @@ interface ChairNodes {
   canvas: HTMLCanvasElement;
   texture: THREE.CanvasTexture;
   lastText: string;
+  /** Caja-hit invisible para apuntar al sillón VACÍO (raycast "agendar", A6/V3). */
+  scheduleHit: THREE.Mesh;
+  scheduleHitMat: THREE.MeshBasicMaterial;
+  /** Último estado calculado (filtra elegibilidad en getScheduleTargets). */
+  status: ChairLiveStatus;
 }
 
 /** Avatar low-poly: cápsula cuerpo + esfera cabeza. Devuelve {group, cloth}. */
@@ -172,6 +179,22 @@ export function createLiveLayer(world: WorldModel): LiveLayer {
     plate.renderOrder = 999; // sobre el resto
     node.add(plate);
 
+    // Caja-hit invisible (raycast "agendar"): cubre el volumen del sillón a la
+    // altura del asiento. opacity 0 → no dibuja nada; visible:true para que el
+    // raycaster la considere. La elegibilidad (no ocupado) la filtra
+    // getScheduleTargets, no la visibilidad de la caja.
+    const scheduleHitMat = new THREE.MeshBasicMaterial({
+      color: "#a78bfa",
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+    });
+    const scheduleHit = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.1, 1.4), scheduleHitMat);
+    scheduleHit.position.y = 0.6; // altura del asiento (local)
+    scheduleHit.visible = true;
+    scheduleHit.userData = { resourceId: a.resourceId, name: a.name, scheduleHit: true };
+    node.add(scheduleHit);
+
     nodes.set(a.resourceId, {
       anchor: a,
       ring,
@@ -184,6 +207,9 @@ export function createLiveLayer(world: WorldModel): LiveLayer {
       canvas,
       texture,
       lastText: "",
+      scheduleHit,
+      scheduleHitMat,
+      status: "libre",
     });
   }
 
@@ -194,6 +220,9 @@ export function createLiveLayer(world: WorldModel): LiveLayer {
         const st = states.get(rid);
         const status = st?.status ?? "libre";
         const occupied = status === "ocupado";
+
+        // Recordar el estado vigente (getScheduleTargets filtra por él).
+        n.status = status;
 
         // Anillo: color por estado.
         n.ringMat.color.set(STATUS_RING_COLOR[status]);
@@ -249,6 +278,15 @@ export function createLiveLayer(world: WorldModel): LiveLayer {
       nodes.forEach((n) => {
         if (n.patient.visible && n.patient.userData?.patientId) out.push(n.patient);
         if (n.doctor.visible && n.doctor.userData?.patientId) out.push(n.doctor);
+      });
+      return out;
+    },
+    getScheduleTargets() {
+      // Cajas-hit de sillones NO ocupados (libre/proximo) → candidatos "agendar".
+      // Recorre el Map con .forEach (NUNCA for...of sobre Map/Set).
+      const out: THREE.Object3D[] = [];
+      nodes.forEach((n) => {
+        if (n.status !== "ocupado") out.push(n.scheduleHit);
       });
       return out;
     },

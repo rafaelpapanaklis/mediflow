@@ -141,7 +141,7 @@ function PatientSearch({ patients, value, onChange }: { patients: Patient[]; val
 
 // ── ApptForm — defined OUTSIDE main component to prevent focus loss ──────────
 interface ApptFormProps {
-  form: { patientId: string; doctorId: string; type: string; date: string; startTime: string; durationMins: number; notes: string; mode: string };
+  form: { patientId: string; doctorId: string; type: string; date: string; startTime: string; durationMins: number; notes: string; mode: string; resourceId?: string };
   setForm: React.Dispatch<React.SetStateAction<any>>;
   doctors: { id: string; firstName: string; lastName: string }[];
   patients: Patient[];
@@ -277,17 +277,23 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
 
   const searchParams = useSearchParams();
 
-  // Auto-open new appointment modal if ?new=1 in URL (with optional patientId)
+  // Auto-open new appointment modal if ?new=1 in URL (with optional patientId / resourceId)
   useEffect(() => {
     if (searchParams.get("new") === "1") {
       const patientId = searchParams.get("patientId");
-      if (patientId) {
-        setForm(f => ({ ...f, patientId }));
+      const resourceId = searchParams.get("resourceId");
+      if (patientId || resourceId) {
+        setForm(f => ({
+          ...f,
+          ...(patientId ? { patientId } : {}),
+          ...(resourceId ? { resourceId } : {}),
+        }));
       }
       setShowNew(true);
       const url = new URL(window.location.href);
       url.searchParams.delete("new");
       url.searchParams.delete("patientId");
+      url.searchParams.delete("resourceId");
       window.history.replaceState({}, "", url.toString());
     }
   }, [searchParams]);
@@ -315,8 +321,10 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
     };
   }, []);
 
-  const emptyForm = { patientId:"", doctorId:currentUserId, type:"Consulta general", date:toDateStr(today), startTime:"09:00", durationMins:30, notes:"", mode:"IN_PERSON" };
-  const [form, setForm] = useState(emptyForm);
+  const emptyForm = { patientId:"", doctorId:currentUserId, type:"Consulta general", date:toDateStr(today), startTime:"09:00", durationMins:30, notes:"", mode:"IN_PERSON", resourceId:"" };
+  // resourceId opcional en el tipo: el form de EDITAR cita (setForm) no lo pasa;
+  // el de NUEVA cita sí (preselección de sillón desde Mi Clínica 3D).
+  const [form, setForm] = useState<{ patientId: string; doctorId: string; type: string; date: string; startTime: string; durationMins: number; notes: string; mode: string; resourceId?: string }>(emptyForm);
   const setF = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
 
   const calDays = useMemo(() => {

@@ -90,6 +90,9 @@ export interface Clinic3DHudProps {
    * discreto de DaleControl. null = modo dashboard.
    */
   publicMode?: { backHref: string } | null;
+  // ── V3 (interacción: clic en sillones) ──────────────────────────────────────
+  /** v3 — pacientes en sala de espera. */
+  waitingCount?: number;
 }
 
 const EDITOR_HREF = "/dashboard/clinic-layout";
@@ -343,7 +346,10 @@ function ReadyOverlay(props: Clinic3DHudProps) {
     onToggleMinimap,
     minimapFrameRef,
     publicMode,
+    waitingCount,
   } = props;
+
+  const waiting = Math.max(0, waitingCount || 0);
 
   // Hint sutil que se desvanece ~5s una vez que el usuario tomó el control
   // (pointer lock en desktop) o al entrar en móvil. Cada vez que (re)entra al
@@ -438,16 +444,30 @@ function ReadyOverlay(props: Clinic3DHudProps) {
         <LegendDot color={STATUS_RING_COLOR.libre} label="Libre" />
         <LegendDot color={STATUS_RING_COLOR.proximo} label="Próxima" />
         <LegendDot color={STATUS_RING_COLOR.ocupado} label="Ocupado" />
+        {/* v3 — qué hace el clic en un sillón */}
+        <div className="mt-1 flex flex-col gap-0.5 border-t border-white/10 pt-1 text-[10px] leading-snug text-white/60">
+          <span>Vacío · clic para agendar</span>
+          <span>Ocupado · clic para ver expediente</span>
+        </div>
       </div>
 
-      {/* Bottom-right: contadores */}
-      <div
-        className={`${panelBase} bottom-0 right-0 mb-[max(env(safe-area-inset-bottom),0.75rem)] mr-[max(env(safe-area-inset-right),0.75rem)] px-3 py-2 text-[clamp(11px,1.4vw,13px)] tabular-nums`}
-      >
-        <span className="font-medium text-white/90">Ocupados {occupied}</span>
-        <span className="mx-1.5 text-white/30">·</span>
-        <span className="font-medium text-white/90">Libres {free}</span>
-        {total ? <span className="ml-1.5 text-white/40">/ {total}</span> : null}
+      {/* Bottom-right: sala de espera + contadores (apilados) */}
+      <div className="pointer-events-none absolute bottom-0 right-0 mb-[max(env(safe-area-inset-bottom),0.75rem)] mr-[max(env(safe-area-inset-right),0.75rem)] flex flex-col items-end gap-1.5">
+        {/* Pacientes en sala de espera (v3) */}
+        <div
+          className={`${panelBase} static flex items-center gap-1.5 px-2.5 py-1 text-[clamp(11px,1.4vw,13px)] tabular-nums`}
+        >
+          <span aria-hidden="true">🪑</span>
+          <span className="font-medium text-white/90">{waiting}</span>
+          <span className="text-white/60">esperando</span>
+        </div>
+        {/* Contadores de sillones */}
+        <div className={`${panelBase} static px-3 py-2 text-[clamp(11px,1.4vw,13px)] tabular-nums`}>
+          <span className="font-medium text-white/90">Ocupados {occupied}</span>
+          <span className="mx-1.5 text-white/30">·</span>
+          <span className="font-medium text-white/90">Libres {free}</span>
+          {total ? <span className="ml-1.5 text-white/40">/ {total}</span> : null}
+        </div>
       </div>
 
       {/* Centro desktop sin control: tarjeta "Haz clic para entrar" */}
