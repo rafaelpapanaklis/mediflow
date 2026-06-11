@@ -32,6 +32,7 @@ type AffiliateRow = {
   // modo legacy (config de niveles sin aplicar) → se muestra commissionPct.
   effectiveLevelLabel?: string | null;
   effectivePct?: number | null;
+  totalClicks?: number;
   payoutMethod: string | null;
   createdAt: string | Date;
   approvedAt: string | Date | null;
@@ -691,6 +692,7 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                 <th>Contacto</th>
                 <th>Código</th>
                 <th>Comisión</th>
+                <th>Clicks</th>
                 <th>Clínicas</th>
                 <th>Registrado</th>
                 <th>Estado</th>
@@ -731,6 +733,7 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                         <>{a.commissionPct}%</>
                       )}
                     </td>
+                    <td className="mono" style={{ color: "var(--text-2)", fontSize: 12 }}>{a.totalClicks ?? 0}</td>
                     <td className="mono" style={{ color: "var(--text-2)", fontSize: 12 }}>{referred}</td>
                     <td className="mono" style={{ color: "var(--text-3)", fontSize: 12 }}>
                       {formatRelativeDate(a.createdAt)}
@@ -771,7 +774,7 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                   </tr>
                   {expandedTeam === a.id && (
                     <tr>
-                      <td colSpan={8} style={{ padding: 0, background: "var(--surface-2, rgba(255,255,255,0.02))" }}>
+                      <td colSpan={9} style={{ padding: 0, background: "var(--surface-2, rgba(255,255,255,0.02))" }}>
                         {renderTeam(a)}
                       </td>
                     </tr>

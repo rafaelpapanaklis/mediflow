@@ -8,7 +8,7 @@ export const metadata: Metadata = { title: "Afiliados — Admin DaleControl" };
 
 // Affiliate es global (sin clinicId): el admin ve TODOS los afiliados.
 export default async function AdminAffiliatesPage() {
-  const [affiliates, config, activeGroups] = await Promise.all([
+  const [affiliates, config, activeGroups, clickGroups] = await Promise.all([
     prisma.affiliate.findMany({
       orderBy: { createdAt: "desc" },
       include: { _count: { select: { clinics: true } } },
@@ -21,16 +21,23 @@ export default async function AdminAffiliatesPage() {
         _count: { _all: true },
       })
       .catch(() => [] as { affiliateId: string | null; _count: { _all: number } }[]),
+    // Clicks totales por afiliado (affiliate_clicks, WS3-T2). catch → tabla
+    // sin aplicar = columna en 0, sin romper.
+    prisma.affiliateClick
+      .groupBy({ by: ["affiliateId"], _count: { _all: true } })
+      .catch(() => [] as { affiliateId: string; _count: { _all: number } }[]),
   ]);
 
   // % vigente por nivel (lo que realmente paga el webhook). Sin config
   // (sql/afiliados-ventas.sql no aplicado) se queda en modo legacy y el
   // client muestra commissionPct como antes.
   const activeByAffiliate = new Map(activeGroups.map(g => [g.affiliateId, g._count._all]));
+  const clicksByAffiliate = new Map(clickGroups.map(g => [g.affiliateId, g._count._all]));
   const rows = affiliates.map(a => {
-    if (!config) return { ...a, effectiveLevelLabel: null, effectivePct: null };
+    const totalClicks = clicksByAffiliate.get(a.id) ?? 0;
+    if (!config) return { ...a, effectiveLevelLabel: null, effectivePct: null, totalClicks };
     const level = computeLevel(activeByAffiliate.get(a.id) ?? 0, config);
-    return { ...a, effectiveLevelLabel: LEVEL_LABELS[level], effectivePct: levelPct(level, config) };
+    return { ...a, effectiveLevelLabel: LEVEL_LABELS[level], effectivePct: levelPct(level, config), totalClicks };
   });
 
   return <AffiliatesClient initial={rows as any} />;
