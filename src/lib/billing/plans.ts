@@ -22,19 +22,19 @@ export const PLANS: ReadonlyArray<PlanDescriptor> = [
   {
     id: "BASIC",
     name: "Básico",
-    priceMxn: 99,
+    priceMxn: 499,
     features: ["1 profesional", "200 pacientes", "Agenda", "Facturación"],
   },
   {
     id: "PRO",
     name: "Profesional",
-    priceMxn: 179,
+    priceMxn: 999,
     features: ["3 profesionales", "Ilimitado", "Expedientes", "Reportes"],
   },
   {
     id: "CLINIC",
     name: "Clínica",
-    priceMxn: 249,
+    priceMxn: 1999,
     features: ["Todo ilimitado", "Multi-sucursal", "API", "Manager"],
   },
 ];
