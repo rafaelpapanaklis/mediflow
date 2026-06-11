@@ -107,7 +107,9 @@ export function LandingConfigClient({ clinic: initial, appUrl }: Props) {
 
   // ── Plantilla: previsualizar (sin publicar) y aplicar (publica)
   function previewTemplate(id: string = templateSel) {
-    window.open(`/${clinic.slug}?preview=${id}`, "_blank", "noopener");
+    // /landing-preview es la ruta DINÁMICA de vista previa; /[slug] es ISR y
+    // no puede leer ?preview= (DYNAMIC_SERVER_USAGE al regenerar).
+    window.open(`/landing-preview/${clinic.slug}?preview=${id}`, "_blank", "noopener");
   }
 
   async function applyTemplate() {
