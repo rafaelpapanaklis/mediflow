@@ -31,8 +31,14 @@ export default async function AdminAffiliatesPage() {
   // % vigente por nivel (lo que realmente paga el webhook). Sin config
   // (sql/afiliados-ventas.sql no aplicado) se queda en modo legacy y el
   // client muestra commissionPct como antes.
-  const activeByAffiliate = new Map(activeGroups.map(g => [g.affiliateId, g._count._all]));
-  const clicksByAffiliate = new Map(clickGroups.map(g => [g.affiliateId, g._count._all]));
+  const activeByAffiliate = new Map<string, number>();
+  for (const g of activeGroups) {
+    if (g.affiliateId) activeByAffiliate.set(g.affiliateId, g._count._all);
+  }
+  const clicksByAffiliate = new Map<string, number>();
+  for (const g of clickGroups) {
+    clicksByAffiliate.set(g.affiliateId, g._count._all);
+  }
   const rows = affiliates.map(a => {
     const totalClicks = clicksByAffiliate.get(a.id) ?? 0;
     if (!config) return { ...a, effectiveLevelLabel: null, effectivePct: null, totalClicks };
