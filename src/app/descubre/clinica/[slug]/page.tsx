@@ -91,7 +91,7 @@ export default async function ClinicProfilePage({ params }: { params: { slug: st
     where: visibilityWhere(params.slug),
     select: {
       id: true, name: true, slug: true, category: true, city: true, state: true, address: true,
-      phone: true, logoUrl: true, description: true, mapsUrl: true,
+      phone: true, logoUrl: true, description: true, mapsUrl: true, latitude: true, longitude: true,
       landingCoverUrl: true, landingTagline: true, landingThemeColor: true, landingActive: true,
       landingServices: true, landingGallery: true, landingYearsExperience: true, landingPatients: true,
       landingInstagram: true, landingFacebook: true,
@@ -147,6 +147,8 @@ export default async function ClinicProfilePage({ params }: { params: { slug: st
     })),
     ratingAvg: reviews.summary.avg,
     ratingCount: reviews.summary.count,
+    latitude: clinic.latitude,
+    longitude: clinic.longitude,
   };
 
   const jsonLd = localBusinessLd({

@@ -99,8 +99,10 @@ export function buildFeaturedServices(users: any[], landingServices: unknown): s
 }
 
 /** Fila de prisma → DirectoryClinic (shape público del contrato). */
-export function toDirectoryClinic(row: any): DirectoryClinic {
+export function toDirectoryClinic(row: any, rating?: { avg: number; count: number }): DirectoryClinic {
   return {
+    ratingAvg: rating?.avg ?? 0,
+    ratingCount: rating?.count ?? 0,
     id: row.id,
     name: row.name,
     slug: row.slug,
@@ -262,7 +264,7 @@ export async function getCityPageData(
   const cityLabel = deriveCities(variants)[0]?.label ?? cityLabelFromSlug(citySlug);
   return {
     cityLabel,
-    items: rows.map(toDirectoryClinic),
+    items: rows.map((r) => toDirectoryClinic(r)),
     total,
     page: safePage,
     totalPages: Math.ceil(total / DIRECTORY_PAGE_SIZE),
