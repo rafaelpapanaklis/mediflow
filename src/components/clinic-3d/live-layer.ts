@@ -52,6 +52,8 @@ export interface LiveLayer {
   group: THREE.Group;
   /** Aplica los estados vivos (clave = resourceId). Sin reconstruir el mundo. */
   update(states: Map<string, Chair3DState>): void;
+  /** Grupos paciente/doctor visibles y con patientId → candidatos del raycast (A4). */
+  getInteractables(): THREE.Object3D[];
   dispose(): void;
 }
 
@@ -200,6 +202,18 @@ export function createLiveLayer(world: WorldModel): LiveLayer {
         n.patient.visible = occupied;
         n.doctor.visible = occupied;
 
+        // userData para el raycast de interacción (A4): paciente Y doctor llevan
+        // el patientId del paciente atendido → click abre el mismo expediente.
+        // Limpia al quedar libre para que getInteractables no lo considere.
+        if (occupied) {
+          const ud = { patientId: st?.patientId ?? null, patientName: st?.patientName ?? n.anchor.name };
+          n.patient.userData = ud;
+          n.doctor.userData = ud;
+        } else {
+          n.patient.userData = {};
+          n.doctor.userData = {};
+        }
+
         // Tinte de identidad del sillón en la ropa del paciente (color del
         // Resource; cae al color del ancla). Si no hay color, ropa neutra.
         const tint = st?.color ?? n.anchor.color;
@@ -227,6 +241,16 @@ export function createLiveLayer(world: WorldModel): LiveLayer {
           n.plateMat.needsUpdate = true;
         }
       });
+    },
+    getInteractables() {
+      // Candidatos del raycast: grupos paciente y doctor visibles con patientId.
+      // Recorre el Map con .forEach (NUNCA for...of sobre Map/Set).
+      const out: THREE.Object3D[] = [];
+      nodes.forEach((n) => {
+        if (n.patient.visible && n.patient.userData?.patientId) out.push(n.patient);
+        if (n.doctor.visible && n.doctor.userData?.patientId) out.push(n.doctor);
+      });
+      return out;
     },
     dispose() {
       // Geometrías/materiales del árbol completo.

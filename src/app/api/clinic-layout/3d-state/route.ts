@@ -62,10 +62,12 @@
 //   500 { error: "internal_error" } + console.error("[GET /api/clinic-layout/3d-state]", err).
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { createHmac } from "crypto";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
+import { activeClinicSecret } from "@/lib/active-clinic-core";
 import { TREATMENT_KINDS } from "@/lib/agenda/types";
 import { getChairStatus, getChairAppointment } from "@/lib/floor-plan/live-mode";
 import { sanitizeElements, sanitizeMetadata } from "@/lib/floor-plan/sanitize";
@@ -141,7 +143,7 @@ export async function GET() {
           endsAt: true,
           status: true,
           type: true,
-          patient: { select: { firstName: true, lastName: true } },
+          patient: { select: { id: true, firstName: true, lastName: true } },
           doctor: { select: { firstName: true, lastName: true } },
         },
       }),
@@ -151,6 +153,7 @@ export async function GET() {
     const liveAppts: LiveAppointment[] = appts.map((a) => ({
       id: a.id,
       resourceId: a.resourceId,
+      patientId: a.patient?.id,
       patient:
         `${a.patient?.firstName ?? ""} ${a.patient?.lastName ?? ""}`.trim() ||
         "Paciente",
@@ -184,9 +187,28 @@ export async function GET() {
         status,
         patientName: occupied ? active?.patient ?? null : null,
         doctorName: occupied ? active?.doctor ?? null : null,
+        patientId: occupied ? active?.patientId ?? null : null,
         appointmentEndsAt: occupied && active ? active.end.toISOString() : null,
       };
     });
+
+    // v2 — Identidad del usuario de la sesión (presence multijugador). Sale de
+    // dbUser; no añade queries (Promise.all se mantiene en 4).
+    const viewer = {
+      name:
+        `${dbUser.firstName ?? ""} ${dbUser.lastName ?? ""}`.trim() ||
+        dbUser.email ||
+        "Usuario",
+      role: dbUser.role,
+    };
+
+    // v2 — Canal Realtime por clínica. NUNCA exponemos el clinicId crudo: lo
+    // derivamos a un nombre de canal corto vía HMAC (reusa activeClinicSecret()).
+    const hmac = createHmac("sha256", activeClinicSecret())
+      .update("c3d:" + clinicId)
+      .digest("hex")
+      .slice(0, 16);
+    const presenceChannel = `c3d:${hmac}`;
 
     const payload: Clinic3DStatePayload = {
       clinicName: clinic?.name ?? "Mi clínica",
@@ -196,6 +218,8 @@ export async function GET() {
         metadata: sanitizeMetadata(layout?.metadata),
       },
       chairs: chairStates,
+      viewer,
+      presenceChannel,
     };
     return NextResponse.json(payload, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {

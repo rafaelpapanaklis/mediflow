@@ -185,6 +185,8 @@ export interface Chair3DState {
   status: ChairLiveStatus;
   patientName?: string | null;
   doctorName?: string | null;
+  /** ID del paciente de la cita activa (v2: click→expediente). Solo si ocupado. */
+  patientId?: string | null;
   appointmentEndsAt?: string | null; // ISO
 }
 
@@ -193,6 +195,10 @@ export interface Clinic3DStatePayload {
   category: string;
   layout: { elements: LayoutElement[]; metadata: LayoutMetadata | null };
   chairs: Chair3DState[];
+  /** v2 — Identidad del usuario de la sesión (para presence multijugador). */
+  viewer?: { name: string; role: string };
+  /** v2 — Nombre de canal Realtime por clínica = `c3d:<hmac>`. null = sin multijugador. */
+  presenceChannel?: string | null;
 }
 
 // ── Paleta por categoría de clínica (tonos claros tipo clínica real) ─────────
@@ -238,3 +244,81 @@ export const STATUS_RING_COLOR: Record<ChairLiveStatus, string> = {
   proximo: "#F59E0B",
   ocupado: "#EF4444",
 };
+
+// ═════════════════════════════════════════════════════════════════════════════
+// V2 — MULTIJUGADOR, INTERACCIÓN, DÍA/NOCHE, MINIMAPA (contrato compartido).
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ── Multijugador (Supabase Realtime presence + broadcast) ────────────────────
+export const POS_HZ = 10;            // máx broadcasts de posición por segundo
+export const POS_MIN_MOVE = 0.05;    // m: umbral de movimiento para re-enviar
+export const POS_MIN_YAW = 0.03;     // rad: umbral de giro para re-enviar
+export const LERP_MS = 150;          // suavizado de avatares remotos
+export const REMOTE_TIMEOUT_MS = 15_000; // sin señal → quitar avatar
+
+/** Metadata de presencia que cada quien publica al entrar. */
+export interface PresenceMeta {
+  name: string;
+  color: string;
+}
+
+/** Carga del broadcast "pos" (10 Hz, solo si cambió). */
+export interface PosBroadcast {
+  x: number;
+  z: number;
+  yaw: number;
+}
+
+/** Estado de un jugador remoto que consume la capa de avatares remotos. */
+export interface RemotePlayerState {
+  id: string;       // presence key (estable por sesión)
+  name: string;
+  color: string;
+  x: number;
+  z: number;
+  yaw: number;
+  t: number;        // timestamp del último update (para timeout/interp)
+}
+
+// ── Interacción (raycast click→expediente) ───────────────────────────────────
+export const INTERACT_RANGE = 6;     // m: alcance para apuntar a un avatar
+
+// ── Puertas animadas (juice visual; la celda puerta ya no colisiona) ─────────
+export const DOOR_OPEN_DIST = 1.5;   // m: alguien cerca → abre
+export const DOOR_OPEN_ANGLE = (80 * Math.PI) / 180; // 80° de apertura
+export const DOOR_ANIM_SPEED = 4;    // rad/s del lerp de apertura
+
+// ── Día / noche (por hora local; cae a valores cálidos de juego casual) ──────
+export const NIGHT_START_HOUR = 19;
+export const NIGHT_END_HOUR = 7;
+export function isNightHour(hour: number): boolean {
+  return hour >= NIGHT_START_HOUR || hour < NIGHT_END_HOUR;
+}
+
+// ── Minimapa (datos por frame que el orquestador escribe y el HUD dibuja) ────
+export interface MinimapFrame {
+  px: number;
+  pz: number;
+  yaw: number;
+  players: { x: number; z: number; color: string }[];
+  chairs: { x: number; z: number; status: ChairLiveStatus }[];
+}
+
+// ── Color estable derivado del nombre (mismo color para todos los que te ven) ─
+function hslToHex(h: number, s: number, l: number): string {
+  s /= 100;
+  l /= 100;
+  const k = (n: number) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  const toHex = (x: number) => Math.round(255 * x).toString(16).padStart(2, "0");
+  return `#${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`;
+}
+
+/** Hash determinista nombre → color HSL agradable (saturación/brillo fijos). */
+export function colorFromName(name: string): string {
+  const s = (name || "?").trim() || "?";
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return hslToHex(h % 360, 62, 56);
+}

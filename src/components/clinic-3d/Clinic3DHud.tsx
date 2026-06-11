@@ -39,10 +39,11 @@
 // salvo los controles.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import Link from "next/link";
-import { Maximize2, Minimize2, ArrowLeft, MousePointer2 } from "lucide-react";
-import { STATUS_RING_COLOR } from "./world-types";
+import { Maximize2, Minimize2, ArrowLeft, MousePointer2, Map as MapIcon } from "lucide-react";
+import { STATUS_RING_COLOR, type MinimapFrame, type WorldModel } from "./world-types";
+import { drawMinimap } from "./minimap";
 
 export type Hud3DPhase = "loading" | "ready" | "empty" | "error";
 
@@ -62,6 +63,22 @@ export interface Clinic3DHudProps {
   onRequestLock: () => void;
   onToggleFullscreen: () => void;
   onRetry: () => void;
+  // ── V2 (los implementa A7: crosshair + minimapa + contador de usuarios) ────
+  /** Mundo (para el plano estático del minimapa). */
+  world: WorldModel;
+  /** Personas conectadas (incluyéndote): "👥 N en la clínica". */
+  userCount: number;
+  /** true si el canal Realtime quedó activo; false → aviso discreto. */
+  multiplayerEnabled: boolean;
+  /** Tooltip de interacción ("Abrir expediente de {nombre}") o null. */
+  interactLabel?: string | null;
+  /** true cuando el crosshair apunta a un avatar interactivo. */
+  targeting?: boolean;
+  /** Minimapa visible (toggle con M o botón). */
+  minimapVisible: boolean;
+  onToggleMinimap: () => void;
+  /** Frame del minimapa que el orquestador actualiza por frame (rAF del HUD). */
+  minimapFrameRef: MutableRefObject<MinimapFrame>;
 }
 
 const EDITOR_HREF = "/dashboard/clinic-layout";
@@ -159,8 +176,139 @@ function ErrorScreen({
 const panelBase =
   "pointer-events-none absolute rounded-xl border border-white/10 bg-black/40 backdrop-blur-md text-white shadow-lg";
 
+// ─── Crosshair central (mira) ────────────────────────────────────────────────
+// Punto + anillo. Si targeting, el anillo crece y toma el acento, y aparece el
+// tooltip de interacción ("Abrir expediente de {nombre}") justo bajo el centro.
+// En desktop con control (isLocked) la mira es nítida; sin control queda muy
+// discreta. En móvil se mantiene sutil (no estorba al joystick).
+function Crosshair({
+  targeting,
+  interactLabel,
+  isLocked,
+  isTouch,
+}: {
+  targeting: boolean;
+  interactLabel?: string | null;
+  isLocked: boolean;
+  isTouch: boolean;
+}) {
+  // Opacidad base: con control se ve; en reposo (sin lock, no móvil) muy tenue.
+  const baseOpacity = targeting ? 1 : isLocked || isTouch ? 0.75 : 0.35;
+  const accent = "#a78bfa"; // violet-400
+  const ringColor = targeting ? accent : "rgba(255,255,255,0.85)";
+  const ringSize = targeting ? 26 : 18;
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[21] flex items-center justify-center">
+      <div className="relative flex items-center justify-center">
+        {/* Anillo */}
+        <span
+          className="rounded-full transition-all duration-150 ease-out"
+          style={{
+            width: ringSize,
+            height: ringSize,
+            border: `2px solid ${ringColor}`,
+            opacity: baseOpacity,
+            boxShadow: targeting ? `0 0 10px ${accent}` : "0 0 2px rgba(0,0,0,0.6)",
+          }}
+        />
+        {/* Punto central */}
+        <span
+          className="absolute rounded-full transition-all duration-150"
+          style={{
+            width: targeting ? 4 : 3,
+            height: targeting ? 4 : 3,
+            backgroundColor: targeting ? accent : "rgba(255,255,255,0.9)",
+            opacity: baseOpacity,
+          }}
+        />
+        {/* Tooltip de interacción bajo el centro */}
+        {targeting && interactLabel ? (
+          <span
+            className="absolute left-1/2 top-full mt-3 -translate-x-1/2 whitespace-nowrap rounded-md border border-violet-400/30 bg-black/70 px-2.5 py-1 text-[11px] font-medium text-white/90 backdrop-blur-md"
+            style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.4)" }}
+          >
+            {interactLabel}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+// ─── Minimapa (canvas 2D con rAF propio) ─────────────────────────────────────
+const MINIMAP_SIZE = 160; // px CSS (responsive: se reduce/oculta vía clases)
+
+function Minimap({
+  world,
+  frameRef,
+}: {
+  world: WorldModel;
+  frameRef: MutableRefObject<MinimapFrame>;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const dpr = Math.max(1, Math.min(3, typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1));
+    const size = MINIMAP_SIZE;
+    // Buffer físico (DPR) vs tamaño CSS; escalamos el contexto una vez.
+    canvas.width = Math.round(size * dpr);
+    canvas.height = Math.round(size * dpr);
+    canvas.style.width = `${size}px`;
+    canvas.style.height = `${size}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    let raf = 0;
+    const loop = () => {
+      const frame = frameRef.current;
+      if (frame) {
+        try {
+          drawMinimap(ctx, world, frame, size);
+        } catch {
+          /* nunca tumbar el rAF por un frame raro */
+        }
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [world, frameRef]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={MINIMAP_SIZE}
+      height={MINIMAP_SIZE}
+      aria-hidden="true"
+      className="pointer-events-none block rounded-xl shadow-lg"
+      style={{ width: MINIMAP_SIZE, height: MINIMAP_SIZE }}
+    />
+  );
+}
+
 function ReadyOverlay(props: Clinic3DHudProps) {
-  const { clinicName, category, occupied, free, total, isTouch, isLocked, isFullscreen } = props;
+  const {
+    clinicName,
+    category,
+    occupied,
+    free,
+    total,
+    isTouch,
+    isLocked,
+    isFullscreen,
+    world,
+    userCount,
+    multiplayerEnabled,
+    interactLabel,
+    targeting,
+    minimapVisible,
+    onToggleMinimap,
+    minimapFrameRef,
+  } = props;
 
   // Hint sutil que se desvanece ~5s una vez que el usuario tomó el control
   // (pointer lock en desktop) o al entrar en móvil. Cada vez que (re)entra al
@@ -180,37 +328,70 @@ function ReadyOverlay(props: Clinic3DHudProps) {
 
   return (
     <div className="pointer-events-none absolute inset-0 z-20 select-none text-white">
-      {/* Top-left: nombre de la clínica + chip categoría */}
-      <div
-        className={`${panelBase} left-0 top-0 m-[max(env(safe-area-inset-left),0.75rem)] mt-[max(env(safe-area-inset-top),0.75rem)] flex max-w-[60vw] items-center gap-2 px-3 py-2`}
-      >
-        <span className="truncate text-[clamp(13px,1.6vw,16px)] font-semibold leading-tight">
-          {clinicName || "Mi clínica"}
-        </span>
-        <span className="shrink-0 rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-violet-200 ring-1 ring-inset ring-violet-400/30">
-          {categoryLabel(category)}
-        </span>
+      {/* Top-left: nombre de la clínica + chip categoría + contador de usuarios */}
+      <div className="pointer-events-none absolute left-0 top-0 m-[max(env(safe-area-inset-left),0.75rem)] mt-[max(env(safe-area-inset-top),0.75rem)] flex max-w-[60vw] flex-col items-start gap-1.5">
+        <div className={`${panelBase} static flex items-center gap-2 px-3 py-2`}>
+          <span className="truncate text-[clamp(13px,1.6vw,16px)] font-semibold leading-tight">
+            {clinicName || "Mi clínica"}
+          </span>
+          <span className="shrink-0 rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-violet-200 ring-1 ring-inset ring-violet-400/30">
+            {categoryLabel(category)}
+          </span>
+        </div>
+        {/* Contador de usuarios conectados (o aviso discreto si no hay multijugador) */}
+        {multiplayerEnabled ? (
+          <div className={`${panelBase} static flex items-center gap-1.5 px-2.5 py-1 text-[clamp(11px,1.4vw,13px)] tabular-nums`}>
+            <span aria-hidden="true">👥</span>
+            <span className="font-medium text-white/90">{Math.max(0, userCount || 0)}</span>
+            <span className="text-white/60">en la clínica</span>
+          </div>
+        ) : (
+          <span className="pointer-events-none pl-1 text-[10px] text-white/35">
+            multijugador no disponible
+          </span>
+        )}
       </div>
 
-      {/* Top-right: volver al editor + fullscreen */}
-      <div className="pointer-events-none absolute right-0 top-0 m-[max(env(safe-area-inset-right),0.75rem)] mt-[max(env(safe-area-inset-top),0.75rem)] flex items-center gap-2">
-        <Link
-          href={EDITOR_HREF}
-          className="pointer-events-auto inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-black/40 px-2.5 py-1.5 text-xs font-medium text-white/90 backdrop-blur-md transition-colors hover:bg-black/60 hover:text-white"
-          title="Volver al editor"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span className="hidden sm:inline">Volver al editor</span>
-        </Link>
-        <button
-          type="button"
-          onClick={props.onToggleFullscreen}
-          aria-label={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
-          title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
-          className="pointer-events-auto inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-black/40 text-white/90 backdrop-blur-md transition-colors hover:bg-black/60 hover:text-white"
-        >
-          {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-        </button>
+      {/* Top-right: volver al editor + minimapa (toggle) + fullscreen, y debajo el minimapa */}
+      <div className="pointer-events-none absolute right-0 top-0 m-[max(env(safe-area-inset-right),0.75rem)] mt-[max(env(safe-area-inset-top),0.75rem)] flex flex-col items-end gap-2">
+        <div className="flex items-center gap-2">
+          <Link
+            href={EDITOR_HREF}
+            className="pointer-events-auto inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-black/40 px-2.5 py-1.5 text-xs font-medium text-white/90 backdrop-blur-md transition-colors hover:bg-black/60 hover:text-white"
+            title="Volver al editor"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span className="hidden sm:inline">Volver al editor</span>
+          </Link>
+          <button
+            type="button"
+            onClick={onToggleMinimap}
+            aria-label={minimapVisible ? "Ocultar minimapa (M)" : "Mostrar minimapa (M)"}
+            title={minimapVisible ? "Ocultar minimapa (M)" : "Mostrar minimapa (M)"}
+            className={`pointer-events-auto inline-flex h-8 w-8 items-center justify-center rounded-lg border backdrop-blur-md transition-colors ${
+              minimapVisible
+                ? "border-violet-400/40 bg-violet-500/25 text-violet-100 hover:bg-violet-500/35"
+                : "border-white/10 bg-black/40 text-white/90 hover:bg-black/60 hover:text-white"
+            }`}
+          >
+            <MapIcon className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={props.onToggleFullscreen}
+            aria-label={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+            title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+            className="pointer-events-auto inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-black/40 text-white/90 backdrop-blur-md transition-colors hover:bg-black/60 hover:text-white"
+          >
+            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          </button>
+        </div>
+        {/* Minimapa: debajo de los botones. Oculto en pantallas muy chicas (estorba). */}
+        {minimapVisible ? (
+          <div className="hidden sm:block">
+            <Minimap world={world} frameRef={minimapFrameRef} />
+          </div>
+        ) : null}
       </div>
 
       {/* Bottom-left: leyenda de estados */}
@@ -244,10 +425,22 @@ function ReadyOverlay(props: Clinic3DHudProps) {
             <span className="text-base font-semibold text-white">Haz clic para entrar</span>
             <span className="text-xs leading-relaxed text-white/60">
               Muévete con <kbd className={kbd}>W</kbd> <kbd className={kbd}>A</kbd> <kbd className={kbd}>S</kbd>{" "}
-              <kbd className={kbd}>D</kbd> · mira con el ratón · sal con <kbd className={kbd}>ESC</kbd>
+              <kbd className={kbd}>D</kbd> · mira con el ratón · <kbd className={kbd}>M</kbd> minimapa · sal con{" "}
+              <kbd className={kbd}>ESC</kbd>
             </span>
           </button>
         </div>
+      ) : null}
+
+      {/* Crosshair central: visible con control (lock desktop o móvil); crece y
+          colorea + tooltip cuando apunta a un avatar interactivo. */}
+      {(isLocked || isTouch) ? (
+        <Crosshair
+          targeting={!!targeting}
+          interactLabel={interactLabel}
+          isLocked={isLocked}
+          isTouch={isTouch}
+        />
       ) : null}
 
       {/* Hint sutil con control activo (desktop bloqueado o móvil) — fade ~5s */}
@@ -259,8 +452,8 @@ function ReadyOverlay(props: Clinic3DHudProps) {
         >
           <span className="rounded-full border border-white/10 bg-black/45 px-3.5 py-1.5 text-center text-[11px] text-white/70 backdrop-blur-md">
             {isTouch
-              ? "Joystick para moverte · arrastra para mirar"
-              : "Muévete con WASD · mira con el ratón · ESC para salir"}
+              ? "Joystick para moverte · arrastra para mirar · M minimapa"
+              : "Muévete con WASD · mira con el ratón · M minimapa · ESC para salir"}
           </span>
         </div>
       ) : null}

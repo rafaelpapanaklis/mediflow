@@ -1,46 +1,34 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// A2 — Geometría de arquitectura: piso, muros, puertas, ventanas. Devuelve un
-// THREE.Group para añadir a la escena. Sin estado; todo se libera por traversal
-// en el dispose del orquestador (geometrías/materiales).
+// A2 — Geometría de arquitectura: PISO, MUROS, TECHO, puertas, ventanas. Devuelve
+// un THREE.Group para añadir a la escena. Sin estado de runtime; todo se libera
+// por traversal en el dispose del orquestador (geometrías/materiales/texturas).
 //
-// TODO(A2): implementar buildArchitecture según este brief.
+// SALTO GRÁFICO (brief D) — sin tocar el merge/instancing ni el performance:
 //
-// PALETA: getPalette(world.category). Materiales MeshStandardMaterial mate
-//   (roughness alto ~0.9, metalness 0). Colores claros tipo clínica.
+// PISO: tiles satinados (roughness ~0.6) con líneas de boquilla (grout) por
+//   metro vía CanvasTexture ≤256px reutilizada (repeat por metro); variación de
+//   color por categoría (getPalette). receiveShadow.
 //
-// PISO:
-//   - Plano que cubre world.bounds (de minX..maxX, minZ..maxZ). y = 0.
-//   - Tiles en damero sutil floorA/floorB de 1×1 m: NO crees un mesh por celda
-//     (caro). Genera UNA textura de damero por código (CanvasTexture pequeña,
-//     ej. 2×2 o 64×64 px) con wrap RepeatWrapping y repeat = (ancho, alto) en
-//     metros; aplícala a un PlaneGeometry rotado -90° en X. recibe sombras
-//     (receiveShadow = true).
-//   - El área fuera de bounds no se dibuja (no caminable).
+// MUROS: zócalo oscuro (~0.12 m) + remate superior; textura sutil de pintura
+//   (ruido suave ≤256px reutilizado); postes redondeados (cilindros) en las
+//   esquinas donde concurren muros; cara interior un punto más clara que la
+//   exterior (segundo material en el grupo de caras). EL GRUESO de los muros
+//   sigue en UN solo draw call (geometría mergeada; NO un mesh por celda).
 //
-// MUROS (celdas de elementos con isWall):
-//   - Cada celda de muro = caja de 1×WALL_HEIGHT×1 (con WALL_THICKNESS si
-//     quieres afinar el grosor según wall_h/wall_v, pero una caja por celda
-//     ocupada del muro es suficiente y legible).
-//   - RENDIMIENTO: NO un mesh por celda. Junta todas las cajas de muro en UNA
-//     geometría mergeada (BufferGeometryUtils.mergeGeometries, import
-//     "three/examples/jsm/utils/BufferGeometryUtils.js") o usa InstancedMesh.
-//     Un solo draw call para todos los muros. castShadow + receiveShadow.
-//   - Zócalo: una banda fina (color baseboard) en la base de los muros (opcional
-//     pero se ve bien): otra geometría mergeada baja (~0.12 m).
-//   - Recorre world.elements; para cada isWall, marca sus celdas ocupadas
-//     (rectángulo cols×rows) y añade una caja por celda al merge. Evita duplicar
-//     celdas (Set "col,row").
+// TECHO: plano a WALL_HEIGHT (color ceiling) con PANELES DE LUZ empotrados =
+//   planos emissive cálidos (#fff4e0) en rejilla cada ~4-5 m dentro de bounds.
+//   Los paneles SIEMPRE emissive (de noche son la luz principal; el orquestador
+//   baja el ambient). El techo está a 2.6 m y los ojos a 1.6 m → no tapa cámara.
 //
-// PUERTAS (isDoor): marco (dos postes + dintel) del color accent, con HUECO
-//   (sin panel, sin colisión — la colisión ya las excluye). Centra en
-//   element.center, rota rotationRad. Si quieres, hoja entreabierta decorativa.
+// PUERTAS (isDoor): SOLO EL MARCO (dos postes + dintel + umbral), sin hoja. La
+//   hoja animada la dibuja doors.ts. Centra en element.center, rota rotationRad.
 //
-// VENTANAS (isWindow): marco delgado + cristal translúcido (MeshStandardMaterial
-//   transparent, opacity ~0.25, color claro azulado) a media altura. Centra y
-//   rota igual.
+// VENTANAS (isWindow): marco (metalness leve) + cristal translúcido a media
+//   altura. Centra y rota igual.
 //
-// TECHO: opcional y MUY tenue (un plano a WALL_HEIGHT con color ceiling, sin
-//   sombras) — solo si no perjudica fps; puedes omitirlo.
+// RENDIMIENTO: texturas procedurales ≤256px cacheadas en variables de módulo y
+//   reutilizadas; el grueso de muros y el zócalo en 1 draw call cada uno; los
+//   postes de esquina mergeados en 1 draw call. Nunca lanzar por datos raros.
 //
 // Devuelve el Group. Nombra el group "architecture".
 // ─────────────────────────────────────────────────────────────────────────────
@@ -66,39 +54,138 @@ function matte(color: string, extra?: THREE.MeshStandardMaterialParameters): THR
   return new THREE.MeshStandardMaterial({ color, roughness: 0.9, metalness: 0, ...extra });
 }
 
+// ── Texturas procedurales cacheadas (≤256px, reutilizadas entre builds) ─────────
+// Un único viewer renderiza un mundo a la vez; el dispose del orquestador libera
+// por traversal los materiales (y con ellos sus .map). Cacheamos por clave de
+// color para no regenerar el canvas en cada carga. El `repeat` se fija por uso.
+
+const _noiseCache = new Map<string, THREE.CanvasTexture>();
+const _groutCache = new Map<string, THREE.CanvasTexture>();
+const _paintBumpCache = new Map<string, THREE.CanvasTexture>();
+
 /**
- * Textura de damero 2×2 (un tile A y uno B por cada 2 m → cada celda = 1 m con
- * repeat=(ancho,alto)/2... NO: usamos un canvas 2×2 px donde cada píxel = 1 celda
- * y repeat = (ancho, alto)/2 para que el patrón se repita cada 2 m. Mantenemos el
- * canvas mínimo (2×2) y NearestFilter para tiles nítidos sin coste.
+ * Ruido suave (grano de pintura) en escala de grises sobre un tinte base. Canvas
+ * 128px, blur por superposición de puntos translúcidos. Reutilizable como `map`
+ * sutil de muro: aporta micro-variación sin romper el color plano de la paleta.
  */
-function makeCheckerTexture(a: string, b: string): THREE.CanvasTexture {
+function makePaintTexture(base: string): THREE.CanvasTexture {
+  const hit = _noiseCache.get(base);
+  if (hit) return hit;
   const cv = document.createElement("canvas");
-  cv.width = 2;
-  cv.height = 2;
+  cv.width = 128;
+  cv.height = 128;
   const ctx = cv.getContext("2d");
   if (ctx) {
-    ctx.fillStyle = a;
-    ctx.fillRect(0, 0, 2, 2);
-    ctx.fillStyle = b;
-    ctx.fillRect(0, 0, 1, 1); // esquina sup-izq
-    ctx.fillRect(1, 1, 1, 1); // esquina inf-der
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, 128, 128);
+    // Motas claras/oscuras muy tenues → aspecto de pintura mate.
+    for (let i = 0; i < 1400; i++) {
+      const x = Math.random() * 128;
+      const y = Math.random() * 128;
+      const r = 0.6 + Math.random() * 1.4;
+      const light = Math.random() > 0.5;
+      ctx.fillStyle = light ? "rgba(255,255,255,0.045)" : "rgba(0,0,0,0.045)";
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
   const tex = new THREE.CanvasTexture(cv);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
-  tex.magFilter = THREE.NearestFilter; // tiles de bordes limpios
-  tex.minFilter = THREE.NearestMipmapLinearFilter;
-  tex.colorSpace = THREE.SRGBColorSpace; // los hex de la paleta son sRGB
+  tex.colorSpace = THREE.SRGBColorSpace;
+  _noiseCache.set(base, tex);
   return tex;
 }
 
-/** Fusiona una lista de cajas (geometrías ya trasladadas) en UNA sola geometría. */
+/**
+ * Mapa de relieve (bump) de grano fino, neutro y barato: lo comparten todos los
+ * muros para dar textura de pintura sin segundo color. Una sola textura global.
+ */
+function makePaintBump(): THREE.CanvasTexture {
+  const hit = _paintBumpCache.get("bump");
+  if (hit) return hit;
+  const cv = document.createElement("canvas");
+  cv.width = 128;
+  cv.height = 128;
+  const ctx = cv.getContext("2d");
+  if (ctx) {
+    ctx.fillStyle = "#808080";
+    ctx.fillRect(0, 0, 128, 128);
+    const img = ctx.getImageData(0, 0, 128, 128);
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const n = 128 + (Math.random() * 30 - 15); // ±15 alrededor del gris medio
+      d[i] = n;
+      d[i + 1] = n;
+      d[i + 2] = n;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  _paintBumpCache.set("bump", tex);
+  return tex;
+}
+
+/**
+ * Tile de piso 1 m con damero sutil A/B + líneas de boquilla (grout). Canvas
+ * 256px = 2×2 celdas; el grout se dibuja en los bordes de cada celda. Con
+ * repeat = (ancho, alto)/2 cada cuadro mide 1 m y las boquillas caen por metro.
+ * Reutilizado entre builds (clave por par de colores).
+ */
+function makeFloorTexture(a: string, b: string): THREE.CanvasTexture {
+  const key = `${a}|${b}`;
+  const hit = _groutCache.get(key);
+  if (hit) return hit;
+  const cv = document.createElement("canvas");
+  cv.width = 256;
+  cv.height = 256;
+  const ctx = cv.getContext("2d");
+  if (ctx) {
+    const half = 128; // 1 celda = 1 m
+    // Damero base.
+    ctx.fillStyle = a;
+    ctx.fillRect(0, 0, 256, 256);
+    ctx.fillStyle = b;
+    ctx.fillRect(0, 0, half, half);
+    ctx.fillRect(half, half, half, half);
+    // Veteado muy leve dentro de cada tile (porcelanato satinado).
+    for (let i = 0; i < 600; i++) {
+      ctx.fillStyle = Math.random() > 0.5 ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)";
+      ctx.fillRect(Math.random() * 256, Math.random() * 256, 1.5, 1.5);
+    }
+    // Líneas de boquilla en los bordes de cada celda de 1 m.
+    ctx.strokeStyle = "rgba(0,0,0,0.16)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(0.5, 0.5, half - 1, half - 1);
+    ctx.strokeRect(half + 0.5, 0.5, half - 1, half - 1);
+    ctx.strokeRect(0.5, half + 0.5, half - 1, half - 1);
+    ctx.strokeRect(half + 0.5, half + 0.5, half - 1, half - 1);
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4; // boquillas nítidas en ángulo rasante (barato)
+  _groutCache.set(key, tex);
+  return tex;
+}
+
+/** Fusiona una lista de geometrías (ya trasladadas) en UNA sola geometría. */
 function mergeBoxes(boxes: THREE.BufferGeometry[]): THREE.BufferGeometry | null {
   if (boxes.length === 0) return null;
   const merged = mergeGeometries(boxes, false);
   for (const g of boxes) g.dispose(); // ya copiadas al buffer fusionado
   return merged ?? null;
+}
+
+/** Aclara un hex sRGB hacia blanco por factor t (0..1). Para caras interiores. */
+function lighten(hex: string, t: number): string {
+  const c = new THREE.Color(hex);
+  c.lerp(new THREE.Color(0xffffff), t);
+  return `#${c.getHexString()}`;
 }
 
 // ── Piso ──────────────────────────────────────────────────────────────────────
@@ -111,27 +198,36 @@ function buildFloor(b: WorldModel["bounds"], pal: WorldPalette): THREE.Mesh {
   const w = Math.max(1, maxX - minX);
   const d = Math.max(1, maxZ - minZ);
 
-  const tex = makeCheckerTexture(pal.floorA, pal.floorB);
-  // Cada par de tiles del canvas mide 2 m → repetimos (w/2, d/2) veces para que
-  // cada cuadro del damero ocupe exactamente 1 m.
+  // Tile satinado con damero sutil + boquilla. El canvas cubre 2×2 m → repeat
+  // (w/2, d/2) deja cada cuadro y cada línea de boquilla por metro exacto.
+  const tex = makeFloorTexture(pal.floorA, pal.floorB);
   tex.repeat.set(w / 2, d / 2);
 
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(w, d),
-    matte("#ffffff", { map: tex, roughness: 0.95 }),
+    // Acabado satinado: roughness media para reflejos suaves de los paneles.
+    matte("#ffffff", { map: tex, roughness: 0.6, metalness: 0.04 }),
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.set((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
   floor.receiveShadow = true;
   floor.name = "floor";
+  // El map del piso está CACHEADO a nivel de módulo (makeFloorTexture) y se
+  // reutiliza entre builds: marca sharedMap para que el dispose del orquestador
+  // libere el material pero NO la textura cacheada (si no, la 2ª construcción —
+  // p.ej. Strict Mode/Fast Refresh/re-mount — reusaría una textura ya disposed).
+  floor.userData.sharedMap = true;
   return floor;
 }
 
 // ── Muros + zócalo ─────────────────────────────────────────────────────────────
 
-/** Celdas ocupadas por todos los muros (sin duplicar). Devuelve [col, row][]. */
-function collectWallCells(elements: WorldElement[]): Array<[number, number]> {
-  const seen = new Set<string>();
+/** Celdas ocupadas por todos los muros (sin duplicar). Devuelve un Set y lista. */
+function collectWallCells(elements: WorldElement[]): {
+  set: Set<string>;
+  cells: Array<[number, number]>;
+} {
+  const set = new Set<string>();
   const cells: Array<[number, number]> = [];
   for (const el of elements ?? []) {
     if (!el || !el.isWall) continue;
@@ -144,59 +240,134 @@ function collectWallCells(elements: WorldElement[]): Array<[number, number]> {
         const c = col0 + dc;
         const r = row0 + dr;
         const key = `${c},${r}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
+        if (set.has(key)) continue;
+        set.add(key);
         cells.push([c, r]);
       }
     }
   }
-  return cells;
+  return { set, cells };
 }
 
 /**
- * Un mesh mergeado para TODOS los muros (1 draw call) + un mesh mergeado para el
- * zócalo (1 draw call). Cada celda = caja de 1×WALL_HEIGHT×1; el centro de la
- * celda (c,r) en mundo es (c+0.5, r+0.5) — coincide con la convención del parser.
+ * Muros con salto gráfico, sin perder el merge:
+ *   - "walls"     → grueso de los muros en UN draw call (caja WALL_THICKNESS de
+ *                   ancho por celda, tono interior un punto más claro, con mapa
+ *                   sutil de pintura + bump compartido).
+ *   - "wall-cap"  → remate superior en UN draw call (banda fina sobre el muro).
+ *   - "baseboard" → zócalo oscuro ~0.12 m en UN draw call.
+ *   - "wall-posts"→ postes redondeados (cilindros) SOLO en esquinas/junciones,
+ *                   mergeados en UN draw call.
+ * La cámara siempre está DENTRO de la clínica, así que el tono interior (más
+ * claro) es el que domina; el zócalo oscuro y el remate dan el contraste de
+ * "cara exterior vs interior" pedido sin un segundo pase por cara.
+ * Centro de celda (c,r) en mundo = (c+0.5, r+0.5).
  */
 function buildWalls(elements: WorldElement[], pal: WorldPalette): THREE.Object3D[] {
-  const cells = collectWallCells(elements);
+  const { set, cells } = collectWallCells(elements);
   if (cells.length === 0) return [];
+
+  const t = WALL_THICKNESS; // grosor visual del muro (más esbelto que 1 m)
+  const baseH = Math.min(0.12, WALL_HEIGHT * 0.2); // zócalo 12 cm
+  const baseT = t + 0.03; // zócalo sobresale un poco del muro
+  const capH = 0.06; // remate superior
+  const capT = t + 0.04;
 
   const wallBoxes: THREE.BufferGeometry[] = [];
   const baseBoxes: THREE.BufferGeometry[] = [];
-  const baseH = Math.min(0.12, WALL_HEIGHT * 0.2);
-  const baseInset = 1 + WALL_THICKNESS * 0.5; // zócalo ligeramente más ancho que el muro
+  const capBoxes: THREE.BufferGeometry[] = [];
 
   for (const [c, r] of cells) {
     const cx = c + 0.5;
     const cz = r + 0.5;
 
-    const wall = new THREE.BoxGeometry(1, WALL_HEIGHT, 1);
+    // ¿El tramo corre en X (vecinos E/O) o en Z (vecinos N/S)? Orienta la caja
+    // delgada a lo largo del tramo para que el muro se vea como una pared, no un
+    // cubo. Si es aislado o esquina, usa cuadrado del grosor.
+    const hN = set.has(`${c - 1},${r}`) || set.has(`${c + 1},${r}`);
+    const vN = set.has(`${c},${r - 1}`) || set.has(`${c},${r + 1}`);
+    const sx = hN || !vN ? 1 : t; // ancho en X
+    const sz = vN ? 1 : t;        // ancho en Z
+
+    const wall = new THREE.BoxGeometry(sx, WALL_HEIGHT, sz);
     wall.translate(cx, WALL_HEIGHT / 2, cz);
     wallBoxes.push(wall);
 
-    const base = new THREE.BoxGeometry(baseInset, baseH, baseInset);
+    const base = new THREE.BoxGeometry(sx + (sx > t ? 0.03 : baseT - t), baseH, sz + (sz > t ? 0.03 : baseT - t));
     base.translate(cx, baseH / 2, cz);
     baseBoxes.push(base);
+
+    const cap = new THREE.BoxGeometry(sx + (sx > t ? 0.04 : capT - t), capH, sz + (sz > t ? 0.04 : capT - t));
+    cap.translate(cx, WALL_HEIGHT - capH / 2, cz);
+    capBoxes.push(cap);
+  }
+
+  // Postes redondeados en esquinas/junciones (donde concurren tramos H y V).
+  const postBoxes: THREE.BufferGeometry[] = [];
+  const postR = t * 0.62;
+  for (const [c, r] of cells) {
+    const hN = set.has(`${c - 1},${r}`) || set.has(`${c + 1},${r}`);
+    const vN = set.has(`${c},${r - 1}`) || set.has(`${c},${r + 1}`);
+    if (!(hN && vN)) continue; // solo verdaderas esquinas / cruces / T
+    const post = new THREE.CylinderGeometry(postR, postR, WALL_HEIGHT, 10, 1);
+    post.translate(c + 0.5, WALL_HEIGHT / 2, r + 0.5);
+    postBoxes.push(post);
   }
 
   const out: THREE.Object3D[] = [];
 
+  // Materiales: pintura mate con micro-ruido + bump compartido. Tono interior
+  // un punto más claro que la paleta base (la cámara ve el interior).
+  const paintMap = makePaintTexture(lighten(pal.wall, 0.06));
+  paintMap.repeat.set(1, WALL_HEIGHT / 2);
+  const bump = makePaintBump();
+  bump.repeat.set(2, WALL_HEIGHT);
+  const wallMat = matte(lighten(pal.wall, 0.06), {
+    map: paintMap,
+    bumpMap: bump,
+    bumpScale: 0.012,
+    roughness: 0.92,
+  });
+
   const wallGeo = mergeBoxes(wallBoxes);
   if (wallGeo) {
-    const mesh = new THREE.Mesh(wallGeo, matte(pal.wall, { roughness: 0.95 }));
+    const mesh = new THREE.Mesh(wallGeo, wallMat);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.name = "walls";
+    // map/bumpMap del muro vienen de caches de módulo (makePaintTexture/
+    // makePaintBump) reutilizados entre builds → no los dispongas en el cleanup.
+    mesh.userData.sharedMap = true;
+    out.push(mesh);
+  }
+
+  const capGeo = mergeBoxes(capBoxes);
+  if (capGeo) {
+    // Remate del tono del zócalo: cierra el muro arriba como una cornisa fina.
+    const mesh = new THREE.Mesh(capGeo, matte(pal.baseboard, { roughness: 0.8 }));
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.name = "wall-cap";
     out.push(mesh);
   }
 
   const baseGeo = mergeBoxes(baseBoxes);
   if (baseGeo) {
-    const mesh = new THREE.Mesh(baseGeo, matte(pal.baseboard, { roughness: 0.85 }));
+    const mesh = new THREE.Mesh(baseGeo, matte(pal.baseboard, { roughness: 0.7 }));
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.name = "baseboard";
+    out.push(mesh);
+  }
+
+  const postGeo = mergeBoxes(postBoxes);
+  if (postGeo) {
+    // Postes del tono del muro pero un toque más definidos (sin map, leen como
+    // columnas redondeadas que rematan las esquinas).
+    const mesh = new THREE.Mesh(postGeo, matte(lighten(pal.wall, 0.1), { roughness: 0.85 }));
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.name = "wall-posts";
     out.push(mesh);
   }
 
@@ -206,51 +377,44 @@ function buildWalls(elements: WorldElement[], pal: WorldPalette): THREE.Object3D
 // ── Puertas ─────────────────────────────────────────────────────────────────────
 
 /**
- * Marco de puerta (dos postes + dintel) del color accent con HUECO (sin hoja
- * sólida que bloquee; la colisión ya excluye puertas). Hoja entreabierta
- * decorativa, fina. Centrado en el origen local; buildArchitecture lo posiciona
- * y rota. El vano se dibuja a lo largo de X = ancho del footprint base.
+ * SOLO EL MARCO de la puerta (dos jambas + dintel + umbral fino), con el HUECO
+ * libre. La HOJA animada la dibuja doors.ts (módulo aparte) — aquí NO se dibuja
+ * ninguna hoja. Centrado en el origen local; buildArchitecture lo posiciona y
+ * rota. El vano corre a lo largo de X = ancho del footprint base.
  */
 function buildDoor(el: WorldElement, pal: WorldPalette): THREE.Group {
   const g = new THREE.Group();
-  g.name = "door";
+  g.name = "door-frame";
 
   const span = Math.max(0.9, num(el.baseCols, 1)); // ancho del vano (m)
-  const jamb = 0.1; // grosor de poste/dintel
+  const jamb = 0.1; // grosor de jamba/dintel
+  const depth = jamb * 1.8; // canto del marco (atraviesa el grosor del muro)
   const height = Math.min(2.1, WALL_HEIGHT - 0.2); // alto del vano
-  const frameMat = matte(pal.accent, { roughness: 0.6 });
+  const frameMat = matte(pal.accent, { roughness: 0.5, metalness: 0.1 });
 
-  // Postes (a izquierda y derecha del vano)
-  const postGeo = new THREE.BoxGeometry(jamb, height, jamb * 1.6);
-  for (const sx of [-1, 1]) {
-    const post = new THREE.Mesh(postGeo, frameMat);
-    post.position.set(sx * (span / 2 - jamb / 2), height / 2, 0);
+  // Jambas (izquierda y derecha del vano)
+  const jambGeo = new THREE.BoxGeometry(jamb, height, depth);
+  for (const dir of [-1, 1]) {
+    const post = new THREE.Mesh(jambGeo, frameMat);
+    post.position.set(dir * (span / 2 - jamb / 2), height / 2, 0);
     post.castShadow = true;
     g.add(post);
   }
 
-  // Dintel (arriba)
-  const lintel = new THREE.Mesh(new THREE.BoxGeometry(span, jamb, jamb * 1.6), frameMat);
+  // Dintel (arriba), cubriendo todo el ancho del vano.
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(span, jamb, depth), frameMat);
   lintel.position.set(0, height - jamb / 2, 0);
   lintel.castShadow = true;
   g.add(lintel);
 
-  // Hoja entreabierta decorativa: panel fino abisagrado en un poste, girado ~35°
-  // hacia adentro. No bloquea (es solo visual) y deja el hueco transitable.
-  const leafW = span - jamb * 2;
-  if (leafW > 0.2) {
-    const hinge = new THREE.Group();
-    hinge.position.set(-(span / 2 - jamb), 0, 0); // bisagra en el poste izquierdo
-    hinge.rotation.y = -Math.PI * 0.2; // entreabierta
-    const leaf = new THREE.Mesh(
-      new THREE.BoxGeometry(leafW, height - jamb, 0.04),
-      matte("#f3f5f7", { roughness: 0.8 }),
-    );
-    leaf.position.set(leafW / 2, (height - jamb) / 2, 0); // pivota desde un borde
-    leaf.castShadow = true;
-    hinge.add(leaf);
-    g.add(hinge);
-  }
+  // Umbral fino a ras de piso (remata el hueco abajo sin estorbar el paso).
+  const sill = new THREE.Mesh(
+    new THREE.BoxGeometry(span, 0.02, depth),
+    matte(pal.baseboard, { roughness: 0.7 }),
+  );
+  sill.position.set(0, 0.01, 0);
+  sill.receiveShadow = true;
+  g.add(sill);
 
   return g;
 }
@@ -271,7 +435,8 @@ function buildWindow(el: WorldElement, pal: WorldPalette): THREE.Group {
   const cy = sillY + winH / 2; // centro vertical del cristal
   const bar = 0.07; // grosor del marco
   const depth = 0.07;
-  const frameMat = matte(pal.accent, { roughness: 0.6 });
+  // Marco con leve metalness → lee como aluminio/herrería de ventana.
+  const frameMat = matte(pal.accent, { roughness: 0.45, metalness: 0.25 });
 
   // Marco: dintel + antepecho (horizontales) y dos jambas (verticales)
   const horiz = new THREE.BoxGeometry(span, bar, depth * 1.4);
@@ -308,6 +473,82 @@ function buildWindow(el: WorldElement, pal: WorldPalette): THREE.Group {
   return g;
 }
 
+// ── Techo + paneles de luz ───────────────────────────────────────────────────────
+
+/**
+ * Techo a WALL_HEIGHT (color ceiling) con PANELES DE LUZ empotrados en rejilla
+ * cada ~4-5 m dentro de bounds. Devuelve:
+ *   - "ceiling"        → un plano (1 draw call), cara hacia abajo, sin sombras.
+ *   - "ceiling-panels" → TODOS los paneles emissive mergeados (1 draw call).
+ * Los paneles van SIEMPRE emissive (#fff4e0): de día se ven como luminarias y de
+ * noche son la luz principal cuando el orquestador baja el ambient. Total: ~2
+ * draw calls. El techo está a 2.6 m y los ojos a 1.6 m → nunca tapa la cámara.
+ */
+function buildCeiling(b: WorldModel["bounds"], pal: WorldPalette): THREE.Object3D[] {
+  const minX = num(b?.minX, 0);
+  const maxX = num(b?.maxX, 1);
+  const minZ = num(b?.minZ, 0);
+  const maxZ = num(b?.maxZ, 1);
+  const w = Math.max(1, maxX - minX);
+  const d = Math.max(1, maxZ - minZ);
+  const cxw = (minX + maxX) / 2;
+  const czw = (minZ + maxZ) / 2;
+
+  const out: THREE.Object3D[] = [];
+
+  // Plano de techo (mirando hacia abajo). FrontSide + rotado para que su normal
+  // apunte al piso: solo se ve desde dentro, no derrocha overdraw.
+  const ceil = new THREE.Mesh(
+    new THREE.PlaneGeometry(w, d),
+    new THREE.MeshStandardMaterial({ color: pal.ceiling, roughness: 0.95, metalness: 0, side: THREE.FrontSide }),
+  );
+  ceil.rotation.x = Math.PI / 2; // normal hacia -Y (hacia abajo)
+  ceil.position.set(cxw, WALL_HEIGHT, czw);
+  ceil.name = "ceiling";
+  // Sin sombras: un techo plano no necesita recibirlas y ahorra fps.
+  out.push(ceil);
+
+  // Paneles de luz en rejilla cada ~4.5 m, centrados sobre el área. Plano fino,
+  // empotrado justo bajo el techo, emissive cálido. Todos mergeados.
+  const step = 4.5;                 // separación de la rejilla (m)
+  const panelW = Math.min(1.2, step * 0.5); // tamaño del panel (m)
+  const panelY = WALL_HEIGHT - 0.02; // empotrado justo bajo el plano de techo
+  const nx = Math.max(1, Math.floor(w / step));
+  const nz = Math.max(1, Math.floor(d / step));
+  const startX = cxw - ((nx - 1) * step) / 2;
+  const startZ = czw - ((nz - 1) * step) / 2;
+
+  const panels: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < nx; i++) {
+    for (let j = 0; j < nz; j++) {
+      const px = startX + i * step;
+      const pz = startZ + j * step;
+      const p = new THREE.PlaneGeometry(panelW, panelW);
+      p.rotateX(Math.PI / 2);       // mirando hacia abajo
+      p.translate(px, panelY, pz);
+      panels.push(p);
+    }
+  }
+  const panelGeo = mergeBoxes(panels);
+  if (panelGeo) {
+    const mesh = new THREE.Mesh(
+      panelGeo,
+      new THREE.MeshStandardMaterial({
+        color: "#fff4e0",
+        emissive: new THREE.Color("#fff4e0"),
+        emissiveIntensity: 0.85, // media-alta: luminaria visible día y noche
+        roughness: 1,
+        metalness: 0,
+        side: THREE.FrontSide,
+      }),
+    );
+    mesh.name = "ceiling-panels";
+    out.push(mesh);
+  }
+
+  return out;
+}
+
 // ── Entrada principal ────────────────────────────────────────────────────────────
 
 export function buildArchitecture(world: WorldModel): THREE.Group {
@@ -323,8 +564,11 @@ export function buildArchitecture(world: WorldModel): THREE.Group {
     // Piso
     group.add(buildFloor(bounds, pal));
 
-    // Muros + zócalo (1 draw call cada uno)
+    // Muros + zócalo + remate + postes (1 draw call cada uno)
     for (const m of buildWalls(elements, pal)) group.add(m);
+
+    // Techo + paneles de luz (~2 draw calls)
+    for (const m of buildCeiling(bounds, pal)) group.add(m);
 
     // Puertas y ventanas: centradas en el centro del footprint y rotadas
     for (const el of elements) {

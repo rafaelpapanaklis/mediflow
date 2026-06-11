@@ -51,6 +51,7 @@
 
 import * as THREE from "three";
 import { typeLabel, type WorldElement, type WorldModel } from "./world-types";
+import { makeContactShadow } from "./three-helpers";
 
 // ── Paleta cálida del brief ──────────────────────────────────────────────────
 const COL = {
@@ -82,22 +83,37 @@ function mat(color: string, opts?: { rough?: number; metal?: number }): THREE.Me
   });
 }
 const M = {
-  wood: () => mat(COL.wood, { rough: 0.7 }),
-  woodDark: () => mat(COL.woodDark, { rough: 0.7 }),
-  white: () => mat(COL.white, { rough: 0.5 }),
-  chrome: () => mat(COL.chrome, { rough: 0.3, metal: 0.85 }),
-  metalDark: () => mat(COL.metalDark, { rough: 0.4, metal: 0.6 }),
-  upholstery: () => mat(COL.upholstery, { rough: 0.9 }),
-  upholsteryDark: () => mat(COL.upholsteryDark, { rough: 0.9 }),
-  black: () => mat(COL.black, { rough: 0.6 }),
-  plant: () => mat(COL.plant, { rough: 0.9 }),
-  plantDark: () => mat(COL.plantDark, { rough: 0.9 }),
-  terracotta: () => mat(COL.terracotta, { rough: 0.95 }),
-  ceramic: () => mat(COL.ceramic, { rough: 0.25 }),
-  screen: () => mat(COL.screen, { rough: 0.25 }),
-  glass: () => mat(COL.glass, { rough: 0.1, metal: 0.2 }),
-  soil: () => mat(COL.soil, { rough: 1 }),
-  gray: () => mat(COL.gray, { rough: 0.9 }),
+  // Madera cálida: mate, sin reflejo metálico.
+  wood: () => mat(COL.wood, { rough: 0.62, metal: 0 }),
+  woodDark: () => mat(COL.woodDark, { rough: 0.66, metal: 0 }),
+  // Equipo: plástico/acrílico clínico mate.
+  white: () => mat(COL.white, { rough: 0.55, metal: 0.04 }),
+  // Cromo pulido: caños, brazos, apoyabrazos (alto brillo, casi sin rugosidad).
+  chrome: () => mat(COL.chrome, { rough: 0.18, metal: 0.95 }),
+  // Acero satinado: postes, juntas, pies (metálico pero más difuso).
+  metalDark: () => mat(COL.metalDark, { rough: 0.38, metal: 0.78 }),
+  // Tapizado: tela mate sin reflejo.
+  upholstery: () => mat(COL.upholstery, { rough: 0.95, metal: 0 }),
+  upholsteryDark: () => mat(COL.upholsteryDark, { rough: 0.95, metal: 0 }),
+  // Plástico negro mate (sillas de oficina, monitores).
+  black: () => mat(COL.black, { rough: 0.7, metal: 0.05 }),
+  plant: () => mat(COL.plant, { rough: 0.92, metal: 0 }),
+  plantDark: () => mat(COL.plantDark, { rough: 0.92, metal: 0 }),
+  terracotta: () => mat(COL.terracotta, { rough: 0.95, metal: 0 }),
+  // Cerámica esmaltada: lavabos/inodoros (brillo suave).
+  ceramic: () => mat(COL.ceramic, { rough: 0.22, metal: 0.04 }),
+  screen: () => mat(COL.screen, { rough: 0.22, metal: 0.1 }),
+  glass: () => mat(COL.glass, { rough: 0.08, metal: 0.25 }),
+  soil: () => mat(COL.soil, { rough: 1, metal: 0 }),
+  gray: () => mat(COL.gray, { rough: 0.9, metal: 0 }),
+};
+
+// ── Tonos de follaje para plantas (varios verdes distintos) ──────────────────
+const LEAF = {
+  a: () => mat("#2f9e54", { rough: 0.92 }),
+  b: () => mat("#3fb568", { rough: 0.9 }),
+  c: () => mat("#1f7d3f", { rough: 0.94 }),
+  d: () => mat("#6cc788", { rough: 0.88 }),
 };
 
 // ── Helpers de primitivas ────────────────────────────────────────────────────
@@ -166,6 +182,51 @@ function makeLabelSprite(text: string): THREE.Sprite {
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
   sprite.scale.set(1.1, 0.275, 1);
   return sprite;
+}
+
+/**
+ * Textura emisiva de la pantalla de TV: degradado de marca + "DaleControl".
+ * ≤512px, cacheada a nivel de módulo (todas las TVs comparten la misma textura).
+ * Se monta como emissiveMap; NO la dispongas por mesh (compartida).
+ */
+let _tvTex: THREE.CanvasTexture | null = null;
+function tvScreenTexture(): THREE.CanvasTexture {
+  if (_tvTex) return _tvTex;
+  const w = 512;
+  const h = 288; // 16:9
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext("2d");
+  if (ctx) {
+    // Degradado de marca (azul clínico → violeta)
+    const grad = ctx.createLinearGradient(0, 0, w, h);
+    grad.addColorStop(0, "#1d4ed8");
+    grad.addColorStop(0.55, "#2563eb");
+    grad.addColorStop(1, "#7c3aed");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+    // Brillo radial suave (centro)
+    const glow = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w * 0.6);
+    glow.addColorStop(0, "rgba(255,255,255,0.28)");
+    glow.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, w, h);
+    // Marca
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "700 54px ui-sans-serif, system-ui, sans-serif";
+    ctx.fillText("DaleControl", w / 2, h / 2 - 8);
+    ctx.font = "500 22px ui-sans-serif, system-ui, sans-serif";
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.fillText("Bienvenido a tu clínica", w / 2, h / 2 + 38);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  _tvTex = tex;
+  return tex;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -250,7 +311,7 @@ function buildEsterilizador(g: THREE.Group): void {
   g.add(at(boxMesh(0.36, 0.2, 0.03, M.screen()), 0.5, 1.25, 0.85));
 }
 
-/** Lavabo clínico: gabinete + encimera + tarja hundida + grifo doblado. */
+/** Lavabo clínico: gabinete + encimera + tarja hundida + grifo cromado. */
 function buildLavabo(g: THREE.Group): void {
   // Gabinete bajo
   g.add(at(boxMesh(1.8, 0.85, 1.7, M.white(), true), 0, 0.425, 0));
@@ -258,14 +319,26 @@ function buildLavabo(g: THREE.Group): void {
   g.add(at(boxMesh(1.9, 0.06, 1.8, M.ceramic()), 0, 0.88, 0));
   // Tarja hundida (box embutido)
   g.add(at(boxMesh(1.0, 0.18, 0.9, M.glass()), 0, 0.84, 0.1));
-  // Grifo doblado: cuello vertical + caño horizontal
-  g.add(at(cyl(0.04, 0.05, 0.35, M.chrome(), 8), 0, 1.05, -0.5));
-  const spout = cyl(0.035, 0.035, 0.35, M.chrome(), 8);
+  // ── Mezcladora metálica (cromo pulido) ──────────────────────────────
+  // Base/cuerpo de la mezcladora
+  g.add(at(cyl(0.06, 0.07, 0.06, M.chrome(), 10), 0, 0.93, -0.5));
+  // Cuello vertical
+  g.add(at(cyl(0.04, 0.05, 0.3, M.chrome(), 10), 0, 1.08, -0.5));
+  // Codo (esfera de unión)
+  g.add(at(sphere(0.05, M.chrome()), 0, 1.22, -0.5));
+  // Caño horizontal hacia la tarja
+  const spout = cyl(0.035, 0.04, 0.36, M.chrome(), 10);
   spout.rotation.x = Math.PI / 2;
-  g.add(at(spout, 0, 1.2, -0.35));
-  // Maneras
-  g.add(at(sphere(0.05, M.chrome()), -0.18, 1.0, -0.5));
-  g.add(at(sphere(0.05, M.chrome()), 0.18, 1.0, -0.5));
+  g.add(at(spout, 0, 1.22, -0.33));
+  // Boquilla apuntando hacia abajo
+  g.add(at(cyl(0.03, 0.035, 0.06, M.chrome(), 8), 0, 1.18, -0.16));
+  // Maneras tipo palanca (cilindros, no esferas) a ambos lados
+  for (const sx of [-1, 1]) {
+    const lever = cyl(0.02, 0.025, 0.16, M.chrome(), 8);
+    lever.rotation.z = Math.PI / 2;
+    g.add(at(lever, sx * 0.16, 0.99, -0.5));
+    g.add(at(sphere(0.028, M.chrome()), sx * 0.08, 0.99, -0.5));
+  }
 }
 
 /** Gabinete de cajones: cuerpo + 3 cajones con tiradores. */
@@ -389,27 +462,48 @@ function buildArchivero(g: THREE.Group): void {
   }
 }
 
-/** Planta: maceta (cono/cilindro) + follaje (esferas/conos verdes). */
+/** Planta: maceta + follaje en racimo de esferas con varios verdes distintos. */
 function buildPlanta(g: THREE.Group): void {
-  // Maceta troncocónica
+  // Maceta troncocónica + reborde
   const pot = cyl(0.28, 0.2, 0.4, M.terracotta(), 12);
   pot.castShadow = true;
   g.add(at(pot, 0, 0.2, 0));
-  g.add(at(cyl(0.27, 0.27, 0.04, M.soil(), 12), 0, 0.4, 0));
-  // Follaje en esferas + cono superior
-  g.add(at(sphere(0.32, M.plant()), 0, 0.7, 0));
-  g.add(at(sphere(0.24, M.plantDark()), 0.18, 0.85, 0.12));
-  g.add(at(sphere(0.22, M.plant()), -0.18, 0.82, -0.1));
-  g.add(at(cone(0.2, 0.5, M.plantDark(), 10), 0, 1.05, 0));
+  g.add(at(cyl(0.3, 0.29, 0.05, M.terracotta(), 12), 0, 0.4, 0)); // labio
+  g.add(at(cyl(0.27, 0.27, 0.04, M.soil(), 12), 0, 0.41, 0));     // tierra
+  // Tallo corto
+  g.add(at(cyl(0.03, 0.04, 0.18, M.woodDark(), 6), 0, 0.5, 0));
+  // Racimo de follaje: 4 esferas, cada una en un verde distinto, escalonadas.
+  const blobs: [number, number, number, number, () => THREE.Material][] = [
+    [0.0, 0.72, 0.0, 0.32, LEAF.a],
+    [0.19, 0.84, 0.1, 0.24, LEAF.b],
+    [-0.18, 0.8, -0.12, 0.23, LEAF.c],
+    [0.04, 1.0, -0.02, 0.22, LEAF.d],
+  ];
+  for (const [x, y, z, r, m] of blobs) {
+    const leaf = sphere(r, m());
+    leaf.scale.y = 1.12; // ligeramente ovalado, más orgánico
+    leaf.castShadow = true;
+    g.add(at(leaf, x, y, z));
+  }
 }
 
-/** Televisión: pantalla delgada + soporte. */
+/** Televisión: marco delgado + pantalla EMISIVA "DaleControl" + soporte. */
 function buildTv(g: THREE.Group): void {
-  // Pantalla (panel oscuro delgado a lo largo de X)
+  // Marco/carcasa (panel oscuro delgado a lo largo de X)
   const panel = boxMesh(1.8, 1.05, 0.07, M.black(), true);
   g.add(at(panel, 0, 1.5, 0));
-  // Cara emisora
-  g.add(at(boxMesh(1.7, 0.95, 0.02, mat("#1d3b6e", { rough: 0.25 })), 0, 1.5, 0.04));
+  // Cara emisora: CanvasTexture de marca como emissiveMap (se ilumina sola).
+  const screenMat = new THREE.MeshStandardMaterial({
+    color: COL.black,
+    roughness: 0.3,
+    metalness: 0.1,
+    emissive: 0xffffff,
+    emissiveMap: tvScreenTexture(),
+    emissiveIntensity: 0.85, // media: brilla sin reventar el bloom
+  });
+  const screen = boxMesh(1.7, 0.95, 0.02, screenMat);
+  screen.userData.sharedMap = true; // textura compartida: no disponer por mesh
+  g.add(at(screen, 0, 1.5, 0.045));
   // Cuello + base / pie
   g.add(at(cyl(0.04, 0.04, 0.5, M.metalDark(), 8), 0, 0.85, 0));
   g.add(at(cyl(0.25, 0.3, 0.05, M.black(), 12), 0, 0.6, 0));
@@ -432,7 +526,7 @@ function buildInodoro(g: THREE.Group): void {
   g.add(at(inner, 0, 0.5, 0.15));
 }
 
-/** Lavabo de baño: pedestal + tarja redonda + grifo. */
+/** Lavabo de baño: pedestal + tarja redonda + grifo cromado. */
 function buildLavaboBano(g: THREE.Group): void {
   // Pedestal
   g.add(at(cyl(0.14, 0.2, 0.8, M.ceramic(), 12), 0, 0.4, 0));
@@ -441,11 +535,17 @@ function buildLavaboBano(g: THREE.Group): void {
   basin.castShadow = true;
   g.add(at(basin, 0, 0.85, 0));
   g.add(at(cyl(0.26, 0.26, 0.1, M.glass(), 12), 0, 0.9, 0));
-  // Grifo
-  g.add(at(cyl(0.03, 0.04, 0.18, M.chrome(), 8), 0, 1.0, -0.22));
-  const spout = cyl(0.025, 0.025, 0.18, M.chrome(), 8);
+  // ── Grifo cromado tipo gooseneck ────────────────────────────────────
+  g.add(at(cyl(0.05, 0.06, 0.04, M.chrome(), 10), 0, 0.96, -0.22)); // base
+  g.add(at(cyl(0.028, 0.035, 0.16, M.chrome(), 10), 0, 1.04, -0.22)); // cuello
+  g.add(at(sphere(0.035, M.chrome()), 0, 1.12, -0.22));               // codo
+  const spout = cyl(0.024, 0.028, 0.18, M.chrome(), 10);
   spout.rotation.x = Math.PI / 2.4;
-  g.add(at(spout, 0, 1.08, -0.15));
+  g.add(at(spout, 0, 1.09, -0.13));
+  // Palanca mezcladora
+  const lever = cyl(0.018, 0.022, 0.12, M.chrome(), 8);
+  lever.rotation.z = Math.PI / 2;
+  g.add(at(lever, 0.07, 1.0, -0.22));
 }
 
 /** Caja genérica gris del footprint + placa flotante (tipo desconocido). */
@@ -531,6 +631,12 @@ export function buildFurniture(world: WorldModel): THREE.Group {
     const mesh = buildFurnitureMesh(el);
     mesh.position.set(el.center.x, 0, el.center.z);
     mesh.rotation.y = el.rotationRad;
+    // AO de contacto (sombra fake) en la base: asienta el mueble al piso.
+    // Radio según el footprint; textura compartida (no se dispone por mesh).
+    const radius = Math.max(el.baseCols, el.baseRows) * 0.6;
+    const shadow = makeContactShadow(radius, 0.4);
+    shadow.position.set(0, 0.02, 0); // base local del mueble (y≈0.02)
+    mesh.add(shadow);
     group.add(mesh);
   }
   return group;
