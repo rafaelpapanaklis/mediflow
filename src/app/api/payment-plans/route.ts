@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { PLAN_FREQUENCY, PLAN_FREQUENCY_DAYS, PLAN_STATUS } from "@/lib/payment-plans/status";
 
 // GET /api/payment-plans?patientId=xxx
 export async function GET(req: NextRequest) {
@@ -57,7 +58,10 @@ export async function POST(req: NextRequest) {
 
   const remaining    = totalAmount - (downPayment ?? 0);
   const baseInstall  = Math.round((remaining / installments) * 100) / 100;
-  const freqDays     = frequency === "WEEKLY" ? 7 : frequency === "BIWEEKLY" ? 14 : 30;
+  // status/frequency son TEXT en prod: normaliza la frecuencia entrante para
+  // no escribir valores fuera del set canónico (el enum de Prisma ya no valida).
+  const freq         = PLAN_FREQUENCY[frequency as keyof typeof PLAN_FREQUENCY] ?? PLAN_FREQUENCY.MONTHLY;
+  const freqDays     = PLAN_FREQUENCY_DAYS[freq];
   const start        = startDate ? new Date(startDate) : new Date();
 
   const plan = await prisma.$transaction(async (tx) => {
@@ -70,10 +74,10 @@ export async function POST(req: NextRequest) {
         totalAmount,
         downPayment:  downPayment ?? 0,
         installments,
-        frequency:    frequency ?? "MONTHLY",
+        frequency:    freq,
         startDate:    startDate ? new Date(startDate) : new Date(),
         notes:        notes ?? null,
-        status:       "ACTIVE",
+        status:       PLAN_STATUS.ACTIVE,
       },
     });
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { PLAN_STATUS } from "@/lib/payment-plans/status";
 
 // PATCH /api/payment-plans/[id] — register a payment on an installment
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -31,7 +32,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (allPaid) {
     await prisma.paymentPlan.update({
       where: { id: params.id },
-      data:  { status: "COMPLETED" },
+      data:  { status: PLAN_STATUS.COMPLETED },
     });
   }
 
@@ -53,6 +54,6 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   });
   if (!plan) return NextResponse.json({ error: "Plan no encontrado" }, { status: 404 });
 
-  await prisma.paymentPlan.updateMany({ where: { id: params.id, clinicId: ctx.clinicId }, data: { status: "CANCELLED" } });
+  await prisma.paymentPlan.updateMany({ where: { id: params.id, clinicId: ctx.clinicId }, data: { status: PLAN_STATUS.CANCELLED } });
   return NextResponse.json({ success: true });
 }
