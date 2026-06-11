@@ -28,6 +28,10 @@ type AffiliateRow = {
   status: AffiliateStatus;
   referralCode: string;
   commissionPct: number;
+  // % vigente por nivel bronce/plata/oro (lo que paga el webhook). null =
+  // modo legacy (config de niveles sin aplicar) → se muestra commissionPct.
+  effectiveLevelLabel?: string | null;
+  effectivePct?: number | null;
   payoutMethod: string | null;
   createdAt: string | Date;
   approvedAt: string | Date | null;
@@ -715,7 +719,18 @@ export function AffiliatesClient({ initial }: { initial: AffiliateRow[] }) {
                         {a.referralCode}
                       </span>
                     </td>
-                    <td className="mono" style={{ color: "var(--text-2)", fontSize: 12 }}>{a.commissionPct}%</td>
+                    <td className="mono" style={{ color: "var(--text-2)", fontSize: 12 }}>
+                      {a.effectivePct != null ? (
+                        <>
+                          {a.effectiveLevelLabel} · {a.effectivePct}%
+                          {a.commissionPct !== a.effectivePct && (
+                            <div style={{ fontSize: 10, color: "var(--text-3)" }}>legacy {a.commissionPct}%</div>
+                          )}
+                        </>
+                      ) : (
+                        <>{a.commissionPct}%</>
+                      )}
+                    </td>
                     <td className="mono" style={{ color: "var(--text-2)", fontSize: 12 }}>{referred}</td>
                     <td className="mono" style={{ color: "var(--text-3)", fontSize: 12 }}>
                       {formatRelativeDate(a.createdAt)}
