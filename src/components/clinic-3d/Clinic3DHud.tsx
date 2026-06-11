@@ -93,6 +93,17 @@ export interface Clinic3DHudProps {
   // ── V3 (interacción: clic en sillones) ──────────────────────────────────────
   /** v3 — pacientes en sala de espera. */
   waitingCount?: number;
+  // ── V3 — MODOS (dron + VR) ───────────────────────────────────────────────
+  /** true en vista dron (aérea): oculta crosshair, tarjeta de entrada y minimapa. */
+  droneActive: boolean;
+  /** Alterna FPS ↔ dron (tecla V o botón 🚁). */
+  onToggleDrone: () => void;
+  /** true si el equipo soporta immersive-vr → muestra el botón "Entrar en VR". */
+  vrSupported: boolean;
+  /** true mientras hay una sesión VR activa. */
+  inVr: boolean;
+  /** Inicia la sesión VR. */
+  onEnterVr: () => void;
 }
 
 const EDITOR_HREF = "/dashboard/clinic-layout";
@@ -347,6 +358,11 @@ function ReadyOverlay(props: Clinic3DHudProps) {
     minimapFrameRef,
     publicMode,
     waitingCount,
+    droneActive,
+    onToggleDrone,
+    vrSupported,
+    inVr,
+    onEnterVr,
   } = props;
 
   const waiting = Math.max(0, waitingCount || 0);
@@ -408,6 +424,19 @@ function ReadyOverlay(props: Clinic3DHudProps) {
           </Link>
           <button
             type="button"
+            onClick={onToggleDrone}
+            aria-label={droneActive ? "Salir de vista dron (V)" : "Vista dron (V)"}
+            title={droneActive ? "Salir de vista dron (V)" : "Vista dron (V)"}
+            className={`pointer-events-auto inline-flex h-8 w-8 items-center justify-center rounded-lg border text-base leading-none backdrop-blur-md transition-colors ${
+              droneActive
+                ? "border-violet-400/40 bg-violet-500/25 text-violet-100 hover:bg-violet-500/35"
+                : "border-white/10 bg-black/40 text-white/90 hover:bg-black/60 hover:text-white"
+            }`}
+          >
+            <span aria-hidden="true">🚁</span>
+          </button>
+          <button
+            type="button"
             onClick={onToggleMinimap}
             aria-label={minimapVisible ? "Ocultar minimapa (M)" : "Mostrar minimapa (M)"}
             title={minimapVisible ? "Ocultar minimapa (M)" : "Mostrar minimapa (M)"}
@@ -428,9 +457,22 @@ function ReadyOverlay(props: Clinic3DHudProps) {
           >
             {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </button>
+          {/* Entrar en VR: SOLO si el equipo soporta immersive-vr (desktop normal: nada). */}
+          {vrSupported ? (
+            <button
+              type="button"
+              onClick={onEnterVr}
+              aria-label="Entrar en realidad virtual"
+              title="Entrar en VR"
+              className="pointer-events-auto inline-flex h-8 items-center gap-1.5 rounded-lg border border-violet-400/40 bg-violet-500/25 px-2.5 text-xs font-semibold text-violet-100 backdrop-blur-md transition-colors hover:bg-violet-500/35"
+            >
+              <span aria-hidden="true">🥽</span>
+              <span className="hidden sm:inline">{inVr ? "En VR" : "Entrar en VR"}</span>
+            </button>
+          ) : null}
         </div>
         {/* Minimapa: debajo de los botones. Oculto en pantallas muy chicas (estorba). */}
-        {minimapVisible ? (
+        {minimapVisible && !droneActive ? (
           <div className="hidden sm:block">
             <Minimap world={world} frameRef={minimapFrameRef} />
           </div>
@@ -470,8 +512,8 @@ function ReadyOverlay(props: Clinic3DHudProps) {
         </div>
       </div>
 
-      {/* Centro desktop sin control: tarjeta "Haz clic para entrar" */}
-      {!isTouch && !isLocked ? (
+      {/* Centro desktop sin control: tarjeta "Haz clic para entrar" (no en dron) */}
+      {!isTouch && !isLocked && !droneActive ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6">
           <button
             type="button"
@@ -494,7 +536,7 @@ function ReadyOverlay(props: Clinic3DHudProps) {
 
       {/* Crosshair central: visible con control (lock desktop o móvil); crece y
           colorea + tooltip cuando apunta a un avatar interactivo. */}
-      {(isLocked || isTouch) ? (
+      {(isLocked || isTouch) && !droneActive ? (
         <Crosshair
           targeting={!!targeting}
           interactLabel={interactLabel}
@@ -504,7 +546,7 @@ function ReadyOverlay(props: Clinic3DHudProps) {
       ) : null}
 
       {/* Hint sutil con control activo (desktop bloqueado o móvil) — fade ~5s */}
-      {(isLocked || isTouch) ? (
+      {(isLocked || isTouch) && !droneActive ? (
         <div
           className={`pointer-events-none absolute inset-x-0 bottom-[max(env(safe-area-inset-bottom),4.5rem)] flex justify-center px-6 transition-opacity duration-700 ${
             hintVisible ? "opacity-100" : "opacity-0"
@@ -523,6 +565,17 @@ function ReadyOverlay(props: Clinic3DHudProps) {
         <div className="pointer-events-none absolute inset-x-0 bottom-0 mb-[max(env(safe-area-inset-bottom),0.5rem)] flex justify-center">
           <span className="rounded-full border border-white/10 bg-black/35 px-2.5 py-1 text-[10px] font-medium tracking-wide text-white/55 backdrop-blur-md">
             Powered by <span className="text-violet-300">DaleControl</span>
+          </span>
+        </div>
+      ) : null}
+
+      {/* Hint de la vista dron (aérea) */}
+      {droneActive ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-[max(env(safe-area-inset-bottom),1.25rem)] flex justify-center px-6">
+          <span className="rounded-full border border-violet-400/25 bg-black/50 px-3.5 py-1.5 text-center text-[11px] text-white/80 backdrop-blur-md">
+            {isTouch
+              ? "Vista dron · arrastra para orbitar · pellizca para zoom · toca 🚁 para volver"
+              : "Vista dron · arrastra para orbitar · rueda para zoom · clic en un avatar abre su expediente · V para volver"}
           </span>
         </div>
       ) : null}

@@ -378,3 +378,22 @@ export const AGENDA_PATH = "/dashboard/appointments";
 export function agendaNewApptUrl(resourceId: string): string {
   return `${AGENDA_PATH}?new=1&resourceId=${encodeURIComponent(resourceId)}`;
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// V3 — MODOS: DRON (vista aérea orbital) + VR (WebXR). Constantes compartidas por
+// drone-controls.ts, vr-setup.ts y el orquestador. NO rompe el contrato previo.
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ── Modo dron (cámara orbital cenital sobre la clínica) ──────────────────────
+export const DRONE_TRANSITION_MS = 600;                 // lerp suave FPS ↔ aérea
+export const DRONE_MIN_POLAR = 0.12;                    // rad: casi cenital sin ser exacto
+export const DRONE_MAX_POLAR = (82 * Math.PI) / 180;    // rad: nunca bajo el horizonte/piso
+export const DRONE_PITCH = (54 * Math.PI) / 180;        // inclinación inicial de la cámara aérea (desde la vertical)
+export const DRONE_FILL = 1.18;                         // holgura sobre el bounds al encuadrar el plano
+export const DRONE_DAMPING = 0.08;                      // suavizado inercial de OrbitControls
+
+// ── Modo VR (WebXR) — locomoción comfort-first (teleport + snap-turn) ─────────
+export const VR_SNAP_TURN = (45 * Math.PI) / 180;       // giro discreto por empujón del thumbstick
+export const VR_SNAP_THRESHOLD = 0.75;                  // |x| del stick para disparar el giro
+export const VR_SNAP_RELEASE = 0.3;                     // |x| para rearmar (evita giro continuo)
+export const VR_TELEPORT_MAX = 40;                      // m: alcance máximo del rayo de teletransporte
