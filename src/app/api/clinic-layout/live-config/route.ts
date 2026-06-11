@@ -36,6 +36,13 @@ async function getDbUser() {
   });
 }
 
+function isMissingTable(err: unknown): boolean {
+  // P2021/42P01 = tabla faltante; P2022/42703 = columna faltante (drift de migración)
+  if (typeof err !== "object" || err === null) return false;
+  const e = err as { code?: string };
+  return e.code === "P2021" || e.code === "P2022" || e.code === "42P01" || e.code === "42703";
+}
+
 /**
  * PATCH /api/clinic-layout/live-config
  * Configura los toggles de la URL pública /live/<slug>: enabled, slug,
@@ -127,6 +134,15 @@ export async function PATCH(req: NextRequest) {
       hasPassword: Boolean(clinic?.liveModePassword),
     });
   } catch (err) {
+    if (isMissingTable(err)) {
+      return NextResponse.json(
+        {
+          error: "schema_not_migrated",
+          hint: "Aplica la migración 20260428100000_clinic_layout en Supabase.",
+        },
+        { status: 503 },
+      );
+    }
     console.error("[PATCH /api/clinic-layout/live-config]", err);
     return NextResponse.json({ error: "internal_error" }, { status: 500 });
   }

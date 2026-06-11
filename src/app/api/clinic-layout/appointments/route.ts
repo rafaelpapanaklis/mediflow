@@ -22,6 +22,13 @@ async function getDbUser() {
   });
 }
 
+function isMissingTable(err: unknown): boolean {
+  // P2021/42P01 = tabla faltante; P2022/42703 = columna faltante (drift de migración)
+  if (typeof err !== "object" || err === null) return false;
+  const e = err as { code?: string };
+  return e.code === "P2021" || e.code === "P2022" || e.code === "42P01" || e.code === "42703";
+}
+
 /**
  * GET /api/clinic-layout/appointments?date=YYYY-MM-DD
  * Devuelve appointments del día con shape LiveAppointment, scopeados a la
@@ -119,7 +126,16 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ appointments: live, waitingRoom });
   } catch (err) {
+    if (isMissingTable(err)) {
+      return NextResponse.json(
+        {
+          error: "schema_not_migrated",
+          hint: "Aplica la migración 20260428100000_clinic_layout en Supabase.",
+        },
+        { status: 503 },
+      );
+    }
     console.error("[GET /api/clinic-layout/appointments]", err);
-    return NextResponse.json({ error: "internal_error", appointments: [] }, { status: 500 });
+    return NextResponse.json({ error: "internal_error" }, { status: 500 });
   }
 }

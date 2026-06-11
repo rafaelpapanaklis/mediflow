@@ -244,13 +244,9 @@ export async function GET(req: NextRequest, { params }: Params) {
         { status: 503 },
       );
     }
-    console.error("[GET /api/live/" + slug + "]", err);
-    return NextResponse.json(
-      {
-        error: "internal_error",
-        message: err instanceof Error ? err.message : "unknown",
-      },
-      { status: 500 },
-    );
+    // No exponer err.message en un endpoint público: puede contener
+    // detalles internos del DB/query. El detalle queda en el log.
+    console.error("[GET /api/live/[slug]]", slug, err);
+    return NextResponse.json({ error: "internal_error" }, { status: 500 });
   }
 }

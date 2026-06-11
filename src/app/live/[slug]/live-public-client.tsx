@@ -428,7 +428,10 @@ export function LivePublicClient({
       />
     );
   }
-  if (error) {
+  // Pantalla de error SOLO si falló la carga inicial (aún no hay datos).
+  // Si falla un poll posterior, conservamos los últimos datos en pantalla
+  // y el siguiente tick del polling reintenta solo (no rompemos la UI).
+  if (error && !data) {
     return (
       <div className={liveStyles.errorWrap}>
         <div className={liveStyles.errorCard}>

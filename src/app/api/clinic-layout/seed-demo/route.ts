@@ -25,6 +25,13 @@ async function getDbUser() {
   });
 }
 
+function isMissingTable(err: unknown): boolean {
+  // P2021/42P01 = tabla faltante; P2022/42703 = columna faltante (drift de migración)
+  if (typeof err !== "object" || err === null) return false;
+  const e = err as { code?: string };
+  return e.code === "P2021" || e.code === "P2022" || e.code === "42P01" || e.code === "42703";
+}
+
 /**
  * POST /api/clinic-layout/seed-demo
  *
@@ -142,6 +149,15 @@ export async function POST() {
       created: { chairs: labelToResourceId.size },
     });
   } catch (err) {
+    if (isMissingTable(err)) {
+      return NextResponse.json(
+        {
+          error: "schema_not_migrated",
+          hint: "Aplica la migración 20260428100000_clinic_layout en Supabase.",
+        },
+        { status: 503 },
+      );
+    }
     console.error("[POST /api/clinic-layout/seed-demo]", err);
     return NextResponse.json({ error: "internal_error" }, { status: 500 });
   }
@@ -170,6 +186,15 @@ export async function PUT() {
     });
     return NextResponse.json({ layout });
   } catch (err) {
+    if (isMissingTable(err)) {
+      return NextResponse.json(
+        {
+          error: "schema_not_migrated",
+          hint: "Aplica la migración 20260428100000_clinic_layout en Supabase.",
+        },
+        { status: 503 },
+      );
+    }
     console.error("[PUT /api/clinic-layout/seed-demo]", err);
     return NextResponse.json({ error: "internal_error" }, { status: 500 });
   }

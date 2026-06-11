@@ -55,9 +55,10 @@ async function getDbUser() {
 }
 
 function isMissingTable(err: unknown): boolean {
+  // P2021/42P01 = tabla faltante; P2022/42703 = columna faltante (drift de migración)
   if (typeof err !== "object" || err === null) return false;
   const e = err as { code?: string };
-  return e.code === "P2021" || e.code === "42P01";
+  return e.code === "P2021" || e.code === "P2022" || e.code === "42P01" || e.code === "42703";
 }
 
 /**

@@ -30,6 +30,13 @@ async function getDbUser() {
   });
 }
 
+function isMissingTable(err: unknown): boolean {
+  // P2021/42P01 = tabla faltante; P2022/42703 = columna faltante (drift de migración)
+  if (typeof err !== "object" || err === null) return false;
+  const e = err as { code?: string };
+  return e.code === "P2021" || e.code === "P2022" || e.code === "42P01" || e.code === "42703";
+}
+
 const PostSchema = z.object({
   /** YYYY-MM-DD del día a optimizar; default = hoy. */
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -62,83 +69,90 @@ interface OptimizerResult {
  * estructurado.
  */
 export async function POST(req: NextRequest) {
-  const rl = rateLimit(req, 5, 5 * 60 * 1000);
-  if (rl) return rl;
+  try {
+    const rl = rateLimit(req, 5, 5 * 60 * 1000);
+    if (rl) return rl;
 
-  const dbUser = await getDbUser();
-  if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!["SUPER_ADMIN", "ADMIN"].includes(dbUser.role)) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+    const dbUser = await getDbUser();
+    if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    if (!["SUPER_ADMIN", "ADMIN"].includes(dbUser.role)) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
 
-  const body = await req.json().catch(() => ({}));
-  const parsed = PostSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "invalid_payload", issues: parsed.error.issues },
-      { status: 400 },
-    );
-  }
+    const body = await req.json().catch(() => null);
+    const parsed = PostSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "invalid_payload", issues: parsed.error.issues },
+        { status: 400 },
+      );
+    }
 
-  const dateStr = parsed.data.date ?? new Date().toISOString().slice(0, 10);
-  const dayStart = new Date(`${dateStr}T00:00:00`);
-  const dayEnd = new Date(`${dateStr}T23:59:59`);
+    const dateStr = parsed.data.date ?? new Date().toISOString().slice(0, 10);
+    const dayStart = new Date(`${dateStr}T00:00:00`);
+    const dayEnd = new Date(`${dateStr}T23:59:59`);
+    if (Number.isNaN(dayStart.getTime()) || Number.isNaN(dayEnd.getTime())) {
+      return NextResponse.json(
+        { error: "invalid_payload", hint: "Fecha inválida; usa formato YYYY-MM-DD." },
+        { status: 400 },
+      );
+    }
 
-  const [appointments, chairs] = await Promise.all([
-    prisma.appointment.findMany({
-      where: {
-        clinicId: dbUser.clinicId,
-        startsAt: { gte: dayStart, lte: dayEnd },
-        status: { notIn: ["CANCELLED", "NO_SHOW"] },
-      },
-      orderBy: { startsAt: "asc" },
-      select: {
-        id: true,
-        resourceId: true,
-        startsAt: true,
-        endsAt: true,
-        type: true,
-        notes: true,
-        patient: { select: { firstName: true, lastName: true } },
-        doctor: { select: { firstName: true, lastName: true } },
-      },
-    }),
-    prisma.resource.findMany({
-      where: { clinicId: dbUser.clinicId, kind: { in: [...TREATMENT_KINDS] }, isActive: true },
-      select: { id: true, name: true },
-      orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
-    }),
-  ]);
+    const [appointments, chairs] = await Promise.all([
+      prisma.appointment.findMany({
+        where: {
+          clinicId: dbUser.clinicId,
+          startsAt: { gte: dayStart, lte: dayEnd },
+          status: { notIn: ["CANCELLED", "NO_SHOW"] },
+        },
+        orderBy: { startsAt: "asc" },
+        select: {
+          id: true,
+          resourceId: true,
+          startsAt: true,
+          endsAt: true,
+          type: true,
+          notes: true,
+          patient: { select: { firstName: true, lastName: true } },
+          doctor: { select: { firstName: true, lastName: true } },
+        },
+      }),
+      prisma.resource.findMany({
+        where: { clinicId: dbUser.clinicId, kind: { in: [...TREATMENT_KINDS] }, isActive: true },
+        select: { id: true, name: true },
+        orderBy: [{ orderIndex: "asc" }, { name: "asc" }],
+      }),
+    ]);
 
-  if (appointments.length === 0) {
-    return NextResponse.json({
-      result: {
-        optimized: [],
-        stats: { deadTimeSavedMins: 0, extraPatientsCapacity: 0, efficiency: 100 },
-        reasoning: "No hay citas para optimizar en este día.",
-      } satisfies OptimizerResult,
-    });
-  }
+    if (appointments.length === 0) {
+      return NextResponse.json({
+        result: {
+          optimized: [],
+          stats: { deadTimeSavedMins: 0, extraPatientsCapacity: 0, efficiency: 100 },
+          reasoning: "No hay citas para optimizar en este día.",
+        } satisfies OptimizerResult,
+      });
+    }
 
-  const fmtT = (d: Date) =>
-    d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false });
+    const fmtT = (d: Date) =>
+      d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false });
 
-  const aptSummary = appointments
-    .map((a) => {
-      const dur = Math.max(1, Math.round((a.endsAt.getTime() - a.startsAt.getTime()) / 60_000));
-      const chair = chairs.find((c) => c.id === a.resourceId)?.name ?? "Sin asignar";
-      const patient =
-        `${a.patient?.firstName ?? ""} ${a.patient?.lastName ?? ""}`.trim() || "Paciente";
-      const doctor =
-        `${a.doctor?.firstName ?? ""} ${a.doctor?.lastName ?? ""}`.trim() || "—";
-      const treatment = a.type || a.notes || "Consulta";
-      return `- chair="${chair}" (id=${a.resourceId ?? "null"}) | ${patient} | ${treatment} | ${fmtT(a.startsAt)}-${fmtT(a.endsAt)} (${dur}min) | ${doctor}`;
-    })
-    .join("\n");
+    const aptSummary = appointments
+      .map((a) => {
+        const dur = Math.max(1, Math.round((a.endsAt.getTime() - a.startsAt.getTime()) / 60_000));
+        const chair = chairs.find((c) => c.id === a.resourceId)?.name ?? "Sin asignar";
+        const patient =
+          `${a.patient?.firstName ?? ""} ${a.patient?.lastName ?? ""}`.trim() || "Paciente";
+        const doctor =
+          `${a.doctor?.firstName ?? ""} ${a.doctor?.lastName ?? ""}`.trim() || "—";
+        const treatment = a.type || a.notes || "Consulta";
+        return `- chair="${chair}" (id=${a.resourceId ?? "null"}) | ${patient} | ${treatment} | ${fmtT(a.startsAt)}-${fmtT(a.endsAt)} (${dur}min) | ${doctor}`;
+      })
+      .join("\n");
 
-  const chairsList = chairs.map((c) => `- "${c.name}" (id=${c.id})`).join("\n");
+    const chairsList = chairs.map((c) => `- "${c.name}" (id=${c.id})`).join("\n");
 
-  const prompt = `Eres un optimizador de agenda para una clínica dental. Analiza estas citas y propón una reorganización optimizada.
+    const prompt = `Eres un optimizador de agenda para una clínica dental. Analiza estas citas y propón una reorganización optimizada.
 
 CITAS ACTUALES (${dateStr}):
 ${aptSummary}
@@ -169,66 +183,79 @@ Responde SOLO con un JSON válido (sin markdown, sin texto extra) con esta estru
   "reasoning": "Explicación breve en español de los cambios realizados (2-3 oraciones)"
 }`;
 
-  const result = await chat({
-    model: "claude-sonnet-4-6",
-    maxTokens: 2000,
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  if (result.error) {
-    return NextResponse.json(
-      { error: "claude_error", detail: result.error },
-      { status: 502 },
-    );
-  }
-  if (result.mock) {
-    return NextResponse.json({
-      result: {
-        optimized: appointments.slice(0, 3).map((a) => ({
-          resourceId: a.resourceId ?? chairs[0]?.id ?? "",
-          patient:
-            `${a.patient?.firstName ?? ""} ${a.patient?.lastName ?? ""}`.trim() || "Paciente",
-          treatment: a.type || "Consulta",
-          doctor: `${a.doctor?.firstName ?? ""} ${a.doctor?.lastName ?? ""}`.trim() || "—",
-          startHour: a.startsAt.getHours(),
-          startMin: a.startsAt.getMinutes(),
-          durationMins: Math.round((a.endsAt.getTime() - a.startsAt.getTime()) / 60_000),
-        })),
-        stats: { deadTimeSavedMins: 0, extraPatientsCapacity: 0, efficiency: 100 },
-        reasoning:
-          "[Mock] ANTHROPIC_API_KEY no configurada. La respuesta real requiere clave válida.",
-      } satisfies OptimizerResult,
-      mock: true,
+    const result = await chat({
+      model: "claude-sonnet-4-6",
+      maxTokens: 2000,
+      messages: [{ role: "user", content: prompt }],
     });
-  }
 
-  // Claude a veces envuelve el JSON en markdown a pesar del system prompt.
-  const match = result.text.match(/\{[\s\S]*\}/);
-  if (!match) {
-    return NextResponse.json(
-      { error: "claude_no_json", raw: result.text.slice(0, 500) },
-      { status: 502 },
+    if (result.error) {
+      return NextResponse.json(
+        { error: "claude_error", detail: result.error },
+        { status: 502 },
+      );
+    }
+    if (result.mock) {
+      return NextResponse.json({
+        result: {
+          optimized: appointments.slice(0, 3).map((a) => ({
+            resourceId: a.resourceId ?? chairs[0]?.id ?? "",
+            patient:
+              `${a.patient?.firstName ?? ""} ${a.patient?.lastName ?? ""}`.trim() || "Paciente",
+            treatment: a.type || "Consulta",
+            doctor: `${a.doctor?.firstName ?? ""} ${a.doctor?.lastName ?? ""}`.trim() || "—",
+            startHour: a.startsAt.getHours(),
+            startMin: a.startsAt.getMinutes(),
+            durationMins: Math.round((a.endsAt.getTime() - a.startsAt.getTime()) / 60_000),
+          })),
+          stats: { deadTimeSavedMins: 0, extraPatientsCapacity: 0, efficiency: 100 },
+          reasoning:
+            "[Mock] ANTHROPIC_API_KEY no configurada. La respuesta real requiere clave válida.",
+        } satisfies OptimizerResult,
+        mock: true,
+      });
+    }
+
+    // Claude a veces envuelve el JSON en markdown a pesar del system prompt.
+    const match = result.text.match(/\{[\s\S]*\}/);
+    if (!match) {
+      return NextResponse.json(
+        { error: "claude_no_json", raw: result.text.slice(0, 500) },
+        { status: 502 },
+      );
+    }
+    let parsedJson: OptimizerResult;
+    try {
+      parsedJson = JSON.parse(match[0]) as OptimizerResult;
+    } catch (err) {
+      return NextResponse.json(
+        {
+          error: "claude_invalid_json",
+          detail: err instanceof Error ? err.message : "parse_failed",
+          raw: match[0].slice(0, 500),
+        },
+        { status: 502 },
+      );
+    }
+
+    // Sanity: cada resourceId optimizado debe pertenecer a la clínica.
+    const validChairIds = new Set(chairs.map((c) => c.id));
+    parsedJson.optimized = (parsedJson.optimized ?? []).filter((a) =>
+      validChairIds.has(a.resourceId),
     );
-  }
-  let parsedJson: OptimizerResult;
-  try {
-    parsedJson = JSON.parse(match[0]) as OptimizerResult;
+
+    return NextResponse.json({ result: parsedJson });
   } catch (err) {
-    return NextResponse.json(
-      {
-        error: "claude_invalid_json",
-        detail: err instanceof Error ? err.message : "parse_failed",
-        raw: match[0].slice(0, 500),
-      },
-      { status: 502 },
-    );
+    if (isMissingTable(err)) {
+      return NextResponse.json(
+        {
+          error: "schema_not_migrated",
+          hint: "Aplica la migración 20260428100000_clinic_layout en Supabase.",
+        },
+        { status: 503 },
+      );
+    }
+    console.error("[POST /api/clinic-layout/optimize]", err);
+    return NextResponse.json({ error: "internal_error" }, { status: 500 });
   }
-
-  // Sanity: cada resourceId optimizado debe pertenecer a la clínica.
-  const validChairIds = new Set(chairs.map((c) => c.id));
-  parsedJson.optimized = (parsedJson.optimized ?? []).filter((a) =>
-    validChairIds.has(a.resourceId),
-  );
-
-  return NextResponse.json({ result: parsedJson });
 }
