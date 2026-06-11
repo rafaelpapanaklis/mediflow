@@ -83,6 +83,10 @@ export function Clinic3DClient({ clinic, initialElements, initialMetadata, initi
   const [interactLabel, setInteractLabel] = useState<string | null>(null);
   const [targeting, setTargeting] = useState(false);
   const [minimapVisible, setMinimapVisible] = useState(true);
+  // Overlay de entrada: el texto cambia a "continuar" tras la 1ª entrada; lockNote
+  // muestra un aviso si el navegador rechazó el lock (throttle de Chrome).
+  const [hasEntered, setHasEntered] = useState(false);
+  const [lockNote, setLockNote] = useState<string | null>(null);
 
   // Frame del minimapa: el loop lo escribe, el HUD lo lee en su propio rAF.
   const minimapFrameRef = useRef<MinimapFrame>({ px: 0, pz: 0, yaw: 0, players: [], chairs: [] });
@@ -192,7 +196,14 @@ export function Clinic3DClient({ clinic, initialElements, initialMetadata, initi
       touchCtl = touch && touchLayerRef.current ? createTouchControls(camera, touchLayerRef.current) : null;
       if (desktop) {
         const d = desktop;
-        d.onLockChange((l) => setIsLocked(l));
+        d.onLockChange((l) => {
+          setIsLocked(l);
+          if (l) {
+            setHasEntered(true);
+            setLockNote(null); // entró bien → limpia cualquier aviso de error
+          }
+        });
+        d.onLockError(() => setLockNote("No se pudo entrar. Haz clic de nuevo."));
         lockRef.current = () => d.lock();
       }
 
@@ -266,9 +277,17 @@ export function Clinic3DClient({ clinic, initialElements, initialMetadata, initi
       };
       poll();
 
-      // ── Input de interacción (no pelea con el lock: el lock lo pide el HUD) ─
+      // ── Input: el clic ENTRA/REANUDA si no hay lock; solo con lock interactúa ─
+      // Orden sin pelea (patrón pointer-lock): primer clic captura el puntero;
+      // los siguientes (ya con lock) hacen el raycast de interacción. Así clicar
+      // en cualquier parte del lienzo reanuda tras ESC, no solo el botón del HUD.
       onCanvasDown = () => {
-        if (desktop && desktop.isLocked() && interaction) {
+        if (!desktop) return;
+        if (!document.pointerLockElement) {
+          desktop.lock();
+          return;
+        }
+        if (interaction) {
           interaction.interactCenter();
           hand?.tap();
         }
@@ -501,6 +520,8 @@ export function Clinic3DClient({ clinic, initialElements, initialMetadata, initi
         onRequestLock={() => lockRef.current()}
         onToggleFullscreen={() => fullscreenRef.current()}
         onRetry={() => reloadRef.current()}
+        lockTitle={hasEntered ? "Haz clic para continuar" : "Haz clic para entrar"}
+        lockNote={lockNote}
         world={world}
         userCount={userCount}
         multiplayerEnabled={mpEnabled}

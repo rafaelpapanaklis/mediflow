@@ -40,6 +40,8 @@ export interface DesktopControls {
   lock(): void;
   isLocked(): boolean;
   onLockChange(cb: (locked: boolean) => void): void;
+  /** Se dispara si el navegador rechaza el lock (p.ej. throttle de Chrome). */
+  onLockError(cb: () => void): void;
   dispose(): void;
 }
 
@@ -71,8 +73,13 @@ export function createDesktopControls(
   const ARROW_KEYS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
   const anyPressed = (keys: string[]): boolean => keys.some((k) => pressed.has(k));
 
+  // FUENTE DE VERDAD ÚNICA del lock: el navegador. NO uses controls.isLocked:
+  // en three r184 PointerLockControls despacha "lock"/"unlock" ANTES de setear
+  // su propio isLocked, así que leerlo en ese momento da el valor invertido. En
+  // cambio document.pointerLockElement YA está actualizado cuando corre cualquier
+  // listener de "pointerlockchange".
   function isLocked(): boolean {
-    return !!(controls as any).isLocked;
+    return typeof document !== "undefined" && document.pointerLockElement === domElement;
   }
 
   // ── Teclado (en window para no depender del foco del canvas) ────────────────
@@ -90,22 +97,33 @@ export function createDesktopControls(
     pressed.clear();
   }
 
-  // ── Lock/unlock del control → notifica HUD ──────────────────────────────────
+  // ── Cambio de lock REAL del navegador → notifica HUD ────────────────────────
+  const lockErrCbs: Array<() => void> = [];
   function emitLock(): void {
     const locked = isLocked();
+    // Al perder el lock soltamos las teclas (si no, sigues "caminando" al volver).
+    if (!locked) clearKeys();
     for (const cb of lockCbs) {
       try { cb(locked); } catch { /* un cb roto no debe tumbar a los demás */ }
     }
-    // Al perder el lock soltamos las teclas (si no, sigues "caminando" al volver).
-    if (!locked) clearKeys();
+  }
+  function onPointerLockError(): void {
+    // Chrome rechaza el lock si lo pides <~1.3s tras soltarlo. No crashea:
+    // emitimos el estado real (desbloqueado) para que el overlay reaparezca y el
+    // usuario reintente; el siguiente clic (pasado el throttle) sí entra.
+    emitLock();
+    for (const cb of lockErrCbs) {
+      try { cb(); } catch { /* noop */ }
+    }
   }
 
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
   window.addEventListener("blur", clearKeys);
   document.addEventListener("visibilitychange", clearKeys);
-  (controls as any).addEventListener?.("lock", emitLock);
-  (controls as any).addEventListener?.("unlock", emitLock);
+  // Escuchamos el evento del NAVEGADOR (no los sintéticos de three) → estado fiable.
+  document.addEventListener("pointerlockchange", emitLock);
+  document.addEventListener("pointerlockerror", onPointerLockError);
 
   return {
     controls,
@@ -145,7 +163,14 @@ export function createDesktopControls(
     },
 
     lock(): void {
-      try { controls.lock(); } catch { /* requiere gesto del usuario */ }
+      // requestPointerLock requiere gesto del usuario y, si lo throttlean, puede
+      // rechazar de forma SÍNCRONA o como promesa: tragamos ambos (el evento
+      // pointerlockerror se encarga de avisar al HUD). Sin esto, la promesa
+      // rechazada generaba un unhandledrejection en consola.
+      try {
+        const ret: any = controls.lock();
+        if (ret && typeof ret.catch === "function") ret.catch(() => {});
+      } catch { /* requiere gesto del usuario / throttle */ }
     },
 
     isLocked,
@@ -154,14 +179,19 @@ export function createDesktopControls(
       if (typeof cb === "function") lockCbs.push(cb);
     },
 
+    onLockError(cb: () => void): void {
+      if (typeof cb === "function") lockErrCbs.push(cb);
+    },
+
     dispose(): void {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", clearKeys);
       document.removeEventListener("visibilitychange", clearKeys);
-      (controls as any).removeEventListener?.("lock", emitLock);
-      (controls as any).removeEventListener?.("unlock", emitLock);
+      document.removeEventListener("pointerlockchange", emitLock);
+      document.removeEventListener("pointerlockerror", onPointerLockError);
       lockCbs.length = 0;
+      lockErrCbs.length = 0;
       pressed.clear();
       try { (controls as any).dispose?.(); } catch { /* noop */ }
     },

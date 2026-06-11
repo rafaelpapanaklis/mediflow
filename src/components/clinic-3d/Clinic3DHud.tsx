@@ -63,6 +63,10 @@ export interface Clinic3DHudProps {
   onRequestLock: () => void;
   onToggleFullscreen: () => void;
   onRetry: () => void;
+  /** Título del overlay de entrada: "Haz clic para entrar" / "…continuar". */
+  lockTitle?: string;
+  /** Aviso bajo el título si el navegador rechazó el lock (throttle de Chrome). */
+  lockNote?: string | null;
   // ── V2 (los implementa A7: crosshair + minimapa + contador de usuarios) ────
   /** Mundo (para el plano estático del minimapa). */
   world: WorldModel;
@@ -422,7 +426,10 @@ function ReadyOverlay(props: Clinic3DHudProps) {
             className="pointer-events-auto flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-black/55 px-8 py-6 text-center backdrop-blur-md transition-colors hover:bg-black/70"
           >
             <MousePointer2 className="h-7 w-7 text-violet-300" />
-            <span className="text-base font-semibold text-white">Haz clic para entrar</span>
+            <span className="text-base font-semibold text-white">{props.lockTitle ?? "Haz clic para entrar"}</span>
+            {props.lockNote ? (
+              <span className="text-xs font-medium text-amber-300">{props.lockNote}</span>
+            ) : null}
             <span className="text-xs leading-relaxed text-white/60">
               Muévete con <kbd className={kbd}>W</kbd> <kbd className={kbd}>A</kbd> <kbd className={kbd}>S</kbd>{" "}
               <kbd className={kbd}>D</kbd> · mira con el ratón · <kbd className={kbd}>M</kbd> minimapa · sal con{" "}
