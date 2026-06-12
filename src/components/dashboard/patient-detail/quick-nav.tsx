@@ -17,6 +17,9 @@ import {
   ArrowUpRight,
   Box,
   Plus,
+  ClipboardCheck,
+  FileText,
+  Receipt,
   type LucideIcon,
 } from "lucide-react";
 import type { PatientActivityCounts } from "@/lib/clinical-shared/get-patient-activity-counts";
@@ -113,6 +116,7 @@ export function QuickNav({
   const coreClinicalItems: NavItem[] = [
     { id: "resumen",    label: t("patients.quickNav.summary"),          icon: ClipboardList },
     { id: "historia",   label: t("patients.quickNav.clinicalHistory"), icon: History, count: counts.historia },
+    { id: "cuestionario", label: t("patients.tabs.cuestionario"), icon: ClipboardCheck },
     { id: "expediente", label: t("patients.quickNav.newConsultation"),   icon: Stethoscope },
     { id: "historial-consultas", label: t("patients.quickNav.consultationHistory"), icon: ClipboardList, count: counts.historialConsultas },
   ];
@@ -185,6 +189,7 @@ export function QuickNav({
     { id: "radiografias", label: t("patients.quickNav.xrays"),     icon: FileImage,    count: counts.radiografias },
     { id: "modelos-3d",   label: t("patients.tabs.modelos3d"),     icon: Box },
     { id: "tratamiento",  label: t("patients.quickNav.treatmentPlan"), icon: Pill,         count: counts.tratamiento },
+    { id: "recetas",      label: t("patients.tabs.recetas"),        icon: FileText },
     { id: "referencias",  label: t("patients.quickNav.referrals"),      icon: ArrowUpRight, count: counts.referencias },
   ];
 
@@ -201,6 +206,7 @@ export function QuickNav({
       groups: [{
         items: [
           { id: "agenda",      label: t("patients.quickNav.appointments"),       icon: Calendar,    count: counts.agenda },
+          { id: "presupuestos", label: t("patients.tabs.presupuestos"), icon: Receipt },
           {
             id: "facturacion",
             label: t("patients.quickNav.billing"),
