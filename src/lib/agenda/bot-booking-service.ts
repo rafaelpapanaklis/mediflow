@@ -293,6 +293,15 @@ export async function getClinicTimezone(clinicId: string): Promise<string> {
   return c?.timezone ?? "America/Mexico_City";
 }
 
+/** Nombre de la clínica para el mensaje de confirmación del bot. */
+export async function getClinicName(clinicId: string): Promise<string> {
+  const c = await prisma.clinic.findUnique({
+    where: { id: clinicId },
+    select: { name: true },
+  });
+  return c?.name ?? "el consultorio";
+}
+
 export async function listBookableServices(clinicId: string) {
   return prisma.procedureCatalog.findMany({
     where: { clinicId, isActive: true },
