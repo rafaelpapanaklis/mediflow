@@ -1151,6 +1151,7 @@
       "referencias": "Referrals",
       "agenda": "Appointments",
       "facturacion": "Billing",
+      "presupuestos": "Quotes",
       "pediatria": "Pediatrics",
       "periodoncia": "Periodontics",
       "endodoncia": "Endodontics",
@@ -1971,7 +1972,10 @@
       "discount": "Discount",
       "cancelInvoice": "Cancel invoice",
       "creating": "Creating…",
-      "createInvoice": "Create invoice {total}"
+      "createInvoice": "Create invoice {total}",
+      "createQuote": "Create quote",
+      "quoteCreated": "Quote {folio} created",
+      "quoteFailed": "Could not create the quote"
     },
     "referralsTab": {
       "statusSent": "Sent",

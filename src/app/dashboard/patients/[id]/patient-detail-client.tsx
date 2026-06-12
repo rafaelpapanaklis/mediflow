@@ -26,6 +26,7 @@ import { PsychologyForm }      from "@/components/clinical/psychology-form";
 import { GeneralMedicineForm } from "@/components/clinical/medicine-form";
 import { ReferralsTab } from "@/components/dashboard/patients/referrals-tab";
 import { Models3DTab } from "@/components/patient-3d/Models3DTab";
+import { QuotesTab } from "@/components/quotes/quotes-tab";
 import { PrescriptionsTab } from "@/components/dashboard/patient-detail/prescriptions-tab";
 import toast from "react-hot-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -231,6 +232,7 @@ const TABS_BASE = [
   { id: "recetas",       labelKey: "patients.tabs.recetas"            },
   { id: "referencias",   labelKey: "patients.tabs.referencias"        },
   { id: "agenda",        labelKey: "patients.tabs.agenda"             },
+  { id: "presupuestos",  labelKey: "patients.tabs.presupuestos"       },
   { id: "facturacion",   labelKey: "patients.tabs.facturacion"        },
 ];
 
@@ -2883,6 +2885,10 @@ export function PatientDetailClient({
 
           {tab === "modelos-3d" && (
             <Models3DTab patientId={patient.id} />
+          )}
+
+          {tab === "presupuestos" && (
+            <QuotesTab patientId={patient.id} />
           )}
 
           {tab === "facturacion" && (

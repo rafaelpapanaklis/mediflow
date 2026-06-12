@@ -27,6 +27,7 @@ export type AuditEntityType =
   | "user"
   | "clinic"
   | "subscription"
+  | "quote"
   // Pediatrics module entity types (spec §4.B.5)
   | "pediatric-record"
   | "ped-guardian"

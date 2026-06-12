@@ -51,6 +51,7 @@ export function TreatmentsModal({
   const [rows, setRows] = useState<Row[]>(() => buildRows(initialTreatments));
   const [discount, setDiscount] = useState(0);
   const [creating, setCreating] = useState(false);
+  const [creatingQuote, setCreatingQuote] = useState(false);
 
   // Re-hidrata cuando cambian las treatments propuestas (e.g. otra cita).
   useEffect(() => {
@@ -103,6 +104,43 @@ export function TreatmentsModal({
       toast.error(err instanceof Error ? err.message : t("patients.treatmentsModal.invoiceFailed"));
     } finally {
       setCreating(false);
+    }
+  }
+
+  // Crea un presupuesto DRAFT con las mismas sugerencias (queda en la pestaña
+  // "Presupuestos" del paciente para presentarlo/aceptarlo después).
+  async function createQuote() {
+    if (rows.length === 0 || creatingQuote) return;
+    setCreatingQuote(true);
+    try {
+      const res = await fetch(`/api/quotes/from-appointment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          appointmentId,
+          discount,
+          lineItems: rows.map((r) => ({
+            code: r.code,
+            name: r.name,
+            toothNumber: r.toothNumber,
+            surface: r.surface,
+            unitPrice: r.unitPrice,
+            quantity: r.quantity,
+            procedureCatalogId: r.procedureCatalogId,
+          })),
+        }),
+      });
+      if (!res.ok) {
+        const b = await res.json().catch(() => ({}));
+        throw new Error(b.error ?? `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      toast.success(t("patients.treatmentsModal.quoteCreated", { folio: data.folio }));
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("patients.treatmentsModal.quoteFailed"));
+    } finally {
+      setCreatingQuote(false);
     }
   }
 
@@ -215,6 +253,14 @@ export function TreatmentsModal({
             onClick={onClose}
           >
             <X size={12} aria-hidden /> {t("patients.treatmentsModal.cancelInvoice")}
+          </button>
+          <button
+            type="button"
+            className={styles.treatmentsCancel}
+            onClick={() => void createQuote()}
+            disabled={rows.length === 0 || creatingQuote}
+          >
+            <FileText size={12} aria-hidden /> {creatingQuote ? t("patients.treatmentsModal.creating") : t("patients.treatmentsModal.createQuote")}
           </button>
           <button
             type="button"

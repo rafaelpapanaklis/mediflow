@@ -244,6 +244,8 @@ model Clinic {
   // Orthodontics Fase 1.5 rediseño completo.
   orthoQuoteScenarios     OrthoQuoteScenario[]
   orthoSignAtHomePackages OrthoSignAtHomePackage[]
+  // Presupuestos / cotizaciones genéricas del paciente (WS1-T1).
+  quotes                  Quote[]
   orthoRetentionRegimens  OrthoRetentionRegimen[]
   orthoRetainerCheckups   OrthoRetainerCheckup[]
   orthoNpsSchedules       OrthoNpsSchedule[]
@@ -1046,6 +1048,7 @@ model User {
   // Orthodontics Fase 1.5 rediseño completo.
   orthoQuotesCreated     OrthoQuoteScenario[]     @relation("OrthoQuoteCreatedBy")
   orthoSignAtHomeCreated OrthoSignAtHomePackage[] @relation("OrthoSignAtHomeCreatedBy")
+  quotesCreated          Quote[]                  @relation("QuoteCreatedBy")
 
   // Implants module — see docs/marketplace/research/implantologia/SPEC.md §4
   implantsPlaced          Implant[]        @relation("ImplantPlacedBy")
@@ -1238,6 +1241,7 @@ model Patient {
   labOrders         LabOrder[]
   clinicalReminders ClinicalReminder[]
   patientShareLinks PatientShareLink[]
+  quotes            Quote[]
 
   @@unique([clinicId, patientNumber])
   @@index([clinicId, status])
@@ -2274,6 +2278,7 @@ model ProcedureCatalog {
   updatedAt   DateTime  @updatedAt
   clinic      Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   cie9        Cie9Code? @relation(fields: [cieCode], references: [code])
+  quoteItems  QuoteItem[]
 
   @@index([clinicId, isActive])
   @@index([cieCode])
@@ -7090,4 +7095,85 @@ model HealthQuestionnaire {
 
   @@index([clinicId, patientId, filledAt(sort: Desc)])
   @@map("health_questionnaires")
+}
+
+// ============================================================================
+// PRESUPUESTOS / COTIZACIONES GENÉRICAS PARA EL PACIENTE (WS1-T1)
+// Cotización multi-ítem (tarifario), descuento por línea y global, vigencia,
+// aceptación pública con firma. Status como String (NO enum: los enums nuevos
+// han causado drift en este repo). Money en Decimal(10,2).
+// ============================================================================
+
+model Quote {
+  id          String @id @default(cuid())
+  clinicId    String
+  patientId   String
+  createdById String?
+
+  /// Folio corto legible por clínica, ej. "P-0001". Único dentro de la clínica.
+  folio  String
+  title  String
+  /// DRAFT | PRESENTED | ACCEPTED | REJECTED | EXPIRED
+  status String @default("DRAFT")
+
+  validUntil DateTime?
+
+  subtotal       Decimal  @default(0) @db.Decimal(10, 2)
+  /// Porcentaje de descuento global (0-100). Si se fija, manda sobre discountAmount al recalcular.
+  discountPct    Decimal? @db.Decimal(5, 2)
+  discountAmount Decimal  @default(0) @db.Decimal(10, 2)
+  total          Decimal  @default(0) @db.Decimal(10, 2)
+
+  notes String? @db.Text
+
+  /// Token público de aceptación (sólo presente cuando el presupuesto se presentó).
+  acceptToken  String?   @unique
+  presentedAt  DateTime?
+  acceptedAt   DateTime?
+  rejectedAt   DateTime?
+  /// Path interno en Supabase Storage (bucket patient-files) de la firma del paciente.
+  signatureUrl String?
+
+  /// Generación idempotente aguas abajo cuando el presupuesto queda ACCEPTED.
+  invoiceId       String?
+  treatmentPlanId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clinic    Clinic      @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient   Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  createdBy User?       @relation("QuoteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  items     QuoteItem[]
+
+  @@unique([clinicId, folio])
+  @@index([clinicId, patientId, status])
+  @@index([clinicId, status])
+  @@index([patientId])
+  @@map("quotes")
+}
+
+model QuoteItem {
+  id          String  @id @default(cuid())
+  quoteId     String
+  /// FK opcional al tarifario; SetNull para no romper la cotización si se borra el procedimiento.
+  procedureId String?
+  /// Copia del nombre al momento de cotizar (el tarifario puede cambiar después).
+  name        String
+  /// CSV de dientes FDI involucrados, ej. "11,12,21". Opcional.
+  toothFdi    String?
+  quantity    Int     @default(1)
+  unitPrice   Decimal @db.Decimal(10, 2)
+  discount    Decimal @default(0) @db.Decimal(10, 2)
+  lineTotal   Decimal @db.Decimal(10, 2)
+  /// Fase de tratamiento 1..n para agrupar en el PDF. Opcional.
+  phase       Int?
+  notes       String?
+  sortOrder   Int     @default(0)
+
+  quote     Quote             @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  procedure ProcedureCatalog? @relation(fields: [procedureId], references: [id], onDelete: SetNull)
+
+  @@index([quoteId])
+  @@map("quote_items")
 }
