@@ -29,6 +29,7 @@ import {
   getPatientActivityCounts,
   type PatientActivityCounts,
 } from "@/lib/clinical-shared/get-patient-activity-counts";
+import { questionnaireFreshness } from "@/lib/health-questionnaire";
 
 export default async function PatientDetailPage({ params }: { params: { id: string } }) {
   const user = await getCurrentUser();
@@ -78,10 +79,21 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   // activas (o todas, si la clínica está en trial vigente) y reusamos esa
   // lista para Pediatría / Periodoncia / prefill endo. Reemplaza tres
   // llamadas previas a canAccessModule() — mismo contrato, una query.
-  const [clinicModuleKeys, activityCounts] = await Promise.all([
+  const [clinicModuleKeys, activityCounts, latestQuestionnaire] = await Promise.all([
     getActiveClinicModuleKeys(user.clinicId),
     getPatientActivityCounts({ clinicId: user.clinicId, patientId: patient.id }),
+    // Cuestionario de salud vigente (anamnesis WS1-T2). .catch(()=>null) lo
+    // hace resiliente: si la tabla aún no está migrada, NO tumba la página
+    // (mismo espíritu que la resiliencia de clinic-layout).
+    prisma.healthQuestionnaire.findFirst({
+      where: { clinicId: user.clinicId, patientId: patient.id },
+      orderBy: { filledAt: "desc" },
+      select: { riskFlags: true, filledAt: true },
+    }).catch(() => null),
   ]);
+  const questionnaireRiskFlags = latestQuestionnaire?.riskFlags ?? [];
+  const questionnaireFilledAt  = latestQuestionnaire?.filledAt ? latestQuestionnaire.filledAt.toISOString() : null;
+  const questionnaireStatus    = questionnaireFreshness(latestQuestionnaire?.filledAt ?? null, Date.now());
   const isDental = user.clinic.category === "DENTAL";
 
   // Pediatría — predicado puro existente: categoría DENTAL|MEDICINE +
@@ -229,7 +241,14 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
         currentMedications: patient.currentMedications,
         lastVisit,
         visitCount,
-      }} />
+      }}
+      riskFlags={questionnaireRiskFlags}
+      emergencyContact={{
+        name:     patient.emergencyContactName,
+        phone:    patient.emergencyContactPhone,
+        relation: patient.emergencyContactRelation,
+      }}
+      />
 
       <ErrorBoundary fallbackTitle={t("patients.page.loadError")}>
         <PatientDetailClient
@@ -257,6 +276,8 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
           orthoRedesignVM={orthoRedesignVM}
           orthoRedesignBundle={orthoRedesignBundle}
           activityCounts={activityCounts}
+          questionnaireStatus={questionnaireStatus}
+          questionnaireFilledAt={questionnaireFilledAt}
         />
       </ErrorBoundary>
     </div>

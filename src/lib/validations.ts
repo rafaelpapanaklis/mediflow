@@ -36,6 +36,10 @@ export const patientSchema = z.object({
   // NOM-004 antecedentes
   familyHistory:                   z.string().optional().nullable(),
   personalNonPathologicalHistory:  z.string().optional().nullable(),
+  // Contacto de emergencia (anamnesis WS1-T2)
+  emergencyContactName:            z.string().optional().nullable(),
+  emergencyContactPhone:           z.string().optional().nullable(),
+  emergencyContactRelation:        z.string().optional().nullable(),
 });
 
 export const appointmentSchema = z.object({

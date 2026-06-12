@@ -24,6 +24,8 @@ const emptyForm = {
   curp: "", curpStatus: "PENDING" as "COMPLETE" | "PENDING" | "FOREIGN", passportNo: "",
   // CRM — adquisición + ciclo de vida (se envían vía spread en el POST).
   source: "", lifecycleStage: "patient",
+  // Contacto de emergencia (anamnesis WS1-T2) — se envían vía spread.
+  emergencyContactName: "", emergencyContactPhone: "", emergencyContactRelation: "",
 };
 
 // Fuentes de adquisición ("¿Cómo nos conoció?"). Valores en español neutro:
@@ -274,6 +276,19 @@ export function NewPatientModal({ open, onClose, onCreated, initialName, initial
                 <div className="field-new" style={{ gridColumn: "1 / -1" }}>
                   <label className="field-new__label">{t("shell.newPatient.address")}</label>
                   <input className="input-new" placeholder={t("shell.newPatient.addressPlaceholder")} value={form.address} onChange={e => set("address", e.target.value)} />
+                </div>
+                {/* Contacto de emergencia (anamnesis WS1-T2) */}
+                <div className="field-new">
+                  <label className="field-new__label">Contacto de emergencia</label>
+                  <input className="input-new" placeholder="Nombre" value={form.emergencyContactName} onChange={e => set("emergencyContactName", e.target.value)} />
+                </div>
+                <div className="field-new">
+                  <label className="field-new__label">Tel. de emergencia</label>
+                  <input className="input-new" placeholder="+52 55…" value={form.emergencyContactPhone} onChange={e => set("emergencyContactPhone", e.target.value)} />
+                </div>
+                <div className="field-new" style={{ gridColumn: "1 / -1" }}>
+                  <label className="field-new__label">Parentesco</label>
+                  <input className="input-new" placeholder="Ej. Cónyuge, madre, hijo…" value={form.emergencyContactRelation} onChange={e => set("emergencyContactRelation", e.target.value)} />
                 </div>
               </div>
             </div>

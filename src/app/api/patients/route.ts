@@ -507,6 +507,10 @@ export async function POST(req: NextRequest) {
       passportNo:  body.passportNo ? String(body.passportNo).trim() : null,
       familyHistory:                  body.familyHistory ?? null,
       personalNonPathologicalHistory: body.personalNonPathologicalHistory ?? null,
+      // Contacto de emergencia (anamnesis WS1-T2)
+      emergencyContactName:     body.emergencyContactName ? String(body.emergencyContactName).trim() : null,
+      emergencyContactPhone:    body.emergencyContactPhone ? String(body.emergencyContactPhone).trim() : null,
+      emergencyContactRelation: body.emergencyContactRelation ? String(body.emergencyContactRelation).trim() : null,
       // CRM — fuente de adquisición + etapa de ciclo de vida.
       source:         body.source ? String(body.source).trim() : null,
       lifecycleStage: body.lifecycleStage === "prospect" ? "prospect" : "patient",

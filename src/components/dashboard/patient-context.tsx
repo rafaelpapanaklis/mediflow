@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AlertTriangle, Pill, Clock, ChevronDown, ChevronUp } from "lucide-react";
+import { RISK_FLAG_LABELS } from "@/lib/health-questionnaire";
 
 interface PatientContextProps {
   patient: {
@@ -10,11 +11,14 @@ interface PatientContextProps {
     allergies: string[]; chronicConditions: string[]; currentMedications: string[];
     lastVisit?: string | null; visitCount?: number;
   };
+  /** Banderas de riesgo del cuestionario de salud vigente (chips rojos). */
+  riskFlags?: string[];
+  emergencyContact?: { name?: string | null; phone?: string | null; relation?: string | null } | null;
 }
 
-export function PatientContextPanel({ patient }: PatientContextProps) {
+export function PatientContextPanel({ patient, riskFlags = [], emergencyContact = null }: PatientContextProps) {
   const [collapsed, setCollapsed] = useState(false);
-  const hasAlerts = patient.allergies.length > 0;
+  const hasAlerts = patient.allergies.length > 0 || riskFlags.length > 0;
 
   function calcAge(dob: string) {
     const born = new Date(dob);
@@ -43,10 +47,16 @@ export function PatientContextPanel({ patient }: PatientContextProps) {
               {patient.bloodType && ` · ${patient.bloodType}`}
             </div>
           </div>
-          {hasAlerts && (
+          {patient.allergies.length > 0 && (
             <span className="flex items-center gap-1 text-sm font-bold text-amber-600 bg-amber-50 dark:bg-amber-900/30 px-2.5 py-1 rounded-full ml-2">
               <AlertTriangle className="w-3.5 h-3.5" />
               {patient.allergies.length} {patient.allergies.length === 1 ? "alergia" : "alergias"}
+            </span>
+          )}
+          {riskFlags.length > 0 && (
+            <span className="flex items-center gap-1 text-sm font-bold text-white bg-rose-600 px-2.5 py-1 rounded-full ml-2">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              {riskFlags.length} {riskFlags.length === 1 ? "riesgo" : "riesgos"}
             </span>
           )}
         </div>
@@ -56,7 +66,22 @@ export function PatientContextPanel({ patient }: PatientContextProps) {
       </button>
 
       {!collapsed && (
-        <div className="grid grid-cols-3 gap-0 border-t border-border divide-x divide-border">
+        <div className="border-t border-border">
+          {riskFlags.length > 0 && (
+            <div className="px-4 py-3 border-b border-rose-200 dark:border-rose-800 bg-rose-50/70 dark:bg-rose-950/20">
+              <div className="text-xs font-bold text-rose-700 dark:text-rose-300 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5" /> Banderas de riesgo (cuestionario)
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {riskFlags.map(f => (
+                  <span key={f} className="text-xs font-bold bg-rose-600 text-white px-2 py-1 rounded-lg">
+                    {RISK_FLAG_LABELS[f] ?? f}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="grid grid-cols-3 gap-0 divide-x divide-border">
 
           {/* Allergies */}
           <div className="px-4 py-3">
@@ -118,7 +143,19 @@ export function PatientContextPanel({ patient }: PatientContextProps) {
                   )}
                 </div>
               )}
+              {emergencyContact && (emergencyContact.name || emergencyContact.phone) && (
+                <div className="mt-2 pt-2 border-t border-border">
+                  <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-0.5">Contacto de emergencia</div>
+                  <div className="text-sm font-semibold">{emergencyContact.name || "—"}</div>
+                  {emergencyContact.phone && (
+                    <div className="text-xs text-muted-foreground">
+                      {emergencyContact.phone}{emergencyContact.relation ? ` · ${emergencyContact.relation}` : ""}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
+          </div>
           </div>
         </div>
       )}

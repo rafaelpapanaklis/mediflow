@@ -20,6 +20,7 @@ import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detai
 import { HistoriaTimeline } from "@/components/dashboard/patient-detail/historia-timeline";
 import patientDetailStyles from "@/components/dashboard/patient-detail/patient-detail.module.css";
 import { DentalForm }          from "@/components/clinical/dental-form";
+import { HealthQuestionnaireTab } from "@/components/dashboard/patient-detail/health-questionnaire-tab";
 import { NutritionForm }       from "@/components/clinical/nutrition-form";
 import { PsychologyForm }      from "@/components/clinical/psychology-form";
 import { GeneralMedicineForm } from "@/components/clinical/medicine-form";
@@ -220,6 +221,7 @@ const INV_STATUS: Record<string, { labelKey: string; cls: string }> = {
 const TABS_BASE = [
   { id: "resumen",       labelKey: "patients.tabs.resumen"            },
   { id: "historia",      labelKey: "patients.tabs.historia"           },
+  { id: "cuestionario",  labelKey: "patients.tabs.cuestionario"       },
   { id: "odontograma",   labelKey: "patients.tabs.odontograma"        },
   { id: "expediente",    labelKey: "patients.tabs.expediente"         },
   { id: "historial-consultas", labelKey: "patients.tabs.historialConsultas" },
@@ -354,6 +356,9 @@ interface Props {
    * comunica "todavía sin registros".
    */
   activityCounts?: PatientActivityCounts;
+  /** Estado del cuestionario de salud para el aviso (anamnesis WS1-T2). */
+  questionnaireStatus?: "none" | "stale" | "ok";
+  questionnaireFilledAt?: string | null;
 }
 
 export function PatientDetailClient({
@@ -369,6 +374,7 @@ export function PatientDetailClient({
   orthoRedesignVM,
   orthoRedesignBundle,
   activityCounts,
+  questionnaireStatus,
 }: Props) {
   const t = useT();
   const router = useRouter();
@@ -411,6 +417,28 @@ export function PatientDetailClient({
   const [consultClosed, setConsultClosed] = useState(false);
   const [noteDetailOpen, setNoteDetailOpen] = useState<ClinicalNote | null>(null);
   const [expandedConsultas, setExpandedConsultas] = useState<Set<string>>(new Set());
+
+  // Aviso de cuestionario de salud faltante/vencido (anamnesis WS1-T2).
+  const showQuestionnaireWarning = questionnaireStatus === "none" || questionnaireStatus === "stale";
+  const questionnaireBanner = (
+    <div className="flex items-center justify-between gap-3 flex-wrap rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/20 px-4 py-3">
+      <div className="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300">
+        <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+        <span>
+          {questionnaireStatus === "stale"
+            ? "El cuestionario de salud tiene más de 12 meses. Conviene actualizarlo."
+            : "Este paciente aún no tiene cuestionario de salud."}
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={() => setTab("cuestionario")}
+        className="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-600 text-white hover:bg-amber-700 flex-shrink-0"
+      >
+        Llenar cuestionario
+      </button>
+    </div>
+  );
 
   function toggleConsulta(id: string) {
     setExpandedConsultas(prev => {
@@ -643,6 +671,10 @@ export function PatientDetailClient({
     // NOM-004 antecedentes
     familyHistory:                   patient.familyHistory ?? "",
     personalNonPathologicalHistory:  patient.personalNonPathologicalHistory ?? "",
+    // Contacto de emergencia (anamnesis WS1-T2)
+    emergencyContactName:     patient.emergencyContactName ?? "",
+    emergencyContactPhone:    patient.emergencyContactPhone ?? "",
+    emergencyContactRelation: patient.emergencyContactRelation ?? "",
   });
   const [editSaving, setEditSaving] = useState(false);
   const [portalLink, setPortalLink] = useState<string | null>(portalUrl ?? null);
@@ -1210,6 +1242,7 @@ export function PatientDetailClient({
           {/* ===== TAB: RESUMEN ===== */}
           {tab === "resumen" && (
             <div className="grid grid-cols-2 gap-4">
+              {showQuestionnaireWarning && <div className="col-span-2">{questionnaireBanner}</div>}
               <div className="bg-card border border-border rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-2 h-2 rounded-full bg-brand-500" />
@@ -1295,6 +1328,7 @@ export function PatientDetailClient({
                     { label: t("patients.summary.bloodType"), val: patient.bloodType || t("patients.summary.notRegistered") },
                     { label: t("patients.summary.insurance"),  val: patient.insuranceProvider || t("patients.summary.noInsurance") },
                     { label: t("common.notes"),                val: patient.notes?.slice(0, 60) || "—" },
+                    { label: "Contacto de emergencia",         val: patient.emergencyContactName ? [patient.emergencyContactName, patient.emergencyContactPhone, patient.emergencyContactRelation].filter(Boolean).join(" · ") : "—" },
                   ].map(r => (
                     <div key={r.label} className="flex justify-between items-start py-1.5 border-b border-slate-50">
                       <span className="text-muted-foreground">{r.label}</span>
@@ -1345,6 +1379,11 @@ export function PatientDetailClient({
                 <div className="text-[10px] text-muted-foreground text-right mt-1">{t("patients.summary.pctCovered", { pct: pctPaid })}</div>
               </div>
             </div>
+          )}
+
+          {/* ===== TAB: CUESTIONARIO DE SALUD ===== */}
+          {tab === "cuestionario" && (
+            <HealthQuestionnaireTab patientId={patient.id} onSaved={() => router.refresh()} />
           )}
 
           {/* ===== TAB: HISTORIA CLINICA ===== */}
@@ -2078,6 +2117,7 @@ export function PatientDetailClient({
                   )}
                 </div>
               </div>
+              {showQuestionnaireWarning && <div className="mb-4">{questionnaireBanner}</div>}
               {currentSpecialty === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} />}
               {currentSpecialty === "nutrition"  && <NutritionForm       patientId={patient.id} patient={patient} onSaved={handleRecordSaved} />}
               {currentSpecialty === "psychology" && <PsychologyForm      patientId={patient.id} sessionNum={records.length + 1} onSaved={handleRecordSaved} />}
@@ -2991,6 +3031,12 @@ export function PatientDetailClient({
             )}
 
             <div className="space-y-1.5"><Label>{t("patients.edit.allergiesLabel")}</Label><Input value={editForm.allergies} onChange={e => setEditForm(f => ({ ...f, allergies: e.target.value }))} /></div>
+            {/* Contacto de emergencia (anamnesis WS1-T2) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5"><Label>Contacto de emergencia</Label><Input value={editForm.emergencyContactName} onChange={e => setEditForm(f => ({ ...f, emergencyContactName: e.target.value }))} placeholder="Nombre" /></div>
+              <div className="space-y-1.5"><Label>Tel. de emergencia</Label><Input value={editForm.emergencyContactPhone} onChange={e => setEditForm(f => ({ ...f, emergencyContactPhone: e.target.value }))} placeholder="+52 55…" /></div>
+            </div>
+            <div className="space-y-1.5"><Label>Parentesco</Label><Input value={editForm.emergencyContactRelation} onChange={e => setEditForm(f => ({ ...f, emergencyContactRelation: e.target.value }))} placeholder="Ej. Cónyuge, madre…" /></div>
             <div className="space-y-1.5"><Label>{t("common.notes")}</Label>
               <textarea className="flex min-h-[60px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground resize-none"
                 value={editForm.notes} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} />

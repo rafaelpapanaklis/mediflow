@@ -16,6 +16,10 @@ const PatchSchema = z
     objective: z.string().nullable().optional(),
     assessment: z.string().nullable().optional(),
     plan: z.string().nullable().optional(),
+    // vitals: signos vitales top-level del MedicalRecord (mismas claves que
+    // cardiología/medicina). Permite que la edición de una consulta dental
+    // persista los vitales que el timeline lee de record.vitals.
+    vitals: z.record(z.any()).nullable().optional(),
     status: z.enum(["DRAFT", "SIGNED"]).optional(),
     // specialtyData: payload completo del form de especialidad
     // (DentalForm.specialtyData con odontogram, procedures, periodontal,
@@ -102,6 +106,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (parsed.data.objective !== undefined) data.objective = parsed.data.objective;
   if (parsed.data.assessment !== undefined) data.assessment = parsed.data.assessment;
   if (parsed.data.plan !== undefined) data.plan = parsed.data.plan;
+  if (parsed.data.vitals !== undefined) data.vitals = parsed.data.vitals;
 
   // Merge specialtyData: si viene specialtyData en el patch, hacer merge
   // shallow con el existente para preservar status/signedAt/attachments.

@@ -184,6 +184,42 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
   }));
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
 
+  // ── Signos vitales de ESTA consulta ──────────────────────────────────────
+  // Mismas claves canónicas que CardiologyForm (bloodPressure/heartRate/
+  // respiratoryRate/oxygenSat/temperature) → se muestran igual en el timeline.
+  // Campos crudos en el form; al guardar se derivan bloodPressure + IMC. En
+  // edición se pre-llenan desde specialtyData.vitals.
+  const initVitals = (initialSpec.vitals ?? {}) as any;
+  const [vitals, setVitals] = useState({
+    bpSys:  initVitals.bpSys  ?? "",
+    bpDia:  initVitals.bpDia  ?? "",
+    hr:     initVitals.hr     ?? "",
+    rr:     initVitals.rr     ?? "",
+    temp:   initVitals.temp   ?? "",
+    spo2:   initVitals.spo2   ?? "",
+    weight: initVitals.weight ?? "",
+    height: initVitals.height ?? "",
+  });
+  const setV = (k: string, v: string) => setVitals(s => ({ ...s, [k]: v }));
+  const [vitalsOpen, setVitalsOpen] = useState(false);
+  const hasVitals = !!(vitals.bpSys || vitals.bpDia || vitals.hr || vitals.rr || vitals.temp || vitals.spo2 || vitals.weight || vitals.height);
+  const bmi = useMemo(() => {
+    const w = parseFloat(vitals.weight);
+    const h = parseFloat(vitals.height);
+    if (!w || !h) return "";
+    const b = w / Math.pow(h / 100, 2);
+    return isFinite(b) ? b.toFixed(1) : "";
+  }, [vitals.weight, vitals.height]);
+  // Validación suave de rangos: warning visual, NO bloquea el guardado.
+  const vitalWarnings: string[] = [];
+  const nv = (x: string) => parseFloat(x);
+  if (vitals.bpSys && (nv(vitals.bpSys) < 80 || nv(vitals.bpSys) > 200)) vitalWarnings.push("TA sistólica fuera de rango (80–200)");
+  if (vitals.bpDia && (nv(vitals.bpDia) < 40 || nv(vitals.bpDia) > 130)) vitalWarnings.push("TA diastólica fuera de rango (40–130)");
+  if (vitals.hr   && (nv(vitals.hr)   < 40 || nv(vitals.hr)   > 160)) vitalWarnings.push("FC fuera de rango (40–160)");
+  if (vitals.rr   && (nv(vitals.rr)   < 8  || nv(vitals.rr)   > 40))  vitalWarnings.push("FR fuera de rango (8–40)");
+  if (vitals.temp && (nv(vitals.temp) < 34 || nv(vitals.temp) > 42))  vitalWarnings.push("Temp fuera de rango (34–42)");
+  if (vitals.spo2 && (nv(vitals.spo2) < 80 || nv(vitals.spo2) > 100)) vitalWarnings.push("SpO₂ fuera de rango (80–100)");
+
   function toggleProc(cat: CatalogProcedure) {
     setSelectedProcs(prev => {
       const exists = prev.find(p => p.id === cat.id);
@@ -211,6 +247,19 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
     }
     setSaving(true);
     try {
+      // Signos vitales → claves canónicas para el timeline + copia cruda en
+      // specialtyData.vitals para re-llenar en edición.
+      const bp = vitals.bpSys && vitals.bpDia ? `${vitals.bpSys}/${vitals.bpDia}` : (vitals.bpSys || vitals.bpDia || "");
+      const vitalsPayload = hasVitals ? {
+        bloodPressure:   bp,
+        heartRate:       vitals.hr,
+        respiratoryRate: vitals.rr,
+        oxygenSat:       vitals.spo2,
+        temperature:     vitals.temp,
+        weight:          vitals.weight,
+        height:          vitals.height,
+        bmi,
+      } : undefined;
       const specialtyData = {
         type: "dental",
         // "Guardar consulta" la deja FINALIZADA (no borrador). El flujo de
@@ -226,6 +275,7 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
         hygieneInstructions: form.hygieneInstructions,
         xrays: form.xrays,
         nextVisit: form.nextVisit,
+        vitals: hasVitals ? { ...vitals, bloodPressure: bp, bmi } : undefined,
       };
 
       let record: any;
@@ -240,6 +290,7 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
             objective: form.objective,
             assessment: form.assessment,
             plan: form.plan,
+            vitals: vitalsPayload,
             specialtyData,
           }),
         });
@@ -258,6 +309,7 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
             objective: form.objective,
             assessment: form.assessment,
             plan: form.plan,
+            vitals: vitalsPayload,
             autoInvoice: selectedProcs.length > 0,
             specialtyData,
           }),
@@ -329,6 +381,68 @@ export function DentalForm({ patientId, onSaved, initialRecord }: Props) {
             onChange={e => set("objective", e.target.value)}
           />
         </div>
+      </div>
+
+      {/* SIGNOS VITALES — sección colapsable. Mismas claves que cardiología. */}
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setVitalsOpen(o => !o)}
+          className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors"
+        >
+          <span className="text-sm font-bold flex items-center gap-2">
+            🩺 Signos vitales
+            {hasVitals && <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-1.5 py-0.5 rounded-full">capturados</span>}
+          </span>
+          <span className="text-muted-foreground text-xs">{vitalsOpen ? "▲" : "▼"}</span>
+        </button>
+        {vitalsOpen && (
+          <div className="px-4 pb-4 pt-1 border-t border-border">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              <div className="field-new">
+                <label className="field-new__label">TA sistólica (mmHg)</label>
+                <input type="number" className="input-new" placeholder="120" value={vitals.bpSys} onChange={e => setV("bpSys", e.target.value)} />
+              </div>
+              <div className="field-new">
+                <label className="field-new__label">TA diastólica (mmHg)</label>
+                <input type="number" className="input-new" placeholder="80" value={vitals.bpDia} onChange={e => setV("bpDia", e.target.value)} />
+              </div>
+              <div className="field-new">
+                <label className="field-new__label">FC (lpm)</label>
+                <input type="number" className="input-new" placeholder="72" value={vitals.hr} onChange={e => setV("hr", e.target.value)} />
+              </div>
+              <div className="field-new">
+                <label className="field-new__label">FR (rpm)</label>
+                <input type="number" className="input-new" placeholder="16" value={vitals.rr} onChange={e => setV("rr", e.target.value)} />
+              </div>
+              <div className="field-new">
+                <label className="field-new__label">Temp (°C)</label>
+                <input type="number" step="0.1" className="input-new" placeholder="36.5" value={vitals.temp} onChange={e => setV("temp", e.target.value)} />
+              </div>
+              <div className="field-new">
+                <label className="field-new__label">SpO₂ (%)</label>
+                <input type="number" className="input-new" placeholder="98" value={vitals.spo2} onChange={e => setV("spo2", e.target.value)} />
+              </div>
+              <div className="field-new">
+                <label className="field-new__label">Peso (kg)</label>
+                <input type="number" step="0.1" className="input-new" placeholder="70" value={vitals.weight} onChange={e => setV("weight", e.target.value)} />
+              </div>
+              <div className="field-new">
+                <label className="field-new__label">Talla (cm)</label>
+                <input type="number" className="input-new" placeholder="170" value={vitals.height} onChange={e => setV("height", e.target.value)} />
+              </div>
+              <div className="field-new">
+                <label className="field-new__label">IMC</label>
+                <input className="input-new" value={bmi} readOnly placeholder="—" style={{ opacity: 0.8 }} />
+              </div>
+            </div>
+            {vitalWarnings.length > 0 && (
+              <div className="mt-3 p-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg text-xs text-amber-700 dark:text-amber-300">
+                ⚠️ {vitalWarnings.join(" · ")}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ODONTOGRAMA — OdontogramV2 en modo CONTROLADO: foto independiente de

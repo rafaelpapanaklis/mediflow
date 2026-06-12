@@ -112,7 +112,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const set = (k: string, v: unknown) => { (data as Record<string, unknown>)[k] = v; };
 
   try {
-    for (const k of ["email", "phone", "bloodType", "address", "notes", "familyHistory", "personalNonPathologicalHistory"] as const) {
+    for (const k of ["email", "phone", "bloodType", "address", "notes", "familyHistory", "personalNonPathologicalHistory", "emergencyContactName", "emergencyContactPhone", "emergencyContactRelation"] as const) {
       if (!has(k)) continue;
       const v = body[k];
       if (v !== null && typeof v !== "string") throw new Error(`Campo ${k} inválido`);

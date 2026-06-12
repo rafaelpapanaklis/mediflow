@@ -1109,6 +1109,12 @@ model Patient {
   familyHistory                  String? @db.Text
   personalNonPathologicalHistory String? @db.Text
 
+  // Contacto de emergencia (anamnesis WS1-T2). Columnas reales en
+  // sql/health-questionnaire.sql (ALTER TABLE ... ADD COLUMN IF NOT EXISTS).
+  emergencyContactName     String?
+  emergencyContactPhone    String?
+  emergencyContactRelation String?
+
   // Datos fiscales para CFDI
   rfcPaciente      String?
   regimenFiscalPac String?
@@ -7056,4 +7062,32 @@ model ClinicReview {
   @@index([clinicId, status, createdAt])
   @@index([clinicId, reported])
   @@map("clinic_reviews")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Cuestionario de salud / anamnesis dental (WS1-T2 anamnesis-vitales).
+// Versionado simple: una fila por llenado; el VIGENTE es el más reciente
+// por (clinicId, patientId, filledAt). Los anteriores se conservan como
+// historial. SIN relaciones Prisma hacia Clinic/Patient/User a propósito
+// (mismo patrón que ClinicReview): las FKs viven en
+// sql/health-questionnaire.sql para NO editar esos modelos y evitar
+// colisiones con otras terminales que también tocan el schema. RLS
+// deny-all en el SQL. `answers` = respuestas crudas del formulario;
+// `riskFlags` = banderas calculadas server-side al guardar (chips rojos).
+// ═══════════════════════════════════════════════════════════════════
+model HealthQuestionnaire {
+  id         String   @id @default(cuid())
+  clinicId   String
+  patientId  String
+  filledAt   DateTime @default(now())
+  filledById String? // User staff que capturó (null = portal/sin sesión)
+  answers    Json
+  riskFlags  String[] @default([])
+  notes      String?  @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clinicId, patientId, filledAt(sort: Desc)])
+  @@map("health_questionnaires")
 }

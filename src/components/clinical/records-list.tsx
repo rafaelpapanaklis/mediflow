@@ -38,10 +38,23 @@ export function DentalRecordDetail({ data, record }: { data: any; record: any })
       {record.vitals && (Object.values(record.vitals).some(v => v)) && (
         <div>
           <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-2">{t("clinical.recordsList.vitalSigns")}</div>
-          <div className="grid grid-cols-3 gap-2">
-            {record.vitals.bloodPressure && <div className="bg-muted/30 rounded-lg p-2 text-center"><div className="text-xs font-bold">{record.vitals.bloodPressure}</div><div className="text-[10px] text-muted-foreground">{t("clinical.recordsList.bloodPressure")}</div></div>}
-            {record.vitals.heartRate     && <div className="bg-muted/30 rounded-lg p-2 text-center"><div className="text-xs font-bold">{record.vitals.heartRate}</div><div className="text-[10px] text-muted-foreground">{t("clinical.recordsList.heartRate")}</div></div>}
-            {record.vitals.notes         && <div className="bg-muted/30 rounded-lg p-2 text-center"><div className="text-xs font-bold">{record.vitals.notes}</div><div className="text-[10px] text-muted-foreground">{t("common.notes")}</div></div>}
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+            {[
+              { label: "T/A",          val: record.vitals.bloodPressure },
+              { label: "FC",           val: record.vitals.heartRate },
+              { label: t("clinical.recordsList.temperature"), val: record.vitals.temperature },
+              { label: "FR",           val: record.vitals.respiratoryRate },
+              { label: "Sat. O₂",     val: record.vitals.oxygenSat },
+              { label: t("clinical.recordsList.weight"), val: record.vitals.weight ? `${record.vitals.weight} kg` : null },
+              { label: t("clinical.recordsList.height"), val: record.vitals.height ? `${record.vitals.height} cm` : null },
+              { label: t("clinical.recordsList.bmi"),    val: record.vitals.bmi },
+              { label: t("common.notes"),                val: record.vitals.notes },
+            ].filter(i => i.val).map(item => (
+              <div key={item.label} className="bg-muted/30 rounded-lg p-2 text-center">
+                <div className="text-xs font-bold">{item.val}</div>
+                <div className="text-[10px] text-muted-foreground">{item.label}</div>
+              </div>
+            ))}
           </div>
         </div>
       )}
