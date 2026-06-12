@@ -88,6 +88,19 @@ export async function POST(req: NextRequest) {
   const { medicalRecordId, patientId, items, indications, diagnosis, cofeprisGroup, cofeprisFolio, expiresAt: expiresAtOverride } = body;
   const medicationsLegacy = body.medications;
 
+  // Evidencia opcional del chequeo IA de contraindicaciones. Se guarda tal cual
+  // en Prescription.aiCheck (nunca se expone en la verificación pública — el
+  // endpoint /verify no selecciona este campo). Cap de tamaño defensivo.
+  const aiCheckRaw = body.aiCheck;
+  let safeAiCheck: any = null;
+  if (aiCheckRaw && typeof aiCheckRaw === "object") {
+    try {
+      if (JSON.stringify(aiCheckRaw).length <= 20000) safeAiCheck = aiCheckRaw;
+    } catch {
+      safeAiCheck = null;
+    }
+  }
+
   if (!patientId) {
     return NextResponse.json({ error: "patientId requerido" }, { status: 400 });
   }
@@ -178,6 +191,7 @@ export async function POST(req: NextRequest) {
         cofeprisFolio: cofeprisFolio ?? null,
         issuedAt,
         expiresAt,
+        aiCheck: safeAiCheck,
       },
     });
     await tx.prescriptionItem.createMany({

@@ -2353,6 +2353,10 @@ model Prescription {
   cofeprisGroup    String?
   cofeprisFolio    String?
   digitalSignature String?
+  // Evidencia: resultado del chequeo IA de contraindicaciones al emitir la
+  // receta (perMedication/interactions/summary + checkedAt). NUNCA se muestra
+  // en la verificación pública — el endpoint /verify no lo selecciona.
+  aiCheck          Json?
 
   medicalRecord MedicalRecord?     @relation(fields: [medicalRecordId], references: [id], onDelete: SetNull)
   patient       Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -2403,6 +2407,23 @@ model PrescriptionItem {
 
   @@index([prescriptionId])
   @@map("prescription_items")
+}
+
+/// Cache de chequeos IA de contraindicaciones al recetar.
+/// Keyed por SHA256(clinicId + patientId + contexto clínico normalizado +
+/// lista de medicamentos). Si el mismo doctor revisa el mismo paciente con la
+/// misma lista, se devuelve el resultado sin volver a cobrar tokens de IA
+/// (mismo patrón de cache que xrayAnalysis). Multi-tenant por clinicId.
+model PrescriptionAiCheck {
+  hash      String   @id @db.VarChar(64)
+  clinicId  String
+  patientId String
+  result    Json
+  model     String   @db.VarChar(60)
+  createdAt DateTime @default(now())
+
+  @@index([clinicId])
+  @@map("prescription_ai_checks")
 }
 
 // ═══════════════════════════════════════════════════════════
