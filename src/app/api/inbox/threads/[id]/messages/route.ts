@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { sendWhatsappMessage } from "@/lib/integrations/twilio-conversations";
+import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { resolveWhatsappSendChannel, isWithin24hWindow } from "@/lib/inbox/send-core";
 import { sendEmail } from "@/lib/email";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 
@@ -108,6 +110,11 @@ export async function POST(req: NextRequest, { params }: Params) {
       include: {
         clinic: {
           select: {
+            // Meta Cloud API (stack real, mismo que webhook/cola/bot).
+            waConnected: true,
+            waPhoneNumberId: true,
+            waAccessToken: true,
+            // Twilio legacy (solo respaldo si no hay Meta).
             twilioAccountSid: true,
             twilioAuthToken: true,
             twilioWhatsappNumber: true,
@@ -126,7 +133,6 @@ export async function POST(req: NextRequest, { params }: Params) {
     // Para respuestas reales, entregamos según el canal del hilo.
     if (!parsed.data.isInternal) {
       if (thread.channel === "WHATSAPP") {
-        // WhatsApp → Twilio (infra existente).
         const phone = thread.patient?.phone;
         if (!phone) {
           return NextResponse.json(
@@ -134,22 +140,55 @@ export async function POST(req: NextRequest, { params }: Params) {
             { status: 400 },
           );
         }
-        const result = await sendWhatsappMessage(
-          {
-            accountSid: thread.clinic.twilioAccountSid ?? "",
-            authToken: thread.clinic.twilioAuthToken ?? "",
-            whatsappNumber: thread.clinic.twilioWhatsappNumber ?? "",
-          },
-          {
-            to: phone,
-            body: parsed.data.body,
-            mediaUrls: parsed.data.attachments?.map((a) => a.url),
-          },
-        );
-        if (!result.success) {
-          sendError = result.error ?? "send_failed";
+        // Mismo stack que el webhook/cola/bot: Meta Cloud API si la clínica
+        // está conectada por Meta; Twilio queda SOLO como respaldo legacy.
+        const resolution = resolveWhatsappSendChannel(thread.clinic);
+        if (resolution.channel === "none") {
+          sendError = "whatsapp_not_connected";
+        } else if (resolution.channel === "meta") {
+          // Ventana de 24h de WhatsApp: con texto libre solo si el último IN
+          // tiene <=24h. Si no, error claro en vez de intentar y fallar opaco.
+          const lastIn = await prisma.inboxMessage.findFirst({
+            where: { threadId: params.id, direction: "IN" },
+            orderBy: { sentAt: "desc" },
+            select: { sentAt: true },
+          });
+          if (!isWithin24hWindow(lastIn?.sentAt ?? null, now)) {
+            sendError = "out_of_24h_window";
+          } else {
+            try {
+              // sendWhatsAppMessage descifra el token internamente (igual que el
+              // webhook). Lanza ante error → lo convertimos en sendError claro.
+              const meta = await sendWhatsAppMessage(
+                thread.clinic.waPhoneNumberId ?? "",
+                thread.clinic.waAccessToken ?? "",
+                phone,
+                parsed.data.body,
+              );
+              externalId = meta?.messages?.[0]?.id ?? null;
+            } catch (err) {
+              sendError = err instanceof Error ? err.message : "send_failed";
+            }
+          }
         } else {
-          externalId = result.messageSid ?? null;
+          // Twilio legacy (clínica con twilio* configurado y SIN Meta).
+          const result = await sendWhatsappMessage(
+            {
+              accountSid: thread.clinic.twilioAccountSid ?? "",
+              authToken: thread.clinic.twilioAuthToken ?? "",
+              whatsappNumber: thread.clinic.twilioWhatsappNumber ?? "",
+            },
+            {
+              to: phone,
+              body: parsed.data.body,
+              mediaUrls: parsed.data.attachments?.map((a) => a.url),
+            },
+          );
+          if (!result.success) {
+            sendError = result.error ?? "send_failed";
+          } else {
+            externalId = result.messageSid ?? null;
+          }
         }
       } else if (thread.channel === "EMAIL") {
         // Email → Resend (infra existente en lib/email).
@@ -203,10 +242,17 @@ export async function POST(req: NextRequest, { params }: Params) {
       },
     });
 
-    // Actualiza lastMessageAt del thread.
+    // Actualiza lastMessageAt. Si un humano responde un hilo de WhatsApp (mensaje
+    // OUT real, no nota interna), pausamos el bot: estándar de inbox con bot para
+    // que no pise la conversación que ya tomó una persona.
+    const humanTookOver =
+      !parsed.data.isInternal && thread.channel === "WHATSAPP";
     await prisma.inboxThread.update({
       where: { id: params.id },
-      data: { lastMessageAt: now },
+      data: {
+        lastMessageAt: now,
+        ...(humanTookOver ? { botActive: false } : {}),
+      },
     });
 
     return NextResponse.json(

@@ -3595,7 +3595,11 @@
       "suggestWithAi": "Sugerir con IA",
       "suggestReplyWithAi": "Sugerir respuesta con IA",
       "sending": "Enviando…",
-      "saveNote": "Guardar nota"
+      "saveNote": "Guardar nota",
+      "botActive": "Bot activo",
+      "botPaused": "Bot en pausa",
+      "botPause": "Pausar bot",
+      "botResume": "Reactivar bot"
     },
     "whatsapp": {
       "subtitle": "Recordatorios automáticos y mensajería con pacientes",

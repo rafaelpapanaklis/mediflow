@@ -20,15 +20,10 @@ import {
   Bell,
   Plus,
   Search,
-  Paperclip,
-  Smile,
-  Sparkles,
+  Bot,
   Check,
   CheckCheck,
-  MoreHorizontal,
   ExternalLink,
-  Phone,
-  Video,
   X,
   Menu,
   ArrowLeft,
@@ -51,6 +46,7 @@ interface Thread {
   lastMessageAt: string;
   tags: string[];
   externalId: string | null;
+  botActive: boolean;
   patient: { id: string; firstName: string; lastName: string } | null;
   assignedTo: { id: string; firstName: string; lastName: string } | null;
   _count: { messages: number };
@@ -263,9 +259,19 @@ export function InboxClient() {
         throw new Error(data.error ?? t("inbox.client.errorSend"));
       }
       const data = await res.json();
+      // Si un humano respondió un hilo de WhatsApp, el server pausó el bot:
+      // reflejarlo en el detalle y en la lista sin re-fetch.
+      const pausedBot = composerMode !== "internal" && activeThread.channel === "WHATSAPP";
       setActiveThread((prev) =>
-        prev ? { ...prev, messages: [...prev.messages, data.message] } : prev,
+        prev
+          ? { ...prev, messages: [...prev.messages, data.message], ...(pausedBot ? { botActive: false } : {}) }
+          : prev,
       );
+      if (pausedBot) {
+        setThreads((prev) =>
+          prev.map((th) => (th.id === activeThread.id ? { ...th, botActive: false } : th)),
+        );
+      }
       setComposerText("");
       if (data.sendError) {
         toast(t("inbox.client.toastSavedButError", { error: data.sendError }), { icon: "⚠️" });
@@ -278,6 +284,27 @@ export function InboxClient() {
       setSending(false);
     }
   }, [activeThread, composerText, composerMode, t]);
+
+  // Pausa/reactiva el bot de WhatsApp en el hilo activo (PATCH botActive).
+  const toggleBot = useCallback(async () => {
+    if (!activeThread) return;
+    const next = !activeThread.botActive;
+    try {
+      const res = await fetch(`/api/inbox/threads/${activeThread.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ botActive: next }),
+      });
+      if (!res.ok) throw new Error();
+      setActiveThread((prev) => (prev ? { ...prev, botActive: next } : prev));
+      setThreads((prev) =>
+        prev.map((th) => (th.id === activeThread.id ? { ...th, botActive: next } : th)),
+      );
+      toast.success(next ? t("inbox.client.botActive") : t("inbox.client.botPaused"));
+    } catch {
+      toast.error(t("inbox.client.errorSend"));
+    }
+  }, [activeThread, t]);
 
   const archiveThread = useCallback(async () => {
     if (!activeThread) return;
@@ -613,12 +640,17 @@ export function InboxClient() {
                 </div>
               </div>
               <div className={styles.detailHeaderActions}>
-                <button type="button" className={styles.iconBtn} title={t("inbox.client.call")} aria-label={t("inbox.client.call")}>
-                  <Phone size={14} aria-hidden />
-                </button>
-                <button type="button" className={styles.iconBtn} title={t("inbox.client.videoCall")} aria-label={t("inbox.client.startVideoCall")}>
-                  <Video size={14} aria-hidden />
-                </button>
+                {activeThread.channel === "WHATSAPP" && (
+                  <button
+                    type="button"
+                    className={styles.iconBtn}
+                    title={activeThread.botActive ? t("inbox.client.botActive") : t("inbox.client.botPaused")}
+                    aria-label={activeThread.botActive ? t("inbox.client.botPause") : t("inbox.client.botResume")}
+                    onClick={toggleBot}
+                  >
+                    <Bot size={14} aria-hidden style={{ color: activeThread.botActive ? "#25d366" : "#94a3b8" }} />
+                  </button>
+                )}
                 <button
                   type="button"
                   className={styles.iconBtn}
@@ -627,9 +659,6 @@ export function InboxClient() {
                   onClick={archiveThread}
                 >
                   <Archive size={14} aria-hidden />
-                </button>
-                <button type="button" className={styles.iconBtn} title={t("inbox.client.more")} aria-label={t("inbox.client.moreOptions")}>
-                  <MoreHorizontal size={14} aria-hidden />
                 </button>
               </div>
             </header>
@@ -741,15 +770,6 @@ export function InboxClient() {
                   disabled={sending}
                 />
                 <div className={styles.composerBar}>
-                  <button type="button" className={styles.composerActionBtn} title={t("inbox.client.attach")} aria-label={t("inbox.client.attachFile")}>
-                    <Paperclip size={14} aria-hidden />
-                  </button>
-                  <button type="button" className={styles.composerActionBtn} title={t("inbox.client.emoji")} aria-label={t("inbox.client.insertEmoji")}>
-                    <Smile size={14} aria-hidden />
-                  </button>
-                  <button type="button" className={styles.composerActionBtn} title={t("inbox.client.suggestWithAi")} aria-label={t("inbox.client.suggestReplyWithAi")}>
-                    <Sparkles size={14} aria-hidden />
-                  </button>
                   <span className={styles.composerBarSpacer} />
                   <button
                     type="button"

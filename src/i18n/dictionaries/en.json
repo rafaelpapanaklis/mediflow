@@ -3595,7 +3595,11 @@
       "suggestWithAi": "Suggest with AI",
       "suggestReplyWithAi": "Suggest reply with AI",
       "sending": "Sending…",
-      "saveNote": "Save note"
+      "saveNote": "Save note",
+      "botActive": "Bot active",
+      "botPaused": "Bot paused",
+      "botPause": "Pause bot",
+      "botResume": "Resume bot"
     },
     "whatsapp": {
       "subtitle": "Automated reminders and patient messaging",

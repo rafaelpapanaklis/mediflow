@@ -54,6 +54,13 @@ export async function GET(req: NextRequest) {
     const denied = denyIfMissingPermission(dbUser, "inbox.view");
     if (denied) return denied;
 
+    // Despertador perezoso (sin cron): los hilos SNOOZED cuya hora ya pasó
+    // vuelven a Inbox (UNREAD) al listar. Así un snooze a 1 min reaparece solo.
+    await prisma.inboxThread.updateMany({
+      where: { clinicId: dbUser.clinicId, status: "SNOOZED", snoozedUntil: { lte: new Date() } },
+      data: { status: "UNREAD", snoozedUntil: null },
+    });
+
     const sp = req.nextUrl.searchParams;
     const where: Prisma.InboxThreadWhereInput = {
       clinicId: dbUser.clinicId,
@@ -99,6 +106,7 @@ export async function GET(req: NextRequest) {
         lastMessageAt: true,
         tags: true,
         externalId: true,
+        botActive: true,
         patient: { select: { id: true, firstName: true, lastName: true } },
         assignedTo: { select: { id: true, firstName: true, lastName: true } },
         _count: { select: { messages: true } },

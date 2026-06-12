@@ -4,7 +4,8 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 import { runBotTurn } from "@/lib/whatsapp/bot/engine";
-import { isAffirmative, isNegative, isCancelWord } from "@/lib/whatsapp/bot/booking-helpers";
+import { classifyReminderReply } from "@/lib/whatsapp/reminder-reply";
+import { normalizeLast10 } from "@/lib/whatsapp/bot/booking-parse";
 import { rateLimitKey } from "@/lib/rate-limit";
 import type { BotHistoryItem } from "@/lib/whatsapp/bot/types";
 import { Prisma } from "@prisma/client";
@@ -94,12 +95,20 @@ export async function POST(req: NextRequest) {
       if (duplicate) return NextResponse.json({ ok: true });
     }
 
-    // Empareja al paciente por teléfono (Meta manda "521234567890" → últimos 10).
-    const fromNormalized = from.replace(/^52/, "").slice(-10);
-    const patient = await prisma.patient.findFirst({
-      where: { clinicId: clinic.id, phone: { contains: fromNormalized } },
-      select: { id: true },
-    });
+    // Empareja al paciente por teléfono comparando los últimos 10 dígitos
+    // NORMALIZADOS en ambos lados (no `contains` crudo, que da falsos positivos
+    // cuando esos 10 dígitos aparecen como substring de otro número). El
+    // `contains` solo pre-filtra en la BD; el match real lo hace normalizeLast10.
+    const fromLast10 = normalizeLast10(from);
+    const phoneCandidates = fromLast10.length === 10
+      ? await prisma.patient.findMany({
+          where: { clinicId: clinic.id, phone: { contains: fromLast10 } },
+          select: { id: true, phone: true },
+          take: 25,
+        })
+      : [];
+    const patient =
+      phoneCandidates.find((p) => normalizeLast10(p.phone ?? "") === fromLast10) ?? null;
 
     // ── Ingest al Inbox unificado (generalizado para Meta, igual que Twilio) ──
     const profileName = value?.contacts?.[0]?.profile?.name as string | undefined;
@@ -186,14 +195,12 @@ export async function POST(req: NextRequest) {
       : null;
 
     if (reminder) {
-      // Palabra completa (\b) vía helpers del bot: con substring, "necesito
-      // cancelar" contiene "si" y CONFIRMABA. Cancelar se evalúa PRIMERO para
-      // frases ambiguas ("mejor no, sí cancélala"); "1"/"2" solo por igualdad
-      // exacta (rawText ya viene trimmed).
-      const isCancel  = text === "2" || isCancelWord(text) || isNegative(text);
-      const isConfirm = !isCancel && (text === "1" || isAffirmative(text));
+      // Clasificación pura compartida con los tests (classifyReminderReply):
+      // cancelar se evalúa PRIMERO para frases ambiguas ("mejor no, sí
+      // cancélala"); "1"/"2" solo por igualdad exacta (rawText ya viene trimmed).
+      const reply = classifyReminderReply(text);
 
-      if (isCancel) {
+      if (reply === "cancel") {
         await prisma.appointment.update({
           where: { id: reminder.appointmentId },
           data:  { status: "CANCELLED", cancelledAt: new Date(), cancelReason: "Cancelado por paciente vía WhatsApp" },
@@ -205,7 +212,7 @@ export async function POST(req: NextRequest) {
             `❌ Tu cita ha sido *cancelada*. Si deseas reagendar, comunícate con nosotros. ¡Hasta pronto!`
           );
         }
-      } else if (isConfirm) {
+      } else if (reply === "confirm") {
         await prisma.appointment.update({
           where: { id: reminder.appointmentId },
           data:  { status: "CONFIRMED", confirmedAt: new Date() },
@@ -297,14 +304,20 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Persiste el estado multi-turno del bot (undefined ⇒ no cambiar).
+    // Persiste el estado multi-turno del bot y, si el bot deriva a humano
+    // (handoff), PAUSA el bot en el hilo (botActive=false) para que no vuelva a
+    // responder hasta que el staff lo reactive. handoff no responde: el mensaje
+    // ya quedó en el Inbox para una persona.
+    const threadUpdate: Prisma.InboxThreadUpdateInput = {};
     if (result.newBotState !== undefined) {
-      await prisma.inboxThread.update({
-        where: { id: thread.id },
-        data: { botState: result.newBotState === null ? Prisma.DbNull : (result.newBotState as Prisma.InputJsonValue) },
-      });
+      threadUpdate.botState = result.newBotState === null ? Prisma.DbNull : (result.newBotState as Prisma.InputJsonValue);
     }
-    // handoff: no se responde; el mensaje ya quedó en el Inbox para el staff.
+    if (result.handoff) {
+      threadUpdate.botActive = false;
+    }
+    if (Object.keys(threadUpdate).length > 0) {
+      await prisma.inboxThread.update({ where: { id: thread.id }, data: threadUpdate });
+    }
 
     return NextResponse.json({ ok: true });
   } catch (err) {

@@ -14,6 +14,8 @@ const PatchSchema = z.object({
   snoozedUntil: z.string().datetime().nullable().optional(),
   subject: z.string().min(1).max(200).optional(),
   tags: z.array(z.string()).optional(),
+  // Pausar/reactivar el bot de WhatsApp en este hilo desde el detalle del Inbox.
+  botActive: z.boolean().optional(),
 }).refine((v) => Object.keys(v).length > 0, "no fields to update");
 
 async function getDbUser() {
@@ -117,13 +119,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
     if (parsed.data.subject !== undefined) data.subject = parsed.data.subject;
     if (parsed.data.tags !== undefined) data.tags = parsed.data.tags;
+    if (parsed.data.botActive !== undefined) data.botActive = parsed.data.botActive;
 
     const updated = await prisma.inboxThread.update({
       where: { id: params.id },
       data,
       select: {
         id: true, status: true, assignedToId: true, snoozedUntil: true,
-        subject: true, tags: true,
+        subject: true, tags: true, botActive: true,
       },
     });
     return NextResponse.json({ thread: updated });
