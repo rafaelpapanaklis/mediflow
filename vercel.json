@@ -51,6 +51,10 @@
     {
       "path": "/api/cron/ai-wallet",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/recall-sweep",
+      "schedule": "0 14 * * *"
     }
   ]
 }

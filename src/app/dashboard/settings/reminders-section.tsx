@@ -15,6 +15,7 @@ import {
   type ReminderChannel,
   type ReminderSettings,
 } from "@/lib/reminders/config";
+import { RecallSection } from "./recall-section";
 
 // Etiqueta i18n de cada momento permitido (minutos antes de la cita).
 const OFFSET_LABEL_KEYS: Record<number, string> = {
@@ -94,6 +95,7 @@ export function RemindersSection({ clinic }: { clinic: any }) {
   }
 
   return (
+    <div className="space-y-6">
     <div className="bg-card border border-border rounded-2xl p-6 shadow-card max-w-lg space-y-4">
       <div>
         <h2 className="text-base font-bold">{t("settings.reminders.title")}</h2>
@@ -236,6 +238,10 @@ export function RemindersSection({ clinic }: { clinic: any }) {
           {saving ? t("common.saving") : t("common.saveChanges")}
         </Button>
       </div>
+    </div>
+
+    {/* Recall genérico (reactivación de pacientes) — WS1-T8 */}
+    <RecallSection clinic={clinic} />
     </div>
   );
 }
