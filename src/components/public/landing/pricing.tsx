@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getPlan } from "@/lib/billing/plans";
 
 interface Plan {
   id: string;
@@ -16,7 +17,7 @@ const PLANS: Plan[] = [
   {
     id: "basic",
     name: "BASIC",
-    price: 49,
+    price: getPlan("BASIC").priceMxn,
     tagline: "Para empezar",
     description: "Solo o arrancando tu práctica.",
     features: [
@@ -27,13 +28,13 @@ const PLANS: Plan[] = [
       "CFDI (50 timbres/mes)",
       "Soporte por email",
     ],
-    cta: "Empezar gratis",
+    cta: "Elegir plan",
     ctaHref: "/signup?plan=basic",
   },
   {
     id: "pro",
     name: "PRO",
-    price: 99,
+    price: getPlan("PRO").priceMxn,
     tagline: "Lo más elegido",
     description: "La elección de clínicas en crecimiento.",
     popular: true,
@@ -47,13 +48,13 @@ const PLANS: Plan[] = [
       "CFDI ilimitado",
       "Soporte prioritario",
     ],
-    cta: "Prueba 14 días gratis",
+    cta: "Elegir plan",
     ctaHref: "/signup?plan=pro",
   },
   {
     id: "clinic",
     name: "CLINIC",
-    price: 249,
+    price: getPlan("CLINIC").priceMxn,
     tagline: "Multi-sucursal",
     description: "Para grupos y multi-sede.",
     features: [
@@ -240,7 +241,7 @@ export function Pricing() {
                   color: "var(--ld-fg, var(--fg))",
                 }}
               >
-                ${p.price}
+                ${p.price.toLocaleString("es-MX")}
               </span>
               <span
                 style={{
@@ -248,7 +249,7 @@ export function Pricing() {
                   color: "var(--ld-fg-muted, var(--fg-muted))",
                 }}
               >
-                USD/mes
+                MXN/mes
               </span>
             </div>
 

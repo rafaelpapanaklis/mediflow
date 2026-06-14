@@ -32,8 +32,15 @@ function getPaypalUrl(plan: PlanId): string | null {
   return url && url.length > 0 ? url : null;
 }
 
-export default async function SuspendedPage() {
+export default async function SuspendedPage({
+  searchParams,
+}: {
+  searchParams: { pending?: string };
+}) {
   const { t } = await getServerT();
+  // Vuelta de un Checkout SPEI/OXXO (asíncrono): el pago aún no se acredita.
+  const pending = searchParams?.pending;
+  const showPending = pending === "spei" || pending === "oxxo";
   const planCards: PlanCardData[] = PLANS.map((p) => ({
     id: p.id,
     name: p.name,
@@ -44,6 +51,20 @@ export default async function SuspendedPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      {showPending && (
+        <div className="mx-auto max-w-2xl px-4 pt-6">
+          <div
+            className="rounded-xl border p-4 text-center text-sm font-semibold"
+            style={{
+              background: "rgba(245,158,11,0.08)",
+              borderColor: "rgba(245,158,11,0.4)",
+              color: "rgb(180,83,9)",
+            }}
+          >
+            {t("pages.suspended.pendingPaymentBanner", { method: (pending ?? "").toUpperCase() })}
+          </div>
+        </div>
+      )}
       {/* Hero bloqueante centrado */}
       <section className="flex flex-col items-center justify-center px-4 py-16 text-center">
         <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl border border-destructive/40 bg-destructive/10 text-4xl">

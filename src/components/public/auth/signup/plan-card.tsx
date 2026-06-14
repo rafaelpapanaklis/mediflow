@@ -188,7 +188,7 @@ export function PlanCard({
         >
           ${price}
         </span>
-        <span style={{ fontSize: 13, color: "var(--ld-fg-muted)" }}>USD/mes</span>
+        <span style={{ fontSize: 13, color: "var(--ld-fg-muted)" }}>MXN/mes</span>
         {billing === "annual" && priceAnnual < priceMonthly && (
           <span
             style={{

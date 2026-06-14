@@ -403,9 +403,9 @@
       "dismiss": "Descartar anuncio"
     },
     "expiredPlanModal": {
-      "title": "Tu plan expiró",
-      "desc": "Tu acceso al panel está bloqueado. Para seguir usando DaleControl renueva tu plan.",
-      "renew": "Renovar plan →"
+      "title": "Activa tu plan",
+      "desc": "Tu acceso al panel está bloqueado. Activa tu plan para empezar a usar DaleControl.",
+      "renew": "Activar plan →"
     },
     "waitingRoomAlert": {
       "tooltip": {
@@ -6922,9 +6922,10 @@
       "endTimeLabel": "Hora fin *"
     },
     "suspended": {
-      "planExpiredTitle": "Tu plan expiró",
-      "planExpiredDescription": "Tu acceso al panel está bloqueado. Para seguir usando DaleControl y retomar tus citas, expedientes y facturación, renueva tu plan.",
-      "renewPlanCta": "Renovar plan ↓",
+      "planExpiredTitle": "Activa tu plan",
+      "planExpiredDescription": "Tu acceso al panel está bloqueado. Activa tu plan para usar DaleControl: tus citas, expedientes y facturación.",
+      "renewPlanCta": "Activar plan ↓",
+      "pendingPaymentBanner": "Esperando confirmación de tu pago ({method}). En cuanto se acredite, activamos tu plan automáticamente.",
       "contactSupport": "Hablar con soporte",
       "backToLogin": "← Volver al login",
       "choosePlanTitle": "Elige tu plan",

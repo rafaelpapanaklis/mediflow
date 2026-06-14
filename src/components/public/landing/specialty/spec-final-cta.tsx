@@ -60,7 +60,7 @@ export function SpecFinalCTA({ spec }: { spec: Specialty }) {
             lineHeight: 1.55,
           }}
         >
-          14 días completos de PRO. Cancela cuando quieras. Migramos tus datos gratis.
+          Activa el plan PRO. Cancela cuando quieras. Migramos tus datos sin costo.
         </p>
         <div
           style={{
@@ -71,7 +71,7 @@ export function SpecFinalCTA({ spec }: { spec: Specialty }) {
           }}
         >
           <Link
-            href="/signup"
+            href="/#precios"
             style={{
               padding: "14px 24px",
               borderRadius: 10,
@@ -85,7 +85,7 @@ export function SpecFinalCTA({ spec }: { spec: Specialty }) {
               textDecoration: "none",
             }}
           >
-            Prueba gratis 14 días →
+            Ver planes →
           </Link>
           <Link
             href="/contact?intent=demo"

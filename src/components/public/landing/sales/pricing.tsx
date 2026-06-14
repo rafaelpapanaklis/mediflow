@@ -9,7 +9,7 @@ import { Check, ShieldCheck } from "lucide-react";
  * Promos vigentes:
  *  - Anual: 30% de descuento → redondear(mensual × 12 × 0.70).
  *  - Mensual: −15% los primeros 3 meses → redondear(mensual × 0.85), luego precio normal.
- *  - Instalación ($500 pago único) incluida gratis en todos los planes.
+ *  - Instalación ($500 pago único) incluida sin costo en todos los planes.
  * EDITABLE — ajusta montos y features aquí.
  */
 const PRICING = {
@@ -110,11 +110,11 @@ export function Pricing() {
                     </p>
                   )}
 
-                  {/* Instalación: $500 pago único tachado, incluido gratis. */}
+                  {/* Instalación: $500 pago único tachado, incluido sin costo. */}
                   <p className="mfh-plan__install">
                     Costo de instalación:{" "}
                     <span className="mfh-plan__install-old">$500 pago único</span>{" "}
-                    <span className="mfh-plan__install-free">✓ Incluido GRATIS</span>
+                    <span className="mfh-plan__install-free">✓ Incluido sin costo</span>
                   </p>
                 </div>
 

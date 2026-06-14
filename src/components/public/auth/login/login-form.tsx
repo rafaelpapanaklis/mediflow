@@ -163,12 +163,12 @@ export function LoginForm() {
 
       {/* Footer */}
       <div style={{ textAlign: "center", fontSize: 13, color: "var(--ld-fg-muted)" }}>
-        ¿Aún no tienes cuenta?{" "}
+        ¿No tienes cuenta?{" "}
         <Link
-          href="/signup"
+          href="/#precios"
           style={{ color: "var(--ld-brand-light)", fontWeight: 500, textDecoration: "none" }}
         >
-          Prueba gratis 14 días →
+          Ver planes →
         </Link>
       </div>
 

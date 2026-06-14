@@ -58,7 +58,7 @@ export function FinalCTA() {
             lineHeight: 1.55,
           }}
         >
-          Empieza gratis hoy. 14 días sin cargo. Cancela cuando quieras.
+          Elige tu plan y empieza hoy. Cancela cuando quieras.
         </p>
 
         <div
@@ -71,7 +71,7 @@ export function FinalCTA() {
           }}
         >
           <Link
-            href="/signup"
+            href="/#precios"
             style={{
               padding: "14px 24px",
               borderRadius: 10,
@@ -85,7 +85,7 @@ export function FinalCTA() {
               transition: "all 0.2s",
             }}
           >
-            Empieza gratis →
+            Ver planes →
           </Link>
           <Link
             href="/demo"

@@ -403,9 +403,9 @@
       "dismiss": "Dismiss announcement"
     },
     "expiredPlanModal": {
-      "title": "Your plan has expired",
-      "desc": "Your access to the dashboard is blocked. To keep using DaleControl, renew your plan.",
-      "renew": "Renew plan →"
+      "title": "Activate your plan",
+      "desc": "Your access to the dashboard is blocked. Activate your plan to start using DaleControl.",
+      "renew": "Activate plan →"
     },
     "waitingRoomAlert": {
       "tooltip": {
@@ -6922,9 +6922,10 @@
       "endTimeLabel": "End time *"
     },
     "suspended": {
-      "planExpiredTitle": "Your plan has expired",
-      "planExpiredDescription": "Your access to the dashboard is blocked. To keep using DaleControl and resume your appointments, records, and billing, renew your plan.",
-      "renewPlanCta": "Renew plan ↓",
+      "planExpiredTitle": "Activate your plan",
+      "planExpiredDescription": "Your access to the dashboard is blocked. Activate your plan to use DaleControl: appointments, records, and billing.",
+      "renewPlanCta": "Activate plan ↓",
+      "pendingPaymentBanner": "Waiting for your payment confirmation ({method}). Your plan activates automatically once it clears.",
       "contactSupport": "Contact support",
       "backToLogin": "← Back to login",
       "choosePlanTitle": "Choose your plan",

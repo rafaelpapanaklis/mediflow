@@ -118,7 +118,7 @@ export function SpecHero({ spec }: { spec: Specialty }) {
               }}
             >
               <Link
-                href="/signup"
+                href="/#precios"
                 style={{
                   padding: "14px 22px",
                   borderRadius: 10,
@@ -132,7 +132,7 @@ export function SpecHero({ spec }: { spec: Specialty }) {
                   textDecoration: "none",
                 }}
               >
-                Prueba gratis 14 días →
+                Ver planes →
               </Link>
               <Link
                 href="/#demo"
@@ -162,7 +162,7 @@ export function SpecHero({ spec }: { spec: Specialty }) {
               }}
             >
               <span>✓ Acceso completo</span>
-              <span>✓ Migración gratis</span>
+              <span>✓ Migración sin costo</span>
               <span>✓ Cancela cuando quieras</span>
             </div>
           </div>

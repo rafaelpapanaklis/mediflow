@@ -4,7 +4,7 @@ export function CTAButtons() {
   return (
     <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
       <Link
-        href="/signup"
+        href="/#precios"
         style={{
           display: "inline-flex",
           alignItems: "center",
@@ -19,7 +19,7 @@ export function CTAButtons() {
           boxShadow: "0 8px 24px rgba(124,58,237,0.35), inset 0 1px 0 rgba(255,255,255,0.15)",
         }}
       >
-        Empieza gratis <span aria-hidden="true">→</span>
+        Ver planes <span aria-hidden="true">→</span>
       </Link>
       <Link
         href="/clinicas"

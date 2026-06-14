@@ -7,7 +7,7 @@ const BENEFITS = [
   "Acceso completo a todos los módulos",
   "Configuración guiada en menos de 10 minutos",
   "Importación gratuita de tus pacientes existentes",
-  "Soporte 1-a-1 durante el trial",
+  "Soporte 1-a-1 personalizado",
   "Cancela cuando quieras sin cargo",
   "Tus datos siempre son tuyos — exporta cuando quieras",
 ];
@@ -29,7 +29,7 @@ export function SignupVisual() {
         <Logo size={26} color="var(--ld-brand-light)" />
       </div>
 
-      {/* Trial badge (pulsing dot) */}
+      {/* Badge (pulsing dot) */}
       <div
         style={{
           display: "inline-flex",
@@ -59,7 +59,7 @@ export function SignupVisual() {
             boxShadow: "0 0 10px #34d399",
           }}
         />
-        Prueba gratis · 14 días · Cancela cuando quieras
+        Activa tu plan · Cancela cuando quieras
       </div>
 
       {/* H1 + sub */}

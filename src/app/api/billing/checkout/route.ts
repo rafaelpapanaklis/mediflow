@@ -11,6 +11,10 @@ export const dynamic = "force-dynamic";
 
 const BodySchema = z.object({
   plan: z.enum(PLAN_IDS),
+  // Método de pago. "card" = suscripción que auto-renueva. "spei"/"oxxo" = pago
+  // único de 1 mes (asíncrono, NO auto-renueva). Default "card" para no romper
+  // a los llamadores existentes (p. ej. las tarjetas de /dashboard/suspended).
+  method: z.enum(["card", "spei", "oxxo"]).default("card"),
 });
 
 /**
@@ -88,40 +92,85 @@ export async function POST(req: NextRequest) {
     process.env.NEXTAUTH_URL ??
     new URL(req.url).origin;
 
-  const session = await stripe.checkout.sessions.create({
-    mode: "subscription",
-    customer: customerId,
-    customer_update: { address: "auto" },
-    payment_method_types: ["card"],
-    line_items: [
-      {
-        price_data: {
-          currency: "mxn",
-          unit_amount: plan.priceMxn * 100,
-          recurring: { interval: "month" },
-          product_data: {
-            name: `DaleControl ${plan.name} — Suscripción mensual`,
-            metadata: { plan: plan.id },
+  const method = parsed.data.method;
+  const unitAmount = plan.priceMxn * 100;
+  // metadata compartida: el webhook discrimina por kind y activa según el método.
+  const meta = {
+    clinicId: clinic.id,
+    plan: plan.id,
+    kind: "platform-subscription",
+    method,
+  };
+
+  let session;
+  if (method === "card") {
+    // Tarjeta → suscripción mensual que se auto-renueva.
+    session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer: customerId,
+      customer_update: { address: "auto" },
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price_data: {
+            currency: "mxn",
+            unit_amount: unitAmount,
+            recurring: { interval: "month" },
+            product_data: {
+              name: `DaleControl ${plan.name} — Suscripción mensual`,
+              metadata: { plan: plan.id },
+            },
           },
+          quantity: 1,
         },
-        quantity: 1,
-      },
-    ],
-    metadata: {
-      clinicId: clinic.id,
-      plan: plan.id,
-      kind: "platform-subscription",
-    },
-    subscription_data: {
-      metadata: {
-        clinicId: clinic.id,
-        plan: plan.id,
-        kind: "platform-subscription",
-      },
-    },
-    success_url: `${baseUrl}/dashboard/suspended/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${baseUrl}/dashboard/suspended`,
-  });
+      ],
+      metadata: meta,
+      subscription_data: { metadata: meta },
+      success_url: `${baseUrl}/dashboard`,
+      cancel_url: `${baseUrl}/dashboard/suspended`,
+    });
+  } else {
+    // SPEI / OXXO → pago ÚNICO de 1 mes (asíncrono, NO auto-renueva). El usuario
+    // recibe CLABE/voucher y deposita; la activación llega por
+    // checkout.session.async_payment_succeeded. Una sesión de Checkout no mezcla
+    // mode "subscription" con OXXO/SPEI, por eso aquí va mode "payment".
+    const isSpei = method === "spei";
+    session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      customer: customerId,
+      customer_update: { address: "auto" },
+      payment_method_types: [isSpei ? "customer_balance" : "oxxo"],
+      ...(isSpei
+        ? {
+            payment_method_options: {
+              customer_balance: {
+                funding_type: "bank_transfer",
+                bank_transfer: { type: "mx_bank_transfer" },
+              },
+            },
+          }
+        : {}),
+      line_items: [
+        {
+          price_data: {
+            currency: "mxn",
+            unit_amount: unitAmount,
+            product_data: {
+              name: `DaleControl ${plan.name} — 1 mes`,
+              metadata: { plan: plan.id },
+            },
+          },
+          quantity: 1,
+        },
+      ],
+      metadata: meta,
+      payment_intent_data: { metadata: meta },
+      // Vuelve al panel mostrando "esperando confirmación" (sigue pending_payment
+      // hasta que Stripe confirme el depósito/voucher).
+      success_url: `${baseUrl}/dashboard/suspended?pending=${method}`,
+      cancel_url: `${baseUrl}/dashboard/suspended`,
+    });
+  }
 
   if (!session.url) {
     return NextResponse.json(

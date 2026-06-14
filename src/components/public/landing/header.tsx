@@ -102,7 +102,7 @@ export function Header({ isLoggedIn = false }: HeaderProps) {
                 Iniciar sesión
               </Link>
               <Link
-                href="/signup"
+                href="/#precios"
                 style={{
                   padding: "8px 14px",
                   borderRadius: 8,
@@ -113,7 +113,7 @@ export function Header({ isLoggedIn = false }: HeaderProps) {
                   boxShadow: "0 4px 12px rgba(124,58,237,0.3)",
                 }}
               >
-                Prueba gratis →
+                Ver planes →
               </Link>
             </>
           )}

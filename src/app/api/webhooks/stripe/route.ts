@@ -77,50 +77,59 @@ export async function POST(req: NextRequest) {
             ? session.subscription
             : session.subscription?.id ?? null;
 
-        const now = new Date();
-        const nextMonth = new Date(now.getTime() + ONE_MONTH_MS);
+        // Tarjeta (mode "subscription") o pago con tarjeta ya acreditado
+        // (payment_status "paid") → activar. SPEI/OXXO (mode "payment") son
+        // ASÍNCRONOS: en "completed" el depósito/voucher aún NO está pagado
+        // (payment_status "unpaid") → NO activar aquí; la activación llega en
+        // checkout.session.async_payment_succeeded. Sin este guard daríamos
+        // acceso sin haber cobrado.
+        const isPaidNow = session.mode === "subscription" || session.payment_status === "paid";
+        if (!isPaidNow) break;
 
-        const before = await prisma.clinic.findUnique({
-          where: { id: clinicId },
-          select: {
-            subscriptionStatus: true,
-            stripeSubscriptionId: true,
-            trialEndsAt: true,
-            nextBillingDate: true,
-          },
+        await activatePlatformSubscription(clinicId, subscriptionId, {
+          event: event.type,
+          sessionId: session.id,
+          plan: session.metadata?.plan ?? null,
         });
+        break;
+      }
 
-        // Levantar el bloqueo de inmediato:
-        //  - subscriptionStatus = 'active'
-        //  - trialEndsAt extendido +1 mes (hace que `trialExpired` sea
-        //    false en el layout aunque el webhook llegue antes que el
-        //    customer.subscription.created)
-        //  - nextBillingDate +1 mes (placeholder hasta que llegue el
-        //    customer.subscription.created con current_period_end real)
-        await prisma.clinic.update({
-          where: { id: clinicId },
-          data: {
-            subscriptionStatus: "active",
-            stripeSubscriptionId: subscriptionId ?? undefined,
-            trialEndsAt: nextMonth,
-            nextBillingDate: nextMonth,
-          },
+      // SPEI / OXXO confirmados (depósito/voucher acreditado por Stripe). Activa
+      // 1 mes MANUAL (sin auto-renovación: no hay subscription). Al llegar
+      // nextBillingDate el gating del layout vuelve a bloquear y el usuario paga
+      // otro periodo (la renovación automática es backlog, no se construye cron).
+      case "checkout.session.async_payment_succeeded": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        if (session.metadata?.kind !== "platform-subscription") break;
+        const clinicId = session.metadata?.clinicId;
+        if (!clinicId) break;
+        await activatePlatformSubscription(clinicId, null, {
+          event: event.type,
+          sessionId: session.id,
+          plan: session.metadata?.plan ?? null,
         });
+        break;
+      }
 
-        await logAudit({
-          clinicId,
-          userId: clinicId, // sin user en webhook context — usamos clinicId como placeholder
-          entityType: "subscription",
-          entityId: subscriptionId ?? session.id,
-          action: "update",
-          changes: {
-            subscriptionStatus: { before: before?.subscriptionStatus ?? null, after: "active" },
-            stripeSubscriptionId: { before: before?.stripeSubscriptionId ?? null, after: subscriptionId },
-            trialEndsAt: { before: before?.trialEndsAt ?? null, after: nextMonth },
-            nextBillingDate: { before: before?.nextBillingDate ?? null, after: nextMonth },
-            _source: { before: null, after: { event: event.type, sessionId: session.id, plan: session.metadata?.plan } },
-          },
-        });
+      // SPEI / OXXO fallido o expirado: NO activar; la cuenta sigue
+      // "pending_payment" y el usuario puede reintentar el pago.
+      case "checkout.session.async_payment_failed":
+      case "checkout.session.expired": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        if (session.metadata?.kind !== "platform-subscription") break;
+        const clinicId = session.metadata?.clinicId;
+        if (clinicId) {
+          await logAudit({
+            clinicId,
+            userId: clinicId,
+            entityType: "subscription",
+            entityId: session.id,
+            action: "update",
+            changes: {
+              _source: { before: null, after: { event: event.type, sessionId: session.id, result: "not_activated" } },
+            },
+          });
+        }
         break;
       }
 
@@ -388,4 +397,54 @@ async function resolveClinicIdByCustomer(customerId: string): Promise<string | n
     select: { id: true },
   });
   return clinic?.id ?? null;
+}
+
+/**
+ * Activa la suscripción de la plataforma para una clínica: levanta el bloqueo
+ * del gating (subscriptionStatus="active") y extiende trialEndsAt/nextBillingDate
+ * +1 mes. Compartido entre el pago con tarjeta (checkout.session.completed) y la
+ * confirmación asíncrona de SPEI/OXXO (async_payment_succeeded).
+ * `subscriptionId` es null en SPEI/OXXO (pago único sin auto-renovación).
+ */
+async function activatePlatformSubscription(
+  clinicId: string,
+  subscriptionId: string | null,
+  source: { event: string; sessionId?: string; plan?: string | null },
+): Promise<void> {
+  const nextMonth = new Date(Date.now() + ONE_MONTH_MS);
+
+  const before = await prisma.clinic.findUnique({
+    where: { id: clinicId },
+    select: {
+      subscriptionStatus: true,
+      stripeSubscriptionId: true,
+      trialEndsAt: true,
+      nextBillingDate: true,
+    },
+  });
+
+  await prisma.clinic.update({
+    where: { id: clinicId },
+    data: {
+      subscriptionStatus: "active",
+      stripeSubscriptionId: subscriptionId ?? undefined,
+      trialEndsAt: nextMonth,
+      nextBillingDate: nextMonth,
+    },
+  });
+
+  await logAudit({
+    clinicId,
+    userId: clinicId, // sin user en webhook context — usamos clinicId como placeholder
+    entityType: "subscription",
+    entityId: subscriptionId ?? source.sessionId ?? clinicId,
+    action: "update",
+    changes: {
+      subscriptionStatus: { before: before?.subscriptionStatus ?? null, after: "active" },
+      stripeSubscriptionId: { before: before?.stripeSubscriptionId ?? null, after: subscriptionId },
+      trialEndsAt: { before: before?.trialEndsAt ?? null, after: nextMonth },
+      nextBillingDate: { before: before?.nextBillingDate ?? null, after: nextMonth },
+      _source: { before: null, after: source },
+    },
+  });
 }

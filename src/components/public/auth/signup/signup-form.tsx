@@ -11,6 +11,7 @@ import { Step1Account } from "./step-1-account";
 import { Step2Clinic } from "./step-2-clinic";
 import { Step3PlanPayment, type CardDetails } from "./step-3-plan-payment";
 import type { Billing, PlanId } from "./plan-card";
+import { isPlanId } from "@/lib/billing/plans";
 import { RefClickTracker } from "@/components/afiliados/ref-click-tracker";
 
 interface SignupState {
@@ -27,7 +28,7 @@ interface SignupState {
   // Step 3
   plan: PlanId;
   billing: Billing;
-  payMethod: "card" | "paypal" | "none";
+  payMethod: "card" | "spei" | "oxxo";
   card: CardDetails;
   coupon: string;
   acceptedTerms: boolean;
@@ -98,6 +99,10 @@ export function SignupForm() {
   // socios). Formato estricto; si no cumple, se ignora.
   const campaignParam = searchParams.get("c") ?? "";
   const campaign = /^[a-z0-9-]{1,40}$/.test(campaignParam) ? campaignParam : undefined;
+  // Plan elegido en la home (?plan=basic|pro|clinic). El registro REQUIERE un
+  // plan; sin uno válido (y fuera del flujo OAuth) mandamos de vuelta a /#precios.
+  const planParam = (searchParams.get("plan") ?? "").toUpperCase();
+  const initialPlan: PlanId | null = isPlanId(planParam) ? planParam : null;
   const initialStepParam = searchParams.get("step");
   const initialStep: 1 | 2 | 3 =
     initialStepParam === "2" ? 2 :
@@ -108,6 +113,7 @@ export function SignupForm() {
   const [step, setStep] = useState<1 | 2 | 3>(initialStep);
   const [form, setForm] = useState<SignupState>(() => ({
     ...INITIAL,
+    plan: initialPlan ?? INITIAL.plan,
     email: initialEmail,
     // En OAuth flow el "nombre" se tomará del Supabase user en el backend
     nombre: isOAuthFlow ? "(OAuth)" : "",
@@ -122,6 +128,13 @@ export function SignupForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialEmail]);
 
+  // El registro requiere un plan elegido en la home. Sin ?plan válido (y fuera
+  // del flujo OAuth, que no arrastra el query) → de vuelta a la sección precios.
+  useEffect(() => {
+    if (!initialPlan && !isOAuthFlow) router.replace("/#precios");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const update = (patch: Partial<SignupState>) =>
     setForm(prev => ({ ...prev, ...patch }));
 
@@ -135,11 +148,6 @@ export function SignupForm() {
     setLoading(true);
     try {
       const slug = slugifyClinic(form.clinicName);
-      const paymentMethodLast4 =
-        form.payMethod === "card"
-          ? form.card.number.replace(/\s/g, "").slice(-4) || undefined
-          : undefined;
-
       const basePayload = {
         clinicName: form.clinicName,
         slug,
@@ -151,8 +159,9 @@ export function SignupForm() {
         clinicSize: form.clinicSize || undefined,
         plan: form.plan,
         billing: form.billing,
-        paymentMethod: form.payMethod,
-        paymentMethodLast4,
+        // El cobro real es vía Stripe Checkout (método elegido en el paso 3);
+        // aquí solo guardamos una preferencia legacy que register/-oauth aceptan.
+        paymentMethod: form.payMethod === "card" ? "card" : "transfer",
       };
 
       let res: Response;
@@ -218,10 +227,26 @@ export function SignupForm() {
         }
       }
 
-      toast.success("¡Cuenta creada! Bienvenido a DaleControl 🎉");
-      // Hard navigation: ver login-form.tsx — evita la cascada de
-      // fetches que causaba router.push + router.refresh síncronos.
-      window.location.href = "/dashboard";
+      // La cuenta nace SIN acceso (pending_payment). Abrimos Stripe Checkout con
+      // el plan + método elegidos; al pagar, el webhook la activa.
+      try {
+        const coRes = await fetch("/api/billing/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ plan: form.plan, method: form.payMethod }),
+        });
+        const coData = (await coRes.json().catch(() => ({}))) as { url?: string };
+        if (coRes.ok && coData.url) {
+          // Hard navigation a Stripe Checkout (hosted).
+          window.location.href = coData.url;
+          return;
+        }
+      } catch {
+        // cae al fallback de abajo
+      }
+      // Sin Stripe configurado o error → al panel de activación para reintentar.
+      toast("Tu cuenta se creó. Continúa con el pago para activarla.", { icon: "💳" });
+      window.location.href = "/dashboard/suspended";
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Error al crear cuenta";
       toast.error(msg);
@@ -251,16 +276,16 @@ export function SignupForm() {
             color: "var(--ld-fg)",
           }}
         >
-          {step === 1 && "Crea tu cuenta gratis"}
+          {step === 1 && "Crea tu cuenta"}
           {step === 2 && "Cuéntanos de tu clínica"}
-          {step === 3 && "Elige tu plan y empieza hoy"}
+          {step === 3 && "Activa tu plan"}
         </h1>
         <p style={{ margin: 0, fontSize: 13.5, color: "var(--ld-fg-muted)" }}>
-          {step === 1 && "14 días gratis · Cancela cuando quieras"}
+          {step === 1 && "Crea tu cuenta para continuar con el pago."}
           {step === 2 &&
             "Configuramos tu espacio basado en tu especialidad."}
           {step === 3 &&
-            "No se te cobrará nada hasta que termine tu prueba."}
+            "Elige tu método de pago y activa tu plan."}
         </p>
       </div>
 

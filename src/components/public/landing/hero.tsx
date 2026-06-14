@@ -50,7 +50,7 @@ export function Hero() {
             <CTAButtons />
             <div style={{ marginTop: 36, display: "flex", gap: 22, fontSize: 12, color: "var(--ld-fg-muted)", flexWrap: "wrap" }}>
               <span>✓ Cancela cuando quieras</span>
-              <span>✓ 14 días gratis</span>
+              <span>✓ Activación inmediata</span>
               <span>✓ Soporte en español</span>
               <span>✓ Migración incluida</span>
             </div>

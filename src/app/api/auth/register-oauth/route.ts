@@ -100,8 +100,8 @@ export async function POST(req: NextRequest) {
     const lastName = String(meta.last_name ?? metaRest.join(" ") ?? firstName);
 
     const slug = data.slug ?? (await generateSlug(data.clinicName));
+    // SIN trial: nace bloqueada (trialEndsAt = ahora) hasta que el pago la active.
     const trialEndsAt = new Date();
-    trialEndsAt.setDate(trialEndsAt.getDate() + 14);
 
     const resolvedCategory = data.category ?? "OTHER";
     const specialtyLabel = data.specialty ?? data.category ?? "other";
@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
         email,
         plan: data.plan as any,
         trialEndsAt,
-        subscriptionStatus: "trialing",
+        subscriptionStatus: "pending_payment",
         preferredPaymentMethod: paymentMethodType,
         paymentMethodCollected,
         paymentMethodType,

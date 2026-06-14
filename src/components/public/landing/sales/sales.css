@@ -567,7 +567,7 @@
 .mfh-plan__promo-val { font-weight: 700; font-size: 15px; color: var(--b-ink); }
 .mfh-plan__promo-ref { color: var(--muted); }
 
-/* Instalación: $500 pago único tachado + incluido gratis. */
+/* Instalación: $500 pago único tachado + incluido sin costo. */
 .mfh-plan__install { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 12.5px; color: var(--muted); }
 .mfh-plan__install-old { text-decoration: line-through; color: var(--faint); }
 .mfh-plan__install-free { font-weight: 700; color: #047857; background: #d1fae5; border-radius: 999px; padding: 2px 9px; font-size: 11.5px; white-space: nowrap; }

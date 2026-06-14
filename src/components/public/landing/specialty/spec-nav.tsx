@@ -92,7 +92,7 @@ export function SpecNav({ currentSlug, isLoggedIn = false }: SpecNavProps) {
                 Iniciar sesión
               </Link>
               <Link
-                href="/signup"
+                href="/#precios"
                 style={{
                   padding: "8px 14px",
                   borderRadius: 8,
@@ -104,7 +104,7 @@ export function SpecNav({ currentSlug, isLoggedIn = false }: SpecNavProps) {
                   textDecoration: "none",
                 }}
               >
-                Prueba gratis →
+                Ver planes →
               </Link>
             </>
           )}

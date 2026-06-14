@@ -69,8 +69,11 @@ export async function POST(req: NextRequest) {
     }
 
     const slug = data.slug ?? await generateSlug(data.clinicName);
+    // SIN trial: la cuenta nace SIN acceso. trialEndsAt = ahora (ya vencido) +
+    // subscriptionStatus "pending_payment" → el gating de dashboard/layout la
+    // bloquea hasta que el pago (Stripe Checkout) la active vía webhook.
+    // No tocamos el schema: trialEndsAt sigue NOT NULL, por eso lo seteamos a now.
     const trialEndsAt = new Date();
-    trialEndsAt.setDate(trialEndsAt.getDate() + 14);
 
     // Resolve category from new field or legacy specialty
     const resolvedCategory = data.category
@@ -80,8 +83,8 @@ export async function POST(req: NextRequest) {
         : "OTHER";
     const specialtyLabel = data.specialty ?? data.category ?? "other";
 
-    // Trial siempre activo — el método de pago se cobra al terminar los 14 días
-    // (cuando Stripe/PayPal estén wired). Hasta entonces, sólo capturamos la preferencia.
+    // El método se cobra de inmediato vía Stripe Checkout (tarjeta/SPEI/OXXO);
+    // aquí sólo guardamos la preferencia para referencia.
     const paymentMethodType =
       data.paymentMethod === "card" || data.paymentMethod === "stripe"
         ? "card"
@@ -179,7 +182,7 @@ export async function POST(req: NextRequest) {
         clinicSize: data.clinicSize,
         phone: data.phone,
         email: data.email, plan: data.plan as any, trialEndsAt,
-        subscriptionStatus: "trialing",
+        subscriptionStatus: "pending_payment",
         preferredPaymentMethod: paymentMethodType,
         paymentMethodCollected,
         paymentMethodType,

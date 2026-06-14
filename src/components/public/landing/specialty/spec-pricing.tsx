@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Specialty } from "@/lib/specialty-data";
+import { getPlan } from "@/lib/billing/plans";
 
 interface Plan {
   name:    string;
@@ -21,9 +22,9 @@ export function SpecPricing({ spec }: { spec: Specialty }) {
   const plans: Plan[] = [
     {
       name:  "BASIC",
-      price: 49,
+      price: getPlan("BASIC").priceMxn,
       tag:   "Para empezar",
-      cta:   "Empezar gratis",
+      cta:   "Elegir plan",
       href:  "/signup?plan=basic",
       items: [
         "1 profesional · 1 sucursal",
@@ -35,10 +36,10 @@ export function SpecPricing({ spec }: { spec: Specialty }) {
     },
     {
       name:    "PRO",
-      price:   99,
+      price:   getPlan("PRO").priceMxn,
       tag:     "Lo más elegido",
       popular: true,
-      cta:     "Prueba 14 días gratis",
+      cta:     "Elegir plan",
       href:    "/signup?plan=pro",
       items: [
         "Hasta 3 profesionales",
@@ -51,7 +52,7 @@ export function SpecPricing({ spec }: { spec: Specialty }) {
     },
     {
       name:  "CLINIC",
-      price: 249,
+      price: getPlan("CLINIC").priceMxn,
       tag:   "Multi-sucursal",
       cta:   "Hablar con ventas",
       href:  "/contact?plan=clinic",
@@ -190,7 +191,7 @@ export function SpecPricing({ spec }: { spec: Specialty }) {
                   color: "var(--ld-fg, var(--fg))",
                 }}
               >
-                ${p.price}
+                ${p.price.toLocaleString("es-MX")}
               </span>
               <span
                 style={{
@@ -198,7 +199,7 @@ export function SpecPricing({ spec }: { spec: Specialty }) {
                   color: "var(--ld-fg-muted, var(--fg-muted))",
                 }}
               >
-                USD/mes
+                MXN/mes
               </span>
             </div>
             <Link
