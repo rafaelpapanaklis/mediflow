@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Eye, Shield, Clock, Users, FileText, CreditCard, Activity, Trash2, BarChart3, MessageCircle, Mail, Download, Layers } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Shield, Clock, Users, FileText, CreditCard, Activity, Trash2, BarChart3, MessageCircle, Mail, Download, Layers, KeyRound, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { ClinicActivityTab } from "@/components/admin/clinic-activity-tab";
 import { ClinicUsageTab } from "@/components/admin/clinic-usage-tab";
@@ -70,6 +70,12 @@ export function AdminClinicDetailClient({
   const [tab, setTab]         = useState("overview");
   const [modalChannel, setModalChannel] = useState<TemplateChannel | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  // Modal: asignar contraseña manual a un usuario de la clínica
+  const [pwUser, setPwUser]       = useState<any | null>(null);
+  const [pw, setPw]               = useState("");
+  const [pwConfirm, setPwConfirm] = useState("");
+  const [showPw, setShowPw]       = useState(false);
+  const [pwSaving, setPwSaving]   = useState(false);
 
   // Cargar notas al entrar al tab (la primera vez)
   useEffect(() => {
@@ -186,6 +192,48 @@ export function AdminClinicDetailClient({
       toast.success("Nota eliminada");
     } catch {
       toast.error("Error al eliminar");
+    }
+  }
+
+  function openPwModal(u: any) {
+    setPwUser(u);
+    setPw("");
+    setPwConfirm("");
+    setShowPw(false);
+  }
+
+  function closePwModal() {
+    if (pwSaving) return;
+    setPwUser(null);
+  }
+
+  async function assignPassword() {
+    if (!pwUser) return;
+    if (pw.length < 8) {
+      toast.error("La contraseña debe tener al menos 8 caracteres");
+      return;
+    }
+    if (pwConfirm && pw !== pwConfirm) {
+      toast.error("Las contraseñas no coinciden");
+      return;
+    }
+    setPwSaving(true);
+    try {
+      const res = await fetch(`/api/admin/clinics/${clinic.id}/users/${pwUser.id}/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pw }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? `HTTP ${res.status}`);
+      }
+      toast.success(`Contraseña actualizada para ${pwUser.email}`);
+      setPwUser(null);
+    } catch (e: any) {
+      toast.error(e.message ?? "Error al actualizar la contraseña");
+    } finally {
+      setPwSaving(false);
     }
   }
 
@@ -456,6 +504,7 @@ export function AdminClinicDetailClient({
                 <th>Rol</th>
                 <th>Estado</th>
                 <th>Registro</th>
+                <th style={{ textAlign: "right" }}>Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -483,6 +532,16 @@ export function AdminClinicDetailClient({
                   </td>
                   <td className="mono" style={{ color: "var(--text-3)", fontSize: 12 }}>
                     {new Date(u.createdAt).toLocaleDateString("es-MX")}
+                  </td>
+                  <td style={{ textAlign: "right" }}>
+                    <ButtonNew
+                      variant="secondary"
+                      size="sm"
+                      icon={<KeyRound size={14} />}
+                      onClick={() => openPwModal(u)}
+                    >
+                      Asignar contraseña
+                    </ButtonNew>
                   </td>
                 </tr>
               ))}
@@ -736,6 +795,110 @@ export function AdminClinicDetailClient({
           reason={totalClinicsInSystem <= 1 ? "Es la única clínica del sistema. El admin no permite borrar la última para no dejar la app vacía (útil durante QA/testing)." : undefined}
           onClose={() => setShowDeleteModal(false)}
         />
+      )}
+
+      {pwUser && (
+        <div className="modal-overlay" onClick={closePwModal}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal__header">
+              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: 8,
+                  background: "color-mix(in oklab, var(--brand) 14%, transparent)",
+                  display: "grid", placeItems: "center",
+                  color: "var(--brand)", flexShrink: 0,
+                }}>
+                  <KeyRound size={16} />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div className="modal__title">Asignar contraseña</div>
+                  <div style={{ fontSize: 11, color: "var(--text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {pwUser.firstName} {pwUser.lastName} · {pwUser.email}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closePwModal}
+                disabled={pwSaving}
+                className="btn-new btn-new--ghost btn-new--sm"
+                aria-label="Cerrar"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            <div className="modal__body">
+              <p style={{ fontSize: 12, color: "var(--text-2)", marginTop: 0, marginBottom: 14, lineHeight: 1.5 }}>
+                Escribe una contraseña nueva para este usuario. Tú la defines y se la entregas por un
+                canal seguro; el usuario podrá cambiarla después desde su cuenta.
+              </p>
+
+              <div className="field-new" style={{ marginBottom: 12 }}>
+                <label className="field-new__label">Nueva contraseña (mín. 8 caracteres)</label>
+                <div style={{ position: "relative" }}>
+                  <input
+                    type={showPw ? "text" : "password"}
+                    autoFocus
+                    disabled={pwSaving}
+                    value={pw}
+                    onChange={e => setPw(e.target.value)}
+                    placeholder="Mínimo 8 caracteres"
+                    className="input-new"
+                    style={{ paddingRight: 40 }}
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPw(v => !v)}
+                    aria-label={showPw ? "Ocultar contraseña" : "Ver contraseña"}
+                    title={showPw ? "Ocultar" : "Ver"}
+                    style={{
+                      position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
+                      background: "transparent", border: "none", cursor: "pointer",
+                      color: "var(--text-3)", padding: 6, display: "grid", placeItems: "center",
+                    }}
+                  >
+                    {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="field-new">
+                <label className="field-new__label">Confirmar contraseña (opcional)</label>
+                <input
+                  type={showPw ? "text" : "password"}
+                  disabled={pwSaving}
+                  value={pwConfirm}
+                  onChange={e => setPwConfirm(e.target.value)}
+                  placeholder="Vuelve a escribirla"
+                  className="input-new"
+                  autoComplete="new-password"
+                  onKeyDown={e => { if (e.key === "Enter") assignPassword(); }}
+                />
+                {pwConfirm.length > 0 && pw !== pwConfirm && (
+                  <div style={{ fontSize: 11, color: "var(--danger)", marginTop: 6 }}>
+                    Las contraseñas no coinciden
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="modal__footer">
+              <ButtonNew variant="ghost" onClick={closePwModal} disabled={pwSaving}>
+                Cancelar
+              </ButtonNew>
+              <ButtonNew
+                variant="primary"
+                onClick={assignPassword}
+                disabled={pwSaving || pw.length < 8 || (pwConfirm.length > 0 && pw !== pwConfirm)}
+                icon={<KeyRound size={14} />}
+              >
+                {pwSaving ? "Asignando…" : "Asignar contraseña"}
+              </ButtonNew>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
