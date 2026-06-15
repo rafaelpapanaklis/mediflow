@@ -13,27 +13,6 @@ const BANK_INFO = {
 
 export const dynamic = "force-dynamic";
 
-/**
- * URLs de suscripción de PayPal Business por plan. Son URLs públicas
- * (no secretos) que Rafael genera desde su panel de PayPal y configura
- * en Vercel como NEXT_PUBLIC_PAYPAL_LINK_<PLAN>. Si una env no está
- * configurada, el botón se renderiza disabled con texto
- * "PayPal — próximamente".
- *
- * Las leemos en el server component (no en el client) para que
- * Next.js no tenga que inlinear las vars en el bundle del cliente —
- * pasamos el resultado como props serializadas.
- */
-function getPaypalUrl(plan: PlanId): string | null {
-  const map: Record<PlanId, string | undefined> = {
-    BASIC:  process.env.NEXT_PUBLIC_PAYPAL_LINK_BASIC,
-    PRO:    process.env.NEXT_PUBLIC_PAYPAL_LINK_PRO,
-    CLINIC: process.env.NEXT_PUBLIC_PAYPAL_LINK_CLINIC,
-  };
-  const url = map[plan];
-  return url && url.length > 0 ? url : null;
-}
-
 export default async function SuspendedPage({
   searchParams,
 }: {
@@ -48,7 +27,6 @@ export default async function SuspendedPage({
     name: p.name,
     priceMxn: p.priceMxn,
     features: [...p.features],
-    paypalUrl: getPaypalUrl(p.id),
   }));
 
   // Plan elegido en el registro (Clinic.plan): preselección + base del upsell.

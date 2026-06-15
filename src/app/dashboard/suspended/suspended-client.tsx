@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, type KeyboardEvent } from "react";
 import toast from "react-hot-toast";
 import { CreditCard, Loader2 } from "lucide-react";
 import type { PlanId } from "@/lib/billing/plans";
@@ -11,7 +11,6 @@ export interface PlanCardData {
   name: string;
   priceMxn: number;
   features: string[];
-  paypalUrl: string | null;
 }
 
 type PayMethod = "card" | "spei" | "oxxo";
@@ -32,6 +31,10 @@ export function SuspendedPlanCards({ plans, currentPlan = null }: Props) {
   const t = useT();
   const [pendingPlan, setPendingPlan] = useState<PlanId | null>(null);
   const [method, setMethod] = useState<PayMethod>("card");
+  // Plan elegido por el usuario: las tarjetas son un radiogroup. Preselección =
+  // su plan actual o, si no tiene, PRO (el popular). El pago se hace sobre este.
+  const [selectedPlan, setSelectedPlan] = useState<PlanId>(currentPlan ?? "PRO");
+  const cardRefs = useRef<Array<HTMLDivElement | null>>([]);
 
   // Plan recomendado (upsell). Sin plan actual válido, sugiere PRO (popular).
   const recommendedPlan: PlanId | null = currentPlan ? NEXT_PLAN[currentPlan] : "PRO";
@@ -48,16 +51,11 @@ export function SuspendedPlanCards({ plans, currentPlan = null }: Props) {
     { id: "oxxo", label: t("pages.suspended.methodOxxo") },
   ];
 
-  const payLabel =
-    method === "spei" ? t("pages.suspended.payWithSpei") :
-    method === "oxxo" ? t("pages.suspended.payWithOxxo") :
-    t("pages.suspended.payWithCard");
-
-  function payAria(name: string): string {
-    if (method === "spei") return t("pages.suspended.payWithSpeiAria", { name });
-    if (method === "oxxo") return t("pages.suspended.payWithOxxoAria", { name });
-    return t("pages.suspended.payWithCardAria", { name });
-  }
+  // Conector del método para el CTA único ("con tarjeta" / "con SPEI" / "con OXXO").
+  const methodConnector =
+    method === "spei" ? t("pages.suspended.payConnectorSpei") :
+    method === "oxxo" ? t("pages.suspended.payConnectorOxxo") :
+    t("pages.suspended.payConnectorCard");
 
   function upsellBenefit(planId: PlanId): string {
     if (planId === "CLINIC") return t("pages.suspended.upsellBenefitClinic");
@@ -91,10 +89,39 @@ export function SuspendedPlanCards({ plans, currentPlan = null }: Props) {
     }
   }
 
-  function handlePaypal(plan: PlanCardData) {
-    if (!plan.paypalUrl) return;
-    window.open(plan.paypalUrl, "_blank", "noopener,noreferrer");
+  // Navegación accesible del radiogroup: las flechas mueven selección y foco.
+  function selectAt(index: number) {
+    const p = plans[index];
+    if (!p) return;
+    setSelectedPlan(p.id);
+    const el = cardRefs.current[index];
+    if (el) el.focus();
   }
+
+  function onCardKeyDown(e: KeyboardEvent<HTMLDivElement>, index: number) {
+    const k = e.key;
+    if (k === "Enter" || k === " " || k === "Spacebar") {
+      e.preventDefault();
+      const p = plans[index];
+      if (p) setSelectedPlan(p.id);
+    } else if (k === "ArrowRight" || k === "ArrowDown") {
+      e.preventDefault();
+      selectAt((index + 1) % plans.length);
+    } else if (k === "ArrowLeft" || k === "ArrowUp") {
+      e.preventDefault();
+      selectAt((index - 1 + plans.length) % plans.length);
+    }
+  }
+
+  const selected = plans.find((p) => p.id === selectedPlan) ?? plans[0];
+  const isRedirecting = pendingPlan !== null;
+  const ctaLabel = selected
+    ? t("pages.suspended.payPlanCta", {
+        plan: selected.name,
+        connector: methodConnector,
+        price: String(selected.priceMxn),
+      })
+    : "";
 
   return (
     <div className="mb-8">
@@ -126,34 +153,73 @@ export function SuspendedPlanCards({ plans, currentPlan = null }: Props) {
         </p>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        {plans.map((plan) => {
+      <div
+        className="grid gap-4 sm:grid-cols-3"
+        role="radiogroup"
+        aria-label={t("pages.suspended.choosePlanTitle")}
+      >
+        {plans.map((plan, i) => {
           const isRecommended = plan.id === recommendedPlan;
           const isCurrent = plan.id === currentPlan;
           const isTop = plan.id === "CLINIC" && currentPlan === "CLINIC";
-          const isPending = pendingPlan === plan.id;
+          const isSelected = plan.id === selectedPlan;
 
           const curPrice = priceOf(currentPlan);
           const showUpsellLine = isRecommended && curPrice != null;
           const upsellAmount = showUpsellLine ? plan.priceMxn - (curPrice as number) : 0;
 
-          // Borde/fondo: recomendado = brand; actual = emerald; resto = default.
-          const cardClass = isRecommended
+          // Base: recomendado = brand; actual = emerald; resto = default.
+          const baseClass = isRecommended
             ? "border-2 shadow-md"
             : isCurrent
               ? "border-2"
               : "border-border bg-card";
-          const cardStyle = isRecommended
+          const baseStyle = isRecommended
             ? { borderColor: "var(--brand)", background: "var(--brand-softer, hsl(var(--card)))" }
             : isCurrent
               ? { borderColor: "rgba(16,185,129,0.6)" }
-              : undefined;
+              : {};
+          // La SELECCIÓN manda encima: borde brand marcado + anillo, claramente
+          // distinto de los badges (★ recomendado / tu plan actual / tope).
+          const selectedStyle = isSelected
+            ? {
+                borderColor: "var(--brand)",
+                boxShadow:
+                  "0 0 0 3px var(--brand-soft, rgba(124,58,237,0.35)), 0 10px 24px -12px rgba(0,0,0,0.25)",
+              }
+            : {};
+          const cardStyle = { ...baseStyle, ...selectedStyle };
 
           return (
-            <div key={plan.id} className={`flex flex-col rounded-2xl border p-5 ${cardClass}`} style={cardStyle}>
+            <div
+              key={plan.id}
+              ref={(el) => {
+                cardRefs.current[i] = el;
+              }}
+              role="radio"
+              aria-checked={isSelected}
+              tabIndex={isSelected ? 0 : -1}
+              onClick={() => setSelectedPlan(plan.id)}
+              onKeyDown={(e) => onCardKeyDown(e, i)}
+              className={`relative flex cursor-pointer select-none flex-col rounded-2xl border p-5 transition ${
+                isSelected ? "border-2" : ""
+              } ${baseClass}`}
+              style={cardStyle}
+            >
+              {/* Check de selección (esquina), sin tapar los badges de la izquierda */}
+              {isSelected && (
+                <span
+                  aria-hidden
+                  className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold text-white"
+                  style={{ background: "var(--brand)" }}
+                >
+                  ✓
+                </span>
+              )}
+
               {/* Badges: recomendado / tu plan actual / tope */}
               {(isRecommended || isCurrent || isTop) && (
-                <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 pr-7">
                   {isRecommended && (
                     <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--brand)" }}>
                       ★ {t("pages.suspended.recommendedBadge")}
@@ -186,7 +252,7 @@ export function SuspendedPlanCards({ plans, currentPlan = null }: Props) {
                 </div>
               )}
 
-              <ul className={`${showUpsellLine ? "" : "mt-4"} mb-5 space-y-1.5`}>
+              <ul className={`${showUpsellLine ? "" : "mt-4"} space-y-1.5`}>
                 {plan.features.map((f) => (
                   <li key={f} className="flex items-center gap-2 text-xs text-muted-foreground">
                     <span className="text-emerald-500">✓</span>
@@ -194,45 +260,30 @@ export function SuspendedPlanCards({ plans, currentPlan = null }: Props) {
                   </li>
                 ))}
               </ul>
-
-              <div className="mt-auto flex flex-col gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleStripeCheckout(plan.id)}
-                  disabled={pendingPlan !== null}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold text-white shadow transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                  style={{ background: "var(--brand)" }}
-                  aria-label={payAria(plan.name)}
-                >
-                  {isPending ? (
-                    <Loader2 size={14} className="animate-spin" aria-hidden />
-                  ) : (
-                    <CreditCard size={14} aria-hidden />
-                  )}
-                  {isPending ? t("pages.suspended.redirecting") : payLabel}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handlePaypal(plan)}
-                  disabled={!plan.paypalUrl || pendingPlan !== null}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold shadow transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                  style={{
-                    background: plan.paypalUrl ? "#FFC439" : "hsl(var(--muted))",
-                    color: plan.paypalUrl ? "#003087" : "hsl(var(--muted-foreground))",
-                  }}
-                  aria-label={
-                    plan.paypalUrl
-                      ? t("pages.suspended.payWithPaypalAria", { name: plan.name })
-                      : t("pages.suspended.paypalComingSoonAria", { name: plan.name })
-                  }
-                  title={plan.paypalUrl ? undefined : t("pages.suspended.paypalComingSoon")}
-                >
-                  {plan.paypalUrl ? t("pages.suspended.payWithPaypal") : t("pages.suspended.paypalComingSoon")}
-                </button>
-              </div>
             </div>
           );
         })}
+      </div>
+
+      {/* CTA único: paga el plan seleccionado con el método elegido */}
+      <div className="mt-6 flex justify-center">
+        <button
+          type="button"
+          onClick={() => handleStripeCheckout(selectedPlan)}
+          disabled={isRedirecting}
+          className="inline-flex w-full max-w-md items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-base font-bold text-white shadow-lg transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          style={{
+            background: "var(--brand)",
+            boxShadow: "0 10px 30px -8px var(--brand-soft, rgba(124,58,237,0.4))",
+          }}
+        >
+          {isRedirecting ? (
+            <Loader2 size={16} className="animate-spin" aria-hidden />
+          ) : (
+            <CreditCard size={16} aria-hidden />
+          )}
+          {isRedirecting ? t("pages.suspended.redirecting") : ctaLabel}
+        </button>
       </div>
     </div>
   );
