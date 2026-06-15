@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import toast from "react-hot-toast";
 import { CreditCard, Loader2, Lock, Check } from "lucide-react";
 import type { PlanId } from "@/lib/billing/plans";
@@ -42,6 +42,26 @@ export function SuspendedPlanCards({ plans, currentPlan = null }: Props) {
   const [selectedPlan, setSelectedPlan] = useState<PlanId>(currentPlan ?? "PRO");
   const cardRefs = useRef<Array<HTMLDivElement | null>>([]);
   const methodRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  // Al ir a Stripe usamos window.location.href; si el usuario regresa con el
+  // botón "atrás", el navegador restaura ESTA página desde el bfcache con
+  // pendingPlan congelado → el CTA se quedaría en "Redirigiendo…" para siempre,
+  // bloqueando reintentar o cambiar de método/plan. Reseteamos pendingPlan al
+  // restaurar la página (pageshow desde bfcache) y al volver a primer plano.
+  useEffect(() => {
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) setPendingPlan(null);
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") setPendingPlan(null);
+    };
+    window.addEventListener("pageshow", onPageShow);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("pageshow", onPageShow);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
 
   // Plan recomendado (upsell). Sin plan actual válido, sugiere PRO (popular).
   const recommendedPlan: PlanId | null = currentPlan ? NEXT_PLAN[currentPlan] : "PRO";
