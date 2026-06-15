@@ -6,18 +6,13 @@ import toast from "react-hot-toast";
 import { CardNew }   from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
+import { PLANS }     from "@/lib/billing/plans";
 
 const BANK_INFO = {
   nombre: "Efthymios Rafail Papanaklis",
   clabe:  "012910015008025244",
   banco:  "BBVA",
 };
-
-const PLANS_CONFIG = [
-  { id: "BASIC",  name: "Básico",        price: 49,  features: "1 profesional · 200 pacientes · Agenda · Facturación" },
-  { id: "PRO",    name: "Profesional",   price: 99,  features: "3 profesionales · Ilimitado · Expedientes · Reportes · WhatsApp" },
-  { id: "CLINIC", name: "Clínica",       price: 249, features: "Todo ilimitado · Multi-sucursal · API · Manager de cuenta" },
-];
 
 interface EnvStatus {
   ADMIN_PASSWORD: boolean;
@@ -131,75 +126,54 @@ export function AdminSettingsClient({ envStatus }: { envStatus: EnvStatus }) {
             </>
           )}
 
-          {/* PRECIOS */}
+          {/* PRECIOS — vista informativa de solo lectura; refleja src/lib/billing/plans.ts */}
           {tab === "precios" && (
-            <>
-              <CardNew title="Planes y precios" sub="Estos son los precios que ven tus clientes al registrarse">
-                <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 640 }}>
-                  {PLANS_CONFIG.map(plan => (
-                    <div
-                      key={plan.id}
-                      style={{
-                        padding: "14px 16px",
-                        background: "var(--bg-elev-2)",
-                        border: "1px solid var(--border-soft)",
-                        borderRadius: 12,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: 12,
-                      }}
-                    >
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 13 }}>{plan.name}</div>
-                        <div style={{ color: "var(--text-3)", fontSize: 11, marginTop: 2 }}>{plan.features}</div>
-                        <div className="mono" style={{ color: "var(--text-3)", fontSize: 10, marginTop: 4 }}>ID: {plan.id}</div>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                        <span style={{ color: "var(--text-3)", fontSize: 13 }}>$</span>
-                        <input
-                          defaultValue={plan.price}
-                          type="number"
-                          className="input-new mono"
-                          style={{ width: 80, textAlign: "center", fontWeight: 600 }}
-                        />
-                        <span style={{ color: "var(--text-3)", fontSize: 12 }}>/mes</span>
-                      </div>
-                    </div>
-                  ))}
+            <CardNew title="Planes y precios" sub="Precios reales del registro y el checkout — vista informativa">
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 640 }}>
+                {PLANS.map(plan => (
                   <div
+                    key={plan.id}
                     style={{
-                      padding: "10px 14px",
-                      background: "rgba(245,158,11,0.08)",
-                      border: "1px solid rgba(245,158,11,0.25)",
-                      borderRadius: 10,
-                      fontSize: 12,
-                      color: "var(--warning)",
+                      padding: "14px 16px",
+                      background: "var(--bg-elev-2)",
+                      border: "1px solid var(--border-soft)",
+                      borderRadius: 12,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 12,
                     }}
                   >
-                    Para que los cambios de precio apliquen en el formulario de registro, también actualiza los valores en el archivo{" "}
-                    <code className="mono" style={{ background: "var(--bg-elev-2)", padding: "1px 5px", borderRadius: 4 }}>register-form.tsx</code>.
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 13 }}>{plan.name}</div>
+                      <div style={{ color: "var(--text-3)", fontSize: 11, marginTop: 2 }}>{plan.features.join(" · ")}</div>
+                      <div className="mono" style={{ color: "var(--text-3)", fontSize: 10, marginTop: 4 }}>ID: {plan.id}</div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 4, flexShrink: 0 }}>
+                      <span style={{ color: "var(--text-3)", fontSize: 13 }}>$</span>
+                      <span className="mono" style={{ color: "var(--text-1)", fontSize: 18, fontWeight: 700 }}>
+                        {plan.priceMxn.toLocaleString("es-MX")}
+                      </span>
+                      <span style={{ color: "var(--text-3)", fontSize: 12 }}>MXN/mes</span>
+                    </div>
                   </div>
-                  <div>
-                    <ButtonNew variant="primary" onClick={save} disabled={saving}>
-                      {saving ? "Guardando…" : "Guardar precios"}
-                    </ButtonNew>
-                  </div>
+                ))}
+                <div
+                  style={{
+                    padding: "10px 14px",
+                    background: "var(--brand-soft)",
+                    border: "1px solid rgba(124,58,237,0.25)",
+                    borderRadius: 10,
+                    fontSize: 12,
+                    color: "var(--text-2)",
+                  }}
+                >
+                  Los precios se configuran en el código{" "}
+                  <code className="mono" style={{ background: "var(--bg-elev-2)", padding: "1px 5px", borderRadius: 4 }}>src/lib/billing/plans.ts</code>.
+                  {" "}Esta vista es informativa (solo lectura).
                 </div>
-              </CardNew>
-
-              <CardNew title="Período de prueba">
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <input
-                    defaultValue="14"
-                    type="number"
-                    className="input-new mono"
-                    style={{ width: 80, textAlign: "center", fontWeight: 600 }}
-                  />
-                  <span style={{ color: "var(--text-3)", fontSize: 13 }}>días de prueba gratuita para nuevas clínicas</span>
-                </div>
-              </CardNew>
-            </>
+              </div>
+            </CardNew>
           )}
 
           {/* BANCO */}
