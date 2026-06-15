@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useT } from "@/i18n/i18n-provider";
 import { useAgenda } from "./agenda-provider";
 import type { AgendaFilters, AppointmentStatus } from "@/lib/agenda/types";
@@ -28,29 +29,55 @@ interface PillProps {
 
 function Pill({ label, count, selected, children }: PillProps) {
   const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  // El panel se renderiza en un PORTAL a <body> con position:fixed para que NO
+  // lo recorte el `overflow:hidden` del contenedor .page de la agenda (ese era
+  // el bug en laptops: el dropdown se abría vacío/recortado; en 4K había
+  // espacio de sobra y no se notaba). Anclamos sus coords al botón.
+  const reposition = () => {
+    const el = btnRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setPos({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) });
+  };
+
+  useLayoutEffect(() => {
+    if (open) reposition();
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (btnRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+      setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
+    const onReflow = () => reposition();
     document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onReflow);
+    // capture:true → re-posiciona aunque el scroll ocurra en un contenedor interno.
+    window.addEventListener("scroll", onReflow, true);
     return () => {
       document.removeEventListener("mousedown", onDoc);
       document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onReflow);
+      window.removeEventListener("scroll", onReflow, true);
     };
   }, [open]);
 
   const close = () => setOpen(false);
 
   return (
-    <div ref={wrapRef} className={styles.filterPillWrap}>
+    <div className={styles.filterPillWrap}>
       <button
+        ref={btnRef}
         type="button"
         className={`${styles.filterPill} ${selected > 0 ? styles.active : ""}`}
         onClick={() => setOpen((o) => !o)}
@@ -61,7 +88,17 @@ function Pill({ label, count, selected, children }: PillProps) {
         <span className={styles.filterPillCount}>{selected > 0 ? selected : count}</span>
         <span aria-hidden>▾</span>
       </button>
-      {open && <div className={styles.filterPanel}>{children(close)}</div>}
+      {open && pos && typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={panelRef}
+            className={styles.filterPanel}
+            style={{ position: "fixed", top: pos.top, right: pos.right, left: "auto", zIndex: 1000 }}
+          >
+            {children(close)}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
