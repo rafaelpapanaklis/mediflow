@@ -86,9 +86,15 @@ export async function POST(
   }
 
   const supabaseAdmin = getAdminClient();
+  // email_confirm: true → además de la contraseña, marcamos el email como
+  // confirmado. Muchos usuarios nunca confirmaron su correo (el email de
+  // confirmación depende de RESEND, que puede no estar configurado), y sin
+  // email confirmado Supabase RECHAZA el login con contraseña aunque sea
+  // correcta. Al asignar contraseña manualmente, el admin habilita el acceso
+  // completo. Idempotente: si ya estaba confirmado, no cambia nada.
   const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
     target.supabaseId,
-    { password },
+    { password, email_confirm: true },
   );
 
   if (updateError) {
