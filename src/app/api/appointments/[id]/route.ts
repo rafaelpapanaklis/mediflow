@@ -11,7 +11,7 @@ import { appointmentToDTO } from "@/lib/agenda/server";
 import { canOverrideOverlap } from "@/lib/agenda/transitions";
 import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
 import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
-import { revalidateAfter } from "@/lib/cache/revalidate";
+import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 import { getTzParts } from "@/lib/agenda/time-utils";
 import {
   syncUpdateToGoogleCalendar,
@@ -243,6 +243,7 @@ export async function PATCH(
     }
 
     revalidateAfter("appointments");
+    revalidatePatientProfile(updated.patientId);
     return NextResponse.json(
       { appointment: appointmentToDTO(updated, session.clinic.category) },
     );
@@ -338,6 +339,7 @@ export async function DELETE(
   }
 
   revalidateAfter("appointments");
+  revalidatePatientProfile(existing.patientId);
   return NextResponse.json({ ok: true });
 }
 

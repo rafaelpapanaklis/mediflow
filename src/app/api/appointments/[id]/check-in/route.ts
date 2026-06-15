@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { loadClinicSession, requireRole } from "@/lib/agenda/api-helpers";
-import { revalidateAfter } from "@/lib/cache/revalidate";
+import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 
 export async function POST(
   _req: NextRequest,
@@ -19,7 +19,7 @@ export async function POST(
 
   const existing = await prisma.appointment.findFirst({
     where: { id: params.id, clinicId: session.clinic.id },
-    select: { id: true, status: true },
+    select: { id: true, status: true, patientId: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -52,6 +52,7 @@ export async function POST(
   });
 
   revalidateAfter("appointments");
+  revalidatePatientProfile(existing.patientId);
   return NextResponse.json({
     ok: true,
     status: "CHECKED_IN",

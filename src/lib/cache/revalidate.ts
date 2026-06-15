@@ -107,3 +107,19 @@ export function revalidateAfterGroups(...groups: CacheGroup[]): void {
     }
   }
 }
+
+/**
+ * Revalida el perfil de UN paciente concreto (/dashboard/patients/[id]).
+ * Es un path DINÁMICO, por eso NO forma parte de los sets estáticos de
+ * CACHE_GROUPS: se invalida con el id concreto desde cada endpoint que muta
+ * datos visibles en el perfil — estado de cita/consulta (iniciar, completar,
+ * cancelar, check-in…), notas clínicas y facturas. Sin esto, completar una
+ * consulta dejaba el perfil con cache viejo mostrándola "en curso".
+ * Mismo patrón que ya usan los endpoints de facturas (invoices/**).
+ */
+export function revalidatePatientProfile(
+  patientId: string | null | undefined,
+): void {
+  if (!patientId) return;
+  revalidatePath(`/dashboard/patients/${patientId}`);
+}

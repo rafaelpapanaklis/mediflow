@@ -24,7 +24,7 @@ import { canOverrideOverlap } from "@/lib/agenda/transitions";
 import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
 import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
 import { logMutation } from "@/lib/audit";
-import { revalidateAfter } from "@/lib/cache/revalidate";
+import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 import { syncCreateToGoogleCalendar } from "@/lib/agenda/google-sync";
 import type {
   AgendaDayResponse,
@@ -323,6 +323,7 @@ export async function POST(req: NextRequest) {
     }
 
     revalidateAfter("appointments");
+    revalidatePatientProfile(created.patientId);
     return NextResponse.json(
       { appointment: appointmentToDTO(created, session.clinic.category) },
       { status: 201 },

@@ -828,10 +828,17 @@ export function PatientDetailClient({
   // ─── Consulta activa (audit Opción C ajustes 2, 5 y 6) ─────────────
   const consultAppointmentId = searchParams.get("appointment");
   const activeAppointment = useMemo(
-    () =>
-      consultAppointmentId && !consultClosed
-        ? appointments.find((a: any) => a.id === consultAppointmentId) ?? null
-        : null,
+    () => {
+      if (!consultAppointmentId || consultClosed) return null;
+      const appt =
+        appointments.find((a: any) => a.id === consultAppointmentId) ?? null;
+      // Una consulta solo está ACTIVA mientras la cita siga IN_PROGRESS. Si ya
+      // se completó/canceló en cualquier superficie (agenda, otra pestaña), el
+      // perfil NO debe seguir mostrando el ConsultBar aunque el query param
+      // ?appointment= persista en la URL (p. ej. al navegar desde "Cobrar").
+      if (!appt || appt.status !== "IN_PROGRESS") return null;
+      return appt;
+    },
     [consultAppointmentId, consultClosed, appointments],
   );
   const isConsultActive = activeAppointment !== null;

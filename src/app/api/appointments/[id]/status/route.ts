@@ -7,7 +7,7 @@ import {
   sideEffectsOf,
   timelineFieldFor,
 } from "@/lib/agenda/transitions";
-import { revalidateAfter } from "@/lib/cache/revalidate";
+import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 import type { StatusChangeInput } from "@/lib/agenda/types";
 
 const APPT_INCLUDE = {
@@ -118,6 +118,7 @@ export async function PATCH(
   }
 
   revalidateAfter("appointments");
+  revalidatePatientProfile(updated.patientId);
   return NextResponse.json(
     { appointment: appointmentToDTO(updated, session.clinic.category) },
   );

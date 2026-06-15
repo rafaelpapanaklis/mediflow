@@ -6,7 +6,7 @@ import { readActiveClinicCookie } from "@/lib/active-clinic";
 import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { hasPermission } from "@/lib/auth/permissions";
-import { revalidateAfter } from "@/lib/cache/revalidate";
+import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 
 export const dynamic = "force-dynamic";
 
@@ -168,6 +168,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   });
 
   revalidateAfter("clinicalNotes");
+  revalidatePatientProfile(updated.patientId);
   return NextResponse.json({ note: updated });
 }
 
@@ -221,5 +222,6 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   });
 
   revalidateAfter("clinicalNotes");
+  revalidatePatientProfile(existing.patientId);
   return NextResponse.json({ success: true });
 }

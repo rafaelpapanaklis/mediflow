@@ -8,7 +8,7 @@ import type {
   BatchValidateInput,
   BatchValidateResult,
 } from "@/lib/agenda/types";
-import { revalidateAfter } from "@/lib/cache/revalidate";
+import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 
 export async function POST(req: NextRequest) {
   const session = await loadClinicSession();
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
       requiresValidation: true,
       status: "SCHEDULED",
     },
-    select: { id: true },
+    select: { id: true, patientId: true },
   });
   const validIds = new Set(candidates.map((c) => c.id));
 
@@ -95,5 +95,9 @@ export async function POST(req: NextRequest) {
   //             enviar notificación a cada paciente afectado.
 
   revalidateAfter("appointments");
+  // Cada cita procesada pertenece a un paciente cuyo perfil muestra el estado
+  // de sus citas; revalidamos el perfil de cada paciente único afectado.
+  const affectedPatientIds = Array.from(new Set(candidates.map((c) => c.patientId)));
+  affectedPatientIds.forEach((pid) => revalidatePatientProfile(pid));
   return NextResponse.json(result);
 }

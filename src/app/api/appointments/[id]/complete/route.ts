@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { loadClinicSession } from "@/lib/agenda/api-helpers";
 import { appointmentToDTO } from "@/lib/agenda/server";
-import { revalidateAfter } from "@/lib/cache/revalidate";
+import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 import {
   changesToTreatments,
   createOrUpdateSnapshot,
@@ -151,6 +151,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   revalidateAfter("appointments");
+  revalidatePatientProfile(existing.patientId);
   return NextResponse.json({
     appointment: appointmentToDTO(updated, session.clinic.category),
     clinicalNoteId: note?.id ?? null,
