@@ -36,6 +36,7 @@ import {
 import { possibleTransitions } from "@/lib/agenda/transitions";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { AgendaEditAppointmentModal } from "./agenda-edit-appointment-modal";
+import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
 import {
   RESOURCE_KIND_LABELS,
   type AgendaAppointmentDTO,
@@ -84,12 +85,14 @@ function patientInitials(name: string): string {
 
 export function AgendaDetailPanel() {
   const t = useT();
-  const { state, selectAppointment, dispatch } = useAgenda();
+  const { state, selectAppointment, dispatch, invalidateRangeCache } = useAgenda();
   const router = useRouter();
   const { open: openNewAppointment } = useNewAppointmentDialog();
   const [pendingStatus, setPendingStatus] = useState<AppointmentStatus | null>(null);
   const [waSending, setWaSending] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [chargingInvoice, setChargingInvoice] = useState<any | null>(null);
+  const [resolvingCharge, setResolvingCharge] = useState(false);
   const [, startTransition] = useTransition();
 
   const appt = useMemo(
@@ -229,6 +232,32 @@ export function AgendaDetailPanel() {
   const dangerActions = validTargets.filter(
     (s) => s === "CANCELLED" || s === "NO_SHOW",
   );
+
+  // "Cobrar" desde la agenda: resuelve la factura vinculada a la cita y abre
+  // el modal de cobro inline (sin navegar al perfil). Si la cita aún no tiene
+  // factura (no se generó desde el expediente con sus procedimientos) avisamos
+  // claro en vez de abrir un cobro vacío.
+  async function handleCharge() {
+    if (!appt || resolvingCharge) return;
+    setResolvingCharge(true);
+    try {
+      const res = await fetch(`/api/invoices/by-appointment/${appt.id}`);
+      if (res.status === 404) {
+        toast.error(t("agenda.detailPanel.chargeNoInvoice"));
+        return;
+      }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? t("agenda.detailPanel.chargeError"));
+      }
+      const data = await res.json();
+      setChargingInvoice(data.invoice);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("agenda.detailPanel.chargeError"));
+    } finally {
+      setResolvingCharge(false);
+    }
+  }
 
   function handleReschedule() {
     if (!appt) return;
@@ -419,10 +448,11 @@ export function AgendaDetailPanel() {
           <button
             type="button"
             className={styles.detailAction}
-            onClick={() => router.push(`/dashboard/patients/${appt.patient.id}?tab=facturacion&appointment=${appt.id}`)}
+            onClick={(e) => { e.stopPropagation(); void handleCharge(); }}
+            disabled={resolvingCharge}
             title={t("agenda.detailPanel.chargeTitle")}
           >
-            <DollarSign size={12} aria-hidden /> {t("agenda.detailPanel.charge")}
+            <DollarSign size={12} aria-hidden /> {resolvingCharge ? "…" : t("agenda.detailPanel.charge")}
           </button>
         )}
         {isTerminal && (
@@ -463,6 +493,17 @@ export function AgendaDetailPanel() {
         appt={editOpen ? appt : null}
         isOpen={editOpen}
         onClose={() => setEditOpen(false)}
+      />
+
+      {/* Cobro inline: reusa el modal de billing (que ya contiene el
+          PaymentModal). La factura vinculada a la cita se resuelve vía
+          /api/invoices/by-appointment y se cobra aquí sin navegar al perfil. */}
+      <InvoiceDetailModal
+        open={chargingInvoice !== null}
+        invoice={chargingInvoice}
+        patientName={appt.patient.name}
+        onClose={() => setChargingInvoice(null)}
+        onMutated={() => { invalidateRangeCache(); }}
       />
     </aside>
   );

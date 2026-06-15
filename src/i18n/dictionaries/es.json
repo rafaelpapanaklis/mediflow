@@ -813,6 +813,8 @@
       "sending": "Enviando…",
       "charge": "Cobrar",
       "chargeTitle": "Cobrar / facturar la cita",
+      "chargeNoInvoice": "Esta cita aún no tiene factura. Agrega los procedimientos en el expediente del paciente para generarla y cobrar.",
+      "chargeError": "No se pudo abrir el cobro. Intenta de nuevo.",
       "rescheduleTitle": "Crear nueva cita pre-poblada con los datos actuales",
       "actionReschedule": "Reagendar",
       "actionConfirm": "Confirmar",

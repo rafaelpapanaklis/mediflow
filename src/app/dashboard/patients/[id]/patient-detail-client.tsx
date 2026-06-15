@@ -413,7 +413,9 @@ export function PatientDetailClient({
             ? "implantes"
             : tabFromUrl === "ortodoncia" && showOrthodontics
               ? "ortodoncia"
-              : "resumen";
+              : tabFromUrl === "facturacion"
+                ? "facturacion"
+                : "resumen";
   const [tab, setTab]         = useState(initialTab);
   const [consultPaused, setConsultPaused] = useState(false);
   const [consultClosed, setConsultClosed] = useState(false);

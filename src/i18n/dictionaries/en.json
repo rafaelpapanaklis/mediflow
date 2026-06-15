@@ -813,6 +813,8 @@
       "sending": "Sending…",
       "charge": "Charge",
       "chargeTitle": "Charge / invoice the appointment",
+      "chargeNoInvoice": "This appointment has no invoice yet. Add the procedures in the patient record to generate it and charge.",
+      "chargeError": "Couldn't open the charge. Try again.",
       "rescheduleTitle": "Create a new appointment pre-filled with the current data",
       "actionReschedule": "Reschedule",
       "actionConfirm": "Confirm",
