@@ -9,9 +9,9 @@ const LOGOS = [
 ];
 
 const METRICS = [
-  { v: "−73%", l: "menos faltas a citas", c: "#059669" },
-  { v: "+4 h", l: "ahorradas por semana", c: "#7c3aed" },
-  { v: "+28%", l: "aceptación de tratamientos", c: "#2563eb" },
+  { v: "60%", l: "más productividad en tu clínica", c: "#059669" },
+  { v: "+6 h", l: "ahorradas por semana", c: "#7c3aed" },
+  { v: "+30%", l: "aceptación de tratamientos", c: "#2563eb" },
   { v: "100%", l: "facturas CFDI 4.0", c: "#d97706" },
 ];
 
