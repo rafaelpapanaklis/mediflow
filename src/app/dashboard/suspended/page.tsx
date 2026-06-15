@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Lock } from "lucide-react";
+import { Lock, Sparkles } from "lucide-react";
 import { PLANS, isPlanId, type PlanId } from "@/lib/billing/plans";
 import { SuspendedPlanCards, type PlanCardData } from "./suspended-client";
 import { getServerT } from "@/i18n/server";
@@ -28,9 +28,22 @@ export default async function SuspendedPage({
   const user = await getCurrentUser();
   const clinic = await prisma.clinic.findUnique({
     where: { id: user.clinicId },
-    select: { plan: true },
+    select: { plan: true, subscriptionStatus: true },
   });
   const currentPlan: PlanId | null = clinic && isPlanId(clinic.plan) ? clinic.plan : null;
+
+  // Copy adaptativo según el estado de la cuenta:
+  //  - Reactivación = cuenta que YA tuvo acceso y se pausó por un pago
+  //    pendiente (past_due / cancelled / unpaid) → tono "reactiva tu plan".
+  //  - Cualquier otro caso (pending_payment o sin estado) = compra nueva
+  //    recién creada en el wizard → tono "último paso", SIN "bloqueado".
+  const status = clinic?.subscriptionStatus ?? null;
+  const isReactivation = !!status && ["past_due", "cancelled", "unpaid"].includes(status);
+  const pillText = isReactivation ? "Tu panel está en pausa" : "Último paso";
+  const heading = isReactivation ? "Reactiva tu plan" : "Último paso: activa tu cuenta";
+  const subcopy = isReactivation
+    ? "Tu acceso se pausó por un pago pendiente. Reactívalo para continuar."
+    : "Elige cómo pagar tu plan y empieza a usar DaleControl. Pago seguro con tarjeta, SPEI u OXXO.";
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -50,7 +63,7 @@ export default async function SuspendedPage({
       )}
 
       <div className="mx-auto max-w-[1000px] px-6 pb-20 pt-12">
-        {/* Encabezado: pill "en pausa" + título + subcopy */}
+        {/* Encabezado adaptativo: pill + título + subcopy (compra vs. reactivación) */}
         <div className="mb-8 flex flex-col items-center gap-4 text-center">
           <div
             className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-card py-1.5 pl-2 pr-3.5 dark:border-violet-500/30"
@@ -60,16 +73,19 @@ export default async function SuspendedPage({
               className="flex h-[26px] w-[26px] items-center justify-center rounded-[7px]"
               style={{ background: "linear-gradient(135deg,#8B5CF6,#7C3AED)" }}
             >
-              <Lock size={14} className="text-white" aria-hidden />
+              {isReactivation ? (
+                <Lock size={14} className="text-white" aria-hidden />
+              ) : (
+                <Sparkles size={14} className="text-white" aria-hidden />
+              )}
             </span>
             <span className="text-[12.5px] font-bold text-violet-700 dark:text-violet-300">
-              Tu panel está en pausa
+              {pillText}
             </span>
           </div>
-          <h1 className="text-4xl font-extrabold tracking-tight md:text-[40px]">Activa tu plan</h1>
+          <h1 className="text-4xl font-extrabold tracking-tight md:text-[40px]">{heading}</h1>
           <p className="max-w-[560px] text-base leading-relaxed text-muted-foreground">
-            Desbloquea tu panel completo —agenda, expedientes y facturación—. Pago seguro con
-            tarjeta, SPEI u OXXO; tu cuenta se reactiva al instante.
+            {subcopy}
           </p>
         </div>
 

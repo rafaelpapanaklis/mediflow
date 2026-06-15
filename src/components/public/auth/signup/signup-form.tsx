@@ -227,11 +227,12 @@ export function SignupForm() {
         }
       }
 
-      // La cuenta nace SIN acceso (pending_payment). El pago YA NO se hace en el
-      // wizard: mandamos al panel y el gating la lleva sola a la pantalla de
-      // activación (/dashboard/suspended), donde re-elige plan, método y paga.
-      toast.success("Tu cuenta se creó. Activa tu plan para empezar.");
-      window.location.href = "/dashboard";
+      // La cuenta nace SIN acceso (pending_payment). El pago se hace en la
+      // pantalla de activación: mandamos DIRECTO a /dashboard/suspended (no a
+      // /dashboard, así no pasa por el gating ni ve modal alguno) donde elige
+      // plan, método y paga. El webhook activa la cuenta al confirmar el pago.
+      toast.success("¡Cuenta creada! Elige cómo pagar para activar tu plan.");
+      window.location.href = "/dashboard/suspended";
       return;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Error al crear cuenta";

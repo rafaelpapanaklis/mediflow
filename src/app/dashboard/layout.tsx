@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { getCurrentUser, getUserClinics } from "@/lib/auth";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
@@ -43,20 +44,22 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const dict = getDict(locale);
   const t = makeT(dict);
 
-  // ── Bloqueo cuando el plan/trial expira ──────────────────────────
-  // Una clínica está expirada cuando trialEndsAt < now Y la suscripción
+  // ── Gating sin plan activo (sin modal bloqueante) ────────────────
+  // Una clínica está sin acceso cuando trialEndsAt < now Y la suscripción
   // no está activa (subscriptionStatus no es active / trialing / paid).
-  // Una clínica que paga después del trial limpia subscriptionStatus a
-  // 'active' y NO debe bloquearse aunque trialEndsAt siga en el pasado.
-  // El bloqueo aplica a TODOS los roles (incluso SUPER_ADMIN). Si un
-  // SUPER_ADMIN necesita destrabar una clínica expirada, lo hace desde
-  // el panel /admin (ruta separada, no bloqueada por este check) que
-  // permite extender trial o activar suscripción manualmente.
+  // Cubre tanto la cuenta NUEVA (pending_payment, trial en cero) como la
+  // SUSPENDIDA por impago. Una clínica que paga limpia subscriptionStatus
+  // a 'active' y NO se bloquea aunque trialEndsAt siga en el pasado.
+  // El gating aplica a TODOS los roles (incluso SUPER_ADMIN). Si un
+  // SUPER_ADMIN necesita destrabar una clínica, lo hace desde el panel
+  // /admin (ruta separada, no cubierta por este check) que permite
+  // extender trial o activar suscripción manualmente.
   //
-  // Implementación: el dashboard se renderiza completo (sidebar, topbar,
-  // contenido). El componente <ExpiredPlanModal /> se monta como portal
-  // encima y bloquea la interacción. Excepción: en /dashboard/suspended
-  // el modal NO se monta porque esa página YA es la pantalla de pago.
+  // Implementación: en vez de un modal de "acceso bloqueado", redirigimos
+  // DIRECTO a la pantalla de pago /dashboard/suspended (abajo). El redirect
+  // es server-side (sin parpadeo del dashboard); el guard de cliente
+  // <ExpiredPlanModal/> cubre las navegaciones soft donde el layout no
+  // se re-ejecuta.
   const trialEndsAt = clinic.trialEndsAt ? new Date(clinic.trialEndsAt) : null;
   const now = new Date();
   const subscriptionStatus = (clinic as { subscriptionStatus?: string | null }).subscriptionStatus ?? null;
@@ -65,6 +68,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const trialExpired = !!trialEndsAt && trialEndsAt < now;
   const isExpired = trialExpired && !subscriptionActive;
   const isInTrial = !!trialEndsAt && trialEndsAt > now && !subscriptionActive;
+
+  // Redirect server-side a la pantalla de pago. Excepción: la propia
+  // /dashboard/suspended (ahí se completa el pago) — sin esta guarda habría
+  // loop. x-pathname lo inyecta el middleware (updateSession) en TODA ruta
+  // /dashboard, así que es fiable; si faltara, el guard de cliente cubre.
+  if (isExpired && pathname && pathname !== "/dashboard/suspended") {
+    redirect("/dashboard/suspended");
+  }
   // allClinics (switcher), módulos activos y counts de onboarding no
   // dependen entre sí: una sola ronda en paralelo en vez de 3 awaits serie.
   //
