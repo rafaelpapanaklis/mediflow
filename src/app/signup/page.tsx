@@ -10,9 +10,9 @@ import { getSession } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Prueba gratis 14 días · DaleControl",
+  title: "Crea tu cuenta · DaleControl",
   description:
-    "Crea tu cuenta en DaleControl — 14 días gratis, cancela cuando quieras. Software médico mexicano con CFDI, WhatsApp e IA.",
+    "Crea tu cuenta en DaleControl — software médico mexicano con CFDI, WhatsApp e IA. Elige tu plan y empieza hoy.",
   robots: { index: true, follow: true },
 };
 
@@ -32,7 +32,7 @@ export default async function SignupPage() {
 
   return (
     <AuthShell
-      split="60/40"
+      split="45/55"
       visual={<SignupVisual />}
       form={
         <Suspense fallback={<FormFallback />}>

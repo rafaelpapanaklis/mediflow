@@ -227,26 +227,12 @@ export function SignupForm() {
         }
       }
 
-      // La cuenta nace SIN acceso (pending_payment). Abrimos Stripe Checkout con
-      // el plan + método elegidos; al pagar, el webhook la activa.
-      try {
-        const coRes = await fetch("/api/billing/checkout", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ plan: form.plan, method: form.payMethod }),
-        });
-        const coData = (await coRes.json().catch(() => ({}))) as { url?: string };
-        if (coRes.ok && coData.url) {
-          // Hard navigation a Stripe Checkout (hosted).
-          window.location.href = coData.url;
-          return;
-        }
-      } catch {
-        // cae al fallback de abajo
-      }
-      // Sin Stripe configurado o error → al panel de activación para reintentar.
-      toast("Tu cuenta se creó. Continúa con el pago para activarla.", { icon: "💳" });
-      window.location.href = "/dashboard/suspended";
+      // La cuenta nace SIN acceso (pending_payment). El pago YA NO se hace en el
+      // wizard: mandamos al panel y el gating la lleva sola a la pantalla de
+      // activación (/dashboard/suspended), donde re-elige plan, método y paga.
+      toast.success("Tu cuenta se creó. Activa tu plan para empezar.");
+      window.location.href = "/dashboard";
+      return;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Error al crear cuenta";
       toast.error(msg);
@@ -278,14 +264,14 @@ export function SignupForm() {
         >
           {step === 1 && "Crea tu cuenta"}
           {step === 2 && "Cuéntanos de tu clínica"}
-          {step === 3 && "Activa tu plan"}
+          {step === 3 && "Elige tu plan"}
         </h1>
         <p style={{ margin: 0, fontSize: 13.5, color: "var(--ld-fg-muted)" }}>
-          {step === 1 && "Crea tu cuenta para continuar con el pago."}
+          {step === 1 && "Crea tu cuenta para empezar."}
           {step === 2 &&
             "Configuramos tu espacio basado en tu especialidad."}
           {step === 3 &&
-            "Elige tu método de pago y activa tu plan."}
+            "Confirma el plan con el que quieres empezar. El pago lo haces dentro del panel."}
         </p>
       </div>
 

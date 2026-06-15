@@ -9,8 +9,8 @@ interface AuthShellProps {
   visual: ReactNode;
   /** Form panel (right). */
   form: ReactNode;
-  /** Proporción del split — "50/50" (login) o "60/40" (signup) */
-  split?: "50/50" | "60/40";
+  /** Proporción del split — "50/50" (login), "60/40" o "45/55" (signup) */
+  split?: "50/50" | "60/40" | "45/55";
 }
 
 /**
@@ -34,8 +34,12 @@ export function AuthShell({ visual, form, split = "50/50" }: AuthShellProps) {
     try { localStorage.setItem("ld-theme", mode); } catch {}
   }, [mode, mounted]);
 
-  const leftRatio  = split === "60/40" ? "1.5fr" : "1fr";
-  const rightRatio = split === "60/40" ? "1fr"   : "1fr";
+  // Proporción de columnas por split. "45/55" da más ancho al form (signup con
+  // 3 planes para elegir) sin tocar "50/50" (login) ni "60/40".
+  const [leftRatio, rightRatio] =
+    split === "60/40" ? ["1.5fr", "1fr"] :
+    split === "45/55" ? ["45fr", "55fr"] :
+    ["1fr", "1fr"];
 
   return (
     <div
@@ -110,7 +114,7 @@ export function AuthShell({ visual, form, split = "50/50" }: AuthShellProps) {
         </button>
 
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ width: "100%", maxWidth: split === "60/40" ? 460 : 420 }}>{form}</div>
+          <div style={{ width: "100%", maxWidth: split === "45/55" ? 600 : split === "60/40" ? 460 : 420 }}>{form}</div>
         </div>
       </div>
 

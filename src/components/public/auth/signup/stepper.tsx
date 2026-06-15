@@ -9,7 +9,7 @@ interface StepperProps {
 const STEPS: Array<{ n: 1 | 2 | 3; label: string }> = [
   { n: 1, label: "Tu cuenta" },
   { n: 2, label: "Tu clínica" },
-  { n: 3, label: "Plan y pago" },
+  { n: 3, label: "Elige tu plan" },
 ];
 
 export function Stepper({ step }: StepperProps) {

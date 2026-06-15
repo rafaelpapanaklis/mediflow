@@ -6954,7 +6954,22 @@
       "payWithPaypal": "Pagar con PayPal",
       "payWithPaypalAria": "Pagar {name} con PayPal",
       "paypalComingSoon": "PayPal — próximamente",
-      "paypalComingSoonAria": "PayPal próximamente para {name}"
+      "paypalComingSoonAria": "PayPal próximamente para {name}",
+      "methodCard": "Tarjeta",
+      "methodSpei": "SPEI",
+      "methodOxxo": "OXXO",
+      "payWithSpei": "Pagar con SPEI",
+      "payWithOxxo": "Pagar con OXXO",
+      "payWithSpeiAria": "Pagar {name} con SPEI",
+      "payWithOxxoAria": "Pagar {name} con OXXO",
+      "asyncMethodNote": "Pago único de 1 mes; no se renueva solo.",
+      "recommendedBadge": "Recomendado",
+      "currentPlanBadge": "Tu plan actual",
+      "topPlanBadge": "Plan más completo",
+      "upsellLine": "Por ${amount} más al mes: {benefit}",
+      "upsellBenefitPro": "pacientes ilimitados y 3 profesionales",
+      "upsellBenefitClinic": "multi-sucursal, API y manager dedicado",
+      "paymentsUnavailable": "Pagos no disponibles temporalmente. Intenta más tarde o usa la transferencia SPEI de abajo."
     },
     "teleconsulta": {
       "title": "Teleconsultas",

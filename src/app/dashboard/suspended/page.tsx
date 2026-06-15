@@ -1,7 +1,9 @@
 import Link from "next/link";
-import { PLANS, type PlanId } from "@/lib/billing/plans";
+import { PLANS, isPlanId, type PlanId } from "@/lib/billing/plans";
 import { SuspendedPlanCards, type PlanCardData } from "./suspended-client";
 import { getServerT } from "@/i18n/server";
+import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 const BANK_INFO = {
   nombre: "Efthymios Rafail Papanaklis",
@@ -48,6 +50,14 @@ export default async function SuspendedPage({
     features: [...p.features],
     paypalUrl: getPaypalUrl(p.id),
   }));
+
+  // Plan elegido en el registro (Clinic.plan): preselección + base del upsell.
+  const user = await getCurrentUser();
+  const clinic = await prisma.clinic.findUnique({
+    where: { id: user.clinicId },
+    select: { plan: true },
+  });
+  const currentPlan: PlanId | null = clinic && isPlanId(clinic.plan) ? clinic.plan : null;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -114,7 +124,7 @@ export default async function SuspendedPage({
           {t("pages.suspended.choosePlanDescription")}
         </p>
 
-        <SuspendedPlanCards plans={planCards} />
+        <SuspendedPlanCards plans={planCards} currentPlan={currentPlan} />
 
         {/* Datos de pago SPEI (alternativa manual) */}
         <div
