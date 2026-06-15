@@ -402,8 +402,8 @@ export function ProceduresClient({ initialProcedures }: Props) {
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={closeModal}
           />
-          <div className="relative bg-card border border-border rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div className="relative bg-card border border-border rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
               <h2 className="text-lg font-bold text-foreground">
                 {editing ? t("pages.procedures.editProcedure") : t("pages.procedures.newProcedure")}
               </h2>
@@ -414,7 +414,8 @@ export function ProceduresClient({ initialProcedures }: Props) {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="flex-1 min-h-0 flex flex-col overflow-hidden">
+              <div className="flex-1 overflow-y-auto min-h-0 p-6 space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
                   {t("common.name")} <span className="text-red-500">*</span>
@@ -525,8 +526,9 @@ export function ProceduresClient({ initialProcedures }: Props) {
                   {t("pages.procedures.active")}
                 </span>
               </label>
+              </div>
 
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-border">
+              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border shrink-0">
                 <button
                   type="button"
                   onClick={closeModal}

@@ -63,13 +63,16 @@ export function ShareWithPatient(props: ShareWithPatientProps) {
       {open && !presentation ? (
         <div role="dialog" aria-modal="true" style={overlayStyle} onClick={() => setOpen(false)}>
           <div onClick={(e) => e.stopPropagation()} style={cardStyle}>
-            <h2 style={{ margin: 0, fontSize: 16, color: "var(--text-1)" }}>
-              Compartir con {props.patientName}
-            </h2>
-            <p style={{ fontSize: 13, color: "var(--text-2)", margin: "4px 0 12px" }}>
-              Elige cómo quieres compartir el resumen del módulo.
-            </p>
+            <div style={{ flexShrink: 0 }}>
+              <h2 style={{ margin: 0, fontSize: 16, color: "var(--text-1)" }}>
+                Compartir con {props.patientName}
+              </h2>
+              <p style={{ fontSize: 13, color: "var(--text-2)", margin: "4px 0 12px" }}>
+                Elige cómo quieres compartir el resumen del módulo.
+              </p>
+            </div>
 
+            <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <button
                 type="button"
@@ -146,8 +149,9 @@ export function ShareWithPatient(props: ShareWithPatientProps) {
                 {error}
               </div>
             ) : null}
+            </div>
 
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12, flexShrink: 0 }}>
               <button type="button" onClick={() => setOpen(false)} style={btnSecondary}>
                 Cerrar
               </button>
@@ -216,6 +220,7 @@ const overlayStyle: React.CSSProperties = {
 
 const cardStyle: React.CSSProperties = {
   width: "min(480px, 100%)",
+  maxHeight: "90vh",
   background: "var(--surface-1)",
   border: "1px solid var(--border)",
   borderRadius: 10,
@@ -223,6 +228,7 @@ const cardStyle: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: 6,
+  overflow: "hidden",
 };
 
 const btnPrimary: React.CSSProperties = {

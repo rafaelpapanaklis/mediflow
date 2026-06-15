@@ -126,7 +126,6 @@ export function ReferralLetterModal(props: ReferralLetterModalProps) {
         style={{
           width: "min(720px, 100%)",
           maxHeight: "90vh",
-          overflowY: "auto",
           background: "var(--surface-1)",
           border: "1px solid var(--border)",
           borderRadius: 10,
@@ -134,9 +133,10 @@ export function ReferralLetterModal(props: ReferralLetterModalProps) {
           display: "flex",
           flexDirection: "column",
           gap: 12,
+          overflow: "hidden",
         }}
       >
-        <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
           <h2 style={{ margin: 0, fontSize: 16, color: "var(--text-1)" }}>
             Hoja de referencia · {props.patientName}
           </h2>
@@ -156,6 +156,16 @@ export function ReferralLetterModal(props: ReferralLetterModalProps) {
           </button>
         </header>
 
+        <div
+          style={{
+            flex: 1,
+            overflowY: "auto",
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+          }}
+        >
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <label style={{ fontSize: 12, color: "var(--text-2)" }}>Doctor receptor</label>
           <select
@@ -211,8 +221,9 @@ export function ReferralLetterModal(props: ReferralLetterModalProps) {
             {error}
           </div>
         ) : null}
+        </div>
 
-        <footer style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <footer style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexShrink: 0 }}>
           {referralId ? (
             <>
               <button type="button" onClick={onPrint} style={btnSecondary}>

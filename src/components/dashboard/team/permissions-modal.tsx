@@ -116,7 +116,7 @@ export function PermissionsModal({ open, member, onClose, onSaved }: Permissions
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-2xl bg-card text-foreground border border-border max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl bg-card text-foreground border border-border max-h-[85vh]">
         <DialogHeader>
           <DialogTitle className="text-foreground font-bold flex items-center gap-2">
             <Shield size={16} className="text-violet-600 dark:text-violet-400" />
@@ -124,7 +124,7 @@ export function PermissionsModal({ open, member, onClose, onSaved }: Permissions
           </DialogTitle>
         </DialogHeader>
 
-        <div className="px-6 py-4 space-y-5">
+        <div className="px-6 py-4 space-y-5 flex-1 overflow-y-auto min-h-0">
           {/* Toggle use-default */}
           <label className="flex items-start gap-3 p-3 rounded-lg border border-border bg-muted/30 cursor-pointer">
             <input

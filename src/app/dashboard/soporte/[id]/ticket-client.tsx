@@ -237,19 +237,21 @@ function CloseDialog({
         role="dialog"
         aria-modal="true"
         aria-label="Cerrar ticket"
-        className="relative w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-xl"
+        className="relative flex max-h-[90vh] w-full max-w-sm flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-xl"
       >
-        <h3 className="text-base font-semibold text-foreground">¿Resolvimos tu problema?</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Al cerrar el ticket ya no podrás responder en este hilo. Si quieres, califica la atención (es opcional).
-        </p>
-        <div className="mt-4">
-          <StarPicker value={rating} onChange={setRating} />
-          <p className="mt-1.5 text-center text-xs text-muted-foreground">
-            {rating > 0 ? `${rating} de 5` : "Sin calificación"}
+        <h3 className="shrink-0 px-5 pb-3 pt-5 text-base font-semibold text-foreground">¿Resolvimos tu problema?</h3>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5">
+          <p className="text-sm text-muted-foreground">
+            Al cerrar el ticket ya no podrás responder en este hilo. Si quieres, califica la atención (es opcional).
           </p>
+          <div className="mt-4">
+            <StarPicker value={rating} onChange={setRating} />
+            <p className="mt-1.5 text-center text-xs text-muted-foreground">
+              {rating > 0 ? `${rating} de 5` : "Sin calificación"}
+            </p>
+          </div>
         </div>
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="shrink-0 flex justify-end gap-2 px-5 pb-5 pt-3">
           <ButtonNew variant="ghost" onClick={onCancel} disabled={closing}>
             Cancelar
           </ButtonNew>

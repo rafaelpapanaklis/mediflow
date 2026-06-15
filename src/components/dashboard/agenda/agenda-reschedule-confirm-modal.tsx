@@ -95,21 +95,21 @@ const overlayStyle: React.CSSProperties = {
 };
 const dialogStyle: React.CSSProperties = {
   position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-  width: "min(92vw, 560px)", background: "var(--bg-elev)", border: "1px solid var(--border-strong)",
+  width: "min(92vw, 560px)", maxHeight: "90vh", background: "var(--bg-elev)", border: "1px solid var(--border-strong)",
   borderRadius: 14, boxShadow: "0 24px 60px -12px rgba(15,10,30,0.4)",
   display: "flex", flexDirection: "column", zIndex: 81,
   fontFamily: "var(--font-sans, system-ui, sans-serif)", overflow: "hidden",
 };
 const headerStyle: React.CSSProperties = {
   display: "flex", alignItems: "center", justifyContent: "space-between",
-  padding: "16px 20px", borderBottom: "1px solid var(--border-soft)",
+  padding: "16px 20px", borderBottom: "1px solid var(--border-soft)", flexShrink: 0,
 };
 const titleStyle: React.CSSProperties = { fontSize: 15, fontWeight: 600, color: "var(--text-1)", margin: 0 };
 const closeBtnStyle: React.CSSProperties = {
   width: 28, height: 28, display: "grid", placeItems: "center", background: "transparent",
   border: "1px solid transparent", borderRadius: 6, color: "var(--text-2)", cursor: "pointer",
 };
-const bodyStyle: React.CSSProperties = { padding: 20, display: "flex", flexDirection: "column", gap: 16 };
+const bodyStyle: React.CSSProperties = { padding: 20, display: "flex", flexDirection: "column", gap: 16, flex: 1, overflowY: "auto", minHeight: 0 };
 const doctorRowStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: 12 };
 const cardsRowStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 };
 const originalCardStyle: React.CSSProperties = {
@@ -123,5 +123,5 @@ const timeStyle: React.CSSProperties = { fontSize: 16, fontWeight: 600, marginBo
 const dateStyle: React.CSSProperties = { fontSize: 13, color: "var(--text-2)" };
 const footerStyle: React.CSSProperties = {
   display: "flex", justifyContent: "flex-end", gap: 8, padding: "14px 20px",
-  borderTop: "1px solid var(--border-soft)",
+  borderTop: "1px solid var(--border-soft)", flexShrink: 0,
 };

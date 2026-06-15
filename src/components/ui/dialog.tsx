@@ -16,12 +16,18 @@ const DialogOverlay = React.forwardRef<React.ElementRef<typeof DialogPrimitive.O
 );
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
+// DialogContent: contenedor acotado a la altura del viewport (max-h-[90vh]) en
+// columna flex con overflow oculto, con un pequeño margen lateral (w-calc) para
+// que nunca toque los bordes en móvil. El HEADER (DialogHeader) y el FOOTER
+// (DialogFooter) quedan fijos (shrink-0); el CUERPO entre ambos DEBE llevar
+// "flex-1 overflow-y-auto min-h-0" para scrollear y que el botón de acción
+// (Cobrar/Guardar) nunca quede fuera de pantalla en laptops de poca altura.
 const DialogContent = React.forwardRef<React.ElementRef<typeof DialogPrimitive.Content>, React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>>(
   ({ className, children, ...props }, ref) => (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content ref={ref} aria-describedby={undefined}
-        className={cn("fixed left-[50%] top-[50%] z-[200] translate-x-[-50%] translate-y-[-50%] bg-white rounded-2xl shadow-card-md w-full max-w-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95", className)} {...props}>
+        className={cn("fixed left-[50%] top-[50%] z-[200] translate-x-[-50%] translate-y-[-50%] bg-white rounded-2xl shadow-card-md w-[calc(100%-2rem)] max-w-lg flex max-h-[90vh] flex-col overflow-hidden data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95", className)} {...props}>
         {children}
         <DialogPrimitive.Close className="absolute right-4 top-4 rounded-lg p-1 text-muted-foreground hover:bg-muted transition-colors">
           <X className="h-4 w-4" />
@@ -33,10 +39,10 @@ const DialogContent = React.forwardRef<React.ElementRef<typeof DialogPrimitive.C
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn("flex flex-col px-6 pt-6 pb-0", className)} {...props} />
+  <div className={cn("flex flex-col px-6 pt-6 pb-0 shrink-0", className)} {...props} />
 );
 const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn("flex items-center justify-end gap-2 px-6 py-4 border-t border-border", className)} {...props} />
+  <div className={cn("flex items-center justify-end gap-2 px-6 py-4 border-t border-border shrink-0", className)} {...props} />
 );
 const DialogTitle = React.forwardRef<React.ElementRef<typeof DialogPrimitive.Title>, React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>>(
   ({ className, ...props }, ref) => (

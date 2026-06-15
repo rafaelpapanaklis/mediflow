@@ -185,13 +185,13 @@ function EditModal({ request, onClose, onSaved }: { request: ArcoRow; onClose: (
         display: "grid", placeItems: "center", zIndex: 100, padding: 24,
       }}
     >
-      <div style={{ background: "var(--bg-elev, #fff)", border: "1px solid var(--border-strong, #94a3b8)", borderRadius: 14, width: "100%", maxWidth: 540 }}>
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-soft, #e2e8f0)" }}>
+      <div style={{ background: "var(--bg-elev, #fff)", border: "1px solid var(--border-strong, #94a3b8)", borderRadius: 14, width: "100%", maxWidth: 540, maxHeight: "90vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border-soft, #e2e8f0)", flexShrink: 0 }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>
             {t("settings.arco.modalTitle", { type: t(TYPE_LABEL_KEY[request.type]) })} · {request.email}
           </h3>
         </div>
-        <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12, flex: 1, overflowY: "auto", minHeight: 0 }}>
           <div>
             <Label>{t("settings.arco.requesterReason")}</Label>
             <p style={{ marginTop: 4, padding: 10, background: "var(--bg-elev-2, #f1f5f9)", borderRadius: 8, fontSize: 13, whiteSpace: "pre-wrap" }}>
@@ -222,7 +222,7 @@ function EditModal({ request, onClose, onSaved }: { request: ArcoRow; onClose: (
             />
           </div>
         </div>
-        <div style={{ padding: "14px 20px", borderTop: "1px solid var(--border-soft, #e2e8f0)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <div style={{ padding: "14px 20px", borderTop: "1px solid var(--border-soft, #e2e8f0)", display: "flex", justifyContent: "flex-end", gap: 8, flexShrink: 0 }}>
           <button type="button" onClick={onClose} style={{ padding: "8px 14px", fontSize: 13, fontWeight: 600, background: "transparent", color: "var(--text-2, #475569)", border: "1px solid var(--border-strong, #94a3b8)", borderRadius: 8, cursor: "pointer", fontFamily: "inherit" }}>
             {t("common.cancel")}
           </button>

@@ -100,7 +100,7 @@ export function PaymentModal({ open, invoice, onClose, onSuccess }: PaymentModal
           <DialogTitle className="text-foreground font-bold">{t("clinical.paymentModal.title")}</DialogTitle>
         </DialogHeader>
 
-        <div className="px-6 py-4 space-y-4">
+        <div className="px-6 py-4 space-y-4 flex-1 overflow-y-auto min-h-0">
           <div className="bg-muted/40 border border-border rounded-lg p-3 text-xs space-y-1">
             <div className="flex justify-between">
               <span className="text-muted-foreground">{t("clinical.paymentModal.invoice")}</span>

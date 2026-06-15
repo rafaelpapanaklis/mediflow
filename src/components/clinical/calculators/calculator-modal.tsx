@@ -53,13 +53,15 @@ export function CalculatorModal({ isOpen, onClose, defaultSpecialty }: Props) {
           maxWidth: 720,
           width: "100%",
           maxHeight: "85vh",
-          overflow: "auto",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
           background: "var(--bg-elev)",
           borderRadius: 12,
           border: "1px solid var(--border)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <CalcIcon size={18} color="var(--brand, #7c3aed)" />
             <div>
@@ -80,7 +82,7 @@ export function CalculatorModal({ isOpen, onClose, defaultSpecialty }: Props) {
           </button>
         </div>
 
-        <div style={{ padding: 20 }}>
+        <div style={{ padding: 20, flex: 1, overflowY: "auto", minHeight: 0 }}>
           {SelectedComponent ? (
             <SelectedComponent onClose={() => setSelected(null)} />
           ) : (

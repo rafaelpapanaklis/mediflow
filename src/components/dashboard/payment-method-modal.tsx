@@ -116,13 +116,16 @@ export function PaymentMethodModal({
           width: "100%",
           maxWidth: 520,
           maxHeight: "90vh",
-          overflowY: "auto",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
           color: "var(--text-1)",
         }}
       >
         {/* Header */}
         <header
           style={{
+            flexShrink: 0,
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
@@ -154,7 +157,7 @@ export function PaymentMethodModal({
         </header>
 
         {/* Cards verticales con las 3 opciones */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 20 }}>
+        <div style={{ flex: 1, overflowY: "auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 12, padding: 20 }}>
           {/* Tarjeta */}
           <OptionCard
             icon={<CreditCard size={20} aria-hidden />}

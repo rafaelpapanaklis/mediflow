@@ -2975,9 +2975,9 @@ export function PatientDetailClient({
 
       {/* Edit patient modal */}
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[90vh]">
           <DialogHeader><DialogTitle className="text-foreground font-bold">{t("patients.edit.title")}</DialogTitle></DialogHeader>
-          <div className="px-6 py-4 space-y-4">
+          <div className="px-6 py-4 space-y-4 flex-1 overflow-y-auto min-h-0">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5"><Label>{t("patients.edit.firstName")}</Label><Input value={editForm.firstName} onChange={e => setEditForm(f => ({ ...f, firstName: e.target.value }))} /></div>
               <div className="space-y-1.5"><Label>{t("patients.edit.lastName")}</Label><Input value={editForm.lastName} onChange={e => setEditForm(f => ({ ...f, lastName: e.target.value }))} /></div>

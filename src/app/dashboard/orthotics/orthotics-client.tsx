@@ -194,12 +194,12 @@ export function OrthoticsClient({ initialItems }: { initialItems: PipelineItem[]
       {/* Add Modal */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
               <h2 className="text-lg font-bold">{t("pages.orthotics.newOrderModalTitle")}</h2>
               <button onClick={() => setShowAdd(false)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
             </div>
-            <div className="px-6 py-5 space-y-4">
+            <div className="px-6 py-5 space-y-4 flex-1 overflow-y-auto min-h-0">
               <div className="space-y-1.5">
                 <Label className="text-sm">{t("pages.orthotics.patientNameLabel")}</Label>
                 <input className="flex h-11 w-full rounded-xl border border-border bg-card px-4 text-base focus:outline-none focus:ring-2 focus:ring-brand-600/20"
@@ -219,7 +219,7 @@ export function OrthoticsClient({ initialItems }: { initialItems: PipelineItem[]
                   value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
               </div>
             </div>
-            <div className="px-6 pb-6 flex gap-3">
+            <div className="px-6 py-4 flex gap-3 shrink-0 border-t border-border">
               <Button variant="outline" onClick={() => setShowAdd(false)} className="flex-1 h-11 text-base">{t("common.cancel")}</Button>
               <Button onClick={handleAdd} className="flex-1 h-11 text-base">{t("pages.orthotics.createOrder")}</Button>
             </div>

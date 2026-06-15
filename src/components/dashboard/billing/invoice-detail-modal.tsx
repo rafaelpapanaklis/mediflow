@@ -195,7 +195,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
             </DialogTitle>
           </DialogHeader>
 
-          <div className="px-6 py-4 space-y-4">
+          <div className="px-6 py-4 space-y-4 flex-1 overflow-y-auto min-h-0">
             {/* Resumen — usa tokens de tema (bg-muted/40, border-border, text-muted-foreground) */}
             <div className="bg-muted/40 border border-border rounded-lg p-3 text-xs space-y-1.5 text-foreground">
               <div className="flex justify-between"><span className="text-muted-foreground">{t("clinical.invoiceDetail.patient")}</span><span className="font-medium">{patientName}</span></div>
@@ -359,7 +359,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
           <DialogHeader>
             <DialogTitle className="text-foreground font-bold">{t("clinical.invoiceDetail.refundInvoiceTitle", { number: invoice.invoiceNumber })}</DialogTitle>
           </DialogHeader>
-          <div className="px-6 py-4 space-y-3">
+          <div className="px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0">
             <p className="text-xs text-muted-foreground">{t("clinical.invoiceDetail.totalPaidLabel")} <span className="font-mono font-bold text-foreground">{formatCurrency(invoice.paid)}</span></p>
             <div className="space-y-1.5">
               <Label>{t("clinical.invoiceDetail.refundAmountLabel")}</Label>
@@ -389,7 +389,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
           <DialogHeader>
             <DialogTitle className="text-foreground font-bold">{t("clinical.invoiceDetail.editPrice")}</DialogTitle>
           </DialogHeader>
-          <div className="px-6 py-4 space-y-3">
+          <div className="px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0">
             <p className="text-xs text-muted-foreground">{t("clinical.invoiceDetail.currentTotalLabel")} <span className="font-mono font-bold text-foreground">{formatCurrency(invoice.total)}</span></p>
             <div className="space-y-1.5">
               <Label>{t("clinical.invoiceDetail.newTotalLabel")}</Label>
@@ -410,7 +410,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
           <DialogHeader>
             <DialogTitle className="text-foreground font-bold">{t("clinical.invoiceDetail.applyDiscount")}</DialogTitle>
           </DialogHeader>
-          <div className="px-6 py-4 space-y-3">
+          <div className="px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0">
             <p className="text-xs text-muted-foreground">{t("clinical.invoiceDetail.currentSubtotalLabel")} <span className="font-mono font-bold text-foreground">{formatCurrency(invoice.subtotal ?? invoice.total + (invoice.discount ?? 0))}</span></p>
             <div className="space-y-1.5">
               <Label>{t("clinical.invoiceDetail.discountMxnLabel")}</Label>
@@ -431,7 +431,7 @@ export function InvoiceDetailModal({ open, invoice, patientName, onClose, onMuta
           <DialogHeader>
             <DialogTitle className="text-foreground font-bold">{t("clinical.invoiceDetail.cancelInvoiceTitle", { number: invoice.invoiceNumber })}</DialogTitle>
           </DialogHeader>
-          <div className="px-6 py-4 space-y-3">
+          <div className="px-6 py-4 space-y-3 flex-1 overflow-y-auto min-h-0">
             <p className="text-xs text-muted-foreground">{t("clinical.invoiceDetail.cancelWarning")}</p>
             <div className="space-y-1.5">
               <Label>{t("clinical.invoiceDetail.reasonOptional")}</Label>

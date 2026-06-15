@@ -188,14 +188,16 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
           borderRadius: 10,
           width: "min(560px, 100%)",
           maxHeight: "90vh",
-          overflow: "auto",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
           fontFamily: "var(--font-sans, system-ui, sans-serif)",
         }}
       >
         <header style={{
           display: "flex", justifyContent: "space-between", alignItems: "center",
           padding: "14px 18px",
-          borderBottom: "1px solid var(--border-soft)",
+          borderBottom: "1px solid var(--border-soft)", flexShrink: 0,
         }}>
           <div>
             <h2 id="edit-appt-title" style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>
@@ -219,7 +221,8 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
           </button>
         </header>
 
-        <form onSubmit={submit} style={{ padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
+        <form onSubmit={submit} style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <div style={{ flex: 1, overflowY: "auto", minHeight: 0, padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
           <Field label={t("common.date")}>
             <DateField
               required
@@ -309,10 +312,11 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose }: Props) {
               </div>
             </div>
           )}
+          </div>
 
           <footer style={{
             display: "flex", justifyContent: "flex-end", gap: 8,
-            paddingTop: 8, borderTop: "1px solid var(--border-soft)", marginTop: 4,
+            padding: "12px 18px", borderTop: "1px solid var(--border-soft)", flexShrink: 0,
           }}>
             <button
               type="button"

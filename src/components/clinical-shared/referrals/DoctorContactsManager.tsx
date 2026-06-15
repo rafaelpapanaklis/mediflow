@@ -213,6 +213,7 @@ export function DoctorContactsManager() {
             onClick={(e) => e.stopPropagation()}
             style={{
               width: "min(520px, 100%)",
+              maxHeight: "90vh",
               background: "var(--surface-1)",
               border: "1px solid var(--border)",
               borderRadius: 10,
@@ -220,11 +221,22 @@ export function DoctorContactsManager() {
               display: "flex",
               flexDirection: "column",
               gap: 8,
+              overflow: "hidden",
             }}
           >
-            <h4 style={{ margin: 0, fontSize: 14, color: "var(--text-1)" }}>
+            <h4 style={{ margin: 0, fontSize: 14, color: "var(--text-1)", flexShrink: 0 }}>
               {draft.id ? "Editar contacto" : "Nuevo contacto"}
             </h4>
+            <div
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                minHeight: 0,
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+              }}
+            >
             <Field label="Nombre completo">
               <input
                 type="text"
@@ -277,7 +289,8 @@ export function DoctorContactsManager() {
                 style={inputStyle}
               />
             </Field>
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 6 }}>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 6, flexShrink: 0 }}>
               <button type="button" onClick={() => setDraft(null)} style={btnSecondary}>
                 Cancelar
               </button>
