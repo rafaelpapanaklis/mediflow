@@ -1,15 +1,10 @@
 import Link from "next/link";
+import { Lock } from "lucide-react";
 import { PLANS, isPlanId, type PlanId } from "@/lib/billing/plans";
 import { SuspendedPlanCards, type PlanCardData } from "./suspended-client";
 import { getServerT } from "@/i18n/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-
-const BANK_INFO = {
-  nombre: "Efthymios Rafail Papanaklis",
-  clabe:  "012910015008025244",
-  banco:  "BBVA",
-};
 
 export const dynamic = "force-dynamic";
 
@@ -53,117 +48,39 @@ export default async function SuspendedPage({
           </div>
         </div>
       )}
-      {/* Hero bloqueante centrado */}
-      <section className="flex flex-col items-center justify-center px-4 py-16 text-center">
-        <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl border border-destructive/40 bg-destructive/10 text-4xl">
-          ⏰
-        </div>
-        <h1 className="mb-4 max-w-2xl text-4xl font-extrabold tracking-tight md:text-5xl">
-          {t("pages.suspended.planExpiredTitle")}
-        </h1>
-        <p className="mb-8 max-w-xl text-base text-muted-foreground md:text-lg">
-          {t("pages.suspended.planExpiredDescription")}
-        </p>
-        <div className="flex flex-col items-center gap-3 sm:flex-row">
-          <a
-            href="#renovar-plan"
-            className="inline-flex items-center justify-center rounded-xl px-8 py-4 text-base font-bold text-white shadow-lg transition hover:opacity-90"
-            style={{
-              background: "var(--brand)",
-              boxShadow: "0 10px 30px -8px var(--brand-soft, rgba(124,58,237,0.4))",
-            }}
-          >
-            {t("pages.suspended.renewPlanCta")}
-          </a>
-          <a
-            href="mailto:soporte@dalecontrol.com"
-            className="inline-flex items-center justify-center rounded-xl border border-border bg-card px-6 py-4 text-base font-semibold text-foreground transition hover:bg-muted"
-          >
-            {t("pages.suspended.contactSupport")}
-          </a>
-        </div>
-        <Link
-          href="/login"
-          className="mt-10 text-xs text-muted-foreground transition hover:text-foreground"
-        >
-          {t("pages.suspended.backToLogin")}
-        </Link>
-      </section>
 
-      {/* Sección de planes + datos de pago */}
-      <section
-        id="renovar-plan"
-        className="mx-auto max-w-4xl scroll-mt-8 px-4 pb-20"
-      >
-        <h2 className="mb-2 text-center text-2xl font-bold tracking-tight">
-          {t("pages.suspended.choosePlanTitle")}
-        </h2>
-        <p className="mb-8 text-center text-sm text-muted-foreground">
-          {t("pages.suspended.choosePlanDescription")}
-        </p>
+      <div className="mx-auto max-w-[1000px] px-6 pb-20 pt-12">
+        {/* Encabezado: pill "en pausa" + título + subcopy */}
+        <div className="mb-8 flex flex-col items-center gap-4 text-center">
+          <div
+            className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-card py-1.5 pl-2 pr-3.5 dark:border-violet-500/30"
+            style={{ boxShadow: "0 2px 8px -2px rgba(124,58,237,0.18)" }}
+          >
+            <span
+              className="flex h-[26px] w-[26px] items-center justify-center rounded-[7px]"
+              style={{ background: "linear-gradient(135deg,#8B5CF6,#7C3AED)" }}
+            >
+              <Lock size={14} className="text-white" aria-hidden />
+            </span>
+            <span className="text-[12.5px] font-bold text-violet-700 dark:text-violet-300">
+              Tu panel está en pausa
+            </span>
+          </div>
+          <h1 className="text-4xl font-extrabold tracking-tight md:text-[40px]">Activa tu plan</h1>
+          <p className="max-w-[560px] text-base leading-relaxed text-muted-foreground">
+            Desbloquea tu panel completo —agenda, expedientes y facturación—. Pago seguro con
+            tarjeta, SPEI u OXXO; tu cuenta se reactiva al instante.
+          </p>
+        </div>
 
         <SuspendedPlanCards plans={planCards} currentPlan={currentPlan} />
 
-        {/* Datos de pago SPEI (alternativa manual) */}
-        <div
-          className="rounded-2xl border-2 bg-card p-6"
-          style={{ borderColor: "var(--brand)" }}
-        >
-          <div
-            className="mb-5 text-xs font-bold uppercase tracking-wider"
-            style={{ color: "var(--brand)" }}
-          >
-            {t("pages.suspended.speiAlternativeLabel")}
-          </div>
-          <div className="grid gap-5 sm:grid-cols-3">
-            <div>
-              <div className="mb-1 text-xs text-muted-foreground">
-                {t("pages.suspended.beneficiaryName")}
-              </div>
-              <div className="text-sm font-semibold">{BANK_INFO.nombre}</div>
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-muted-foreground">
-                {t("pages.suspended.clabe")}
-              </div>
-              <div
-                className="font-mono text-xl font-extrabold tracking-wider"
-                style={{ color: "var(--brand)" }}
-              >
-                {BANK_INFO.clabe}
-              </div>
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-muted-foreground">{t("pages.suspended.bank")}</div>
-              <div className="text-sm font-semibold">{BANK_INFO.banco}</div>
-            </div>
-          </div>
-          <div
-            className="mt-5 rounded-lg border p-3 text-xs"
-            style={{
-              background: "rgba(245, 158, 11, 0.08)",
-              borderColor: "rgba(245, 158, 11, 0.4)",
-              color: "rgb(180, 83, 9)",
-            }}
-          >
-            <strong>{t("pages.suspended.importantLabel")}</strong>{" "}
-            {t("pages.suspended.speiImportantNote")}
-          </div>
-        </div>
-
-        {/* Contacto */}
-        <div className="mt-6 text-center text-sm text-muted-foreground">
-          {t("pages.suspended.alreadyPaidPrefix")}{" "}
-          <a
-            href="mailto:soporte@dalecontrol.com"
-            className="font-semibold hover:underline"
-            style={{ color: "var(--brand)" }}
-          >
-            soporte@dalecontrol.com
-          </a>{" "}
-          {t("pages.suspended.alreadyPaidSuffix")}
-        </div>
-      </section>
+        <p className="mt-6 text-center text-[12.5px] text-muted-foreground">
+          <Link href="/login" className="transition hover:text-foreground">
+            ← {t("pages.suspended.backToLogin")}
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }

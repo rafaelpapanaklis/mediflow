@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
           event: event.type,
           sessionId: session.id,
           plan: session.metadata?.plan ?? null,
-        });
+        }, session.metadata?.billing === "annual" ? "annual" : "monthly");
         break;
       }
 
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
           event: event.type,
           sessionId: session.id,
           plan: session.metadata?.plan ?? null,
-        });
+        }, session.metadata?.billing === "annual" ? "annual" : "monthly");
         break;
       }
 
@@ -410,8 +410,15 @@ async function activatePlatformSubscription(
   clinicId: string,
   subscriptionId: string | null,
   source: { event: string; sessionId?: string; plan?: string | null },
+  billing: "monthly" | "annual" = "monthly",
 ): Promise<void> {
-  const nextMonth = new Date(Date.now() + ONE_MONTH_MS);
+  // Periodo cubierto: anual = +1 año, mensual = +1 mes (intacto). Para tarjeta
+  // los eventos customer.subscription.* luego fijan el current_period_end real
+  // de Stripe (anual → +1 año); para SPEI/OXXO (pago único) este es el valor
+  // definitivo.
+  const nextMonth = billing === "annual"
+    ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
+    : new Date(Date.now() + ONE_MONTH_MS);
 
   const before = await prisma.clinic.findUnique({
     where: { id: clinicId },

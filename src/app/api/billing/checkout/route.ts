@@ -12,9 +12,12 @@ export const dynamic = "force-dynamic";
 const BodySchema = z.object({
   plan: z.enum(PLAN_IDS),
   // Método de pago. "card" = suscripción que auto-renueva. "spei"/"oxxo" = pago
-  // único de 1 mes (asíncrono, NO auto-renueva). Default "card" para no romper
+  // único (asíncrono, NO auto-renueva). Default "card" para no romper
   // a los llamadores existentes (p. ej. las tarjetas de /dashboard/suspended).
   method: z.enum(["card", "spei", "oxxo"]).default("card"),
+  // Ciclo de facturación. "annual" = 10 meses (2 gratis). Default "monthly"
+  // para no romper a los llamadores existentes.
+  billing: z.enum(["monthly", "annual"]).default("monthly"),
 });
 
 /**
@@ -93,13 +96,18 @@ export async function POST(req: NextRequest) {
     new URL(req.url).origin;
 
   const method = parsed.data.method;
-  const unitAmount = plan.priceMxn * 100;
-  // metadata compartida: el webhook discrimina por kind y activa según el método.
+  const billing = parsed.data.billing;
+  // Anual = 10 meses (2 gratis). El monto sube; el PERIODO lo fija el webhook
+  // (nextBillingDate +1 año / +1 mes según metadata.billing).
+  const months = billing === "annual" ? 10 : 1;
+  const unitAmount = plan.priceMxn * months * 100;
+  // metadata compartida: el webhook discrimina por kind y activa según método+billing.
   const meta = {
     clinicId: clinic.id,
     plan: plan.id,
     kind: "platform-subscription",
     method,
+    billing,
   };
 
   let session;
@@ -115,9 +123,9 @@ export async function POST(req: NextRequest) {
           price_data: {
             currency: "mxn",
             unit_amount: unitAmount,
-            recurring: { interval: "month" },
+            recurring: { interval: billing === "annual" ? "year" : "month" },
             product_data: {
-              name: `DaleControl ${plan.name} — Suscripción mensual`,
+              name: `DaleControl ${plan.name} — Suscripción ${billing === "annual" ? "anual" : "mensual"}`,
               metadata: { plan: plan.id },
             },
           },
@@ -156,7 +164,7 @@ export async function POST(req: NextRequest) {
             currency: "mxn",
             unit_amount: unitAmount,
             product_data: {
-              name: `DaleControl ${plan.name} — 1 mes`,
+              name: `DaleControl ${plan.name} — ${billing === "annual" ? "1 año" : "1 mes"}`,
               metadata: { plan: plan.id },
             },
           },
@@ -189,7 +197,7 @@ export async function POST(req: NextRequest) {
     changes: {
       _created: {
         before: null,
-        after: { plan: plan.id, priceMxn: plan.priceMxn, sessionId: session.id },
+        after: { plan: plan.id, priceMxn: plan.priceMxn, billing, amountMxn: unitAmount / 100, sessionId: session.id },
       },
     },
     ipAddress,

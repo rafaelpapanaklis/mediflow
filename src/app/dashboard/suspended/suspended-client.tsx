@@ -2,7 +2,7 @@
 
 import { useRef, useState, type KeyboardEvent } from "react";
 import toast from "react-hot-toast";
-import { CreditCard, Loader2 } from "lucide-react";
+import { CreditCard, Loader2, Lock, Check } from "lucide-react";
 import type { PlanId } from "@/lib/billing/plans";
 import { useT } from "@/i18n/i18n-provider";
 
@@ -14,6 +14,7 @@ export interface PlanCardData {
 }
 
 type PayMethod = "card" | "spei" | "oxxo";
+type Billing = "monthly" | "annual";
 
 interface Props {
   plans: PlanCardData[];
@@ -27,14 +28,20 @@ const NEXT_PLAN: Record<PlanId, PlanId | null> = {
   CLINIC: null,
 };
 
+function fmt(n: number): string {
+  return "$" + Math.round(n).toLocaleString("es-MX");
+}
+
 export function SuspendedPlanCards({ plans, currentPlan = null }: Props) {
   const t = useT();
   const [pendingPlan, setPendingPlan] = useState<PlanId | null>(null);
   const [method, setMethod] = useState<PayMethod>("card");
+  const [billing, setBilling] = useState<Billing>("monthly");
   // Plan elegido por el usuario: las tarjetas son un radiogroup. Preselección =
   // su plan actual o, si no tiene, PRO (el popular). El pago se hace sobre este.
   const [selectedPlan, setSelectedPlan] = useState<PlanId>(currentPlan ?? "PRO");
   const cardRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const methodRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   // Plan recomendado (upsell). Sin plan actual válido, sugiere PRO (popular).
   const recommendedPlan: PlanId | null = currentPlan ? NEXT_PLAN[currentPlan] : "PRO";
@@ -45,17 +52,22 @@ export function SuspendedPlanCards({ plans, currentPlan = null }: Props) {
     return p ? p.priceMxn : null;
   }
 
+  // Precio/mes mostrado: anual = priceMxn*10/12 redondeado (2 meses gratis);
+  // mensual = priceMxn tal cual. Total anual = priceMxn*10.
+  function perMonth(priceMxn: number): number {
+    return billing === "annual" ? Math.round((priceMxn * 10) / 12) : priceMxn;
+  }
+  function annualTotal(priceMxn: number): number {
+    return priceMxn * 10;
+  }
+
   const methods: Array<{ id: PayMethod; label: string }> = [
     { id: "card", label: t("pages.suspended.methodCard") },
     { id: "spei", label: t("pages.suspended.methodSpei") },
     { id: "oxxo", label: t("pages.suspended.methodOxxo") },
   ];
-
-  // Conector del método para el CTA único ("con tarjeta" / "con SPEI" / "con OXXO").
-  const methodConnector =
-    method === "spei" ? t("pages.suspended.payConnectorSpei") :
-    method === "oxxo" ? t("pages.suspended.payConnectorOxxo") :
-    t("pages.suspended.payConnectorCard");
+  const methodIndex: Record<PayMethod, number> = { card: 0, spei: 1, oxxo: 2 };
+  const methodOrder: PayMethod[] = ["card", "spei", "oxxo"];
 
   function upsellBenefit(planId: PlanId): string {
     if (planId === "CLINIC") return t("pages.suspended.upsellBenefitClinic");
@@ -69,10 +81,9 @@ export function SuspendedPlanCards({ plans, currentPlan = null }: Props) {
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan, method }),
+        body: JSON.stringify({ plan, method, billing }),
       });
-      // Stripe no configurado → mensaje claro y apuntar al SPEI manual de abajo,
-      // sin dejar al usuario en limbo.
+      // Stripe no configurado → mensaje claro, sin dejar al usuario en limbo.
       if (res.status === 503) {
         toast.error(t("pages.suspended.paymentsUnavailable"));
         setPendingPlan(null);
@@ -89,7 +100,7 @@ export function SuspendedPlanCards({ plans, currentPlan = null }: Props) {
     }
   }
 
-  // Navegación accesible del radiogroup: las flechas mueven selección y foco.
+  // Navegación accesible del radiogroup de planes: flechas mueven selección y foco.
   function selectAt(index: number) {
     const p = plans[index];
     if (!p) return;
@@ -97,7 +108,6 @@ export function SuspendedPlanCards({ plans, currentPlan = null }: Props) {
     const el = cardRefs.current[index];
     if (el) el.focus();
   }
-
   function onCardKeyDown(e: KeyboardEvent<HTMLDivElement>, index: number) {
     const k = e.key;
     if (k === "Enter" || k === " " || k === "Spacebar") {
@@ -113,50 +123,62 @@ export function SuspendedPlanCards({ plans, currentPlan = null }: Props) {
     }
   }
 
+  // Mismo patrón de teclado en el selector de método (radiogroup).
+  function selectMethodAt(index: number) {
+    const m = methodOrder[(index + methodOrder.length) % methodOrder.length];
+    setMethod(m);
+    const el = methodRefs.current[methodOrder.indexOf(m)];
+    if (el) el.focus();
+  }
+  function onMethodKeyDown(e: KeyboardEvent<HTMLButtonElement>, index: number) {
+    const k = e.key;
+    if (k === "ArrowRight" || k === "ArrowDown") {
+      e.preventDefault();
+      selectMethodAt(index + 1);
+    } else if (k === "ArrowLeft" || k === "ArrowUp") {
+      e.preventDefault();
+      selectMethodAt(index - 1);
+    }
+  }
+
   const selected = plans.find((p) => p.id === selectedPlan) ?? plans[0];
   const isRedirecting = pendingPlan !== null;
-  const ctaLabel = selected
-    ? t("pages.suspended.payPlanCta", {
-        plan: selected.name,
-        connector: methodConnector,
-        price: String(selected.priceMxn),
-      })
-    : "";
+  const ctaPrice = selected ? perMonth(selected.priceMxn) : 0;
 
   return (
-    <div className="mb-8">
-      {/* Selector de método de pago (compartido por las 3 tarjetas) */}
-      <div className="mb-3 flex justify-center">
-        <div className="inline-flex flex-wrap justify-center rounded-xl border border-border bg-card p-1">
-          {methods.map((m) => {
-            const active = method === m.id;
-            return (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => setMethod(m.id)}
-                aria-pressed={active}
-                className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
-                  active ? "text-white" : "text-muted-foreground hover:text-foreground"
-                }`}
-                style={active ? { background: "var(--brand)" } : undefined}
-              >
-                {m.label}
-              </button>
-            );
-          })}
+    <div>
+      {/* === Toggle Mensual / Anual === */}
+      <div className="mb-7 flex flex-wrap items-center justify-center gap-3">
+        <div className="relative inline-flex rounded-full bg-[#ECEAF1] p-1.5 dark:bg-[#241F32]">
+          <span
+            aria-hidden
+            className="absolute bottom-1.5 left-1.5 top-1.5 rounded-full bg-white shadow-sm transition-transform duration-300 dark:bg-[#3A3450]"
+            style={{ width: "calc(50% - 6px)", transform: billing === "annual" ? "translateX(100%)" : "translateX(0)" }}
+          />
+          {(["monthly", "annual"] as Billing[]).map((b) => (
+            <button
+              key={b}
+              type="button"
+              onClick={() => setBilling(b)}
+              aria-pressed={billing === b}
+              className={`relative z-10 min-w-[112px] rounded-full px-4 py-2 text-[13.5px] font-bold transition-colors ${
+                billing === b ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {b === "monthly" ? "Mensual" : "Anual"}
+            </button>
+          ))}
         </div>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
+          2 meses gratis
+        </span>
       </div>
-      {method !== "card" && (
-        <p className="mb-5 text-center text-xs" style={{ color: "rgb(180,83,9)" }}>
-          {t("pages.suspended.asyncMethodNote")}
-        </p>
-      )}
 
+      {/* === Grid de planes (radiogroup) === */}
       <div
-        className="grid gap-4 sm:grid-cols-3"
         role="radiogroup"
         aria-label={t("pages.suspended.choosePlanTitle")}
+        className="mb-7 grid items-stretch gap-[18px] md:grid-cols-3"
       >
         {plans.map((plan, i) => {
           const isRecommended = plan.id === recommendedPlan;
@@ -167,28 +189,6 @@ export function SuspendedPlanCards({ plans, currentPlan = null }: Props) {
           const curPrice = priceOf(currentPlan);
           const showUpsellLine = isRecommended && curPrice != null;
           const upsellAmount = showUpsellLine ? plan.priceMxn - (curPrice as number) : 0;
-
-          // Base: recomendado = brand; actual = emerald; resto = default.
-          const baseClass = isRecommended
-            ? "border-2 shadow-md"
-            : isCurrent
-              ? "border-2"
-              : "border-border bg-card";
-          const baseStyle = isRecommended
-            ? { borderColor: "var(--brand)", background: "var(--brand-softer, hsl(var(--card)))" }
-            : isCurrent
-              ? { borderColor: "rgba(16,185,129,0.6)" }
-              : {};
-          // La SELECCIÓN manda encima: borde brand marcado + anillo, claramente
-          // distinto de los badges (★ recomendado / tu plan actual / tope).
-          const selectedStyle = isSelected
-            ? {
-                borderColor: "var(--brand)",
-                boxShadow:
-                  "0 0 0 3px var(--brand-soft, rgba(124,58,237,0.35)), 0 10px 24px -12px rgba(0,0,0,0.25)",
-              }
-            : {};
-          const cardStyle = { ...baseStyle, ...selectedStyle };
 
           return (
             <div
@@ -201,89 +201,172 @@ export function SuspendedPlanCards({ plans, currentPlan = null }: Props) {
               tabIndex={isSelected ? 0 : -1}
               onClick={() => setSelectedPlan(plan.id)}
               onKeyDown={(e) => onCardKeyDown(e, i)}
-              className={`relative flex cursor-pointer select-none flex-col rounded-2xl border p-5 transition ${
-                isSelected ? "border-2" : ""
-              } ${baseClass}`}
-              style={cardStyle}
+              className={`relative flex cursor-pointer select-none flex-col rounded-[20px] border p-[22px] outline-none transition-[transform,box-shadow] duration-200 hover:-translate-y-[3px] focus-visible:ring-2 focus-visible:ring-violet-500/60 ${
+                isRecommended
+                  ? "border-violet-200 bg-violet-50/60 dark:border-violet-500/30 dark:bg-violet-500/[0.06]"
+                  : "border-border bg-card"
+              }`}
+              style={
+                isSelected
+                  ? {
+                      borderColor: "var(--brand)",
+                      boxShadow:
+                        "0 0 0 4px rgba(124,58,237,0.13), 0 20px 42px -22px rgba(124,58,237,0.5)",
+                    }
+                  : { boxShadow: "0 1px 2px rgba(16,24,40,0.04)" }
+              }
             >
-              {/* Check de selección (esquina), sin tapar los badges de la izquierda */}
-              {isSelected && (
-                <span
-                  aria-hidden
-                  className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold text-white"
-                  style={{ background: "var(--brand)" }}
-                >
-                  ✓
-                </span>
-              )}
-
-              {/* Badges: recomendado / tu plan actual / tope */}
-              {(isRecommended || isCurrent || isTop) && (
-                <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 pr-7">
-                  {isRecommended && (
-                    <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--brand)" }}>
-                      ★ {t("pages.suspended.recommendedBadge")}
-                    </span>
-                  )}
-                  {isCurrent && (
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-500">
-                      {t("pages.suspended.currentPlanBadge")}
-                    </span>
-                  )}
-                  {isTop && (
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                      {t("pages.suspended.topPlanBadge")}
-                    </span>
-                  )}
+              <div className="flex flex-col gap-[13px]">
+                {/* Badges + radio */}
+                <div className="flex min-h-[24px] items-start justify-between gap-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {isRecommended && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wide text-white"
+                        style={{ background: "linear-gradient(135deg,#8B5CF6,#7C3AED)" }}
+                      >
+                        ★ {t("pages.suspended.recommendedBadge")}
+                      </span>
+                    )}
+                    {isCurrent && (
+                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wide text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
+                        {t("pages.suspended.currentPlanBadge")}
+                      </span>
+                    )}
+                    {isTop && (
+                      <span className="rounded-full border border-border px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wide text-muted-foreground">
+                        {t("pages.suspended.topPlanBadge")}
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    className={`relative h-[22px] w-[22px] flex-shrink-0 rounded-full border-2 ${
+                      isSelected ? "border-violet-600 dark:border-violet-500" : "border-[#D6D3DE] dark:border-[#3A3450]"
+                    }`}
+                  >
+                    {isSelected && (
+                      <span className="absolute inset-[3px] rounded-full bg-violet-600 dark:bg-violet-500" />
+                    )}
+                  </div>
                 </div>
-              )}
 
-              <div className="mb-1 text-base font-bold">{plan.name}</div>
-              <div className="text-2xl font-extrabold" style={{ color: "var(--brand)" }}>
-                ${plan.priceMxn}{t("pages.suspended.perMonth")}
+                <div className="text-[17px] font-bold tracking-tight">{plan.name}</div>
+
+                <div className="flex items-baseline gap-1">
+                  <span className="text-[34px] font-extrabold leading-none tracking-tight text-violet-600 dark:text-violet-400">
+                    {fmt(perMonth(plan.priceMxn))}
+                  </span>
+                  <span className="text-sm font-semibold text-muted-foreground">
+                    {t("pages.suspended.perMonth")}
+                  </span>
+                </div>
+                <div className="-mt-1 text-xs text-muted-foreground">
+                  {billing === "annual"
+                    ? `${fmt(annualTotal(plan.priceMxn))} al año · 2 meses gratis`
+                    : "Facturación mensual · cancela cuando quieras"}
+                </div>
+
+                {showUpsellLine && (
+                  <div className="rounded-[9px] bg-violet-500/10 px-2.5 py-2 text-xs font-semibold text-violet-700 dark:text-violet-300">
+                    {t("pages.suspended.upsellLine", {
+                      amount: upsellAmount.toLocaleString("es-MX"),
+                      benefit: upsellBenefit(plan.id),
+                    })}
+                  </div>
+                )}
+
+                <div className="my-0.5 h-px bg-border" />
+
+                <div className="flex flex-col gap-[9px]">
+                  {plan.features.map((f) => (
+                    <div key={f} className="flex items-center gap-2.5 text-[13.5px] text-muted-foreground">
+                      <Check size={16} strokeWidth={2.4} className="flex-shrink-0 text-green-600 dark:text-emerald-400" aria-hidden />
+                      {f}
+                    </div>
+                  ))}
+                </div>
               </div>
-
-              {showUpsellLine && (
-                <div className="mb-3 mt-1 text-xs font-semibold" style={{ color: "var(--brand)" }}>
-                  {t("pages.suspended.upsellLine", {
-                    amount: upsellAmount.toLocaleString("es-MX"),
-                    benefit: upsellBenefit(plan.id),
-                  })}
-                </div>
-              )}
-
-              <ul className={`${showUpsellLine ? "" : "mt-4"} space-y-1.5`}>
-                {plan.features.map((f) => (
-                  <li key={f} className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="text-emerald-500">✓</span>
-                    {f}
-                  </li>
-                ))}
-              </ul>
             </div>
           );
         })}
       </div>
 
-      {/* CTA único: paga el plan seleccionado con el método elegido */}
-      <div className="mt-6 flex justify-center">
+      {/* === Barra de checkout: método + CTA + señales de confianza === */}
+      <div
+        className="mx-auto flex max-w-[560px] flex-col items-center gap-4 rounded-[18px] border border-border bg-card p-[22px]"
+        style={{ boxShadow: "0 1px 2px rgba(16,24,40,0.04), 0 18px 40px -28px rgba(16,24,40,0.3)" }}
+      >
+        {/* Selector de método (pill deslizante) */}
+        <div
+          role="radiogroup"
+          aria-label={t("pages.suspended.methodCard")}
+          className="relative flex w-full rounded-[13px] bg-[#F1F0F4] p-1.5 dark:bg-[#241F32]"
+        >
+          <span
+            aria-hidden
+            className="absolute bottom-1.5 left-1.5 top-1.5 rounded-[9px] bg-white shadow-sm transition-transform duration-300 dark:bg-[#3A3450]"
+            style={{ width: "calc((100% - 12px) / 3)", transform: `translateX(${methodIndex[method] * 100}%)` }}
+          />
+          {methods.map((m, i) => {
+            const active = method === m.id;
+            return (
+              <button
+                key={m.id}
+                ref={(el) => {
+                  methodRefs.current[i] = el;
+                }}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                tabIndex={active ? 0 : -1}
+                onClick={() => setMethod(m.id)}
+                onKeyDown={(e) => onMethodKeyDown(e, i)}
+                className={`relative z-10 flex flex-1 items-center justify-center gap-1.5 rounded-[9px] px-1 py-2.5 text-[13px] font-bold transition-colors ${
+                  active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {m.id === "card" && <CreditCard size={16} aria-hidden />}
+                {m.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {method !== "card" && (
+          <p className="-mt-1 text-center text-xs" style={{ color: "rgb(180,83,9)" }}>
+            {t("pages.suspended.asyncMethodNote")}
+          </p>
+        )}
+
+        {/* CTA único: paga el plan seleccionado con el método y ciclo elegidos */}
         <button
           type="button"
           onClick={() => handleStripeCheckout(selectedPlan)}
           disabled={isRedirecting}
-          className="inline-flex w-full max-w-md items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-base font-bold text-white shadow-lg transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          className="flex w-full items-center justify-center gap-2.5 rounded-[13px] px-4 py-[15px] text-[15px] font-bold text-white transition-transform hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-70"
           style={{
-            background: "var(--brand)",
-            boxShadow: "0 10px 30px -8px var(--brand-soft, rgba(124,58,237,0.4))",
+            background: "linear-gradient(135deg,#7C3AED,#6D28D9)",
+            boxShadow: "0 14px 30px -10px rgba(124,58,237,0.6)",
           }}
         >
-          {isRedirecting ? (
-            <Loader2 size={16} className="animate-spin" aria-hidden />
-          ) : (
-            <CreditCard size={16} aria-hidden />
-          )}
-          {isRedirecting ? t("pages.suspended.redirecting") : ctaLabel}
+          {isRedirecting ? <Loader2 size={17} className="animate-spin" aria-hidden /> : <Lock size={17} aria-hidden />}
+          {isRedirecting
+            ? t("pages.suspended.redirecting")
+            : selected
+              ? `Pagar ${selected.name} — ${fmt(ctaPrice)}/mes`
+              : ""}
         </button>
+
+        {/* Señales de confianza */}
+        <div className="flex flex-wrap items-center justify-center gap-2 text-xs font-semibold text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <Lock size={13} aria-hidden /> Pago seguro vía Stripe
+          </span>
+          <span className="text-border">·</span>
+          <span>Cancela cuando quieras</span>
+          <span className="text-border">·</span>
+          <span>Sin contratos</span>
+        </div>
       </div>
     </div>
   );
