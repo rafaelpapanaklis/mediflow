@@ -9,8 +9,9 @@
 -- NO toca aiTokensUsed ni aiLastResetAt (el consumo del periodo se conserva).
 -- El monedero de recargas de IA es OTRO sistema (sql/ai-billing.sql) — no se toca aquí.
 -- Aplicar a mano en Supabase (no se aplica solo).
+-- OJO: la tabla física es "clinics" (Prisma @@map), NO "Clinic" (nombre del modelo).
 
-UPDATE "Clinic" SET "aiTokensLimit" = CASE "plan"::text
+UPDATE "clinics" SET "aiTokensLimit" = CASE "plan"::text
   WHEN 'BASIC'  THEN 50000
   WHEN 'PRO'    THEN 200000
   WHEN 'CLINIC' THEN 1000000
