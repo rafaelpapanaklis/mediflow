@@ -30,7 +30,9 @@ import {
   Megaphone,
   AlertTriangle,
   CalendarDays,
+  RotateCw,
 } from "lucide-react";
+import { EmptyStateNew } from "@/components/dashboard/empty-state";
 
 interface Post {
   id: string;
@@ -206,10 +208,10 @@ export default function CalendarClient() {
         {/* Barra superior */}
         <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 14 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <button type="button" aria-label="Anterior" onClick={() => go(-1)} style={iconBtn}>
+            <button type="button" aria-label={view === "month" ? "Mes anterior" : "Semana anterior"} onClick={() => go(-1)} style={iconBtn}>
               <ChevronLeft size={18} aria-hidden />
             </button>
-            <button type="button" aria-label="Siguiente" onClick={() => go(1)} style={iconBtn}>
+            <button type="button" aria-label={view === "month" ? "Mes siguiente" : "Semana siguiente"} onClick={() => go(1)} style={iconBtn}>
               <ChevronRight size={18} aria-hidden />
             </button>
             <button
@@ -241,7 +243,7 @@ export default function CalendarClient() {
                     fontSize: 13,
                     fontWeight: 600,
                     borderRadius: 7,
-                    color: view === v ? "var(--brand)" : "var(--text-3)",
+                    color: view === v ? "var(--brand)" : "var(--text-2)",
                     background: view === v ? "var(--bg-elev)" : "transparent",
                   }}
                 >
@@ -280,6 +282,7 @@ export default function CalendarClient() {
             style={{
               display: "flex",
               alignItems: "center",
+              flexWrap: "wrap",
               gap: 8,
               fontSize: 13,
               color: "var(--warning)",
@@ -290,7 +293,29 @@ export default function CalendarClient() {
               marginBottom: 12,
             }}
           >
-            <AlertTriangle size={16} aria-hidden /> {error}
+            <AlertTriangle size={16} aria-hidden style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1, minWidth: 0 }}>{error}</span>
+            <button
+              type="button"
+              onClick={() => void loadGrid(fromISO, toISO)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                minHeight: 32,
+                padding: "0 12px",
+                fontSize: 12,
+                fontWeight: 600,
+                color: "var(--warning)",
+                background: "var(--bg-elev)",
+                border: "1px solid var(--warning)",
+                borderRadius: 8,
+                cursor: "pointer",
+                flexShrink: 0,
+              }}
+            >
+              <RotateCw size={13} aria-hidden /> Reintentar
+            </button>
           </div>
         ) : null}
 
@@ -304,7 +329,7 @@ export default function CalendarClient() {
         </div>
 
         {/* Grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 5 }}>
+        <div aria-busy={loading} style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 5 }}>
           {cells.map((day) => {
             const key = format(day, "yyyy-MM-dd");
             const dayPosts = byDay[key] ?? [];
@@ -356,6 +381,7 @@ export default function CalendarClient() {
                       key={p.id}
                       type="button"
                       title={`${st.label} · ${p.caption}`}
+                      aria-label={`${st.label}: ${p.caption || "(sin texto)"}. Editar publicación`}
                       onClick={(e) => {
                         e.stopPropagation();
                         openEdit(p.id);
@@ -399,8 +425,8 @@ export default function CalendarClient() {
         {/* Leyenda de estados (color no es el único indicador) */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 14 }}>
           {Object.keys(STATUS_META).map((k) => (
-            <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-3)" }}>
-              <span style={{ width: 9, height: 9, borderRadius: "50%", background: STATUS_META[k].color }} aria-hidden />
+            <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-2)" }}>
+              <span style={{ width: 9, height: 9, borderRadius: "50%", background: STATUS_META[k].color, flexShrink: 0 }} aria-hidden />
               {STATUS_META[k].label}
             </span>
           ))}
@@ -414,27 +440,14 @@ export default function CalendarClient() {
           <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>Próximas</h3>
         </div>
         {upcoming.length === 0 ? (
-          <div
-            style={{
-              fontSize: 13,
-              color: "var(--text-3)",
-              background: "var(--bg-elev)",
-              border: "1px dashed var(--border-soft)",
-              borderRadius: 12,
-              padding: 18,
-              textAlign: "center",
-            }}
-          >
-            No tienes publicaciones programadas.
-            <br />
-            <button
-              type="button"
-              onClick={() => openCreate()}
-              style={{ marginTop: 10, color: "var(--brand)", background: "none", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
-            >
-              Crear la primera →
-            </button>
-          </div>
+          <EmptyStateNew
+            icon={CalendarDays}
+            size="sm"
+            tone="brand"
+            title="Sin publicaciones programadas"
+            description="Programa tu primera publicación para verla aquí."
+            primaryCta={{ label: "Crear la primera", icon: Plus, onClick: () => openCreate() }}
+          />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {upcoming.map((p) => {

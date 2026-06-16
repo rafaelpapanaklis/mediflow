@@ -300,7 +300,7 @@ export default function StudioClient({ initialTokens }: { initialTokens: TokenIn
         <div style={{ height: 6, borderRadius: 99, background: "var(--bg-elev-2)", marginTop: 7, overflow: "hidden" }}>
           <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 99, transition: "width .3s" }} />
         </div>
-        <div style={{ fontSize: 11, color: "var(--text-4)", marginTop: 5 }}>
+        <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 5 }}>
           de {tokens.limit.toLocaleString("es-MX")} este mes
         </div>
       </div>
@@ -452,6 +452,7 @@ export default function StudioClient({ initialTokens }: { initialTokens: TokenIn
             type="button"
             className="mkt-btn-primary"
             onClick={generate}
+            aria-busy={loading}
             disabled={loading || (!!tokens && tokens.remaining <= 0)}
           >
             {loading ? (
@@ -481,19 +482,24 @@ export default function StudioClient({ initialTokens }: { initialTokens: TokenIn
             fontSize: 13.5,
             color: limitReached ? "var(--warning)" : "var(--danger)",
             background: limitReached ? "var(--warning-soft)" : "var(--danger-soft)",
-            border: `1px solid ${limitReached ? "var(--warning-soft)" : "var(--danger-soft)"}`,
+            border: `1px solid ${limitReached ? "var(--warning)" : "var(--danger)"}`,
           }}
         >
           <AlertCircle size={17} aria-hidden style={{ flexShrink: 0, marginTop: 1 }} />
-          <span>{error}</span>
+          <span style={{ minWidth: 0, wordBreak: "break-word" }}>{error}</span>
         </div>
       )}
 
       {/* Resultados / estados */}
       {loading ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
+        <div
+          role="status"
+          aria-busy="true"
+          aria-label="Generando contenido con IA"
+          style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}
+        >
           {[0, 1, 2].map((i) => (
-            <div key={i} className="mkt-skel" style={{ height: 150, borderRadius: 14 }} />
+            <div key={i} className="mkt-skel" aria-hidden style={{ height: 150, borderRadius: 14 }} />
           ))}
         </div>
       ) : result && result.items.length > 0 ? (
@@ -543,6 +549,7 @@ export default function StudioClient({ initialTokens }: { initialTokens: TokenIn
                     className="mkt-iconbtn"
                     onClick={() => onSendToComposer(item)}
                     title="Enviar al Composer"
+                    aria-label="Enviar este texto al Composer"
                   >
                     <Send size={14} aria-hidden /> Al Composer
                   </button>
@@ -647,7 +654,7 @@ const FIELD_LABEL: CSSProperties = {
 const STYLES = `
 .mkt-chip {
   display: inline-flex; align-items: center; gap: 7px;
-  padding: 8px 13px; font-size: 13px; font-weight: 500; cursor: pointer;
+  min-height: 36px; padding: 8px 13px; font-size: 13px; font-weight: 500; cursor: pointer;
   color: var(--text-2); background: var(--bg);
   border: 1px solid var(--border-soft); border-radius: 10px;
   transition: background .12s, color .12s, border-color .12s;
@@ -688,8 +695,8 @@ const STYLES = `
 }
 .mkt-card:hover { border-color: var(--border-strong); box-shadow: 0 4px 18px rgba(0,0,0,0.06); }
 .mkt-iconbtn {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 6px 11px; font-size: 12.5px; font-weight: 500; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 36px; padding: 8px 12px; font-size: 12.5px; font-weight: 500; cursor: pointer;
   color: var(--text-2); background: transparent;
   border: 1px solid var(--border-soft); border-radius: 8px;
   transition: background .12s, color .12s, border-color .12s;

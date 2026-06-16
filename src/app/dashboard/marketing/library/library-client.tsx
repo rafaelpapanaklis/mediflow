@@ -111,7 +111,7 @@ export function MarketingLibraryClient({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <p style={{ margin: 0, fontSize: 13, color: "var(--text-3)", maxWidth: 640 }}>
+      <p style={{ margin: 0, fontSize: 13, color: "var(--text-2)", maxWidth: 640 }}>
         Plantillas listas para inspirarte. Cópialas o llévalas al editor y publica en minutos. Las que
         guardes desde el Estudio IA aparecerán aquí, en tu clínica.
       </p>
@@ -199,7 +199,7 @@ export function MarketingLibraryClient({
                 type="button"
                 onClick={() => setQuery("")}
                 aria-label="Limpiar búsqueda"
-                style={{ display: "grid", placeItems: "center", border: "none", background: "transparent", cursor: "pointer", color: "var(--text-3)", padding: 2 }}
+                style={{ display: "grid", placeItems: "center", border: "none", background: "transparent", cursor: "pointer", color: "var(--text-3)", padding: 0, width: 28, height: 28, flexShrink: 0, marginRight: -4 }}
               >
                 <X size={14} />
               </button>
@@ -228,7 +228,7 @@ export function MarketingLibraryClient({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(290px, 100%), 1fr))",
             gap: 14,
             alignItems: "start",
           }}
@@ -345,7 +345,7 @@ function TemplateCard({
         {tpl.source === "clinic" && (
           <span
             title="Plantilla guardada por tu clínica"
-            style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, color: "#059669" }}
+            style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, color: "var(--success)" }}
           >
             <BadgeCheck size={13} aria-hidden /> Tuya
           </span>
@@ -353,7 +353,7 @@ function TemplateCard({
       </div>
 
       {/* Título */}
-      <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "var(--text-1)", letterSpacing: "-0.01em" }}>
+      <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "var(--text-1)", letterSpacing: "-0.01em", overflowWrap: "anywhere" }}>
         {tpl.title}
       </h3>
 
@@ -377,7 +377,7 @@ function TemplateCard({
       {tpl.tags.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
           {tpl.tags.map((tag) => (
-            <span key={tag} style={{ fontSize: 10.5, color: "var(--text-3)", background: "var(--bg-elev-2, rgba(127,127,127,0.06))", borderRadius: 6, padding: "2px 7px" }}>
+            <span key={tag} style={{ fontSize: 10.5, color: "var(--text-3)", background: "var(--bg-elev-2, rgba(127,127,127,0.06))", borderRadius: 6, padding: "2px 7px", overflowWrap: "anywhere", maxWidth: "100%" }}>
               #{tag}
             </span>
           ))}
@@ -389,6 +389,7 @@ function TemplateCard({
         <button
           type="button"
           onClick={onCopy}
+          aria-label={copied ? `Texto de "${tpl.title}" copiado` : `Copiar texto de "${tpl.title}"`}
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -401,9 +402,9 @@ function TemplateCard({
             fontWeight: 500,
             cursor: "pointer",
             fontFamily: "inherit",
-            background: copied ? "var(--success-soft, rgba(16,185,129,0.12))" : "var(--bg-elev)",
-            color: copied ? "#059669" : "var(--text-1)",
-            border: `1px solid ${copied ? "rgba(16,185,129,0.35)" : "var(--border-strong, var(--border-soft))"}`,
+            background: copied ? "var(--success-soft)" : "var(--bg-elev)",
+            color: copied ? "var(--success)" : "var(--text-1)",
+            border: `1px solid ${copied ? "var(--success)" : "var(--border-strong, var(--border-soft))"}`,
             transition: "background 0.15s, color 0.15s, border-color 0.15s",
           }}
         >
@@ -412,6 +413,7 @@ function TemplateCard({
         </button>
         <Link
           href={composerHref}
+          aria-label={`Usar "${tpl.title}" en el Composer`}
           style={{
             display: "inline-flex",
             alignItems: "center",

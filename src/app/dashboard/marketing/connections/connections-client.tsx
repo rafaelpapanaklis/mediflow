@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import { CheckCircle2, CircleSlash, Link2, Unplug } from "lucide-react";
+import { EmptyStateNew } from "@/components/dashboard/empty-state";
 
 export interface ConnectionAccount {
   id: string;
@@ -81,8 +83,8 @@ export function ConnectionsClient({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <header style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "var(--text-1)" }}>Conexiones</h1>
-        <p style={{ margin: 0, fontSize: 14, color: "var(--text-3)", maxWidth: 580 }}>
+        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 600, color: "var(--text-1)" }}>Conexiones</h2>
+        <p style={{ margin: 0, fontSize: 14, color: "var(--text-2)", maxWidth: 580 }}>
           Vincula tu Página de Facebook e Instagram para publicar desde DaleControl. Tu Instagram
           debe ser <strong>Business</strong> y estar vinculado a una Página de Facebook.
         </p>
@@ -99,17 +101,26 @@ export function ConnectionsClient({
           }}
         >
           <div>
-            <h2 style={cardTitle}>Facebook + Instagram</h2>
-            <p style={{ margin: 0, fontSize: 13, color: "var(--text-3)" }}>
+            <h3 style={cardTitle}>Facebook + Instagram</h3>
+            <p style={{ margin: 0, fontSize: 13, color: "var(--text-2)" }}>
               Te llevaremos a Meta para autorizar tus páginas.
             </p>
           </div>
           {canManage ? (
-            <a href="/api/marketing/oauth/start" style={primaryBtn}>
+            <a
+              href="/api/marketing/oauth/start"
+              style={primaryBtn}
+              aria-label={
+                facebook.length > 0
+                  ? "Reconectar Facebook e Instagram con Meta"
+                  : "Conectar Facebook e Instagram con Meta"
+              }
+            >
+              <Link2 size={16} aria-hidden style={{ flexShrink: 0 }} />
               {facebook.length > 0 ? "Reconectar" : "Conectar con Facebook"}
             </a>
           ) : (
-            <span style={{ fontSize: 13, color: "var(--text-3)" }}>
+            <span style={{ fontSize: 13, color: "var(--text-2)" }}>
               Solo un administrador puede conectar.
             </span>
           )}
@@ -117,7 +128,23 @@ export function ConnectionsClient({
       </section>
 
       {accounts.length === 0 ? (
-        <p style={{ fontSize: 14, color: "var(--text-3)" }}>Aún no hay cuentas conectadas.</p>
+        <section style={cardStyle} aria-label="Sin cuentas conectadas">
+          <EmptyStateNew
+            icon={Link2}
+            tone="brand"
+            title="Aún no hay cuentas conectadas"
+            description="Vincula tu Página de Facebook e Instagram para empezar a publicar desde DaleControl."
+            primaryCta={
+              canManage
+                ? {
+                    label: "Conectar con Facebook",
+                    href: "/api/marketing/oauth/start",
+                    icon: Link2,
+                  }
+                : undefined
+            }
+          />
+        </section>
       ) : (
         <section style={{ display: "grid", gap: 12 }}>
           {facebook.map((fb) => {
@@ -134,28 +161,48 @@ export function ConnectionsClient({
                     gap: 12,
                   }}
                 >
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <span style={badge("#1877F2")}>Facebook</span>
-                    <strong style={{ color: "var(--text-1)", fontSize: 15 }}>
-                      {fb.name ?? "Página"}
-                    </strong>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span style={badge("#1877F2")}>Facebook</span>
+                      <StatusPill connected={fb.connected} />
+                    </div>
+                    <strong style={ellipsisStrong}>{fb.name ?? "Página"}</strong>
                     {ig ? (
-                      <span style={{ fontSize: 13, color: "var(--text-2)" }}>
-                        <span style={badge("#E1306C")}>Instagram</span> @{ig.name ?? ig.externalId}
+                      <span
+                        style={{
+                          fontSize: 13,
+                          color: "var(--text-2)",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <span style={badge("linear-gradient(135deg,#f58529,#dd2a7b,#8134af)")}>Instagram</span> @{ig.name ?? ig.externalId}
                       </span>
                     ) : (
-                      <span style={{ fontSize: 12, color: "var(--text-3)" }}>
+                      <span style={{ fontSize: 12, color: "var(--text-2)" }}>
                         Sin Instagram vinculado
                       </span>
                     )}
                   </div>
                   {canManage && (
                     <button
+                      type="button"
                       onClick={() => disconnect(fb.id, fb.name ?? "esta página")}
                       disabled={busy === fb.id}
+                      aria-busy={busy === fb.id}
+                      aria-label={`Desconectar ${fb.name ?? "esta página"} de Facebook`}
                       style={dangerBtn}
                     >
-                      {busy === fb.id ? "…" : "Desconectar"}
+                      {busy === fb.id ? (
+                        "Desconectando…"
+                      ) : (
+                        <>
+                          <Unplug size={14} aria-hidden style={{ flexShrink: 0 }} />
+                          Desconectar
+                        </>
+                      )}
                     </button>
                   )}
                 </div>
@@ -173,19 +220,28 @@ export function ConnectionsClient({
                   gap: 12,
                 }}
               >
-                <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
                   <span style={badge("#E1306C")}>Instagram</span>
-                  <strong style={{ color: "var(--text-1)", fontSize: 15, marginLeft: 8 }}>
-                    @{ig.name ?? ig.externalId}
-                  </strong>
+                  <StatusPill connected={ig.connected} />
+                  <strong style={ellipsisStrong}>@{ig.name ?? ig.externalId}</strong>
                 </div>
                 {canManage && (
                   <button
+                    type="button"
                     onClick={() => disconnect(ig.id, `@${ig.name ?? ig.externalId}`)}
                     disabled={busy === ig.id}
+                    aria-busy={busy === ig.id}
+                    aria-label={`Desconectar @${ig.name ?? ig.externalId} de Instagram`}
                     style={dangerBtn}
                   >
-                    {busy === ig.id ? "…" : "Desconectar"}
+                    {busy === ig.id ? (
+                      "Desconectando…"
+                    ) : (
+                      <>
+                        <Unplug size={14} aria-hidden style={{ flexShrink: 0 }} />
+                        Desconectar
+                      </>
+                    )}
                   </button>
                 )}
               </div>
@@ -213,25 +269,41 @@ const primaryBtn: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   gap: 8,
-  padding: "10px 16px",
+  minHeight: 40,
+  padding: "0 16px",
   borderRadius: 10,
-  background: "#1877F2",
+  background: "var(--brand)",
   color: "#fff",
   fontSize: 14,
   fontWeight: 600,
   textDecoration: "none",
   border: "none",
   cursor: "pointer",
+  boxShadow: "0 4px 16px -6px rgba(124,58,237,0.6)",
 };
 const dangerBtn: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  minHeight: 36,
   padding: "8px 12px",
   borderRadius: 8,
   background: "transparent",
-  color: "#dc2626",
+  color: "var(--danger)",
   border: "1px solid var(--border-soft)",
   fontSize: 13,
   fontWeight: 600,
   cursor: "pointer",
+  whiteSpace: "nowrap",
+  flexShrink: 0,
+};
+const ellipsisStrong: React.CSSProperties = {
+  color: "var(--text-1)",
+  fontSize: 15,
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 function badge(color: string): React.CSSProperties {
   return {
@@ -242,5 +314,35 @@ function badge(color: string): React.CSSProperties {
     color: "#fff",
     fontSize: 11,
     fontWeight: 700,
+    flexShrink: 0,
   };
+}
+
+/**
+ * Estado real de la conexión (lo trae el server desde
+ * /api/marketing/connections → socialAccount.connected). No es solo color:
+ * incluye icono + texto para accesibilidad (no depende del color).
+ */
+function StatusPill({ connected }: { connected: boolean }) {
+  const Icon = connected ? CheckCircle2 : CircleSlash;
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 5,
+        padding: "2px 8px",
+        borderRadius: 999,
+        fontSize: 11,
+        fontWeight: 600,
+        flexShrink: 0,
+        background: connected ? "var(--success-soft)" : "var(--bg-elev-2)",
+        color: connected ? "var(--success)" : "var(--text-2)",
+        border: `1px solid ${connected ? "var(--success)" : "var(--border-soft)"}`,
+      }}
+    >
+      <Icon size={12} aria-hidden style={{ flexShrink: 0 }} />
+      {connected ? "Conectada" : "Desconectada"}
+    </span>
+  );
 }

@@ -92,14 +92,14 @@ export function MarketingOverviewClient({ data }: { data: OverviewData }) {
             gap: 10,
             padding: "10px 14px",
             borderRadius: 12,
-            background: "rgba(220, 38, 38, 0.08)",
-            border: "1px solid rgba(220, 38, 38, 0.25)",
+            background: "var(--danger-soft)",
+            border: "1px solid var(--danger)",
             color: "var(--text-1)",
             textDecoration: "none",
             fontSize: 13,
           }}
         >
-          <AlertTriangle size={16} aria-hidden style={{ color: "#dc2626", flexShrink: 0 }} />
+          <AlertTriangle size={16} aria-hidden style={{ color: "var(--danger)", flexShrink: 0 }} />
           <span>
             {data.failed === 1
               ? "1 publicación falló al enviarse."
@@ -439,7 +439,7 @@ function UpcomingRow({ post }: { post: UpcomingPost }) {
         >
           {post.caption?.trim() || "(sin texto)"}
         </span>
-        <span style={{ fontSize: 11.5, color: "var(--text-3)" }}>{formatWhen(post.scheduledFor)}</span>
+        <span style={{ fontSize: 11.5, color: "var(--text-2)" }}>{formatWhen(post.scheduledFor)}</span>
       </span>
     </li>
   );
@@ -482,13 +482,13 @@ function ConnectionRow({ provider, name }: { provider?: string; name?: string })
           marginLeft: "auto",
           fontSize: 11,
           fontWeight: 600,
-          color: "#059669",
+          color: "var(--success)",
           display: "inline-flex",
           alignItems: "center",
           gap: 4,
         }}
       >
-        <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981" }} aria-hidden />
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--success)" }} aria-hidden />
         Conectada
       </span>
     </div>

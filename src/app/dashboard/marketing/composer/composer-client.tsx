@@ -398,6 +398,8 @@ export default function ComposerClient({ connections, initialCaption, initialDat
           />
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
             <span
+              aria-live="polite"
+              aria-label={`${caption.length} de ${captionLimit} caracteres${overLimit ? ", superas el límite" : ""}`}
               style={{
                 fontSize: 12,
                 fontWeight: 600,
@@ -466,6 +468,8 @@ export default function ComposerClient({ connections, initialCaption, initialDat
                 type="button"
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading}
+                aria-busy={uploading}
+                aria-label={uploading ? "Subiendo imagen" : "Añadir imagen"}
                 style={{
                   width: 84,
                   height: 84,
@@ -559,6 +563,7 @@ export default function ComposerClient({ connections, initialCaption, initialDat
             type="button"
             onClick={() => submit("DRAFT")}
             disabled={draftDisabled}
+            aria-busy={saving}
             style={{
               ...baseBtn,
               color: "var(--text-1)",
@@ -577,6 +582,7 @@ export default function ComposerClient({ connections, initialCaption, initialDat
               type="button"
               onClick={() => submit("SCHEDULED")}
               disabled={scheduleDisabled}
+              aria-busy={saving}
               style={{
                 ...baseBtn,
                 flex: "1 1 200px",
@@ -595,6 +601,7 @@ export default function ComposerClient({ connections, initialCaption, initialDat
               type="button"
               onClick={() => submit("NOW")}
               disabled={publishNowDisabled}
+              aria-busy={saving}
               title={!channelConnected ? "Conecta tu red social para publicar al instante" : undefined}
               style={{
                 ...baseBtn,
@@ -677,7 +684,7 @@ export default function ComposerClient({ connections, initialCaption, initialDat
                 ) : null}
               </>
             ) : (
-              <span style={{ fontSize: 12, color: "var(--text-4)", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 12, color: "var(--text-3)", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
                 <ImagePlus size={26} aria-hidden />
                 Sin imagen
               </span>
@@ -690,7 +697,7 @@ export default function ComposerClient({ connections, initialCaption, initialDat
                 margin: 0,
                 fontSize: 13,
                 lineHeight: 1.55,
-                color: caption.trim() ? "var(--text-1)" : "var(--text-4)",
+                color: caption.trim() ? "var(--text-1)" : "var(--text-3)",
                 whiteSpace: "pre-wrap",
                 wordBreak: "break-word",
                 maxHeight: 160,

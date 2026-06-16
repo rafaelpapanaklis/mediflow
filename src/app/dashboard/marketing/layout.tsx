@@ -41,6 +41,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   return (
     <div
+      className="mkt-root"
       style={{
         padding: "clamp(14px, 1.6vw, 28px)",
         maxWidth: 1500,
@@ -48,6 +49,32 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
         fontFamily: "var(--font-sans, system-ui, sans-serif)",
       }}
     >
+      {/* Capa de a11y + movimiento para todo el módulo (una sola vez):
+          anillo de foco visible por teclado, respeto a prefers-reduced-motion
+          y transición suave al cambiar de sección del submenú. */}
+      <style>{`
+        .mkt-root a:focus-visible,
+        .mkt-root button:focus-visible,
+        .mkt-root [role="button"]:focus-visible,
+        .mkt-root [tabindex]:not([tabindex="-1"]):focus-visible {
+          outline: 2px solid var(--brand);
+          outline-offset: 2px;
+          border-radius: 8px;
+        }
+        .mkt-fade { animation: mkt-fade-in 0.18s ease-out both; }
+        @keyframes mkt-fade-in {
+          from { opacity: 0; transform: translateY(4px); }
+          to   { opacity: 1; transform: none; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .mkt-root *, .mkt-root *::before, .mkt-root *::after {
+            animation-duration: 0.001ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.001ms !important;
+            scroll-behavior: auto !important;
+          }
+        }
+      `}</style>
       <header style={{ marginBottom: 16 }}>
         <h1
           style={{
@@ -117,7 +144,9 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
         })}
       </nav>
 
-      <main style={{ minWidth: 0 }}>{children}</main>
+      <main key={pathname} className="mkt-fade" style={{ minWidth: 0 }}>
+        {children}
+      </main>
     </div>
   );
 }

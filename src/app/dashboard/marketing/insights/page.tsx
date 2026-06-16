@@ -17,7 +17,7 @@ const SOON = "Próximamente";
 export default function MarketingInsightsPage() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      <p style={{ margin: 0, fontSize: 13, color: "var(--text-3)", maxWidth: 640 }}>
+      <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55, color: "var(--text-2)", maxWidth: 640 }}>
         Aquí verás el rendimiento de tus publicaciones —alcance, interacciones y nuevos seguidores—
         directo de Instagram y Facebook. Conecta tus redes para empezar a medir.
       </p>
@@ -38,6 +38,8 @@ export default function MarketingInsightsPage() {
 
       {/* Panel de gráfica — listo para recharts cuando haya datos de Meta Insights */}
       <section
+        role="status"
+        aria-live="polite"
         style={{
           position: "relative",
           overflow: "hidden",
@@ -114,7 +116,7 @@ export default function MarketingInsightsPage() {
             display: "inline-flex",
             alignItems: "center",
             gap: 7,
-            height: 34,
+            height: 36,
             padding: "0 14px",
             borderRadius: 9,
             fontSize: 13,
