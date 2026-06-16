@@ -97,6 +97,8 @@ export function AdminClinicDetailClient({
   const expired   = clinic.trialEndsAt && new Date(clinic.trialEndsAt) < new Date();
   const daysLeft  = clinic.trialEndsAt ? Math.ceil((new Date(clinic.trialEndsAt).getTime() - Date.now()) / 86400000) : null;
   const owner     = clinic.users[0];
+  // Dueño-cliente (cuenta SUPER_ADMIN) para enlazar al CRM de clientes.
+  const clienteOwner = (clinic.users || []).find((u: any) => u.role === "SUPER_ADMIN") || owner;
 
   async function updatePlan() {
     setSaving(true);
@@ -283,6 +285,14 @@ export function AdminClinicDetailClient({
               <span>{clinic.city ?? "—"}, {clinic.country}</span>
               {clinic.phone && <span>{clinic.phone}</span>}
               <span className="mono">/{clinic.slug}</span>
+              {clienteOwner?.supabaseId && (
+                <Link
+                  href={`/admin/clientes/${clienteOwner.supabaseId}`}
+                  style={{ color: "var(--brand)", textDecoration: "none", fontWeight: 500 }}
+                >
+                  Cliente: {`${clienteOwner.firstName ?? ""} ${clienteOwner.lastName ?? ""}`.trim() || clienteOwner.email}
+                </Link>
+              )}
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>

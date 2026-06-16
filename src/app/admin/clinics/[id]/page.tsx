@@ -11,7 +11,7 @@ export default async function AdminClinicDetailPage({ params }: { params: { id: 
   const clinic = await prisma.clinic.findUnique({
     where: { id: params.id },
     include: {
-      users:        { select: { id: true, firstName: true, lastName: true, email: true, phone: true, role: true, createdAt: true, isActive: true } },
+      users:        { select: { id: true, supabaseId: true, firstName: true, lastName: true, email: true, phone: true, role: true, createdAt: true, isActive: true } },
       _count:       { select: { patients: true, appointments: true, invoices: true, records: true, users: true, files: true } },
       schedules:    true,
       clinicModules: {
