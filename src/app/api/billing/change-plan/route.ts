@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
 import { getPlan, PLAN_IDS, type PlanId } from "@/lib/billing/plans";
+import { getPlanLimits } from "@/lib/plans";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
 
 export const runtime = "nodejs";
@@ -123,7 +124,11 @@ export async function POST(req: NextRequest) {
   // no toca clinic.plan — ese es nuestro tracking local).
   await prisma.clinic.update({
     where: { id: clinic.id },
-    data: { plan: targetPlanId, subscriptionStatus: updated.status },
+    data: {
+      plan: targetPlanId,
+      subscriptionStatus: updated.status,
+      aiTokensLimit: getPlanLimits(targetPlanId).aiTokensDefault,
+    },
   });
 
   const { ipAddress, userAgent } = extractAuditMeta(req);

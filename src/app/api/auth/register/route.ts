@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { getPlanLimits } from "@/lib/plans";
 import { z } from "zod";
 import { rateLimit } from "@/lib/rate-limit";
 import { sendWelcomeEmail } from "@/lib/email";
@@ -182,6 +183,7 @@ export async function POST(req: NextRequest) {
         clinicSize: data.clinicSize,
         phone: data.phone,
         email: data.email, plan: data.plan as any, trialEndsAt,
+        aiTokensLimit: getPlanLimits(data.plan).aiTokensDefault,
         subscriptionStatus: "pending_payment",
         preferredPaymentMethod: paymentMethodType,
         paymentMethodCollected,

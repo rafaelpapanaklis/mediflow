@@ -16,6 +16,8 @@ import {
   AI_SETUP_KIND,
 } from "@/lib/ai-billing/recharge";
 import { PATIENT_INVOICE_KIND, applyInvoiceOnlinePayment } from "@/lib/patient-portal/online-payment";
+import { getPlanLimits } from "@/lib/plans";
+import { isPlanId } from "@/lib/billing/plans";
 
 // Next.js App Router: no hace body-parsing automático aquí porque leemos el
 // raw body para verificar la firma de Stripe.
@@ -142,6 +144,12 @@ export async function POST(req: NextRequest) {
           // current_period_end no siempre está tipado en las últimas versiones
           // del SDK; lo leemos como campo opcional.
           const periodEnd = (sub as any).current_period_end as number | undefined;
+          // Plan en la metadata de la suscripción (cambios hechos desde el
+          // dashboard/portal de Stripe). Si es válido, sincroniza plan + cupo IA.
+          const subPlan = sub.metadata?.plan;
+          const subPlanFields = isPlanId(subPlan)
+            ? { plan: subPlan, aiTokensLimit: getPlanLimits(subPlan).aiTokensDefault }
+            : {};
           await prisma.clinic.update({
             where: { id: clinicId },
             data: {
@@ -149,6 +157,7 @@ export async function POST(req: NextRequest) {
               subscriptionStatus:   sub.status,
               subscriptionId:       sub.id,
               nextBillingDate:      periodEnd ? new Date(periodEnd * 1000) : null,
+              ...subPlanFields,
             },
           });
 
@@ -456,6 +465,13 @@ async function activatePlatformSubscription(
   if (before?.trialEndsAt && new Date(before.trialEndsAt) > base) base = new Date(before.trialEndsAt);
   const next = billing === "annual" ? addYears(base, 1) : addMonths(base, 1);
 
+  // Plan elegido en el checkout (source.plan, viene de session.metadata.plan).
+  // Si es válido, fija plan + cupo de IA acorde; si no, deja lo existente.
+  // Cubre tarjeta (checkout.session.completed) y SPEI/OXXO (async_payment_succeeded).
+  const planFields = isPlanId(source.plan)
+    ? { plan: source.plan, aiTokensLimit: getPlanLimits(source.plan).aiTokensDefault }
+    : {};
+
   await prisma.clinic.update({
     where: { id: clinicId },
     data: {
@@ -463,6 +479,7 @@ async function activatePlatformSubscription(
       stripeSubscriptionId: subscriptionId ?? undefined,
       trialEndsAt: next,
       nextBillingDate: next,
+      ...planFields,
     },
   });
 
