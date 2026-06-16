@@ -43,6 +43,8 @@ model Clinic {
   waPhoneNumberId  String? @unique
   waAccessToken    String?
   waConnected      Boolean @default(false)
+  waBusinessAccountId String?  // WABA id (Embedded Signup)
+  waConnMethod        String?  // "manual" | "embedded"
   waReminderActive Boolean @default(true)
   waReminder24h    Boolean @default(true)
   waReminder1h     Boolean @default(false)

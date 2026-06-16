@@ -11,6 +11,7 @@ import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useT } from "@/i18n/i18n-provider";
+import { EmbeddedSignupButton } from "./embedded-signup-button";
 
 interface Props {
   connected:     boolean;
@@ -162,7 +163,13 @@ export function WhatsAppClient({
             <strong>{t("inbox.whatsapp.requirementsLabel")}</strong> {t("inbox.whatsapp.requirementsBody")}
           </div>
 
-          <ButtonNew variant="primary" onClick={() => setStep("config")}>
+          {/* Embedded Signup: la clínica conecta su WhatsApp sola (recomendado).
+              Si faltan los envs de Meta el botón no se renderiza y queda el modo manual. */}
+          <EmbeddedSignupButton
+            onConnected={() => { setConnected(true); setStep("done"); router.refresh(); }}
+          />
+
+          <ButtonNew variant="secondary" onClick={() => setStep("config")}>
             {t("inbox.whatsapp.configureCta")}
           </ButtonNew>
         </div>
