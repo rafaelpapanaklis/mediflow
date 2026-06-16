@@ -399,10 +399,31 @@ async function resolveClinicIdByCustomer(customerId: string): Promise<string | n
   return clinic?.id ?? null;
 }
 
+/** Suma n meses a una fecha, recortando el día si el mes destino es más corto
+ *  (ej. 31 ene + 1 mes → 28/29 feb, no 3 mar). */
+function addMonths(date: Date, n: number): Date {
+  const d = new Date(date.getTime());
+  const day = d.getDate();
+  d.setMonth(d.getMonth() + n);
+  if (d.getDate() < day) d.setDate(0);
+  return d;
+}
+
+/** Suma n años a una fecha (29 feb → 28 feb en año no bisiesto). */
+function addYears(date: Date, n: number): Date {
+  const d = new Date(date.getTime());
+  const m = d.getMonth();
+  d.setFullYear(d.getFullYear() + n);
+  if (d.getMonth() !== m) d.setDate(0);
+  return d;
+}
+
 /**
  * Activa la suscripción de la plataforma para una clínica: levanta el bloqueo
- * del gating (subscriptionStatus="active") y extiende trialEndsAt/nextBillingDate
- * +1 mes. Compartido entre el pago con tarjeta (checkout.session.completed) y la
+ * del gating (subscriptionStatus="active") y EXTIENDE trialEndsAt/nextBillingDate
+ * un periodo (mes/año) DESDE EL FINAL del periodo vigente (o desde hoy si ya
+ * venció) — renovar anticipado SUMA los días restantes, no los pierde.
+ * Compartido entre el pago con tarjeta (checkout.session.completed) y la
  * confirmación asíncrona de SPEI/OXXO (async_payment_succeeded).
  * `subscriptionId` es null en SPEI/OXXO (pago único sin auto-renovación).
  */
@@ -412,14 +433,6 @@ async function activatePlatformSubscription(
   source: { event: string; sessionId?: string; plan?: string | null },
   billing: "monthly" | "annual" = "monthly",
 ): Promise<void> {
-  // Periodo cubierto: anual = +1 año, mensual = +1 mes (intacto). Para tarjeta
-  // los eventos customer.subscription.* luego fijan el current_period_end real
-  // de Stripe (anual → +1 año); para SPEI/OXXO (pago único) este es el valor
-  // definitivo.
-  const nextMonth = billing === "annual"
-    ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
-    : new Date(Date.now() + ONE_MONTH_MS);
-
   const before = await prisma.clinic.findUnique({
     where: { id: clinicId },
     select: {
@@ -430,13 +443,26 @@ async function activatePlatformSubscription(
     },
   });
 
+  // EXTENDER desde el final del periodo vigente, NO desde hoy: si el cliente
+  // renueva anticipado (aún le quedan días de plan o de trial), esos días se
+  // SUMAN; si ya venció, se cuenta desde hoy. El "fin vigente" es el MÁXIMO de
+  // hoy, nextBillingDate y trialEndsAt (en trial nextBillingDate suele ser null,
+  // así que trialEndsAt es el que cuenta). Para tarjeta, customer.subscription.*
+  // fijará luego el current_period_end REAL de Stripe; este es el valor
+  // inmediato/placeholder y el definitivo para SPEI/OXXO (pago único).
+  const now = new Date();
+  let base = now;
+  if (before?.nextBillingDate && new Date(before.nextBillingDate) > base) base = new Date(before.nextBillingDate);
+  if (before?.trialEndsAt && new Date(before.trialEndsAt) > base) base = new Date(before.trialEndsAt);
+  const next = billing === "annual" ? addYears(base, 1) : addMonths(base, 1);
+
   await prisma.clinic.update({
     where: { id: clinicId },
     data: {
       subscriptionStatus: "active",
       stripeSubscriptionId: subscriptionId ?? undefined,
-      trialEndsAt: nextMonth,
-      nextBillingDate: nextMonth,
+      trialEndsAt: next,
+      nextBillingDate: next,
     },
   });
 
@@ -449,8 +475,8 @@ async function activatePlatformSubscription(
     changes: {
       subscriptionStatus: { before: before?.subscriptionStatus ?? null, after: "active" },
       stripeSubscriptionId: { before: before?.stripeSubscriptionId ?? null, after: subscriptionId },
-      trialEndsAt: { before: before?.trialEndsAt ?? null, after: nextMonth },
-      nextBillingDate: { before: before?.nextBillingDate ?? null, after: nextMonth },
+      trialEndsAt: { before: before?.trialEndsAt ?? null, after: next },
+      nextBillingDate: { before: before?.nextBillingDate ?? null, after: next },
       _source: { before: null, after: source },
     },
   });

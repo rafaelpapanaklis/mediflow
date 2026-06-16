@@ -70,6 +70,7 @@ export async function POST(req: NextRequest) {
       name: true,
       email: true,
       stripeCustomerId: true,
+      stripeSubscriptionId: true,
     },
   });
   if (!clinic) {
@@ -97,6 +98,42 @@ export async function POST(req: NextRequest) {
 
   const method = parsed.data.method;
   const billing = parsed.data.billing;
+
+  // Tarjeta: si la clínica YA tiene una suscripción de tarjeta viva en Stripe,
+  // NO crear una segunda (evita doble cobro recurrente). La mandamos al billing
+  // portal para gestionar la existente (cambiar tarjeta, plan o cancelar).
+  // SPEI/OXXO no aplican (pago único; cada pago EXTIENDE el periodo vía webhook).
+  if (method === "card" && clinic.stripeSubscriptionId) {
+    let existing: any = null;
+    try {
+      existing = await stripe.subscriptions.retrieve(clinic.stripeSubscriptionId);
+    } catch {
+      existing = null; // la suscripción ya no existe en Stripe → seguir con alta normal
+    }
+    const liveStatuses = ["active", "trialing", "past_due", "unpaid"];
+    if (existing && liveStatuses.indexOf(existing.status) >= 0) {
+      try {
+        const portal = await stripe.billingPortal.sessions.create({
+          customer: customerId,
+          return_url: `${baseUrl}/dashboard/settings`,
+        });
+        return NextResponse.json({
+          url: portal.url,
+          portal: true,
+          message: "Ya tienes una suscripción de tarjeta activa. Gestiónala (cambiar tarjeta, plan o cancelar) en el portal de Stripe.",
+        });
+      } catch {
+        return NextResponse.json(
+          {
+            error: "Ya tienes una suscripción de tarjeta activa. Para cambiar tu plan o método de pago usa el portal de facturación o contacta a soporte.",
+            alreadySubscribed: true,
+          },
+          { status: 409 },
+        );
+      }
+    }
+  }
+
   // Anual = 10 meses (2 gratis). El monto sube; el PERIODO lo fija el webhook
   // (nextBillingDate +1 año / +1 mes según metadata.billing).
   const months = billing === "annual" ? 10 : 1;
