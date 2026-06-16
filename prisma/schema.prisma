@@ -287,6 +287,11 @@ model Clinic {
   latitude  Float?
   longitude Float?
 
+  // Marketing (WS-MKT-T1) — redes conectadas, posts programados y plantillas.
+  socialAccounts     SocialAccount[]
+  marketingPosts     MarketingPost[]
+  marketingTemplates MarketingTemplate[]
+
   @@map("clinics")
 }
 
@@ -7197,4 +7202,69 @@ model QuoteItem {
 
   @@index([quoteId])
   @@map("quote_items")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Marketing (WS-MKT-T1 foundation) — redes sociales, posts y plantillas.
+// Contrato: prompts/marketing/_ORQUESTA_PLAN.md §3. Los tokens de red SIEMPRE
+// viajan cifrados en reposo (AES-256-GCM, ver src/lib/marketing/crypto.ts).
+// Requiere sql/marketing.sql aplicado a mano en Supabase (RLS deny-all).
+// camelCase 1:1 con las columnas (sin @map por columna; solo @@map de tabla).
+// ═══════════════════════════════════════════════════════════════════
+
+model SocialAccount {
+  id             String    @id @default(cuid())
+  clinicId       String
+  provider       String // "FACEBOOK" | "INSTAGRAM"
+  externalId     String // page id (FB) / ig business account id (IG)
+  name           String?
+  accessTokenEnc String // token CIFRADO (AES-256-GCM, ver crypto.ts)
+  igBusinessId   String? // solo FB: cuenta IG vinculada
+  scope          String?
+  tokenExpiresAt DateTime?
+  connected      Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  clinic         Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@unique([clinicId, provider, externalId])
+  @@index([clinicId])
+  @@map("social_accounts")
+}
+
+model MarketingPost {
+  id           String    @id @default(cuid())
+  clinicId     String
+  channel      String // "FACEBOOK" | "INSTAGRAM" | "BOTH"
+  caption      String
+  mediaUrls    String[] // URLs públicas (Supabase Storage) para IG
+  status       String    @default("DRAFT") // DRAFT|SCHEDULED|PUBLISHING|PUBLISHED|FAILED
+  scheduledFor DateTime?
+  publishedAt  DateTime?
+  externalIds  Json? // { facebook?: string, instagram?: string }
+  errorMsg     String?
+  aiGenerated  Boolean   @default(false)
+  createdById  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  clinic       Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId, status])
+  @@index([scheduledFor])
+  @@map("marketing_posts")
+}
+
+model MarketingTemplate {
+  id        String   @id @default(cuid())
+  clinicId  String? // null = plantilla global
+  specialty String? // tipo de clínica
+  kind      String // "CAPTION" | "IDEA" | "CAMPAIGN" | "IMAGE_BRIEF"
+  title     String
+  body      String
+  tags      String[]
+  createdAt DateTime @default(now())
+  clinic    Clinic?  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId])
+  @@map("marketing_templates")
 }
