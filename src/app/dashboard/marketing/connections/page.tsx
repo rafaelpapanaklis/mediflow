@@ -1,25 +1,36 @@
-// Conexiones IG/FB — placeholder de foundation (lo llena WS-MKT-T4).
+import { getAuthContext } from "@/lib/auth-context";
+import { prisma } from "@/lib/prisma";
+import { ConnectionsClient, type ConnectionAccount } from "./connections-client";
 
-export default function MarketingConnectionsPage() {
-  return (
-    <section
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        textAlign: "center",
-        gap: 10,
-        padding: "clamp(40px, 8vw, 96px) 24px",
-        border: "1px dashed var(--border-soft)",
-        borderRadius: 16,
-        background: "var(--bg-elev)",
-      }}
-    >
-      <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: "var(--text-1)" }}>Conexiones</h2>
-      <p style={{ margin: 0, fontSize: 14, color: "var(--text-3)", maxWidth: 440 }}>
-        En construcción — vincula tus páginas de Facebook e Instagram para publicar desde aquí. (WS-MKT-T4)
-      </p>
-    </section>
-  );
+export const dynamic = "force-dynamic";
+
+export default async function MarketingConnectionsPage() {
+  const ctx = await getAuthContext();
+  if (!ctx) return null; // el layout del dashboard ya redirige a login
+
+  const rows = await prisma.socialAccount.findMany({
+    where: { clinicId: ctx.clinicId },
+    select: {
+      id: true,
+      provider: true,
+      externalId: true,
+      name: true,
+      igBusinessId: true,
+      connected: true,
+      createdAt: true,
+      // accessTokenEnc nunca se selecciona ni llega al cliente.
+    },
+    orderBy: [{ provider: "asc" }, { createdAt: "desc" }],
+  });
+
+  const accounts: ConnectionAccount[] = rows.map((r) => ({
+    id: r.id,
+    provider: r.provider === "INSTAGRAM" ? "INSTAGRAM" : "FACEBOOK",
+    externalId: r.externalId,
+    name: r.name,
+    igBusinessId: r.igBusinessId,
+    connected: r.connected,
+  }));
+
+  return <ConnectionsClient accounts={accounts} canManage={ctx.isAdmin} />;
 }
