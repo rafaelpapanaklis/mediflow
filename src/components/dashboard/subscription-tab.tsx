@@ -172,18 +172,15 @@ export function SubscriptionTab({ clinic }: Props) {
         body: JSON.stringify({ plan: targetPlan }),
       });
       const data = (await res.json().catch(() => ({}))) as {
-        mode?: "in-place" | "checkout";
+        mode?: "in-place";
         plan?: PlanId;
-        redirectUrl?: string;
         error?: string;
       };
       if (!res.ok) {
         throw new Error(data.error ?? t("shell.subscriptionTab.errChangePlan"));
       }
-      if (data.mode === "checkout" && data.redirectUrl) {
-        window.location.href = data.redirectUrl;
-        return;
-      }
+      // Tanto con suscripción de Stripe como en trial el cambio es in-place:
+      // toast de éxito + refresh para repintar "TU PLAN" y el upsell.
       toast.success(t("shell.subscriptionTab.planUpdatedToast", { plan: targetPlan }));
       router.refresh();
     } catch (err) {

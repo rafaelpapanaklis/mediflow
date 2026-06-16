@@ -17,10 +17,14 @@ const BodySchema = z.object({
 /**
  * POST /api/billing/change-plan
  *
- * Cambia el plan de la suscripción activa de la clínica con prorrateo
- * automático de Stripe. Si la clínica todavía no tiene subscription
- * activa, devuelve `{ redirectUrl }` apuntando al checkout self-service
- * para que cree una nueva.
+ * Cambia el plan de la clínica.
+ *  - Con suscripción activa de Stripe: hace el `update` con prorrateo
+ *    automático del periodo en curso.
+ *  - En trial / sin suscripción: el plan es solo una preferencia (aún no se
+ *    cobra), así que actualiza `clinic.plan` in-place. El cobro ocurre luego
+ *    cuando el usuario "Activa/paga" su plan en /dashboard/suspended (que
+ *    preselecciona este plan).
+ * En ambos casos devuelve `{ mode: "in-place", plan }`.
  *
  * Multi-tenant: clinicId siempre del ctx, NUNCA del body.
  */
@@ -65,17 +69,37 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Sin suscripción activa → no se puede hacer "update" en Stripe.
-  // Devolvemos la URL del checkout self-service para que la cree.
+  // Sin suscripción activa (trial / pending_payment): el plan es solo una
+  // preferencia — durante el trial no se cobra. Actualizamos clinic.plan
+  // in-place de inmediato; el cobro ocurre cuando el usuario "Activa/paga"
+  // su plan en /dashboard/suspended (que preselecciona este plan).
+  // NO tocamos subscriptionStatus (sigue trial/pending hasta que pague).
   if (!clinic.stripeSubscriptionId) {
-    const baseUrl =
-      process.env.NEXT_PUBLIC_APP_URL ??
-      process.env.NEXTAUTH_URL ??
-      new URL(req.url).origin;
-    return NextResponse.json({
-      mode: "checkout",
-      redirectUrl: `${baseUrl}/dashboard/suspended?prefill=${targetPlanId}`,
+    const planLimits = await getPlanLimits(targetPlanId);
+    await prisma.clinic.update({
+      where: { id: clinic.id },
+      data: {
+        plan: targetPlanId,
+        aiTokensLimit: planLimits.aiTokensDefault,
+      },
     });
+
+    const { ipAddress, userAgent } = extractAuditMeta(req);
+    await logAudit({
+      clinicId: clinic.id,
+      userId: user.id,
+      entityType: "subscription",
+      entityId: clinic.id,
+      action: "update",
+      changes: {
+        plan: { before: clinic.plan, after: targetPlanId },
+        _source: { before: null, after: { event: "self-service-change-plan-trial", priceMxn: targetPlan.priceMxn } },
+      },
+      ipAddress,
+      userAgent,
+    });
+
+    return NextResponse.json({ mode: "in-place", plan: targetPlanId });
   }
 
   const stripe = getStripeSafe();
