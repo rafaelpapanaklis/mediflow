@@ -72,7 +72,7 @@ const card: React.CSSProperties = {
   background: "var(--bg-elev)",
   border: "1px solid var(--border-soft)",
   borderRadius: 14,
-  padding: 18,
+  padding: 16,
 };
 const labelStyle: React.CSSProperties = {
   display: "block",
@@ -586,6 +586,7 @@ export default function ComposerClient({ connections, initialCaption, initialDat
               style={{
                 ...baseBtn,
                 flex: "1 1 200px",
+                minHeight: 40,
                 color: "#fff",
                 background: "var(--brand)",
                 boxShadow: scheduleDisabled ? "none" : "0 4px 16px -6px rgba(124,58,237,0.6)",
@@ -606,6 +607,7 @@ export default function ComposerClient({ connections, initialCaption, initialDat
               style={{
                 ...baseBtn,
                 flex: "1 1 200px",
+                minHeight: 40,
                 color: "#fff",
                 background: "var(--brand)",
                 boxShadow: publishNowDisabled ? "none" : "0 4px 16px -6px rgba(124,58,237,0.6)",

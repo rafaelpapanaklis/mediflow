@@ -45,7 +45,7 @@ export default function MarketingInsightsPage() {
           overflow: "hidden",
           background: "var(--bg-elev)",
           border: "1px solid var(--border-soft)",
-          borderRadius: 16,
+          borderRadius: 14,
           padding: "clamp(28px, 5vw, 56px) 24px",
           minHeight: 300,
           display: "flex",

@@ -439,7 +439,7 @@ function UpcomingRow({ post }: { post: UpcomingPost }) {
         >
           {post.caption?.trim() || "(sin texto)"}
         </span>
-        <span style={{ fontSize: 11.5, color: "var(--text-2)" }}>{formatWhen(post.scheduledFor)}</span>
+        <span style={{ fontSize: 12, color: "var(--text-2)" }}>{formatWhen(post.scheduledFor)}</span>
       </span>
     </li>
   );

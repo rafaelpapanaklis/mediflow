@@ -221,7 +221,7 @@ export function ConnectionsClient({
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
-                  <span style={badge("#E1306C")}>Instagram</span>
+                  <span style={badge("linear-gradient(135deg,#f58529,#dd2a7b,#8134af)")}>Instagram</span>
                   <StatusPill connected={ig.connected} />
                   <strong style={ellipsisStrong}>@{ig.name ?? ig.externalId}</strong>
                 </div>

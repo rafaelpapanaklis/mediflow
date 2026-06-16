@@ -333,7 +333,7 @@ export default function StudioClient({ initialTokens }: { initialTokens: TokenIn
         style={{
           background: "var(--bg-elev)",
           border: "1px solid var(--border-soft)",
-          borderRadius: 16,
+          borderRadius: 14,
           padding: "clamp(14px, 2vw, 20px)",
         }}
       >
@@ -590,7 +590,7 @@ export default function StudioClient({ initialTokens }: { initialTokens: TokenIn
             gap: 10,
             padding: "clamp(36px, 7vw, 72px) 24px",
             border: "1px dashed var(--border-soft)",
-            borderRadius: 16,
+            borderRadius: 14,
             background: "var(--bg-elev)",
           }}
         >
@@ -661,7 +661,7 @@ const STYLES = `
 }
 .mkt-chip:hover { background: var(--bg-hover); color: var(--text-1); }
 .mkt-chip[aria-pressed="true"] {
-  color: var(--brand); background: var(--brand-soft); border-color: var(--border-brand); font-weight: 600;
+  color: var(--brand); background: var(--brand-softer); border-color: var(--border-brand); font-weight: 600;
 }
 .mkt-seg {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -680,9 +680,10 @@ const STYLES = `
 .mkt-input::placeholder { color: var(--text-4); }
 .mkt-input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-softer); }
 .mkt-btn-primary {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 10px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
-  color: #fff; background: var(--brand); border: none; border-radius: 11px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 40px; padding: 0 16px; font-size: 14px; font-weight: 600; cursor: pointer;
+  color: #fff; background: var(--brand); border: none; border-radius: 10px;
+  box-shadow: 0 4px 16px -6px rgba(124,58,237,0.6);
   transition: filter .12s, opacity .12s;
 }
 .mkt-btn-primary:hover { filter: brightness(1.07); }

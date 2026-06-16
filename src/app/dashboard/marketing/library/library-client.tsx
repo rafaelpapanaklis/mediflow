@@ -214,7 +214,7 @@ export function MarketingLibraryClient({
 
       {/* Galería */}
       {filtered.length === 0 ? (
-        <div style={{ border: "1px dashed var(--border-soft)", borderRadius: 16, background: "var(--bg-elev)" }}>
+        <div style={{ border: "1px dashed var(--border-soft)", borderRadius: 14, background: "var(--bg-elev)" }}>
           <EmptyStateNew
             icon={Library}
             title="No hay plantillas con estos filtros"
