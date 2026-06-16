@@ -1,25 +1,14 @@
-// Calendario — placeholder de foundation (lo llena WS-MKT-T3).
+// Calendario de publicaciones (WS-MKT-T3). Server component: solo guarda auth y
+// monta el cliente, que pide los posts por rango visible a /api/marketing/posts.
 
-export default function MarketingCalendarPage() {
-  return (
-    <section
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        textAlign: "center",
-        gap: 10,
-        padding: "clamp(40px, 8vw, 96px) 24px",
-        border: "1px dashed var(--border-soft)",
-        borderRadius: 16,
-        background: "var(--bg-elev)",
-      }}
-    >
-      <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: "var(--text-1)" }}>Calendario</h2>
-      <p style={{ margin: 0, fontSize: 14, color: "var(--text-3)", maxWidth: 440 }}>
-        En construcción — vista de calendario con tus posts programados y publicados. (WS-MKT-T3)
-      </p>
-    </section>
-  );
+import { redirect } from "next/navigation";
+import { getAuthContext } from "@/lib/auth-context";
+import CalendarClient from "./calendar-client";
+
+export const dynamic = "force-dynamic";
+
+export default async function MarketingCalendarPage() {
+  const ctx = await getAuthContext();
+  if (!ctx) redirect("/login");
+  return <CalendarClient />;
 }
