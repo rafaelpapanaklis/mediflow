@@ -1,25 +1,41 @@
-// Biblioteca / Plantillas — placeholder de foundation (lo llena WS-MKT-T6).
+// Biblioteca / Plantillas del módulo Marketing (WS-MKT-T6). Server component:
+// trae las plantillas que la clínica guardó en DB y se las pasa al cliente, que
+// las fusiona con el set integrado (src/lib/marketing/seed-templates.ts). Así la
+// biblioteca es útil desde el primer día aunque nadie haya guardado nada y aunque
+// no se haya aplicado el SQL semilla.
 
-export default function MarketingLibraryPage() {
-  return (
-    <section
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        textAlign: "center",
-        gap: 10,
-        padding: "clamp(40px, 8vw, 96px) 24px",
-        border: "1px dashed var(--border-soft)",
-        borderRadius: 16,
-        background: "var(--bg-elev)",
-      }}
-    >
-      <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: "var(--text-1)" }}>Biblioteca</h2>
-      <p style={{ margin: 0, fontSize: 14, color: "var(--text-3)", maxWidth: 440 }}>
-        En construcción — plantillas de captions, ideas y campañas reutilizables. (WS-MKT-T6)
-      </p>
-    </section>
-  );
+export const dynamic = "force-dynamic";
+
+import type { Metadata } from "next";
+import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { MarketingLibraryClient, type ClinicTemplate } from "./library-client";
+
+export const metadata: Metadata = { title: "Biblioteca — Marketing — DaleControl" };
+
+export default async function MarketingLibraryPage() {
+  const user = await getCurrentUser();
+  const clinicCategory: string = (user.clinic as any)?.category ?? "OTHER";
+
+  let clinicTemplates: ClinicTemplate[] = [];
+  try {
+    const rows = await prisma.marketingTemplate.findMany({
+      where: { clinicId: user.clinicId },
+      orderBy: { createdAt: "desc" },
+      take: 300,
+    });
+    clinicTemplates = rows.map((r) => ({
+      id: r.id,
+      kind: r.kind,
+      specialty: r.specialty ?? null,
+      title: r.title,
+      body: r.body,
+      tags: Array.isArray(r.tags) ? r.tags : [],
+    }));
+  } catch (e) {
+    // Tabla aún sin migrar → solo se muestra el set integrado.
+    console.error("[marketing/library] fallo al cargar plantillas de la clínica", e);
+  }
+
+  return <MarketingLibraryClient clinicCategory={clinicCategory} clinicTemplates={clinicTemplates} />;
 }
