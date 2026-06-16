@@ -1,6 +1,47 @@
 
 
 ═══════════════════════════════════════════════════════════════════════════
+## WS-billing · T3 — "Cambiar de plan" en trial actualiza el plan in-place ✅ EN MAIN (6f12a94, 2026-06-16)
+═══════════════════════════════════════════════════════════════════════════
+Commit 6f12a94. Build VERDE (npx next build, sin pipes; ✓ Compiled successfully +
+type-check sin errores TS; los prisma:error DATABASE_URL son del prerender sin DB en
+este entorno y no afectan el exit ni el typecheck).
+
+BUG: En cuenta en trial / sin suscripción Stripe, Settings › Suscripción → "Cambiar a
+este plan" NO cambiaba el plan: redirigía a /dashboard/suspended?prefill=PLAN, y suspended
+IGNORA ?prefill (solo lee ?pending y preselecciona clinic.plan, el viejo). Resultado: el
+usuario elegía Básico pero suspended seguía mostrando el plan anterior. El ?prefill era
+código muerto (único productor: este route; cero consumidores en todo src/).
+
+FIX: en trial el plan es solo preferencia (no se cobra hasta "Activar/pagar"). Ahora el
+cambio es IN-PLACE: se actualiza clinic.plan de inmediato y suspended lo preselecciona solo.
+
+ARCHIVOS TOCADOS (4):
+- src/app/api/billing/change-plan/route.ts: la rama `if (!clinic.stripeSubscriptionId)`
+  ya no devuelve {mode:"checkout", redirectUrl:.../suspended?prefill=...}. Ahora:
+  prisma.clinic.update {plan: targetPlanId, aiTokensLimit: getPlanLimits(targetPlanId)
+  .aiTokensDefault} + logAudit(action update; plan before/after; _source
+  "self-service-change-plan-trial") → return {mode:"in-place", plan}. NO toca
+  subscriptionStatus (sigue trial/pending hasta que pague). Docstring actualizado.
+- src/components/dashboard/subscription-tab.tsx: applyPlanChange ya manejaba in-place
+  (toast + router.refresh). Se eliminó la rama muerta mode:"checkout"/window.location.href
+  (el endpoint ya nunca devuelve checkout) y se quitó redirectUrl del tipo de respuesta.
+- src/i18n/dictionaries/es.json + en.json: copy de changePlanDescCheckout y
+  confirmChangeBodyCheckout (caso sin-sub) ya no prometen checkout → "Cambiaremos tu plan
+  ahora; el cobro se realiza cuando actives tu plan." (es/en).
+
+NO TOCADO: src/app/dashboard/suspended/ (page.tsx ya preselecciona clinic.plan vía
+getCurrentUser→clinic.plan; con el plan ya correcto el botón muestra "Pagar <plan>" solo).
+
+REGLAS RESPETADAS: clinicId siempre del ctx (nunca del body), getPlanLimits como fuente
+única de cupos (mismo patrón que la rama con-sub), sin SQL nuevo, sin envs nuevas.
+
+QA (Rafael): trial + "Cambiar a Básico" → TU PLAN: Básico, y "Activar/pagar mi plan" →
+suspended con Básico preseleccionado y "Pagar Básico — $499".
+
+---
+
+═══════════════════════════════════════════════════════════════════════════
 ## WS-billing · T1 — Sincronizar cupo de IA (aiTokensLimit) con el plan ✅ EN MAIN (a2182b1, 2026-06-15)
 ═══════════════════════════════════════════════════════════════════════════
 Commit a2182b1. Build VERDE (npx next build, EXIT 0; los prisma:error DATABASE_URL
