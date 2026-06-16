@@ -1,25 +1,63 @@
-// Crear post — placeholder de foundation (lo llena WS-MKT-T3).
+// Crear / editar post (WS-MKT-T3). Server component: resuelve auth, estado de
+// conexiones y (si ?id=) el post a editar, y se lo pasa al cliente como props.
+// Lee ?caption= (viene del Estudio IA) y ?date= (clic en un día del Calendario).
 
-export default function MarketingComposerPage() {
+import { redirect } from "next/navigation";
+import { getAuthContext } from "@/lib/auth-context";
+import { prisma } from "@/lib/prisma";
+import ComposerClient from "./composer-client";
+
+export const dynamic = "force-dynamic";
+
+interface SP {
+  caption?: string;
+  id?: string;
+  date?: string;
+}
+
+export default async function MarketingComposerPage({ searchParams }: { searchParams: SP }) {
+  const ctx = await getAuthContext();
+  if (!ctx) redirect("/login");
+
+  let connections = { facebook: false, instagram: false };
+  let initialPost: any = null;
+
+  try {
+    const [accounts, post] = await Promise.all([
+      prisma.socialAccount.findMany({
+        where: { clinicId: ctx.clinicId, connected: true }, // aislamiento por clínica
+        select: { provider: true },
+      }),
+      searchParams?.id
+        ? prisma.marketingPost.findFirst({ where: { id: searchParams.id, clinicId: ctx.clinicId } })
+        : Promise.resolve(null),
+    ]);
+    connections = {
+      facebook: accounts.some((a) => a.provider === "FACEBOOK"),
+      instagram: accounts.some((a) => a.provider === "INSTAGRAM"),
+    };
+    if (post) {
+      initialPost = {
+        id: post.id,
+        channel: post.channel,
+        caption: post.caption,
+        mediaUrls: post.mediaUrls ?? [],
+        status: post.status,
+        scheduledFor: post.scheduledFor ? post.scheduledFor.toISOString() : null,
+        aiGenerated: post.aiGenerated,
+      };
+    }
+  } catch (e) {
+    // Tablas de Marketing aún no migradas → se degrada a "sin conexiones / sin post".
+    console.error("[marketing/composer] schema:", (e as Error)?.message);
+  }
+
   return (
-    <section
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        textAlign: "center",
-        gap: 10,
-        padding: "clamp(40px, 8vw, 96px) 24px",
-        border: "1px dashed var(--border-soft)",
-        borderRadius: 16,
-        background: "var(--bg-elev)",
-      }}
-    >
-      <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: "var(--text-1)" }}>Crear post</h2>
-      <p style={{ margin: 0, fontSize: 14, color: "var(--text-3)", maxWidth: 440 }}>
-        En construcción — redacta, adjunta media y programa publicaciones para Facebook e Instagram. (WS-MKT-T3)
-      </p>
-    </section>
+    <ComposerClient
+      connections={connections}
+      initialCaption={typeof searchParams?.caption === "string" ? searchParams.caption : ""}
+      initialDate={typeof searchParams?.date === "string" ? searchParams.date : ""}
+      initialPost={initialPost}
+    />
   );
 }
