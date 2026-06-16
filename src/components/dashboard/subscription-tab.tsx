@@ -251,6 +251,39 @@ export function SubscriptionTab({ clinic }: Props) {
             {t("shell.subscriptionTab.trialExpiredNotice", { date: trialEndsAt ? formatFecha(trialEndsAt) : "" })}
           </div>
         )}
+
+        {/* CTA activar/pagar — visible cuando NO hay suscripción activa (trial,
+            prueba expirada o sin plan). Lleva a la pantalla de pago existente
+            (/dashboard/suspended) con tarjeta/SPEI/OXXO, preseleccionando el
+            plan actual de la clínica. Permite pagar ANTES de expirar. */}
+        {!subscriptionActive && (
+          <div
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              flexWrap: "wrap", gap: 12, padding: "14px 16px", borderRadius: 12,
+              background: "linear-gradient(90deg, rgba(124,58,237,0.12), rgba(99,102,241,0.10))",
+              border: "1px solid rgba(124,58,237,0.3)",
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text-1)" }}>
+                {t("shell.subscriptionTab.activateTitle")}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>
+                {t("shell.subscriptionTab.activateSubtitle")}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard/suspended")}
+              className="btn-new btn-new--primary btn-new--sm"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}
+            >
+              <CreditCard size={14} aria-hidden />
+              {t("shell.subscriptionTab.activateCta")}
+            </button>
+          </div>
+        )}
       </section>
 
       {/* ── Cambiar plan ─────────────────────────────────────────── */}
@@ -302,6 +335,13 @@ export function SubscriptionTab({ clinic }: Props) {
                   ${plan.priceMxn}
                   <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-3)", marginLeft: 4 }}>{t("shell.subscriptionTab.mxnPerMonth")}</span>
                 </div>
+                {!isCurrent && plan.priceMxn !== currentPlan.priceMxn && (
+                  <div style={{ fontSize: 11, fontWeight: 600, color: plan.priceMxn > currentPlan.priceMxn ? "var(--brand)" : "var(--text-3)" }}>
+                    {plan.priceMxn > currentPlan.priceMxn
+                      ? t("shell.subscriptionTab.priceDeltaUp", { delta: plan.priceMxn - currentPlan.priceMxn })
+                      : t("shell.subscriptionTab.priceDeltaDown", { delta: currentPlan.priceMxn - plan.priceMxn })}
+                  </div>
+                )}
                 <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
                   {plan.features.map((f) => (
                     <li key={f} style={{ fontSize: 11, color: "var(--text-2)", display: "flex", alignItems: "center", gap: 6 }}>

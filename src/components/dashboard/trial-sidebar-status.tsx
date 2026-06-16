@@ -78,7 +78,7 @@ export function TrialSidebarStatus({
   if (collapsed) {
     return (
       <Link
-        href="/dashboard/marketplace"
+        href="/dashboard/settings?tab=subscription"
         aria-label={expired ? t("shell.trialSidebar.ariaExpired") : t("shell.trialSidebar.ariaDaysLeft", { count: days })}
         className={`mx-auto mt-2 mb-2 flex h-8 w-8 items-center justify-center rounded-lg ${palette.bg} ${palette.border} border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]`}
       >

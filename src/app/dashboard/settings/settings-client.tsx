@@ -73,7 +73,14 @@ interface Props { user: any; clinic: any; initialTab?: string; gcalStatus?: stri
 
 export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, teamMembers: initTeam = [] }: Props) {
   const t = useT();
-  const [tab,      setTab]      = useState(initialTab || "clinica");
+  const [tab,      setTab]      = useState(() => {
+    const requested = initialTab || "clinica";
+    const admin = initUser.role === "ADMIN" || initUser.role === "SUPER_ADMIN";
+    // El tab de suscripción es solo para el dueño/admin. Si un rol operativo
+    // llega por ?tab=subscription (p. ej. desde el banner de trial), cae al
+    // tab por defecto en vez de ver datos de facturación.
+    return requested === "subscription" && !admin ? "clinica" : requested;
+  });
   const [saving,   setSaving]   = useState(false);
   const [user,     setUser]     = useState(initUser);
   const [clinic,   setClinic]   = useState(initClinic);
@@ -327,7 +334,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
         <div style={{ flex: 1, minWidth: 0 }}>
 
       {/* ── SUSCRIPCIÓN ── */}
-      {tab === "subscription" && <SubscriptionTab clinic={clinic} />}
+      {tab === "subscription" && isAdminUser && <SubscriptionTab clinic={clinic} />}
 
       {/* ── CLÍNICA ── */}
       {tab === "clinica" && (

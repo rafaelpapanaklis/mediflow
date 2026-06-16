@@ -69,10 +69,10 @@ export async function TrialBanner({ trialEndsAt, isInTrial }: TrialBannerProps) 
           </div>
         </div>
         <Link
-          href="/dashboard/marketplace"
+          href="/dashboard/settings?tab=subscription"
           className="bg-white text-red-700 hover:bg-red-50 font-semibold px-4 py-2 rounded-lg text-sm transition-colors flex items-center gap-1.5 flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-red-600"
         >
-          {t("shell.trialBanner.ctaChooseNow")}
+          {t("shell.trialBanner.ctaRenewNow")}
           <ArrowRight className="w-4 h-4" aria-hidden />
         </Link>
       </div>
@@ -94,10 +94,10 @@ export async function TrialBanner({ trialEndsAt, isInTrial }: TrialBannerProps) 
           </div>
         </div>
         <Link
-          href="/dashboard/marketplace"
+          href="/dashboard/settings?tab=subscription"
           className="bg-white/15 backdrop-blur hover:bg-white/25 font-medium px-3 py-1.5 rounded-md text-sm transition-colors flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
         >
-          {t("shell.trialBanner.ctaChooseMine")}
+          {t("shell.trialBanner.ctaRenewNow")}
         </Link>
       </div>
     );
@@ -118,7 +118,7 @@ export async function TrialBanner({ trialEndsAt, isInTrial }: TrialBannerProps) 
         </div>
       </div>
       <Link
-        href="/dashboard/marketplace"
+        href="/dashboard/settings?tab=subscription"
         className="bg-white/15 backdrop-blur hover:bg-white/25 font-medium px-3 py-1.5 rounded-md text-sm transition-colors flex items-center gap-1.5 flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
       >
         {t("shell.trialBanner.ctaChooseMine")}

@@ -345,13 +345,14 @@
         "one": "¡Tu prueba termina en {count} día!",
         "other": "¡Tu prueba termina en {count} días!"
       },
-      "urgentSubtitle": "Compra los módulos que necesitas antes de perder el acceso · Tus datos se mantendrán",
+      "urgentSubtitle": "Renueva tu plan antes de perder el acceso · Tus datos se mantendrán",
       "ctaChooseNow": "Elegir módulos ahora",
+      "ctaRenewNow": "Renovar plan",
       "warningDaysLeft": {
         "one": "{count} día",
         "other": "{count} días"
       },
-      "warningSuffix": "restantes en tu prueba gratuita · No olvides activar los módulos que más uses",
+      "warningSuffix": "restantes en tu prueba gratuita · Renueva tu plan para no perder el acceso",
       "ctaChooseMine": "Elegir mis módulos",
       "promoTitle": "Prueba gratis · Acceso completo a todos los módulos",
       "promoYouHave": "Te quedan",
@@ -630,6 +631,11 @@
       "statusNone": "Sin suscripción",
       "yourPlan": "Tu plan",
       "planLine": "Plan {name} — ${price} MXN/mes",
+      "activateTitle": "Activa o renueva tu plan",
+      "activateSubtitle": "Paga antes de que termine tu prueba para asegurar el acceso. Tarjeta, SPEI u OXXO.",
+      "activateCta": "Activar / pagar mi plan",
+      "priceDeltaUp": "+${delta} MXN/mes vs tu plan",
+      "priceDeltaDown": "-${delta} MXN/mes vs tu plan",
       "endsToday": "Termina hoy",
       "oneDayLeft": "1 día restante",
       "daysLeftOfTotal": "{days} días restantes de {total}",

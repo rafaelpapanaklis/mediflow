@@ -345,13 +345,14 @@
         "one": "Your trial ends in {count} day!",
         "other": "Your trial ends in {count} days!"
       },
-      "urgentSubtitle": "Buy the modules you need before you lose access · Your data will be kept",
+      "urgentSubtitle": "Renew your plan before you lose access · Your data will be kept",
       "ctaChooseNow": "Choose modules now",
+      "ctaRenewNow": "Renew plan",
       "warningDaysLeft": {
         "one": "{count} day",
         "other": "{count} days"
       },
-      "warningSuffix": "left in your free trial · Don't forget to activate the modules you use the most",
+      "warningSuffix": "left in your free trial · Renew your plan to keep your access",
       "ctaChooseMine": "Choose my modules",
       "promoTitle": "Free trial · Full access to all modules",
       "promoYouHave": "You have",
@@ -630,6 +631,11 @@
       "statusNone": "No subscription",
       "yourPlan": "Your plan",
       "planLine": "{name} plan — ${price} MXN/mo",
+      "activateTitle": "Activate or renew your plan",
+      "activateSubtitle": "Pay before your trial ends to keep your access. Card, SPEI or OXXO.",
+      "activateCta": "Activate / pay my plan",
+      "priceDeltaUp": "+${delta} MXN/mo vs your plan",
+      "priceDeltaDown": "-${delta} MXN/mo vs your plan",
       "endsToday": "Ends today",
       "oneDayLeft": "1 day left",
       "daysLeftOfTotal": "{days} days left of {total}",
