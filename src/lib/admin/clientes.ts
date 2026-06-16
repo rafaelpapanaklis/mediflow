@@ -53,6 +53,25 @@ export interface ClienteRow {
   tags: ClienteTag[];
 }
 
+/** Cobro de suscripción (SubscriptionInvoice) dentro del detalle de cliente. */
+export interface ClienteInvoice {
+  id: string;
+  clinicId: string;
+  clinicName: string;
+  amount: number;
+  currency: string;
+  status: string;            // pending | paid | failed
+  method: string | null;     // stripe | transfer | deposit | oxxo | paypal | …
+  reference: string | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  refunded: boolean;         // derivado de la marca en notes (sin schema)
+  manualPending: boolean;    // pendiente y método manual (SPEI/transferencia/…)
+  refundable: boolean;       // pagado, método stripe y con referencia de Stripe
+}
+
 /** Clínica dentro del detalle de cliente. */
 export interface ClienteClinica {
   id: string;
@@ -71,6 +90,15 @@ export interface ClienteClinica {
   aiTokensLimit: number;
   ingresos: number;             // suscripción pagada acumulada (SubscriptionInvoice)
   role: string;
+  // Facturación
+  nextBillingDate: string | null;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+  paymentMethodType: string | null;
+  paymentMethodLast4: string | null;
+  paymentMethodCollected: boolean;
+  preferredPaymentMethod: string | null;
+  invoices: ClienteInvoice[];
 }
 
 /** Detalle completo de /admin/clientes/[supabaseId]. */
@@ -91,6 +119,7 @@ export interface ClienteDetalle {
   ingresosTotales: number;      // suma histórica de pagos de suscripción
   ltv: number;                  // estimado (MRR × 24)
   affiliateName: string | null;
+  pendingPaymentsCount: number;
   clinics: ClienteClinica[];
   planDistribution: { plan: string; count: number; mrr: number }[];
   revenueSeries: { label: string; value: number }[];
@@ -208,6 +237,13 @@ type OwnerClinicRow = {
     createdAt: Date;
     aiTokensUsed: number;
     aiTokensLimit: number;
+    nextBillingDate: Date | null;
+    stripeCustomerId: string | null;
+    stripeSubscriptionId: string | null;
+    paymentMethodType: string | null;
+    paymentMethodLast4: string | null;
+    paymentMethodCollected: boolean;
+    preferredPaymentMethod: string | null;
     affiliate: { name: string } | null;
     _count: { patients: number; appointments: number };
   } | null;
@@ -233,6 +269,13 @@ const OWNER_CLINIC_SELECT = {
       createdAt: true,
       aiTokensUsed: true,
       aiTokensLimit: true,
+      nextBillingDate: true,
+      stripeCustomerId: true,
+      stripeSubscriptionId: true,
+      paymentMethodType: true,
+      paymentMethodLast4: true,
+      paymentMethodCollected: true,
+      preferredPaymentMethod: true,
       affiliate: { select: { name: true } },
       _count: { select: { patients: true, appointments: true } },
     },
@@ -325,8 +368,13 @@ export async function getClienteDetalle(supabaseId: string): Promise<ClienteDeta
   const clinicIds = clinicsRaw.map((c) => c.id);
 
   const subInvoices = await prisma.subscriptionInvoice.findMany({
-    where: { clinicId: { in: clinicIds }, status: "paid" },
-    select: { amount: true, paidAt: true, createdAt: true, clinicId: true },
+    where: { clinicId: { in: clinicIds } },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true, clinicId: true, amount: true, currency: true, status: true,
+      method: true, reference: true, periodStart: true, periodEnd: true,
+      paidAt: true, createdAt: true, notes: true,
+    },
   });
 
   // Serie mensual (últimos 12 meses) + ingresos por clínica + total histórico.
@@ -340,18 +388,58 @@ export async function getClienteDetalle(supabaseId: string): Promise<ClienteDeta
     series.push({ key, label: d.toLocaleDateString("es-MX", { month: "short" }) });
   }
 
+  const clinicNameById: Record<string, string> = {};
+  clinicsRaw.forEach((c) => { clinicNameById[c.id] = c.name; });
+
+  const REFUND_MARK = "[REEMBOLSADO";
+  const MANUAL_METHODS = ["transfer", "deposit", "oxxo", "spei", "paypal", "cash"];
+
   const ingresosPorClinica: Record<string, number> = {};
+  const invoicesByClinic: Record<string, ClienteInvoice[]> = {};
   let ingresosTotales = 0;
+  let pendingPaymentsCount = 0;
+
   subInvoices.forEach((inv) => {
     const amt = inv.amount || 0;
-    ingresosTotales += amt;
-    ingresosPorClinica[inv.clinicId] = (ingresosPorClinica[inv.clinicId] || 0) + amt;
-    const when = inv.paidAt || inv.createdAt;
-    if (when) {
-      const dt = new Date(when);
-      const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
-      if (key in monthBuckets) monthBuckets[key] += amt;
+
+    // Ingresos / serie: solo cobros pagados.
+    if (inv.status === "paid") {
+      ingresosTotales += amt;
+      ingresosPorClinica[inv.clinicId] = (ingresosPorClinica[inv.clinicId] || 0) + amt;
+      const when = inv.paidAt || inv.createdAt;
+      if (when) {
+        const dt = new Date(when);
+        const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
+        if (key in monthBuckets) monthBuckets[key] += amt;
+      }
     }
+    if (inv.status === "pending") pendingPaymentsCount += 1;
+
+    const refunded = !!inv.notes && inv.notes.indexOf(REFUND_MARK) >= 0;
+    const manualPending =
+      inv.status === "pending" && (!inv.method || MANUAL_METHODS.indexOf(inv.method) >= 0);
+    const ref = inv.reference || "";
+    const isStripeRef = /^(pi_|ch_|in_|py_|re_)/.test(ref);
+    const refundable = inv.status === "paid" && inv.method === "stripe" && isStripeRef && !refunded;
+
+    const row: ClienteInvoice = {
+      id: inv.id,
+      clinicId: inv.clinicId,
+      clinicName: clinicNameById[inv.clinicId] || "",
+      amount: amt,
+      currency: inv.currency || "MXN",
+      status: inv.status,
+      method: inv.method ?? null,
+      reference: inv.reference ?? null,
+      periodStart: inv.periodStart ? inv.periodStart.toISOString() : null,
+      periodEnd: inv.periodEnd ? inv.periodEnd.toISOString() : null,
+      paidAt: inv.paidAt ? inv.paidAt.toISOString() : null,
+      createdAt: inv.createdAt.toISOString(),
+      refunded,
+      manualPending,
+      refundable,
+    };
+    (invoicesByClinic[inv.clinicId] = invoicesByClinic[inv.clinicId] || []).push(row);
   });
   const revenueSeries = series.map((s) => ({ label: s.label, value: monthBuckets[s.key] || 0 }));
 
@@ -399,6 +487,14 @@ export async function getClienteDetalle(supabaseId: string): Promise<ClienteDeta
     aiTokensLimit: c.aiTokensLimit,
     ingresos: ingresosPorClinica[c.id] || 0,
     role: roleByClinic[c.id] || "SUPER_ADMIN",
+    nextBillingDate: c.nextBillingDate ? c.nextBillingDate.toISOString() : null,
+    stripeCustomerId: c.stripeCustomerId,
+    stripeSubscriptionId: c.stripeSubscriptionId,
+    paymentMethodType: c.paymentMethodType,
+    paymentMethodLast4: c.paymentMethodLast4,
+    paymentMethodCollected: c.paymentMethodCollected,
+    preferredPaymentMethod: c.preferredPaymentMethod,
+    invoices: invoicesByClinic[c.id] || [],
   }));
 
   const planDistMap: Record<string, { plan: string; count: number; mrr: number }> = {};
@@ -435,6 +531,7 @@ export async function getClienteDetalle(supabaseId: string): Promise<ClienteDeta
     ingresosTotales,
     ltv,
     affiliateName,
+    pendingPaymentsCount,
     clinics,
     planDistribution,
     revenueSeries,

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
+import { refundPayment } from "@/lib/stripe-subscriptions";
+import { isStripeConfigured, stripeUnavailableResponse } from "@/lib/stripe";
 
 function isAdmin(req: NextRequest): boolean {
   const token = req.cookies.get("admin_token")?.value;
@@ -159,6 +161,30 @@ export async function POST(req: NextRequest) {
       where: { id: clinicId },
       data: { subscriptionStatus: "cancelled" },
     });
+    return NextResponse.json({ success: true });
+  }
+
+  if (action === "refund_payment") {
+    if (!isStripeConfigured()) return NextResponse.json(stripeUnavailableResponse(), { status: 503 });
+    const { invoiceId, amountMxn, reason } = body;
+    const invoice = await prisma.subscriptionInvoice.findUnique({ where: { id: invoiceId } });
+    if (!invoice) return NextResponse.json({ error: "Cobro no encontrado" }, { status: 404 });
+    if (invoice.status !== "paid") {
+      return NextResponse.json({ error: "Solo se puede reembolsar un cobro pagado" }, { status: 400 });
+    }
+    const ref = invoice.reference ?? "";
+    const isStripeRef = /^(pi_|ch_|in_|py_)/.test(ref);
+    if (invoice.method !== "stripe" || !isStripeRef) {
+      return NextResponse.json(
+        { error: "Este cobro no es de Stripe (o no tiene referencia de Stripe). Reembólsalo por el canal original." },
+        { status: 400 },
+      );
+    }
+    const amt = amountMxn ? Number(amountMxn) : undefined;
+    await refundPayment(ref, amt, reason);
+    const marca = `[REEMBOLSADO${amt ? " $" + amt : ""}]${reason ? " " + String(reason).slice(0, 180) : ""}`;
+    await prisma.subscriptionInvoice.update({ where: { id: invoiceId }, data: { notes: marca } });
+    console.log("[ADMIN] refund_payment", { invoiceId, clinicId: invoice.clinicId, amount: amt ?? "full", ref });
     return NextResponse.json({ success: true });
   }
 

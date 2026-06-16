@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, Mail, MessageCircle, Eye, Building2, DollarSign, TrendingUp,
@@ -17,6 +18,7 @@ import type {
   ClienteDetalle, ClienteClinica, ClienteAggStatus, ClienteTag, ClinicNormStatus,
 } from "@/lib/admin/clientes";
 import { PlanDonut, ActivityBars } from "./cliente-charts";
+import { ClienteBilling } from "./cliente-billing";
 
 type Tone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
 
@@ -44,7 +46,16 @@ function healthColor(score: number): string {
   return "var(--danger)";
 }
 
-export function ClienteDetalleClient({ cliente }: { cliente: ClienteDetalle }) {
+export function ClienteDetalleClient({
+  cliente,
+  stripeConfigured,
+  stripeInstructions,
+}: {
+  cliente: ClienteDetalle;
+  stripeConfigured: boolean;
+  stripeInstructions: string;
+}) {
+  const [tab, setTab] = useState<"resumen" | "facturacion">("resumen");
   const waPhone = cliente.ownerPhone ? cliente.ownerPhone.replace(/[^\d]/g, "") : "";
 
   return (
@@ -101,6 +112,35 @@ export function ClienteDetalleClient({ cliente }: { cliente: ClienteDetalle }) {
         </div>
       </CardNew>
 
+      {/* Tabs */}
+      <div className="segment-new" style={{ display: "inline-flex", gap: 2 }}>
+        <button
+          type="button"
+          onClick={() => setTab("resumen")}
+          className={`segment-new__btn ${tab === "resumen" ? "segment-new__btn--active" : ""}`}
+        >
+          Resumen
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("facturacion")}
+          className={`segment-new__btn ${tab === "facturacion" ? "segment-new__btn--active" : ""}`}
+        >
+          Facturación
+          {cliente.pendingPaymentsCount > 0 && (
+            <span style={{ marginLeft: 6, fontSize: 10, color: "var(--warning)", fontWeight: 700 }}>
+              {cliente.pendingPaymentsCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {tab === "facturacion" && (
+        <ClienteBilling cliente={cliente} stripeConfigured={stripeConfigured} stripeInstructions={stripeInstructions} />
+      )}
+
+      {tab === "resumen" && (
+        <>
       {/* KPIs */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 }}>
         <KpiCard label="Clínicas" value={String(cliente.clinicsCount)} icon={Building2} />
@@ -143,6 +183,8 @@ export function ClienteDetalleClient({ cliente }: { cliente: ClienteDetalle }) {
           ))}
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }

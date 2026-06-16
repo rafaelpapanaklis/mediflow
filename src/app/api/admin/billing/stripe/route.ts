@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { createCustomer, createCheckoutForSubscription, cancelSubscription, getCustomerPortalUrl } from "@/lib/stripe-subscriptions";
+import { createCustomer, createCheckoutForSubscription, cancelSubscription, getCustomerPortalUrl, pauseSubscription, resumeSubscription } from "@/lib/stripe-subscriptions";
+import { isStripeConfigured, stripeUnavailableResponse } from "@/lib/stripe";
 
 function isAdmin(req: NextRequest): boolean {
   const token = req.cookies.get("admin_token")?.value;
@@ -9,6 +10,7 @@ function isAdmin(req: NextRequest): boolean {
 
 export async function POST(req: NextRequest) {
   if (!isAdmin(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isStripeConfigured()) return NextResponse.json(stripeUnavailableResponse(), { status: 503 });
 
   try {
     const body = await req.json();
@@ -52,6 +54,22 @@ export async function POST(req: NextRequest) {
       if (!clinic.stripeCustomerId) return NextResponse.json({ error: "No Stripe customer" }, { status: 400 });
       const url = await getCustomerPortalUrl(clinic.stripeCustomerId, `${process.env.NEXT_PUBLIC_APP_URL}/admin/payments`);
       return NextResponse.json({ url });
+    }
+
+    if (action === "pause_subscription") {
+      if (!clinic.stripeSubscriptionId) return NextResponse.json({ error: "No active subscription" }, { status: 400 });
+      await pauseSubscription(clinic.stripeSubscriptionId);
+      await prisma.clinic.update({ where: { id: clinicId }, data: { subscriptionStatus: "paused" } });
+      console.log("[ADMIN] pause_subscription", { clinicId, subscriptionId: clinic.stripeSubscriptionId });
+      return NextResponse.json({ success: true });
+    }
+
+    if (action === "resume_subscription") {
+      if (!clinic.stripeSubscriptionId) return NextResponse.json({ error: "No subscription" }, { status: 400 });
+      await resumeSubscription(clinic.stripeSubscriptionId);
+      await prisma.clinic.update({ where: { id: clinicId }, data: { subscriptionStatus: "active" } });
+      console.log("[ADMIN] resume_subscription", { clinicId, subscriptionId: clinic.stripeSubscriptionId });
+      return NextResponse.json({ success: true });
     }
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });

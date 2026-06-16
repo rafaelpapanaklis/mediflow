@@ -113,3 +113,53 @@ export async function getCustomerPortalUrl(customerId: string, returnUrl: string
   });
   return session.url;
 }
+
+/** Pausa el cobro de la suscripción (no la cancela): Stripe deja de cobrar y
+ *  anula las facturas generadas mientras esté pausada. */
+export async function pauseSubscription(subscriptionId: string): Promise<void> {
+  const stripe = getStripe();
+  await stripe.subscriptions.update(subscriptionId, {
+    pause_collection: { behavior: "void" },
+  });
+}
+
+/** Reanuda el cobro de una suscripción previamente pausada (limpia pause_collection). */
+export async function resumeSubscription(subscriptionId: string): Promise<void> {
+  const stripe = getStripe();
+  await stripe.subscriptions.update(subscriptionId, {
+    pause_collection: null as any,
+  });
+}
+
+/**
+ * Reembolsa un cobro de Stripe a partir de una referencia (pi_… / ch_… / py_… / in_…).
+ * `amountMxn` opcional para reembolso parcial; el motivo libre va a metadata
+ * (Stripe.reason solo acepta un enum cerrado, no texto libre).
+ */
+export async function refundPayment(
+  reference: string,
+  amountMxn?: number,
+  reason?: string,
+): Promise<void> {
+  const stripe = getStripe();
+  const params: any = {
+    reason: "requested_by_customer",
+    metadata: { adminReason: (reason ?? "").slice(0, 200) },
+  };
+  if (amountMxn && amountMxn > 0) params.amount = Math.round(amountMxn * 100);
+
+  if (reference.startsWith("pi_")) {
+    params.payment_intent = reference;
+  } else if (reference.startsWith("ch_") || reference.startsWith("py_")) {
+    params.charge = reference;
+  } else if (reference.startsWith("in_")) {
+    const invoice = await stripe.invoices.retrieve(reference);
+    const pi = (invoice as any).payment_intent;
+    if (!pi) throw new Error("La factura de Stripe no tiene un pago asociado para reembolsar");
+    params.payment_intent = typeof pi === "string" ? pi : pi.id;
+  } else {
+    throw new Error("Referencia de Stripe no reconocida para reembolso");
+  }
+
+  await stripe.refunds.create(params);
+}
