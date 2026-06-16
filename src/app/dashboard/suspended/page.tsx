@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Lock, Sparkles } from "lucide-react";
-import { PLANS, isPlanId, type PlanId } from "@/lib/billing/plans";
+import { isPlanId, type PlanId } from "@/lib/billing/plans";
+import { getResolvedPlans } from "@/lib/plans";
 import { SuspendedPlanCards, type PlanCardData } from "./suspended-client";
 import { getServerT } from "@/i18n/server";
 import { getCurrentUser } from "@/lib/auth";
@@ -17,7 +18,7 @@ export default async function SuspendedPage({
   // Vuelta de un Checkout SPEI/OXXO (asíncrono): el pago aún no se acredita.
   const pending = searchParams?.pending;
   const showPending = pending === "spei" || pending === "oxxo";
-  const planCards: PlanCardData[] = PLANS.map((p) => ({
+  const planCards: PlanCardData[] = (await getResolvedPlans()).map((p) => ({
     id: p.id,
     name: p.name,
     priceMxn: p.priceMxn,

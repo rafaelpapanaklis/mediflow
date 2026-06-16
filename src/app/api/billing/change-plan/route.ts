@@ -3,8 +3,8 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
-import { getPlan, PLAN_IDS, type PlanId } from "@/lib/billing/plans";
-import { getPlanLimits } from "@/lib/plans";
+import { PLAN_IDS, type PlanId } from "@/lib/billing/plans";
+import { getResolvedPlan, getPlanLimits } from "@/lib/plans";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
 
 export const runtime = "nodejs";
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
   }
 
   const targetPlanId: PlanId = parsed.data.plan;
-  const targetPlan = getPlan(targetPlanId);
+  const targetPlan = await getResolvedPlan(targetPlanId);
 
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },
@@ -122,12 +122,13 @@ export async function POST(req: NextRequest) {
   // Actualizamos plan local de inmediato (el webhook
   // customer.subscription.updated también llega y refresca status, pero
   // no toca clinic.plan — ese es nuestro tracking local).
+  const planLimits = await getPlanLimits(targetPlanId);
   await prisma.clinic.update({
     where: { id: clinic.id },
     data: {
       plan: targetPlanId,
       subscriptionStatus: updated.status,
-      aiTokensLimit: getPlanLimits(targetPlanId).aiTokensDefault,
+      aiTokensLimit: planLimits.aiTokensDefault,
     },
   });
 

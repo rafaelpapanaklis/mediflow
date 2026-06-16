@@ -6690,6 +6690,27 @@ model AiPricingConfig {
   @@map("ai_pricing_configs")
 }
 
+/// Config editable de cada plan de la plataforma (uno por planId: BASIC/PRO/
+/// CLINIC). Fuente única de precio/límites/permisos por módulo, editable desde
+/// /admin/settings → Planes SIN redeploy. La lee `src/lib/plans.ts` (cacheada).
+/// storageBytes es BigInt (100GB ≈ 1.07e11 no cabe en Int). maxPatients/maxUsers
+/// null = ilimitado. features = mapa { moduleKey: boolean } (casillas del panel).
+model PlanConfig {
+  planId          String   @id
+  label           String
+  priceMxnMonthly Int
+  priceMxnAnnual  Int
+  storageBytes    BigInt
+  aiTokensDefault Int
+  whatsappMonthly Int
+  maxPatients     Int?
+  maxUsers        Int?
+  features        Json
+  updatedAt       DateTime @updatedAt
+
+  @@map("plan_configs")
+}
+
 /// Saldo central que Rafael carga en Anthropic (USD, centavos). El dashboard de
 /// tesorería calcula consumido (sum costUsdMicros) vs cargado.
 model AnthropicRecharge {

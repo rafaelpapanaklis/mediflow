@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { AdminSettingsClient } from "./settings-client";
+import { getResolvedPlans } from "@/lib/plans";
 
 export const metadata: Metadata = { title: "Configuración — Admin DaleControl" };
 
-export default function AdminSettingsPage() {
+export default async function AdminSettingsPage() {
   // Sólo podemos leer env vars en el server. Las exponemos como booleanos al
   // cliente (no filtramos ningún secreto, solo si están definidas).
   const envStatus = {
@@ -20,5 +21,6 @@ export default function AdminSettingsPage() {
     WHATSAPP_TOKEN:         Boolean(process.env.MEDIFLOW_WHATSAPP_TOKEN),
     WHATSAPP_PHONE_ID:      Boolean(process.env.MEDIFLOW_WHATSAPP_PHONE_ID),
   };
-  return <AdminSettingsClient envStatus={envStatus} />;
+  const planConfigs = await getResolvedPlans();
+  return <AdminSettingsClient envStatus={envStatus} planConfigs={planConfigs} />;
 }

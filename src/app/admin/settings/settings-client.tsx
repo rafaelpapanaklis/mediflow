@@ -6,7 +6,7 @@ import toast from "react-hot-toast";
 import { CardNew }   from "@/components/ui/design-system/card-new";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import { BadgeNew }  from "@/components/ui/design-system/badge-new";
-import { PLANS }     from "@/lib/billing/plans";
+import { PLAN_MODULES, type ResolvedPlan } from "@/lib/plan-shared";
 
 const BANK_INFO = {
   nombre: "Efthymios Rafail Papanaklis",
@@ -29,13 +29,165 @@ interface EnvStatus {
   WHATSAPP_PHONE_ID: boolean;
 }
 
-export function AdminSettingsClient({ envStatus }: { envStatus: EnvStatus }) {
+const GB = 1024 ** 3;
+
+function NumField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="field-new">
+      <label className="field-new__label">{label}</label>
+      <input className="input-new" type="number" min={0} value={value} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
+function LimitField({
+  label, value, onChange, unlimited, onUnlimited,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  unlimited: boolean;
+  onUnlimited: (v: boolean) => void;
+}) {
+  return (
+    <div className="field-new">
+      <label className="field-new__label">{label}</label>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <input
+          className="input-new"
+          type="number"
+          min={0}
+          value={unlimited ? "" : value}
+          disabled={unlimited}
+          placeholder={unlimited ? "Ilimitado" : ""}
+          onChange={(e) => onChange(e.target.value)}
+          style={{ flex: 1, minWidth: 0 }}
+        />
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-2)", whiteSpace: "nowrap", cursor: "pointer" }}>
+          <input type="checkbox" checked={unlimited} onChange={(e) => onUnlimited(e.target.checked)} style={{ width: 14, height: 14, accentColor: "#7c3aed" }} />
+          Ilimitado
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function PlanCardEditor({ plan }: { plan: ResolvedPlan }) {
+  const [label, setLabel] = useState(plan.label);
+  const [priceMonthly, setPriceMonthly] = useState(String(plan.priceMxnMonthly));
+  const [priceAnnual, setPriceAnnual] = useState(String(plan.priceMxnAnnual));
+  const [storageGb, setStorageGb] = useState(String(Math.round((plan.storageBytes / GB) * 100) / 100));
+  const [aiTokens, setAiTokens] = useState(String(plan.aiTokensDefault));
+  const [whatsapp, setWhatsapp] = useState(String(plan.whatsappMonthly));
+  const [maxPatients, setMaxPatients] = useState(plan.maxPatients == null ? "" : String(plan.maxPatients));
+  const [unlimitedPatients, setUnlimitedPatients] = useState(plan.maxPatients == null);
+  const [maxUsers, setMaxUsers] = useState(plan.maxUsers == null ? "" : String(plan.maxUsers));
+  const [unlimitedUsers, setUnlimitedUsers] = useState(plan.maxUsers == null);
+  const [features, setFeatures] = useState<Record<string, boolean>>(() => {
+    const f: Record<string, boolean> = {};
+    for (const m of PLAN_MODULES) f[m.key] = plan.moduleFeatures[m.key] !== false;
+    return f;
+  });
+  const [saving, setSaving] = useState(false);
+
+  async function savePlan() {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/admin/plan-config/${plan.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label,
+          priceMxnMonthly: Number(priceMonthly),
+          priceMxnAnnual: Number(priceAnnual),
+          storageBytes: Math.round(Number(storageGb) * GB),
+          aiTokensDefault: Number(aiTokens),
+          whatsappMonthly: Number(whatsapp),
+          maxPatients: unlimitedPatients ? null : Number(maxPatients),
+          maxUsers: unlimitedUsers ? null : Number(maxUsers),
+          features,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error ?? "Error al guardar");
+      }
+      toast.success(`Plan ${label} guardado`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error al guardar");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      style={{
+        padding: 16,
+        background: "var(--bg-elev-2)",
+        border: "1px solid var(--border-soft)",
+        borderRadius: 12,
+        display: "flex",
+        flexDirection: "column",
+        gap: 14,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div className="field-new" style={{ flex: 1, minWidth: 180 }}>
+          <label className="field-new__label">Nombre del plan</label>
+          <input className="input-new" value={label} onChange={(e) => setLabel(e.target.value)} />
+        </div>
+        <span className="mono" style={{ fontSize: 10, color: "var(--text-3)", paddingBottom: 10 }}>ID: {plan.id}</span>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+        <NumField label="Precio mensual (MXN)" value={priceMonthly} onChange={setPriceMonthly} />
+        <NumField label="Precio anual (MXN)" value={priceAnnual} onChange={setPriceAnnual} />
+        <NumField label="Almacenamiento (GB)" value={storageGb} onChange={setStorageGb} />
+        <NumField label="Tokens IA / mes" value={aiTokens} onChange={setAiTokens} />
+        <NumField label="WhatsApp / mes" value={whatsapp} onChange={setWhatsapp} />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
+        <LimitField label="Máximo de pacientes" value={maxPatients} onChange={setMaxPatients} unlimited={unlimitedPatients} onUnlimited={setUnlimitedPatients} />
+        <LimitField label="Máximo de usuarios" value={maxUsers} onChange={setMaxUsers} unlimited={unlimitedUsers} onUnlimited={setUnlimitedUsers} />
+      </div>
+
+      <div>
+        <div style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 600, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.4 }}>
+          Módulos del panel habilitados
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 6 }}>
+          {PLAN_MODULES.map((m) => (
+            <label key={m.key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-2)", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={features[m.key] !== false}
+                onChange={(e) => setFeatures((prev) => ({ ...prev, [m.key]: e.target.checked }))}
+                style={{ width: 15, height: 15, accentColor: "#7c3aed" }}
+              />
+              {m.label}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <ButtonNew variant="primary" onClick={savePlan} disabled={saving}>
+          {saving ? "Guardando…" : `Guardar ${plan.id}`}
+        </ButtonNew>
+      </div>
+    </div>
+  );
+}
+
+export function AdminSettingsClient({ envStatus, planConfigs }: { envStatus: EnvStatus; planConfigs: ResolvedPlan[] }) {
   const [tab, setTab]   = useState("empresa");
   const [saving, setSaving] = useState(false);
 
   const TABS = [
     { id: "empresa",   label: "Empresa",     icon: Building   },
-    { id: "precios",   label: "Precios",     icon: CreditCard },
+    { id: "precios",   label: "Planes",      icon: CreditCard },
     { id: "banco",     label: "Datos banco", icon: CreditCard },
     { id: "seguridad", label: "Seguridad",   icon: Shield     },
     { id: "correos",   label: "Correos",     icon: Mail       },
@@ -126,37 +278,12 @@ export function AdminSettingsClient({ envStatus }: { envStatus: EnvStatus }) {
             </>
           )}
 
-          {/* PRECIOS — vista informativa de solo lectura; refleja src/lib/billing/plans.ts */}
+          {/* PLANES — editor de precio/límites/permisos por plan (plan_configs). */}
           {tab === "precios" && (
-            <CardNew title="Planes y precios" sub="Precios reales del registro y el checkout — vista informativa">
-              <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 640 }}>
-                {PLANS.map(plan => (
-                  <div
-                    key={plan.id}
-                    style={{
-                      padding: "14px 16px",
-                      background: "var(--bg-elev-2)",
-                      border: "1px solid var(--border-soft)",
-                      borderRadius: 12,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 12,
-                    }}
-                  >
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ color: "var(--text-1)", fontWeight: 600, fontSize: 13 }}>{plan.name}</div>
-                      <div style={{ color: "var(--text-3)", fontSize: 11, marginTop: 2 }}>{plan.features.join(" · ")}</div>
-                      <div className="mono" style={{ color: "var(--text-3)", fontSize: 10, marginTop: 4 }}>ID: {plan.id}</div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: 4, flexShrink: 0 }}>
-                      <span style={{ color: "var(--text-3)", fontSize: 13 }}>$</span>
-                      <span className="mono" style={{ color: "var(--text-1)", fontSize: 18, fontWeight: 700 }}>
-                        {plan.priceMxn.toLocaleString("es-MX")}
-                      </span>
-                      <span style={{ color: "var(--text-3)", fontSize: 12 }}>MXN/mes</span>
-                    </div>
-                  </div>
+            <CardNew title="Planes" sub="Precio, límites y permisos por módulo de cada plan. Se guardan por plan y aplican sin redeploy.">
+              <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 760 }}>
+                {planConfigs.map((p) => (
+                  <PlanCardEditor key={p.id} plan={p} />
                 ))}
                 <div
                   style={{
@@ -168,9 +295,10 @@ export function AdminSettingsClient({ envStatus }: { envStatus: EnvStatus }) {
                     color: "var(--text-2)",
                   }}
                 >
-                  Los precios se configuran en el código{" "}
-                  <code className="mono" style={{ background: "var(--bg-elev-2)", padding: "1px 5px", borderRadius: 4 }}>src/lib/billing/plans.ts</code>.
-                  {" "}Esta vista es informativa (solo lectura).
+                  El precio mensual alimenta el checkout; las casillas de módulos
+                  muestran/ocultan secciones del panel a las clínicas según su plan
+                  (en prueba se ve todo). Los máximos de pacientes/usuarios son
+                  informativos en esta fase (aún sin bloqueo duro).
                 </div>
               </div>
             </CardNew>

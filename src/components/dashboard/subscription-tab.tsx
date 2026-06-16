@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { Check, CreditCard, Download, ExternalLink, Loader2, Receipt, Sparkles } from "lucide-react";
-import { PLANS, type PlanId, isPlanId } from "@/lib/billing/plans";
+import { type PlanId, isPlanId } from "@/lib/billing/plans";
 import { PaymentMethodModal } from "./payment-method-modal";
 import { useT } from "@/i18n/i18n-provider";
 
@@ -43,6 +43,14 @@ interface InvoicesResponse {
   stripeUnavailable: boolean;
 }
 
+interface ApiPlan {
+  id: PlanId;
+  name: string;
+  priceMxn: number;
+  priceMxnAnnual: number;
+  features: string[];
+}
+
 const TRIAL_DAYS_TOTAL = 14;
 
 function formatFecha(d: Date) {
@@ -78,6 +86,7 @@ export function SubscriptionTab({ clinic }: Props) {
   const [confirmPlan, setConfirmPlan] = useState<PlanId | null>(null);
   const [invoices, setInvoices] = useState<BillingInvoiceRow[] | null>(null);
   const [stripeUnavailable, setStripeUnavailable] = useState(false);
+  const [plans, setPlans] = useState<ApiPlan[] | null>(null);
 
   const trialEndsAt = clinic.trialEndsAt ? new Date(clinic.trialEndsAt) : null;
   const now = new Date();
@@ -90,7 +99,7 @@ export function SubscriptionTab({ clinic }: Props) {
   const trialExpired = !!trialEndsAt && trialEndsAt < now && !subscriptionActive;
 
   const currentPlanId: PlanId = isPlanId(clinic.plan) ? clinic.plan : "PRO";
-  const currentPlan = PLANS.find((p) => p.id === currentPlanId)!;
+  const currentPlan = plans?.find((p) => p.id === currentPlanId) ?? null;
 
   const { daysLeft, pct } = useMemo(() => {
     if (!trialEndsAt) return { daysLeft: 0, pct: 0 };
@@ -114,6 +123,23 @@ export function SubscriptionTab({ clinic }: Props) {
       .catch(() => {
         if (cancelled) return;
         setInvoices([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Planes resueltos (precio/nombre/features) desde el endpoint público — sin
+  // precios hardcodeados en el cliente.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/plans")
+      .then((r) => r.json())
+      .then((data: { plans: ApiPlan[] }) => {
+        if (!cancelled) setPlans(data.plans);
+      })
+      .catch(() => {
+        if (!cancelled) setPlans([]);
       });
     return () => {
       cancelled = true;
@@ -211,7 +237,7 @@ export function SubscriptionTab({ clinic }: Props) {
                 {statusLabel}
               </div>
               <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)" }}>
-                {t("shell.subscriptionTab.planLine", { name: currentPlan.name, price: currentPlan.priceMxn })}
+                {t("shell.subscriptionTab.planLine", { name: currentPlan?.name ?? currentPlanId, price: currentPlan?.priceMxn ?? 0 })}
               </div>
             </div>
           </div>
@@ -300,7 +326,7 @@ export function SubscriptionTab({ clinic }: Props) {
             : t("shell.subscriptionTab.changePlanDescCheckout")}
         </p>
         <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
-          {PLANS.map((plan) => {
+          {(plans ?? []).map((plan) => {
             const isCurrent = plan.id === currentPlanId;
             const isPopular = plan.id === "PRO";
             const isPending = changingPlan === plan.id;
@@ -335,7 +361,7 @@ export function SubscriptionTab({ clinic }: Props) {
                   ${plan.priceMxn}
                   <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-3)", marginLeft: 4 }}>{t("shell.subscriptionTab.mxnPerMonth")}</span>
                 </div>
-                {!isCurrent && plan.priceMxn !== currentPlan.priceMxn && (
+                {!isCurrent && currentPlan && plan.priceMxn !== currentPlan.priceMxn && (
                   <div style={{ fontSize: 11, fontWeight: 600, color: plan.priceMxn > currentPlan.priceMxn ? "var(--brand)" : "var(--text-3)" }}>
                     {plan.priceMxn > currentPlan.priceMxn
                       ? t("shell.subscriptionTab.priceDeltaUp", { delta: plan.priceMxn - currentPlan.priceMxn })
@@ -609,7 +635,7 @@ export function SubscriptionTab({ clinic }: Props) {
             style={{ maxWidth: 460, width: "100%", padding: 26 }}
           >
             <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "var(--text-1)", marginBottom: 10 }}>
-              {t("shell.subscriptionTab.confirmChangeTitle", { name: PLANS.find((p) => p.id === confirmPlan)?.name ?? "" })}
+              {t("shell.subscriptionTab.confirmChangeTitle", { name: plans?.find((p) => p.id === confirmPlan)?.name ?? "" })}
             </h3>
             <p style={{ margin: 0, fontSize: 13, color: "var(--text-2)", lineHeight: 1.55, marginBottom: 18 }}>
               {hasStripeSubscription

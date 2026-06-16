@@ -6,7 +6,7 @@ import { ArrowLeft, MapPin, FileText, Download, ClipboardList, Receipt, Clock, F
 import { getDentalLabContext } from "@/lib/lab-auth";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency } from "@/lib/utils";
-import { formatBytes } from "@/lib/plans";
+import { formatBytes } from "@/lib/plan-shared";
 import { formatRelativeDate } from "@/lib/format";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";

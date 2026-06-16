@@ -12,7 +12,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { PLANS } from "@/lib/billing/plans";
+import { FALLBACK_PLAN_PRICES_MXN } from "@/lib/plan-shared";
 
 const DAY = 86_400_000;
 
@@ -131,8 +131,7 @@ export interface ClienteDetalle {
 /** Precio mensual del plan (usa monthlyPrice si está, si no plans.ts). */
 export function planPriceMxn(plan: string, monthlyPrice?: number | null): number {
   if (monthlyPrice && monthlyPrice > 0) return monthlyPrice;
-  const p = PLANS.find((x) => x.id === plan);
-  return p ? p.priceMxn : 0;
+  return FALLBACK_PLAN_PRICES_MXN[plan] ?? 0;
 }
 
 function clinicStatus(subscriptionStatus: string | null, trialEndsAt: Date | null): ClinicNormStatus {

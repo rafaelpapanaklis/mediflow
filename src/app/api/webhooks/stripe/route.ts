@@ -148,7 +148,7 @@ export async function POST(req: NextRequest) {
           // dashboard/portal de Stripe). Si es válido, sincroniza plan + cupo IA.
           const subPlan = sub.metadata?.plan;
           const subPlanFields = isPlanId(subPlan)
-            ? { plan: subPlan, aiTokensLimit: getPlanLimits(subPlan).aiTokensDefault }
+            ? { plan: subPlan, aiTokensLimit: (await getPlanLimits(subPlan)).aiTokensDefault }
             : {};
           await prisma.clinic.update({
             where: { id: clinicId },
@@ -469,7 +469,7 @@ async function activatePlatformSubscription(
   // Si es válido, fija plan + cupo de IA acorde; si no, deja lo existente.
   // Cubre tarjeta (checkout.session.completed) y SPEI/OXXO (async_payment_succeeded).
   const planFields = isPlanId(source.plan)
-    ? { plan: source.plan, aiTokensLimit: getPlanLimits(source.plan).aiTokensDefault }
+    ? { plan: source.plan, aiTokensLimit: (await getPlanLimits(source.plan)).aiTokensDefault }
     : {};
 
   await prisma.clinic.update({

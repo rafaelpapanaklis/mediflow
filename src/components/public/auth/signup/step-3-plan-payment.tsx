@@ -1,8 +1,16 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PlanCard, type Billing, type PlanId } from "./plan-card";
-import { PLANS } from "@/lib/billing/plans";
+
+interface ApiPlan {
+  id: PlanId;
+  name: string;
+  priceMxn: number;
+  priceMxnAnnual: number;
+  features: string[];
+}
 
 // Compat: el wizard (signup-form) aún tipa `card`/`payMethod` en su estado. Se
 // conservan los tipos aunque el paso 3 ya NO captura pago — el cobro se hace en
@@ -45,6 +53,17 @@ const PLAN_DESC: Record<PlanId, string> = {
 export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading }: Step3Props) {
   const canSubmit = values.acceptedTerms && !loading;
 
+  // Planes (precio/nombre/features) desde el endpoint público — sin hardcodear.
+  const [plans, setPlans] = useState<ApiPlan[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/plans")
+      .then((r) => r.json())
+      .then((data: { plans: ApiPlan[] }) => { if (!cancelled) setPlans(data.plans); })
+      .catch(() => { if (!cancelled) setPlans([]); });
+    return () => { cancelled = true; };
+  }, []);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       {/* Selector de plan — los 3 planes, sin encimar: colapsan por ANCHO real
@@ -57,14 +76,14 @@ export function Step3PlanPayment({ values, onChange, onBack, onSubmit, loading }
           alignItems: "stretch",
         }}
       >
-        {PLANS.map((p) => (
+        {(plans ?? []).map((p) => (
           <PlanCard
             key={p.id}
             plan={p.id}
             name={p.name}
             description={PLAN_DESC[p.id] ?? ""}
             priceMonthly={p.priceMxn}
-            priceAnnual={p.priceMxn}
+            priceAnnual={p.priceMxnAnnual}
             billing="monthly"
             features={[...p.features]}
             popular={p.id === "PRO"}

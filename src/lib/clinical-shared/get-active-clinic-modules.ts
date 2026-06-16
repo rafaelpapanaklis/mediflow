@@ -30,6 +30,8 @@ import {
   PERIODONTICS_MODULE_KEY,
   ORTHODONTICS_MODULE_KEY,
 } from "@/lib/specialties/keys";
+import { getResolvedPlan } from "@/lib/plans";
+import { PLAN_MODULE_KEYS } from "@/lib/plan-shared";
 
 /**
  * Universo de keys consideradas "especialidad clínica" en el sidebar y
@@ -53,6 +55,7 @@ export async function getActiveClinicModuleKeys(
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },
     select: {
+      plan: true,
       trialEndsAt: true,
       clinicModules: {
         where: {
@@ -68,9 +71,26 @@ export async function getActiveClinicModuleKeys(
   if (!clinic) return [];
 
   const inTrial = clinic.trialEndsAt.getTime() > now.getTime();
-  if (inTrial) return [...SPECIALTY_MODULE_KEYS];
 
-  return clinic.clinicModules.map((cm) => cm.module.key);
+  // Especialidades del marketplace (lógica previa intacta).
+  const specialtyKeys = inTrial
+    ? [...SPECIALTY_MODULE_KEYS]
+    : clinic.clinicModules.map((cm) => cm.module.key);
+
+  // Módulos del panel gateados por el PLAN (Fase 1: solo navegación). En trial
+  // o ante cualquier fallo se devuelven TODOS (fail-open). Post-trial: solo los
+  // habilitados en PlanConfig.features[key] (=== false oculta) para el plan.
+  let planKeys: string[] = [...PLAN_MODULE_KEYS];
+  if (!inTrial) {
+    try {
+      const resolved = await getResolvedPlan(clinic.plan);
+      planKeys = PLAN_MODULE_KEYS.filter((k) => resolved.moduleFeatures[k] !== false);
+    } catch {
+      planKeys = [...PLAN_MODULE_KEYS];
+    }
+  }
+
+  return [...specialtyKeys, ...planKeys];
 }
 
 /**

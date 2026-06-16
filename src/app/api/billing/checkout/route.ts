@@ -3,7 +3,8 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
-import { getPlan, PLAN_IDS, type PlanId } from "@/lib/billing/plans";
+import { PLAN_IDS, type PlanId } from "@/lib/billing/plans";
+import { getResolvedPlan } from "@/lib/plans";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
 
 export const runtime = "nodejs";
@@ -60,7 +61,7 @@ export async function POST(req: NextRequest) {
   }
 
   const planId: PlanId = parsed.data.plan;
-  const plan = getPlan(planId);
+  const plan = await getResolvedPlan(planId);
 
   // Reusar customer existente si la clínica ya tiene uno. Si no, crear.
   const clinic = await prisma.clinic.findUnique({

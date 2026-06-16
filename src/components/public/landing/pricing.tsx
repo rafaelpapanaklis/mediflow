@@ -1,10 +1,9 @@
 import Link from "next/link";
-import { getPlan } from "@/lib/billing/plans";
+import { getResolvedPlans } from "@/lib/plans";
 
 interface Plan {
   id: string;
   name: string;
-  price: number;
   tagline: string;
   description: string;
   popular?: boolean;
@@ -17,7 +16,6 @@ const PLANS: Plan[] = [
   {
     id: "basic",
     name: "BASIC",
-    price: getPlan("BASIC").priceMxn,
     tagline: "Para empezar",
     description: "Solo o arrancando tu práctica.",
     features: [
@@ -34,7 +32,6 @@ const PLANS: Plan[] = [
   {
     id: "pro",
     name: "PRO",
-    price: getPlan("PRO").priceMxn,
     tagline: "Lo más elegido",
     description: "La elección de clínicas en crecimiento.",
     popular: true,
@@ -54,7 +51,6 @@ const PLANS: Plan[] = [
   {
     id: "clinic",
     name: "CLINIC",
-    price: getPlan("CLINIC").priceMxn,
     tagline: "Multi-sucursal",
     description: "Para grupos y multi-sede.",
     features: [
@@ -72,7 +68,13 @@ const PLANS: Plan[] = [
   },
 ];
 
-export function Pricing() {
+export async function Pricing() {
+  const resolved = await getResolvedPlans();
+  const priceById: Record<string, number> = {
+    basic: resolved[0].priceMxn,
+    pro: resolved[1].priceMxn,
+    clinic: resolved[2].priceMxn,
+  };
   return (
     <section
       id="pricing"
@@ -241,7 +243,7 @@ export function Pricing() {
                   color: "var(--ld-fg, var(--fg))",
                 }}
               >
-                ${p.price.toLocaleString("es-MX")}
+                ${(priceById[p.id] ?? 0).toLocaleString("es-MX")}
               </span>
               <span
                 style={{

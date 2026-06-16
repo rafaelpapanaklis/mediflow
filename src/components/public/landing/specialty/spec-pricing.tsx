@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Specialty } from "@/lib/specialty-data";
-import { getPlan } from "@/lib/billing/plans";
+import { getResolvedPlans } from "@/lib/plans";
 
 interface Plan {
   name:    string;
@@ -12,17 +12,19 @@ interface Plan {
   popular?: boolean;
 }
 
-export function SpecPricing({ spec }: { spec: Specialty }) {
+export async function SpecPricing({ spec }: { spec: Specialty }) {
   const accent = spec.accent;
   const aiDesc =
     spec.category === "Dental"
       ? "IA radiografías 50/mes"
       : "IA análisis 50/mes";
 
+  const resolved = await getResolvedPlans();
+
   const plans: Plan[] = [
     {
       name:  "BASIC",
-      price: getPlan("BASIC").priceMxn,
+      price: resolved[0].priceMxn,
       tag:   "Para empezar",
       cta:   "Elegir plan",
       href:  "/signup?plan=basic",
@@ -36,7 +38,7 @@ export function SpecPricing({ spec }: { spec: Specialty }) {
     },
     {
       name:    "PRO",
-      price:   getPlan("PRO").priceMxn,
+      price:   resolved[1].priceMxn,
       tag:     "Lo más elegido",
       popular: true,
       cta:     "Elegir plan",
@@ -52,7 +54,7 @@ export function SpecPricing({ spec }: { spec: Specialty }) {
     },
     {
       name:  "CLINIC",
-      price: getPlan("CLINIC").priceMxn,
+      price: resolved[2].priceMxn,
       tag:   "Multi-sucursal",
       cta:   "Hablar con ventas",
       href:  "/contact?plan=clinic",

@@ -172,6 +172,7 @@ export async function POST(req: NextRequest) {
       } catch {}
     }
 
+    const planLimits = await getPlanLimits(data.plan);
     const clinic = await prisma.clinic.create({
       data: {
         name: data.clinicName, slug, specialty: specialtyLabel,
@@ -183,7 +184,7 @@ export async function POST(req: NextRequest) {
         clinicSize: data.clinicSize,
         phone: data.phone,
         email: data.email, plan: data.plan as any, trialEndsAt,
-        aiTokensLimit: getPlanLimits(data.plan).aiTokensDefault,
+        aiTokensLimit: planLimits.aiTokensDefault,
         subscriptionStatus: "pending_payment",
         preferredPaymentMethod: paymentMethodType,
         paymentMethodCollected,

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Zap, HardDrive, MessageCircle, Scan } from "lucide-react";
-import { formatBytes, type PlanLimits } from "@/lib/plans";
+import { formatBytes, type PlanLimits } from "@/lib/plan-shared";
 import { CardNew } from "@/components/ui/design-system/card-new";
 
 interface Usage {

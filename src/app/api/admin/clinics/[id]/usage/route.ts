@@ -43,7 +43,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     }),
   ]);
 
-  const limits = getPlanLimits(clinic.plan);
+  const limits = await getPlanLimits(clinic.plan);
   const storageUsed = storageAgg._sum.size ?? 0;
   const filesCount  = storageAgg._count.id ?? 0;
 

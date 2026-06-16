@@ -1,16 +1,21 @@
 /**
- * Single source of truth para los planes de suscripción de la
- * plataforma DaleControl.
+ * Tipos y validadores de los planes de la plataforma DaleControl.
  *
- * Los precios viven aquí (no en una tabla todavía) para evitar que el
- * cliente y el endpoint /api/billing/checkout puedan diferir. Si en el
- * futuro se quiere precios dinámicos por clínica/cupón, se mueve a una
- * tabla pero el módulo se mantiene como fachada.
+ * Este módulo es PURO y client-safe (sin prisma, sin "server-only"): solo
+ * expone el universo de ids, el guard `isPlanId` y el tipo descriptor. Es
+ * importable desde client components.
+ *
+ * El PRECIO, los límites y los permisos por módulo ya NO viven aquí: salen de
+ * la tabla `plan_configs` (editable desde el admin), resuelta server-side por
+ * `src/lib/plans.ts` (`getResolvedPlan` / `getResolvedPlans` / `getPlanLimits`).
+ * Los client components obtienen los planes vía el endpoint público
+ * `GET /api/plans` o como props desde un server component.
  */
 
 export const PLAN_IDS = ["BASIC", "PRO", "CLINIC"] as const;
 export type PlanId = (typeof PLAN_IDS)[number];
 
+/** Plan resuelto para UI (precio/features ya provienen de plan_configs). */
 export interface PlanDescriptor {
   id: PlanId;
   name: string;
@@ -18,33 +23,6 @@ export interface PlanDescriptor {
   features: string[];
 }
 
-export const PLANS: ReadonlyArray<PlanDescriptor> = [
-  {
-    id: "BASIC",
-    name: "Básico",
-    priceMxn: 499,
-    features: ["1 profesional", "200 pacientes", "Agenda", "Facturación"],
-  },
-  {
-    id: "PRO",
-    name: "Profesional",
-    priceMxn: 999,
-    features: ["3 profesionales", "Ilimitado", "Expedientes", "Reportes"],
-  },
-  {
-    id: "CLINIC",
-    name: "Clínica",
-    priceMxn: 1999,
-    features: ["Todo ilimitado", "Multi-sucursal", "API", "Manager"],
-  },
-];
-
 export function isPlanId(v: unknown): v is PlanId {
   return typeof v === "string" && (PLAN_IDS as readonly string[]).includes(v);
-}
-
-export function getPlan(id: PlanId): PlanDescriptor {
-  const p = PLANS.find((x) => x.id === id);
-  if (!p) throw new Error(`Plan no encontrado: ${id}`);
-  return p;
 }
