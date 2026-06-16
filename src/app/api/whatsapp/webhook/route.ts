@@ -57,6 +57,15 @@ export async function POST(req: NextRequest) {
     const sigBuf = Buffer.from(signature);
     const expectedBuf = Buffer.from(expectedSig);
     if (sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) {
+      // TEMP DEBUG (quitar): diagnostica por qué la firma no coincide. No expone
+      // el secret (solo su largo); recv/exp son hashes públicos.
+      console.error("WA_SIG_DEBUG " + JSON.stringify({
+        secretLen: appSecret.length,
+        secretHasWs: /\s/.test(appSecret),
+        bodyLen: rawBody.length,
+        recv: signature,
+        exp: expectedSig,
+      }));
       return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
     }
 
