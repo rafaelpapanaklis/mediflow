@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { logMutation } from "@/lib/audit";
 
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
@@ -30,5 +31,18 @@ export async function POST(req: NextRequest) {
   const record = await prisma.periodontalRecord.create({
     data: { patientId, clinicId: ctx.clinicId, doctorId: ctx.userId, measurements, notes, bleedingIndex, plaquIndex },
   });
+
+  // NOM-024 §6.3.5 — bitácora de creación del registro periodontal.
+  // clinicId/userId SIEMPRE de sesión (getAuthContext), nunca del body.
+  await logMutation({
+    req,
+    clinicId:   ctx.clinicId,
+    userId:     ctx.userId,
+    entityType: "periodontal",
+    entityId:   record.id,
+    action:     "create",
+    after:      { patientId: record.patientId, doctorId: record.doctorId },
+  });
+
   return NextResponse.json(record, { status: 201 });
 }

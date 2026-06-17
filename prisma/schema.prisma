@@ -2089,7 +2089,10 @@ model AuditLog {
   userAgent  String?
   createdAt  DateTime @default(now())
 
-  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  // NOM-024 §6.3.5 — la bitácora NO se destruye al borrar la clínica. La FK
+  // real en BD es ON DELETE RESTRICT (ver sql/nom-audit-immutable.sql, aplicado
+  // a mano). Se declara Restrict aquí para que el ORM no reintroduzca CASCADE.
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Restrict)
   user   User   @relation(fields: [userId], references: [id])
 
   @@index([clinicId, entityType, entityId])

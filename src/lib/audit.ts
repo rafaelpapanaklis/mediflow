@@ -24,6 +24,8 @@ export type AuditEntityType =
   | "consent"
   | "inventory"
   | "treatment"
+  | "periodontal"
+  | "body-map"
   | "xray-analysis"
   | "patient-file"
   | "prescription"

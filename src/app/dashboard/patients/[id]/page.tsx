@@ -4,6 +4,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { getServerT } from "@/i18n/server";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
+import { logAudit } from "@/lib/audit";
 import { PatientDetailClient } from "./patient-detail-client";
 import { PatientContextPanel } from "@/components/dashboard/patient-context";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
@@ -69,6 +71,28 @@ export default async function PatientDetailPage({ params }: { params: { id: stri
   ]);
 
   if (!patient) notFound();
+
+  // NOM-024 §6.3.5 — bitácora de LECTURA del expediente. Abrir el detalle de
+  // un paciente (su expediente clínico) deja rastro: quién, qué, cuándo y
+  // origen (IP/UA). clinicId/userId SIEMPRE de sesión, nunca del request.
+  {
+    const h = headers();
+    const xff = h.get("x-forwarded-for");
+    const ip =
+      (xff ? xff.split(",")[0]!.trim() : null) ??
+      h.get("x-real-ip") ??
+      h.get("cf-connecting-ip") ??
+      undefined;
+    await logAudit({
+      clinicId:   user.clinicId,
+      userId:     user.id,
+      entityType: "record",
+      entityId:   patient.id,
+      action:     "view",
+      ipAddress:  ip || undefined,
+      userAgent:  h.get("user-agent") || undefined,
+    });
+  }
 
   const portalUrl = patient.portalToken
     ? `${process.env.NEXT_PUBLIC_APP_URL}/portal/${patient.portalToken}`
