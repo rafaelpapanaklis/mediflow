@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
   if (!patientId) return NextResponse.json({ error: "patientId required" }, { status: 400 });
 
   const list = await prisma.prescription.findMany({
-    where: { clinicId: ctx.clinicId, patientId },
+    where: { clinicId: ctx.clinicId, patientId, status: "ACTIVE" },
     include: {
       doctor: { select: { id: true, firstName: true, lastName: true } },
       items:  { include: { cums: true } },

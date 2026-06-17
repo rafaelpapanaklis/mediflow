@@ -48,7 +48,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       },
     }),
     prisma.prescription.findMany({
-      where: { patientId: patient.id, clinicId: user.clinicId },
+      where: { patientId: patient.id, clinicId: user.clinicId, status: "ACTIVE" },
       orderBy: { issuedAt: "desc" },
       include: { items: { include: { cums: true } } },
     }),
