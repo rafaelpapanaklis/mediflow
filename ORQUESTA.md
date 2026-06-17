@@ -1,4 +1,55 @@
 ═══════════════════════════════════════════════════════════════════════════
+## NOM-OLA1-INTEG — Integración de las 5 ramas NOM Ola 1 + fix P2 (PDF receta anulada) 🟡 EN RAMA integ/nom-ola1 (NO main, 2026-06-17)
+═══════════════════════════════════════════════════════════════════════════
+Integra en UNA rama las 5 ramas de la Ola 1 NOM-024 + arregla el P2 (PDF de receta anulada
+sin sello "ANULADA"). NO toca main. Build VERDE, EXIT 0.
+
+RAMAS MERGEADAS (git merge --no-ff, en este orden) sobre main (18a64fb):
+  a) feat/nom-rls          → 34b6fe3  (RLS deny-all faltante + sql/nom-rls-missing.sql)
+  b) feat/nom-cie10        → 265f49d  (selector CIE-10 real en medicine/dental/dermatology forms)
+  c) feat/nom-expediente   → 5c8fd23  (validación de campos mínimos + audit de notas/firma clínica)
+  d) feat/nom-conservacion → e9865b7  (anulación lógica receta + soft-delete archivos + archivado clínica; DUEÑA del schema)
+  e) feat/nom-bitacora     → 263c7d2  (bitácora inmutable + audit de mutaciones/lecturas)
+
+CONFLICTOS (schema.prisma + audit.ts): NO hubo conflicto de merge real. Los cambios de
+conservacion y bitacora caen en regiones DISJUNTAS → git (ort) los auto-fusionó. VERIFIQUÉ a
+mano que quedó la UNIÓN de ambos (no se descartó nada):
+  - prisma/schema.prisma: conservacion (Clinic.archivedAt/archivedBy/archiveReason;
+    PatientFile.deletedAt/deletedBy/deleteReason + @@index([clinicId, deletedAt]);
+    Prescription.status/voidedAt/voidedBy/voidReason) Y bitacora (AuditLog.clinic onDelete
+    Cascade→Restrict + comentario, L2095). Modelos distintos.
+  - src/lib/audit.ts: conservacion (AuditAction +"void"|"soft_delete"|"archive"; logMutation
+    soporta esas acciones) Y bitacora (AuditEntityType +"periodontal"|"body-map").
+  `npx prisma generate` corrido tras el merge. ORQUESTA.md también se auto-fusionó (rls + conservacion + bitacora).
+
+FIX P2 — PDF de receta ANULADA (RX-06):
+  El builder COMPARTIDO src/lib/pdf/prescription-pdf.ts ya hace su propio query con `include`
+  (sin select) → rx.status/voidReason/voidedAt YA estaban disponibles, NO hubo que tocar los
+  endpoints. Ahora pasa voided=(status==="VOIDED")/voidReason/voidedAt a PrescriptionDocument,
+  que estampa (a) watermark diagonal "ANULADA" (rojo, fixed, todas las páginas) y (b) banner
+  rojo "RECETA ANULADA — SIN VALIDEZ" con motivo + fecha. Cubre los 3 consumidores del builder:
+  prescriptions/[id]/pdf (dashboard), prescriptions/[id]/verify/pdf (público) y
+  paciente/recetas/[id]/pdf (portal). @react-pdf/renderer v4.5.1 (transform/opacity OK).
+  Archivos: prescription-document.tsx (+props + estilos watermark/banner + render),
+  prescription-pdf.ts (pasa los 3 campos).
+
+BUILD: npx next build (worktree; node_modules vía junction; SIN pipes). ✓ Compiled successfully ·
+  type-check sin errores · ✓ Generating static pages (275/275) · EXIT 0. Los prisma:error
+  DATABASE_URL son del prerender sin DB (patrón conocido). Las 3 rutas PDF en el manifest.
+
+🔴 SQL A APLICAR A MANO (Supabase SQL Editor, NO prisma migrate; idempotentes):
+  1) sql/nom-rls-missing.sql      — RLS deny-all en las 16 tablas sin RLS (portal paciente, IA recetas, labs).
+  2) sql/nom-conservacion.sql     — columnas/índices de borrado lógico (archivado / soft-delete / anulación).
+  3) sql/nom-audit-immutable.sql  — trigger append-only en audit_logs + FK clinics→audit_logs RESTRICT.
+  ⚠️ Tras (3): borrar una clínica con bitácora FALLARÁ (FK RESTRICT) — comportamiento NOM-024
+  correcto; conservacion ya cambió el endpoint admin/clinics/[id] a archivado lógico → validar en QA.
+
+RAMA: integ/nom-ola1 (worktree mediflow-worktrees/nom-integ). Pusheada a origin. NO mergear a main sin QA.
+QA: aplicar los 3 SQL en orden; anular una receta → su PDF (dashboard/portal/verify) sale con
+  watermark+banner "ANULADA"; smoke de RLS, CIE-10 en consulta, validación de notas, conservación
+  (anti-hard-delete) y bitácora inmutable. Aislamiento multi-tenant intacto (clinicId de sesión).
+
+═══════════════════════════════════════════════════════════════════════════
 ## NOM-RLS — RLS deny-all FALTANTE (portal paciente + IA recetas + labs B2B) ✅ EN RAMA feat/nom-rls (56b1e9f, 2026-06-17) · NO en main
 ═══════════════════════════════════════════════════════════════════════════
 QUÉ SE HIZO: cierra AC-10 / AC-14 y el gap #26 del audit
