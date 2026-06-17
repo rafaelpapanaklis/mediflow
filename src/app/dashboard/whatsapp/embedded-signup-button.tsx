@@ -103,7 +103,11 @@ export function EmbeddedSignupButton({ onConnected }: { onConnected?: () => void
         config_id: CONFIG_ID,
         response_type: "code",
         override_default_response_type: true,
-        extras: { setup: {}, featureType: "", sessionInfoVersion: "3" },
+        // Coexistence: la clínica conecta su número EXISTENTE de la app de
+        // WhatsApp Business y lo conserva en el celular (mismo número en la app
+        // y en el panel, sincronizado). El config_id de Meta debe estar creado
+        // con coexistence habilitado; featureType selecciona ese sub-flujo.
+        extras: { setup: {}, featureType: "whatsapp_business_app_onboarding", sessionInfoVersion: "3" },
       },
     );
   }
