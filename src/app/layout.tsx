@@ -57,6 +57,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
+        {/* Verificación de dominio de Meta (Business Manager → Dominios). No mover de <head>. */}
+        <meta name="facebook-domain-verification" content="vbkgvotyofxz7i64jkvb9kgtep2oki" />
         <script dangerouslySetInnerHTML={{ __html: `
           (function() {
             try {
