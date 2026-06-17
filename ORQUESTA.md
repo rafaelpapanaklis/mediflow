@@ -185,3 +185,23 @@ Env nuevas: NINGUNA. SQL nuevo: NINGUNO.
 - Otros precios legacy fuera de alcance T2: `admin/billing` activate_clinic (299/499/799) y `affiliates/stats.ts` (fallback MRR) — solo aplican cuando `clinic.monthlyPrice` es null.
 
 Env nuevas: NINGUNA. SQL nuevo: `sql/plan_configs.sql` (aplicar a mano).
+
+---
+
+## [WS-WA-COEXISTENCE] — Embedded Signup → flujo coexistence (16-jun, `820b3f0`)
+
+Rama `feature/whatsapp-embedded` (rebasada sobre main). Objetivo: la clínica conecta su número EXISTENTE de la app de WhatsApp Business y lo conserva en el celular (mismo número, sincronizado con el panel).
+
+**Validación (doc Meta/360dialog, no asumido):** featureType `whatsapp_business_app_onboarding`, sessionInfoVersion `3`; los mensajes que la clínica envía desde el cel llegan como webhook `smb_message_echoes` (no `messages`).
+
+**Cambios (2 archivos):**
+- `embedded-signup-button.tsx`: `FB.login` extras `featureType:""` → `"whatsapp_business_app_onboarding"` (sub-flujo coexistence).
+- `api/whatsapp/webhook/route.ts`: nuevo handler `ingestBusinessAppEchoes` para `field==="smb_message_echoes"` — refleja el eco como mensaje OUT del staff en el Inbox (match paciente por `to`, dedup por wamid, upsert hilo) y **pausa el bot del hilo** (`botActive=false`) para no responder doble. Reusa el handoff existente. INERTE hasta que coexistence esté activo → no afecta la conexión manual actual.
+
+**Build:** `npx next build` EXIT 0 (`route.js` del webhook compilado, sin errores de tipo). `prisma generate` corrido (campos `waBusinessAccountId`/`waConnMethod`).
+
+**Pendiente Rafael (Meta = cuello de botella):** verificación negocio + Tech Provider + Embedded Signup con coexistence (`config_id` → `NEXT_PUBLIC_WHATSAPP_ES_CONFIG_ID`) + App Review (`whatsapp_business_management`+`whatsapp_business_messaging`) + **suscribir webhook `smb_message_echoes`** + aplicar `sql/whatsapp_embedded.sql` al desplegar.
+
+**No hecho (a futuro):** webhooks `history` (importar chats viejos) y `smb_app_state_sync` (contactos); el exchange aún llama `/register` (best-effort) — revisar para coexistence. Merge a main SOLO tras QA + Meta listo.
+
+Env nuevas: `NEXT_PUBLIC_WHATSAPP_ES_CONFIG_ID` (Rafael, tras crear el ES). SQL: `sql/whatsapp_embedded.sql` (2 columnas, al desplegar).
