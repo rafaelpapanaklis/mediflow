@@ -1,4 +1,52 @@
+═══════════════════════════════════════════════════════════════════════════
+## NOM-RLS — RLS deny-all FALTANTE (portal paciente + IA recetas + labs B2B) ✅ EN RAMA feat/nom-rls (56b1e9f, 2026-06-17) · NO en main
+═══════════════════════════════════════════════════════════════════════════
+QUÉ SE HIZO: cierra AC-10 / AC-14 y el gap #26 del audit
+docs/compliance/NOM024_AUDIT_2026-06-17.md (Área 9 — Control de acceso). Habilita
+RLS + policy RESTRICTIVE deny-all a (anon, authenticated) en las 16 tablas que hoy
+NO la tenían. Base legal: LFPDPPP art. 19 + NOM-024-SSA3-2012 §6.3.2. Defense-in-
+depth: una fuga del anon key ya NO expone passwordHash/tokenHash del portal del
+paciente ni los datos del módulo de laboratorios vía PostgREST. El service role
+bypassa RLS por diseño → la app (Prisma server-side) sigue igual; estas policies
+son inertes para el cliente.
 
+PATRÓN (idéntico a sql/rls-deny-all-policies.sql): helper público
+_apply_deny_all_rls(text) → ALTER TABLE ... ENABLE ROW LEVEL SECURITY + CREATE
+POLICY <tabla>_deny_anon AS RESTRICTIVE FOR ALL TO anon, authenticated
+USING (false) WITH CHECK (false), sólo si no existe; envuelto en EXCEPTION WHEN
+undefined_table; DROP FUNCTION al final. Idempotente y re-ejecutable.
+
+TABLAS CUBIERTAS (16):
+- Portal del paciente (3): patient_accounts, patient_account_links,
+  patient_account_sessions   (def. sql/patient-portal.sql)
+- IA de recetas (1): prescription_ai_checks   (def. sql/prescription-ai-check.sql;
+  OJO: el nombre real es PLURAL — el audit lo nombraba "prescription_ai_check")
+- Laboratorios B2B (12): dental_labs, dental_lab_users, dental_lab_services,
+  dental_lab_orders, dental_lab_order_events, dental_lab_order_files,
+  dental_lab_traffic_history, dental_lab_bank_accounts, dental_lab_fiscal_data,
+  dental_lab_invoices, dental_lab_chat_threads, dental_lab_chat_messages
+  (def. sql/laboratorios.sql / Prisma @@map, verificado 1:1)
+
+ALCANCE EXTENDIDO (+2 sobre el gap #26, deliberado): patient_account_links (mismo
+cluster de PII: mapea cuenta↔paciente↔clínica) y el padre dental_labs (datos del
+lab + mpAccessToken de b2b-payments.sql). Dejar hermanos del mismo archivo sin RLS
+contradecía el objetivo. Verificado contra TODOS los sql/*.sql: ninguna de las 16
+tenía RLS previa (ai-billing, afiliados, supplier, quotes, etc. ya cubren las suyas).
+
+ARCHIVOS (1, +112): sql/nom-rls-missing.sql (NUEVO). NO toca schema.prisma ni rutas.
+
+SQL A APLICAR (a mano, Supabase SQL editor, tras revisar la rama):
+  → sql/nom-rls-missing.sql
+La verificación viene al pie del archivo (debe devolver 16 filas con
+policyname LIKE '%_deny_anon').
+
+BUILD: npx next build (sin pipes), EXIT 0, ✓ Compiled successfully, 276/276 páginas.
+(El build es sólo confirmación de no-regresión: sql/ no se compila; cero cambios de código.)
+
+RAMA: feat/nom-rls (commit SQL 56b1e9f). NO mergeada a main. Sin envs nuevas.
+QA (Rafael): aplicar el SQL en Supabase; confirmar que portal del paciente, bot de
+IA de recetas y módulo de labs siguen operando (van por service role) y que la
+query de verificación devuelve 16 policies.
 
 ═══════════════════════════════════════════════════════════════════════════
 ## WS-RT-INBOX merge — Inbox en tiempo real (polling) ✅ EN MAIN (6b4b2e6, 2026-06-17)
