@@ -1,6 +1,73 @@
 
 
 ═══════════════════════════════════════════════════════════════════════════
+## NOM-BITACORA — Bitácora de auditoría INMUTABLE + auditar mutaciones/lecturas (NOM-024 §6.3.5) 🟡 EN RAMA feat/nom-bitacora (NO main, 2026-06-17)
+═══════════════════════════════════════════════════════════════════════════
+Cierra los gaps #7, #8, #9 y #10 de la auditoría NOM-024
+(docs/compliance/NOM024_AUDIT_2026-06-17.md, Área 4 AUD-2..AUD-5). NO toca main.
+Build VERDE (npx next build, sin pipes), EXIT 0.
+
+QUÉ SE HIZO:
+1) INMUTABILIDAD (gap #7 / AUD-2) — SQL nuevo a aplicar a MANO: sql/nom-audit-immutable.sql.
+   Trigger BEFORE UPDATE OR DELETE en audit_logs que lanza excepción → la tabla queda
+   APPEND-ONLY (solo INSERT). Idempotente.
+2) FK clinics→audit_logs CASCADE → RESTRICT (gap #8 / AUD-3) — en el mismo .sql. Borrar una
+   clínica con bitácora ahora FALLA en vez de destruir el rastro. El DO-block localiza la FK
+   existente por catálogo (nombre auto-generado variable) y la recrea como
+   audit_logs_clinicId_fkey ON DELETE RESTRICT. Idempotente. También se actualizó
+   prisma/schema.prisma (AuditLog.clinic onDelete Cascade→Restrict) para que el ORM no
+   reintroduzca CASCADE en un futuro db push. NO cambia el client generado.
+3) DEJÓ DE BORRAR LA BITÁCORA (gap #8 / AUD-3) — src/app/api/cron/retention/route.ts: se
+   eliminó el bloque auditLog.deleteMany (>7 años), su entrada en summary (auditLogsDeleted)
+   y la var sevenYearsAgo. El resto del cron (anonimización inbox >2a y arco >5a por clínica)
+   queda INTACTO. El archivado WORM off-site lo sigue haciendo el cron db-export (no se toca).
+   JSDoc actualizado.
+4) AUDITAR MUTACIONES antes sin registro (gap #9 / AUD-4) — logMutation de @/lib/audit,
+   clinicId/userId SIEMPRE de sesión (getAuthContext), nunca del body:
+   - treatments POST (crear plan)  → entityType "treatment", create.
+   - treatments/[id] PATCH (add_session, cambio de estado, edición general) y DELETE.
+   - periodontal POST (crear registro) → entityType "periodontal" (nuevo en el union).
+   - body-map POST (crear anotación)   → entityType "body-map" (nuevo en el union).
+5) AUDITAR LECTURA del expediente (gap #10 / AUD-5) — src/app/dashboard/patients/[id]/page.tsx:
+   al abrir el detalle del paciente se registra logAudit action "view", entityType "record",
+   entityId = patientId, con IP/UA vía headers(). Mismo patrón que el read-log ya existente
+   en /api/records GET.
+   NO se tocó clinical-notes/route, clinical/route ni appointments/[id]/complete (otra terminal).
+
+ARCHIVOS (8 modificados + 1 nuevo):
+- sql/nom-audit-immutable.sql              (NUEVO — aplicar a mano en Supabase)
+- prisma/schema.prisma                     (AuditLog.clinic onDelete → Restrict + comentario)
+- src/app/api/cron/retention/route.ts      (−auditLog.deleteMany; summary y JSDoc ajustados)
+- src/app/api/treatments/route.ts          (audit POST)
+- src/app/api/treatments/[id]/route.ts     (audit PATCH ×3 + DELETE)
+- src/app/api/periodontal/route.ts         (audit POST)
+- src/app/api/body-map/route.ts            (audit POST)
+- src/app/dashboard/patients/[id]/page.tsx (audit READ del expediente)
+- src/lib/audit.ts                          (+entityType "periodontal" | "body-map")
+
+🔴 SQL A APLICAR A MANO (Supabase SQL Editor, NO prisma migrate):
+   sql/nom-audit-immutable.sql — trigger append-only + FK RESTRICT. Idempotente.
+   ⚠️ CONSECUENCIA ESPERADA tras aplicar: borrar una clínica que tenga audit_logs fallará
+   (FK RESTRICT). Es el comportamiento NOM-024 correcto; el flujo "eliminar clínica" del
+   /admin (admin/clinics/[id]) deberá archivar/desligar la bitácora antes de borrar →
+   followup separado, fuera de esta terminal.
+
+BUILD: npx next build (worktree; node_modules vía junction al repo principal; SIN pipes).
+   ✓ Compiled successfully · type-check sin errores · ✓ Generating static pages (276/276) ·
+   EXIT 0. Los prisma:error DATABASE_URL son del prerender sin DB en este entorno y NO
+   afectan el exit (patrón conocido). Rutas tocadas presentes en el manifest como ƒ.
+
+RAMA: feat/nom-bitacora (worktree mediflow-worktrees/nom-bitacora). NO mergear a main sin QA.
+
+QA (Rafael):
+- Aplicar sql/nom-audit-immutable.sql en Supabase; verificar trigger + FK (queries al pie del
+  .sql). Probar que un UPDATE/DELETE manual a audit_logs FALLA.
+- Crear/editar/borrar un plan de tratamiento, un registro periodontal y una anotación de
+  body-map, y abrir un expediente → confirmar filas nuevas en audit_logs (acción correcta,
+  clinicId de la clínica activa, IP/UA en la lectura).
+- Confirmar que el cron de retención ya NO reporta auditLogsDeleted ni borra bitácora.
+
+═══════════════════════════════════════════════════════════════════════════
 ## WS-RT-INBOX merge — Inbox en tiempo real (polling) ✅ EN MAIN (6b4b2e6, 2026-06-17)
 ═══════════════════════════════════════════════════════════════════════════
 QUÉ SE HIZO: merge de la rama feat/rt-inbox a main y push (deploy auto en Vercel).

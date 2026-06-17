@@ -14,7 +14,10 @@ export const maxDuration = 300;
  * Auth: Authorization: Bearer ${CRON_SECRET}.
  *
  * Política (detalle en docs/RETENTION.md):
- *  - audit_logs > 7 años    → borrar (NOM-024 retención mínima cumplida)
+ *  - audit_logs → NUNCA se borran. La bitácora de auditoría es append-only e
+ *    inmutable a nivel BD (trigger BEFORE UPDATE/DELETE + FK clinics→audit_logs
+ *    ON DELETE RESTRICT, ver sql/nom-audit-immutable.sql) y se archiva WORM
+ *    off-site vía el cron db-export. Borrarla violaría NOM-024 §6.3.5.
  *  - patient_files huérfanos > 30 días (sin patientId existente) → borrar
  *  - inbox_messages > 2 años → anonimizar contenido
  *  - arco_requests RESOLVED/REJECTED > 5 años → anonimizar
@@ -31,13 +34,11 @@ export async function GET(req: NextRequest) {
   }
 
   const now = new Date();
-  const sevenYearsAgo = new Date(now.getTime() - 7 * 365 * 24 * 60 * 60 * 1000);
   const fiveYearsAgo  = new Date(now.getTime() - 5 * 365 * 24 * 60 * 60 * 1000);
   const twoYearsAgo   = new Date(now.getTime() - 2 * 365 * 24 * 60 * 60 * 1000);
 
   const summary = {
     startedAt: now.toISOString(),
-    auditLogsDeleted: 0,
     inboxMessagesAnonymized: 0,
     arcoRequestsAnonymized: 0,
     clinicsProcessed: 0,
@@ -45,25 +46,20 @@ export async function GET(req: NextRequest) {
     errors: [] as string[],
   };
 
-  // 1) Audit logs > 7 años: borrar GLOBAL (no per-clinic — la tabla es
-  //    grande y filtrar por clinicId no aporta).
-  try {
-    const r = await prisma.auditLog.deleteMany({
-      where: { createdAt: { lt: sevenYearsAgo } },
-    });
-    summary.auditLogsDeleted = r.count;
-  } catch (e: any) {
-    summary.errors.push(`auditLog.deleteMany: ${String(e?.message ?? e).slice(0, 200)}`);
-  }
+  // NOM-024 §6.3.5 — la BITÁCORA DE AUDITORÍA (audit_logs) NO se borra. Es
+  // append-only e inmutable a nivel BD (trigger BEFORE UPDATE/DELETE + FK
+  // clinics→audit_logs ON DELETE RESTRICT, ver sql/nom-audit-immutable.sql) y
+  // se archiva WORM off-site vía el cron db-export. Cualquier DELETE aquí
+  // sería rechazado por el trigger. El borrado previo (auditLog.deleteMany
+  // > 7 años) se ELIMINÓ por incumplir la retención inmutable de la norma.
 
-  // 2) Iterar por clínica para inbox + arco + huérfanos
+  // Iterar por clínica para inbox + arco (anonimización LFPDPPP).
   const clinics = await prisma.clinic.findMany({ select: { id: true, name: true } });
   for (const c of clinics) {
     try {
-      // 2a) inbox_messages > 2 años → anonimizar body. sentAt es la
-      // columna de timestamp en este modelo. Adjuntos se vacían a [] (no
-      // null porque el campo es Json opcional pero algunos clientes
-      // asumen array).
+      // inbox_messages > 2 años → anonimizar body. sentAt es la columna de
+      // timestamp en este modelo. Adjuntos se vacían a [] (no null porque el
+      // campo es Json opcional pero algunos clientes asumen array).
       const inboxRes = await prisma.inboxMessage.updateMany({
         where: {
           sentAt: { lt: twoYearsAgo },
@@ -77,7 +73,7 @@ export async function GET(req: NextRequest) {
       }).catch(() => ({ count: 0 }));
       summary.inboxMessagesAnonymized += inboxRes.count;
 
-      // 2b) arco_requests cerrados > 5 años → anonimizar
+      // arco_requests cerrados > 5 años → anonimizar
       const arcoRes = await prisma.arcoRequest.updateMany({
         where: {
           clinicId: c.id,
