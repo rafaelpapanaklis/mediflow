@@ -7,6 +7,7 @@ import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { hasPermission } from "@/lib/auth/permissions";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
+import { EMPTY_NOTE_ERROR, isClinicalNoteEmpty } from "@/lib/clinical/note-validation";
 
 export const dynamic = "force-dynamic";
 
@@ -139,6 +140,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     where: { id: params.id, clinicId: dbUser.clinicId },
     select: { subjective: true, objective: true, assessment: true, plan: true, specialtyData: true },
   });
+
+  // NOM-004 CAMPOS-OBLIGATORIOS: no permitir FIRMAR una nota vacía. Validamos el
+  // resultado EFECTIVO (merge del patch sobre lo existente) antes de sellar SIGNED.
+  if (parsed.data.status === "SIGNED") {
+    const effective = {
+      subjective: parsed.data.subjective !== undefined ? parsed.data.subjective : beforeState?.subjective,
+      objective: parsed.data.objective !== undefined ? parsed.data.objective : beforeState?.objective,
+      assessment: parsed.data.assessment !== undefined ? parsed.data.assessment : beforeState?.assessment,
+      plan: parsed.data.plan !== undefined ? parsed.data.plan : beforeState?.plan,
+      specialtyData: nextSpec ?? currentSpec,
+    };
+    if (isClinicalNoteEmpty(effective)) {
+      return NextResponse.json({ error: EMPTY_NOTE_ERROR }, { status: 422 });
+    }
+  }
 
   const updated = await prisma.medicalRecord.update({
     where: { id: params.id },
