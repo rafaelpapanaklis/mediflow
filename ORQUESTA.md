@@ -1,6 +1,46 @@
 
 
 ═══════════════════════════════════════════════════════════════════════════
+## WS-RT-INBOX merge — Inbox en tiempo real (polling) ✅ EN MAIN (6b4b2e6, 2026-06-17)
+═══════════════════════════════════════════════════════════════════════════
+QUÉ SE HIZO: merge de la rama feat/rt-inbox a main y push (deploy auto en Vercel).
+El inbox ahora recibe mensajes/cambios sin recargar, vía polling ligero cada 5s.
+
+PROCESO:
+- Rebase de feat/rt-inbox sobre main: LIMPIO, 0 conflictos. La rama estaba 1 commit
+  detrás (main tenía solo 22931a5 = meta-etiqueta SEO en layout.tsx; el commit del
+  inbox no toca layout.tsx → sin solapamiento). merge-base 45771ac.
+  Tras rebase: ab35564 → 6b4b2e6 (mismo árbol, reparentado sobre 22931a5).
+- Merge a main: git merge --ff-only feat/rt-inbox → Fast-forward 22931a5..6b4b2e6.
+  Sin commit de merge (FF puro), por eso no hay commit nuevo con Co-Author.
+- Push: 22931a5..6b4b2e6  main -> main. OK.
+
+ARCHIVOS (3, +343/-7):
+- src/app/api/inbox/since/route.ts (NUEVO, 203 líneas): GET ligero de polling. Devuelve
+  sólo lo cambiado desde ?ts=<ISO>: threads (lastMessageAt|updatedAt > ts), messages del
+  hilo abierto (?threadId), counts.byChannel y serverTime (cursor del próximo poll, evita
+  clock skew). Despierta SNOOZED vencidos. take:200.
+- src/app/api/inbox/threads/route.ts (+serverTime): captura serverTime al inicio y lo
+  devuelve para sembrar el cursor del cliente. Sin otro cambio.
+- src/app/dashboard/inbox/inbox-client.tsx (+135/-6): poll cada 5s, merge de threads/
+  messages por id (sin recargar), pausa en document.hidden, reconciliación silenciosa.
+
+AISLAMIENTO MULTI-TENANT (revisado, NO debilitado):
+- clinicId SIEMPRE de getDbUser() (cookie firmada de clínica activa + supabaseId); nada
+  del request puede ampliar el alcance. Toda query lleva clinicId: dbUser.clinicId.
+- Permiso: denyIfMissingPermission(dbUser, "inbox.view").
+- threadId se valida {id, clinicId} con findFirst ANTES de leer mensajes; un threadId
+  ajeno → owned null → 0 mensajes. El cliente nunca envía clinicId.
+
+BUILD: npx next build (sin pipes), EXIT 0, ✓ Compiled successfully, 276/276 páginas.
+/api/inbox/since presente en el manifest como ƒ (dynamic, force-dynamic). Los
+prisma:error DATABASE_URL son del prerender sin DB en este entorno y no afectan el exit.
+
+SIN SQL, SIN envs nuevas. COMMIT FINAL EN MAIN: 6b4b2e6.
+QA (Rafael): abrir Inbox en 2 pestañas/usuarios de la MISMA clínica; un WhatsApp/cambio
+entrante debe aparecer en ≤5s sin refrescar; verificar que otra clínica NO ve nada.
+
+═══════════════════════════════════════════════════════════════════════════
 ## WS-billing · T3 — "Cambiar de plan" en trial actualiza el plan in-place ✅ EN MAIN (6f12a94, 2026-06-16)
 ═══════════════════════════════════════════════════════════════════════════
 Commit 6f12a94. Build VERDE (npx next build, sin pipes; ✓ Compiled successfully +
