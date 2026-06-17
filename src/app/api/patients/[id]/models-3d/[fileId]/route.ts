@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { createClient as createAdmin } from "@supabase/supabase-js";
-import { BUCKETS, extractStoragePath } from "@/lib/storage";
 import { hasPermission } from "@/lib/auth/permissions";
 import { logAudit } from "@/lib/audit";
 
@@ -27,23 +25,26 @@ export async function DELETE(
   });
   if (!file) return NextResponse.json({ error: "Archivo no encontrado" }, { status: 404 });
 
-  // Borra de Storage. No fatal si falla — el registro igual se elimina.
+  // Ya borrado lógicamente — idempotente.
+  if (file.deletedAt) return NextResponse.json({ success: true, softDeleted: true });
+
+  // Motivo opcional del body.
+  let reason: string | null = null;
   try {
-    const supabase = createAdmin(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false } },
-    );
-    const storagePath = extractStoragePath(file.url, BUCKETS.PATIENT_FILES);
-    if (storagePath) {
-      await supabase.storage.from(BUCKETS.PATIENT_FILES).remove([storagePath]);
+    const body = await _req.json();
+    if (body && typeof body.reason === "string" && body.reason.trim()) {
+      reason = body.reason.trim().slice(0, 2000);
     }
-  } catch (e) {
-    console.error("[models-3d] storage delete error (non-fatal):", e);
+  } catch {
+    /* sin body */
   }
 
-  await prisma.patientFile.deleteMany({
+  // NOM-004 conservación / NOM-024 §7 — NO hard-delete: borrado LÓGICO. El blob
+  // en Storage se PRESERVA (expediente, conservación ≥5 años); deletedAt oculta
+  // el modelo 3D de la vista activa.
+  await prisma.patientFile.updateMany({
     where: { id: params.fileId, clinicId: ctx.clinicId },
+    data:  { deletedAt: new Date(), deletedBy: ctx.userId, deleteReason: reason },
   });
 
   await logAudit({
@@ -51,16 +52,16 @@ export async function DELETE(
     userId: ctx.userId,
     entityType: "patient-file",
     entityId: params.fileId,
-    action: "delete",
+    action: "soft_delete",
     changes: {
       _deleted: {
         before: { name: file.name, category: file.category, url: file.url },
-        after: null,
+        after: { deletedAt: new Date().toISOString(), deleteReason: reason },
       },
     },
   });
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, softDeleted: true });
 }
 
 // PATCH /api/patients/[id]/models-3d/[fileId] — guarda las notas clínicas

@@ -1,6 +1,68 @@
 
 
 ═══════════════════════════════════════════════════════════════════════════
+## [NOM-CONSERVACION] Anti-hard-delete / conservación (NOM-004 / NOM-024 §7) ✅ rama feat/nom-conservacion — NO main (2026-06-17)
+═══════════════════════════════════════════════════════════════════════════
+QUÉ SE HIZO: cierra Ola 1·fila 1 del audit (docs/compliance/NOM024_AUDIT_2026-06-17.md):
+RX-11, RX-06, RET-01, RET-12. El borrado FÍSICO del expediente se sustituye por
+anulación/borrado LÓGICO con motivo + preservación. Ningún DELETE destruye ya
+recetas, radiografías, modelos 3D, ni el expediente al "eliminar" una clínica.
+
+CAMBIOS:
+1) Receta (RX-11/RX-06) — api/prescriptions/[id]/route.ts: DELETE ya NO hace
+   prisma.delete; ANULA (status=VOIDED + voidedAt + voidedBy + voidReason),
+   idempotente, motivo opcional { reason } en el body. Se quitó el bloqueo por
+   cofeprisFolio (anular ≠ destruir).
+   · Verificación pública (el QR sigue resolviendo, muestra "ANULADA"):
+     api/prescriptions/[id]/verify/route.ts (valid=!expired && !voided; isVoided +
+     voidReason) y portal/prescription/[id]/verify/page.tsx (banner rojo "⛔ Receta
+     ANULADA — no debe ser surtida" + motivo; oculta botón Descargar PDF).
+   · Anuladas ocultas de listas ACTIVAS (where status:"ACTIVE"): prescriptions/
+     route.ts, paciente/recetas, patients/[id]/timeline, patients/[id]/export,
+     patients/[id]/export-cda. El backup db-export NO se filtra (conserva todo).
+2) Radiografías + Modelos 3D (RET-01) — soft-delete de PatientFile:
+   api/xrays/[id]/route.ts y api/patients/[id]/models-3d/[fileId]/route.ts (DELETE)
+   ya NO borran blob de Storage ni fila → marcan deletedAt/deletedBy/deleteReason;
+   el blob se CONSERVA. Filtro deletedAt:null en vistas activas: xrays/route.ts,
+   dashboard/xrays/[patientId]/page.tsx, patients/[id]/timeline, patients/[id]/
+   models-3d/route.ts, patients/[id]/export, dashboard/home/doctor (count).
+3) Clínica (RET-01/RET-12) — api/admin/clinics/[id]/route.ts: DELETE ya NO hace
+   prisma.clinic.delete (CASCADE que destruía pacientes/recetas/radiografías/
+   bitácora) ni borra Storage. ARCHIVA: archivedAt + archivedBy(=IP) + archiveReason
+   + isPublic=false + landingActive=false. El expediente y los archivos se CONSERVAN.
+   Roster admin (admin/clinics/page.tsx) filtra archivedAt:null. Guard "única
+   clínica" ahora cuenta solo activas.
+4) Bitácora — lib/audit.ts: AuditAction y logMutation aceptan void|soft_delete|
+   archive; preservan before + after (con el motivo).
+
+SCHEMA (prisma/schema.prisma) — aditivo (nullable salvo status):
+- Prescription: status @default("ACTIVE"), voidedAt, voidedBy, voidReason
+- PatientFile:  deletedAt, deletedBy, deleteReason + @@index([clinicId, deletedAt])
+- Clinic:       archivedAt, archivedBy, archiveReason
+
+SQL A APLICAR (a mano, tras desplegar): sql/nom-conservacion.sql — idempotente
+(ADD COLUMN / CREATE INDEX IF NOT EXISTS), cero DROP. prescriptions.status NOT NULL
+DEFAULT 'ACTIVE' (filas viejas → ACTIVE, siguen visibles). ⚠️ aplicar junto al
+deploy (feature en main sin su SQL = outage en tabla core).
+
+BUILD: npx next build (sin pipe) → EXIT 0, ✓ Compiled successfully, type-check OK,
+276/276 páginas. prisma generate OK (cliente compartido por junction). Los
+prisma:error DATABASE_URL son del prerender sin DB en este entorno (igual que main).
+
+MULTI-TENANT: sin cambios; clinicId siempre de la sesión en cada query.
+
+PENDIENTE / FOLLOW-UPS (fuera de esta tarea):
+- PDF de verificación (lib/pdf/prescription-pdf.ts) no estampa "ANULADA" aún → por
+  eso se oculta el botón Descargar PDF en recetas anuladas.
+- Clínica archivada sale del directorio público (isPublic=false) y del roster admin,
+  pero NO se filtra de crons ni de ~30 clinic.findMany restantes; evaluar en QA.
+- Falta UI para capturar el motivo al borrar (hoy { reason } es opcional en el body).
+- No hay "desanular"/restaurar desde UI (reactivar = poner el campo a null).
+- QA: anular receta→QR ANULADA; borrar rx/3D→desaparece pero el blob persiste;
+  archivar clínica→el expediente persiste.
+
+RAMA: feat/nom-conservacion (worktree mediflow-worktrees/nom-conservacion). NO main.
+═══════════════════════════════════════════════════════════════════════════
 ## WS-RT-INBOX merge — Inbox en tiempo real (polling) ✅ EN MAIN (6b4b2e6, 2026-06-17)
 ═══════════════════════════════════════════════════════════════════════════
 QUÉ SE HIZO: merge de la rama feat/rt-inbox a main y push (deploy auto en Vercel).

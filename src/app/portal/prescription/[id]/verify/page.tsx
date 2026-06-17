@@ -38,6 +38,9 @@ export default async function VerifyPrescriptionPage({ params }: PageProps) {
 
   const now = new Date();
   const expired = rx.expiresAt ? rx.expiresAt < now : false;
+  // NOM-004 conservación / NOM-024 §7 — receta anulada: el QR sigue resolviendo,
+  // pero la verificación debe avisar que NO debe surtirse.
+  const voided = rx.status === "VOIDED" || rx.voidedAt != null;
   const issuedDate = rx.issuedAt.toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
   const expiresDate = rx.expiresAt ? rx.expiresAt.toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" }) : "—";
   const patientFullName = `${rx.patient.firstName} ${rx.patient.lastName}`;
@@ -58,32 +61,43 @@ export default async function VerifyPrescriptionPage({ params }: PageProps) {
         style={{
           padding: "10px 14px",
           borderRadius: 10,
-          marginBottom: 20,
-          background: expired ? "#fee2e2" : "#dcfce7",
-          color: expired ? "#991b1b" : "#166534",
+          marginBottom: voided && rx.voidReason ? 8 : 20,
+          background: voided ? "#fee2e2" : expired ? "#fef3c7" : "#dcfce7",
+          color: voided ? "#991b1b" : expired ? "#92400e" : "#166534",
           fontWeight: 700,
           fontSize: 14,
         }}
       >
-        {expired ? "⚠ Receta vencida — no debe ser surtida" : "✓ Receta válida y vigente"}
+        {voided
+          ? "⛔ Receta ANULADA — no debe ser surtida"
+          : expired
+            ? "⚠ Receta vencida — no debe ser surtida"
+            : "✓ Receta válida y vigente"}
       </div>
+      {voided && rx.voidReason && (
+        <p style={{ marginBottom: 20, fontSize: 13, color: "#991b1b" }}>
+          Motivo de anulación: {rx.voidReason}
+        </p>
+      )}
 
-      <a
-        href={`/api/prescriptions/${rx.id}/verify/pdf`}
-        style={{
-          display: "inline-block",
-          padding: "10px 16px",
-          background: "#7c3aed",
-          color: "#fff",
-          borderRadius: 10,
-          fontWeight: 700,
-          fontSize: 14,
-          textDecoration: "none",
-          marginBottom: 20,
-        }}
-      >
-        Descargar receta (PDF)
-      </a>
+      {!voided && (
+        <a
+          href={`/api/prescriptions/${rx.id}/verify/pdf`}
+          style={{
+            display: "inline-block",
+            padding: "10px 16px",
+            background: "#7c3aed",
+            color: "#fff",
+            borderRadius: 10,
+            fontWeight: 700,
+            fontSize: 14,
+            textDecoration: "none",
+            marginBottom: 20,
+          }}
+        >
+          Descargar receta (PDF)
+        </a>
+      )}
 
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Receta médica electrónica</h1>
       <p style={{ fontSize: 12, color: "#64748b", marginBottom: 28 }}>

@@ -4,6 +4,9 @@ import type { PediatricAuditAction } from "@/lib/pediatrics/audit";
 
 export type AuditAction =
   | "create" | "update" | "delete" | "view"
+  // NOM-004/NOM-024 conservación — borrado LÓGICO (no destructivo): anulación de
+  // receta, soft-delete de archivo del expediente, archivado de clínica.
+  | "void" | "soft_delete" | "archive"
   | "XRAY_NOTES_UPDATED" | "FILE_NOTES_UPDATED"
   // Reset de contraseña por SUPER_ADMIN. NO incluye el password (ni hash)
   // en el log — solo la acción y el target.
@@ -105,7 +108,7 @@ export async function logMutation(opts: {
   userId: string;
   entityType: AuditEntityType;
   entityId: string;
-  action: "create" | "update" | "delete";
+  action: "create" | "update" | "delete" | "void" | "soft_delete" | "archive";
   before?: Record<string, any> | null;
   after?: Record<string, any> | null;
 }): Promise<void> {
@@ -117,8 +120,16 @@ export async function logMutation(opts: {
       if (Object.keys(changes).length === 0) return; // no-op update, skip log
     } else if (opts.action === "create" && opts.after) {
       changes = { _created: { before: null, after: opts.after } };
-    } else if (opts.action === "delete" && opts.before) {
-      changes = { _deleted: { before: opts.before, after: null } };
+    } else if (
+      (opts.action === "delete" ||
+        opts.action === "void" ||
+        opts.action === "soft_delete" ||
+        opts.action === "archive") &&
+      opts.before
+    ) {
+      // Borrado lógico/anulación (NOM-004 conservación / NOM-024 §7): preserva el
+      // "before" y, si lo hay, el "after" con el motivo.
+      changes = { _deleted: { before: opts.before, after: opts.after ?? null } };
     }
     await logAudit({
       clinicId:   opts.clinicId,

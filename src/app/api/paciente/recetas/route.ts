@@ -25,7 +25,7 @@ export async function GET() {
   }
 
   const list = await prisma.prescription.findMany({
-    where: { patientId: { in: patientIds }, patient: { deletedAt: null } },
+    where: { patientId: { in: patientIds }, patient: { deletedAt: null }, status: "ACTIVE" },
     orderBy: { issuedAt: "desc" },
     take: 100,
     select: {

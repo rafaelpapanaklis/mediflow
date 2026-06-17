@@ -32,7 +32,7 @@ export default async function XraysPatientPage({ params, searchParams }: Props) 
 
   const [files, clinic] = await Promise.all([
     prisma.patientFile.findMany({
-      where: { clinicId, patientId: params.patientId },
+      where: { clinicId, patientId: params.patientId, deletedAt: null },
       orderBy: { createdAt: "desc" },
       include: {
         patient: { select: { id: true, firstName: true, lastName: true, patientNumber: true } },

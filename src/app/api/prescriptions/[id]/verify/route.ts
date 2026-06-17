@@ -11,6 +11,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       id: true,
       issuedAt: true,
       expiresAt: true,
+      status: true,
+      voidedAt: true,
+      voidReason: true,
       medications: true,
       indications: true,
       cofeprisGroup: true,
@@ -23,11 +26,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if (!rx) return NextResponse.json({ error: "Receta no encontrada" }, { status: 404 });
 
   const isExpired = rx.expiresAt ? rx.expiresAt.getTime() < Date.now() : false;
+  // NOM-004 conservación / NOM-024 §7 — receta anulada: el QR sigue resolviendo,
+  // pero NO es válida para surtir.
+  const isVoided = rx.status === "VOIDED" || rx.voidedAt != null;
 
   return NextResponse.json({
     id: rx.id,
-    valid: !isExpired,
+    valid: !isExpired && !isVoided,
     isExpired,
+    isVoided,
+    voidReason: isVoided ? rx.voidReason : null,
     issuedAt: rx.issuedAt,
     expiresAt: rx.expiresAt,
     medications: rx.medications,

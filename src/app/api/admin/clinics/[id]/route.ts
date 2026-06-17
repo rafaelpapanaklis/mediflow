@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { createClient as createAdmin } from "@supabase/supabase-js";
-import { BUCKETS, extractStoragePath } from "@/lib/storage";
 
 function isAdminAuthed() {
   const token = cookies().get("admin_token")?.value;
@@ -28,8 +26,8 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
 
   const clinicId = params.id;
 
-  // Guard: no permitir eliminar la única clínica del sistema (útil en QA/testing).
-  const totalClinics = await prisma.clinic.count();
+  // Guard: no archivar la única clínica activa del sistema (útil en QA/testing).
+  const totalClinics = await prisma.clinic.count({ where: { archivedAt: null } });
   if (totalClinics <= 1) {
     return NextResponse.json(
       { error: "No se puede eliminar la única clínica del sistema" },
@@ -39,92 +37,68 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
 
   const clinic = await prisma.clinic.findUnique({
     where: { id: clinicId },
-    select: { id: true, name: true, slug: true, email: true, createdAt: true },
+    select: { id: true, name: true, slug: true, email: true, createdAt: true, archivedAt: true },
   });
   if (!clinic) return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
 
-  // 1. Listar archivos de esa clínica desde la tabla PatientFile (y landingGallery / logoUrl / etc.)
-  // Usar la DB como fuente de verdad — solo borramos lo que conocemos.
-  const patientFiles = await prisma.patientFile.findMany({
-    where: { clinicId },
-    select: { url: true },
-  });
-
-  // Acepta paths nuevos y URLs legacy (post-migración a bucket privado).
-  const storagePaths = patientFiles
-    .map(f => extractStoragePath(f.url, BUCKETS.PATIENT_FILES) ?? "")
-    .filter(Boolean);
-
-  // 2. Borrar archivos de Supabase Storage ANTES de la DB, en lotes de 100.
-  //    Si falla la DB después, queda algún archivo huérfano, pero preferible
-  //    a tener records de DB sin archivos (UX rota).
-  let storageDeleted = 0;
-  let storageErrors  = 0;
-  if (storagePaths.length > 0 && process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    const supabase = createAdmin(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
-      { auth: { persistSession: false } },
-    );
-    for (let i = 0; i < storagePaths.length; i += 100) {
-      const batch = storagePaths.slice(i, i + 100);
-      const { error } = await supabase.storage.from(BUCKETS.PATIENT_FILES).remove(batch);
-      if (error) {
-        storageErrors += batch.length;
-        console.error("[admin/clinics DELETE] storage batch failed:", (error as any)?.message ?? "unknown");
-      } else {
-        storageDeleted += batch.length;
-      }
-    }
-
-    // 2b. Limpia el bucket público de la landing por prefijo
-    const { error: landingErr } = await supabase.storage
-      .from(BUCKETS.CLINIC_PUBLIC)
-      .list(`landing/${clinicId}`, { limit: 1000 })
-      .then(async ({ data, error }) => {
-        if (error || !data || data.length === 0) return { error };
-        const paths = data.map(d => `landing/${clinicId}/${d.name}`);
-        return supabase.storage.from(BUCKETS.CLINIC_PUBLIC).remove(paths);
-      });
-    if (landingErr) {
-      console.warn("[admin/clinics DELETE] landing cleanup non-fatal:", (landingErr as any)?.message ?? "unknown");
-    }
+  // Ya archivada — idempotente.
+  if (clinic.archivedAt) {
+    return NextResponse.json({ success: true, clinicId: clinic.id, archived: true });
   }
 
-  // 3. Borrar la clínica — onDelete: Cascade en Prisma se encarga del resto
-  //    (patients, appointments, records, invoices, users, files, audit_logs...).
-  //    Algunos modelos no cascadeen (no aplica aquí — todos los que referencian
-  //    Clinic usan onDelete: Cascade en el schema).
+  // Motivo opcional del body.
+  let reason: string | null = null;
   try {
-    await prisma.clinic.delete({ where: { id: clinicId } });
+    const body = await req.json();
+    if (body && typeof body.reason === "string" && body.reason.trim()) {
+      reason = body.reason.trim().slice(0, 2000);
+    }
+  } catch {
+    /* sin body */
+  }
+
+  // NOM-004 / NOM-024 §7 — NO hard-delete: eliminar una clínica JAMÁS debe
+  // cascada-destruir el expediente (pacientes, recetas, radiografías, bitácora,
+  // blobs de Storage). Se ARCHIVA lógicamente: el expediente y los archivos se
+  // CONSERVAN; solo se saca a la clínica de las superficies públicas
+  // (isPublic / landingActive). Reactivación manual = poner archivedAt = null.
+  const adminIp = req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? null;
+  try {
+    await prisma.clinic.update({
+      where: { id: clinicId },
+      data: {
+        archivedAt:    new Date(),
+        archivedBy:    adminIp,
+        archiveReason: reason,
+        isPublic:      false,
+        landingActive: false,
+      },
+    });
   } catch (err: any) {
-    console.error("[admin/clinics DELETE] prisma delete failed:", err?.message ?? "unknown");
+    console.error("[admin/clinics DELETE] prisma archive failed:", err?.message ?? "unknown");
     return NextResponse.json(
-      { error: "Error al eliminar la clínica de la base de datos", detail: err?.message },
+      { error: "Error al archivar la clínica en la base de datos", detail: err?.message },
       { status: 500 },
     );
   }
 
-  // 4. Audit log — como la clínica ya no existe, no podemos usar AuditLog
-  //    (cascade lo habría borrado de todos modos). Loggeamos estructurado
-  //    al console para que quede en Vercel Logs y se pueda auditar desde ahí.
+  // Audit estructurado a Vercel Logs (la clínica se conserva; dejamos rastro del
+  // archivado con identidad disponible — IP del admin — y motivo).
   console.log(JSON.stringify({
-    type:           "admin.clinic.deleted",
-    at:             new Date().toISOString(),
-    clinicId:       clinic.id,
-    clinicName:     clinic.name,
-    clinicSlug:     clinic.slug,
+    type:            "admin.clinic.archived",
+    at:              new Date().toISOString(),
+    clinicId:        clinic.id,
+    clinicName:      clinic.name,
+    clinicSlug:      clinic.slug,
     clinicCreatedAt: clinic.createdAt.toISOString(),
-    storageFilesDeleted: storageDeleted,
-    storageErrors,
-    adminIp:        req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? null,
-    userAgent:      req.headers.get("user-agent") ?? null,
+    reason,
+    adminIp,
+    userAgent:       req.headers.get("user-agent") ?? null,
   }));
 
   return NextResponse.json({
     success: true,
     clinicId: clinic.id,
-    storageDeleted,
-    storageErrors,
+    archived: true,
   });
 }
