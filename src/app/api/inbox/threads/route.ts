@@ -48,6 +48,10 @@ function isMissingTable(err: unknown): boolean {
 
 /** GET /api/inbox/threads?status=&channel=&assignedTo=&search= */
 export async function GET(req: NextRequest) {
+  // Cursor para el polling de /api/inbox/since: capturado al inicio para no
+  // perder mensajes que entren durante esta petición. El cliente lo guarda y lo
+  // manda como ?ts= en el siguiente poll (evita clock skew cliente/servidor).
+  const serverTime = new Date();
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return jsonError("unauthorized", 401);
@@ -126,7 +130,7 @@ export async function GET(req: NextRequest) {
       ) as Record<string, number>,
     };
 
-    return NextResponse.json({ threads, counts });
+    return NextResponse.json({ threads, counts, serverTime: serverTime.toISOString() });
   } catch (err) {
     if (isMissingTable(err)) {
       return jsonError("schema_not_migrated", 503, {

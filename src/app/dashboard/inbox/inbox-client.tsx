@@ -157,10 +157,28 @@ export function InboxClient() {
   }, [mobileSidebarOpen, activeThreadId]);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Cursor del polling en tiempo real (lo siembra el listado con serverTime y lo
+  // avanza cada poll de /api/inbox/since). Ref para no re-disparar efectos.
+  const lastSyncRef = useRef<string | null>(null);
+  // El hilo abierto, en ref, para leerlo dentro del intervalo de polling sin
+  // recrearlo en cada cambio de selección.
+  const activeThreadIdRef = useRef<string | null>(null);
+  // Contador de polls para reconciliar en duro (silencioso) 1 de cada 6 (~30s).
+  const pollTickRef = useRef(0);
 
-  const fetchThreads = useCallback(async () => {
-    setLoadingList(true);
-    setError(null);
+  // Carga autoritativa de la lista. `silent: true` la usa la reconciliación del
+  // polling: recarga la lista completa SIN spinner ni tocar el cursor, para
+  // reflejar bajas/cambios que el incremental no puede ver (hilos que salen del
+  // filtro, reasignados, archivados por otro usuario).
+  const fetchThreads = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent ?? false;
+    if (!silent) {
+      setLoadingList(true);
+      setError(null);
+      // Pausa el polling mientras recargamos en duro: cualquier poll que entre
+      // en esta ventana corta (since=null) en vez de avanzar un cursor obsoleto.
+      lastSyncRef.current = null;
+    }
     try {
       const params = new URLSearchParams();
       if (folder === "snoozed") params.set("status", "SNOOZED");
@@ -172,6 +190,7 @@ export function InboxClient() {
 
       const res = await fetch(`/api/inbox/threads?${params.toString()}`);
       if (!res.ok) {
+        if (silent) return; // reconciliación silenciosa: no toca la UI en fallo
         const data = await res.json().catch(() => ({}));
         if (res.status === 503) {
           setError(data.hint ?? t("inbox.client.errorSchemaNotMigrated"));
@@ -183,16 +202,126 @@ export function InboxClient() {
       const data = await res.json();
       setThreads(data.threads ?? []);
       setCounts(data.counts ?? { total: 0, byChannel: {} });
+      // Sólo la carga NO silenciosa siembra/avanza el cursor. La reconciliación
+      // deja el cursor intacto a propósito: así el siguiente poll incremental
+      // sigue trayendo los mensajes nuevos del hilo abierto sin huecos.
+      if (!silent && data.serverTime) lastSyncRef.current = data.serverTime;
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("inbox.client.errorLoadInbox"));
+      if (!silent) setError(err instanceof Error ? err.message : t("inbox.client.errorLoadInbox"));
     } finally {
-      setLoadingList(false);
+      if (!silent) setLoadingList(false);
     }
   }, [folder, activeChannel, activeAssignee, search, patientIdFilter, t]);
+
+  // Polling en tiempo real: cada 5s pide a /api/inbox/since SÓLO lo que cambió
+  // desde el último cursor y lo mergea sin recargar la vista. Se pausa cuando la
+  // pestaña está oculta. El aislamiento por clínica lo garantiza el servidor.
+  const pollSince = useCallback(async () => {
+    if (typeof document !== "undefined" && document.hidden) return;
+    // Un único gate por cursor: si es null hay una recarga en duro en curso (o
+    // aún no cargó la lista), así que no hacemos NADA hasta que se siembre.
+    const since = lastSyncRef.current;
+    if (!since) return;
+
+    // 1 de cada 6 polls (~30s) reconciliamos la lista completa en silencio. Es
+    // la red de seguridad para lo que el incremental no ve: hilos que salen del
+    // filtro, reasignados o archivados por otro usuario, y la rara truncación
+    // por tope. No avanza el cursor (lo hace solo el incremental).
+    pollTickRef.current += 1;
+    if (pollTickRef.current % 6 === 0) {
+      await fetchThreads({ silent: true });
+      return;
+    }
+
+    try {
+      const params = new URLSearchParams();
+      params.set("ts", since);
+      if (folder === "snoozed") params.set("status", "SNOOZED");
+      if (folder === "archived") params.set("status", "ARCHIVED");
+      if (activeChannel) params.set("channel", activeChannel);
+      if (activeAssignee) params.set("assignedTo", activeAssignee);
+      if (search.trim()) params.set("search", search.trim());
+      if (patientIdFilter) params.set("patientId", patientIdFilter);
+      if (activeThreadIdRef.current) params.set("threadId", activeThreadIdRef.current);
+
+      const res = await fetch(`/api/inbox/since?${params.toString()}`);
+      if (!res.ok) return; // polling silencioso: nunca rompe la UI
+      const data = await res.json();
+      if (data.serverTime) lastSyncRef.current = data.serverTime;
+
+      // Threads cambiados: el `since` devuelve el Thread completo (mismo select
+      // que el listado), así que se reemplaza por id y se reordena por fecha.
+      const incoming: Thread[] = data.threads ?? [];
+      if (incoming.length > 0) {
+        setThreads((prev) => {
+          const byId: Record<string, Thread> = {};
+          for (const th of prev) byId[th.id] = th;
+          for (const th of incoming) byId[th.id] = th;
+          return Object.keys(byId)
+            .map((k) => byId[k])
+            .sort(
+              (a, b) =>
+                new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime(),
+            );
+        });
+      }
+
+      // Badges de no-leídos por canal (el total del folder Inbox se deriva de
+      // threads.length en otro efecto).
+      if (data.counts?.byChannel) {
+        setCounts((prev) => ({ ...prev, byChannel: data.counts.byChannel }));
+      }
+
+      // Mensajes nuevos del hilo abierto: se anexan deduplicando por id.
+      const newMsgs: ThreadMessage[] = data.messages ?? [];
+      if (newMsgs.length > 0) {
+        setActiveThread((prev) => {
+          if (!prev) return prev;
+          const haveIds: Record<string, true> = {};
+          for (const m of prev.messages) haveIds[m.id] = true;
+          const extra = newMsgs.filter((m) => !haveIds[m.id]);
+          if (extra.length === 0) return prev;
+          const merged = prev.messages
+            .concat(extra)
+            .sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
+          return { ...prev, messages: merged };
+        });
+      }
+    } catch {
+      // silencioso: un poll fallido se reintenta en el siguiente tick
+    }
+  }, [folder, activeChannel, activeAssignee, search, patientIdFilter, fetchThreads]);
 
   useEffect(() => {
     void fetchThreads();
   }, [fetchThreads]);
+
+  // Mantiene el ref del hilo abierto al día para el polling.
+  useEffect(() => {
+    activeThreadIdRef.current = activeThreadId;
+  }, [activeThreadId]);
+
+  // El badge del folder "Inbox" refleja en vivo el número de hilos de la vista.
+  useEffect(() => {
+    setCounts((c) => (c.total === threads.length ? c : { ...c, total: threads.length }));
+  }, [threads.length]);
+
+  // Arranca/limpia el intervalo de polling. Se re-crea si cambian los filtros
+  // (pollSince depende de ellos) y dispara un poll inmediato al volver a la
+  // pestaña (visibilitychange). Limpia interval y listener al desmontar.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      void pollSince();
+    }, 5000);
+    const onVisible = () => {
+      if (!document.hidden) void pollSince();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [pollSince]);
 
   // Cuando se selecciona un thread, fetch detalle
   useEffect(() => {
