@@ -41,15 +41,23 @@ export async function GET(req: NextRequest) {
   const patientId = req.nextUrl.searchParams.get("patientId");
   if (!patientId) return NextResponse.json({ error: "patientId required" }, { status: 400 });
 
+  // NOM-004 conservación / NOM-024 §7: las recetas ANULADAS (status=VOIDED) se
+  // conservan y se MUESTRAN marcadas — nunca se ocultan. Devolvemos todas las del
+  // paciente (status/voidedAt/voidReason llegan por ser campos escalares).
   const list = await prisma.prescription.findMany({
-    where: { clinicId: ctx.clinicId, patientId, status: "ACTIVE" },
+    where: { clinicId: ctx.clinicId, patientId },
     include: {
       doctor: { select: { id: true, firstName: true, lastName: true } },
       items:  { include: { cums: true } },
     },
     orderBy: { issuedAt: "desc" },
   });
-  return NextResponse.json(list);
+  // Vigentes primero, luego anuladas; dentro de cada grupo se preserva issuedAt
+  // desc (Array.sort es estable y el query ya viene ordenado).
+  const ordered = [...list].sort(
+    (a, b) => Number(a.status === "VOIDED") - Number(b.status === "VOIDED"),
+  );
+  return NextResponse.json(ordered);
 }
 
 interface PrescriptionItemBody {

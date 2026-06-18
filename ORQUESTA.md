@@ -49,6 +49,21 @@ QA: aplicar los 3 SQL en orden; anular una receta → su PDF (dashboard/portal/v
   watermark+banner "ANULADA"; smoke de RLS, CIE-10 en consulta, validación de notas, conservación
   (anti-hard-delete) y bitácora inmutable. Aislamiento multi-tenant intacto (clinicId de sesión).
 
+FIX UX (followup, 2026-06-18) — fix: lista de recetas muestra anuladas con badge ANULADA (antes las ocultaba).
+  El GET /api/prescriptions filtraba status:"ACTIVE" → al anular una receta desaparecía de la lista y
+  parecía borrada, contradiciendo la conservación NOM-004/§7. Ahora el GET devuelve TODAS (activas +
+  anuladas; status/voidedAt/voidReason ya venían por ser escalares), ordenadas vigentes primero y
+  anuladas al final (sort estable → issuedAt desc dentro de cada grupo). prescriptions-tab.tsx: badge
+  rojo "ANULADA", tarjeta atenuada (opacity) + título tachado, muestra motivo + fecha de anulación; en
+  anuladas se ocultan WhatsApp/Correo/Eliminar (ni se reenvía ni se re-anula) y se mantienen PDF
+  (sellado) + Verificación. i18n es/en (statusVoided/voidedOn/voidReason). SIN SQL. Build EXIT 0.
+  OTRAS superficies que aún filtran status:"ACTIVE" (NO tocadas — decisión de producto, reportadas a
+  Rafael): timeline del paciente (api/patients/[id]/timeline), export JSON (api/patients/[id]/export) y
+  export-CDA (api/patients/[id]/export-cda). Portal del paciente (api/paciente/recetas) se deja como
+  está por indicación expresa. Aislamiento multi-tenant intacto (clinicId de sesión).
+  Archivos: api/prescriptions/route.ts, components/dashboard/patient-detail/prescriptions-tab.tsx,
+  i18n/dictionaries/es.json + en.json.
+
 ═══════════════════════════════════════════════════════════════════════════
 ## NOM-RLS — RLS deny-all FALTANTE (portal paciente + IA recetas + labs B2B) ✅ EN RAMA feat/nom-rls (56b1e9f, 2026-06-17) · NO en main
 ═══════════════════════════════════════════════════════════════════════════
