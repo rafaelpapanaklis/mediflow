@@ -4,8 +4,9 @@
 // "Importar mi clínica" — wizard (modal .modal--wide). Máquina de estado de 6
 // pasos + desvío a Migración asistida, fiel al prototipo design/import-clinic/.
 //
-// Recibe un ImportClient por prop (default = MockImportClient). TODO(T4): pasar
-// el cliente real para descarga de plantilla, preview/commit y ticket asistidos.
+// Recibe un ImportClient por prop; por defecto usa el cliente REAL
+// (RealImportClient, WS2-T4) que habla con /api/import/* (plantilla, preview/
+// commit por entidad, migración asistida). Se puede inyectar un mock en tests.
 // ============================================================================
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -14,16 +15,17 @@ import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 import {
   type ImportClient,
+  type Entity,
   type ColumnMapping,
   type PreviewResult,
   type CommitResult,
   type Origin,
-  MockImportClient,
   ORIGINS,
   DATA_TYPES,
   isAcceptedFile,
   MAX_FILE_MB,
 } from "./import-client";
+import { RealImportClient } from "@/lib/import/client";
 import { StepOrigin } from "./step-origin";
 import { StepExport } from "./step-export";
 import { StepWhat } from "./step-what";
@@ -48,15 +50,15 @@ interface Props {
   onImported?: () => void;
   /** Abrir directo en el flujo de migración asistida. */
   startInAssisted?: boolean;
-  /** Inyección del cliente de datos. Default: Mock (sin backend). */
+  /** Inyección del cliente de datos. Default: RealImportClient (APIs reales). */
   client?: ImportClient;
 }
 
 export function ImportWizard({ open, onClose, onImported, startInAssisted = false, client }: Props) {
   const t = useT();
-  // El cliente por defecto se crea una sola vez por montaje.
+  // El cliente por defecto (real) se crea una sola vez por montaje.
   const fallbackClient = useRef<ImportClient>();
-  if (!fallbackClient.current) fallbackClient.current = new MockImportClient();
+  if (!fallbackClient.current) fallbackClient.current = new RealImportClient();
   const api = client ?? fallbackClient.current;
 
   const [origins, setOrigins] = useState<Origin[]>(ORIGINS);
@@ -164,42 +166,78 @@ export function ImportWizard({ open, onClose, onImported, startInAssisted = fals
     setMapping({});
   }
 
-  // ---- Importar (commit + progreso simulado) ----
+  // ---- Importar (commit multi-entidad + progreso) ----
+  // Importa, EN ORDEN, las entidades elegidas en el paso 3 (pacientes → saldos →
+  // citas) desde el MISMO archivo. Pacientes va primero para que saldos/citas
+  // resuelvan al paciente recién creado. Pacientes usa el mapeo del paso 5; saldos
+  // y citas se autodetectan (su mapeo no se edita en esta UI). El resumen se
+  // acumula por entidad. La barra "crece" mientras corre el trabajo real y se
+  // completa solo al terminar (no se simula el éxito).
   async function runImport() {
+    if (!file) return;
+    const f = file;
+    const entities = DATA_TYPES
+      .filter((d) => d.entity && types.has(d.id))
+      .map((d) => d.entity as Entity);
+    const toRun: Entity[] = entities.length ? entities : ["patients"];
+
     setStep("importing");
     setPct(0);
     setProgLabel(t("shell.importClinic.importing.prep"));
-    let res: CommitResult;
-    try {
-      res = await api.commit("patients", file as File, mapping, { skipDuplicates: skipDup });
-    } catch {
-      toast.error(t("shell.importClinic.errImport"));
-      setStep(6);
-      return;
-    }
-    setResult(res);
+
+    // Barra creciente (tope 90%) mientras corren los commits reales.
     const labels: [number, string][] = [
       [15, t("shell.importClinic.importing.validating")],
       [45, t("shell.importClinic.importing.balances")],
       [75, t("shell.importClinic.importing.scheduling")],
-      [100, t("shell.importClinic.importing.finishing")],
     ];
     let p = 0;
     clearTimer();
     intervalRef.current = setInterval(() => {
-      p += Math.random() * 14 + 6;
-      if (p >= 100) {
-        p = 100;
-        clearTimer();
-        setPct(100);
-        setProgLabel(labels[labels.length - 1][1]);
-        setTimeout(() => setStep("result"), 420);
-        return;
-      }
+      p = Math.min(90, p + Math.random() * 9 + 3);
       setPct(p);
       const lbl = labels.find(([thr]) => p <= thr);
       if (lbl) setProgLabel(lbl[1]);
     }, 360);
+
+    const agg: CommitResult = {
+      created: 0,
+      errors: 0,
+      duplicates: 0,
+      summary: { patients: 0, balances: "—", appointments: 0 },
+      errorReportUrl: undefined,
+    };
+    let committedAny = false;
+
+    for (const ent of toRun) {
+      try {
+        const r = await api.commit(ent, f, ent === "patients" ? mapping : {}, { skipDuplicates: skipDup });
+        committedAny = true;
+        agg.created += r.created;
+        agg.errors += r.errors;
+        agg.duplicates += r.duplicates;
+        if (r.errorReportUrl) agg.errorReportUrl = r.errorReportUrl;
+        if (ent === "patients") agg.summary.patients = r.created;
+        else if (ent === "balances") agg.summary.balances = r.created.toLocaleString();
+        else if (ent === "appointments") agg.summary.appointments = r.created;
+      } catch (e) {
+        // Falla la PRIMERA entidad sin nada importado → abortar y volver a revisar.
+        // Falla una entidad secundaria (p. ej. el archivo no trae columnas de saldo
+        // o cita) → se omite y se continúa con el resto.
+        if (!committedAny) {
+          clearTimer();
+          toast.error(e instanceof Error ? e.message : t("shell.importClinic.errImport"));
+          setStep(6);
+          return;
+        }
+      }
+    }
+
+    clearTimer();
+    setResult(agg);
+    setPct(100);
+    setProgLabel(t("shell.importClinic.importing.finishing"));
+    setTimeout(() => setStep("result"), 480);
   }
 
   // ---- Asistida ----
